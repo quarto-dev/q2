@@ -178,6 +178,8 @@ execute <- function(
   }
 
   env <- globalenv()
+  # EXR-12: the leading statement of a recorded brace span; see hooks.R
+  env$.QuartoInlineId <- function(id) invisible(NULL)
   env$.QuartoInlineRender <- function(v) {
     if (is.null(v)) {
       "NULL"
@@ -202,6 +204,7 @@ execute <- function(
     run_pandoc = FALSE,
     envir = env
   )
+  quarto_flush_span_records()
   knit_meta <- attr(render_output, "knit_meta")
   files_dir <- attr(render_output, "files_dir")
   intermediates_dir <- attr(render_output, "intermediates_dir")
@@ -267,7 +270,8 @@ execute <- function(
     engineDependencies = engineDependencies,
     preserve = preserve,
     postProcess = postProcess,
-    chunks = I(unname(quarto_chunk_records$records))
+    chunks = I(unname(quarto_chunk_records$records)),
+    spans = I(unname(quarto_span_records$records))
   )
 }
 

@@ -393,6 +393,7 @@ mod tests {
                 lang: "python",
                 code: "x = 1",
                 options: &options,
+                attr_tail: "",
                 profile: None,
             },
         )

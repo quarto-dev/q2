@@ -101,6 +101,9 @@ pub enum EngineRecordProblem {
     UnknownUnitId { id: String },
     /// Two cells name the same unit id.
     DuplicateUnitId { id: String },
+    /// An inline span the engine owns has no result (EXR-12). `location` is where it sits
+    /// in the author's file (`file:line`).
+    MissingSpan { location: String },
     /// The record builder rejected the result.
     Build { detail: String },
 }
@@ -126,6 +129,9 @@ pub fn engine_record_diagnostic(engine: &str, problem: &EngineRecordProblem) -> 
         ),
         EngineRecordProblem::DuplicateUnitId { id } => {
             format!("the notebook names unit `{id}` more than once")
+        }
+        EngineRecordProblem::MissingSpan { location } => {
+            format!("it reported no result for the inline expression at {location}, which it owns")
         }
         EngineRecordProblem::Build { detail } => {
             format!("the record could not be built from its result: {detail}")

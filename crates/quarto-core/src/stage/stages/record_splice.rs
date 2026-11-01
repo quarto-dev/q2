@@ -101,6 +101,7 @@ pub(crate) fn splice_record(
     // After the merge: reconciling against the reparsed text takes its meta, which would drop
     // anything folded earlier. Includes must reach the pane even when no unit splices.
     fold_includes(record, &mut doc);
+    fold_warnings(record, ctx);
     (doc, report)
 }
 
@@ -138,8 +139,18 @@ fn splice_units(
             };
             engine_for(record, unit.lang())
                 .and_then(|e| {
-                    UnitKey::from_author_text(&e.hash_definition, kind, unit.lang(), &text.text)
-                        .ok()
+                    let tail = match unit {
+                        Unit::Cell(c) => c.attr_tail.as_str(),
+                        Unit::Inline(_) => "",
+                    };
+                    UnitKey::from_author_text(
+                        &e.hash_definition,
+                        kind,
+                        unit.lang(),
+                        &text.text,
+                        tail,
+                    )
+                    .ok()
                 })
                 // No owning engine, or options that do not parse: the unit can match by
                 // content hash only.
@@ -344,6 +355,26 @@ fn fold_includes(record: &Record, doc: &mut DocumentAst) {
     }
 }
 
+/// Raise each engine entry\'s recorded warnings into the stage diagnostics, as the engine
+/// stage does for a live run (replay parity, bd-cp3em). A stored warning that does not parse
+/// as a diagnostic is skipped.
+fn fold_warnings(record: &Record, ctx: &mut StageContext) {
+    for entry in &record.metadata.quarto_engines {
+        for stored in &entry.warnings {
+            match serde_json::from_value::<quarto_error_reporting::DiagnosticMessage>(
+                stored.clone(),
+            ) {
+                Ok(diagnostic) => ctx.add_diagnostic(diagnostic),
+                Err(_) => trace_event!(
+                    ctx,
+                    EventLevel::Warn,
+                    "record-splice: skipping a recorded warning that is not a diagnostic"
+                ),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -450,6 +481,39 @@ mod tests {
     fn splice(source: &str, record: &Record) -> (String, SpliceReport) {
         let (doc, report) = splice_record(parse(source), record, &mut ctx(), Path::new("/project"));
         (text_of(&doc), report)
+    }
+
+    /// Replay parity (bd-cp3em): the live engine stage re-raises an engine\'s warnings into the
+    /// stage diagnostics; a record carries them, so the splice does too.
+    #[test]
+    fn recorded_engine_warnings_are_raised_as_diagnostics() {
+        use quarto_error_reporting::DiagnosticMessageBuilder;
+        let mut record = three_cells();
+        let warning = DiagnosticMessageBuilder::warning("engine warned")
+            .with_code("Q-18-2")
+            .build();
+        record.metadata.quarto_engines[0]
+            .warnings
+            .push(serde_json::to_value(&warning).unwrap());
+        // A stored warning that is not a diagnostic is skipped, never fatal.
+        record.metadata.quarto_engines[0]
+            .warnings
+            .push(json!("not a diagnostic"));
+        let mut ctx = ctx();
+        let _ = splice_record(parse(THREE), &record, &mut ctx, Path::new("/project"));
+        assert_eq!(ctx.diagnostics, vec![warning]);
+    }
+
+    #[test]
+    fn a_record_without_warnings_raises_none() {
+        let mut ctx = ctx();
+        let _ = splice_record(
+            parse(THREE),
+            &three_cells(),
+            &mut ctx,
+            Path::new("/project"),
+        );
+        assert!(ctx.diagnostics.is_empty());
     }
 
     const THREE: &str =

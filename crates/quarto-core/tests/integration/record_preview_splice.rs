@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use quarto_core::engine::preview_record::record_capture_run;
+use quarto_core::engine::preview_record::{compute_source_inputs, record_capture_run};
 use quarto_core::engine::{
     EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError, LanguageClaim,
 };
@@ -295,12 +295,19 @@ async fn splice_ids_equal_the_writers_with_and_without_the_mask() {
         let source = format!("---\nformat: q2-preview\n---\n\n{source}");
         let dir = tempfile::tempdir().unwrap();
         let record = record_for(dir.path(), &source).await;
+        // The stub engine's cells only: with R installed the real knitr engine also records
+        // a `{r}` chunk (EXR-11), which this fixture does not count.
         let written: Vec<String> = record
             .cells
             .iter()
+            .filter(|c| c.metadata.quarto_engine.as_deref() == Some(STUB_PYTHON.name))
             .map(|c| c.metadata.quarto_cell_id.clone())
             .collect();
-        assert_eq!(written.len(), *cells, "fixture {i}: the writer's units");
+        assert_eq!(
+            written.len(),
+            *cells,
+            "fixture {i}: the writer's units {written:?}"
+        );
 
         let report = splice_report(dir.path(), &source, &record).await;
         let units = report["units"].as_array().unwrap();
@@ -353,6 +360,77 @@ async fn a_knitr_labeled_cell_hashes_the_same_at_record_and_splice_time() {
     );
     assert_eq!(unit["staleness"], "fresh", "{report}");
     assert!(report["orphaned"].as_array().unwrap().is_empty());
+}
+
+// ── record-level staleness (EXR-15) ───────────────────────────────────────────
+
+/// Whether `record` is stale against the document now on disk in `dir`, judged the way the
+/// preview watcher does: the masked, overlay-free pre-engine inputs, no engine loaded.
+async fn stale_now(dir: &Path, record: &Record) -> bool {
+    let path = dir.join("doc.qmd").canonicalize().unwrap();
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
+    let source = compute_source_inputs(&path, &project, runtime)
+        .await
+        .unwrap();
+    quarto_core::record::record_is_stale(
+        record,
+        &String::from_utf8_lossy(&source.input_qmd),
+        &source.sugared_blocks,
+        &source.metadata,
+    )
+    .unwrap()
+}
+
+/// The viewer computes its units from the masked pre-engine AST, so a display block holding a
+/// cell or a span adds no phantom unit and the recorded document is fresh (shares the splice
+/// conformance corpus above: the same documents, judged by hash instead of by id).
+#[tokio::test]
+async fn a_recorded_document_is_fresh_with_and_without_the_mask() {
+    for (i, (source, _, _)) in CONFORMANCE.iter().enumerate() {
+        let source = format!("---\nformat: q2-preview\n---\n\n{source}");
+        let dir = tempfile::tempdir().unwrap();
+        let record = record_for(dir.path(), &source).await;
+        assert!(
+            !stale_now(dir.path(), &record).await,
+            "fixture {i}: a freshly recorded document must not be stale"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_prose_edit_leaves_the_record_fresh_and_a_code_edit_does_not() {
+    let source = doc(&[("", "a = 1")]);
+    let dir = tempfile::tempdir().unwrap();
+    let record = record_for(dir.path(), &source).await;
+
+    std::fs::write(
+        dir.path().join("doc.qmd"),
+        source.replace(
+            "format: q2-preview\n---\n",
+            "format: q2-preview\n---\n\nNew prose.\n",
+        ),
+    )
+    .unwrap();
+    assert!(!stale_now(dir.path(), &record).await, "prose edit");
+
+    std::fs::write(dir.path().join("doc.qmd"), source.replace("a = 1", "a = 2")).unwrap();
+    assert!(stale_now(dir.path(), &record).await, "code edit");
+}
+
+/// bd-n1vmlalw: the engine stage re-injects the `#| label:` line for an engine named `knitr`
+/// after hashing, so a freshly recorded labeled knitr document used to look stale at once.
+/// The hash is taken from the sugared snapshot, never the re-injected text.
+#[tokio::test]
+async fn a_freshly_recorded_labeled_knitr_document_is_not_stale() {
+    let source = "---\nformat: q2-preview\nengine: knitr\n---\n\n```{r}\n#| label: fig-two-sines\n#| fig-cap: Two sines\nplot(1)\n```\n";
+    let dir = tempfile::tempdir().unwrap();
+    let engine = StubEngine {
+        name: "knitr",
+        lang: "r",
+    };
+    let record = record_with(dir.path(), source, engine).await;
+    assert!(!stale_now(dir.path(), &record).await);
 }
 
 // ── legacy-versus-record parity (plan Risks: presenter output re-parsed to blocks) ──
@@ -472,4 +550,82 @@ async fn record_splice_matches_legacy_splice_on_the_jupyter_fixtures() {
         }
     }
     assert!(problems.is_empty(), "{}", problems.join("\n\n"));
+}
+
+// ── guests (EXR-15 Phase C) ────────────────────────────────────────────────
+
+/// An engine that claims `python` and counts every `execute`. A guest must never reach it.
+struct CountingEngine(Arc<std::sync::atomic::AtomicUsize>);
+
+impl ExecutionEngine for CountingEngine {
+    fn name(&self) -> &str {
+        "jupyter"
+    }
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == "python" {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
+    }
+    fn execute(
+        &self,
+        input: &str,
+        _ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(ExecuteResult::new(input))
+    }
+}
+
+/// Preview-render as a guest: execution forbidden (`ExecutionPolicy::None`) and an engine
+/// that would count any attempt to run. Returns the AST JSON and the attempt count.
+async fn guest_preview(dir: &Path, source: &str, record: &Record) -> (String, usize) {
+    let path = dir.join("doc.qmd");
+    std::fs::write(&path, source).unwrap();
+    let path = path.canonicalize().unwrap();
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
+    let doc_info = DocumentInfo::from_path(&path);
+    let format = Format::html();
+    let bins = BinaryDependencies::new();
+    let mut ctx = RenderContext::new(&project, &doc_info, &format, &bins);
+    ctx.execution_policy = quarto_core::engine::ExecutionPolicy::None;
+    let runs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut registry = EngineRegistry::new();
+    registry.register(Arc::new(CountingEngine(runs.clone())));
+    let ast = render_qmd_to_preview_ast(
+        source.as_bytes(),
+        &path.display().to_string(),
+        &mut ctx,
+        runtime,
+        Some(Arc::new(registry)),
+        CapturePayload::Record(Arc::new(record.clone())),
+    )
+    .await
+    .unwrap()
+    .ast_json;
+    (ast, runs.load(std::sync::atomic::Ordering::SeqCst))
+}
+
+/// A guest with a record in the sidecar shows the host's output, and, even with a capable
+/// engine in its registry, never executes: a fresh cell shows its recorded output, an
+/// edited cell stays as source.
+#[tokio::test]
+async fn a_guest_shows_the_hosts_recorded_output_and_never_executes() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = doc(&CELLS);
+    let record = record_for(dir.path(), &source).await;
+
+    let host = preview(dir.path(), &source, &record).await;
+    let (guest, runs) = guest_preview(dir.path(), &source, &record).await;
+    assert_eq!(guest, host, "the guest renders what the host renders");
+    assert_eq!(outputs(&guest), 3);
+    assert_eq!(runs, 0, "a guest cannot trigger execution");
+
+    let edited = doc(&[("", "a = 1"), ("", "b = 22"), ("", "c = 3")]);
+    let (guest, runs) = guest_preview(dir.path(), &edited, &record).await;
+    assert_eq!(outputs(&guest), 2, "the edited cell has no recorded output");
+    assert!(guest.contains("b = 22"), "the edited cell stays as source");
+    assert_eq!(runs, 0, "a stale cell is not re-run on a guest");
 }

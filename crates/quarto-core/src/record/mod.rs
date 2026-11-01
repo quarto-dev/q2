@@ -23,6 +23,7 @@ mod overlay;
 mod place;
 mod positron_import;
 mod reader;
+mod staleness;
 mod types;
 mod writer;
 
@@ -47,6 +48,7 @@ pub use positron_import::{
     Provenance, import_positron_cache,
 };
 pub use reader::{ReadError, read_record, read_record_value};
+pub use staleness::record_is_stale;
 pub use types::{
     AuthorText, AuthorTexts, CellMetadata, CellType, EngineEntry, EngineRecord, Record, RecordCell,
     RecordFile, RecordMetadata, UnitKind, UnitLocation, UnitResult,

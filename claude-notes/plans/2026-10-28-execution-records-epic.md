@@ -2,7 +2,7 @@
 title: 'Epic: engine execution records as ipynb (and execution of inline expressions)'
 date: 2026-10-28
 description: 'Replaces q2''s three execution-result caching mechanisms with one ipynb-shaped engine execution record that every engine produces and one presenter consumes, delivers execution of inline expressions for Jupyter on the way, and subsumes the Jupyter owned-languages epic.'
-status: draft  # outline plus the full plan set; nothing started
+status: in-progress  # JOL-1 to JOL-5 (JOL-3 deferred), EXR-1 to EXR-7, EXR-10, EXR-13 and EXR-14 landed; EXR-8, EXR-11 and EXR-15 under way; see each plan for status
 ---
 
 **Branch:** `feature/execution-records-epic`
@@ -588,9 +588,9 @@ into it and to edit this epic.
 
 | Lane | Worktree | Queue, in order (a plan starts when its hard dependencies have landed) |
 |---|---|---|
-| A: Jupyter spine | `workspace-4` | EXR-2 (merge at the end of Phase 3, then Phases 4 and 5), EXR-3, EXR-5 (merge at the end of Phase 2, then Phases 3 and 4), EXR-6 |
-| B: ownership and the record | `workspace-5` | JOL-1, JOL-2a, then EXR-4 the moment EXR-2 Phase 3 has landed (it outranks the rest of the queue through Phase 5; its Phase 6 can wait), JOL-4 (moved ahead of JOL-2b by Gordon, 2026-10-31: it needs only JOL-1 and blocks EXR-8), JOL-2b, EXR-7 (its wire-types half once EXR-4 Phase 1 has landed, its mapping half once EXR-5 Phase 2 has landed; either half outranks what follows it), JOL-5 |
-| C: engines | `workspace-6` | EXR-10 (done), EXR-11 (Phases 11S, 11A and 11B now; 11C when its gates land), EXR-8 Part A (QNR, no q2 dependency), EXR-16 (the Positron spikes need no dependency and fill idle time), EXR-9 (9A and 9B once EXR-7\'s wire-types half has landed; 9C later), EXR-12, then the rest of EXR-8 |
+| A: Jupyter spine, then knitr inline and Positron | `workspace-4` | Done: EXR-2, EXR-3, EXR-5, EXR-6. Next, re-assigned by Gordon, 2026-11-01: EXR-12 (knitr K2 inline; its gate, EXR-11, landed at `d0112a569`, so branch from that or later), then EXR-16 (the Positron spikes need nothing; its q2-side half needs EXR-4 Phases 0 to 5, landed) |
+| B: ownership and the record, then marimo | `workspace-5` | Done: JOL-1, JOL-2a, EXR-4, JOL-4, EXR-7, JOL-5. Open: JOL-2b (implemented; waits only on its `cargo xtask verify` gate). Next, re-assigned by Gordon, 2026-11-01: EXR-9 (9A, 9B and 9C; every gate has landed) |
+| C: engines | `workspace-6` | Done: EXR-10, EXR-11. Now: EXR-8, Part A (QNR) first, then Part B (every hard dependency has landed). EXR-9, EXR-12 and EXR-16 moved to lanes B and A on 2026-11-01 |
 | D: readers, preview, docs | `workspace-7` | EXR-1, EXR-1b (when EXR-2 Phase 4 has landed; it does not block the rest of the queue), EXR-13a, EXR-14, EXR-13b, EXR-15, EXR-18, EXR-17 (only when its trigger holds and Gordon says go) |
 
 JOL-1 and JOL-4 live in `2026-07-06-plan4d-owned-languages.md` (Phases 4d-A/B and 4d-C/D/E).
@@ -600,7 +600,7 @@ branch, and leave its sessions to rebase themselves.
 
 The critical path is EXR-2 (to Phase 3), then EXR-4 (to Phase 4), then EXR-5 (to Phase 2), then
 EXR-7\'s mapping half and EXR-13b, and EXR-6 after the rest of EXR-5. After the 2026-10-31 re-cut,
-lane C has EXR-11 (S, A, B), EXR-8 Part A and the Positron spikes to do before the gates land,
+lane C has EXR-11 (S, A, B) and EXR-8 Part A to do before the gates land,
 and lane D has EXR-13a and EXR-14 once EXR-4 Phase 5 has landed; expect some idle time anyway; an idle lane says so in its handoff and stops (rule 6).
 Session counts in the plan headers are estimates, and the lanes carry roughly 12, 14, 16 and
 17 sessions of work.
@@ -744,8 +744,16 @@ Notified: <lanes messaged at a gate merge, and any lane not found> | none
    first; old docs untouched; `classify.rs` updated.
 4. **Committing the public API while unsettled** (bd-ixz93hjp): optional,
    versioned fields; no npm publish until the contract is exercised.
-5. **Size** (bd-sr73): measured inside EXR-4 before the figure decision is
-   frozen.
+5. **Size** (bd-sr73): measured (EXR-4 Phase 0, re-measured on the hub store in
+   EXR-15 Phase D, 2026-11-01). Decision: figures stay inline. A matplotlib figure plus a
+   small table is 23.5 KB as a stored record document (24.8 KB as a legacy capture), about
+   430 such figures to the 10 MB warning; a sidecar would only be considered past 1 MB
+   gzipped per record. **Orphans:** each execution writes a new immutable document, so an
+   edit-run-edit session leaves about 23.5 KB behind per run per document (10 runs measured
+   at 235,206 bytes in the store, linear, no deduplication of an unchanged figure across
+   documents); 20 runs on one document is about 470 KB until `hub admin` collects them. That
+   is small enough that the single-cell upgrade path (content-addressed figure docs) stays
+   deferred, and it is what `hub admin` aging has to keep up with.
 6. **Never run both mechanisms on one record** (bd-mu9i0bct and bd-42202ipf
    were this bug class).
 7. **Fork drift.** The three engine forks diverge from upstream. QNR\'s cede

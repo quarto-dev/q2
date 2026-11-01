@@ -291,15 +291,16 @@ pub struct EncodedCapturePayload {
 }
 
 /// Choose and encode the payload a capture writer stores. A record is written
-/// only when `record_gate` is on **and** the run produced one (a preview cache
-/// hit has none); otherwise the legacy capture array is written, byte-identical
+/// only when `record_gate` is on **and** the run produced one that describes
+/// something (a preview cache hit has none, and an engine that builds no record
+/// leaves an engineless one); otherwise the legacy capture array is written, byte-identical
 /// to what the writers produced before EXR-13b.
 pub fn encode_capture_payload(
     captures: &[quarto_trace::EngineCapture],
     record: Option<&crate::record::Record>,
     record_gate: bool,
 ) -> std::io::Result<EncodedCapturePayload> {
-    match record.filter(|_| record_gate) {
+    match record.filter(|r| record_gate && !r.metadata.quarto_engines.is_empty()) {
         Some(record) => Ok(EncodedCapturePayload {
             gzipped: gzip_record(record)?,
             is_record: true,
@@ -432,6 +433,20 @@ mod writer_tests {
         let caps = vec![capture("jupyter")];
         let enc = encode_capture_payload(&caps, None, true).unwrap();
         assert!(!enc.is_record);
+    }
+
+    /// An engine that builds no record (a passthrough or an extension engine without one)
+    /// leaves the coalesced record with no engine entries. It describes nothing, so storing it
+    /// would replace the legacy captures with an empty document and lose the outputs.
+    #[test]
+    fn gate_on_with_an_engineless_record_falls_back_to_legacy() {
+        let mut empty = record();
+        empty.metadata.quarto_engines.clear();
+        empty.cells.clear();
+        let caps = vec![capture("test-passthrough")];
+        let enc = encode_capture_payload(&caps, Some(&empty), true).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.engines, vec!["test-passthrough".to_string()]);
     }
 }
 

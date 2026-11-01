@@ -23,6 +23,12 @@ discipline is the same as `replay_stored_outputs`, which the notebook cases cove
 differences (error-abort policy, `begin_cell` ordering relative to execution) are not pinned
 here and are covered by the `#[ignore]`d kernel tests in `tests/integration/jupyter_integration.rs`.
 
-Known pinned oddities (documented, not fixed): `text/markdown`, `text/latex` and widget
-payloads are silently dropped; an undecodable image with no `text/plain` renders
-`[Image output]`.
+Known pinned oddities (documented, not fixed): widget payloads are silently dropped; an
+undecodable image with no `text/plain` renders `[Image output]`.
+
+Changed on purpose (EXR-8 B3, 2026-11-01): `text/markdown` and math `text/latex` were pinned
+as silently dropped. The TS presenter emits them as markdown in a `.cell-output-markdown`
+div, and the Julia flip needs the same, so `unhandled-markdown-mime`,
+`unhandled-latex-mime` and `markdown-beats-nothing-plain-wins` were re-blessed (Gordon
+approved). `scripts/check-presenter-goldens-unchanged.sh` reports these three files as
+changed from now on; that is the intended exception.

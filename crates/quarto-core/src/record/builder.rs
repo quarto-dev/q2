@@ -133,6 +133,11 @@ impl<'a> RecordBuilder<'a> {
             .clone();
         let lang = unit.lang();
 
+        let attr_tail = match unit {
+            Unit::Cell(c) => c.attr_tail.as_str(),
+            Unit::Inline(_) => "",
+        };
+
         // A span's text is its expression and has no option lines.
         let (options, code, label) = match kind {
             UnitKind::Inline => (BTreeMap::new(), author.text.clone(), None),
@@ -148,6 +153,7 @@ impl<'a> RecordBuilder<'a> {
                 lang,
                 code: &code,
                 options: &options,
+                attr_tail,
                 profile: None,
             },
         )?;

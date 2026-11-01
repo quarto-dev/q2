@@ -4,4 +4,10 @@
 x
 ```
 
+::: {.cell-output .cell-output-display .cell-output-markdown}
+
+$x^2$
+
+:::
+
 :::

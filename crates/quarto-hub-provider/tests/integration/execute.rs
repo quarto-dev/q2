@@ -387,8 +387,8 @@ async fn a_dash_m_reaches_execution_but_not_the_staleness_key() {
 
 // ── EXR-5: the execution record under a `-M` overlay ────────────────────────
 
-/// An engine that records every unit the stage listed, as the Jupyter engine
-/// does (EXR-4's `RecordBuilder` over the stage's units and author texts).
+/// An engine that records every unit the stage listed, naming the languages it owns as
+/// the Jupyter engine does (a record whose entry owns nothing cannot be judged fresh) (EXR-4's `RecordBuilder` over the stage's units and author texts).
 struct RecordingEngine;
 
 impl ExecutionEngine for RecordingEngine {
@@ -417,6 +417,7 @@ impl ExecutionEngine for RecordingEngine {
             result.record = Some(
                 builder
                     .finish(EngineEntryInput {
+                        owned_languages: ctx.owned_languages.clone(),
                         document_metadata: ctx.document_metadata_json(),
                         ..Default::default()
                     })
@@ -496,6 +497,18 @@ fn provide_hub_with_overlay_stores_overlay_free_record_hashes() {
 
     assert!(!stored.captures[0].input_qmd.contains("ZZOVERLAYSUB"));
     let record = stored.record.expect("record kept");
+    // A viewer with no overlay recomputes from the source and finds the record fresh
+    // (EXR-15), even though the execution ran under `params: {n: 2}`.
+    assert!(
+        !quarto_core::record::record_is_stale(
+            &record,
+            &String::from_utf8_lossy(&source.input_qmd),
+            &source.sugared_blocks,
+            &source.metadata,
+        )
+        .unwrap(),
+        "an overlay-free viewer sees the record as fresh"
+    );
     assert_eq!(
         record.metadata.quarto_execution_hash,
         plain_record.metadata.quarto_execution_hash
@@ -514,4 +527,33 @@ fn provide_hub_with_overlay_stores_overlay_free_record_hashes() {
         .expect("the overlay is noted");
     assert_eq!(noted.get("params"), Some(&serde_json::json!({ "n": 2 })));
     assert!(!noted.contains_key("subtitle"), "{noted:?}");
+}
+
+/// The provenance bytes depend on the overlay's meaning, not on how the flag was spelled,
+/// and a non-execution key never reaches them (EXR-15; moved from EXR-4).
+#[test]
+fn overlay_provenance_is_independent_of_flag_spelling() {
+    use quarto_core::metadata_flag::overlay_from_metadata_flags;
+    use quarto_core::record::overlay_difference;
+
+    let record = quarto_core::record::read_record(include_str!(
+        "../../../quarto-core/tests/fixtures/records/basic.json"
+    ))
+    .unwrap();
+    let noted = |flags: &[&str]| {
+        let flags: Vec<String> = flags.iter().map(|f| f.to_string()).collect();
+        let overlay = overlay_from_metadata_flags(&flags).unwrap().unwrap();
+        let diff = overlay_difference(overlay.metadata.as_ref().unwrap(), &record);
+        serde_json::to_string(&diff).unwrap()
+    };
+    let flow = noted(&["params:{n: 2}", "title:ZZ"]);
+    let json = noted(&["title:ZZ", "params:{\"n\": 2}"]);
+    assert_eq!(
+        flow, json,
+        "flag order and YAML flow vs JSON are not meaningful"
+    );
+    assert!(
+        !flow.contains("title"),
+        "a non-execution key is absent: {flow}"
+    );
 }

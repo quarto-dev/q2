@@ -440,6 +440,7 @@ mod tests {
                     lang: "python",
                     code: "x",
                     options,
+                    attr_tail: "",
                     profile: None,
                 },
             )

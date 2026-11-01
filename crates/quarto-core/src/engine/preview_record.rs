@@ -274,6 +274,9 @@ pub async fn compute_input_qmd(
 pub struct SourceInputs {
     pub input_qmd: Vec<u8>,
     pub metadata: std::collections::BTreeMap<String, serde_json::Value>,
+    /// The pre-sugaring snapshot of the same run: the author's text of each braced block, so
+    /// the staleness check hashes units the way the record writer did (EXR-15).
+    pub sugared_blocks: Vec<crate::record::SugaredBlock>,
 }
 
 /// [`compute_input_qmd`] plus the merged metadata, from one pre-engine run.
@@ -334,6 +337,7 @@ pub async fn compute_source_inputs(
     Ok(SourceInputs {
         input_qmd: buf,
         metadata,
+        sugared_blocks: std::mem::take(&mut ctx.sugared_blocks),
     })
 }
 

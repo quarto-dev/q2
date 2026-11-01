@@ -4,11 +4,9 @@
 x
 ```
 
-::: {.cell-output .cell-output-display}
+::: {.cell-output .cell-output-display .cell-output-markdown}
 
-```
-plain wins
-```
+**md**
 
 :::
 

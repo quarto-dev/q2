@@ -75,10 +75,87 @@ chunk_figure_files <- function(options) {
   file.path(fig_dir, list.files(dir, recursive = TRUE))
 }
 
+# EXR-12: per-span records. The Rust side rewrites each brace-spelling inline span to
+# `.QuartoInlineId("<id>"); .QuartoInlineRender(expr)`. knitr's `inline` hook is not
+# called for a `NULL`, invisible or zero-length value (`knitr:::inline_exec` skips it),
+# so a span cannot be recorded from that hook alone. The `evaluate.inline` hook runs for
+# every span: it takes the id from the span's code and holds it as pending. The `inline`
+# hook, which receives the value and returns the markdown knitr inserts, records
+# {id, markdown} and clears it; a pending id still set when the next span starts (or
+# knitting ends) was never served, so it is recorded with empty markdown.
+quarto_span_records <- new.env()
+quarto_span_records$records <- list()
+quarto_span_records$pending <- NULL
+quarto_span_records$installed <- NULL
+
+quarto_record_span <- function(markdown) {
+  id <- quarto_span_records$pending
+  if (is.null(id)) {
+    return(invisible(NULL))
+  }
+  quarto_span_records$pending <- NULL
+  quarto_span_records$records[[length(quarto_span_records$records) + 1]] <-
+    list(id = id, markdown = markdown)
+  invisible(NULL)
+}
+
+# Record an unserved pending id as an empty span. Called before each span and at the end
+# of knitting (execute.R).
+quarto_flush_span_records <- function() {
+  quarto_record_span("")
+}
+
+# Wrap whatever `inline` hook is current, so the markdown is exactly what knitr (or a
+# hook the document installed) produces. Installed at the first span, before knitr's
+# `inline_exec` reads the hook (its `hook` argument is a lazy default), and again if a
+# chunk replaces the hook mid-document.
+quarto_ensure_inline_hook <- function() {
+  current <- knitr::knit_hooks$get("inline")
+  if (identical(current, quarto_span_records$installed)) {
+    return(invisible(NULL))
+  }
+  installed <- function(x) {
+    text <- paste(current(x), collapse = "")
+    quarto_record_span(text)
+    text
+  }
+  quarto_span_records$installed <- installed
+  knitr::knit_hooks$set(inline = installed)
+  invisible(NULL)
+}
+
+quarto_evaluate_inline_hook <- function(base) {
+  # knitr_hooks() can run more than once in a process; never wrap our own wrapper
+  # (it would call itself).
+  while (!is.null(attr(base, "quarto_base"))) {
+    base <- attr(base, "quarto_base")
+  }
+  hook <- function(code, envir = knitr::knit_global()) {
+    quarto_flush_span_records()
+    quarto_ensure_inline_hook()
+    m <- regmatches(
+      code,
+      regexec("^\\s*\\.QuartoInlineId\\(\"([^\"]+)\"\\);", code)
+    )[[1]]
+    if (length(m) == 2) {
+      quarto_span_records$pending <- m[2]
+    }
+    base(code, envir)
+  }
+  attr(hook, "quarto_base") <- base
+  hook
+}
+
 knitr_hooks <- function(format, resourceDir, handledLanguages) {
   knit_hooks <- list()
   opts_hooks <- list()
   quarto_chunk_records$records <- list()
+  quarto_span_records$records <- list()
+  quarto_span_records$pending <- NULL
+  quarto_span_records$installed <- NULL
+  knit_hooks[["evaluate.inline"]] <- quarto_evaluate_inline_hook(
+    knitr::knit_hooks$get("evaluate.inline")
+  )
   chunk_pending <- list()
 
   # Snapshot taken before each recorded chunk runs. Options hooks run before

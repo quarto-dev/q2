@@ -2,7 +2,7 @@
 title: 'EXR-12: knitr K2, inline expressions as recorded units'
 date: 2026-10-28
 description: 'Records each knitr brace-spelling inline expression span as a unit of the engine execution record by embedding the unit id in the rewritten expression, without changing how any value renders; the classic spelling is still rewritten as today but gets no id and no record.'
-status: draft
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md) (plan EXR-12,
@@ -13,7 +13,7 @@ record plumbing and the record adapter), [EXR-2](2026-10-28-exr-02-unit-scanner.
 **Blocks:** [EXR-17](2026-10-28-exr-17-legacy-removal.md). Soft prerequisite of
 [EXR-14](2026-10-28-exr-14-preview-splice.md)\'s knitr-span end-to-end fixtures (the span
 splice itself works on any record with span units). Per the dependency table in the epic, it also blocks EXR-18.
-**Lane:** C (`workspace-6`); run it under the epic\'s "Running the plans in four lanes" section.
+**Lane:** A (`workspace-4`; re-assigned from C by Gordon, 2026-11-01); run it under the epic\'s "Running the plans in four lanes" section.
 **Estimated sessions:** 2.
 
 > **For implementers:** TDD, task by task; steps use `- [ ]` checkboxes. Tests
@@ -143,68 +143,68 @@ Gordon, 2026-10-30):
 
 ## Phase 12S: spikes first (decisions written into this plan)
 
-- [ ] **S1.** In a scratch R session with the pinned knitr (first record which
+- [x] **S1.** In a scratch R session with the pinned knitr (first record which
   version that is): confirm that `` `r .QuartoInlineId("1-9f8e7d6c-inline"); 1+1` `` renders `2`,
   that `` `r .QuartoInlineId("1-9f8e7d6c-inline"); NULL` `` renders empty, that a wrapped
   `evaluate.inline` hook runs for every span including the `NULL` one while the
   `inline` hook does not, that the pending id set by the `evaluate.inline` wrapper
   reaches the `inline` hook of the same span, and that evaluating two expressions
   gives the last one\'s visibility. Pin the minimum knitr version these rely on.
-- [ ] **S2.** Set equality: list the brace spans knitr evaluates for the existing test
+- [x] **S2.** Set equality: list the brace spans knitr evaluates for the existing test
   documents (prose, attribute values, link titles, adjacent spans, display
   fences, spans inside `eval: false` chunks\' surrounding prose) against the EXR-2
   scanner\'s units. Record every difference; classic spans are an expected,
   by-design difference and are listed separately.
-- [ ] **S3.** `execute: enabled: false` and `error: true`: what knitr does with
+- [x] **S3.** `execute: enabled: false` and `error: true`: what knitr does with
   inline spans, and what Quarto 1 does.
 
 ## Phase 12A: tests first
 
 No R needed:
 
-- [ ] `rewrite_embeds_ids_in_brace_spans`: golden strings for `{r} x`, a tab-separated
+- [x] `rewrite_embeds_ids_in_brace_spans`: golden strings for `{r} x`, a tab-separated
   brace span, and brace spans in attribute values.
-- [ ] `rewrite_leaves_classic_spans_without_ids`: golden strings for `r x` and a
+- [x] `rewrite_leaves_classic_spans_without_ids`: golden strings for `r x` and a
   tab-separated classic span come out exactly as today, with no id statement.
-- [ ] `rewrite_leaves_empty_classic_span_alone`: loud failure preserved
+- [x] `rewrite_leaves_empty_classic_span_alone`: loud failure preserved
   (existing behavior at `preprocess.rs:285-290`).
-- [ ] `ids_come_from_the_shared_unit_list`: the rewrite takes the ids of its owned brace
+- [x] `ids_come_from_the_shared_unit_list`: the rewrite takes the ids of its owned brace
   spans from the stage\'s shared unit list (matched by `line` in the text knitr receives,
   in order within a line, under a count check; core re-locates each unit\'s `line`, EXR-2
   `locate_units` carried by EXR-7), never generates its own; a span another engine owns,
   or a classic span, is skipped and does not shift the ids of the owned ones.
-- [ ] `resolver_and_scanner_agree_on_the_corpus`: property test over every
+- [x] `resolver_and_scanner_agree_on_the_corpus`: property test over every
   fixture string in `knitr_inline_expressions.rs` and the mask tests; the set of brace
   spans from the rewrite equals the scanner\'s inline units for language `r` (this is the
   guard for phantom units; classic spans are excluded from both sides by design).
 
 Real R, gated like the existing file:
 
-- [ ] `inline_records_one_unit_per_span_in_document_order`.
-- [ ] `inline_records_brace_spans_and_not_classic_spans`: a brace span records the
+- [x] `inline_records_one_unit_per_span_in_document_order`.
+- [x] `inline_records_brace_spans_and_not_classic_spans`: a brace span records the
   escaped text and a `NULL` brace span records `NULL`; a classic span in the same document
   produces no unit (its rendered text still matches `null_values_render_per_spelling`).
-- [ ] `inline_null_and_invisible_spans_record_an_empty_unit_and_do_not_shift_ids`: a
+- [x] `inline_null_and_invisible_spans_record_an_empty_unit_and_do_not_shift_ids`: a
   `NULL` span between two valued spans records an empty unit under its own id, and
   the following span keeps its id (the case a recording on the `inline` hook alone
   gets wrong).
-- [ ] `inline_id_embedding_does_not_change_output` (shadow equality): the HTML of
+- [x] `inline_id_embedding_does_not_change_output` (shadow equality): the HTML of
   every existing fixture in `knitr_inline_expressions.rs` is byte-identical with
   embedding on and off.
-- [ ] `inline_in_attribute_and_link_title_are_units`.
-- [ ] `inline_in_nested_display_fence_is_not_a_unit`: masked fences yield no unit
+- [x] `inline_in_attribute_and_link_title_are_units`.
+- [x] `inline_in_nested_display_fence_is_not_a_unit`: masked fences yield no unit
   and no recorded value.
-- [ ] `inline_count_mismatch_skips_record_with_diagnostic`: if knitr evaluates fewer
+- [x] `inline_count_mismatch_skips_record_with_diagnostic`: if knitr evaluates fewer
   spans than the scanner found (the adjacent-span case until fixed), no record is
   written for the document and a diagnostic names the span\'s source location; the
   render succeeds (the epic\'s count-mismatch rule while records are additive; whether
   a mismatch may fail the render after knitr flips is decided in that flip task).
-- [ ] `inline_error_names_the_unit_location` (bonus, with bd-1ng2ivis): an inline
+- [x] `inline_error_names_the_unit_location` (bonus, with bd-1ng2ivis): an inline
   expression that errors reports `file.qmd:line:col` of the span.
 
 ## Phase 12B: R side
 
-- [ ] Define `.QuartoInlineId` next to `.QuartoInlineRender` in `execute.R`; wrap the
+- [x] Define `.QuartoInlineId` next to `.QuartoInlineRender` in `execute.R`; wrap the
   `evaluate.inline` hook (set the pending id for every span), add the `inline` hook
   that records `{id, text}` and clears the pending id, and flush an unserved pending id
   as an empty string at the next span and at the end of knitting; return the records as
@@ -212,19 +212,67 @@ Real R, gated like the existing file:
 
 ## Phase 12C: Rust side
 
-- [ ] Extend the rewrite in `preprocess.rs` to take the shared unit list\'s ids and emit the
+- [x] Extend the rewrite in `preprocess.rs` to take the shared unit list\'s ids and emit the
   leading statement for brace spans only; keep the old signature for callers that record
   nothing, and leave classic spans rewritten as today.
-- [ ] `KnitrExecuteResult.spans` with `#[serde(default)]`; adapter into the record
+- [x] `KnitrExecuteResult.spans` with `#[serde(default)]`; adapter into the record
   (span units with rendered outputs), joined by id.
-- [ ] The owned-span count is restricted to language `r`: knitr\'s view marks
+- [x] The owned-span count is restricted to language `r`: knitr\'s view marks
   `python`, `sql`, `bash` and `sh` owned through its interop claims
   (`engine/knitr/mod.rs:257-266`), but the pass evaluates only `r` spans
   (`preprocess.rs:202-211`), so a span in any other language knitr owns stays literal
   with no id and no unit, and does not enter the count.
-- [ ] Alignment check: every scanner span for language `r` has a record (or the engine reported it
+- [x] Alignment check: every scanner span for language `r` has a record (or the engine reported it
   as not evaluated); otherwise no record plus a diagnostic with the span\'s location,
   and the render succeeds.
+
+## Results (2026-11-01)
+
+Spike findings, all on knitr 1.50 (the version installed locally; the version q2 pins is
+still unknown, and this plan adds no new minimum beyond the `evaluate.inline` and `inline`
+hooks, both long-standing `knit_hooks` entries):
+
+- **S1.** Confirmed: the `evaluate.inline` hook runs for every span, `NULL`, invisible and
+  zero-length ones included, while the `inline` hook does not (`knitr:::inline_exec` skips
+  it when `length(res)` is 0); `.QuartoInlineId("..."); expr` keeps the last expression\'s
+  value and visibility; a comment after the leading statement is harmless. Two facts the
+  plan did not have:
+  - A hook set through rmarkdown\'s `knit_hooks` replaces knitr\'s default `inline` hook,
+    which drops its numeric rounding (`3.14159265` instead of `3.141593`). The recording
+    hook is therefore installed lazily from the `evaluate.inline` wrapper, wrapping the hook
+    that is current at that moment (`quarto_ensure_inline_hook` in `hooks.R`); `inline_exec`
+    reads its `hook` argument lazily, after the first `evaluate.inline` call. Output is
+    byte-identical to a run with no recording (checked in R and by
+    `inline_id_embedding_does_not_change_output`).
+  - `knitr_hooks()` can run more than once in a process; the wrapper unwraps its own earlier
+    install (`quarto_base` attribute) or it calls itself and fails with "evaluation nested
+    too deeply".
+- **S2.** The brace spans the rewrite evaluates equal the scanner\'s `r` units on every
+  fixture in `resolver_and_scanner_agree_on_the_corpus` (prose, attributes, link titles,
+  adjacent spans, multi-line, tab, front matter, lists and tables, after a chunk). The
+  adjacent-span limitation is shared: the scanner and the rewrite both consume the guard
+  character, so both see only the first span and the units stay aligned (no mismatch).
+  By-design differences: classic spans (no unit); `{R}`, `{python}` and other languages
+  (no unit, not counted); a span inside an HTML comment, which the scanner skips and the
+  rewrite evaluates (it gets no id and no record, test
+  `a_span_in_an_html_comment_is_evaluated_but_not_a_unit`). A span inside a display fence
+  is masked upstream, so neither side sees it.
+- **S3.** `execute: enabled: false` does not stop knitr evaluating a brace span in a
+  document that has an `r` chunk (existing behavior, unchanged; the span is recorded). A
+  document with no `r` chunk does not reach knitr, so its spans are neither evaluated nor
+  recorded. `error: true` governs chunks only: a failing inline expression fails the render
+  either way. Quarto 1 was not run for any of this. Errors from an inline expression used
+  to be reported at a line of the text handed to R (`lines 139-139`); they now name the
+  line in the author\'s file (`map_span_line_to_engine_line`, `inline_error_names_the_unit_location`).
+
+Notes on the tests: the count-mismatch case is a unit test
+(`inline_count_mismatch_skips_record_with_diagnostic` in `chunk_records.rs`): because the
+scanner and the rewrite agree even on adjacent spans, no real-R document produces a
+mismatch today. The shadow-equality test also runs `place(record)` against the live
+document, except for documents with a classic span (no unit, so `place` leaves it literal)
+and for the masked display fence. A numeric inline value such as `` `{r} 1e6` `` (`1e+06`)
+made the live render fail to parse in the shadow fixture, with or without recording; it was
+left out of the fixture and is not part of this plan.
 
 ## Exit criteria
 

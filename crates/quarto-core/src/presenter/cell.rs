@@ -138,6 +138,19 @@ fn echoed_source_fence(language: &str, code: &str) -> String {
 
 /// Wrap already-trimmed output text in a `::: {<classes>}` div around
 /// a plain fence, with the fence sized to the content.
+/// The markdown a rich output presents as: `text/markdown`, or math `text/latex` when
+/// there is no `text/markdown` (Q1's `displayDataWithMarkdownMath`; math is text that
+/// starts and ends with `$`, or a `\begin{` environment).
+fn markdown_output(data: &crate::presenter::output::MimeBundle) -> Option<String> {
+    if let Some(markdown) = data.get("text/markdown") {
+        return Some(extract_text_content(markdown));
+    }
+    let latex = extract_text_content(data.get("text/latex")?);
+    let is_math = (latex.starts_with('$') && latex.ends_with('$'))
+        || (latex.starts_with("\\begin{") && latex.contains("\\end{"));
+    is_math.then_some(latex)
+}
+
 fn fenced_output_div(classes: &str, text: &str) -> String {
     let ticks = ticks_for_code(text);
     format!("\n::: {{{classes}}}\n\n{ticks}\n{text}\n{ticks}\n\n:::\n")
@@ -153,10 +166,10 @@ fn fenced_output_div(classes: &str, text: &str) -> String {
 ///
 /// Rich-output MIME priority follows Q1's `displayDataMimeType` for
 /// HTML targets, scoped to the types q2 handles: `text/html` →
-/// `image/svg+xml` → `image/png` → `image/jpeg` → `text/plain`
-/// **last** (a matplotlib bundle carries an image plus a text
-/// fallback; the image must win). `text/markdown` and jupyter-widget
-/// payloads remain unhandled (follow-up).
+/// `text/markdown` (or math `text/latex`) → `image/svg+xml` →
+/// `image/png` → `image/jpeg` → `text/plain` **last** (a matplotlib
+/// bundle carries an image plus a text fallback; the image must win).
+/// Jupyter-widget payloads remain unhandled (follow-up).
 fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: bool) -> String {
     const IMAGE_MIMES: [&str; 3] = ["image/svg+xml", "image/png", "image/jpeg"];
 
@@ -190,6 +203,12 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
                     output.push_str(&format!(
                         "\n::: {{.cell-output .cell-output-display}}\n\n{ticks}{{=html}}\n{}\n{ticks}\n\n:::\n",
                         s
+                    ));
+                } else if let Some(markdown) = markdown_output(data) {
+                    // Written as markdown itself (Q1's `mdMarkdownOutput`), with the
+                    // extra class `isMarkdown` adds.
+                    output.push_str(&format!(
+                        "\n::: {{.cell-output .cell-output-display .cell-output-markdown}}\n\n{markdown}\n\n:::\n"
                     ));
                 } else if let Some(rel_path) =
                     image_entry.and_then(|(mime, value)| fig.write_image(mime, value))
@@ -693,6 +712,112 @@ mod tests {
         let md = format_outputs(&result, &mut test_fig(), true);
         assert!(md.contains("{=html}"), "html must win; got:\n{md}");
         assert!(!md.contains("![]("), "no image when html wins; got:\n{md}");
+    }
+
+    fn display(mimes: &[(&str, serde_json::Value)]) -> CellResult {
+        let data = mimes
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
+        ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }])
+    }
+
+    #[test]
+    fn test_text_markdown_is_emitted_as_markdown() {
+        // Q1: `text/markdown` is written as markdown itself, in a div that also carries
+        // `.cell-output-markdown`, not as the `text/plain` fallback in a code fence.
+        let result = display(&[
+            ("text/markdown", serde_json::json!(["**bold**"])),
+            ("text/plain", serde_json::json!("bold")),
+        ]);
+        assert_eq!(
+            format_outputs(&result, &mut test_fig(), true),
+            "\n::: {.cell-output .cell-output-display .cell-output-markdown}\n\n**bold**\n\n:::\n"
+        );
+    }
+
+    #[test]
+    fn test_math_latex_is_emitted_as_markdown() {
+        // Q1 (`displayDataWithMarkdownMath`): math LaTeX with no `text/markdown` is
+        // presented as markdown so pandoc reads the math.
+        for latex in ["$x^2$", "$$\\int f$$", "\\begin{align}a\\end{align}"] {
+            let result = display(&[
+                ("text/latex", serde_json::json!([latex])),
+                ("text/plain", serde_json::json!("fallback")),
+            ]);
+            let md = format_outputs(&result, &mut test_fig(), true);
+            assert_eq!(
+                md,
+                format!(
+                    "\n::: {{.cell-output .cell-output-display .cell-output-markdown}}\n\n{latex}\n\n:::\n"
+                ),
+                "latex {latex:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_non_math_latex_falls_back_to_plain_text() {
+        // For an HTML target Q1 leaves other `text/latex` out of the priority list.
+        let result = display(&[
+            ("text/latex", serde_json::json!(["\\textbf{x}"])),
+            ("text/plain", serde_json::json!("x")),
+        ]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(!md.contains("cell-output-markdown"), "got:\n{md}");
+        assert!(md.contains("```\nx\n```"), "got:\n{md}");
+    }
+
+    #[test]
+    fn test_markdown_beats_latex_and_image_but_not_html() {
+        let md_over_latex = display(&[
+            ("text/markdown", serde_json::json!(["m"])),
+            ("text/latex", serde_json::json!(["$l$"])),
+        ]);
+        let md = format_outputs(&md_over_latex, &mut test_fig(), true);
+        assert!(
+            md.contains("\n\nm\n\n") && !md.contains("$l$"),
+            "got:\n{md}"
+        );
+
+        let md_over_image = display(&[
+            ("text/markdown", serde_json::json!(["m"])),
+            ("image/png", serde_json::json!(PNG_B64_MULTILINE)),
+        ]);
+        let md = format_outputs(&md_over_image, &mut test_fig(), true);
+        assert!(
+            md.contains("cell-output-markdown") && !md.contains("![]("),
+            "got:\n{md}"
+        );
+
+        let html_over_md = display(&[
+            ("text/html", serde_json::json!("<b>h</b>")),
+            ("text/markdown", serde_json::json!(["m"])),
+        ]);
+        let md = format_outputs(&html_over_md, &mut test_fig(), true);
+        assert!(
+            md.contains("{=html}") && !md.contains("cell-output-markdown"),
+            "got:\n{md}"
+        );
+    }
+
+    #[test]
+    fn test_markdown_execute_result_is_also_markdown() {
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: [("text/markdown".to_string(), serde_json::json!("*it*"))]
+                .into_iter()
+                .collect(),
+            metadata: serde_json::json!({}),
+            execution_count: 1,
+        }]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(
+            md.contains(".cell-output-markdown") && md.contains("*it*"),
+            "got:\n{md}"
+        );
     }
 
     #[test]

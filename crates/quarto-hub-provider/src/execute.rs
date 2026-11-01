@@ -610,6 +610,51 @@ mod tests {
         assert_eq!(kind, "engine-record");
     }
 
+    /// EXR-15: the record doc's `meta.engines` is the record's engines list, in order, and the
+    /// payload parses back to an equal record.
+    #[tokio::test]
+    async fn record_doc_meta_and_payload_match_the_record() {
+        use automerge::ReadDoc;
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let expected_engines: Vec<String> = record
+            .metadata
+            .quarto_engines
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(record.clone()),
+        };
+        let repo = Repo::build_tokio().load().await;
+        let id = write_capture_doc(&repo, "doc.qmd", &run, true)
+            .await
+            .unwrap();
+        let handle = repo.find(id.parse().unwrap()).await.unwrap().unwrap();
+        let (engines, gzipped) = handle.with_document(|doc| {
+            let engines = quarto_hub::resource::read_capture_meta(doc)
+                .map(|m| m.engines)
+                .unwrap_or_default();
+            let content = doc
+                .get(automerge::ROOT, "content")
+                .unwrap()
+                .and_then(|(v, _)| v.into_bytes().ok())
+                .unwrap();
+            (engines, content)
+        });
+        assert_eq!(engines, expected_engines);
+        let parsed =
+            quarto_core::pandoc_request::captures::parse_capture_payload(Some(&gzipped), &id)
+                .unwrap();
+        let quarto_core::pandoc_request::captures::CapturePayload::Record(back) = parsed else {
+            panic!("expected a record payload");
+        };
+        assert_eq!(*back, record);
+    }
+
     #[test]
     fn is_safe_relative_guards_traversal() {
         assert!(is_safe_relative("report.qmd"));

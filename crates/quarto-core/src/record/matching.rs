@@ -36,6 +36,7 @@ impl UnitKey {
         kind: UnitKind,
         lang: &str,
         author_text: &str,
+        attr_tail: &str,
     ) -> Result<Self, HashError> {
         let (options, code, content) = match kind {
             UnitKind::Inline => (
@@ -56,6 +57,7 @@ impl UnitKey {
                 code: &code,
                 options: &options,
                 profile: None,
+                attr_tail,
             },
         )?;
         Ok(Self {
@@ -173,7 +175,20 @@ mod tests {
     }
 
     fn key(text: &str) -> UnitKey {
-        UnitKey::from_author_text(&def(), UnitKind::Cell, "python", text).unwrap()
+        UnitKey::from_author_text(&def(), UnitKind::Cell, "python", text, "").unwrap()
+    }
+
+    /// The brace tail is hashed on this side as on the writer's (EXR-11): editing it makes
+    /// the exec hash differ, and an empty tail leaves the hash as it was.
+    #[test]
+    fn brace_tail_changes_the_exec_hash() {
+        let hash = |tail: &str| {
+            UnitKey::from_author_text(&def(), UnitKind::Cell, "python", "x", tail)
+                .unwrap()
+                .exec_hash
+        };
+        assert_ne!(hash(""), hash("echo=FALSE"));
+        assert_eq!(hash(""), key("x").exec_hash);
     }
 
     fn cell_from(key: &UnitKey) -> RecordCell {
@@ -305,7 +320,7 @@ mod tests {
 
     #[test]
     fn spans_and_cells_never_match_each_other() {
-        let span = UnitKey::from_author_text(&def(), UnitKind::Inline, "python", "x").unwrap();
+        let span = UnitKey::from_author_text(&def(), UnitKind::Inline, "python", "x", "").unwrap();
         let cells = record_of(&["x"]);
         let m = match_units(&[span], &cells);
         assert_eq!(m.assignment, vec![None]);
@@ -313,15 +328,15 @@ mod tests {
 
     #[test]
     fn span_keys_ignore_language_case() {
-        let a = UnitKey::from_author_text(&def(), UnitKind::Inline, "Python", "a").unwrap();
-        let b = UnitKey::from_author_text(&def(), UnitKind::Inline, "python", "a").unwrap();
+        let a = UnitKey::from_author_text(&def(), UnitKind::Inline, "Python", "a", "").unwrap();
+        let b = UnitKey::from_author_text(&def(), UnitKind::Inline, "python", "a", "").unwrap();
         assert_eq!(a, b);
     }
 
     #[test]
     fn an_edited_second_span_leaves_the_first_matched() {
         let span = |code: &str| {
-            UnitKey::from_author_text(&def(), UnitKind::Inline, "python", code).unwrap()
+            UnitKey::from_author_text(&def(), UnitKind::Inline, "python", code, "").unwrap()
         };
         let cells: Vec<RecordCell> = [span("a"), span("a"), span("b")]
             .iter()
@@ -351,7 +366,7 @@ mod tests {
             .unwrap()
             .cells;
         let cell_key = key("#| fig-width: 7\nx = 1");
-        let span_key = UnitKey::from_author_text(&d, UnitKind::Inline, "python", "x").unwrap();
+        let span_key = UnitKey::from_author_text(&d, UnitKind::Inline, "python", "x", "").unwrap();
         let m = match_units(&[cell_key, span_key], &cells);
         assert_eq!(m.assignment, vec![Some(0), Some(1)]);
     }

@@ -338,6 +338,18 @@ self-contained file. `quarto_files_ref` is reserved for a future sidecar: the re
 ignores it and the writer never emits it. Moving figures out of the file would be a schema change
 (a `quarto_record_version` bump), not an extension.
 
+Size decision (EXR-15 Phase D, bd-sr73, 2026-11-01): figures stay inline. Measured on a real
+kernel (the `size-measurement.qmd` fixture, one matplotlib PNG and a three-row data frame):
+the legacy capture gzips to 24,417 bytes and the record to 23,099 (record JSON 32,381 bytes
+against 41,434 for the capture, because the record omits `input_qmd`). The figure is about 89%
+of the gzipped payload (29,072 base64 bytes of PNG, estimated from the EXR-4 Phase 0 table).
+Stored as a hub automerge document the record takes 23,522 bytes (the binary doc adds about
+420 bytes of metadata), and the filesystem store holds exactly that much per document with no
+extra overhead. Roughly 23 KB per figure of this kind puts the 10 MB warning at about 430
+figures in one document. Sidecar threshold, if one is ever needed: a record whose gzipped
+payload passes 1 MB (about 40 figures), where one execution already costs more than the
+orphan budget below; nothing in the fixtures comes near it, so no sidecar design is scheduled.
+
 Serialization: struct-ordered fields, `BTreeMap` for maps, one-space indent with
 sorted keys and a trailing newline (the nbformat writer convention), LF endings,
 no `last_updated`.

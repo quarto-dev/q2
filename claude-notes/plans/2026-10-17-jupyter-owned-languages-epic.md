@@ -4,9 +4,10 @@ date: 2026-10-17
 description: 'Outline of an epic that replaces the Jupyter engine''s hard-coded language lists with resolver-assigned ownership (Plan 4d''s owned_languages), Q1-style kernelspec lookup by language, and multiple kernels per document.'
 ---
 
-**Status:** split into per-phase plans (JOL-1 done and merged; JOL-2a in progress on
-`exr/JOL-1`; JOL-2b, JOL-4, JOL-5 not started; JOL-3 deferred). This file is the background;
-the per-phase plans and the 2026-10-31 review notes in JOL-2a and JOL-2b win on conflicts.
+**Status:** split into per-phase plans. JOL-1, JOL-2a, JOL-4 and JOL-5 are done;
+JOL-2b is implemented and awaits only its `cargo xtask verify` gate; JOL-3 is deferred. This
+file is the background; the per-phase plans and the 2026-10-31 review notes in JOL-2a and
+JOL-2b win on conflicts.
 **Part of:** [the engine-execution-records epic](2026-10-28-execution-records-epic.md)
 (branch `feature/execution-records-epic`). This epic stays separately reviewable but
 **executes as part of that one**: its phases are plans in that epic's DAG

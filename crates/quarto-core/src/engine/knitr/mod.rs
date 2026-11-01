@@ -28,10 +28,13 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+mod chunk_records;
+mod error_lines;
 pub mod error_parser;
 pub mod format;
 pub mod label_reinsert;
 pub mod preprocess;
+mod span_records;
 pub mod subprocess;
 pub mod types;
 
@@ -48,11 +51,50 @@ use crate::resources::ResourceBundle;
 #[allow(unused_imports)]
 pub use error_parser::{RErrorInfo, RErrorType, parse_r_error};
 pub use format::KnitrFormatConfig;
-pub use preprocess::resolve_inline_r_expressions;
+#[allow(unused_imports)]
+pub use preprocess::{resolve_inline_r_expressions, resolve_inline_r_expressions_with_ids};
 pub use subprocess::{
     CallROptions, call_r, determine_working_dir, find_rscript, find_rscript_call_count,
 };
 pub use types::{KnitrExecuteParams, KnitrExecuteResult, KnitrIncludes};
+
+/// EXR-11 Phase 11D: knitr reports "Quitting from lines X-Y" against the text q2 handed to
+/// R. Re-express the range as lines of the author's file; any failure to map leaves the
+/// error as it was.
+fn remap_error_lines(
+    err: crate::engine::error::ExecutionError,
+    ctx: &ExecutionContext,
+    engine_input: &str,
+    r_text: &str,
+) -> crate::engine::error::ExecutionError {
+    use crate::engine::error::ExecutionError;
+    let ExecutionError::ExecutionFailedAtLines {
+        engine,
+        message,
+        start_line,
+        end_line,
+    } = &err
+    else {
+        return err;
+    };
+    let mapped = error_lines::map_to_engine_lines(engine_input, r_text, *start_line..=*end_line)
+        // EXR-12: an inline expression that fails is on one line, outside every chunk.
+        .or_else(|| {
+            let line =
+                error_lines::map_span_line_to_engine_line(engine_input, r_text, *start_line)?;
+            Some(line..=line)
+        })
+        .and_then(|l| error_lines::engine_lines_to_document(ctx, engine_input, l));
+    match mapped {
+        Some(lines) => ExecutionError::execution_failed_at_lines(
+            engine.clone(),
+            message.clone(),
+            *lines.start(),
+            *lines.end(),
+        ),
+        None => err,
+    }
+}
 
 #[cfg(test)]
 mod chunk_record_tests;
@@ -171,11 +213,24 @@ impl ExecutionEngine for KnitrEngine {
             ));
         }
 
+        // Step 1b (EXR-11): when a record is wanted, give every chunk knitr owns a
+        // `quarto-unit-id` option. This runs on the text the stage scanned, before the
+        // edits below change cell bodies (the label re-insertion adds option lines, which
+        // would stop `locate_units` matching those cells).
+        let engine_input = input;
+        let (input, expected_ids) = chunk_records::insert_unit_ids(input, ctx);
+        let input = input.as_str();
+
         // Step 2: Preprocess markdown (resolve inline R expressions)
         // Use has_inline_r_expressions as optimization to skip regex replacement
         // when there are no inline R expressions (common case).
+        //
+        // Step 2a (EXR-12): when a record is wanted, each owned brace span carries its
+        // unit id in the rewritten expression.
+        let span_plan = span_records::SpanPlan::new(input, ctx);
+        let span_ids = span_plan.expected.clone();
         let preprocessed = if preprocess::has_inline_r_expressions(input) {
-            resolve_inline_r_expressions(input)
+            span_plan.resolve(input)
         } else {
             input.to_string()
         };
@@ -230,7 +285,8 @@ impl ExecutionEngine for KnitrEngine {
             &ctx.temp_dir,
             &working_dir,
             &call_options,
-        )?;
+        )
+        .map_err(|e| remap_error_lines(e, ctx, engine_input, &params.markdown))?;
 
         // Step 9: Post-process markdown (fix .rmarkdown references)
         let markdown = postprocess_markdown(&result.markdown, &ctx.source_path);
@@ -241,7 +297,7 @@ impl ExecutionEngine for KnitrEngine {
         let includes = convert_includes(&result.includes, self.name(), &mut warnings);
 
         // Step 11: Build and return result
-        Ok(ExecuteResult {
+        let mut execute_result = ExecuteResult {
             markdown,
             supporting_files: result.supporting.into_iter().map(PathBuf::from).collect(),
             filters: result.filters,
@@ -250,7 +306,22 @@ impl ExecutionEngine for KnitrEngine {
             html_dependencies: Vec::new(),
             warnings,
             ..Default::default()
-        })
+        };
+
+        // Step 12 (EXR-11): the record, a side product that never changes the markdown.
+        chunk_records::attach_records(
+            ctx,
+            &self.hash_definition(),
+            &expected_ids,
+            &result.chunks,
+            &chunk_records::Spans {
+                expected: &span_ids,
+                found: &result.spans,
+                location: &|id| span_records::span_location(ctx, engine_input, id),
+            },
+            &mut execute_result,
+        );
+        Ok(execute_result)
     }
 
     fn can_freeze(&self) -> bool {
@@ -460,6 +531,7 @@ mod tests {
                 lang: "python",
                 code: "x = 1",
                 options: &options,
+                attr_tail: "",
                 profile: None,
             },
         )

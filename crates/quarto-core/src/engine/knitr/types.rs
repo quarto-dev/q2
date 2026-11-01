@@ -138,8 +138,25 @@ pub struct KnitrExecuteResult {
     /// One record per chunk that carried a `quarto-unit-id` option, in
     /// execution order (EXR-11). Absent from results that predate it.
     #[serde(default)]
-    #[allow(dead_code)]
     pub chunks: Vec<KnitrChunkRecord>,
+
+    /// One record per brace-spelling inline span that carried an id statement, in
+    /// evaluation order (EXR-12). Absent from results that predate it.
+    #[serde(default)]
+    pub spans: Vec<KnitrSpanRecord>,
+}
+
+/// A brace-spelling inline expression recorded by the `evaluate.inline` and `inline`
+/// hooks (EXR-12).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnitrSpanRecord {
+    /// The unit id the span carried in its `.QuartoInlineId` statement.
+    pub id: String,
+
+    /// The markdown knitr inserted for the span: empty for a value knitr inserts
+    /// nothing for (`invisible`, a zero-length vector).
+    pub markdown: String,
 }
 
 /// A knitr chunk recorded by the chunk hook (EXR-11).

@@ -199,6 +199,11 @@ pub struct UnitHashInput<'a> {
     pub code: &'a str,
     /// All of the unit's options (the profile's presentation options are removed here).
     pub options: &'a BTreeMap<String, Value>,
+    /// The text after the language token inside the fence braces (`{r echo=FALSE}` gives
+    /// `echo=FALSE`), trimmed; empty for an inline span or a bare `{lang}`. It is in no `#|`
+    /// option and not in the code, so it is hashed on its own, and every engine over-invalidates
+    /// on a change to it (an engine cannot opt out).
+    pub attr_tail: &'a str,
     /// The hash profile the unit names (`quarto_hash_rule`); `None` is the default.
     pub profile: Option<&'a str>,
 }
@@ -219,6 +224,11 @@ pub fn hash_unit(def: &HashDefinition, unit: &UnitHashInput) -> Result<String, H
     f.field(&canonical_json(&Value::Object(
         options.into_iter().collect(),
     )));
+    // Only when present, so a unit with no tail keeps the hash it had before the tail counted.
+    if !unit.attr_tail.is_empty() {
+        f.field("attr-tail");
+        f.field(unit.attr_tail);
+    }
     Ok(f.finish())
 }
 
@@ -347,6 +357,7 @@ pub fn recompute_cell_hash(def: &HashDefinition, cell: &RecordCell) -> Result<St
             lang,
             code: &code,
             options: &options,
+            attr_tail: "",
             profile: cell.metadata.quarto_hash_rule.as_deref(),
         },
     )
@@ -372,6 +383,7 @@ mod tests {
             lang: "python",
             code,
             options,
+            attr_tail: "",
             profile: None,
         }
     }
@@ -591,6 +603,7 @@ mod tests {
             hash_unit(
                 &d,
                 &UnitHashInput {
+                    attr_tail: "",
                     profile: Some("all"),
                     ..unit("x", o)
                 },
@@ -654,6 +667,7 @@ mod tests {
         let err = hash_unit(
             &def(),
             &UnitHashInput {
+                attr_tail: "",
                 profile: Some("nope"),
                 ..unit("x", &o)
             },
@@ -877,5 +891,35 @@ mod tests {
         )
         .unwrap();
         assert_eq!(recompute_cell_hash(&def(), &cell).unwrap(), expected);
+    }
+
+    #[test]
+    fn attr_tail_changes_the_unit_hash_and_an_empty_tail_changes_nothing() {
+        let def = HashDefinition::conservative("knitr");
+        let options = BTreeMap::new();
+        let hash = |attr_tail: &str| {
+            hash_unit(
+                &def,
+                &UnitHashInput {
+                    kind: UnitKind::Cell,
+                    lang: "r",
+                    code: "1",
+                    options: &options,
+                    attr_tail,
+                    profile: None,
+                },
+            )
+            .unwrap()
+        };
+        assert_ne!(hash(""), hash("echo=TRUE"));
+        assert_ne!(hash("echo=TRUE"), hash("echo=FALSE"));
+        assert_eq!(hash("echo=TRUE"), hash("echo=TRUE"));
+        // An empty tail adds no field, so every hash recorded before the tail counted still matches.
+        let mut f = Fields::new(&def, "unit");
+        f.field("cell");
+        f.field("r");
+        f.field("1");
+        f.field(&canonical_json(&Value::Object(Default::default())));
+        assert_eq!(hash(""), f.finish());
     }
 }

@@ -24,9 +24,10 @@
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::{CaptureRun, compute_input_qmd};
+use quarto_core::engine::preview_record::{CaptureRun, compute_input_qmd, compute_source_inputs};
 use quarto_core::pandoc_request::captures::{CapturePayload, parse_capture_payload};
 use quarto_core::project::ProjectContext;
+use quarto_core::record::{Record, record_is_stale};
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::HubContext;
 use quarto_hub::index::CaptureRef;
@@ -207,6 +208,13 @@ async fn record_one(
     Ok(true)
 }
 
+/// What the sidecar's capture doc held, as far as staleness is concerned.
+enum Recorded {
+    /// The first engine's `input_qmd`, the legacy byte-compare key (bd-5yff4).
+    Legacy(String),
+    Record(Arc<Record>),
+}
+
 /// Recompute whether the active sidecar entry for `rel_path` is
 /// stale (Phase C.2). Compares the file's current canonical QMD
 /// against the recorded capture's `input_qmd` byte-for-byte (per
@@ -252,9 +260,9 @@ pub async fn recompute_staleness(
     // deterministic function of the prior engine's output, so an
     // unchanged first input means the whole recorded sequence is still
     // valid.
-    let recorded_input_qmd = match read_capture_from_doc(&ctx, &existing.capture_doc_id).await {
+    let recorded = match read_capture_from_doc(&ctx, &existing.capture_doc_id).await {
         Ok(CapturePayload::Legacy(captures)) => match captures.into_iter().next() {
-            Some(first) => first.input_qmd,
+            Some(first) => Recorded::Legacy(first.input_qmd),
             None => {
                 tracing::warn!(
                     rel_path = %rel_path,
@@ -270,16 +278,7 @@ pub async fn recompute_staleness(
             );
             return Ok(false);
         }
-        Ok(CapturePayload::Record(_)) => {
-            // Record-level staleness (does the record still describe this document)
-            // is EXR-15's; per-unit staleness is computed by the splice (EXR-14) and
-            // reported on its own. The byte compare below is the legacy rule only.
-            tracing::debug!(
-                rel_path = %rel_path,
-                "recorded payload is an engine record; skipping legacy staleness check",
-            );
-            return Ok(false);
-        }
+        Ok(CapturePayload::Record(record)) => Recorded::Record(record),
         Err(e) => {
             tracing::warn!(
                 rel_path = %rel_path,
@@ -294,11 +293,40 @@ pub async fn recompute_staleness(
     let project = ProjectContext::discover(&abs_path, runtime.as_ref())
         .map_err(|e| RecordError::DiscoverFailed(format!("{}", e)))?;
 
-    let current_input_qmd = compute_input_qmd(&abs_path, &project, runtime)
-        .await
-        .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
-
-    let is_stale = current_input_qmd != recorded_input_qmd.as_bytes();
+    let is_stale = match recorded {
+        // Legacy payloads keep the byte compare: any prose edit flips it.
+        Recorded::Legacy(recorded_input_qmd) => {
+            let current_input_qmd = compute_input_qmd(&abs_path, &project, runtime)
+                .await
+                .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+            current_input_qmd != recorded_input_qmd.as_bytes()
+        }
+        // Records compare the per-engine document hashes, recomputed from the record's
+        // stored declarations on the masked, overlay-free pre-engine document (EXR-15,
+        // decision 5). No engine is loaded.
+        Recorded::Record(record) => {
+            let source = compute_source_inputs(&abs_path, &project, runtime)
+                .await
+                .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+            let input_qmd = String::from_utf8_lossy(&source.input_qmd);
+            match record_is_stale(
+                &record,
+                &input_qmd,
+                &source.sugared_blocks,
+                &source.metadata,
+            ) {
+                Ok(stale) => stale,
+                Err(e) => {
+                    tracing::warn!(
+                        rel_path = %rel_path,
+                        error = %e,
+                        "could not apply the record's hash declarations; skipping staleness check",
+                    );
+                    return Ok(false);
+                }
+            }
+        }
+    };
     let target_value = Some(is_stale);
     if existing.staleness == target_value {
         return Ok(false);
@@ -518,6 +546,52 @@ mod tests {
         let (mime, kind) = written_mime_and_kind(true, true).await;
         assert_eq!(mime, quarto_hub::resource::RECORD_MIME_TYPE);
         assert_eq!(kind, "engine-record");
+    }
+
+    /// EXR-15: the record doc's `meta.engines` is the record's engines list, in order, and the
+    /// payload parses back to an equal record.
+    #[tokio::test]
+    async fn record_doc_meta_and_payload_match_the_record() {
+        let temp = TempDir::new().unwrap();
+        let storage = StorageManager::new_standalone(temp.path()).unwrap();
+        let ctx = Arc::new(
+            HubContext::new(storage, HubConfig::default())
+                .await
+                .unwrap(),
+        );
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let expected: Vec<String> = record
+            .metadata
+            .quarto_engines
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(record.clone()),
+        };
+        let id = write_capture_doc_gated(&ctx, "doc.qmd", &run, true)
+            .await
+            .unwrap();
+        let handle = ctx
+            .repo()
+            .find(id.parse().unwrap())
+            .await
+            .unwrap()
+            .expect("doc exists");
+        let engines = handle.with_document(|doc| {
+            quarto_hub::resource::read_capture_meta(doc)
+                .map(|m| m.engines)
+                .unwrap_or_default()
+        });
+        assert_eq!(engines, expected);
+        let CapturePayload::Record(back) = read_capture_from_doc(&ctx, &id).await.unwrap() else {
+            panic!("expected a record payload");
+        };
+        assert_eq!(*back, record);
     }
 
     #[tokio::test]
@@ -1457,6 +1531,199 @@ mod tests {
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
             Some(true),
             "prose-only edit ALSO flips staleness in v1 (known limitation per §Q-C3)"
+        );
+    }
+
+    /// An engine that records the units it owns, as the Jupyter engine does (EXR-4's
+    /// `RecordBuilder` over the stage's units and author texts). The passthrough engine
+    /// above builds no record.
+    struct RecordingTestEngine;
+
+    impl ExecutionEngine for RecordingTestEngine {
+        fn name(&self) -> &str {
+            "test-recording"
+        }
+
+        fn execute(
+            &self,
+            input: &str,
+            ctx: &ExecutionContext,
+        ) -> Result<ExecuteResult, ExecutionError> {
+            use quarto_core::record::{EngineEntryInput, RecordBuilder, UnitResult};
+            let mut result = ExecuteResult::passthrough(input);
+            if ctx.want_record {
+                let fail = |e: &dyn std::fmt::Display| {
+                    ExecutionError::execution_failed("test-recording", e.to_string())
+                };
+                let def = self.hash_definition();
+                let mut builder =
+                    RecordBuilder::new(self.name(), &def, &ctx.units, &ctx.author_texts)
+                        .map_err(|e| fail(&e))?;
+                for (i, unit) in ctx.units.iter().enumerate() {
+                    if ctx.owned_languages.iter().any(|l| l == unit.lang()) {
+                        builder
+                            .push(i, UnitResult::default())
+                            .map_err(|e| fail(&e))?;
+                    }
+                }
+                result.record = Some(
+                    builder
+                        .finish(EngineEntryInput {
+                            owned_languages: ctx.owned_languages.clone(),
+                            document_metadata: ctx.document_metadata_json(),
+                            ..Default::default()
+                        })
+                        .map_err(|e| fail(&e))?,
+                );
+            }
+            Ok(result)
+        }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == "test-recording" {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    fn make_recording_registry() -> Arc<EngineRegistry> {
+        let mut reg = EngineRegistry::new();
+        reg.register(Arc::new(RecordingTestEngine));
+        Arc::new(reg)
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // EXR-15: record-level staleness (decision 5)
+    // ──────────────────────────────────────────────────────────────
+
+    /// Like `build_ctx_record_then_return_root`, but the sidecar points at a *record*
+    /// doc (writer gate on), built from a real pre-engine run.
+    async fn build_ctx_record_doc_then_return_root(
+        files: &[(&str, &str)],
+        rel: &str,
+    ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
+        let (tmp, ctx, runtime) = build_ctx_with_files(files).await;
+        let abs = tmp.path().join(rel);
+        let project = ProjectContext::discover(&abs, runtime.as_ref()).unwrap();
+        let run = quarto_core::engine::preview_record::record_capture_run(
+            &abs,
+            &project,
+            runtime.clone(),
+            Some(make_recording_registry()),
+        )
+        .await
+        .unwrap();
+        assert!(run.record.is_some(), "the engine stage emits a record");
+        let id = write_capture_doc_gated(&ctx, rel, &run, true)
+            .await
+            .unwrap();
+        ctx.index()
+            .set_capture(
+                rel,
+                &CaptureRef {
+                    capture_doc_id: id,
+                    staleness: Some(false),
+                    state: None,
+                    last_error: None,
+                },
+            )
+            .unwrap();
+        (tmp, ctx, runtime)
+    }
+
+    async fn staleness_after_edit(
+        ctx: &Arc<HubContext>,
+        runtime: &Arc<dyn SystemRuntime>,
+        rel: &str,
+    ) -> Option<bool> {
+        recompute_staleness(
+            ctx.clone(),
+            runtime.clone(),
+            rel,
+            EnginePolicy::Manual,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        ctx.index().get_capture(rel).unwrap().staleness
+    }
+
+    const RECORD_DOC: &str =
+        "---\nengine: test-recording\n---\n\nA paragraph.\n\n```{test-recording}\nx\n```\n";
+
+    #[tokio::test]
+    async fn record_prose_only_edit_stays_fresh() {
+        let (tmp, ctx, runtime) =
+            build_ctx_record_doc_then_return_root(&[("doc.qmd", RECORD_DOC)], "doc.qmd").await;
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            RECORD_DOC.replace("A paragraph.", "A different paragraph."),
+        )
+        .unwrap();
+        assert_eq!(
+            staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
+            Some(false),
+            "a prose edit does not stale a record"
+        );
+    }
+
+    #[tokio::test]
+    async fn record_code_edit_flips_staleness() {
+        let (tmp, ctx, runtime) =
+            build_ctx_record_doc_then_return_root(&[("doc.qmd", RECORD_DOC)], "doc.qmd").await;
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            RECORD_DOC.replace("\nx\n", "\ny\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
+            Some(true)
+        );
+    }
+
+    #[tokio::test]
+    async fn record_unchanged_document_stays_fresh() {
+        let (_tmp, ctx, runtime) =
+            build_ctx_record_doc_then_return_root(&[("doc.qmd", RECORD_DOC)], "doc.qmd").await;
+        assert_eq!(
+            staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
+            Some(false)
+        );
+    }
+
+    /// The function, not the watcher: recomputing the includer after an edit inside an
+    /// included file that holds code sets `staleness`, because the hash comes from the
+    /// expanded pre-engine units, not from file bytes. (The watcher never makes this call;
+    /// see the known-limit test above.)
+    #[tokio::test]
+    async fn record_function_sees_a_code_edit_inside_an_include() {
+        let (tmp, ctx, runtime) = build_ctx_record_doc_then_return_root(
+            &[
+                (
+                    "doc.qmd",
+                    "---\nengine: test-recording\n---\n\n{{< include _inc.qmd >}}\n",
+                ),
+                ("_inc.qmd", "```{test-recording}\nfirst\n```\n"),
+            ],
+            "doc.qmd",
+        )
+        .await;
+        std::fs::write(
+            tmp.path().join("_inc.qmd"),
+            "```{test-recording}\nsecond\n```\n",
+        )
+        .unwrap();
+        assert_eq!(
+            staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
+            Some(true)
         );
     }
 

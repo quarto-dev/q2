@@ -78,6 +78,16 @@ pub fn run_engine_stage(
     observer: Arc<dyn PipelineObserver>,
     registry: Option<Arc<EngineRegistry>>,
 ) -> Result<(), PipelineError> {
+    run_engine_stage_ast(input, observer, registry).map(|_| ())
+}
+
+/// As [`run_engine_stage`], returning the document the stage produced (the executed
+/// markdown, parsed).
+pub fn run_engine_stage_ast(
+    input: &Path,
+    observer: Arc<dyn PipelineObserver>,
+    registry: Option<Arc<EngineRegistry>>,
+) -> Result<pampa::pandoc::Pandoc, PipelineError> {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(input, runtime.as_ref()).expect("project discovery");
     let content = runtime.file_read(input).expect("read the input");
@@ -94,6 +104,8 @@ pub fn run_engine_stage(
     }
     let pipeline = Pipeline::new(stages).expect("pipeline stages are compatible");
     let data = PipelineData::LoadedSource(LoadedSource::new(input.to_path_buf(), content));
-    pollster::block_on(pipeline.run(data, &mut ctx))?;
-    Ok(())
+    match pollster::block_on(pipeline.run(data, &mut ctx))? {
+        PipelineData::DocumentAst(doc) => Ok(doc.ast),
+        _ => panic!("the engine stage ends in a DocumentAst"),
+    }
 }

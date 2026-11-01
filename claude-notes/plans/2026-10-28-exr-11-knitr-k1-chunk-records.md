@@ -2,7 +2,7 @@
 title: 'EXR-11: knitr K1, chunk records recorded additively'
 date: 2026-10-28
 description: 'Makes the knitr chunk hook record each chunk as a unit of the engine execution record (id, finished markdown, resolved-options digest, files) while the live render path stays byte-identical.'
-status: draft
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md) (plan EXR-11,
@@ -226,10 +226,10 @@ Verified in code on 2026-10-28 unless marked.
 
 ## Phase 11A: tests first
 
-- [ ] `knitr_chunk_records_one_per_owned_chunk` (real R): three chunks, one with
-  `eval: false`, one with `include: false`; three units in document order; ids
+- [x] `knitr_chunk_records_one_per_owned_chunk` (real R): chunks with
+  `eval: false`, `include: false` and a labeled figure; units in document order; ids
   match the stage\'s shared unit list.
-  R level done (`chunk_records_one_per_chunk_with_an_id_in_order`). Open: the stage-level half, ids matching the shared unit list, needs 11C id insertion.
+  R level: `chunk_records_one_per_chunk_with_an_id_in_order`. Stage level: `knitr_chunk_records_one_per_owned_chunk` in `tests/integration/knitr_chunk_records.rs`.
 - [x] `knitr_chunk_id_is_not_emitted_as_an_attribute` (real R): the rendered HTML
   has no trace of the id option.
 - [x] `knitr_shadow_equality` (real R): placing the recorded chunk markdown into
@@ -237,14 +237,25 @@ Verified in code on 2026-10-28 unless marked.
   `knitr_label_reinject.rs`, `knitr_display_fence.rs`, and a labeled-figure
   document.
   Done as `chunk_records_shadow_equality` (R level, three fixtures echoing the named files, a test-local `place`). knitr puts one extra newline after each chunk, so the prose segment after a record starts with it; the record itself is exact.
-- [ ] `knitr_unit_hash_covers_all_options` (no R): changing `echo` in the brace
+- [x] `knitr_unit_hash_covers_all_options` (no R): changing `echo` in the brace
   options or in a `#|` line changes the unit\'s execution hash; changing prose
   does not.
-  Open: needs `hash_definition` (EXR-4 Phase 5), which is not in this branch.
-- [ ] `knitr_record_files_per_chunk` (real R): a two-figure document attributes
+  **Decision (2026-11-01, Gordon): hash the brace tail, do not handle the comma form.** The
+  unit\'s author text is the lines between the fences, so options in the fence\'s brace tail
+  (`{r echo=FALSE}`) were in no hash. `UnitHashInput` now has an `attr_tail` field (from
+  `CellUnit.attr_tail`); a non-empty tail is appended to the hash as its own field, and an empty
+  tail adds nothing, so existing hashes are unchanged (`record/exec_hash.rs`). It applies to every
+  engine, because core hashing names no engine and over-invalidating is the safe direction.
+  The scanner still does not treat `{r, echo=FALSE}` (a comma after the language) as a cell
+  (`engine/patterns.rs` `braced_info_pattern` needs whitespace), so such a chunk gets no id and no
+  record unit; that is accepted and not handled.
+  The splice side hashes the same input: `UnitKey::from_author_text` takes the tail too
+  (`record/matching.rs`, passed from the cell in `stage/stages/record_splice.rs`), so the
+  writer's and the matcher's execution hashes agree (`brace_tail_changes_the_exec_hash`).
+- [x] `knitr_record_files_per_chunk` (real R): a two-figure document attributes
   each file to its chunk; bytes arrive through the existing
   `collect_capture_files` path.
-  R level done (`chunk_records_attribute_figure_files_to_their_chunk`). Open: bytes via `collect_capture_files`, needs the 11C adapter.
+  R level: `chunk_records_attribute_figure_files_to_their_chunk`. Stage level: `knitr_record_files_per_chunk` (files are in the output\'s `quarto_files` metadata).
 - [x] `knitr_record_has_notebook_level_meta` (real R, an htmlwidget fixture such
   as the one in `knitr_html_dependency.rs`): `preserve`, `needs_postprocess` and
   dependencies are at notebook level and unchanged.
@@ -272,37 +283,62 @@ Verified in code on 2026-10-28 unless marked.
 
 ## Phase 11C: Rust side
 
-- [ ] `KnitrExecuteResult.chunks: Vec<KnitrChunkRecord>` with `#[serde(default)]`.
-- [ ] `KnitrEngine::hash_definition()` is EXR-4\'s task (the knitr override: empty
+- [x] `KnitrExecuteResult.chunks: Vec<KnitrChunkRecord>` with `#[serde(default)]`.
+- [x] `KnitrEngine::hash_definition()` is EXR-4\'s task (the knitr override: empty
   exclusion lists, `document_keys: ["knitr"]`, with its own document-hash test
   `exr-04` Phase 2). Nothing to implement here; the first Rust task that needs the
   declaration waits for EXR-4 Phase 2.
-- [ ] Engine-boundary id insertion, by the unit\'s `line` in the text knitr receives:
+- [x] Engine-boundary id insertion, by the unit\'s `line` in the text knitr receives:
   core re-locates each unit\'s `line` into that text (EXR-2 `locate_units`, carried by
   EXR-7), and the header edit inserts the unit\'s id (the id EXR-4\'s function filled in
   the shared list) at that line, under the count check below. An unlabeled chunk has no
   wrapper `Div` to key on (`label_reinject.rs:35-45` walks `for_each_wrapped_cell`, which
   visits only code blocks wrapped by a `Div` whose id classifies as a crossref label), so
   EXR-10\'s `Div`-id locator serves crossref labels only and is not used for ids.
-- [ ] Adapter into the record library (EXR-4): units with rendered outputs, format
+  Landed in `engine/knitr/chunk_records.rs`. Ids are inserted into the text the stage scanned,
+  before the inline-R and label edits (label re-insertion changes cell bodies and would break
+  `locate_units` matching).
+- [x] Adapter into the record library (EXR-4): units with rendered outputs, format
   tag, hash definition version, notebook-level folded results.
-- [ ] Alignment assertion: the number and order of returned chunk records equals
+- [x] Alignment assertion: the number and order of returned chunk records equals
   the count of knitr-owned chunk units in the shared list. A mismatch yields no record
   plus a diagnostic naming both counts and the render succeeds, because the record is
   additive (epic decision 19, the alignment contract, and EXR-12 follow the same rule);
   it is never a silent drop and never a failed render.
-- [ ] Test-only shadow equality helper, using `place(record)` for rendered units, which
+- [x] Test-only shadow equality helper, using `place(record)` for rendered units, which
   EXR-4 owns (marimo, [EXR-9](2026-10-28-exr-09-marimo.md), reuses the same function).
   If EXR-4\'s `place` has not landed, this task waits.
+  Done as `knitr_stage_shadow_equality` (real R, `tests/integration/knitr_chunk_records.rs`):
+  a labeled figure with a caption, a plain cell between prose, `include: false`, and several
+  chunks. `place` runs on the canonical text from `compute_input_qmd` (the crossref wrapper
+  Div and caption live outside the chunk, so placing into the raw source would drop them), and
+  the units take the author-text ids by order. Both sides are parsed and written through the
+  qmd writer, which absorbs knitr's extra newline after each chunk.
 
 ## Phase 11D: optional bonus, error line mapping (bd-1ng2ivis)
 
-- [ ] Because q2 builds the text handed to R (preprocessing, header edits), keep a
+- [x] Because q2 builds the text handed to R (preprocessing, header edits), keep a
   line map from that text to units. Map the "Quitting from lines X-Y" range from
   `error_parser.rs` back to the unit\'s source location instead of the
   `.rmarkdown` intermediate. Do not use the unit id as the knitr label: labels
   drive output filenames. Ship only if Phase 11C is green and the map costs under
   a session; otherwise leave the strand open.
+  Done (`engine/knitr/error_lines.rs`, `remap_error_lines` in `knitr/mod.rs`). Findings:
+  - Nothing in the stage ever set `quiet`, so knitr's stderr was inherited and the parser
+    never saw the failure. `call_r` now always pipes stderr and, when not quiet, a tee
+    thread forwards it live and keeps a copy. The terminal output is the same bytes; a
+    failing chunk's diagnostic now carries R's message instead of "R process failed".
+  - Current knitr prints `Quitting from doc.rmarkdown:154-158 [label]`, not
+    `lines X-Y`; `error_parser.rs` handles both.
+  - The range is in the text handed to R, which carries ~140 lines of serialized default
+    front matter. The map goes by chunk (the k-th chunk of the R text is the k-th chunk of
+    the engine input; a line keeps its distance from the first code line, so the id and
+    label option lines q2 adds do not shift it), then through the stage's `source_info` to
+    the author's file. A range outside any chunk (inline R), a chunk-count mismatch, or a
+    line that maps into an included file leaves the error unmapped.
+  - Result: a failing chunk is reported at its lines in the author's file
+    (`knitr_error_lines_point_at_the_authors_file`). No line map is stored; the chunk
+    correspondence is recomputed from the two texts, which cost far less than a session.
 
 ## Exit criteria
 
