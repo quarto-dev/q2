@@ -79,7 +79,7 @@ async fn run(doc: &str) -> (String, String) {
         &mut ctx,
         runtime,
         Some(Arc::new(EngineRegistry::new())),
-        caps,
+        caps.into(),
     )
     .await
     .unwrap();
@@ -135,7 +135,7 @@ async fn labeled_figure_splices_for_any_engine_name() {
         &mut ctx,
         runtime,
         Some(Arc::new(EngineRegistry::new())),
-        vec![capture],
+        vec![capture].into(),
     )
     .await
     .unwrap();
@@ -176,7 +176,7 @@ async fn canonical_capture_without_injected_line_splices() {
         &mut ctx,
         runtime,
         Some(Arc::new(EngineRegistry::new())),
-        vec![capture],
+        vec![capture].into(),
     )
     .await
     .unwrap();

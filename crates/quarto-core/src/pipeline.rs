@@ -53,6 +53,7 @@ use quarto_pandoc_types::Pandoc;
 use quarto_source_map::SourceContext;
 
 use crate::Result;
+use crate::pandoc_request::captures::CapturePayload;
 use crate::render::RenderContext;
 use crate::stage::CodeHighlightStage;
 use crate::stage::stages::ApplyTemplateConfig;
@@ -192,6 +193,16 @@ impl HtmlRenderConfig {
     ) -> Self {
         self.engine_registry = Some(registry);
         self
+    }
+
+    /// Attach whichever payload kind a render received (legacy captures, a
+    /// record, or nothing). EXR-14.
+    pub fn with_payload(self, payload: CapturePayload) -> Self {
+        match payload {
+            CapturePayload::Empty => self,
+            CapturePayload::Legacy(captures) => self.with_captures(captures),
+            CapturePayload::Record(record) => self.with_record(record),
+        }
     }
 
     /// Attach server-recorded engine captures to splice into the HTML render
@@ -515,7 +526,8 @@ pub async fn render_qmd_to_pandoc(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
-    render_qmd_to_pandoc_with_captures(content, source_name, ctx, runtime, Vec::new()).await
+    render_qmd_to_pandoc_with_captures(content, source_name, ctx, runtime, CapturePayload::Empty)
+        .await
 }
 
 /// [`render_qmd_to_pandoc`] splicing recorded `captures` before engine
@@ -528,7 +540,7 @@ pub async fn render_qmd_to_pandoc_with_captures(
     source_name: &str,
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
     let stages = build_pandoc_pipeline_stages_with_captures(
         ctx.format.identifier,
@@ -597,9 +609,7 @@ const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &[
 /// `None`, the stage is still inserted but runs as a pass-through.
 /// See `crates/quarto-core/src/engine/capture_splice.rs` and
 /// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
-pub fn build_q2_preview_pipeline_stages(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+pub fn build_q2_preview_pipeline_stages(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     // Build the base list; the engine registry comes from ctx.registry
     // (set by run_pipeline from project.registry or the override seam).
     // We still reconstruct the engine-execution stage ourselves so it can
@@ -661,16 +671,14 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 /// engine execution (the wasm entry point passes the document's). With none,
 /// the list is exactly the old pandoc list minus its tail: the splice stage
 /// is only inserted when there is something to splice.
-pub fn build_pandoc_prefix_stages(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+pub fn build_pandoc_prefix_stages(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     build_pandoc_prefix_stages_in(captures, None)
 }
 
 /// [`build_pandoc_prefix_stages`] with the capture files written into
 /// `materialize_dir` rather than beside the document (epic E10).
 pub fn build_pandoc_prefix_stages_in(
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None);
@@ -690,14 +698,12 @@ pub fn build_pandoc_prefix_stages_in(
 /// classes, present with or without captures). The single source for the
 /// single-document list, the book pause list and the book finishing list, so
 /// they cannot drift.
-fn build_pandoc_request_prefix(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+fn build_pandoc_request_prefix(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     build_pandoc_request_prefix_in(captures, None)
 }
 
 fn build_pandoc_request_prefix_in(
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_pandoc_prefix_stages_in(captures, materialize_dir);
@@ -714,9 +720,7 @@ fn build_pandoc_request_prefix_in(
 /// the [`crate::pandoc_request::PandocRequest`] in the render context
 /// instead of running pandoc. Typst gets no `ResourceCopyFlushStage` or
 /// `TypstCompileStage` here.
-pub fn build_pandoc_request_stages(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+pub fn build_pandoc_request_stages(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_pandoc_request_prefix(captures);
     stages.push(Box::new(PandocPrepareStage::new()));
     stages
@@ -729,7 +733,7 @@ pub fn build_pandoc_request_stages(
 /// plain one never touches the network, which tests of the prepare step rely
 /// on.
 pub fn build_pandoc_request_stages_fetching(
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_pandoc_request_stages(captures);
     let tail = stages.len() - 1;
@@ -747,7 +751,7 @@ pub fn build_pandoc_request_stages_fetching(
 /// ends in a process spawn and cannot run in the browser. Ungated.
 pub fn build_pandoc_request_pause_stages(
     upper_bound: crate::transform::TransformPhase,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Vec<Box<dyn PipelineStage>> {
     build_pandoc_request_pause_stages_in(upper_bound, captures, None)
 }
@@ -756,7 +760,7 @@ pub fn build_pandoc_request_pause_stages(
 /// `materialize_dir` (epic E10; the book download's chapters).
 pub fn build_pandoc_request_pause_stages_in(
     upper_bound: crate::transform::TransformPhase,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) -> Vec<Box<dyn PipelineStage>> {
     pause_stages_from(
@@ -777,7 +781,7 @@ pub fn build_pandoc_request_finishing_stages(
     lower_bound: crate::transform::TransformPhase,
 ) -> Vec<Box<dyn PipelineStage>> {
     finishing_stages_from(
-        build_pandoc_request_stages_fetching(Vec::new()),
+        build_pandoc_request_stages_fetching(CapturePayload::Empty),
         lower_bound,
     )
 }
@@ -804,7 +808,12 @@ pub fn build_pandoc_request_finishing_stages(
 pub fn build_pandoc_pipeline_stages(
     format_identifier: crate::format::FormatIdentifier,
 ) -> Vec<Box<dyn PipelineStage>> {
-    build_pandoc_pipeline_stages_with_captures(format_identifier, Vec::new(), None, false)
+    build_pandoc_pipeline_stages_with_captures(
+        format_identifier,
+        CapturePayload::Empty,
+        None,
+        false,
+    )
 }
 
 /// [`build_pandoc_pipeline_stages`] splicing server-recorded `captures`
@@ -816,7 +825,7 @@ pub fn build_pandoc_pipeline_stages(
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_pandoc_pipeline_stages_with_captures(
     format_identifier: crate::format::FormatIdentifier,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
     count_unexecuted: bool,
 ) -> Vec<Box<dyn PipelineStage>> {
@@ -956,10 +965,7 @@ pub fn build_pandoc_pipeline_finishing_stages(
 /// cell-aligned with `build_capture_pipeline_stages`. With empty `captures` the
 /// inserted splice is a pass-through and the engine stage is still (re)built
 /// with the registry, so callers may invoke this unconditionally.
-fn insert_capture_splice_stage(
-    stages: &mut Vec<Box<dyn PipelineStage>>,
-    captures: Vec<quarto_trace::EngineCapture>,
-) {
+fn insert_capture_splice_stage(stages: &mut Vec<Box<dyn PipelineStage>>, captures: CapturePayload) {
     insert_capture_splice_stage_in(stages, captures, None);
 }
 
@@ -967,11 +973,12 @@ fn insert_capture_splice_stage(
 /// `materialize_dir` instead of beside the document.
 fn insert_capture_splice_stage_in(
     stages: &mut Vec<Box<dyn PipelineStage>>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) {
-    let spliced_engine_names: std::collections::HashSet<String> =
-        captures.iter().map(|c| c.engine_name.clone()).collect();
+    // The engines this payload serves: a legacy capture's engine name, or each
+    // `quarto_engines` entry of a record (EXR-14).
+    let spliced_engine_names = captures.served_engine_names();
 
     // Reconstruct the engine-execution stage with the spliced-engine set.
     // The registry is no longer a stage-level concern — it is read from
@@ -982,11 +989,13 @@ fn insert_capture_splice_stage_in(
         .position(|s| s.name() == "engine-execution")
         .expect("engine-execution stage must exist in the pipeline");
     stages[engine_idx] = Box::new(engine_stage);
-    let splice_stage: Box<dyn PipelineStage> = Box::new(
-        crate::stage::CaptureSpliceStage::new()
-            .with_captures(captures)
-            .with_materialize_dir(materialize_dir),
-    );
+    let splice = crate::stage::CaptureSpliceStage::new().with_materialize_dir(materialize_dir);
+    let splice = match captures {
+        CapturePayload::Empty => splice,
+        CapturePayload::Legacy(captures) => splice.with_captures(captures),
+        CapturePayload::Record(record) => splice.with_record(record),
+    };
+    let splice_stage: Box<dyn PipelineStage> = Box::new(splice);
     stages.insert(engine_idx, splice_stage);
 }
 
@@ -1002,7 +1011,7 @@ fn insert_capture_splice_stage_in(
 /// (`build_capture_pipeline_stages`).
 pub fn build_html_pipeline_stages_with_captures(
     apply_config: Option<ApplyTemplateConfig>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Vec<Box<dyn PipelineStage>> {
     // The engine registry is not a builder concern — it flows via
     // `ctx.registry` at run time (Task 8 of ts-engine-extensions). This helper
@@ -1561,14 +1570,12 @@ pub enum PartialKind {
     /// prefix with `captures` spliced in and the unexecuted-cell count (the
     /// chapter context never gets `prepare_options`, so the intent must be
     /// explicit); the HTML list otherwise.
-    Request {
-        captures: Vec<quarto_trace::EngineCapture>,
-    },
+    Request { captures: CapturePayload },
     /// [`PartialKind::Request`] writing capture files into
     /// `materialize_dir` instead of beside the document (epic E10: the
     /// book download's request directory).
     RequestMaterialized {
-        captures: Vec<quarto_trace::EngineCapture>,
+        captures: CapturePayload,
         materialize_dir: Option<std::path::PathBuf>,
     },
 }
@@ -2000,10 +2007,14 @@ pub async fn render_qmd_to_html(
     // The engine registry is NOT threaded through the builders — it flows via
     // `ctx.engine_registry_override` (set above) into `ctx.registry` at run time
     // (Task 8 of ts-engine-extensions).
-    let stages = if config.captures.is_empty() {
+    let payload = match config.record() {
+        Some(record) => CapturePayload::Record(record.clone()),
+        None => CapturePayload::from(config.captures.clone()),
+    };
+    let stages = if payload.is_empty() {
         build_html_pipeline_stages_with_options(apply_config)
     } else {
-        build_html_pipeline_stages_with_captures(apply_config, config.captures.clone())
+        build_html_pipeline_stages_with_captures(apply_config, payload)
     };
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
@@ -2059,7 +2070,7 @@ pub async fn render_qmd_to_preview_ast(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
     engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Result<PreviewAstOutput> {
     // Capture the untransformed AST before any pipeline stage runs.
     // This is the baseline `incremental_write` reconciles against (plan:
@@ -4508,7 +4519,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            vec![capture],
+            vec![capture].into(),
         ))
         .expect("q2-preview render");
 
@@ -4588,7 +4599,7 @@ mod tests {
             &mut ctx,
             runtime,
             Some(Arc::new(registry)),
-            Vec::new(),
+            CapturePayload::Empty,
         ));
 
         // P2-12: a registered engine with no available runtime and no spliced
@@ -4672,7 +4683,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -4732,7 +4743,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -4787,7 +4798,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides render");
 
@@ -4832,7 +4843,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides render");
 
@@ -4888,7 +4899,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides render");
 
@@ -4950,7 +4961,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides brand render");
 
@@ -4986,7 +4997,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -5063,7 +5074,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -5214,7 +5225,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -5325,7 +5336,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -5408,7 +5419,7 @@ mod tests {
     /// Python / etc. cells; `q2 render` keeps highlighting.
     #[test]
     fn q2_preview_pipeline_includes_code_highlight() {
-        let stages = build_q2_preview_pipeline_stages(Vec::new());
+        let stages = build_q2_preview_pipeline_stages(CapturePayload::Empty);
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
         assert!(
             names.contains(&"code-highlight"),
@@ -7429,7 +7440,7 @@ mod tests {
         let native = names(build_pandoc_pipeline_stages(
             crate::format::FormatIdentifier::Docx,
         ));
-        let prefix = names(build_pandoc_prefix_stages(Vec::new()));
+        let prefix = names(build_pandoc_prefix_stages(CapturePayload::Empty));
         assert_eq!(
             prefix,
             native[..native.len() - 1],
@@ -7439,7 +7450,7 @@ mod tests {
             !prefix.iter().any(|n| n == "pandoc-write"),
             "the prefix has no writer"
         );
-        let request = names(build_pandoc_request_stages(Vec::new()));
+        let request = names(build_pandoc_request_stages(CapturePayload::Empty));
         // The request list is the prefix plus the cell count (just before
         // `engine-execution`) and the `pandoc-prepare` tail.
         let mut expected = prefix.clone();
@@ -7460,11 +7471,11 @@ mod tests {
     /// before `pandoc-prepare`.
     #[test]
     fn fetching_request_list_adds_the_prefetch_and_rasterizer_before_the_tail() {
-        let plain: Vec<String> = build_pandoc_request_stages(Vec::new())
+        let plain: Vec<String> = build_pandoc_request_stages(CapturePayload::Empty)
             .iter()
             .map(|s| s.name().to_string())
             .collect();
-        let fetching: Vec<String> = build_pandoc_request_stages_fetching(Vec::new())
+        let fetching: Vec<String> = build_pandoc_request_stages_fetching(CapturePayload::Empty)
             .iter()
             .map(|s| s.name().to_string())
             .collect();
@@ -7488,14 +7499,14 @@ mod tests {
             record: None,
             files: Vec::new(),
         };
-        let stages = build_pandoc_prefix_stages(vec![capture]);
+        let stages = build_pandoc_prefix_stages(vec![capture].into());
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
         let splice = names
             .iter()
             .position(|n| *n == "capture-splice")
             .expect("capture-splice present when captures are given");
         assert_eq!(names[splice + 1], "engine-execution");
-        let none = build_pandoc_prefix_stages(Vec::new());
+        let none = build_pandoc_prefix_stages(CapturePayload::Empty);
         assert!(!none.iter().any(|s| s.name() == "capture-splice"));
     }
 
@@ -7520,7 +7531,7 @@ mod tests {
     fn request_pause_list_is_the_prefix_cut_at_ast_transforms() {
         let pause = stage_names(build_pandoc_request_pause_stages(
             TransformPhase::Normalization,
-            Vec::new(),
+            CapturePayload::Empty,
         ));
         assert_eq!(pause.last().map(String::as_str), Some("ast-transforms"));
         let count = pause.iter().position(|n| n == "unexecuted-cell-count");
@@ -7534,14 +7545,14 @@ mod tests {
             assert!(!pause.iter().any(|n| n == excluded), "{excluded}");
         }
         // It is exactly the single-document request list up to `ast-transforms`.
-        let single = stage_names(build_pandoc_request_stages(Vec::new()));
+        let single = stage_names(build_pandoc_request_stages(CapturePayload::Empty));
         let at = single.iter().position(|n| n == "ast-transforms").unwrap();
         assert_eq!(pause[..pause.len() - 1], single[..at]);
 
         // With captures: capture-splice, then the count, then the engine.
         let with = stage_names(build_pandoc_request_pause_stages(
             TransformPhase::Normalization,
-            vec![some_capture()],
+            vec![some_capture()].into(),
         ));
         let splice = with.iter().position(|n| n == "capture-splice").unwrap();
         assert_eq!(with[splice + 1], "unexecuted-cell-count");
@@ -7561,7 +7572,7 @@ mod tests {
         assert_eq!(finishing[n - 1], "pandoc-prepare");
         assert_eq!(finishing[n - 2], "rasterize-svg-images");
         assert_eq!(finishing[n - 3], "prefetch-remote-images");
-        let single = stage_names(build_pandoc_request_stages_fetching(Vec::new()));
+        let single = stage_names(build_pandoc_request_stages_fetching(CapturePayload::Empty));
         let at = single.iter().position(|n| n == "ast-transforms").unwrap();
         assert_eq!(finishing[1..], single[at + 1..], "one source of truth");
     }
@@ -7581,12 +7592,12 @@ mod tests {
                 &ctx,
                 TransformPhase::Normalization,
                 PartialKind::Request {
-                    captures: Vec::new(),
+                    captures: CapturePayload::Empty,
                 },
             ));
             let want = stage_names(build_pandoc_request_pause_stages(
                 TransformPhase::Normalization,
-                Vec::new(),
+                CapturePayload::Empty,
             ));
             assert_eq!(got, want, "{format_key}");
             assert!(got.iter().any(|n| n == "unexecuted-cell-count"));
@@ -7598,7 +7609,7 @@ mod tests {
             &ctx,
             TransformPhase::Normalization,
             PartialKind::Request {
-                captures: Vec::new(),
+                captures: CapturePayload::Empty,
             },
         ));
         assert_eq!(
@@ -7628,7 +7639,7 @@ mod tests {
             make_test_runtime(),
             TransformPhase::Normalization,
             PartialKind::Request {
-                captures: Vec::new(),
+                captures: CapturePayload::Empty,
             },
         )
         .await
@@ -7752,7 +7763,7 @@ mod tests {
                 &mut ctx,
                 runtime,
                 None,
-                Vec::new(),
+                CapturePayload::Empty,
             ))
             .expect("baseline q2-preview render")
         };
@@ -7795,7 +7806,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("attributed q2-preview render");
 
@@ -7918,7 +7929,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 

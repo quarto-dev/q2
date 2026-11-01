@@ -46,7 +46,6 @@ use quarto_core::project::ProjectContext;
 use quarto_core::record::{overlay_difference, rehash_record};
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
-use quarto_trace::EngineCapture;
 use samod::Repo;
 
 use crate::ProviderError;
@@ -355,9 +354,14 @@ impl Provider {
             run = overlay_free_run(run, &source, overlay)?;
         }
 
-        let new_doc_id = write_capture_doc(&self.repo, rel_path, &run)
-            .await
-            .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
+        let new_doc_id = write_capture_doc(
+            &self.repo,
+            rel_path,
+            &run,
+            quarto_core::engine::capture_files::record_writing_enabled(),
+        )
+        .await
+        .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
         let updated = CaptureRef {
             capture_doc_id: new_doc_id.clone(),
@@ -517,27 +521,34 @@ pub fn overlay_free_run(
     Ok(run)
 }
 
-/// Gzip the captures to JSON and store them as a capture binary automerge doc.
-/// Mirror of `quarto-preview`'s `write_capture_doc` (kept in sync via the
-/// shared [`CAPTURE_MIME_TYPE`] and the shared wire-format helper
-/// `gzip_captures` — serialize + gzip + 10MB size warning, bd-qbhp2cvv).
-/// Takes the whole run (EXR-5): the record travels with the captures, and
-/// EXR-13 decides how the hub document carries it; until then only the
-/// captures are stored.
+/// Encode the run (a record doc when the writer gate is on and the run has a
+/// record, else a legacy capture doc) and store it as a binary automerge doc.
+/// Mirror of `quarto-preview`'s `write_capture_doc`; both go through
+/// `encode_capture_payload` (serialize + gzip + 10MB size warning, bd-qbhp2cvv)
+/// and `create_engine_payload_document`, behind the one gate
+/// `record_writing_enabled` (EXR-13b; the caller passes the gate).
 async fn write_capture_doc(
     repo: &Repo,
     rel_path: &str,
     run: &CaptureRun,
+    record_gate: bool,
 ) -> Result<String, ProviderError> {
-    let captures: &[EngineCapture] = &run.captures;
-    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
-        .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
+    let encoded = quarto_core::engine::capture_files::encode_capture_payload(
+        &run.captures,
+        run.record.as_ref(),
+        record_gate,
+    )
+    .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
     let meta = quarto_hub::resource::CaptureDocMeta {
         source_path: rel_path.to_string(),
-        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+        engines: encoded.engines,
     };
-    let doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
-        .map_err(|e| ProviderError::Protocol(format!("binary doc: {e}")))?;
+    let doc = quarto_hub::resource::create_engine_payload_document(
+        encoded.is_record,
+        &encoded.gzipped,
+        &meta,
+    )
+    .map_err(|e| ProviderError::Protocol(format!("binary doc: {e}")))?;
     let handle = repo
         .create(doc)
         .await
@@ -548,6 +559,56 @@ async fn write_capture_doc(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// EXR-13b writer gate: gate off writes a legacy capture doc even when the run
+    /// has a record; gate on writes a record doc.
+    async fn written_kind(gate: bool) -> (String, String) {
+        use automerge::ReadDoc;
+        use quarto_core::record::read_record;
+        let record = read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(record),
+        };
+        let repo = Repo::build_tokio().load().await;
+        let id = write_capture_doc(&repo, "doc.qmd", &run, gate)
+            .await
+            .unwrap();
+        let handle = repo
+            .find(id.parse().unwrap())
+            .await
+            .unwrap()
+            .expect("doc exists");
+        handle.with_document(|doc| {
+            let get = |k: &str| {
+                doc.get(automerge::ROOT, k)
+                    .unwrap()
+                    .and_then(|(v, _)| v.into_string().ok())
+                    .unwrap_or_default()
+            };
+            let kind = quarto_hub::resource::read_capture_meta(doc)
+                .and_then(|m| m.kind)
+                .unwrap_or_default();
+            (get("mimeType"), kind)
+        })
+    }
+
+    #[tokio::test]
+    async fn writer_gate_off_writes_a_legacy_capture_doc() {
+        let (mime, kind) = written_kind(false).await;
+        assert_eq!(mime, quarto_hub::resource::CAPTURE_MIME_TYPE);
+        assert_eq!(kind, "engine-capture");
+    }
+
+    #[tokio::test]
+    async fn writer_gate_on_writes_a_record_doc() {
+        let (mime, kind) = written_kind(true).await;
+        assert_eq!(mime, quarto_hub::resource::RECORD_MIME_TYPE);
+        assert_eq!(kind, "engine-record");
+    }
 
     #[test]
     fn is_safe_relative_guards_traversal() {

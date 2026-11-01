@@ -30,14 +30,12 @@ use axum::{
 use quarto_core::engine::EngineRegistry;
 use quarto_core::project::ProjectContext;
 use quarto_error_reporting::DiagnosticMessageBuilder;
-use quarto_hub::HubContext;
 use quarto_hub::context::SharedContext;
 use quarto_hub::index::{CaptureRef, CaptureState};
 use quarto_system_runtime::SystemRuntime;
-use quarto_trace::EngineCapture;
 use serde::{Deserialize, Serialize};
 
-use crate::cache::record_capture_cached;
+use crate::cache::record_capture_run_cached;
 use crate::diagnostics;
 
 /// Process-wide set of paths currently being re-executed. Used to
@@ -303,14 +301,14 @@ async fn perform_re_execute(
     let project = ProjectContext::discover(&abs_path, runtime.as_ref())
         .map_err(|e| format!("project discovery failed: {e}"))?;
 
-    let captures = record_capture_cached(cache_dir, &abs_path, &project, runtime.clone(), registry)
+    let run = record_capture_run_cached(cache_dir, &abs_path, &project, runtime.clone(), registry)
         .await
         .map_err(|e| format!("engine pipeline failed: {e}"))?;
-    if captures.is_empty() {
+    if run.captures.is_empty() {
         return Err("engine produced no capture (no code cells?)".to_string());
     }
 
-    let new_doc_id = write_capture_doc(&ctx, rel_path, &captures)
+    let new_doc_id = crate::capture_driver::write_capture_doc(&ctx, rel_path, &run)
         .await
         .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
@@ -325,33 +323,6 @@ async fn perform_re_execute(
         .map_err(|e| format!("failed to update sidecar: {e}"))?;
 
     Ok(())
-}
-
-/// Mirror of `capture_driver::write_capture_doc` (private there).
-/// Duplicated here to avoid widening that module's public surface
-/// for the C.5-only handler. Both call sites stay in sync via the
-/// shared `CAPTURE_MIME_TYPE` constant and the shared wire-format
-/// helper `gzip_captures` (serialize + gzip + 10MB size warning,
-/// bd-qbhp2cvv).
-async fn write_capture_doc(
-    ctx: &Arc<HubContext>,
-    rel_path: &str,
-    captures: &[EngineCapture],
-) -> Result<String, String> {
-    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
-        .map_err(|e| format!("serialize/gzip: {e}"))?;
-    let meta = quarto_hub::resource::CaptureDocMeta {
-        source_path: rel_path.to_string(),
-        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
-    };
-    let doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
-        .map_err(|e| format!("binary doc: {e}"))?;
-    let handle = ctx
-        .repo()
-        .create(doc)
-        .await
-        .map_err(|_| "samod repo stopped".to_string())?;
-    Ok(handle.document_id().to_string())
 }
 
 #[cfg(test)]

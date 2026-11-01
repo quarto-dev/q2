@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
+use quarto_core::engine::preview_record::{CaptureRun, compute_input_qmd, record_capture_run};
 use quarto_core::pandoc_request::captures::{CapturePayload, parse_capture_payload};
 use quarto_core::project::ProjectContext;
 use quarto_core::stage::PipelineError;
@@ -152,6 +152,23 @@ pub async fn record_capture_cached(
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<Arc<EngineRegistry>>,
 ) -> Result<Vec<EngineCapture>, PipelineError> {
+    record_capture_run_cached(cache_dir, path, project, runtime, engine_registry)
+        .await
+        .map(|run| run.captures)
+}
+
+/// [`record_capture_cached`] returning the whole [`CaptureRun`] (EXR-13b), so a
+/// capture writer can store the execution record when its gate is on. A cache
+/// **hit** carries no record (the cache holds legacy captures only; storing
+/// records there is EXR-15), so the run's `record` is `None` and the writer
+/// falls back to a legacy capture doc.
+pub async fn record_capture_run_cached(
+    cache_dir: &Path,
+    path: &Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+    engine_registry: Option<Arc<EngineRegistry>>,
+) -> Result<CaptureRun, PipelineError> {
     // Compute the same input_qmd the engine would receive — this
     // doubles as the cache key derivation and as the source of truth
     // for what we hash. compute_input_qmd already runs the pre-engine
@@ -163,7 +180,10 @@ pub async fn record_capture_cached(
     match read_cached(cache_dir, &key) {
         Ok(Some(captures)) => {
             tracing::debug!(path = %path.display(), key = %key, "engine capture cache hit");
-            return Ok(captures);
+            return Ok(CaptureRun {
+                captures,
+                record: None,
+            });
         }
         Ok(None) => {}
         Err(e) => {
@@ -176,9 +196,9 @@ pub async fn record_capture_cached(
         }
     }
 
-    let captures = record_capture(path, project, runtime, engine_registry).await?;
-    if !captures.is_empty()
-        && let Err(e) = write_cached(cache_dir, &key, &captures)
+    let run = record_capture_run(path, project, runtime, engine_registry).await?;
+    if !run.captures.is_empty()
+        && let Err(e) = write_cached(cache_dir, &key, &run.captures)
     {
         tracing::warn!(
             path = %path.display(),
@@ -187,7 +207,7 @@ pub async fn record_capture_cached(
             "engine capture cache write failed; capture still emitted",
         );
     }
-    Ok(captures)
+    Ok(run)
 }
 
 #[cfg(test)]

@@ -16,9 +16,10 @@ use super::normalize_request_path_str;
 /// What a capture document's payload holds, decided from the payload itself
 /// (EXR-13). The TS layer fetches bytes without the MIME type, so the dispatch is
 /// here, in Rust, on the decompressed JSON.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum CapturePayload {
     /// No payload (absent or zero bytes).
+    #[default]
     Empty,
     /// The legacy `EngineCapture[]` shape (or a stale single capture object).
     Legacy(Vec<quarto_trace::EngineCapture>),
@@ -27,13 +28,56 @@ pub enum CapturePayload {
 }
 
 impl CapturePayload {
-    /// The captures the splice stage can present today. A record is not presented
-    /// until EXR-14, so it yields none and its code cells render as source.
+    /// The legacy captures this payload carries. A record yields none: it reaches the
+    /// splice through [`CapturePayload::Record`] (EXR-14), never through the legacy path.
     pub fn into_captures(self) -> Vec<quarto_trace::EngineCapture> {
         match self {
             CapturePayload::Legacy(captures) => captures,
             CapturePayload::Empty | CapturePayload::Record(_) => Vec::new(),
         }
+    }
+
+    /// Whether there is nothing to splice (no payload, or an empty legacy list).
+    pub fn is_empty(&self) -> bool {
+        match self {
+            CapturePayload::Empty => true,
+            CapturePayload::Legacy(captures) => captures.is_empty(),
+            CapturePayload::Record(_) => false,
+        }
+    }
+
+    /// Names of the engines whose output this payload serves, so the engine stage can
+    /// suppress its "(no execution)" warning for them: the captures' engine names, or the
+    /// record's `quarto_engines` entries.
+    pub fn served_engine_names(&self) -> std::collections::HashSet<String> {
+        match self {
+            CapturePayload::Empty => Default::default(),
+            CapturePayload::Legacy(captures) => {
+                captures.iter().map(|c| c.engine_name.clone()).collect()
+            }
+            CapturePayload::Record(record) => record
+                .metadata
+                .quarto_engines
+                .iter()
+                .map(|e| e.name.clone())
+                .collect(),
+        }
+    }
+}
+
+impl From<Vec<quarto_trace::EngineCapture>> for CapturePayload {
+    fn from(captures: Vec<quarto_trace::EngineCapture>) -> Self {
+        if captures.is_empty() {
+            CapturePayload::Empty
+        } else {
+            CapturePayload::Legacy(captures)
+        }
+    }
+}
+
+impl From<std::sync::Arc<crate::record::Record>> for CapturePayload {
+    fn from(record: std::sync::Arc<crate::record::Record>) -> Self {
+        CapturePayload::Record(record)
     }
 }
 

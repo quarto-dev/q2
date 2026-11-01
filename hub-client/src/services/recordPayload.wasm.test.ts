@@ -5,9 +5,8 @@
  * `quarto_` metadata) where it carried an `EngineCapture[]`. The TS layer passes the bytes
  * through untouched as `capture_gz_json`; Rust decides the shape from the payload.
  *
- * Presenting a record is EXR-14. Until then both WASM entry points must accept a record
- * without erroring and render its code cells as source, so a record reaching an older
- * renderer than its writer degrades to source instead of an error overlay.
+ * EXR-14 presents a record: both WASM entry points splice the recorded output of every
+ * cell whose unit hash still matches the document, and leave an edited cell as source.
  *
  * The record is the checked-in fixture `crates/quarto-core/tests/fixtures/records/basic.json`
  * (a Rust test keeps it valid). Its stdout is rewritten to a marker that appears only in the
@@ -102,28 +101,72 @@ beforeEach(() => {
   wasm.vfs_clear();
 });
 
-function expectSourceOnly(json: string): void {
+// A display block shows a `{python}` cell with the same text *before* the real cell. The
+// nested-cell mask keeps it from being a unit; if it were claimed it would take the record's
+// output (the first occurrence of that hash) and the real cell would fall back to source.
+const DISPLAY_DOC = [
+  '---',
+  'format: q2-preview',
+  '---',
+  '',
+  '````markdown',
+  '```{python}',
+  'print(1)',
+  '```',
+  '````',
+  '',
+  '```{python}',
+  'print(1)',
+  '```',
+  '',
+].join('\n');
+
+const EDITED_DOC = DOC.replace('print(1)', 'print(2)');
+
+function parse(json: string): RenderResponse {
   const result = JSON.parse(json) as RenderResponse;
   expect(result.success, `Render failed: ${result.error}`).toBe(true);
   expect(result.ast_json).toBeTruthy();
-  expect(
-    result.ast_json!.includes('print(1)'),
-    'the code cell renders as source',
-  ).toBe(true);
-  expect(
-    result.ast_json!.includes(MARKER),
-    'a record is not presented until EXR-14: its output must not appear',
-  ).toBe(false);
+  return result;
 }
 
-describe('engine-record payloads (EXR-13)', () => {
-  it('render_page_for_preview accepts a record and renders code cells as source', async () => {
+function expectPresented(json: string): void {
+  const ast = parse(json).ast_json!;
+  expect(ast.includes(MARKER), 'the recorded output is spliced in').toBe(true);
+  expect(ast.includes('print(1)'), 'the source is still shown (echo defaults on)').toBe(true);
+}
+
+function expectSourceOnly(json: string): void {
+  const ast = parse(json).ast_json!;
+  expect(ast.includes('print(2)'), 'the edited cell renders as source').toBe(true);
+  expect(ast.includes(MARKER), 'an edited cell has no recorded output').toBe(false);
+}
+
+describe('engine-record payloads (EXR-13, EXR-14)', () => {
+  it('render_page_for_preview presents the recorded output of a matching cell', async () => {
     wasm.vfs_add_file('/project/doc.qmd', DOC);
+    expectPresented(await wasm.render_page_for_preview('/project/doc.qmd', undefined, recordBytes));
+  });
+
+  it('render_page_for_preview leaves an edited cell as source', async () => {
+    wasm.vfs_add_file('/project/doc.qmd', EDITED_DOC);
     expectSourceOnly(await wasm.render_page_for_preview('/project/doc.qmd', undefined, recordBytes));
   });
 
-  it('render_page_in_project_with_attribution accepts a record and renders code cells as source', async () => {
+  it('render_page_in_project_with_attribution presents the recorded output', async () => {
     wasm.vfs_add_file('/project/doc.qmd', DOC);
+    expectPresented(
+      await wasm.render_page_in_project_with_attribution(
+        '/project/doc.qmd',
+        undefined,
+        undefined,
+        recordBytes,
+      ),
+    );
+  });
+
+  it('render_page_in_project_with_attribution leaves an edited cell as source', async () => {
+    wasm.vfs_add_file('/project/doc.qmd', EDITED_DOC);
     expectSourceOnly(
       await wasm.render_page_in_project_with_attribution(
         '/project/doc.qmd',
@@ -132,6 +175,18 @@ describe('engine-record payloads (EXR-13)', () => {
         recordBytes,
       ),
     );
+  });
+
+  it('a cell shown inside a display block is not a unit: the real cell takes the output', async () => {
+    wasm.vfs_add_file('/project/doc.qmd', DISPLAY_DOC);
+    const ast = parse(
+      await wasm.render_page_for_preview('/project/doc.qmd', undefined, recordBytes),
+    ).ast_json!;
+    expect(ast.split(MARKER).length - 1, 'one recorded output').toBe(1);
+    expect(
+      ast.indexOf(MARKER),
+      'the output follows the real cell, after the display block',
+    ).toBeGreaterThan(ast.lastIndexOf('print(1)'));
   });
 
   it('an unrecognized payload still fails with an error naming both shapes', async () => {

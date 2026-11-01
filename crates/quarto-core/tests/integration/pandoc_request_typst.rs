@@ -48,7 +48,7 @@ pub(crate) fn render_with(
             format,
             project: &project,
             source_date_epoch: Some(1_700_000_000),
-            captures: Vec::new(),
+            captures: Vec::new().into(),
             typst_available_fonts,
             resolver: None,
         },

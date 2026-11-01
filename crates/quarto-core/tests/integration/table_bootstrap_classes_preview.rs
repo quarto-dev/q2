@@ -42,7 +42,7 @@ fn preview_table_classes(content: &str) -> Vec<Vec<String>> {
         &mut ctx,
         runtime,
         None,
-        vec![],
+        vec![].into(),
     ))
     .expect("preview pipeline render")
     .ast_json;

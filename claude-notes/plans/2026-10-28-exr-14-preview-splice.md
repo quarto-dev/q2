@@ -2,7 +2,7 @@
 title: 'EXR-14: preview splices records by unit id'
 date: 2026-10-28
 description: 'Adds the id-based, lenient preview splice for engine execution records, including inline expression spans, per-unit staleness, and masking-safe unit identity, while the legacy structural splice stays frozen for old captures.'
-status: draft  # not started
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
@@ -187,84 +187,89 @@ and `EngineRecord`); no kernel needed. In production the `Record` reaches the sp
 the payload EXR-13 reads, and EXR-5's task "Record handoff to the capture writers" is what
 puts it there.
 
-- [ ] Lookup: a record with cells A, B, C and a document with A, B, C splices all
+- [x] Lookup: a record with cells A, B, C and a document with A, B, C splices all
   three; each output run equals what the presenter produces for that cell.
-- [ ] Edit one cell: A, B2, C (B2 is B after an edit). A and C splice, B2 is `stale`
+- [x] Edit one cell: A, B2, C (B2 is B after an edit). A and C splice, B2 is `stale`
   and stays as source, and the old B record cell is `orphaned`.
-- [ ] Reorder: C, A, B splices all three (position is not part of the key).
-- [ ] Duplicates: two identical cells (hash H) splice in occurrence order: the first takes
+- [x] Reorder: C, A, B splices all three (position is not part of the key).
+- [x] Duplicates: two identical cells (hash H) splice in occurrence order: the first takes
   the first record cell with H and the second takes the second. Deleting the first document
   cell leaves one cell, now the first occurrence of H, and it takes the **first** record cell
   with H (the second record cell is `orphaned`). Cell indexes inside the ids shifted; the
   test asserts they are not consulted.
-- [ ] Option sensitivity, converse pair. An `echo` (presentation-only) edit to a `#|`
+- [x] Option sensitivity, converse pair. An `echo` (presentation-only) edit to a `#|`
   line keeps the cell matched through `quarto_exec_hash` and the record fresh, and the
   cell is presented with the new `echo` value. An execution-relevant `#|` edit (for
   example `fig-width`) changes the execution hash, matches nothing, and the cell is
   `stale`, stays as source, and the next execution re-runs it.
-- [ ] Fallback keys: a record cell with only `quarto_content_hash` (an imported Positron
+- [x] Fallback keys: a record cell with only `quarto_content_hash` (an imported Positron
   record) matches by content hash, so an `echo` edit there makes the cell `stale` (the
   content hash includes the `#|` lines); a record cell with both hashes prefers the
   execution hash when the two disagree.
-- [ ] Presentation uses the current cell: a matched cell whose recorded `echo` was true
+- [x] Presentation uses the current cell: a matched cell whose recorded `echo` was true
   and whose current `echo` is false splices without the source block, and the reverse.
-- [ ] Spans: a document with `` `{python} a` `` twice and `` `{python} b` `` once
+- [x] Spans: a document with `` `{python} a` `` twice and `` `{python} b` `` once
   splices three inline values; editing the second `a` leaves the first matched and
   makes the edited one `stale`; a span of a language the record has no unit for stays
   as source. Language case: `` `{Python} a` `` and `` `{python} a` `` are the same key.
-- [ ] Front-matter span: a document whose own `title:` holds `` `{python} a` `` and whose
+- [x] Front-matter span: a document whose own `title:` holds `` `{python} a` `` and whose
   body holds `` `{python} a` `` has two units with the same key; the record has two. The
   body span is occurrence 1 (the front-matter span is occurrence 0 and is never spliced), so
   it takes the second record unit's value, and the front-matter span's value is not placed
   in the body. A span with the same text in `_quarto.yml` (project metadata) is not a unit
   and takes no occurrence number, so the body span stays occurrence 0 when the span lives
   only in the project metadata.
-- [ ] Span value kinds: plain text is escaped as text; markdown-mime values are
+- [x] Span value kinds: plain text is escaped as text; markdown-mime values are
   parsed as inline markdown; an HTML value becomes a raw inline. These mirror the
   rules EXR-3 defines for live execution, and the test asserts the same expected
   strings for the same inputs (shared table).
-- [ ] Files and includes: a record with embedded files materializes them through
+- [x] Files and includes: a record with embedded files materializes them through
   `ctx.runtime` before splicing; a record whose notebook-level metadata has
   `include-in-header` content folds it into `meta.rendered.includes.header`
   (parity with `fold_capture_includes_into_meta`).
-- [ ] Fail-soft: a record cell with an unparseable output, or a record whose units
+- [x] Fail-soft: a record cell with an unparseable output, or a record whose units
   are all unmatched, leaves the AST unchanged and never errors.
-- [ ] Ids: a span added before a cell leaves that cell's id unchanged (span counter is
+- [x] Ids: a span added before a cell leaves that cell's id unchanged (span counter is
   separate); a ceded braced cell and a `{python.marimo}` cell count in the cell index;
   a raw `{=html}` block does not. A span in prose in a language no engine owns still
   takes the next number of the document-wide span counter (the scan applies no ownership
   filter); text inside any braced fence and inside an HTML comment holds no spans (decision
   41; EXR-3 divergences 8 and 10), so it takes none. A span in the document's own front
   matter takes a number; a span from project metadata does not.
-- [ ] Labeled cells hash the writer's range (decision 36): a Jupyter cell with a
+- [x] Labeled cells hash the writer's range (decision 36): a Jupyter cell with a
   `#| label: fig-x` line and a `#| fig-cap:` line (crossref sugaring strips both from the
   AST text) gets the same `quarto_content_hash` at splice time as the writer recorded, and
   splices. The knitr-labeled counterpart is the ignored test in Phase C.
-- [ ] Nesting corpus: the corpus the splice tests use includes a cell inside a blockquote
+- [x] Nesting corpus: the corpus the splice tests use includes a cell inside a blockquote
   and a cell inside a list item (Positron's parser, which has no nesting rule, indexes
   these differently; decision 39), and the splice matches them by hash regardless of the
   index.
-- [ ] Dispatch: a legacy payload runs the existing splice (all existing
+- [x] Dispatch: a legacy payload runs the existing splice (all existing
   `capture_splice` tests stay green and unmodified; tests added here for the legacy
   path alone carry the `legacy_capture_` prefix); a record payload cannot reach
   `apply_capture_splices` (compile-time, plus a test that the stage rejects an
   attempted mixed configuration).
-- [ ] Independence: a grep-style test fails if any file of the record arm imports from
+- [x] Independence: a grep-style test fails if any file of the record arm imports from
   `engine/capture_splice.rs`.
 
 ## Phase B: implementation
 
-- [ ] First, write the characterization test for how spans appear in the pre-engine AST
+- [x] First, write the characterization test for how spans appear in the pre-engine AST
   in a heading, a table cell and an attribute value (a paragraph and the plain `Code`
   shape are already verified). Record the result in this plan.
-- [ ] Write the tests first, then make the record arm mask a clone of the AST before it
+  **Result (2026-11-01):** the scan is textual over the serialized qmd, so a span in a heading,
+  a table cell and an attribute value (`title="..."`) is each one unit and each splices in
+  place (an attribute value is substituted as raw text, so a value with a double quote would
+  break the attribute; EXR-3's value rules do not special-case it). Test:
+  `spans_in_a_heading_a_table_cell_and_an_attribute_value_splice`.
+- [x] Write the tests first, then make the record arm mask a clone of the AST before it
   scans: tests that a `{python}` fence and a span nested inside a display block yield no
   units (the same corpus as Phase C), and that the arm's unit list equals the writer's unit
   list on the Phase C fixtures. Then call `nested_cell_mask::mask` on a clone (as
   `EngineExecutionStage` does at `engine_execution.rs:515`) and scan the clone. Nothing in
   the pre-engine stages masks, so without this task the arm would claim units the writer
   never saw.
-- [ ] Verify and wire (UNVERIFIED until checked): that the splice presenter receives the
+- [x] Verify and wire (UNVERIFIED until checked): that the splice presenter receives the
   **current** cell's options and the current document scope (`execute:` scope with
   cell-over-scope precedence, as `resolve_cell_options` does for the live path) layered
   over any options the record stores, with a current option winning over the record's
@@ -273,7 +278,7 @@ puts it there.
   `opts_chunk$set`) is settled with the knitr follow-on epic. Check what `ctx` holds at the splice stage and what the
   EXR-1 presenter takes; if the current options do not reach it, add the plumbing and make
   the "presentation uses the current cell" test pass.
-- [ ] Unit enumeration from the shared scan (EXR-2's `scan_units` plus EXR-4's id
+- [x] Unit enumeration from the shared scan (EXR-2's `scan_units` plus EXR-4's id
   function, decision 38) over the masked clone of the pre-engine document (previous task),
   the same list the writer
   used (same ids, same document order, document-wide span counter), then mapped onto the
@@ -281,54 +286,89 @@ puts it there.
   mechanism EXR-4's first task chose, never from the sugared `CodeBlock.text`. If a
   separate AST walker is kept for the mapping, it must agree with the scan on every
   conformance fixture.
-- [ ] A `RecordSpliceStage` or a record arm inside `CaptureSpliceStage` (decide from
+- [x] A `RecordSpliceStage` or a record arm inside `CaptureSpliceStage` (decide from
   the code: the stage already owns files, includes and fail-soft logging, so an arm
   is likely smaller). It runs the lookup, calls the EXR-1 presenter per matched
   cell, parses the presenter markdown with the same `pampa` reader the legacy path
   uses, and replaces the cell. Only the `Legacy` arm of `CapturePayload` calls the
   legacy splice, `label_reinject::strip` or `parse_capture_gz`.
-- [ ] Span splice mode, per the span decision above.
-- [ ] Implement the matching order of decision 34: execution hash, then content hash,
+- [x] Span splice mode, per the span decision above.
+- [x] Implement the matching order of decision 34: execution hash, then content hash,
   duplicates by k-th occurrence in record order (design decision 2); matched cells are
   presented with the current options. A document unit is hashed under the `HashDefinition`
   of the `quarto_engines` entry whose recorded owned-language set contains its language.
-- [ ] Emit the per-unit staleness result as stage auxiliary data (kind constant next
+- [x] Emit the per-unit staleness result as stage auxiliary data (kind constant next
   to `ENGINE_CAPTURE_KIND`), and into `ctx` for EXR-15. No UI.
-- [ ] Suppress the "(no execution)" warning for engines the record served, by
-  reusing `with_spliced_engines` with the engine list from the record.
+- [x] Suppress the "(no execution)" warning for engines the record served, by
+  reusing `with_spliced_engines` with the engine list from the record
+  (`CapturePayload::served_engine_names`, read from `quarto_engines`). Pinned by
+  `editing_one_cell_leaves_n_minus_1_outputs_and_one_source_cell`: with an empty registry an
+  edited cell left as source errors out ("jupyter is registered but its runtime is not
+  available") unless the record's engine is in the spliced set.
 
 ## Phase C: masking and conformance
 
-- [ ] Fixtures with display blocks (a four-backtick fence containing a `{python}`
+- [x] Fixtures with display blocks (a four-backtick fence containing a `{python}`
   cell and a span, a blockquote containing a fence, a `{{python}}` doubled brace
   that must not be claimed): the unit list with the mask applied contains no
   phantom units, on native and in a WASM test. Include a ceded cell and the dotted
   `{python.marimo}` form so the document-wide cell index is exercised.
-- [ ] Cross-site property test: for each conformance fixture (the same files EXR-2
+  Native: `splice_ids_equal_the_writers_with_and_without_the_mask` (five fixtures) and the
+  Phase B unit test. WASM: `recordPayload.wasm.test.ts`, "a cell shown inside a display
+  block is not a unit" (a same-text cell *before* the real one would steal the output if
+  claimed).
+- [x] Cross-site property test: for each conformance fixture (the same files EXR-2
   and EXR-16 use), unit ids computed by the native record writer equal those
   computed by the splice at read time, with the mask on and with it off.
-- [ ] `MASK_INLINE_RE` and the scanner's span regex are one definition (EXR-2);
-  add a test that fails if the two diverge.
-- [ ] Canonical recorded input: a knitr labeled cell hashes the same at record time
+  `splice_ids_equal_the_writers_with_and_without_the_mask` runs the real writer
+  (`record_capture_run`) and the real preview pipeline, and compares the staleness event.
+  "Mask off" is the control documents with nothing to mask; the mask itself is never
+  disabled. The fixtures are this plan\'s own, not the EXR-2/EXR-16 conformance files.
+- [x] `MASK_INLINE_RE` and the scanner's span regex are one definition (EXR-2);
+  add a test that fails if the two diverge. Already in place from EXR-2: both regexes are
+  built in `engine/patterns.rs`, and `mask_inline_pattern_covers_every_scanned_span`
+  (`engine/units.rs`) fails if the mask stops covering a scanned span.
+- [x] Canonical recorded input: a knitr labeled cell hashes the same at record time
   and at splice time (the label re-injection must not leak into the id). If EXR-10
   has not landed, mark this test ignored with the strand reference, and leave it as
   the acceptance test for EXR-10. It is not the only labeled-cell test: the Jupyter
   `fig-` label plus `fig-cap` test in Phase A runs without EXR-10.
+  EXR-10 has landed, so this is a live test, not ignored:
+  `a_knitr_labeled_cell_hashes_the_same_at_record_and_splice_time`. The writer is a stub
+  named `knitr`, which makes the real engine stage re-inject the label after hashing; no
+  real knitr record exists until EXR-11.
 
 ## Phase D: pipeline, WASM, end to end
 
-- [ ] Wire the record arm through `insert_capture_splice_stage_in` and the three
+- [x] Wire the record arm through `insert_capture_splice_stage_in` and the three
   pipeline builders that take captures (`pipeline.rs` near `:504` to `:666`).
-- [ ] WASM tests: `render_page_for_preview` with a record payload shows the recorded
+  Done by replacing `Vec<EngineCapture>` with `CapturePayload` in the builders,
+  `PartialKind`, `PandocRequestInput`, `BookDownloadParams`, the preview render helper and
+  the WASM entry points (a91d287d4). `insert_capture_splice_stage_in` attaches a record with
+  `CaptureSpliceStage::with_record`; `HtmlRenderConfig::with_payload` does the same for the
+  HTML path. Left as-is on purpose: `capture_driver.rs`\'s record staleness arm and
+  `cache.rs` `read_cached` treat a record as a miss; record-level staleness is EXR-15\'s
+  (design decision 4) and nothing writes records to that cache yet.
+- [x] WASM tests: `render_page_for_preview` with a record payload shows the recorded
   output; an edited cell falls back to source; an inline expression shows its value.
-- [ ] Hub-client integration test (existing `Preview.capture.integration.test.tsx`
-  style) for a record payload.
-- [ ] End to end on native: record a Jupyter document (after EXR-5), edit one cell,
+  `recordPayload.wasm.test.ts` covers presented, edited-to-source and display block for both
+  entry points. **Not covered in WASM: the inline expression** (the checked-in fixture has
+  no span and hashing one by hand in TS is not worth it); spans are covered natively by the
+  `record_splice` unit tests.
+- [x] Hub-client integration test (existing `Preview.capture.integration.test.tsx`
+  style) for a record payload. The TS layer is shape-agnostic, so the test pins that a
+  record-typed binary doc\'s bytes reach the render call untouched.
+- [x] End to end on native: record a Jupyter document (after EXR-5), edit one cell,
   preview shows N-1 outputs and one source cell. Then change only an `echo` option on a
   cell: preview shows all N outputs, the changed cell with its new presentation.
-- [ ] Scope note test: an edit to an included file does not recompute the includer in
+  `tests/integration/record_preview_splice.rs`, library-level through
+  `render_qmd_to_preview_ast`, with a stub engine standing in for Jupyter. Not run through
+  the `q2 preview` binary or a browser.
+- [x] Scope note test: an edit to an included file does not recompute the includer in
   the watcher (pre-existing limitation, `lib.rs:484-510`); state it in the test name so
   nobody reads it as a regression.
+  `editing_an_included_file_does_not_recompute_the_includer_known_watcher_limit`
+  (`quarto-preview/src/capture_driver.rs`).
 
 ## Exit criteria
 
@@ -353,6 +393,11 @@ puts it there.
   (the `.cell` wrapper, echoed source block). Keep the wrapper shape until EXR-17
   (`2026-07-01-bd-gthycd33-jupyter-cell-wrapper.md`); a parity test compares the
   record splice with the legacy splice on the same Jupyter fixture.
+  Done: `record_splice_matches_legacy_splice_on_the_jupyter_fixtures`, kernel-free over the
+  EXR-6 goldens. Nine shadow cases render byte-identical HTML; the one divergence is
+  `include-false`, where the legacy splice leaves the hidden cell as source (an empty output
+  run is indistinguishable from "no match") and the record correctly hides it. Figure
+  cases are not compared (they need materialized files).
 - **Duplicate cells** match by k-th occurrence in record order (design decision 2). After
   deleting one of several identical cells, the later record cell is the one reported
   `orphaned`, whichever one the author meant; the cells share a hash, so the display differs

@@ -94,7 +94,7 @@ fn unit_id(unit: &Unit) -> Option<&str> {
 }
 
 /// The one `display_data` markdown output of a cell and the format it was produced for.
-fn stored_markdown(cell: &RecordCell) -> Option<(String, Option<String>)> {
+pub(crate) fn stored_markdown(cell: &RecordCell) -> Option<(String, Option<String>)> {
     let [output] = cell.outputs.as_slice() else {
         return None;
     };
@@ -121,7 +121,7 @@ fn stored_markdown(cell: &RecordCell) -> Option<(String, Option<String>)> {
 
 /// The edit for one unit. A fenced cell keeps its trailing newline and carries its blockquote
 /// prefix and indentation onto the continuation lines, so the substitution stays in its container.
-fn replacement(unit: &Unit, text: &str, markdown: &str) -> (usize, usize, String) {
+pub(crate) fn replacement(unit: &Unit, text: &str, markdown: &str) -> (usize, usize, String) {
     match unit {
         Unit::Inline(i) => (i.start, i.end, markdown.trim_end_matches('\n').to_string()),
         Unit::Cell(c) => {

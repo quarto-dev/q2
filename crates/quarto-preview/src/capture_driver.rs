@@ -24,16 +24,15 @@
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::compute_input_qmd;
+use quarto_core::engine::preview_record::{CaptureRun, compute_input_qmd};
 use quarto_core::pandoc_request::captures::{CapturePayload, parse_capture_payload};
 use quarto_core::project::ProjectContext;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::HubContext;
 use quarto_hub::index::CaptureRef;
 use quarto_system_runtime::SystemRuntime;
-use quarto_trace::EngineCapture;
 
-use crate::cache::record_capture_cached;
+use crate::cache::record_capture_run_cached;
 use crate::config::EnginePolicy;
 use crate::diagnostics;
 
@@ -168,7 +167,7 @@ async fn record_one(
     // C.7: route through the cache-aware wrapper so identical content
     // across (re-)opens hits the filesystem cache instead of re-running
     // the engine.
-    let captures = record_capture_cached(
+    let run = record_capture_run_cached(
         cache_dir,
         abs_path,
         &project,
@@ -178,11 +177,11 @@ async fn record_one(
     .await
     .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
 
-    if captures.is_empty() {
+    if run.captures.is_empty() {
         return Ok(false);
     }
 
-    let capture_doc_id = write_capture_doc(ctx, rel_path, &captures).await?;
+    let capture_doc_id = write_capture_doc(ctx, rel_path, &run).await?;
 
     let capture_ref = CaptureRef {
         capture_doc_id,
@@ -194,7 +193,8 @@ async fn record_one(
         .set_capture(rel_path, &capture_ref)
         .map_err(|e| RecordError::SidecarFailed(format!("{}", e)))?;
 
-    let engines = captures
+    let engines = run
+        .captures
         .iter()
         .map(|c| c.engine_name.as_str())
         .collect::<Vec<_>>()
@@ -271,8 +271,9 @@ pub async fn recompute_staleness(
             return Ok(false);
         }
         Ok(CapturePayload::Record(_)) => {
-            // A record's staleness is per unit (EXR-14); the byte compare below
-            // is the legacy rule only.
+            // Record-level staleness (does the record still describe this document)
+            // is EXR-15's; per-unit staleness is computed by the splice (EXR-14) and
+            // reported on its own. The byte compare below is the legacy rule only.
             tracing::debug!(
                 rel_path = %rel_path,
                 "recorded payload is an engine record; skipping legacy staleness check",
@@ -337,9 +338,11 @@ pub async fn recompute_staleness(
     Ok(true)
 }
 
-/// Serialize + gzip + store the EngineCapture sequence as a samod binary
-/// doc (bd-5yff4: a JSON array, one per engine). Returns the new doc's
-/// stringified DocumentId for use in the sidecar `captureDocId` field.
+/// Encode and store a capture run as a samod binary doc: a record doc when the
+/// writer gate (`record_writing_enabled`) is on and the run has a record, else
+/// the legacy `EngineCapture` array (bd-5yff4: one per engine). Returns the new
+/// doc's stringified DocumentId for the sidecar `captureDocId` field. Shared by
+/// the eager driver and the re-execute handler (EXR-13b).
 ///
 /// `rel_path` is the project-relative source path, stamped (with the
 /// engine names) into the doc's uncompressed `meta` audit map
@@ -348,20 +351,41 @@ pub async fn recompute_staleness(
 pub async fn write_capture_doc(
     ctx: &Arc<HubContext>,
     rel_path: &str,
-    captures: &[EngineCapture],
+    run: &CaptureRun,
 ) -> Result<String, RecordError> {
-    // Shared wire format (serialize + gzip + 10MB size warning,
-    // bd-qbhp2cvv) — same helper as re_execute.rs and the
-    // hub-provider exec server.
-    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
-        .map_err(|e| RecordError::Gzip(format!("{}", e)))?;
+    write_capture_doc_gated(
+        ctx,
+        rel_path,
+        run,
+        quarto_core::engine::capture_files::record_writing_enabled(),
+    )
+    .await
+}
+
+/// [`write_capture_doc`] with the gate passed explicitly (test seam).
+pub async fn write_capture_doc_gated(
+    ctx: &Arc<HubContext>,
+    rel_path: &str,
+    run: &CaptureRun,
+    record_gate: bool,
+) -> Result<String, RecordError> {
+    let encoded = quarto_core::engine::capture_files::encode_capture_payload(
+        &run.captures,
+        run.record.as_ref(),
+        record_gate,
+    )
+    .map_err(|e| RecordError::Gzip(format!("{}", e)))?;
 
     let meta = quarto_hub::resource::CaptureDocMeta {
         source_path: rel_path.to_string(),
-        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+        engines: encoded.engines,
     };
-    let automerge_doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
-        .map_err(|e| RecordError::CreateBinaryDoc(format!("{}", e)))?;
+    let automerge_doc = quarto_hub::resource::create_engine_payload_document(
+        encoded.is_record,
+        &encoded.gzipped,
+        &meta,
+    )
+    .map_err(|e| RecordError::CreateBinaryDoc(format!("{}", e)))?;
 
     let handle = ctx
         .repo()
@@ -436,6 +460,71 @@ pub async fn read_capture_from_doc(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// EXR-13b writer gate (shared by the eager driver and the re-execute
+    /// handler): gate off writes a legacy capture doc even when the run carries a
+    /// record; gate on writes a record doc; gate on with no record (a cache hit)
+    /// falls back to legacy.
+    async fn written_mime_and_kind(gate: bool, with_record: bool) -> (String, String) {
+        use automerge::ReadDoc;
+        let temp = TempDir::new().unwrap();
+        let storage = StorageManager::new_standalone(temp.path()).unwrap();
+        let ctx = Arc::new(
+            HubContext::new(storage, HubConfig::default())
+                .await
+                .unwrap(),
+        );
+        let record = with_record.then(|| {
+            quarto_core::record::read_record(include_str!(
+                "../../quarto-core/tests/fixtures/records/basic.json"
+            ))
+            .unwrap()
+        });
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record,
+        };
+        let id = write_capture_doc_gated(&ctx, "doc.qmd", &run, gate)
+            .await
+            .unwrap();
+        let handle = ctx
+            .repo()
+            .find(id.parse().unwrap())
+            .await
+            .unwrap()
+            .expect("doc exists");
+        handle.with_document(|doc| {
+            let mime = doc
+                .get(automerge::ROOT, "mimeType")
+                .unwrap()
+                .and_then(|(v, _)| v.into_string().ok())
+                .unwrap_or_default();
+            let kind = quarto_hub::resource::read_capture_meta(doc)
+                .and_then(|m| m.kind)
+                .unwrap_or_default();
+            (mime, kind)
+        })
+    }
+
+    #[tokio::test]
+    async fn writer_gate_off_writes_a_legacy_capture_doc() {
+        let (mime, kind) = written_mime_and_kind(false, true).await;
+        assert_eq!(mime, quarto_hub::resource::CAPTURE_MIME_TYPE);
+        assert_eq!(kind, "engine-capture");
+    }
+
+    #[tokio::test]
+    async fn writer_gate_on_writes_a_record_doc() {
+        let (mime, kind) = written_mime_and_kind(true, true).await;
+        assert_eq!(mime, quarto_hub::resource::RECORD_MIME_TYPE);
+        assert_eq!(kind, "engine-record");
+    }
+
+    #[tokio::test]
+    async fn writer_gate_on_without_a_record_writes_legacy() {
+        let (mime, _) = written_mime_and_kind(true, false).await;
+        assert_eq!(mime, quarto_hub::resource::CAPTURE_MIME_TYPE);
+    }
 
     use quarto_core::engine::{ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError};
     use quarto_hub::context::HubConfig;
@@ -1216,6 +1305,71 @@ mod tests {
             ctx.index().get_capture("doc.qmd").unwrap().staleness,
             Some(true),
             "sidecar should now say staleness: true"
+        );
+    }
+
+    /// Pre-existing watcher scope limit, **not a regression** (EXR-14 scope note): the
+    /// preview watcher recomputes staleness only for the path that changed
+    /// (`on_file_changed` in `lib.rs`), so an edit to an *included* file never recomputes
+    /// the includer. Recomputing the includer itself does see the edit; only the trigger
+    /// is missing. Fixing the watcher is outside the execution-records epic.
+    #[tokio::test]
+    async fn editing_an_included_file_does_not_recompute_the_includer_known_watcher_limit() {
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[
+            (
+                "doc.qmd",
+                "---\nengine: test-passthrough\n---\n\n{{< include _inc.qmd >}}\n",
+            ),
+            ("_inc.qmd", "```{test-passthrough}\nfirst\n```\n"),
+        ])
+        .await;
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime.clone(),
+            Some(make_registry()),
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert!(count >= 1, "the includer has a capture");
+
+        std::fs::write(
+            tmp.path().join("_inc.qmd"),
+            "```{test-passthrough}\nsecond\n```\n",
+        )
+        .unwrap();
+
+        // What the watcher does for the changed path: recompute that path only.
+        recompute_staleness(
+            ctx.clone(),
+            runtime.clone(),
+            "_inc.qmd",
+            EnginePolicy::Manual,
+            None,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false),
+            "the includer is not recomputed by an edit to its include"
+        );
+
+        // The includer itself would see the edit if something recomputed it.
+        assert!(
+            recompute_staleness(
+                ctx.clone(),
+                runtime,
+                "doc.qmd",
+                EnginePolicy::Manual,
+                None,
+                &cache_dir_for_test(),
+            )
+            .await
+            .unwrap(),
+            "recomputing the includer does see the include's edit"
         );
     }
 

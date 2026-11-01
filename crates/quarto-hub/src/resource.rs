@@ -252,6 +252,22 @@ pub fn create_record_document_at(
     )
 }
 
+/// Create the binary doc for an encoded capture payload: a record doc when
+/// `is_record`, a legacy capture doc otherwise. The one call the three capture
+/// writers share, so they stop choosing MIME and `meta.kind` themselves
+/// (EXR-13b).
+pub fn create_engine_payload_document(
+    is_record: bool,
+    gzipped: &[u8],
+    meta: &CaptureDocMeta,
+) -> Result<Automerge> {
+    if is_record {
+        create_record_document(gzipped, meta)
+    } else {
+        create_capture_document(gzipped, meta)
+    }
+}
+
 /// The shared body of the capture and record writers: they differ only in
 /// MIME and `meta.kind`.
 fn create_payload_document(

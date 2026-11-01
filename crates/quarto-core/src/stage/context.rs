@@ -394,6 +394,11 @@ pub struct StageContext {
     /// did not run, in which case the scanned text stands in.
     pub sugared_blocks: Vec<crate::record::SugaredBlock>,
 
+    /// What the record splice decided per unit (EXR-14): staleness for every document unit and
+    /// the record cells nothing matched. `None` until a record has been spliced. EXR-15 reads
+    /// it for the hub status surface.
+    pub record_splice_report: Option<crate::stage::stages::SpliceReport>,
+
     /// This chapter's harvested citation manifest (book-projects P6),
     /// set by [`crate::stage::stages::UserFiltersStage`] from the
     /// citeproc filter's output alongside its existing, unchanged
@@ -520,6 +525,7 @@ impl StageContext {
             pandoc_request: None,
             unexecuted_cells: 0,
             sugared_blocks: Vec::new(),
+            record_splice_report: None,
             chapter_seed: None,
             cross_chapter_crossref_registry: None,
             citation_manifest: None,

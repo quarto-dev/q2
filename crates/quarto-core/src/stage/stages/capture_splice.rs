@@ -76,6 +76,20 @@ fn fold_capture_includes_into_meta(meta: &mut ConfigValue, capture: &EngineCaptu
     let Some(includes_json) = capture.result.get("includes") else {
         return;
     };
+    fold_includes_value_into_meta(meta, includes_json);
+}
+
+/// Auxiliary-data kind for the record splice's per-unit staleness (EXR-14). One event per
+/// splice run; the payload is `{"units": [{"id", "staleness": "fresh"|"stale"}], "orphaned":
+/// [cell id]}`. Observers that do not know the kind ignore it.
+pub const RECORD_STALENESS_KIND: &str = "RecordStaleness";
+
+/// [`fold_capture_includes_into_meta`] for a bare `includes` JSON value, which is also how a
+/// record's engine entry stores them (EXR-14).
+pub(super) fn fold_includes_value_into_meta(
+    meta: &mut ConfigValue,
+    includes_json: &serde_json::Value,
+) {
     let Ok(includes) = serde_json::from_value::<PandocIncludes>(includes_json.clone()) else {
         return;
     };
@@ -104,6 +118,9 @@ pub struct CaptureSpliceStage {
     /// source tree). `None` falls back to the context's
     /// `capture_materialize_dir`, then the document directory.
     materialize_dir: Option<std::path::PathBuf>,
+    /// A stored execution record (EXR-14). Exclusive with `captures`: the two builders each
+    /// clear the other, so a stage never runs both the legacy and the record splice.
+    record: Option<std::sync::Arc<crate::record::Record>>,
 }
 
 impl CaptureSpliceStage {
@@ -116,6 +133,7 @@ impl CaptureSpliceStage {
         Self {
             captures: Vec::new(),
             materialize_dir: None,
+            record: None,
         }
     }
 
@@ -141,7 +159,43 @@ impl CaptureSpliceStage {
     /// (e.g. the q2-preview project pipeline runs once per active page).
     pub fn with_captures(mut self, captures: Vec<EngineCapture>) -> Self {
         self.captures = captures;
+        self.record = None;
         self
+    }
+
+    /// Attach a stored execution record (EXR-14). Units are matched by hash, not by the
+    /// legacy structural walk; see [`record_splice`](super::record_splice). Replaces any
+    /// legacy captures.
+    pub fn with_record(mut self, record: std::sync::Arc<crate::record::Record>) -> Self {
+        self.record = Some(record);
+        self.captures = Vec::new();
+        self
+    }
+
+    /// Whether this stage splices a record (and so never the legacy path).
+    pub fn has_record(&self) -> bool {
+        self.record.is_some()
+    }
+}
+
+impl CaptureSpliceStage {
+    /// Where supporting files go: the stage's own directory, the context's, or beside the
+    /// document (a bare source name falls back to the project directory).
+    fn document_dir(
+        &self,
+        doc_ast: &crate::stage::data::DocumentAst,
+        ctx: &StageContext,
+    ) -> std::path::PathBuf {
+        self.materialize_dir
+            .clone()
+            .or_else(|| ctx.capture_materialize_dir.clone())
+            .unwrap_or_else(|| {
+                doc_ast
+                    .path
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf)
+            })
     }
 }
 
@@ -178,6 +232,27 @@ impl PipelineStage for CaptureSpliceStage {
             ));
         };
 
+        if let Some(record) = &self.record {
+            let doc_dir = self.document_dir(&doc_ast, ctx);
+            let (spliced, report) =
+                super::record_splice::splice_record(doc_ast, record, ctx, &doc_dir);
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "record-splice: {} unit(s), {} orphaned record cell(s)",
+                report.units.len(),
+                report.orphaned.len()
+            );
+            ctx.observer.on_auxiliary_data(
+                self.name(),
+                0,
+                RECORD_STALENESS_KIND,
+                &report.to_json(),
+            );
+            ctx.record_splice_report = Some(report);
+            return Ok(PipelineData::DocumentAst(spliced));
+        }
+
         if self.captures.is_empty() {
             trace_event!(ctx, EventLevel::Debug, "no captures attached; pass-through");
             return Ok(PipelineData::DocumentAst(doc_ast));
@@ -192,17 +267,7 @@ impl PipelineStage for CaptureSpliceStage {
         // dir comes from the AST's path (absolute in the WASM VFS and
         // in `q2 render`); a bare source name (some native test
         // harnesses) falls back to the project dir.
-        let doc_dir = self
-            .materialize_dir
-            .clone()
-            .or_else(|| ctx.capture_materialize_dir.clone())
-            .unwrap_or_else(|| {
-                doc_ast
-                    .path
-                    .parent()
-                    .filter(|p| !p.as_os_str().is_empty())
-                    .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf)
-            });
+        let doc_dir = self.document_dir(&doc_ast, ctx);
         for capture in &self.captures {
             if !capture.files.is_empty() {
                 trace_event!(

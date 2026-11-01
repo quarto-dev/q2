@@ -144,7 +144,7 @@ async fn preview_ast(
         &mut ctx,
         runtime,
         registry,
-        Vec::new(),
+        Vec::new().into(),
     )
     .await
     .unwrap_or_else(|e| panic!("notebook must render: {e}"))
@@ -417,7 +417,7 @@ async fn stored_png_output_written_as_figure_file() {
         &mut ctx,
         runtime,
         None,
-        Vec::new(),
+        Vec::new().into(),
     )
     .await
     .expect("png-output notebook must render");

@@ -810,97 +810,12 @@ impl PipelineStage for EngineExecutionStage {
             // the current use (filename attribution in the trace) this is
             // adequate.
             let intermediate_name = intermediate_filename(&path, engine.name());
-            let (mut executed_ast, executed_ast_context, parse_warnings) =
-                pampa::readers::qmd::read(
-                    result.markdown.as_bytes(),
-                    false, // loose mode
-                    &intermediate_name,
-                    &mut std::io::sink(),
-                    true, // track source locations
-                    None, // file_id
-                )
-                .map_err(|diagnostics| {
-                    // bd-render-failure-unattributed-yxe0v7th shape 1:
-                    // these spans index into `result.markdown`, NOT into the
-                    // original document. Returning a bare `StageError` here
-                    // drops the only context that gives them meaning, and
-                    // `run_pipeline`'s generic `StageError -> QuartoError::Parse`
-                    // conversion then rebinds `FileId(0)` to the *source*
-                    // document's bytes. Engine output is normally much larger
-                    // than its source, so the offset lands past EOF and the
-                    // renderer emits neither an ariadne frame nor its
-                    // `at <file>:<row>:<col>` fallback — the page dies with no
-                    // attribution at all. When the source happens to be long
-                    // enough, the offset instead resolves to arbitrary
-                    // unrelated text and is reported with full confidence.
-                    //
-                    // So bind the spans here, to the buffer they actually
-                    // index, and hand back a `Structured` error that
-                    // `run_pipeline` passes through untouched.
-                    let mut source_context = quarto_source_map::SourceContext::new();
-                    source_context
-                        .add_file(intermediate_name.clone(), Some(result.markdown.clone()));
-                    PipelineError::Structured(crate::error::ParseError::new(
-                        diagnostics,
-                        source_context,
-                    ))
-                })?;
-
-            // Register this engine's intermediate as a new file slot, using
-            // the FileId the source context actually assigns. Deriving it
-            // from `filenames.len()` is wrong: sparse registrations —
-            // MetadataMergeStage's config files, added via
-            // `add_file_with_id` — grow `source_context.files` without
-            // growing `ast_context.filenames`, so in a project render the
-            // two counts diverge and the derived id lands on `_quarto.yml`'s
-            // dense slot (bd-itj2mjkr).
-            let new_slot = if let Some(intermediate_file) = executed_ast_context
-                .source_context
-                .get_file(quarto_source_map::FileId(0))
-                .cloned()
-            {
-                if let Some(info) = intermediate_file.file_info {
-                    merged_context
-                        .source_context
-                        .add_file_with_info(intermediate_name.clone(), info)
-                } else {
-                    merged_context
-                        .source_context
-                        .add_file(intermediate_name.clone(), None)
-                }
-            } else {
-                merged_context
-                    .source_context
-                    .add_file(intermediate_name.clone(), None)
-            };
-            merged_context.filenames.push(intermediate_name);
-            // Carry the executed parse's example-list counter forward; the
-            // last engine's value wins so downstream numbering is coherent.
-            merged_context
-                .example_list_counter
-                .set(executed_ast_context.example_list_counter.get());
-
-            // Remap the executed AST's `FileId(0)` to this engine's slot.
-            // Kept original blocks keep their FileIds; new blocks reference
-            // `new_slot`. The remap is conditional (not additive): the
-            // executed AST is a fresh single-file parse, so `FileId(0)` is
-            // the only id it can legitimately contain — any other id (e.g. a
-            // quarto-yaml hash id that leaked in) must pass through
-            // untouched rather than be shifted into garbage.
-            quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
-                if id == quarto_source_map::FileId(0) {
-                    new_slot
-                } else {
-                    id
-                }
-            });
-
-            // Reconcile: keep unchanged content's source locations, take
-            // new content from the executed AST. The "original" side may
-            // already carry FileIds from earlier engines; reconcile decides
-            // keep/replace by content, so mixed provenance is fine.
-            let (reconciled_ast, reconciliation_plan) =
-                quarto_ast_reconcile::reconcile(ast, executed_ast);
+            let (reconciled_ast, parse_warnings, reconciliation_plan) = merge_markdown_into_ast(
+                ast,
+                &mut merged_context,
+                &result.markdown,
+                intermediate_name,
+            )?;
             ast = reconciled_ast;
             warnings.extend(parse_warnings);
 
@@ -961,10 +876,116 @@ impl PipelineStage for EngineExecutionStage {
     }
 }
 
+/// Parse engine-produced markdown against its own intermediate file slot and reconcile it
+/// into `ast`, so unchanged content keeps its source locations and new content points at the
+/// slot. Shared by the engine stage and the record splice (EXR-14), so a spliced record
+/// attributes diagnostics exactly as a live engine run does.
+pub(crate) fn merge_markdown_into_ast(
+    ast: quarto_pandoc_types::pandoc::Pandoc,
+    merged_context: &mut pampa::pandoc::ASTContext,
+    markdown: &str,
+    intermediate_name: String,
+) -> Result<
+    (
+        quarto_pandoc_types::pandoc::Pandoc,
+        Vec<quarto_error_reporting::DiagnosticMessage>,
+        quarto_ast_reconcile::ReconciliationPlan,
+    ),
+    PipelineError,
+> {
+    let (mut executed_ast, executed_ast_context, parse_warnings) = pampa::readers::qmd::read(
+        markdown.as_bytes(),
+        false, // loose mode
+        &intermediate_name,
+        &mut std::io::sink(),
+        true, // track source locations
+        None, // file_id
+    )
+    .map_err(|diagnostics| {
+        // bd-render-failure-unattributed-yxe0v7th shape 1:
+        // these spans index into `result.markdown`, NOT into the
+        // original document. Returning a bare `StageError` here
+        // drops the only context that gives them meaning, and
+        // `run_pipeline`'s generic `StageError -> QuartoError::Parse`
+        // conversion then rebinds `FileId(0)` to the *source*
+        // document's bytes. Engine output is normally much larger
+        // than its source, so the offset lands past EOF and the
+        // renderer emits neither an ariadne frame nor its
+        // `at <file>:<row>:<col>` fallback — the page dies with no
+        // attribution at all. When the source happens to be long
+        // enough, the offset instead resolves to arbitrary
+        // unrelated text and is reported with full confidence.
+        //
+        // So bind the spans here, to the buffer they actually
+        // index, and hand back a `Structured` error that
+        // `run_pipeline` passes through untouched.
+        let mut source_context = quarto_source_map::SourceContext::new();
+        source_context.add_file(intermediate_name.clone(), Some(markdown.to_string()));
+        PipelineError::Structured(crate::error::ParseError::new(diagnostics, source_context))
+    })?;
+
+    // Register this engine's intermediate as a new file slot, using
+    // the FileId the source context actually assigns. Deriving it
+    // from `filenames.len()` is wrong: sparse registrations —
+    // MetadataMergeStage's config files, added via
+    // `add_file_with_id` — grow `source_context.files` without
+    // growing `ast_context.filenames`, so in a project render the
+    // two counts diverge and the derived id lands on `_quarto.yml`'s
+    // dense slot (bd-itj2mjkr).
+    let new_slot = if let Some(intermediate_file) = executed_ast_context
+        .source_context
+        .get_file(quarto_source_map::FileId(0))
+        .cloned()
+    {
+        if let Some(info) = intermediate_file.file_info {
+            merged_context
+                .source_context
+                .add_file_with_info(intermediate_name.clone(), info)
+        } else {
+            merged_context
+                .source_context
+                .add_file(intermediate_name.clone(), None)
+        }
+    } else {
+        merged_context
+            .source_context
+            .add_file(intermediate_name.clone(), None)
+    };
+    merged_context.filenames.push(intermediate_name);
+    // Carry the executed parse's example-list counter forward; the
+    // last engine's value wins so downstream numbering is coherent.
+    merged_context
+        .example_list_counter
+        .set(executed_ast_context.example_list_counter.get());
+
+    // Remap the executed AST's `FileId(0)` to this engine's slot.
+    // Kept original blocks keep their FileIds; new blocks reference
+    // `new_slot`. The remap is conditional (not additive): the
+    // executed AST is a fresh single-file parse, so `FileId(0)` is
+    // the only id it can legitimately contain — any other id (e.g. a
+    // quarto-yaml hash id that leaked in) must pass through
+    // untouched rather than be shifted into garbage.
+    quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
+        if id == quarto_source_map::FileId(0) {
+            new_slot
+        } else {
+            id
+        }
+    });
+
+    // Reconcile: keep unchanged content's source locations, take
+    // new content from the executed AST. The "original" side may
+    // already carry FileIds from earlier engines; reconcile decides
+    // keep/replace by content, so mixed provenance is fine.
+    let (reconciled_ast, reconciliation_plan) = quarto_ast_reconcile::reconcile(ast, executed_ast);
+
+    Ok((reconciled_ast, parse_warnings, reconciliation_plan))
+}
+
 /// EXR-5: the one scan, with every unit's id filled from the author text the
 /// sugaring stage snapshotted (`StageContext::sugared_blocks`). `author_texts`
 /// is total over the units it is built from, so `fill_ids` cannot fail.
-fn scan_and_fill_ids(
+pub(crate) fn scan_and_fill_ids(
     qmd: &str,
     snapshot: &[crate::record::SugaredBlock],
 ) -> (Vec<crate::engine::units::Unit>, crate::record::AuthorTexts) {
@@ -1118,7 +1139,7 @@ fn intermediate_filename(source_path: &std::path::Path, engine_name: &str) -> St
 ///
 /// This produces QMD that can be fed to execution engines.
 /// Uses pampa's QMD writer which preserves code cell attributes.
-fn serialize_ast_to_qmd(
+pub(crate) fn serialize_ast_to_qmd(
     ast: &quarto_pandoc_types::pandoc::Pandoc,
 ) -> Result<(String, quarto_source_map::SourceInfo), PipelineError> {
     let (buffer, source_info) =

@@ -19,6 +19,7 @@ use super::single_file_render::{
 };
 use crate::error::QuartoError;
 use crate::format::Format;
+use crate::pandoc_request::captures::CapturePayload;
 use crate::pandoc_request::render::{BookOutcomeInfo, PandocRequestOutcome, ResolvedBookScope};
 use crate::pipeline::{PartialKind, build_pandoc_request_finishing_stages};
 use crate::project::ProjectContext;
@@ -61,7 +62,7 @@ pub(crate) async fn render_book_request(
         let Some(file) = &item.file else {
             return (
                 PartialKind::Request {
-                    captures: Vec::new(),
+                    captures: CapturePayload::Empty,
                 },
                 Vec::new(),
             );
@@ -75,21 +76,16 @@ pub(crate) async fn render_book_request(
         match captures_by_path.get(&key) {
             None => (
                 PartialKind::Request {
-                    captures: Vec::new(),
+                    captures: CapturePayload::Empty,
                 },
                 Vec::new(),
             ),
             Some(bytes) => {
                 match crate::pandoc_request::captures::parse_capture_payload(Some(bytes), &key) {
-                    Ok(payload) => (
-                        PartialKind::Request {
-                            captures: payload.into_captures(),
-                        },
-                        Vec::new(),
-                    ),
+                    Ok(payload) => (PartialKind::Request { captures: payload }, Vec::new()),
                     Err(e) => (
                         PartialKind::Request {
-                            captures: Vec::new(),
+                            captures: CapturePayload::Empty,
                         },
                         vec![DiagnosticMessage::warning(format!(
                             "Could not read the recorded results for {label}: {e}; its code is shown as source"

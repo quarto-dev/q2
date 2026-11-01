@@ -1128,7 +1128,7 @@ async fn render_qmd_with_overlay(
         &project,
         user_grammars,
         false,
-        Vec::new(),
+        Default::default(),
         None,
         None,
         None,
@@ -1198,7 +1198,7 @@ async fn render_printable_with_overlay(
         &project,
         user_grammars,
         false,
-        Vec::new(),
+        Default::default(),
         None,
         Some(&printable_format),
         None,
@@ -1233,7 +1233,7 @@ pub async fn render_qmd_content(
         &project,
         user_grammars,
         false,
-        Vec::new(),
+        Default::default(),
         None,
         None,
         None,
@@ -1579,9 +1579,8 @@ async fn render_page_for_preview_with_overlay(
 ///
 /// The payload is dispatched on its shape by
 /// [`parse_capture_payload`](quarto_core::pandoc_request::captures::parse_capture_payload)
-/// (EXR-13): a legacy capture, or an engine execution record. A record is not
-/// presented until EXR-14, so it yields no captures and its code cells render as
-/// source. `path` names the document in notices.
+/// (EXR-13): a legacy capture, or an engine execution record (EXR-14 presents it by
+/// unit hash). `path` names the document in notices.
 ///
 /// bd-lucp: the preview path consumes these via `CaptureSpliceStage`,
 /// not `ReplayEngine` — see
@@ -1589,9 +1588,8 @@ async fn render_page_for_preview_with_overlay(
 fn parse_capture_from(
     capture_gz_json: Option<Vec<u8>>,
     path: &str,
-) -> Result<Vec<quarto_trace::EngineCapture>, String> {
+) -> Result<quarto_core::pandoc_request::captures::CapturePayload, String> {
     quarto_core::pandoc_request::captures::parse_capture_payload(capture_gz_json.as_deref(), path)
-        .map(quarto_core::pandoc_request::captures::CapturePayload::into_captures)
 }
 
 // ============================================================================
@@ -2519,7 +2517,7 @@ async fn render_single_doc_to_response(
     // `CaptureSpliceStage`) on the preview branch. The HTML branch
     // ignores it (HTML renders don't consume captures in the WASM today —
     // `q2 render` natively runs engines instead).
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: quarto_core::pandoc_request::captures::CapturePayload,
     attribution_json: Option<String>,
     // When `Some`, use this format string verbatim instead of detecting
     // it from the content (and instead of `prefer_preview_format`
@@ -2617,7 +2615,7 @@ async fn render_single_doc_to_response(
             // bd-uy4uygha: splice server-recorded captures into the HTML render
             // (hub-client's default `format: html` preview), the same way the
             // `preview` branch above does for the AST path.
-            let config = HtmlRenderConfig::with_resolver(resolver.clone()).with_captures(captures);
+            let config = HtmlRenderConfig::with_resolver(resolver.clone()).with_payload(captures);
             match render_qmd_to_html(content, &source_name, &mut ctx, &config, runtime_arc).await {
                 Ok(out) => (
                     Some(out.html),
@@ -2719,7 +2717,7 @@ async fn render_project_active_page_to_response(
     // per-doc `render_qmd_to_preview_ast` call; [`CaptureSpliceStage`]
     // inside the q2-preview pipeline folds the splices. The non-preview
     // branch ignores it.
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: quarto_core::pandoc_request::captures::CapturePayload,
     attribution_json: Option<String>,
     // The requested format (`to`), as for `render_single_doc_to_response`.
     requested_format: Option<&str>,

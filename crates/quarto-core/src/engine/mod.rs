@@ -62,7 +62,7 @@ mod context;
 mod detection;
 pub mod diagnostics;
 mod error;
-mod ipynb_replay;
+pub(crate) mod ipynb_replay;
 mod markdown;
 pub mod nested_cell_mask;
 pub(crate) mod patterns;

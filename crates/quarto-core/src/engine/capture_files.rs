@@ -229,15 +229,93 @@ pub fn capture_doc_size_warning(gzipped_len: usize) -> Option<String> {
 /// duplicated the gzip block. Logs [`capture_doc_size_warning`] when
 /// the result is oversized.
 pub fn gzip_captures(captures: &[quarto_trace::EngineCapture]) -> std::io::Result<Vec<u8>> {
+    gzip_json(&serde_json::to_vec(captures)?)
+}
+
+/// Gzip a coalesced execution record in its canonical writer bytes — the
+/// payload of the record binary doc (`application/x-engine-record+gzip`,
+/// EXR-13). Shares [`gzip_json`] (and so the size warning) with
+/// [`gzip_captures`]; byte-for-byte deterministic for equal records.
+pub fn gzip_record(record: &crate::record::Record) -> std::io::Result<Vec<u8>> {
+    let text = crate::record::write_record(record)?;
+    gzip_json(text.as_bytes())
+}
+
+/// The one gzip body behind [`gzip_captures`] and [`gzip_record`].
+fn gzip_json(json: &[u8]) -> std::io::Result<Vec<u8>> {
     use std::io::Write as _;
-    let json = serde_json::to_vec(captures)?;
     let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    enc.write_all(&json)?;
+    enc.write_all(json)?;
     let gzipped = enc.finish()?;
     if let Some(msg) = capture_doc_size_warning(gzipped.len()) {
         tracing::warn!("{msg}");
     }
     Ok(gzipped)
+}
+
+/// Build-time default of the record-writer gate (EXR-13b). Off until release
+/// N+1: readers ship a release before writers, because a store holding record
+/// documents is stranded if the reader is reverted (epic decision 4).
+pub const RECORD_WRITING_DEFAULT: bool = false;
+
+/// Environment override of [`RECORD_WRITING_DEFAULT`]: `1`/`true`/`on`/`yes`
+/// enables, `0`/`false`/`off`/`no` disables, anything else keeps the default.
+pub const RECORD_WRITING_ENV: &str = "QUARTO_ENGINE_RECORD_WRITE";
+
+/// The single writer gate consulted by all three capture writers.
+pub fn record_writing_enabled() -> bool {
+    record_writing_from(std::env::var(RECORD_WRITING_ENV).ok().as_deref())
+}
+
+/// Pure body of [`record_writing_enabled`] so the parsing is unit-testable
+/// without touching the process environment.
+pub fn record_writing_from(value: Option<&str>) -> bool {
+    match value.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        Some("1" | "true" | "on" | "yes") => true,
+        Some("0" | "false" | "off" | "no") => false,
+        _ => RECORD_WRITING_DEFAULT,
+    }
+}
+
+/// A capture payload ready to become a hub binary doc.
+#[derive(Debug, Clone)]
+pub struct EncodedCapturePayload {
+    /// The gzipped bytes (`content` of the doc).
+    pub gzipped: Vec<u8>,
+    /// `true` for a record doc (`RECORD_MIME_TYPE`, `meta.kind: engine-record`),
+    /// `false` for a legacy capture doc.
+    pub is_record: bool,
+    /// The `meta.engines` list: the record's `quarto_engines` names for a record,
+    /// the captures' `engine_name`s for a legacy payload.
+    pub engines: Vec<String>,
+}
+
+/// Choose and encode the payload a capture writer stores. A record is written
+/// only when `record_gate` is on **and** the run produced one (a preview cache
+/// hit has none); otherwise the legacy capture array is written, byte-identical
+/// to what the writers produced before EXR-13b.
+pub fn encode_capture_payload(
+    captures: &[quarto_trace::EngineCapture],
+    record: Option<&crate::record::Record>,
+    record_gate: bool,
+) -> std::io::Result<EncodedCapturePayload> {
+    match record.filter(|_| record_gate) {
+        Some(record) => Ok(EncodedCapturePayload {
+            gzipped: gzip_record(record)?,
+            is_record: true,
+            engines: record
+                .metadata
+                .quarto_engines
+                .iter()
+                .map(|e| e.name.clone())
+                .collect(),
+        }),
+        None => Ok(EncodedCapturePayload {
+            gzipped: gzip_captures(captures)?,
+            is_record: false,
+            engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+        }),
+    }
 }
 
 /// A capture file path is safe when it is relative and contains no
@@ -249,6 +327,112 @@ fn is_safe_relative_path(path: &str) -> bool {
     !path.is_empty()
         && p.components()
             .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+}
+
+#[cfg(test)]
+mod writer_tests {
+    use super::*;
+    use crate::record::read_record;
+    use quarto_trace::EngineCapture;
+    use std::io::Read as _;
+
+    fn record() -> crate::record::Record {
+        read_record(include_str!("../../tests/fixtures/records/basic.json")).unwrap()
+    }
+
+    fn gunzip(bytes: &[u8]) -> String {
+        let mut out = String::new();
+        flate2::read::GzDecoder::new(bytes)
+            .read_to_string(&mut out)
+            .unwrap();
+        out
+    }
+
+    #[test]
+    fn gzip_record_is_deterministic_and_round_trips() {
+        let r = record();
+        let a = gzip_record(&r).unwrap();
+        assert_eq!(a, gzip_record(&r).unwrap());
+        assert_eq!(read_record(&gunzip(&a)).unwrap(), r);
+    }
+
+    #[test]
+    fn gzip_record_carries_the_canonical_writer_bytes() {
+        let r = record();
+        assert_eq!(
+            gunzip(&gzip_record(&r).unwrap()),
+            crate::record::write_record(&r).unwrap()
+        );
+    }
+
+    #[test]
+    fn gzip_helpers_share_one_gzip_and_warning_body() {
+        // The warning decision is `capture_doc_size_warning`, called from the one
+        // private `gzip_json` that both wrappers use.
+        let src = include_str!("capture_files.rs");
+        let body = src.split("#[cfg(test)]").next().unwrap();
+        assert_eq!(body.matches("GzEncoder::new").count(), 1, "one gzip body");
+        assert_eq!(
+            body.matches("capture_doc_size_warning(gzipped.len())")
+                .count(),
+            1,
+            "one warning call"
+        );
+    }
+
+    #[test]
+    fn gate_defaults_off_and_parses_overrides() {
+        assert!(!RECORD_WRITING_DEFAULT);
+        assert!(!record_writing_from(None));
+        assert!(!record_writing_from(Some("")));
+        assert!(!record_writing_from(Some("garbage")));
+        for on in ["1", "true", "TRUE", "on", "yes"] {
+            assert!(record_writing_from(Some(on)), "{on}");
+        }
+        for off in ["0", "false", "off", "no"] {
+            assert!(!record_writing_from(Some(off)), "{off}");
+        }
+    }
+
+    fn capture(engine: &str) -> EngineCapture {
+        serde_json::from_value(serde_json::json!({
+            "engine_name": engine, "input_qmd": "x", "result": {}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn gate_off_encodes_legacy_even_with_a_record() {
+        let caps = vec![capture("jupyter")];
+        let r = record();
+        let enc = encode_capture_payload(&caps, Some(&r), false).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.gzipped, gzip_captures(&caps).unwrap());
+        assert_eq!(enc.engines, vec!["jupyter".to_string()]);
+    }
+
+    #[test]
+    fn gate_on_encodes_the_record_with_its_engines() {
+        let caps = vec![capture("jupyter")];
+        let r = record();
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert!(enc.is_record);
+        assert_eq!(enc.gzipped, gzip_record(&r).unwrap());
+        let want: Vec<String> = r
+            .metadata
+            .quarto_engines
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
+        assert_eq!(enc.engines, want);
+    }
+
+    #[test]
+    fn gate_on_without_a_record_falls_back_to_legacy() {
+        let caps = vec![capture("jupyter")];
+        let enc = encode_capture_payload(&caps, None, true).unwrap();
+        assert!(!enc.is_record);
+    }
 }
 
 #[cfg(test)]

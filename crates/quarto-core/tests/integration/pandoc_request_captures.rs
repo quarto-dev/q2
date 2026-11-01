@@ -48,7 +48,7 @@ fn render_as(
             format,
             project: &project,
             source_date_epoch: Some(1_700_000_000),
-            captures,
+            captures: captures.into(),
             typst_available_fonts: None,
             resolver: None,
         },

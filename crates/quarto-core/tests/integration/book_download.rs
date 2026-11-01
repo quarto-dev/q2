@@ -18,6 +18,7 @@ use quarto_core::book_download::{
     BookDownloadFailure, BookDownloadParams, BookDownloadResult, render_book_download,
 };
 use quarto_core::format::Format;
+use quarto_core::pandoc_request::captures::CapturePayload;
 use quarto_core::render_to_file::TypstTarget;
 use quarto_core::stage::Cancellation;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -102,7 +103,7 @@ fn download(
     content: Option<&str>,
     format: &str,
     target: Option<TypstTarget>,
-    captures: &HashMap<String, Vec<EngineCapture>>,
+    captures: &HashMap<String, CapturePayload>,
     cancellation: Cancellation,
 ) -> Result<BookDownloadResult, BookDownloadFailure> {
     let format = Format::from_format_string(format).unwrap();
@@ -358,7 +359,7 @@ fn a_chapters_captures_are_spliced_and_its_plot_lands_in_the_request_directory()
         }],
     };
     // Sidecar keys are hub-root-relative; the hub root is the project here.
-    let captures = HashMap::from([("ch1.qmd".to_string(), vec![capture])]);
+    let captures = HashMap::from([("ch1.qmd".to_string(), CapturePayload::from(vec![capture]))]);
     let result = ok(download(
         &fx,
         "ch2.qmd",
