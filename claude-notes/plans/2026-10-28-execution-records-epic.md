@@ -2,7 +2,7 @@
 title: 'Epic: engine execution records as ipynb (and execution of inline expressions)'
 date: 2026-10-28
 description: 'Replaces q2''s three execution-result caching mechanisms with one ipynb-shaped engine execution record that every engine produces and one presenter consumes, delivers execution of inline expressions for Jupyter on the way, and subsumes the Jupyter owned-languages epic.'
-status: in-progress  # JOL-1, JOL-2a, JOL-2b, JOL-4, JOL-5 and EXR-1 to EXR-16 and EXR-18 landed (JOL-3 deferred; EXR-17 trigger-gated); EXR-19 is a draft, not reviewed; see each plan for status
+status: in-progress  # JOL-1, JOL-2a, JOL-2b, JOL-4, JOL-5 and EXR-1 to EXR-16 and EXR-18 landed (JOL-3 deferred; EXR-17 trigger-gated); widget outputs and HTML dependencies are future development in the widget epic; see each plan for status
 ---
 
 **Branch:** `feature/execution-records-epic`
@@ -469,7 +469,9 @@ and JOL-4 is Plan 4d phases 4d-C/D/E; they need no new file.
 | EXR-16 | [Positron interop](2026-10-28-exr-16-positron-interop.md) | q2-side import and fixtures; spikes S0 to S6 in the Positron fork |
 | EXR-17 | [Legacy removal](2026-10-28-exr-17-legacy-removal.md) | trigger-gated; no date |
 | EXR-18 | [Docs and end-to-end](2026-10-28-exr-18-docs-e2e.md) | |
-| EXR-19 | [Widget outputs in the presenter](2026-11-01-exr-19-widget-outputs.md) | found by the EXR-8 flip, missed in review; draft, not yet reviewed |
+
+**Future development:** widget outputs and HTML dependencies (found by the Julia flip, EXR-8 B4)
+continue in the [widget epic](2026-11-02-widget-epic.md). They are not part of this epic.
 
 Dependencies, one row per plan. This table is the source of truth: each plan\'s
 Depends on and Blocks lines must agree with it. Hard edges are direct (an edge implied
@@ -504,7 +506,6 @@ but its end-to-end checks want it.
 | EXR-16 | EXR-2, EXR-4 (Phases 0 to 5; the Positron spikes need nothing) | EXR-3 |
 | EXR-17 | EXR-6, EXR-8, EXR-9, EXR-11, EXR-12, EXR-13a, EXR-13b, EXR-14, EXR-15 | |
 | EXR-18 | EXR-3, EXR-6, EXR-8, EXR-9, EXR-12, JOL-5 | every other plan (docs are written as each lands) |
-| EXR-19 | EXR-1, EXR-6, EXR-8 (proposed; to confirm in review) | EXR-17, EXR-18 (proposed) |
 
 Chains worth seeing at a glance: JOL-1 and JOL-2a lead to JOL-2b, then JOL-5 (JOL-3
 hangs off JOL-2b and EXR-2 but is deferred); EXR-2 and EXR-1 lead to EXR-3 and

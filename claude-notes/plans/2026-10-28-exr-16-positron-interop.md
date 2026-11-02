@@ -480,13 +480,13 @@ This is the main spike and the demo candidate.
 - **Effort.** 1 to 2 sessions.
 - **Dependencies.** S2, S3 and the q2 import function.
 
-### S7: self-contained widget outputs (from EXR-19)
+### S7: self-contained widget outputs (from the widget work, first called EXR-19)
 
 - **Question.** Does Positron\'s inline Quarto execution run Ark in notebook mode, and does a
   widget exported from a q2 record render there? Does the Positron-compatible subset
   (`record/freeze_readiness.rs`) tolerate an extra per-output metadata key?
-- **Background.** Requested by lane C ([EXR-19](2026-11-01-exr-19-widget-outputs.md), draft, on
-  branch `exr/EXR-8-b`). Positron reads only the MIME bundle. Ark\'s `html_widgets.R` emits one
+- **Background.** Requested by lane C ([WGT-2](2026-11-02-wgt-02-dependency-contract.md) in the widget epic,
+  first called EXR-19, draft, on branch `exr/EXR-8-b`). Positron reads only the MIME bundle. Ark\'s `html_widgets.R` emits one
   self-contained `text/html` `display_data` in notebook and background mode, with every
   JS and CSS dependency inlined behind an AMD guard. Positron\'s cache keeps all MIME types
   and puts `quarto_webview_metadata` in the output\'s own metadata. Read from the sources only;
@@ -499,7 +499,7 @@ This is the main spike and the demo candidate.
   and check that the widget renders.
 - **Success and failure.** Success: Ark runs in notebook mode for inline execution, the
   exported widget renders, and the extra key survives. Failure is reported with its cause.
-- **Deliverable.** Findings note S7, with the answer fed back to EXR-19.
+- **Deliverable.** Findings note S7, with the answer fed back to WGT-2 in the widget epic.
 - **Effort.** 0.5 to 1 session; (b) and (c) need the dev build from S0.
 - **Dependencies.** S0 and S2.
 

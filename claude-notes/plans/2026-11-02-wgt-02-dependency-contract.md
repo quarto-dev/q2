@@ -1,20 +1,22 @@
 ---
-title: 'EXR-19: widget and HTML-dependency outputs in the Rust presenter'
+title: 'WGT-2: the dependency contract and the Julia and Jupyter widget regression'
 date: 2026-11-01
 description: 'The Rust presenter has no handling for Jupyter widget and dependency-bearing HTML outputs, and the engine path that produced their dependencies is skipped when core presents. Proposes one engine-neutral dependency contract (per-output manifest, presenter policy, per-engine adapters) shared with the knitr epic, and records what the knitr epic and Positron already do. Draft, not yet reviewed.'
 status: draft  # found during EXR-8 B4/B5; in scope for the epic, missed in review; to be reviewed outside the EXR-8 session
 ---
 
-**Part of:** [the epic](2026-10-28-execution-records-epic.md) (EXR-19).
+**Part of:** [the widget epic](2026-11-02-widget-epic.md) (WGT-2). **Moved from the execution-records
+epic on 2026-11-02 (Gordon), where it was EXR-19.** The gate for the contract design is
+[WGT-1](2026-11-02-wgt-01-widget-spikes.md); ipywidgets, which this plan does not cover, is
+[WGT-3](2026-11-02-wgt-03-ipywidgets.md).
 **Found by:** [EXR-8](2026-10-28-exr-08-julia.md) B4, the Julia flip.
-**Corrects (all complete or in flight elsewhere; this plan amends them and edits none of them):**
-[EXR-1](2026-10-28-exr-01-presenter-extraction.md) and
-[EXR-4](2026-10-28-exr-04-record-format.md) (both complete on the integration branch, per Gordon,
-2026-11-01), [EXR-6](2026-10-28-exr-06-jupyter-flip.md) (lane A), EXR-8 (lane C),
-[EXR-16](2026-10-28-exr-16-positron-interop.md) (in progress in lane A, `workspace-4`).
-**Proposed to block:** [EXR-17](2026-10-28-exr-17-legacy-removal.md) and
-[EXR-18](2026-10-28-exr-18-docs-e2e.md) (a widget document must render correctly before the
-legacy path goes and before the docs promise parity).
+**Corrects (all complete and merged into the execution-records epic; this plan amends them and edits
+none of them):** [EXR-1](2026-10-28-exr-01-presenter-extraction.md),
+[EXR-4](2026-10-28-exr-04-record-format.md), [EXR-6](2026-10-28-exr-06-jupyter-flip.md),
+[EXR-8](2026-10-28-exr-08-julia.md) and [EXR-16](2026-10-28-exr-16-positron-interop.md).
+**Proposed to block:** [EXR-17](2026-10-28-exr-17-legacy-removal.md) (a widget document must
+render correctly before the legacy path goes). The execution-records epic is otherwise complete and
+EXR-18 is merged, so nothing else waits on this plan.
 
 This plan is a first write-up, not a researched design. Everything marked **unverified** is
 from reading code and plans in the EXR-8 session, not from running a widget document.
@@ -35,7 +37,13 @@ old path supplied. That gap is not Julia-specific, so it belongs to the epic.
    (`quarto.jupyter.resultIncludes`) or `engineDependencies`
    (`quarto.jupyter.resultEngineDependencies`), plus `preserve` and `pandoc` entries, for
    widget and HTML outputs. These are the scripts and styles a widget needs to run on the
-   page.
+   page. (Added by the design review, read in code: q2 always sends
+   `dependencies: true` (`engine/ts_engine.rs:566`), so the Julia engine takes the
+   `resultIncludes` branch and q2 receives `includes` text, not structured dependencies.
+   The wire `engine_dependencies` field is never mapped by `map_execute_result`. The
+   `preserve` map is always empty for Jupyter-shaped results, because Quarto 1\'s
+   `isPreservedHtml` is a constant `false` in
+   `external-sources/quarto-cli/src/core/jupyter/preserve.ts`.)
 2. **What the core path drops.** When core presents, the engine skips `toMarkdown`
    (`coreWillPresent`, `record-wire.ts`) and returns `markdown: ""`, so none of the above is
    produced. A widget output renders without its scripts. The flip commit records this as a
@@ -48,15 +56,16 @@ old path supplied. That gap is not Julia-specific, so it belongs to the epic.
 4. **The Jupyter engine has the same gap, but it is not a regression.** Lane A
    (`ipynb-execution-lane-a-12`, 2026-11-01, a static read of branch `exr/EXR-6`, nothing run)
    found no dependency derivation anywhere in `engine/jupyter` or `presenter` (no includes,
-   requirejs or html-preserve handling). The only widget mentions are the MIME types requested
-   from the kernel (`execute.rs:252-258`) and `cell.rs:172`, and the flip's caller forwards
+   requirejs or html-preserve handling). The only widget mentions are the mapping of received
+   media types to MIME names (`execute.rs:252-258`, not a request to the kernel) and `cell.rs:172`, and the flip's caller forwards
    only `files_written` (`text_execute.rs:679`). So for Jupyter this is new capability, not a
    loss; Julia is the only engine that lost something, because its `toMarkdown` used to supply
    the dependencies. Not rendered: whether a plotly or ipywidgets Jupyter document happens to
    be self-contained HTML today.
 5. **The channels exist in core.** `ExecuteResult` carries `includes` (pre-rendered
-   fragments), `html_dependencies` (structured `{name, stylesheets, scripts}` manifests that
-   `EngineExecutionStage` stores through `store_html_dependencies`), and on the wire
+   fragments), `html_dependencies` (structured `{name, version, stylesheets, scripts}` manifests, all
+   `PathBuf`, that `EngineExecutionStage` stores through `store_html_dependencies`, which reads
+   each file at store time), and on the wire
    `preserve` and `engine_dependencies`. The wire `preserve` map is documented as
    "carried-and-ignored until a consumer lands". So the plumbing to receive dependencies is
    partly there; what is missing is something that produces them on the core path.
@@ -84,7 +93,11 @@ This plan corrects completed work, so it starts from the code:
 - **EXR-1, presenter.** `present_document` returns `PresentResult { markdown, files_written,
   notes }` (`presenter/document.rs`). There is no dependency field, and
   `present_from_record` (`engine/ts_record.rs`) copies only `markdown`, the written files
-  and notes onto the `ExecuteResult`. That is where the dependencies stop.
+  and notes onto the `ExecuteResult`. That is where the dependencies stop. There are four
+  non-test callers of `present_document`: `ts_record.rs:542`, `jupyter/text_execute.rs:658`,
+  `engine/replay.rs:137` and `engine/ipynb_replay.rs:238`. `replay.rs` starts from the stored
+  result and overwrites only markdown, written files and record, so it needs the new field
+  forwarded too.
 - **Widget payloads** are unhandled in `format_outputs` (`presenter/cell.rs`, "follow-up").
 
 ## What the knitr epic and Positron already do
@@ -136,7 +149,7 @@ versions as checked out, not a release):
 
 ## Decisions so far (Gordon, 2026-11-01)
 
-- **EXR-19 owns the engine-neutral dependency contract.** The knitr epic's decision 19
+- **WGT-2 owns the engine-neutral dependency contract** (it was EXR-19 when this was decided). The knitr epic's decision 19
   becomes one adapter into it.
 - **Per-output placement (leaning, Gordon: "I think that's right").** A dependency manifest
   hangs on the output that needs it, so the visibility rule runs per output (the knitr rule,
@@ -229,14 +242,16 @@ Each is additive; none reopens a decision.
   that a self-contained widget is a plain MIME bundle with no extra metadata. No struct
   change. `EngineRecord.html_dependencies` stays the merged form. Open: whether the
   Positron-compatible subset (`freeze_readiness.rs`, EXR-16) tolerates the key.
-- **EXR-6 (Jupyter flip, lane A) and EXR-8 (Julia, lane C).** Both flips call
-  `present_document`; both must forward the new dependency list onto the `ExecuteResult`
-  (`present_from_record` today does not). This is the fix for the "known loss" EXR-8 B4
-  records.
-- **EXR-16 (Positron interop; lane A, in progress).** Export converts manifest to
-  self-contained HTML. Lane A is adding the spike as S7 (needs the GUI, so it waits for
-  Gordon) and checking `freeze_readiness.rs` for the extra metadata key. The spike: does Positron's inline Quarto execution run Ark in
-  notebook mode, and does a q2-exported widget render there?
+- **EXR-6 (Jupyter flip) and EXR-8 (Julia), both complete.** Both flips call
+  `present_document`, as do both replay paths (`engine/replay.rs`, `engine/ipynb_replay.rs`);
+  all must forward the new dependency list onto the `ExecuteResult` (`present_from_record`
+  today does not). This is the fix for the "known loss" EXR-8 B4 records.
+- **EXR-16 (Positron interop; complete).** Export converts manifest to self-contained HTML. The S7
+  spike has run ([the S7 findings](../research/2026-11-02-exr-16-s7-widget-outputs-findings.md)): Ark produces one self-contained `text/html` for an `htmlwidget`
+  (plotly 3.87 MB, leaflet 460 KB), and it renders again from Positron\'s cache. An extra per-output
+  metadata key survives the q2 record code and import, but a Positron rewrite of a record drops q2
+  keys (S2a), so anything that must survive a Positron round trip has to live in the MIME bundle.
+  Not tested: a hand-seeded q2 record, Python widgets, other packages, offline rendering.
 - **Knitr epic (workspace-3).** The knitr adapter converts `knit_meta` into the neutral
   manifest and keeps the serialized R objects as an opaque engine-private field. KNR-5's
   imported-widget limit needs rechecking against Ark's self-contained form. Their call.
@@ -259,8 +274,8 @@ Each is additive; none reopens a decision.
 - [ ] Neutral per-output manifest in the record (schema in EXR-4), tests first.
 - [ ] Presenter policy and dependency channel out of `present_document`, tests first.
 - [ ] Adapters: Julia and Jupyter (derive or declare), knitr (`knit_meta`).
-- [ ] Self-contained form: presenter rule, manifest-to-self-contained conversion for export (with EXR-16, lane A), AMD guard.
-- [ ] Send the EXR-16 requests to lane A, and keep EXR-1 and EXR-4 corrections in this plan.
+- [ ] Self-contained form: presenter rule, manifest-to-self-contained conversion for export (EXR-16 is complete; the export is new work here), AMD guard.
+- [x] The EXR-16 request (spike S7) is answered, see the findings note; the EXR-1 and EXR-4 corrections stay in this plan.
 - [ ] Widget fixtures, a parity row and an end-to-end row.
 - [ ] Update EXR-8 (known loss), KNR-5 (imported widget limit) and the epic tables when
   scoped.

@@ -7,7 +7,7 @@ description: 'Positron inline execution caches an R htmlwidget as one self-conta
 **Question.** Does Positron\'s inline Quarto execution produce a self-contained `text/html`
 output for an R widget, does that output render when loaded from the cache, and does the
 Positron-compatible subset of a q2 record tolerate an extra per-output metadata key? This is
-the question from lane C\'s [EXR-19](2026-11-01-exr-19-widget-outputs.md).
+the question from lane C\'s widget work ([WGT-2](../plans/2026-11-02-wgt-02-dependency-contract.md) in the widget epic, first called EXR-19).
 
 **Answer.** Yes to all three, with one narrowing: only `htmlwidget` objects get a `text/html`
 output from Ark. A full hand-built q2 record placed in the cache (part c as written in the
@@ -65,7 +65,7 @@ plotly and leaflet outputs appeared immediately, and the third cell showed its r
 `text/html` output loaded from the cache renders as a widget. A q2 record whose output carries
 the same bundle is read by the same loader (S2a showed a clean load).
 
-## What this means for EXR-19
+## What this means for the widget epic (WGT-2, first called EXR-19)
 
 - A widget exported from q2 should be one `text/html` bundle with every JS and CSS dependency
   inline. Ark\'s own output is exactly that, so the Positron reader needs nothing beyond the
