@@ -229,6 +229,26 @@ jobs:
           cd crates/tree-sitter-qmd/tree-sitter-markdown
           tree-sitter test
 
+      # A Jupyter runtime plus a Python kernelspec, so the jupyter-gated
+      # integration tests (python_kernel_available / require_kernel!) run
+      # instead of skipping silently. The widget packages are for the widget
+      # epic (claude-notes/plans/2026-11-02-widget-epic.md). The venv's bin
+      # goes on PATH so `jupyter` is found; the kernelspec is installed
+      # per-user so list_kernelspecs() sees it.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Jupyter kernel and widget packages
+        shell: bash
+        run: |
+          uv venv "$RUNNER_TEMP/jupyter-venv" --python 3.12
+          uv pip install --python "$RUNNER_TEMP/jupyter-venv/bin/python" \
+            jupyter-core ipykernel ipywidgets anywidget plotly
+          "$RUNNER_TEMP/jupyter-venv/bin/python" -m ipykernel install --user --name python3
+          echo "$RUNNER_TEMP/jupyter-venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/jupyter-venv/bin/jupyter" --version
+          "$RUNNER_TEMP/jupyter-venv/bin/jupyter" kernelspec list
+
       # `ci` profile + `--tests` makes a separate `cargo build` redundant.
       # `--tests` (not `--all-targets`) excludes benches — `quarto-yaml` declares
       # `harness = false` benches that nextest can't enumerate as tests.
