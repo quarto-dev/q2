@@ -27,6 +27,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 - [`9e9f81418`](https://github.com/quarto-dev/q2/commits/9e9f81418): The PDF preview no longer shows a spurious "The PDF viewer drew nothing within 30 s" error over a correctly updated PDF after a quick edit during a slow compile: a compiled PDF that a newer one replaced before it reached the screen is now dropped quietly instead of timing out later.
 
+### 2026-11-02
+
+- [`9de60b9fe`](https://github.com/quarto-dev/q2/commits/9de60b9fe): The preview can now show code output from a Jupyter run recorded by q2 (including Jupyter inline expressions such as `{python} 1+1`), alongside the previous capture format
+
 ### 2026-10-30
 
 - [`8acbc6d63`](https://github.com/quarto-dev/q2/commits/8acbc6d63): Comments can now be added and resolved with the Edit toggle off. Pressing Enter used to discard the comment silently.
