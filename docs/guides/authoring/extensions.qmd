@@ -40,7 +40,7 @@ This page covers installing extensions, project types, and metadata contribution
 
 ``` {.bash}
 q2 add quarto-ext/fontawesome          # GitHub: <org>/<repo>
-q2 add quarto-ext/fontawesome@v1.2.0   # a tag or branch
+q2 add quarto-ext/fontawesome@v1.2.0   # a tag, branch, or commit SHA
 q2 add org/repo/subdir                 # an extension in a repository subfolder
 q2 add https://example.com/ext.zip     # a .zip or .tar.gz URL
 q2 add ./my-extension                  # a local folder or archive
