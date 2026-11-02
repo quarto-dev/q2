@@ -268,3 +268,31 @@ fn figures_are_inline_and_the_sidecar_field_is_reserved() {
     assert!(read.metadata.quarto_files_ref.is_some());
     assert!(!write_record(&read).unwrap().contains("quarto_files_ref"));
 }
+
+/// EXR-16 S7(a): an extra per-output metadata key (for example a self-contained widget
+/// marker) is output data, not an execution input. It must survive a write and read of the
+/// record unchanged and move no matching, staleness or reuse key.
+#[test]
+fn an_extra_per_output_metadata_key_round_trips_and_moves_no_key() {
+    let (base, _) = build(DOC, &Variant::default());
+    let mut with_extra = base.clone();
+    let extra = json!({"self_contained": true, "deps": ["a.js", "b.css"], "nested": {"n": 1}});
+    with_extra.cells[0].outputs = vec![json!({
+        "output_type": "display_data",
+        "data": {"text/html": "<div id='w'></div>", "text/plain": "<Widget>"},
+        "metadata": {"quarto_widget": extra.clone(), "unknown_future_key": "kept"}
+    })];
+
+    let bytes = write_record(&with_extra).unwrap();
+    let back = read_record(&bytes).unwrap();
+    let metadata = &back.cells[0].outputs[0]["metadata"];
+    assert_eq!(metadata["quarto_widget"], extra);
+    assert_eq!(metadata["unknown_future_key"], "kept");
+    assert_eq!(back, with_extra);
+    assert_eq!(
+        write_record(&back).unwrap(),
+        bytes,
+        "and the bytes are stable"
+    );
+    assert_eq!(keys(&base), keys(&back), "no key reads output metadata");
+}

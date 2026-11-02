@@ -2,7 +2,7 @@
 title: 'EXR-16: Positron interop for engine execution records'
 date: 2026-10-28
 description: 'Specifies what q2 does alone for Positron compatibility (schema subset, display-only import, conformance fixtures, language gate) and a series of spikes in a Positron checkout that test whether the shared fixtures, reading q2 records, and execution of inline expressions are viable, ending in a demo if they are.'
-status: draft  # not started; the Positron spikes need no one else's agreement and send nothing to anyone
+status: complete
 ---
 
 **Part of:** [the epic](2026-10-28-execution-records-epic.md)
@@ -10,7 +10,7 @@ status: draft  # not started; the Positron spikes need no one else's agreement a
 [EXR-2](2026-10-28-exr-02-unit-scanner.md) (conformance fixtures). Soft:
 [EXR-3](2026-10-28-exr-03-jupyter-iee.md) (the IEE value rule that spike S4 compares).
 **Blocks:** nothing in the epic; it is the compatibility check on EXR-4.
-**Lane:** C (`workspace-6`); run it under the epic\'s "Running the plans in four lanes" section.
+**Lane:** A (`workspace-4`; the epic table reassigned it from C); run it under the epic\'s "Running the plans in four lanes" section.
 **Estimated sessions:** 2 on the q2 side (import: 1; fixtures: 1). The spikes are rough
 estimates, 6 to 9 sessions in all (S0 0.5 to 1, S1 0.5, S2 1, S3 2 to 3, S4 0.5, S5 1 to 2
 as a stretch, S6 1 to 2); the dev-build time in S0 is the largest unknown.
@@ -83,8 +83,8 @@ has that extension by default is **not verified**).
 - Cell metadata: `quarto_cell_id`, `quarto_content_hash` (`:44`, `:45`, written at
   `:777`, `:778`). Rich outputs are written as `execute_result` with all mimes in `data`
   plus `metadata.quarto_webview_metadata` (`:921` to `:926`).
-- Output representation (verified 2026-10-29, reading `:880-990`; not run against a real
-  Positron): every rich output, `display_data` included, is collapsed to
+- Output representation (verified 2026-10-29, reading `:880-990`; confirmed against a real
+  Positron on 2026-11-02, S2b): every rich output, `display_data` included, is collapsed to
   `execute_result`; every payload is held as a string, so a JSON mime (`application/json`,
   anything `+json`) is written as a string although nbformat stores JSON mimes as objects,
   and the reader `JSON.stringify`s any non-string value. Non-conformant but not lossy: a
@@ -212,69 +212,69 @@ parser contain no span handling).
 
 ### Phase A: tests first
 
-- [ ] Hash conformance: a fixture table of cell texts (with `#|` lines, CRLF (equal to its
+- [x] Hash conformance (done 2026-11-01: `content-hash-vectors.json` has 9 vectors, incl. the S1 Positron-observed lone-surrogate value; `content_hash_matches_every_phase_0_vector`): a fixture table of cell texts (with `#|` lines, CRLF (equal to its
   LF twin, as Positron splits on `\r?\n`), trailing
   newline, Unicode, empty cell) and the expected 16-character hashes. The Positron-side
   expected values come from running Positron\'s `computeContentHash` in spike S1 and are
   committed as data; until S1 has run, the table holds the node `crypto` vectors listed
   in S1 and is marked provisional. q2\'s hash function is tested against the table.
   (Cross-site tests of this kind are the main protection against risk 1 in the epic.)
-- [ ] Cell id conformance: `quarto_cell_id` strings for the same fixtures, including a
+- [x] Cell id conformance (done 2026-11-01 in `tests/integration/positron_conformance.rs`; 20 cases, 11 recorded divergences, each with a note in `positron-expected.json`): `quarto_cell_id` strings for the same fixtures, including a
   duplicate pair and a document with an inline expression span before a cell (the cell\'s id
   is the same as without the span; span ids use their own counter, EXR-4). Divergences are
   asserted as divergences, with the expected Positron id stored beside q2\'s: a cell with
   `#| label: fig-x` (q2 `fig-x`, Positron `unlabeled`), a brace-label cell
   (`{python, fig-x}`), and cells in a blockquote, a list and a four-backtick fence (index
   differs; EXR-2\'s corpus carries the expected Positron index).
-- [ ] Language-token fixtures (shared with Positron): `{python.marimo}`, `{python .marimo}`
+- [x] Language-token fixtures (done 2026-11-01, cases `marimo_spaced`, `marimo_dotted`, `lang_case`; q2 records the token as written, so `{Python}` is `Python` in `.q2.json`) (shared with Positron): `{python.marimo}`, `{python .marimo}`
   and `{Python}` for the same text. Expected: equal hashes on both sides; q2 tokens
   `python.marimo`, `python` plus class `marimo`, and `python` (case-insensitive); Positron
   reads `python` for all three, with label `.marimo` for the first two and `unlabeled` for
   the third. The differing languages and labels are asserted, not hidden.
-- [ ] Import tests: given a Positron cache file (a fixture in its exact shape), q2 produces
+- [x] Import tests: (done: `positron_import.rs` tests, 2026-11-01 audit) given a Positron cache file (a fixture in its exact shape), q2 produces
   display-only unit outputs matched by content hash; an unmatched or stale cell is skipped
-  silently; a file with a wrong `quarto_cache_version` is read but flagged, never deleted;
+  silently; a file with a wrong `quarto_cache_version` is rejected with `ImportError::VersionMismatch` (not read, and never deleted: the importer takes bytes and cannot delete);
   an `execute_result` carrying all mimes in `data` is accepted; `quarto_webview_metadata` is
   preserved or ignored without error.
-- [ ] Normalization tests: a Positron `execute_result` for what q2 would call
+- [x] Normalization tests: (done: `positron_import.rs` tests) a Positron `execute_result` for what q2 would call
   `display_data` imports as the standard form; a string-valued `application/json` and a
   string-valued `+json` mime come out as objects; an invalid JSON string is kept as the
   string with a logged notice; the imported output is spec-conformant nbformat.
-- [ ] Language-gate tests: a cell whose q2 token is `python.marimo` receives no Positron
+- [x] Language-gate tests: (done: `the_language_gate_runs_on_the_q2_side`, incl. the documented gap) a cell whose q2 token is `python.marimo` receives no Positron
   outputs; a plain `{python}` Jupyter-owned cell does; a cell owned by another engine
   receives none; a different-language cell with identical text is documented as not
   caught (Risks).
-- [ ] Round-trip safety test: a q2 record read by a Positron-compatible validator (a
+- [x] Round-trip safety test: (done 2026-11-01: `positron_conformance::a_q2_record_passes_positrons_loader_checks_only_with_cache_version_one`) a q2 record read by a Positron-compatible validator (a
   fixture-level reimplementation of its structure checks) passes with
   `quarto_cache_version: 1`, and the test documents what happens if the key is set to
   any other value (Positron deletes the file). This guards the defensive key only; no q2
   flow depends on it. Spike S2a replaces the reimplementation
   with Positron\'s real loader once it has run.
-- [ ] Trust test: imported units carry a display-only provenance marker and cannot be used
+- [x] Trust test: (done 2026-11-01: `imported_outputs_convert_to_nothing_a_reuse_decision_takes` (compile-time probe)) imported units carry a display-only provenance marker and cannot be used
   where a reuse decision is made (the type system, or an explicit check with a test).
 
 ### Phase B: implementation
 
-- [ ] Import function in the record library (EXR-4\'s crate): read a Positron cache file,
+- [x] Import function in the record library (done: `crates/quarto-core/src/record/positron_import.rs`, a2d267389) (EXR-4\'s crate): read a Positron cache file,
   normalize at read, apply the language gate, match by content hash, return display-only
   unit outputs. No CLI surface here; callers are EXR-14 (preview) later if wanted, and
   spike S6 uses it for the demo.
-- [ ] A fixture generator in q2 that writes the conformance fixtures (qmd plus the units,
+- [x] A fixture generator in q2 (done 2026-11-01; it lives in `quarto-core`, EXR-4\'s crate, and writes `crates/quarto-core/tests/fixtures/positron-conformance/` with its README) that writes the conformance fixtures (qmd plus the units,
   ids and hashes q2 expects) into `tests/fixtures/positron-conformance/` of the crate that
   holds EXR-4\'s record library (the crate path is fixed by EXR-4 Phase 1; write it into
   this task then), with a README in that directory that states the format and the exact
   commands to regenerate them. Spike S1\'s vitest finds the directory through the
   environment variable `Q2_POSITRON_FIXTURES` (an absolute path; the vitest fails with a
   message naming the variable when it is unset), because Positron\'s checkout is outside
-  the q2 worktree. Whether the fixtures are ever offered to Positron is decided after S1.
-- [ ] Keep the two version keys documented in one place (EXR-4\'s schema doc), stating
+  the q2 worktree. Offering the fixtures to Positron is not part of this plan (Gordon, 2026-11-02); the spike branches on his fork carry the Positron-side tests.
+- [x] Keep the two version keys (done 2026-11-01: EXR-4 schema reference, test `q2_only_ever_emits_cache_version_one`) documented in one place (EXR-4\'s schema doc), stating
   plainly that `quarto_cache_version` is defensive, and assert in a test that q2 never emits
   it with a value other than 1.
 
 ## Positron spikes
 
 Each spike answers one question about whether an idea is viable and ends in a short
-findings note with a go or no-go. All are **not started** except S1, whose Positron side ran on 2026-10-31 (findings: `claude-notes/research/2026-10-31-exr-16-s1-conformance-findings.md`; the q2 comparison waits on the fixture generator and EXR-4 Phase 5).
+findings note with a go or no-go. S0 ran on 2026-11-01 (go; `claude-notes/research/2026-11-01-exr-16-s0-environment-findings.md`) and S2 part (a) on the same day (go for display-only reads; `claude-notes/research/2026-11-01-exr-16-s2a-read-record-findings.md`). **S2 part (b) ran on 2026-11-02** after being skipped at first: a q2 record placed in the dev build\'s cache seeds a document with no cell run, and Positron then consumes the file and rewrites it with only cell id and content hash (see the S2b and S6 note). S3 ran on 2026-11-01 and 2026-11-02 (go for the core route, `session.execute` in `Interactive` mode; the two extension API gaps are confirmed in the source; `claude-notes/research/2026-11-02-exr-16-s3-inline-exec-findings.md`; a kernel restart during a span shows `KeyboardInterrupt` at once, as an interrupt does). S4 ran on 2026-11-02 (go: the spike\'s rule now matches EXR-3 on all shared fixtures; `claude-notes/research/2026-11-02-exr-16-s4-value-rule-findings.md`). S7 ran on 2026-11-02 (go: the extra per-output key survives; Ark caches an R htmlwidget as one self-contained `text/html` that renders again from the cache; only `htmlwidget` objects get `text/html`; a hand-built q2 record in the cache was not done; `claude-notes/research/2026-11-02-exr-16-s7-widget-outputs-findings.md`). S6 ran on 2026-11-02 (all three legs work at the file level; no rendered q2 preview, since nothing consumes the imported outputs yet; `claude-notes/research/2026-11-02-exr-16-s2b-s6-seed-and-demo-findings.md`). S5 is **not run** (stretch, skipped): the S3 route works for Python and for R (checked on 2026-11-02), and `user_expressions` is not reachable from the workbench without a new API (the supervisor hard-codes `user_expressions: {}`), so an Ark implementation alone would have no consumer; the S3 note records the trade-offs. The S6 demo ran on the S3 dev build, not on a merged demo branch (the S2 work is vitest only and needed none), and there is no screen capture. S1, whose Positron side ran on 2026-10-31 (findings: `claude-notes/research/2026-10-31-exr-16-s1-conformance-findings.md`; the q2 comparison ran on 2026-11-01 through the fixture generator: hashes agree, ids differ in 11 of 20 cases; see the findings note\'s addendum).
 
 ### Ground rules
 
@@ -318,6 +318,10 @@ findings note with a go or no-go. All are **not started** except S1, whose Posit
   output inline. Failure: no working build after at most 2 sessions; then S3 and S6 are
   blocked and the unit-level spikes (S1, S2a, S4) are all that remains.
 - **Deliverable.** Findings note S0, with the commands and timings.
+- **Status (2026-11-01).** Worktree `/Users/gordon/src/positron-spike-s0` (branch
+  `spike/q2-s0-env`) is installed and vitest runs; the dev launch is untried. A full
+  `npm install` needs Node ≥ 24.22.1 (see
+  `claude-notes/research/2026-11-01-exr-16-s0-environment-findings.md`).
 - **Effort.** 0.5 to 1 session; the build time is unknown.
 - **Dependencies.** None. S1 and S2a need only vitest and can start before the dev build works.
 
@@ -363,7 +367,7 @@ findings note with a go or no-go. All are **not started** except S1, whose Posit
 - **Question.** What does Positron do with a record that has extra keys, inline-expression
   units and rendered outputs, and is reading q2 records a viable way to seed its cache?
 - **Setup.** Branch `spike/q2-s2-read-record`. Part (a) is a vitest on the cache service
-  with an in-memory file service. UNVERIFIED that Positron\'s vitest harness can supply one:
+  with an in-memory file service. It turned out that Positron\'s vitest harness can supply one (S2a ran on the real `FileService`):
   no `quartoOutputCacheService.vitest.ts` exists today (checked 2026-10-31 in
   `src/vs/workbench/contrib/positronQuarto/test/browser/`), and the four existing tests that
   mention the service (`quartoKernelManager`, `quartoOutputManagerSaveAs`,
@@ -476,10 +480,33 @@ This is the main spike and the demo candidate.
 - **Effort.** 1 to 2 sessions.
 - **Dependencies.** S2, S3 and the q2 import function.
 
+### S7: self-contained widget outputs (from EXR-19)
+
+- **Question.** Does Positron\'s inline Quarto execution run Ark in notebook mode, and does a
+  widget exported from a q2 record render there? Does the Positron-compatible subset
+  (`record/freeze_readiness.rs`) tolerate an extra per-output metadata key?
+- **Background.** Requested by lane C ([EXR-19](2026-11-01-exr-19-widget-outputs.md), draft, on
+  branch `exr/EXR-8-b`). Positron reads only the MIME bundle. Ark\'s `html_widgets.R` emits one
+  self-contained `text/html` `display_data` in notebook and background mode, with every
+  JS and CSS dependency inlined behind an AMD guard. Positron\'s cache keeps all MIME types
+  and puts `quarto_webview_metadata` in the output\'s own metadata. Read from the sources only;
+  nothing has been run.
+- **Method.** (a) Vitest or Rust test, no GUI: add an extra per-output metadata key to a
+  record and check `freeze_readiness.rs` and `positron_import.rs` round-trip it.
+  (b) GUI: run an R widget cell (for example htmlwidgets) in Positron inline execution, and
+  inspect the cached output for the self-contained `text/html`. (c) GUI: build a q2
+  record whose output carries that self-contained HTML, seed Positron\'s cache (as in S2),
+  and check that the widget renders.
+- **Success and failure.** Success: Ark runs in notebook mode for inline execution, the
+  exported widget renders, and the extra key survives. Failure is reported with its cause.
+- **Deliverable.** Findings note S7, with the answer fed back to EXR-19.
+- **Effort.** 0.5 to 1 session; (b) and (c) need the dev build from S0.
+- **Dependencies.** S0 and S2.
+
 ### Ordering
 
 S1 and S2a first (no build needed), with S0 in parallel; S3 after S0, with S4 alongside it;
-S5 only if wanted; S6 last.
+S5 only if wanted; S7 after S2; S6 last.
 
 ## Exit criteria
 
@@ -489,7 +516,7 @@ S5 only if wanted; S6 last.
 - Each spike that ran has a findings note with a go or no-go and its branch name. A spike
   that was skipped or blocked says so and why.
 - If S0 through S4 are go, the S6 demo exists; otherwise the notes say what blocked it.
-- Nothing has been sent to or proposed to anyone.
+- The spike branches `spike/q2-s1-conformance`, `spike/q2-s2-read-record` and `spike/q2-s3-inline-exec` are on Gordon\'s fork (pushed 2026-11-02 at his request, so the Positron team can see the contributions). `spike/q2-s0-env` has no commits of its own and was not pushed. No pull request, issue or message has been sent or proposed to anyone, and nothing was pushed to `upstream`.
 
 ## Risks and open questions
 
@@ -514,9 +541,9 @@ S5 only if wanted; S6 last.
 - **The language gate is partial.** Positron\'s cache has no language, so identical text in
   different languages still matches by hash; only the owner check and the occurrence rule
   guard it. Tests document the gap.
-- **Normalization and the real Positron** are untested together until S2 runs: no real
-  Positron round trip has been run, and the JSON-mime string behavior comes from reading its
-  code.
+- **Normalization and the real Positron** were untested together until S2b and S6 ran on
+  2026-11-02. They now have: a real round trip shows an unknown JSON mime becomes a string on
+  Positron\'s first rewrite, as the code reading said.
 
 ## References
 

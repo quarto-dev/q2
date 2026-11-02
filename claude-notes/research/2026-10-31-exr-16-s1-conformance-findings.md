@@ -7,7 +7,7 @@ description: 'What Positron''s Quarto parser, content hash and cell ids do on th
 **Question.** Where do Positron's parser, content hash and cell ids disagree with q2's?
 
 **Branch.** `spike/q2-s1-conformance` in `/Users/gordon/src/positron-spike-s1` (a worktree of
-Gordon's fork, cut from `upstream/main` at `f854bb8e66`, committed locally, not pushed).
+Gordon's fork, cut from `upstream/main` at `f854bb8e66`, committed locally, and pushed to the fork on 2026-11-02).
 The test is `src/vs/workbench/contrib/positronQuarto/test/browser/quartoQ2Conformance.vitest.ts`.
 
 **Method.** `npm install --ignore-scripts` (91 seconds, node v24.5.0 although `.nvmrc` says
@@ -54,3 +54,27 @@ Hashes: go for sharing the algorithm; the line-ending and lone-surrogate cases n
 Ids: the label segment, nesting and tilde fences are findings, not fixes. If q2 ids must equal
 Positron's, q2 would need Positron's label rules, which differ from the scanner's. Recorded for
 the Phase A conformance tables.
+
+## Addendum 2026-11-01: the q2 comparison
+
+q2's fixture generator now exists (`crates/quarto-core/tests/fixtures/positron-conformance/`, 20
+cases, README there). The S1 vitest reads it through `Q2_POSITRON_FIXTURES` and asserts
+Positron's cells against `positron-expected.json`; the q2 test checks that every id or hash
+difference carries a divergence note. Both pass.
+
+- **Hashes:** equal on every cell both parsers see (including CRLF, Unicode, a duplicate pair
+  and a cell after an inline span). The lone-surrogate vector pinned in q2 is the value
+  Positron produced (`a<surrogate>b` hashes as `a\ufffdb`).
+- **Ids differ in 11 of 20 cases.** Cell lists agree in 9. Causes: `#| label:` lines are not
+  read as labels (`label_comment`, `unicode_cell`); `#bar` and `.marimo` become labels
+  (`brace_id`, `marimo_spaced`, `marimo_dotted`); blockquote and list cells are invisible to
+  Positron; display and four-backtick fences give phantom cells.
+- **Deliberate q2 rejection:** `{r, label=foo}` and `{python, fig-x}` are rejected by q2's
+  parser with `Q-2-36` (old-style knitr chunk header; `docs/errors/markdown/Q-2-36.qmd`, plan
+  `2026-05-14-q-2-36-knitr-style-chunk-options.md`, strand bd-j4fe), checked with `q2 render`
+  on the fixtures. Such a document never reaches the unit scanner, so q2 has no cell where
+  Positron finds one with no label. Not a gap to close; the fixtures keep the case so the
+  asymmetry stays visible.
+- **Case:** Positron lowercases the language (`{Python}` is `python`); q2 keeps the token as
+  written.
+- **Go:** share the hash; treat ids as a format only. Branch `spike/q2-s1-conformance` (on Gordon\'s fork since 2026-11-02).

@@ -22,8 +22,7 @@ export function contentHash(blockContent) {
 }
 
 // `js` is the input as Positron would hold it (it may contain a lone surrogate).
-// `expected` is pinned where the plan gives it (recomputed against Positron's
-// hash on 2026-10-31); null means "computed here, then pinned in the fixture".
+// `expected` is pinned where the plan gives it, or where Positron itself produced it (S1); null means "computed here, then pinned in the fixture".
 const VECTORS = [
   { name: "simple", js: "x <- 1", expected: "4390f67858f3f1c7" },
   { name: "accent", js: "café", expected: "f424452a9673918c" },
@@ -31,6 +30,10 @@ const VECTORS = [
   { name: "label-line-and-unicode", js: "#| label: fig-é\nx <- 'é😀'", expected: "774a7e618b133ed6" },
   { name: "empty-cell", js: "", expected: null },
   { name: "lone-surrogate-is-replacement-char", js: "\ud800", expected: null },
+  // Pinned to the value Positron's own StringSHA1 produced in EXR-16 spike S1 (2026-10-31,
+  // claude-notes/research/2026-10-31-exr-16-s1-conformance-findings.md): a lone surrogate
+  // hashes as U+FFFD, so this equals the hash of "a\ufffdb".
+  { name: "lone-surrogate-mid-text-positron", js: "a\ud800b", expected: "c3693aea616c886c" },
   { name: "crlf-equals-lf", js: "#| label: a\r\nx <- 1\r\ny <- 2", expected: null,
     twin: "#| label: a\nx <- 1\ny <- 2" },
   { name: "trailing-newline-kept", js: "x <- 1\n", expected: null },

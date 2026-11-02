@@ -253,6 +253,14 @@ Notebook `metadata` (flat keys, all optional unless noted):
 - `quarto_record_version` (required): q2's schema version, starts at 1.
 - `quarto_cache_version: 1`: emitted **only while the schema subset really is
   Positron-compatible**; any incompatible change drops it rather than bumping it.
+  **The two version keys, in one place.** `quarto_record_version` is q2's schema version and
+  the only one q2 reads and gates on. `quarto_cache_version` is *defensive only*: it has no
+  consumer in q2's own flow, because q2 never writes into Positron's cache directory. It is
+  emitted (always `1`, from `Record::CACHE_VERSION`) so that a record dropped there by hand
+  passes Positron's loader, which deletes a file whose value is missing or other than 1 (and
+  then consumes a valid one; see EXR-16 Background). If Positron bumps its version, q2 drops
+  the key instead of following. Tests: `positron_conformance::q2_only_ever_emits_cache_version_one`
+  and `a_q2_record_passes_positrons_loader_checks_only_with_cache_version_one`.
 - `quarto_source`: project-relative document path, forward slashes.
 - `quarto_engines`: ordered list, one entry per engine that ran:
   `name`, `provenance` (engine version, kernelspec name and language, executor
@@ -842,8 +850,8 @@ plus `cargo nextest run -p quarto-core` (Phase 6 adds the WASM compile).
   `jupyter`, language is `\w+`) and the occurrence rule, and returns `DisplayOnlyOutputs`, a type with no
   conversion to `UnitResult` or `RecordCell`. Rich outputs normalize to `display_data` (no execution
   count), `quarto_webview_metadata` is dropped, an invalid JSON string stays a string with a notice in
-  `notices`. **Reconcile EXR-16 Phase A:** it says a wrong `quarto_cache_version` is "read but flagged";
-  this plan and the handoff say rejected, and the code rejects (`ImportError::VersionMismatch`).
+  `notices`. EXR-16 Phase A now says the same (reconciled 2026-11-01): a wrong `quarto_cache_version` is
+  rejected (`ImportError::VersionMismatch`) and the importer never deletes the file.
 - [x] `place(record, units, document_text, format) -> String`, the shared helper for
   rendered units: for each unit whose record cell holds one `display_data` with
   `text/x-quarto-markdown`, it substitutes that stored markdown at the unit, after

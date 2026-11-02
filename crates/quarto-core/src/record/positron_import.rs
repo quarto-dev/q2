@@ -294,6 +294,27 @@ mod tests {
         );
     }
 
+    /// EXR-16 S7(a): the importer drops only `quarto_webview_metadata`; any other per-output
+    /// metadata key, including a nested one a self-contained widget might carry, survives.
+    #[test]
+    fn an_extra_per_output_metadata_key_survives_the_import() {
+        let mut file: Value = serde_json::from_slice(&positron_file()).unwrap();
+        file["cells"][0]["outputs"][1]["metadata"] = json!({
+            "quarto_webview_metadata": {"w": 1},
+            "quarto_widget": {"self_contained": true, "deps": ["a.js"]},
+            "k": "v"
+        });
+        let imp = import_positron_cache(&serde_json::to_vec(&file).unwrap()).unwrap();
+        let out = &imp
+            .outputs_for("aaaaaaaaaaaaaaaa", 0, "jupyter", "python")
+            .unwrap()
+            .outputs()[1];
+        assert_eq!(
+            out["metadata"],
+            json!({"quarto_widget": {"self_contained": true, "deps": ["a.js"]}, "k": "v"})
+        );
+    }
+
     #[test]
     fn a_rich_execute_result_imports_as_standard_display_data() {
         let imp = import_positron_cache(&positron_file()).unwrap();
