@@ -243,7 +243,8 @@ jobs:
         run: |
           uv venv "$RUNNER_TEMP/jupyter-venv" --python 3.12
           uv pip install --python "$RUNNER_TEMP/jupyter-venv/bin/python" \
-            jupyter-core ipykernel ipywidgets anywidget plotly
+            jupyter-core ipykernel ipywidgets anywidget plotly \
+            great-tables polars pandas
           "$RUNNER_TEMP/jupyter-venv/bin/python" -m ipykernel install --user --name python3
           echo "$RUNNER_TEMP/jupyter-venv/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/jupyter-venv/bin/jupyter" --version
