@@ -84,6 +84,14 @@ issue URL, an Overview (current behaviour → new behaviour, with code
 locations), and a checkbox work-item list. Keep it short — it is the record,
 not a design doc. Tick items as you finish them.
 
+The note is qmd, not GitHub Markdown: CI runs `q2 render --strict
+claude-notes`, and any warning fails the PR (see `AGENTS.md` and
+`claude-notes/instructions/writing-notes.md`). The usual trap in this skill
+is placeholders: a bare `<sha>` or `<ref>` parses as a raw HTML element
+(Q-2-9), and that includes the `title` and `description` front matter, which
+are parsed as markdown. Put placeholders in code spans, or leave them out of
+the front matter.
+
 ## 4. Fix, test-first
 
 - Write or update the test first and watch it fail for the right reason.
@@ -106,6 +114,9 @@ Run the checks that cover what you touched, not just the one new test:
   clippy from `.claude/rules/cross-platform.md`.
 - **Larger blast radius:** if you're unsure what depends on the change,
   run `cargo xtask verify --skip-hub-build`.
+- **Notes (always):** from `claude-notes/`, run `cargo run --bin q2 --
+  render --strict <path>` on the plan, and on every other note you added or
+  changed. Any warning fails CI, so fix them all before you push.
 
 **Pre-existing failures:** if a check fails, re-run it on `main` (e.g.
 `git stash`, run, `git stash pop`) to tell whether you caused it. Only
