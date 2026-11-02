@@ -1,7 +1,7 @@
 ---
-title: "q2 add owner/repo@<sha>: probe GitHub's commit archive URL"
+title: "q2 add owner/repo@SHA: probe GitHub's commit archive URL"
 date: 2026-11-02
-description: Add archive/<ref>.tar.gz as a third candidate for GitHub shorthand refs so commit SHAs install.
+description: Add `archive/<ref>.tar.gz` as a third candidate for GitHub shorthand refs so commit SHAs install.
 ---
 
 Strand: bd-pr8yrfm1 · Issue: https://github.com/quarto-dev/q2/issues/1005
