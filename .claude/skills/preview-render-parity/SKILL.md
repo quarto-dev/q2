@@ -236,6 +236,8 @@ git commit -m "...(bd-<id>)"
 # Push (only after explicit user OK, per AGENTS.md GIT PUSH POLICY) and open a PR
 # against main — no integration branch to merge into (see worktrees.md § Pushing for PR)
 git push -u origin braid/<id>-<slug>:feature/<id>-<slug>
+# Later pushes need the same refspec: local and remote names differ, so a
+# bare `git push` fails. Confirm with `git ls-remote origin feature/<id>-<slug>`.
 ```
 
 **Commit-message style** (per repo convention — read `git log -5 --pretty=format:"%h %s%n%b%n---"` on `main` if in doubt):

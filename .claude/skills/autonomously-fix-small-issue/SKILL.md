@@ -135,6 +135,12 @@ git push -u origin braid/<id>-<slug>:feature/<id>-<slug>   # bugfix/ for bugs
 gh pr create --base main --head feature/<id>-<slug> --title "<area>: <headline>" --body ...
 ```
 
+The local and remote branch names differ, so a bare `git push` **fails** on
+every later push too (a CI fix, review changes). Always repeat the refspec,
+don't silence the push's output, and confirm it landed with `git ls-remote
+origin <remote-branch>` against `git rev-parse HEAD` before you say it's
+pushed. See `.claude/rules/worktrees.md` § Pushing for PR.
+
 PR body: `Closes #<N>.`, the behaviour change in one or two sentences, what
 changed (files/functions), **Testing** (each check and its result,
 pre-existing failures called out, anything not verified, e.g. "not checked in

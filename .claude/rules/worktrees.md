@@ -194,6 +194,38 @@ git push -u origin braid/<id>-<slug>:feature/<id>-<slug>
 
 This keeps local branches short and consistent while remote refs are self-describing in PR lists.
 
+### Every later push needs the explicit refspec too
+
+Because the local and remote names differ, a bare `git push` on these
+branches **fails**, even after `-u` has set the upstream. Under git's default
+`push.default=simple` it stops with:
+
+```text
+fatal: The upstream branch of your current branch does not match
+the name of your current branch.
+```
+
+So every follow-up push (a fix for a CI failure, review changes, a merge from
+`main`) must repeat the refspec:
+
+```bash
+git push origin braid/<id>-<slug>:feature/<id>-<slug>
+# or, from the branch itself:
+git push origin HEAD:feature/<id>-<slug>
+```
+
+**Check that the push landed.** Don't silence `git push` (`-q`, `| tail`,
+`2>/dev/null`), because the error above is easy to drop. Afterwards, confirm
+that the remote tip matches your local `HEAD`:
+
+```bash
+git ls-remote origin feature/<id>-<slug>   # should print your `git rev-parse HEAD`
+```
+
+This bit PR #1006: a CI fix was pushed with a silenced bare `git push`, the
+push never happened, and CI kept failing on the old commit while the agent
+reported the fix as pushed.
+
 ## Manual bootstrap
 
 If `cargo xtask create-worktree` is unavailable (fresh clone before first build, or
