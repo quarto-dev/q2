@@ -1037,7 +1037,7 @@ q2 use brand myorg/monorepo/brands/dark
 q2 use brand https://example.com/brand.tar.gz
 ```
 
-A GitHub source may name a tag or branch with `@<ref>`, and a subdirectory
+A GitHub source may name a tag, branch, or commit SHA with `@<ref>`, and a subdirectory
 within the repository. With no `@<ref>`, Quarto looks for a `main` branch and
 then a `master` branch.
 
