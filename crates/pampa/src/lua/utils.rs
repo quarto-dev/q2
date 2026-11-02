@@ -15,10 +15,11 @@ use crate::pandoc::{Block, Inline, LineBreak};
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use quarto_source_map::{By, SourceInfo};
 
-use super::config_value::{LuaConfigNull, LuaConfigSpecial, push_config_value};
+use super::config_value::{LuaConfigNull, LuaConfigSpecial, peek_config_value, push_config_value};
 use super::constructors::LuaListAttributes;
 use super::metadata::LuaMetaProxy;
 use super::nodes::{LuaNodes, NodesShape};
+use super::pandoc_doc::peek_pandoc_doc;
 use super::types::{
     LuaAttr, LuaBlock, LuaCitation, LuaInline, filter_source_info, inlines_to_lua_table,
 };
@@ -798,6 +799,9 @@ fn create_to_roman_numeral(lua: &Lua) -> Result<Function> {
 /// `Attr` or `ListAttributes`, and errors on anything else. This mirrors
 /// that over q2's userdata, with two things pandoc has no counterpart
 /// for: a `pandoc.Nodes` stringifies its contents (blocks or inlines),
+/// a document's metadata is stringified like any other metadata map
+/// (q2's metadata also carries project config, so it is larger than
+/// pandoc's, and scalars count, where pandoc's document walk skips them),
 /// and `nil` (and an explicit `quarto.config.null()`) is `""`, because a
 /// missing metadata key or shortcode kwarg reads as `nil` here
 /// (D-stringify-nil).
@@ -841,7 +845,23 @@ pub(crate) fn stringify_value(lua: &Lua, value: &Value) -> Result<String> {
             )))
         }
         Value::Table(table) => {
-            // Handle table of elements
+            // A document: pandoc's `query` over `Pandoc meta blocks`
+            // visits the metadata first, then the blocks (GH #1015).
+            if table
+                .metatable()
+                .is_some_and(|mt| mt.raw_get::<String>("__name").is_ok_and(|n| n == "Pandoc"))
+            {
+                let doc = peek_pandoc_doc(lua, value.clone())?;
+                return Ok(stringify_config_value(lua, &doc.meta)? + &stringify_blocks(&doc.blocks));
+            }
+            // A map with no array part (a `Meta` table, or a nested
+            // metadata map, which reads as a plain table) is a MetaMap:
+            // its values in key order (GH #1015).
+            if table.raw_len() == 0 && table.clone().pairs::<Value, Value>().next().is_some() {
+                let meta = peek_config_value(lua, value.clone(), None, &filter_source_info(lua))?;
+                return stringify_config_value(lua, &meta);
+            }
+            // A list of elements.
             let mut result = String::new();
             for item in table.clone().sequence_values::<Value>() {
                 let item = item?;
@@ -1133,6 +1153,64 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_stringify_pandoc_doc() {
+        // GH #1015: a whole document stringifies to its text, meta
+        // first then blocks (pandoc's `query` over `Pandoc meta blocks`).
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Pandoc({pandoc.Para({pandoc.Str('built')})}))")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "built");
+
+        let result: String = lua
+            .load(
+                "return pandoc.utils.stringify(pandoc.Pandoc(
+                    {pandoc.Para({pandoc.Str('body')})},
+                    {title = pandoc.Inlines({pandoc.Str('Title')})}))",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Titlebody");
+    }
+
+    #[test]
+    fn test_stringify_meta() {
+        // GH #1015: a Meta table (and a nested metadata map, a plain
+        // table) stringifies to its values in key order.
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load(
+                "return pandoc.utils.stringify(pandoc.Meta({
+                    b = pandoc.Inlines({pandoc.Str('two')}),
+                    a = pandoc.Inlines({pandoc.Str('one')}),
+                }))",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "onetwo");
+
+        let result: String = lua
+            .load(
+                "return pandoc.utils.stringify({
+                    name = pandoc.Inlines({pandoc.Str('Ada')}),
+                    affiliation = {city = 'London'},
+                })",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "LondonAda");
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify({})")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "");
     }
 
     #[test]
