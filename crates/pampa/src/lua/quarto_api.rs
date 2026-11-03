@@ -1149,41 +1149,22 @@ fn register_quarto_utils(lua: &Lua, quarto: &Table) -> Result<()> {
 
     // quarto.utils.as_inlines(obj) — coerce various types to pandoc.Inlines
     // Matches TS Quarto's _utils.lua:280-300. Type coercion, not markdown parsing.
-    //
-    // Note: our pandoc.utils.type() returns specific names (e.g., "Para", "Str")
-    // rather than generic "Block"/"Inline" like real Pandoc. We use lookup tables
-    // to classify element types.
     lua.load(
         r#"
         local pandoc_utils_type = pandoc.utils.type
         local blocks_to_inlines = pandoc.utils.blocks_to_inlines
-        local block_types = {
-            Para = true, Plain = true, Header = true, CodeBlock = true,
-            RawBlock = true, BlockQuote = true, BulletList = true,
-            OrderedList = true, DefinitionList = true, Div = true,
-            LineBlock = true, Table = true, Figure = true,
-            HorizontalRule = true,
-        }
-        local inline_types = {
-            Str = true, Space = true, SoftBreak = true, LineBreak = true,
-            Emph = true, Strong = true, Underline = true, Strikeout = true,
-            Superscript = true, Subscript = true, SmallCaps = true,
-            Quoted = true, Code = true, Math = true, RawInline = true,
-            Link = true, Image = true, Span = true, Note = true,
-            Cite = true, Shortcode = true,
-        }
         return function(obj)
             local pt = pandoc_utils_type(obj)
             if pt == "Inlines" then
                 return obj
-            elseif inline_types[pt] then
+            elseif pt == "Inline" then
                 return pandoc.Inlines({obj})
             elseif pt == "Blocks" then
                 return blocks_to_inlines(obj)
-            elseif block_types[pt] then
+            elseif pt == "Block" then
                 return blocks_to_inlines({obj})
             elseif pt == "List" or pt == "table" then
-                if obj[1] and block_types[pandoc_utils_type(obj[1])] then
+                if obj[1] and pandoc_utils_type(obj[1]) == "Block" then
                     return blocks_to_inlines(obj)
                 end
                 return pandoc.Inlines(obj)
@@ -1201,33 +1182,18 @@ fn register_quarto_utils(lua: &Lua, quarto: &Table) -> Result<()> {
     lua.load(
         r#"
         local pandoc_utils_type = pandoc.utils.type
-        local block_types = {
-            Para = true, Plain = true, Header = true, CodeBlock = true,
-            RawBlock = true, BlockQuote = true, BulletList = true,
-            OrderedList = true, DefinitionList = true, Div = true,
-            LineBlock = true, Table = true, Figure = true,
-            HorizontalRule = true,
-        }
-        local inline_types = {
-            Str = true, Space = true, SoftBreak = true, LineBreak = true,
-            Emph = true, Strong = true, Underline = true, Strikeout = true,
-            Superscript = true, Subscript = true, SmallCaps = true,
-            Quoted = true, Code = true, Math = true, RawInline = true,
-            Link = true, Image = true, Span = true, Note = true,
-            Cite = true, Shortcode = true,
-        }
         return function(obj)
             local pt = pandoc_utils_type(obj)
             if pt == "Blocks" then
                 return obj
-            elseif block_types[pt] then
+            elseif pt == "Block" then
                 return pandoc.Blocks({obj})
             elseif pt == "Inlines" then
                 return pandoc.Blocks({pandoc.Plain(obj)})
-            elseif inline_types[pt] then
+            elseif pt == "Inline" then
                 return pandoc.Blocks({pandoc.Plain({obj})})
             elseif pt == "List" or pt == "table" then
-                if obj[1] and inline_types[pandoc_utils_type(obj[1])] then
+                if obj[1] and pandoc_utils_type(obj[1]) == "Inline" then
                     return pandoc.Blocks({pandoc.Plain(obj)})
                 end
                 return pandoc.Blocks(obj)
@@ -1756,7 +1722,7 @@ mod tests {
             .load(r#"return quarto.utils.type(pandoc.Str("x"))"#)
             .eval()
             .unwrap();
-        assert_eq!(result, "Str");
+        assert_eq!(result, "Inline");
     }
 
     #[test]

@@ -321,15 +321,19 @@ fn create_type(lua: &Lua) -> Result<Function> {
     })
 }
 
-/// The `pandoc.utils.type` name of a userdata: the element type for an
-/// Inline or Block, the fixed name for q2's other userdata, else the
-/// metatable's `__name`. `None` when there is no name to give.
+/// The `pandoc.utils.type` name of a userdata: `Inline` or `Block` for
+/// an element (Pandoc's `__name`; the tag is `elem.t`), the fixed name
+/// for q2's other userdata, else the metatable's `__name`. `None` when
+/// there is no name to give.
 fn userdata_type_name(ud: &AnyUserData) -> Option<String> {
-    if let Ok(inline) = ud.borrow::<LuaInline>() {
-        return Some(get_inline_type_name(&inline.borrow_inline()));
+    if ud.is::<LuaInline>() {
+        return Some("Inline".to_string());
     }
-    if let Ok(block) = ud.borrow::<LuaBlock>() {
-        return Some(get_block_type_name(&block.borrow_block()));
+    if ud.is::<LuaBlock>() {
+        return Some("Block".to_string());
+    }
+    if ud.is::<LuaAttr>() {
+        return Some("Attr".to_string());
     }
     if ud.is::<LuaCitation>() {
         return Some("Citation".to_string());
@@ -355,65 +359,6 @@ fn userdata_type_name(ud: &AnyUserData) -> Option<String> {
     ud.metatable()
         .ok()
         .and_then(|mt| mt.get::<String>("__name").ok())
-}
-
-/// Get the type name for an inline element
-fn get_inline_type_name(inline: &Inline) -> String {
-    match inline {
-        Inline::Str(_) => "Str".to_string(),
-        Inline::Space(_) => "Space".to_string(),
-        Inline::SoftBreak(_) => "SoftBreak".to_string(),
-        Inline::LineBreak(_) => "LineBreak".to_string(),
-        Inline::Emph(_) => "Emph".to_string(),
-        Inline::Strong(_) => "Strong".to_string(),
-        Inline::Underline(_) => "Underline".to_string(),
-        Inline::Strikeout(_) => "Strikeout".to_string(),
-        Inline::Superscript(_) => "Superscript".to_string(),
-        Inline::Subscript(_) => "Subscript".to_string(),
-        Inline::SmallCaps(_) => "SmallCaps".to_string(),
-        Inline::Quoted(_) => "Quoted".to_string(),
-        Inline::Code(_) => "Code".to_string(),
-        Inline::Math(_) => "Math".to_string(),
-        Inline::RawInline(_) => "RawInline".to_string(),
-        Inline::Link(_) => "Link".to_string(),
-        Inline::Image(_) => "Image".to_string(),
-        Inline::Span(_) => "Span".to_string(),
-        Inline::Note(_) => "Note".to_string(),
-        Inline::Cite(_) => "Cite".to_string(),
-        Inline::Shortcode(_) => "Shortcode".to_string(),
-        Inline::NoteReference(_) => "NoteReference".to_string(),
-        Inline::Attr(_) => "Attr".to_string(),
-        Inline::Insert(_) => "Insert".to_string(),
-        Inline::Delete(_) => "Delete".to_string(),
-        Inline::Highlight(_) => "Highlight".to_string(),
-        Inline::EditComment(_) => "EditComment".to_string(),
-        Inline::Custom(_) => "Custom".to_string(),
-    }
-}
-
-/// Get the type name for a block element
-fn get_block_type_name(block: &Block) -> String {
-    match block {
-        Block::Paragraph(_) => "Para".to_string(),
-        Block::Plain(_) => "Plain".to_string(),
-        Block::Header(_) => "Header".to_string(),
-        Block::CodeBlock(_) => "CodeBlock".to_string(),
-        Block::RawBlock(_) => "RawBlock".to_string(),
-        Block::BlockQuote(_) => "BlockQuote".to_string(),
-        Block::BulletList(_) => "BulletList".to_string(),
-        Block::OrderedList(_) => "OrderedList".to_string(),
-        Block::DefinitionList(_) => "DefinitionList".to_string(),
-        Block::Div(_) => "Div".to_string(),
-        Block::LineBlock(_) => "LineBlock".to_string(),
-        Block::Table(_) => "Table".to_string(),
-        Block::Figure(_) => "Figure".to_string(),
-        Block::HorizontalRule(_) => "HorizontalRule".to_string(),
-        Block::CaptionBlock(_) => "CaptionBlock".to_string(),
-        Block::BlockMetadata(_) => "BlockMetadata".to_string(),
-        Block::NoteDefinitionPara(_) => "NoteDefinitionPara".to_string(),
-        Block::NoteDefinitionFencedBlock(_) => "NoteDefinitionFencedBlock".to_string(),
-        Block::Custom(_) => "Custom".to_string(),
-    }
 }
 
 /// sha1(input)
@@ -1326,7 +1271,8 @@ mod tests {
             .eval()
             .unwrap();
 
-        assert_eq!(result, "Str");
+        // Pandoc's `__name` for every inline is `Inline` (GH #1019).
+        assert_eq!(result, "Inline");
     }
 
     #[test]
@@ -1338,7 +1284,21 @@ mod tests {
             .eval()
             .unwrap();
 
-        assert_eq!(result, "Para");
+        // Pandoc's `__name` for every block is `Block` (GH #1019).
+        assert_eq!(result, "Block");
+    }
+
+    #[test]
+    fn test_type_attr() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.type(pandoc.Attr('id', {'a'}))")
+            .eval()
+            .unwrap();
+
+        // Not the Rust wrapper's name, `LuaAttr` (GH #1019).
+        assert_eq!(result, "Attr");
     }
 
     #[test]
@@ -1919,67 +1879,6 @@ mod tests {
         assert_eq!(
             bti("{pandoc.Nodes(pandoc.Para{'a'}), pandoc.Para{'b'}, pandoc.Nodes({})}"),
             "a\nb"
-        );
-    }
-
-    // ========== get_inline_type_name tests ==========
-
-    #[test]
-    fn test_get_inline_type_name_all() {
-        use crate::pandoc::*;
-
-        assert_eq!(
-            get_inline_type_name(&Inline::Str(Str {
-                text: String::new(),
-                source_info: SourceInfo::for_test()
-            })),
-            "Str"
-        );
-        assert_eq!(
-            get_inline_type_name(&Inline::Space(Space {
-                source_info: SourceInfo::for_test()
-            })),
-            "Space"
-        );
-        assert_eq!(
-            get_inline_type_name(&Inline::SoftBreak(SoftBreak {
-                source_info: SourceInfo::for_test()
-            })),
-            "SoftBreak"
-        );
-        assert_eq!(
-            get_inline_type_name(&Inline::LineBreak(LineBreak {
-                source_info: SourceInfo::for_test()
-            })),
-            "LineBreak"
-        );
-    }
-
-    // ========== get_block_type_name tests ==========
-
-    #[test]
-    fn test_get_block_type_name_all() {
-        use crate::pandoc::*;
-
-        assert_eq!(
-            get_block_type_name(&Block::Paragraph(Paragraph {
-                content: vec![],
-                source_info: SourceInfo::for_test()
-            })),
-            "Para"
-        );
-        assert_eq!(
-            get_block_type_name(&Block::Plain(Plain {
-                content: vec![],
-                source_info: SourceInfo::for_test()
-            })),
-            "Plain"
-        );
-        assert_eq!(
-            get_block_type_name(&Block::HorizontalRule(HorizontalRule {
-                source_info: SourceInfo::for_test()
-            })),
-            "HorizontalRule"
         );
     }
 }
