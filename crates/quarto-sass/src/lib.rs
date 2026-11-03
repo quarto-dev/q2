@@ -68,7 +68,8 @@ pub use compile::{
 };
 pub use config::{
     BrandPathResolver, DarkThemeConfig, HighlightStyle, ResolvedVariants, ThemeConfig,
-    brand_base_dir, resolve_adaptive_highlight, resolve_brand, resolve_brand_variants,
+    brand_base_dir, ignored_pandoc_themes, resolve_adaptive_highlight, resolve_brand,
+    resolve_brand_variants,
 };
 pub use error::SassError;
 pub use layer::{merge_layers, parse_layer, parse_layer_from_parts};

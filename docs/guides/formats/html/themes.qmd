@@ -35,7 +35,11 @@ Custom theme files use SCSS with Quarto's layer markers
 rules), and can use all of Bootstrap's variables, functions, and
 mixins.
 
-To opt out of Bootstrap entirely, use `theme: none`.
+`theme: default` selects plain Bootstrap with no Bootswatch theme,
+which is also what you get when `theme:` is not set. To opt out of
+Bootstrap entirely, use `theme: none`. Quarto 1's `theme: pandoc`
+is not supported yet: Quarto 2 ignores it with a warning
+([`Q-14-12`](/errors/theme/Q-14-12.qmd)) and uses plain Bootstrap.
 
 ## Light and dark mode {#dark-mode}
 

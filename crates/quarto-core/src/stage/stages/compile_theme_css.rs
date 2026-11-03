@@ -702,6 +702,28 @@ impl PipelineStage for CompileThemeCssStage {
             }
         };
 
+        // `theme: pandoc` (Quarto 1's Bootstrap-free page) is not
+        // implemented: quarto-sass drops the entry, so the page gets
+        // plain Bootstrap. Say so once per entry (Q-14-12, GH #1036).
+        for location in quarto_sass::ignored_pandoc_themes(&doc.ast.meta) {
+            ctx.add_diagnostic(
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                    "`theme: pandoc` is not supported",
+                )
+                .with_code("Q-14-12")
+                .problem(
+                    "Quarto 2 does not implement the Bootstrap-free `pandoc` theme yet; \
+                     the entry is ignored and the page uses the default Bootstrap theme.",
+                )
+                .add_hint(
+                    "Use `theme: none` to drop Bootstrap entirely, or `theme: default` \
+                     for plain Bootstrap?",
+                )
+                .with_location(location)
+                .build(),
+            );
+        }
+
         // ── Variant-aware compilation (bd-0pic6, phase A2) ─────────
         // The light variant always compiles. A `theme: {light: …,
         // dark: …}` map additionally compiles the dark half — through
@@ -1836,6 +1858,53 @@ mod tests {
             css.contains(".container"),
             "compiled CSS should contain .container"
         );
+    }
+
+    #[tokio::test]
+    async fn default_theme_compiles_plain_bootstrap_without_warning() {
+        // GH #1036: Quarto 1's `theme: default` means plain Bootstrap.
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context(runtime);
+        let stage = CompileThemeCssStage::new();
+
+        stage
+            .run(make_doc_ast(meta_with_theme("default")), &mut ctx)
+            .await
+            .expect("`theme: default` must not fail the stage");
+
+        let css = get_css_artifact(&ctx);
+        assert_ne!(css, DEFAULT_CSS);
+        assert!(css.contains(".btn"), "plain Bootstrap expected");
+        assert!(
+            ctx.diagnostics.is_empty(),
+            "no diagnostics expected: {:?}",
+            ctx.diagnostics
+        );
+    }
+
+    #[tokio::test]
+    async fn pandoc_theme_warns_and_compiles_plain_bootstrap() {
+        // GH #1036: `theme: pandoc` is not implemented; the entry is
+        // ignored (plain Bootstrap) with one Q-14-12 warning.
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context(runtime);
+        let stage = CompileThemeCssStage::new();
+
+        stage
+            .run(make_doc_ast(meta_with_theme("pandoc")), &mut ctx)
+            .await
+            .expect("`theme: pandoc` must not fail the stage");
+
+        let css = get_css_artifact(&ctx);
+        assert!(css.contains(".btn"), "plain Bootstrap expected");
+        let codes: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert_eq!(codes, vec!["Q-14-12"], "diagnostics: {:?}", ctx.diagnostics);
     }
 
     #[tokio::test]

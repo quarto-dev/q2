@@ -132,8 +132,8 @@ pub fn sass_error_to_parse_error_at(
                 ))
                 .add_hint(
                     "Use one of the built-in Bootswatch names (e.g. `cosmo`, `darkly`), \
-                     a path to a `.scss`/`.css` file, or `theme: none` to suppress \
-                     Bootstrap?",
+                     `default` for plain Bootstrap, a path to a `.scss`/`.css` file, \
+                     or `theme: none` to suppress Bootstrap?",
                 );
             if let Some(loc) = location {
                 b = b.with_location(loc.clone());
@@ -498,6 +498,7 @@ mod tests {
         // landed — bd-0pic6 phase A2.)
         for code in [
             "Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5", "Q-14-6", "Q-14-7", "Q-14-8",
+            "Q-14-12",
         ] {
             let info = quarto_error_catalog::ERROR_CATALOG.get(code);
             assert!(
@@ -518,21 +519,21 @@ mod tests {
     fn unknown_theme_renders_with_q142_code_and_span() {
         // Parallel to invalid_theme_config_renders_with_code_and_span,
         // but for the UnknownTheme variant. A document with
-        // `theme: default` in its frontmatter triggers
-        // ThemeSpec::parse("default") → UnknownTheme; the helper
+        // `theme: nosuchtheme` in its frontmatter triggers
+        // ThemeSpec::parse("nosuchtheme") → UnknownTheme; the helper
         // must lift it into a Q-14-2 ariadne diagnostic whose
         // location points back at the document.
         let temp = TempDir::new().unwrap();
         let root = temp.path().canonicalize().unwrap();
         // Imagine this is the document frontmatter (or a
         // _metadata.yml referenced by the page). The byte offset of
-        // the `default` token is what we point at.
+        // the `nosuchtheme` token is what we point at.
         let yaml_path = root.join("doc.qmd");
-        let contents = "---\nformat:\n  html:\n    theme: default\n---\n";
+        let contents = "---\nformat:\n  html:\n    theme: nosuchtheme\n---\n";
         std::fs::write(&yaml_path, contents).unwrap();
 
-        let scalar_start = contents.find("default").unwrap();
-        let scalar_end = scalar_start + "default".len();
+        let scalar_start = contents.find("nosuchtheme").unwrap();
+        let scalar_end = scalar_start + "nosuchtheme".len();
         let location = SourceInfo::Original {
             file_id: file_id_for(&yaml_path),
             start_offset: scalar_start,
@@ -540,7 +541,7 @@ mod tests {
         };
 
         let err = SassError::UnknownTheme {
-            name: "default".to_string(),
+            name: "nosuchtheme".to_string(),
             location: Some(location.clone()),
         };
 
