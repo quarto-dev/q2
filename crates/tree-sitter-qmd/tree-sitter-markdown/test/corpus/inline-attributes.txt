@@ -186,3 +186,22 @@ empty attributes
                 (key_value_specifier
                   (key_value_key)
                   (key_value_value))))))))
+================================================================================
+attribute key with colon (GH #1027)
+================================================================================
+[]{html:style="v" k=v}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
