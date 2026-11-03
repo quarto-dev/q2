@@ -156,6 +156,19 @@ Filed bd-h14a4m83. Fix scope:
 4. Out of scope (check separately): pandoc-hybrid and Typst/LaTeX legs,
    which render callouts through other paths.
 
+## Fix (follow-up commit on this branch)
+
+I took shape (a). `CalloutResolveTransform` moved from Normalization to
+the Crossref phase, right after `CrossrefResolveTransform`. Until then
+callouts stay `Callout` custom nodes, which is the shape every transform
+in between already handles in the q2-preview pipeline (that pipeline never
+runs `callout-resolve`). The resolver builds the prefix from
+`plain_data.order` with `format_crossref_number`, so book chapters get
+`{chapter}.{n}`. The kind comes from the `crossref-<type>-title` term,
+falling back to the registry `kind`. After the fix, all three fixtures
+render the same titles as Quarto 1, and the `simple` crossref callout's
+DOM matches Quarto 1's markup.
+
 ## Verification commands used
 
 ```sh
