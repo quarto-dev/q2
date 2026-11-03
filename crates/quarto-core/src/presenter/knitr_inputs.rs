@@ -18,7 +18,7 @@
 //! edit to a presentation option shows without a re-run; the document scope is not layered
 //! (decision 3), because it is part of the hash.
 
-use quarto_pandoc_types::config_value::ConfigValue;
+use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind, InterpretationContext};
 use serde_json::Value;
 
 use crate::record::{EngineEntry, RecordCell};
@@ -30,6 +30,7 @@ use super::output::{CellOutput, CellResult};
 use super::visibility::knitr_visibility;
 
 /// The cell-metadata keys this reader consumes.
+pub const ECHOED_CODE_KEY: &str = "quarto_echoed_code";
 pub const OUTPUT_ANCHORS_KEY: &str = "quarto_output_anchors";
 pub const OUTPUT_KINDS_KEY: &str = "quarto_output_kinds";
 pub const EXPRESSION_STARTS_KEY: &str = "quarto_expression_starts";
@@ -62,6 +63,10 @@ pub fn present_knitr_cell(
     fig: &mut dyn FigureSink,
 ) -> Option<String> {
     let recorded = cell.metadata.extra.get(RESOLVED_OPTIONS_KEY)?;
+    // The code knitr echoed, when it differs from the authored code; the anchors and
+    // expression starts index into it.
+    let echoed = echoed_code(cell);
+    let code = echoed.as_deref().unwrap_or(code);
     let known = engine.and_then(|e| e.known_options.as_deref());
     let merged = layer_options(recorded, header, known);
 
@@ -124,6 +129,37 @@ pub fn present_knitr_cell(
     ))
 }
 
+/// The knitr `#|` header read as literal YAML scalars (R\'s `yaml.load` and Quarto 1 keep
+/// them): `InterpretationContext::ProjectConfig` does not parse a string as markdown, so
+/// `comment: "##"` is not an empty heading and `*marked up*` keeps its asterisks. The Jupyter
+/// path keeps `DocumentMetadata`.
+pub fn knitr_header_options(
+    options: Option<quarto_yaml::YamlWithSourceInfo>,
+) -> Option<ConfigValue> {
+    let o = options?;
+    let mut collector = pampa::utils::diagnostic_collector::DiagnosticCollector::new();
+    let config = pampa::pandoc::meta::yaml_to_config_value(
+        o,
+        InterpretationContext::ProjectConfig,
+        &mut collector,
+    );
+    for d in collector.into_diagnostics() {
+        tracing::warn!("cell option conversion diagnostic: {d:?}");
+    }
+    Some(config)
+}
+
+/// `quarto_echoed_code`: the lines knitr echoed, joined; `None` when absent or malformed.
+fn echoed_code(cell: &RecordCell) -> Option<String> {
+    cell.metadata
+        .extra
+        .get(ECHOED_CODE_KEY)?
+        .as_array()?
+        .iter()
+        .map(|l| l.as_str())
+        .collect::<Option<String>>()
+}
+
 /// The recorded options with the current header options layered over them (epic decision 11).
 /// A header key written with a dash is read under its dotted name when `known` lists that
 /// name: q2\'s R layer accepts either spelling for a knitr option (`normalize_options`), and
@@ -138,6 +174,11 @@ fn layer_options(
     merged.remove("unserializable");
     if let Some(entries) = header.and_then(ConfigValue::as_map_entries) {
         for entry in entries {
+            // The capture evaluated an `!expr` in R and recorded the result; the expression
+            // text must not replace it.
+            if matches!(entry.value.value, ConfigValueKind::Expr(_)) {
+                continue;
+            }
             let dotted = entry.key.replace('-', ".");
             let key = if known.is_some_and(|k| k.contains(&dotted)) {
                 dotted
@@ -395,6 +436,23 @@ mod tests {
     }
 
     #[test]
+    fn echoed_code_replaces_the_authored_code_and_the_anchors_index_into_it() {
+        // A numeric `eval` masked the first line; the output follows the second.
+        let c = cell(
+            "print(1)\nprint(2)\n",
+            vec![stream("stdout", "[1] 2\n")],
+            vec![
+                (RESOLVED_OPTIONS_KEY, json!({})),
+                (ECHOED_CODE_KEY, json!(["## print(1)\n", "print(2)"])),
+                (OUTPUT_ANCHORS_KEY, json!([2])),
+            ],
+        );
+        let md = present("print(1)\nprint(2)\n", &c, None, None).unwrap();
+        assert!(md.contains("## print(1)\nprint(2)\n```"), "{md}");
+        assert!(!md.contains("\nprint(1)"), "{md}");
+    }
+
+    #[test]
     fn the_current_header_options_win_over_the_recorded_ones() {
         let c = cell(
             "a\n",
@@ -404,6 +462,56 @@ mod tests {
         let h = header("#| echo: false");
         let md = present("a\n", &c, None, h.as_ref()).unwrap();
         assert!(!md.contains("cell-code"), "{md}");
+    }
+
+    /// `#|` lines as knitr header options (the literal reader).
+    fn knitr_header(lines: &str) -> Option<ConfigValue> {
+        let parsed = partition_cell_options(
+            "r",
+            lines,
+            SourceInfo::generated(quarto_source_map::By::unknown()),
+        )
+        .unwrap();
+        knitr_header_options(parsed.options)
+    }
+
+    #[test]
+    fn header_strings_stay_literal_scalars() {
+        // `"##"` is an empty heading and `*x*` loses its markup when read as markdown.
+        let h = knitr_header("#| comment: \"##\"\n#| fig-cap: \"*marked up*\"").unwrap();
+        assert_eq!(h.get("comment").unwrap().as_str(), Some("##"));
+        assert_eq!(h.get("fig-cap").unwrap().as_str(), Some("*marked up*"));
+    }
+
+    #[test]
+    fn a_literal_comment_reaches_the_presented_cell() {
+        let c = cell(
+            "a\n",
+            vec![stream("stdout", "1")],
+            vec![(RESOLVED_OPTIONS_KEY, json!({"comment": "#>"}))],
+        );
+        let h = knitr_header("#| comment: \"##\"");
+        let md = present("a\n", &c, None, h.as_ref()).unwrap();
+        assert!(md.contains("\n## 1\n"), "{md}");
+    }
+
+    #[test]
+    fn an_expr_header_option_does_not_override_the_recorded_value() {
+        // The capture evaluated `!expr` in R and recorded the result; the expression text
+        // must not replace it.
+        let c = cell(
+            "a\n",
+            vec![],
+            vec![(RESOLVED_OPTIONS_KEY, json!({"fig.cap": "evaluated"}))],
+        );
+        let e = engine(Some(&["fig.cap"]));
+        let h = knitr_header("#| fig-cap: !expr paste0('a', 'b')");
+        let merged = layer_options(
+            &c.metadata.extra[RESOLVED_OPTIONS_KEY],
+            h.as_ref(),
+            e.known_options.as_deref(),
+        );
+        assert_eq!(merged["fig.cap"], "evaluated", "{merged}");
     }
 
     #[test]

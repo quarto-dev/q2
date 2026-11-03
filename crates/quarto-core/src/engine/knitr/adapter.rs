@@ -17,11 +17,15 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 
+use quarto_source_map::{By, SourceInfo};
+
+use crate::cell_options::partition_cell_options;
 use crate::engine::context::ExecutionContext;
 use crate::engine::diagnostics::EngineRecordProblem;
 use crate::engine::units::Unit;
 use crate::presenter::knitr_inputs::{
-    EXPRESSION_STARTS_KEY, OUTPUT_ANCHORS_KEY, OUTPUT_KINDS_KEY, RESOLVED_OPTIONS_KEY,
+    ECHOED_CODE_KEY, EXPRESSION_STARTS_KEY, OUTPUT_ANCHORS_KEY, OUTPUT_KINDS_KEY,
+    RESOLVED_OPTIONS_KEY,
 };
 use crate::presenter::options::OutputKind;
 use crate::presenter::output::CellOutput;
@@ -91,7 +95,7 @@ pub(super) fn build_structured(
         } else {
             pieces_to_cell_anchored(chunk, captured.read_file)
         };
-        let Some((_, result, anchors)) = mapped else {
+        let Some((echoed, result, anchors)) = mapped else {
             let Some(markdown) = fallback.iter().find(|f| f.id == id) else {
                 return Err(build(&format!(
                     "no finished markdown for the fallback chunk `{id}`"
@@ -113,6 +117,11 @@ pub(super) fn build_structured(
         extra.insert(RESOLVED_OPTIONS_KEY.to_string(), resolved_options(chunk));
         if let Some(anchors) = anchors {
             extra.insert(OUTPUT_ANCHORS_KEY.to_string(), json!(anchors));
+        }
+        if let Some(lines) =
+            echoed_code(&ctx.author_texts.0[index].text, &echoed, &ctx.units[index])
+        {
+            extra.insert(ECHOED_CODE_KEY.to_string(), json!(lines));
         }
         let kinds = output_kinds(chunk);
         if kinds.len() == outputs.len() {
@@ -180,6 +189,34 @@ pub(super) fn build_structured(
     }
     rehash_document(&mut record, &ctx.document_metadata_json()).map_err(|e| build(&e))?;
     Ok(record)
+}
+
+/// The code knitr echoed, as nbformat `source` lines, when it differs from the authored code
+/// (the author text without its `#|` lines): a numeric `eval` masks lines as `## x`,
+/// `ref.label` supplies another chunk\'s code, `tidy` rewrites it. `None` when they agree, so an
+/// ordinary chunk carries no key. The cell source stays the authored text: the unit hash is
+/// recomputed from it.
+fn echoed_code(author_text: &str, echoed: &str, unit: &Unit) -> Option<Vec<String>> {
+    let Unit::Cell(cell) = unit else {
+        return None;
+    };
+    let authored = partition_cell_options(
+        &cell.lang,
+        author_text,
+        SourceInfo::generated(By::unknown()),
+    )
+    .ok()?
+    .code;
+    let trim = |s: &str| s.trim_end_matches('\n').to_string();
+    if trim(&authored) == trim(echoed) {
+        return None;
+    }
+    let echoed = trim(echoed);
+    let mut lines: Vec<String> = echoed.split('\n').map(|l| format!("{l}\n")).collect();
+    if let Some(last) = lines.last_mut() {
+        last.pop();
+    }
+    Some(lines)
 }
 
 /// The chunk's resolved options as the record stores them: the options object as the capture
@@ -334,6 +371,60 @@ y
     }
 
     #[test]
+    fn echoed_code_is_written_only_when_it_differs_from_the_authored_code() {
+        let c = ctx();
+        let found = ids(&c);
+        let mut chunks = pieces(&found);
+        // knitr echoed a masked line (numeric `eval`); the first chunk echoes what was written.
+        chunks[1] = chunk(
+            &found[1],
+            "## y",
+            json!({"class.source": "mine"}),
+            json!([{"class": "source", "text": "## y\n"}]),
+        );
+        let record = build(&c, &chunks, &[]).unwrap();
+        assert!(
+            !record.cells[0].metadata.extra.contains_key(ECHOED_CODE_KEY),
+            "an ordinary chunk carries no key"
+        );
+        assert_eq!(
+            record.cells[1].metadata.extra[ECHOED_CODE_KEY],
+            json!(["## y"])
+        );
+    }
+
+    #[test]
+    fn echoed_code_does_not_change_the_source_or_the_hashes() {
+        let c = ctx();
+        let found = ids(&c);
+        let plain = build(&c, &pieces(&found), &[]).unwrap();
+        let mut chunks = pieces(&found);
+        chunks[1] = chunk(
+            &found[1],
+            "## y",
+            json!({"class.source": "mine", "foo.unknown": "1"}),
+            json!([{"class": "source", "text": "## y\n"}]),
+        );
+        let masked = build(&c, &chunks, &[]).unwrap();
+        let (a, b) = (&plain.cells[1], &masked.cells[1]);
+        assert_eq!(a.source, b.source);
+        assert_eq!(a.metadata.quarto_exec_hash, b.metadata.quarto_exec_hash);
+        assert_eq!(
+            a.metadata.quarto_content_hash,
+            b.metadata.quarto_content_hash
+        );
+        assert!(
+            !b.source.concat().contains("## y"),
+            "the cell source stays the authored text"
+        );
+        let def = knitr_hash_definition();
+        assert_eq!(
+            crate::record::recompute_cell_hash(&def, b).unwrap(),
+            crate::record::recompute_cell_hash(&def, a).unwrap()
+        );
+    }
+
+    #[test]
     fn the_flat_keys_are_the_structured_profiles_not_every_option() {
         let c = ctx();
         let record = build(&c, &pieces(&ids(&c)), &[]).unwrap();
@@ -468,6 +559,21 @@ y
         // the unknown option, from known_options, and the header option the class names
         assert!(md.contains("foo.unknown='1'"), "{md}");
         assert!(md.contains(".mine"), "{md}");
+    }
+
+    #[test]
+    fn notebook_level_results_stay_out_of_the_knitr_record() {
+        // Includes, preserve, post-processing and dependencies belong to the `ExecuteResult`
+        // (EXR-11 left them there, and the captured path keeps it): the entry carries none.
+        let c = ctx();
+        let record = build(&c, &pieces(&ids(&c)), &[]).unwrap();
+        let entry = &record.engine;
+        assert!(entry.includes.is_none());
+        assert!(entry.filters.is_empty());
+        assert!(entry.preserve.is_empty());
+        assert!(!entry.needs_postprocess);
+        assert!(entry.html_dependencies.is_empty());
+        assert!(entry.resource_files.is_empty());
     }
 
     #[test]

@@ -434,7 +434,7 @@ Moved to [KNR-2b](2026-11-02-knr-02b-presenter-remainder.md), which owns them:
 
 1. **Size.** Interlude I1 measured it: the prototype closed 97 of 154 blockers in one
    session, the rest is small items of the same kind, so the plan is not split (4 to 7
-   sessions). The one cross-plan dependency is KNR-3\'s two keys, for 10 corpus cases.
+   sessions). The one cross-plan dependency is KNR-3\'s record keys (`quarto_output_kinds` and `known_options`, for 10 corpus cases; a third key, `quarto_echoed_code`, since 2026-11-03).
 2. **Jupyter drift.** Building the shared layer touches Jupyter output; mitigate with the
    goldens (no runtime switch, decision 12).
 3. **Format dependence.** Some presentation depends on the target format at present time,

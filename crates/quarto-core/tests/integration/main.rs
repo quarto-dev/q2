@@ -120,6 +120,7 @@ pub mod knitr_corpus_gate;
 pub mod knitr_corpus_generator;
 pub mod knitr_corpus_normalizer;
 pub mod knitr_corpus_q1;
+pub mod knitr_corpus_record;
 pub mod knitr_corpus_run;
 pub mod knitr_corpus_runner;
 pub mod knitr_corpus_support;

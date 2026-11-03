@@ -101,6 +101,8 @@ fn capture_reports_knitrs_known_option_names_once() {
         "attr.output",
         "fenced.echo",
         "quarto-unit-id",
+        // set by execute.R on the format\'s `opts_chunk`, which knitr applies before any chunk
+        "ft.shadow",
     ] {
         assert!(known.iter().any(|k| k == name), "{name} in {known:?}");
     }

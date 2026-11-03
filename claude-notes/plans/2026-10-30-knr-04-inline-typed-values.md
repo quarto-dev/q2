@@ -81,6 +81,9 @@ mentions inline spans, so this plan is also the place where spans join that cont
 2. Statements and errors in spans are fatal and `error: true` is ignored, as in q1; `None`
    and `NULL` follow EXR-12 and EXR-3 (parent decisions 17 and 21).
 3. Additive until KNR-6: the live output does not change.
+4. **Flag:** the [units-only engines epic](2026-11-02-units-only-engines-epic.md) (draft) follows
+   decision 1 for `` `r expr` `` (its open question 2) and may supersede KNR-3\'s `child=` fallback
+   with sub-units. Do not extend the `child=` fallback beyond what KNR-3\'s table needs.
 
 ## Provisional: decisions this plan must make
 

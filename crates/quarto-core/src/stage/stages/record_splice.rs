@@ -35,7 +35,7 @@ use crate::presenter::cell::render_cell_with;
 use crate::presenter::expansion::{render_expanded_unit, split_expansions};
 use crate::presenter::figures::{FigureSink, RuntimeFigureSink};
 use crate::presenter::inline::{InlineTarget, render_inline};
-use crate::presenter::knitr_inputs::{original_chunk, present_knitr_cell};
+use crate::presenter::knitr_inputs::{knitr_header_options, original_chunk, present_knitr_cell};
 use crate::presenter::options::CellOptions;
 use crate::presenter::output::{CellOutput, CellResult};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
@@ -332,7 +332,7 @@ fn present_cell(
     // A structured knitr cell is read by the shared reader; any other cell presents as it
     // always did.
     if let Unit::Cell(u) = unit {
-        let header = resolve_cell_options(None, partitioned_options);
+        let header = knitr_header_options(partitioned_options);
         let (info, lines) = original_chunk(&u.lang, &u.attr_tail, author_text);
         if let Some(markdown) = present_knitr_cell(
             lang,
@@ -1075,6 +1075,71 @@ mod tests {
         let edited = R_ECHO.replace("echo: true", "echo: true\n#| warning: false");
         let (_, report) = splice_in(Format::html(), &edited, &record);
         assert_eq!(report.units[0].1, UnitStaleness::Stale);
+    }
+
+    /// What EXR-11 wrote: the all-options declaration at version 1, no `structured` profile, no
+    /// `quarto_hash_rule` or format option on the cell, and the output as pass-through markdown.
+    fn exr11_record(source: &str, markdown: &str) -> Record {
+        let doc = parse(source);
+        let (qmd, _) = serialize_ast_to_qmd(&doc.ast).unwrap();
+        let (units, texts): (_, AuthorTexts) = scan_and_fill_ids(&qmd, &[]);
+        let mut def = crate::record::HashDefinition::conservative("knitr");
+        def.version = 1;
+        def.document_keys = vec!["knitr".to_string()];
+        let mut builder = RecordBuilder::new("knitr", &def, &units, &texts).unwrap();
+        for i in 0..units.len() {
+            builder
+                .push(
+                    i,
+                    UnitResult {
+                        outputs: vec![json!({
+                            "output_type": "display_data",
+                            "data": {QUARTO_MARKDOWN_MIME: markdown},
+                            "metadata": {"quarto_format": "html"}
+                        })],
+                        execution_count: None,
+                        kernel: None,
+                    },
+                )
+                .unwrap();
+        }
+        let mut entry = builder
+            .finish(EngineEntryInput {
+                owned_languages: vec!["r".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        rehash_document(&mut entry, &Default::default()).unwrap();
+        coalesce(&[entry], &units).unwrap()
+    }
+
+    #[test]
+    fn an_exr11_era_record_still_presents_through_the_pass_through_presenter() {
+        let record = exr11_record(R_ECHO, "```r\nx <- 1\nx\n```\n\n```\n[1] 1\n```\n");
+        assert_eq!(record.metadata.quarto_engines[0].hash_definition.version, 1);
+        let (text, report) = splice_in(Format::html(), R_ECHO, &record);
+        // The record is judged by the declaration it stores (version 1), so it is fresh and its
+        // pass-through markdown is placed.
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
+        assert!(text.contains("[1] 1"), "{text}");
+        // The version bump restarts every hash: the current declaration never reproduces an
+        // EXR-11 hash, so a new run's record shares no unit hash with the old one.
+        let (units, texts): (_, AuthorTexts) = scan_and_fill_ids(R_ECHO, &[]);
+        let Unit::Cell(cell) = &units[0] else {
+            panic!("expected a cell")
+        };
+        let current = UnitKey::from_author_text(
+            &knitr_hash_definition(),
+            UnitKind::Cell,
+            "r",
+            &texts.0[0].text,
+            &cell.attr_tail,
+        )
+        .unwrap();
+        assert_ne!(
+            current.exec_hash, record.cells[0].metadata.quarto_exec_hash,
+            "version 2 must not reproduce a version 1 hash"
+        );
     }
 
     #[test]

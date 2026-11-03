@@ -21,13 +21,17 @@ corpus has no case for the holds).
 ## Why this is separate
 
 KNR-2 built the presenter, the fallback-unit presenter, the target router and the corpus
-gate, and measured the corpus: 198 of 221 cases accepted, 5 allowlisted, 11 never compared,
-7 blockers outside the allowlist. All 7 wait on other plans: the four `options/foo.unknown/*`
-cases and the `tbl-cap` attribute of `s2/01_kable` need KNR-3 to write `known_options`,
-`setup-state/knit_hooks_override` needs KNR-3\'s fallback-unit rule, and `s9/01_inline` needs
-KNR-4. The other open items need the same record fields, or have no corpus case yet. Splitting
-lets KNR-2 close and keeps this work where its inputs exist. The presenter-only items below
-(Phase 2bB) need no other plan; if someone is free earlier they may run first.
+gate, and measured the corpus on the direct path (r15): 198 of 221 cases accepted, 5
+allowlisted, 11 never compared, 7 blockers outside the allowlist. Those 7 waited on KNR-3 (the
+four `options/foo.unknown/*` cases, the `tbl-cap` attribute of `s2/01_kable`, and
+`setup-state/knit_hooks_override`) and on KNR-4 (`s9/01_inline`). KNR-3 has since landed its
+three and runs the gate through the written record (slice 4, 2026-11-03): 193 accepted, 5
+allowlisted, 7 not compared, 16 blockers. Fifteen of those are KNR-3 slice 5\'s (a regression in
+the `include_graphics` reader, header-option interpretation, list-nested indentation and the
+`quarto_echoed_code` key); the sixteenth is `s9/01_inline` (KNR-4). The other open items here
+need the same record fields, or have no corpus case yet. Splitting lets KNR-2 close and keeps
+this work where its inputs exist. The presenter-only items below (Phase 2bB) need no other
+plan; if someone is free earlier they may run first.
 
 ## Record contract this plan consumes
 
@@ -90,7 +94,8 @@ fixture and a test that fails first.
   fixture for each and decide whether anything is missing.
 - [ ] Unit tests of each hook feature against hand-built outputs: caption and label
   dedupe, layout synthesis, class assembly, the `results: asis` bare rule, unknown-option
-  forwarding (JSON, escaping), indent for list-nested chunks, fence length for outputs
+  forwarding (JSON, escaping), indent for list-nested chunks (the splice fix is KNR-3 slice 5; the
+  hook-level tests are here), fence length for outputs
   containing backtick runs.
 
 ## Phase 2bC: close-out
@@ -120,14 +125,11 @@ fixture and a test that fails first.
   after the widget, three-tick `{=html}` fence) is done here (slice 5) and is the knitr half of
   the shared raw-HTML path that WGT-2 wants.
 - [ ] Re-run the corpus. Every difference is classified; zero blockers; the intentional
-  divergences are written down with one-line reasons. Measured 2026-11-02 (report r15, 221
-  cases, html plus typst, docx, gfm, revealjs, epub on the rich-output documents): 198
-  accepted (identical or syntax-level), 5 allowlisted, 11 not compared (5 fallback units, 4
-  consistent aborts, 2 unavailable `gifski`), and 7 blockers outside the allowlist. All 7 wait
-  on other plans, so this item stays open until they land: the four `options/foo.unknown/*`
-  cases and the `tbl-cap` attribute of `s2/01_kable` (KNR-3 writing `known_options`),
-  `setup-state/knit_hooks_override` (a user hook, so the fallback-unit rule), and
-  `s9/01_inline` (KNR-4).
+  divergences are written down with one-line reasons. State at 2026-11-03 (KNR-3 slice 4,
+  through the written record, 221 cases): 193 accepted (identical or syntax-level), 5
+  allowlisted, 7 not compared (4 consistent aborts, 3 unavailable packages), and 16 blockers
+  outside the allowlist: 15 are KNR-3 slice 5 (see its notes) and `s9/01_inline` is KNR-4.
+  This item stays open until both have landed and the count is zero.
 - [ ] Assert the gate. `corpus_report` currently writes the gate verdict
   (`knitr_corpus_gate`, epic decision 26) into its summary without failing on it, because
   the residual cases waited on other plans. Once they have landed, make a failed gate fail a

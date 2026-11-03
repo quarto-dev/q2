@@ -16,7 +16,10 @@ use super::knitr_corpus_classify::{Class, classify};
 use super::knitr_corpus_gate::{Allowlist, evaluate};
 use super::knitr_corpus_normalizer::{normalize, normalize_figure_paths};
 use super::knitr_corpus_q1::{q1_enabled, q1_markdown};
-use super::knitr_corpus_run::{Outcome, parallel, r_available, run_fixture_with_env};
+use super::knitr_corpus_record::{RecordRun, run_through_record};
+use super::knitr_corpus_run::{
+    Outcome as DirectOutcome, parallel, r_available, run_fixture_with_env,
+};
 use super::knitr_corpus_support::{CorpusManifest, Fixture, corpus_dir};
 
 /// What one (fixture, format) case came to.
@@ -57,14 +60,19 @@ pub struct CaseRecord {
     pub format: String,
     #[serde(flatten)]
     pub result: CaseResult,
+    /// The normalized live markdown (the oracle), kept for freezing; not part of the report.
+    #[serde(skip)]
+    pub oracle: Option<String>,
 }
 
-/// Run one case. `env` pins knitr (see `run_fixture_with_env`).
-pub fn run_case(f: &Fixture, format: &str, env: &[(String, String)]) -> CaseRecord {
-    let result = match Outcome::from_run(run_fixture_with_env(f, format, true, env)) {
-        Outcome::Aborted(message) => CaseResult::Aborted { message },
-        Outcome::Unavailable(package) => CaseResult::Unavailable { package },
-        Outcome::Ran(run) => {
+/// The KNR-1 candidate: the capture's pieces presented chunk by chunk without the engine, the
+/// record or the product path. `KNR_DIRECT=1` selects it, to tell a difference the record path
+/// introduces from one the presenter has on its own.
+fn run_case_direct(f: &Fixture, format: &str, env: &[(String, String)]) -> CaseRecord {
+    let result = match DirectOutcome::from_run(run_fixture_with_env(f, format, true, env)) {
+        DirectOutcome::Aborted(message) => CaseResult::Aborted { message },
+        DirectOutcome::Unavailable(package) => CaseResult::Unavailable { package },
+        DirectOutcome::Ran(run) => {
             let doc_path = run.doc_dir().join(format!("doc.{}", f.ext));
             match baseline(&f.text, &doc_path, &run.chunks) {
                 Baseline::Fallback(reason) => CaseResult::Fallback { reason },
@@ -72,25 +80,8 @@ pub fn run_case(f: &Fixture, format: &str, env: &[(String, String)]) -> CaseReco
                     let oracle = normalize_figure_paths(&normalize(&run.markdown, run.doc_dir()));
                     let candidate = normalize_figure_paths(&normalize(&candidate, run.doc_dir()));
                     let class = classify(&oracle, &candidate);
-                    let q1 = (format == "html" && q1_enabled()).then(|| match q1_markdown(f) {
-                        Err(error) => Q1Column {
-                            class: None,
-                            diff: None,
-                            error: Some(error),
-                        },
-                        Ok(q1_md) => {
-                            let q1_md = normalize_figure_paths(&q1_md);
-                            let c = classify(&q1_md, &oracle);
-                            Q1Column {
-                                class: Some(c.label().to_string()),
-                                diff: (c != Class::Identical)
-                                    .then(|| first_difference(&q1_md, &oracle)),
-                                error: None,
-                            }
-                        }
-                    });
                     CaseResult::Compared {
-                        q1,
+                        q1: None,
                         class: class.label().to_string(),
                         multi_group: run.chunks.iter().any(|c| source_groups(c) > 1),
                         diff: (class != Class::Identical)
@@ -105,6 +96,75 @@ pub fn run_case(f: &Fixture, format: &str, env: &[(String, String)]) -> CaseReco
         group: f.group.clone(),
         format: format.to_string(),
         result,
+        oracle: None,
+    }
+}
+
+/// Run one case. `env` pins knitr (see `run_fixture_with_env`).
+pub fn run_case(f: &Fixture, format: &str, env: &[(String, String)]) -> CaseRecord {
+    if std::env::var_os("KNR_DIRECT").is_some() {
+        return run_case_direct(f, format, env);
+    }
+    // KNR-3 slice 4: the candidate is the engine's record, written, read back and presented
+    // through the product path (`knitr_corpus_record`). `KNR_R_LIBS` still pins knitr, through
+    // the process environment (`R_LIBS`), which the engine's R child inherits.
+    enum Outcome {
+        Ran(RecordRun),
+        Aborted(String),
+        Unavailable(String),
+    }
+    use Outcome::{Aborted, Ran, Unavailable};
+    let outcome = match run_through_record(f, format) {
+        Ok(run) => Ran(run),
+        Err(e) => match e.strip_prefix("Missing package: ") {
+            Some(pkg) => Unavailable(pkg.trim().to_string()),
+            None => Aborted(e),
+        },
+    };
+    let mut frozen = None;
+    let result = match outcome {
+        Aborted(message) => CaseResult::Aborted { message },
+        Unavailable(package) => CaseResult::Unavailable { package },
+        Ran(run) => match run.candidate {
+            Baseline::Fallback(reason) => CaseResult::Fallback { reason },
+            Baseline::Candidate(candidate) => {
+                let oracle = normalize_figure_paths(&normalize(&run.markdown, run.live_dir.path()));
+                frozen = Some(oracle.clone());
+                let candidate = normalize_figure_paths(&normalize(&candidate, run.dir.path()));
+                let class = classify(&oracle, &candidate);
+                let q1 = (format == "html" && q1_enabled()).then(|| match q1_markdown(f) {
+                    Err(error) => Q1Column {
+                        class: None,
+                        diff: None,
+                        error: Some(error),
+                    },
+                    Ok(q1_md) => {
+                        let q1_md = normalize_figure_paths(&q1_md);
+                        let c = classify(&q1_md, &oracle);
+                        Q1Column {
+                            class: Some(c.label().to_string()),
+                            diff: (c != Class::Identical)
+                                .then(|| first_difference(&q1_md, &oracle)),
+                            error: None,
+                        }
+                    }
+                });
+                CaseResult::Compared {
+                    q1,
+                    class: class.label().to_string(),
+                    multi_group: false,
+                    diff: (class != Class::Identical)
+                        .then(|| first_difference(&oracle, &candidate)),
+                }
+            }
+        },
+    };
+    CaseRecord {
+        name: f.name.clone(),
+        group: f.group.clone(),
+        format: format.to_string(),
+        result,
+        oracle: frozen,
     }
 }
 
@@ -253,6 +313,48 @@ pub fn env_from_process() -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
+/// Where a case's frozen live markdown lives: `live/<name>.<format>.md` in the corpus.
+fn frozen_path(r: &CaseRecord) -> std::path::PathBuf {
+    corpus_dir()
+        .join("live")
+        .join(format!("{}.{}.md", r.name, r.format))
+}
+
+/// The frozen oracle (KNR-3 slice 4): the live markdown of each compared case, normalized.
+/// `KNR_FREEZE=1` writes the files; otherwise each is compared with its file, so a change in
+/// what knitr (or the engine's live path) writes shows up as a difference, not as a silent new
+/// oracle. Returns the report lines.
+fn freeze_or_compare(records: &[CaseRecord]) -> String {
+    let freeze = std::env::var_os("KNR_FREEZE").is_some();
+    let (mut same, mut differ, mut missing, mut written) = (0, Vec::new(), 0, 0);
+    for r in records {
+        let Some(live) = &r.oracle else { continue };
+        let path = frozen_path(r);
+        if freeze {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, live).unwrap();
+            written += 1;
+            continue;
+        }
+        match std::fs::read_to_string(&path) {
+            Ok(old) if old == *live => same += 1,
+            Ok(_) => differ.push(format!("{} [{}]", r.name, r.format)),
+            Err(_) => missing += 1,
+        }
+    }
+    if freeze {
+        return format!("frozen oracle: wrote {written} files\n");
+    }
+    let mut out = format!(
+        "frozen oracle: {same} match, {} differ, {missing} missing\n",
+        differ.len()
+    );
+    for d in differ {
+        out.push_str(&format!("  differs: {d}\n"));
+    }
+    out
+}
+
 #[test]
 fn corpus_report() {
     let Ok(path) = std::env::var("KNR_REPORT") else {
@@ -271,7 +373,8 @@ fn corpus_report() {
     // the assertion lands in KNR-2b, Phase 2bC.
     let allowlist = Allowlist::load(&corpus_dir()).unwrap();
     let gate = evaluate(&records, &allowlist);
-    let summary = format!("{}\n{}", summarize(&records), gate.render());
+    let frozen = freeze_or_compare(&records);
+    let summary = format!("{}\n{}\n{frozen}", summarize(&records), gate.render());
     std::fs::write(format!("{path}.summary.txt"), summary).unwrap();
 }
 
@@ -282,6 +385,7 @@ fn summary_counts_by_group_and_lists_the_unusual_cases() {
         group: group.into(),
         format: "html".into(),
         result,
+        oracle: None,
     };
     let compared = |class: &str, multi: bool| CaseResult::Compared {
         class: class.into(),

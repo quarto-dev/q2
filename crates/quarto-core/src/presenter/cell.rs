@@ -343,14 +343,15 @@ fn select_by_kind(
 }
 
 /// An `include_graphics` image (the mapper marks it `metadata.quarto_knitr.include_graphics`):
-/// its own path, and the width knitr computed, when it did.
+/// its own path (`metadata.quarto_file_path`, epic decision 25), and the width knitr computed,
+/// when it did.
 fn included_graphic(metadata: &serde_json::Value) -> Option<(String, Option<f64>)> {
     let k = metadata.get("quarto_knitr")?;
     if k.get("include_graphics")?.as_bool() != Some(true) {
         return None;
     }
     Some((
-        k.get("file")?.as_str()?.to_string(),
+        metadata.get("quarto_file_path")?.as_str()?.to_string(),
         k.get("width").and_then(|w| w.as_f64()),
     ))
 }
@@ -1889,10 +1890,28 @@ mod option_tests {
             &CellOptions::default(),
             vec![CellOutput::DisplayData {
                 data,
-                metadata: serde_json::json!({"quarto_knitr": {
-                    "file": "made.png", "include_graphics": true, "width": 200.0}}),
+                metadata: serde_json::json!({"quarto_file_path": "made.png", "quarto_knitr": {
+                    "include_graphics": true, "width": 200.0}}),
             }],
         );
+        assert!(
+            md.contains("::: {.cell-output-display}\n\n![](made.png){width=200}\n\n:::"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn include_graphics_from_the_mappers_output_keeps_the_path() {
+        // Built by the mapper, not by hand: a hand-built key kept the old reader passing
+        // after `28474d2ec` moved the writer to `quarto_file_path`.
+        let chunk: crate::engine::knitr::types::KnitrCapturedChunk =
+            serde_json::from_value(serde_json::json!({"ordinal": 1, "label": "t", "pieces": [
+                {"class": "image_paths", "paths": ["made.png"], "widths": [200.0]}]}))
+            .unwrap();
+        let (_, result) =
+            crate::engine::knitr::pieces_map::pieces_to_cell(&chunk, &|_| Some(vec![1, 2, 3]))
+                .unwrap();
+        let md = render_opts(&CellOptions::default(), result.outputs);
         assert!(
             md.contains("::: {.cell-output-display}\n\n![](made.png){width=200}\n\n:::"),
             "{md}"

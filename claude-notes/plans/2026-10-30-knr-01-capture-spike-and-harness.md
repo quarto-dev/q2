@@ -423,12 +423,14 @@ the same packages are installed there.
 **Source order and the wire shape.** knitr alternates source and output; nbformat has one
 source then outputs, and `stream` and `error` outputs have no `metadata` field (reported, not
 re-run: nbformat 4 schema), so a position cannot ride on the outputs. Encoding: the cell
-`source` is the code `evaluate()` received, and the cell metadata holds
+`source` is the authored text (the unit hash is recomputed from it), the code `evaluate()`
+received is `quarto_echoed_code` when it differs (epic decision 21, amended 2026-11-03; the
+first version of this paragraph had it as the cell `source`), and the cell metadata holds
 `quarto_output_anchors`, an array parallel to `outputs` whose entry is the number of source
 lines that precede that output. Equal neighbors form one source group; no anchors means all
-the source first. (Unverified, because no presenter or mapper exists: `echo` numeric and
-`eval` numeric chunks and `tidy` chunks, where the code seen by `evaluate()` differs from the
-document text. Numeric `eval` shows the masked lines as `## ` source, S1.) The R side emits,
+the source first. (Verified by the KNR-3 corpus gate, 2026-11-03: numeric `eval` shows the
+masked lines as `## ` source and `ref.label` supplies the referenced chunk\'s code, so both
+need `quarto_echoed_code`; `echo` numeric is applied at present time.) The R side emits,
 next to EXR-11\'s `chunks`, a per-chunk field `pieces`:
 
 ```json
@@ -863,12 +865,12 @@ that use them). Verified by running.
   needs the record writer and was not run here.
 - **`ref.label` and the code.** `c_ref` has an empty body, and the chunk hook sees its
   `code` as `c_inherit`\'s text with `ref.label` retained; the source in the document is
-  empty. A structured unit for such a chunk records the code `evaluate()` received (S2:
-  `code`), not the document text, and the scanner\'s unit text is empty. KNR-3 must say which
-  the hash covers: the hash of an empty-bodied `ref.label` chunk does not change when the
-  referenced chunk changes, so the record can go stale silently; the safe rule is to treat a
-  `ref.label` chunk as a fallback unit until the hash can include the referenced code. This
-  is a **recommendation, not run**.
+  empty. The structured unit keeps the authored (empty) `source`, and the code `evaluate()`
+  received (S2: `code`) is `quarto_echoed_code` (KNR-3, 2026-11-03). The hash covers the
+  authored text: the hash of an empty-bodied `ref.label` chunk does not change when the
+  referenced chunk changes, so the record can go stale silently. That is still open: the safe
+  rule is to treat a `ref.label` chunk as a fallback unit until the hash can include the
+  referenced code, a **recommendation, not run**.
 - [x] **S9, inline spans (feeds KNR-4).** Capture each inline expression\'s value from the
   `evaluate.inline` and `inline` hooks (`block.R:634-665`) in R, for both spellings
   (`r expr` and `{r} expr`), including `NULL`, invisible values, numbers that knitr formats

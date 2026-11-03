@@ -33,7 +33,7 @@ use super::inline::{
     InlineOutcome, InlineTarget, classify_inline_result, escape_yaml_double, front_matter_key_at,
     render_inline,
 };
-use super::knitr_inputs::{original_chunk, present_knitr_cell};
+use super::knitr_inputs::{knitr_header_options, original_chunk, present_knitr_cell};
 use super::options::CellOptions;
 use super::output::CellResult;
 use super::visibility::{CellVisibility, resolve_cell_options};
@@ -122,6 +122,9 @@ pub fn present_document(
     fig: &mut dyn FigureSink,
 ) -> Result<PresentResult, PresentError> {
     let matched = match_cells(units, cells);
+    // The author text of each unit: its scanned text without the container prefix and indent,
+    // which `replacement` puts back on every line of what it splices.
+    let author_texts = crate::record::AuthorTexts::from_scanned(units);
     let mut order: Vec<usize> = (0..units.len()).collect();
     order.sort_by_key(|&i| units[i].start());
 
@@ -158,12 +161,13 @@ pub fn present_document(
         let result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
         match &units[ui] {
             Unit::Cell(u) => {
+                let author = author_texts.0[ui].text.as_str();
                 let parsed =
-                    partition_cell_options(&u.lang, &u.code, SourceInfo::generated(By::unknown()))
+                    partition_cell_options(&u.lang, author, SourceInfo::generated(By::unknown()))
                         .map_err(|e| PresentError::InvalidCellOptions {
-                            unit: ui,
-                            message: e.to_string(),
-                        })?;
+                        unit: ui,
+                        message: e.to_string(),
+                    })?;
                 let parsed_options = parsed.options.clone();
                 let resolved = resolve_cell_options(scope, parsed.options);
                 let visibility = CellVisibility::resolve(resolved.as_ref());
@@ -186,8 +190,8 @@ pub fn present_document(
                     None => {
                         // A structured knitr cell is read by the shared reader; any other
                         // cell presents as it always did.
-                        let header = resolve_cell_options(None, parsed_options);
-                        let (info, lines) = original_chunk(&u.lang, &u.attr_tail, &u.code);
+                        let header = knitr_header_options(parsed_options);
+                        let (info, lines) = original_chunk(&u.lang, &u.attr_tail, author);
                         present_knitr_cell(
                             &u.lang,
                             &parsed.code,
@@ -218,12 +222,17 @@ pub fn present_document(
                             reason: f.reason,
                         }),
                 );
-                out.push_str(&document_text[last_end..u.start]);
+                // `replacement` carries the container prefix and indent onto every line; the
+                // rendered text keeps its own trailing newlines, as it always did.
+                let trailing = &text[text.trim_end_matches('\n').len()..];
+                let (start, end, placed) = replacement(&units[ui], document_text, &text);
+                let text = format!("{}{trailing}", placed.trim_end_matches('\n'));
+                out.push_str(&document_text[last_end..start]);
                 if out.ends_with('\n') && !out.ends_with("\n\n") {
                     out.push('\n');
                 }
                 out.push_str(&text);
-                last_end = u.end;
+                last_end = end;
             }
             Unit::Inline(u) => {
                 let Some(text) = inline_text(ui, u, &result, document_text, target, &mut notes)?
@@ -500,6 +509,48 @@ mod tests {
         )
         .unwrap();
         fixture::assert_rich(&out.markdown);
+    }
+
+    #[test]
+    fn a_list_nested_structured_cell_keeps_its_indent_on_every_line() {
+        // The unit's `code` keeps the container indent; the presenter partitions the author
+        // text instead and splices through `replacement`, so the fences stay in the list item.
+        use crate::presenter::knitr_inputs::fixture;
+        let body = fixture::SOURCE
+            .lines()
+            .map(|l| format!("  {l}\n"))
+            .collect::<String>();
+        let text = format!("- item\n\n{body}\nafter\n");
+        let (units, texts) = staged_units(&text);
+        let mut cells = record(&units, &texts, &[(0, fixture::outputs())]);
+        fixture::apply(&mut cells[0]);
+        let engine = entry_with(
+            &units,
+            &texts,
+            Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect()),
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let out = present_document(
+            &cells,
+            &text,
+            &units,
+            None,
+            InlineTarget::from_format("html"),
+            "html",
+            Some(&engine),
+            &mut fig,
+        )
+        .unwrap()
+        .markdown;
+        let cell_part = out.strip_prefix("- item\n\n").unwrap();
+        let before_after = cell_part.split("\nafter").next().unwrap();
+        assert!(
+            before_after
+                .lines()
+                .all(|l| l.is_empty() || l.starts_with("  ")),
+            "{out}"
+        );
     }
 
     #[test]

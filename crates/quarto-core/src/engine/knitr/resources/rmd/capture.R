@@ -365,11 +365,15 @@ capture_chunk_hook <- function(prev) {
 # The option names the chunk hook does NOT forward as cell attributes (KNR-3): the same
 # `known_opts` union hooks.R builds in its chunk hook ("forward any other unknown attributes"),
 # so the presenter forwards exactly what Quarto 1 does. Read before any chunk runs, so a setup
-# chunk's `opts_chunk$set` cannot make an unknown name known. Keep in step with hooks.R.
-capture_known_options <- function() {
+# chunk's `opts_chunk$set` cannot make an unknown name known. `format_opts_chunk` is the
+# `opts_chunk` list of the options execute() builds (ft.shadow, dev.args, crop, the document's
+# `knitr: opts_chunk`): knitr applies it before the first chunk, so the live hook sees those
+# names as known. Keep in step with hooks.R.
+capture_known_options <- function(format_opts_chunk = list()) {
   knitr_default_opts <- unique(c(
     tryCatch(names(knitr:::opts_chunk_attr), error = function(e) character()),
-    names(knitr::opts_chunk$get())
+    names(knitr::opts_chunk$get()),
+    names(format_opts_chunk)
   ))
   # fmt: skip
   quarto_knitr_opts <- c(
@@ -411,7 +415,7 @@ capture_install <- function(knitr) {
   quarto_capture$hooks_at_start <- NULL
   quarto_capture$hook_override <- NULL
   quarto_capture$cache_labels <- character()
-  quarto_capture$known_options <- capture_known_options()
+  quarto_capture$known_options <- capture_known_options(knitr$opts_chunk)
   hooks <- knitr$knit_hooks
   evaluate <- if (is.null(hooks[["evaluate"]])) {
     knitr::knit_hooks$get("evaluate")

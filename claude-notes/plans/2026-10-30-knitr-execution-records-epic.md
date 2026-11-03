@@ -267,23 +267,36 @@ Made with Gordon on 2026-10-30.
     fix it unless the presenter itself needs the behavior. This is the out-of-plan case in
     the repo's tracking rule, so strands are right here even though the epic itself has none
     (decision 18).
-21. **Presentation facts the presenter cannot recover live in two internal cell-metadata
-    keys and one per-engine field (2026-11-01, interlude I1, signed off by Gordon; the third
-    item changed 2026-11-02).** `quarto_output_anchors` (the source lines before each output,
-    in the order the capture saw them) and `quarto_output_kinds` (parallel to `outputs`:
-    `"message"`, `"warning"` or null) are cell keys. The option names knitr knows come from
+21. **Presentation facts the presenter cannot recover live in three internal cell-metadata
+    keys and one per-engine field (2026-11-01, interlude I1, signed off by Gordon; the engine
+    field changed 2026-11-02; the third key added 2026-11-03, signed off by Gordon after the
+    KNR-3 corpus gate).** `quarto_output_anchors` (the source lines before each output, in the
+    order the capture saw them), `quarto_output_kinds` (parallel to `outputs`: `"message"`,
+    `"warning"` or null) and `quarto_echoed_code` are cell keys. `quarto_echoed_code` holds the
+    code knitr echoed, as an array of lines in nbformat `source` style (each with its trailing
+    newline except the last), the `#|` option lines excluded. It is written only when it
+    differs from the authored code with its option lines removed (a numeric `eval` masks the
+    unevaluated lines as `## `, `ref.label` supplies the referenced chunk\'s code, `tidy`
+    rewrites it), so an ordinary chunk carries nothing. The presenter shows it in place of the
+    authored code, and the anchors and `quarto_expression_starts` index into it. The cell
+    `source` stays the **authored** text, so the hash and the id stay what the stage computes
+    from the document (`recompute_cell_hash` rebuilds a unit\'s hash from `source`; a `source`
+    holding the echoed code would make every numeric-`eval` chunk stale on each render). This
+    supersedes KNR-1\'s encoding sentence that the cell `source` is the code `evaluate()`
+    received. The option names knitr knows come from
     the knitr that ran and are stored **once per record**, as the optional `known_options` list
     on the `quarto_engines` entry beside `hash_definition`; the presenter subtracts them from a
     chunk\'s current options at present time, and what is left is the unknown options. An absent
     field means no unknown-option filtering. This replaces the per-cell `quarto_unknown_options`
     key that KNR-2 was written against (KNR-3 decision 6 says so; KNR-2 reads the new field).
-    The two cell keys start with `quarto_`, so `CellMetadata::options()` drops them from user
+    The three cell keys start with `quarto_`, so `CellMetadata::options()` drops them from user
     options, and `known_options` lives on the engine entry, so it never reaches that path. None
     enters the exec hash (the hash comes from the pre-engine units). KNR-3 writes them;
     KNR-2 reads them. The option-aware reordering that knitr does (`fig.show` and `results`
     hold and hide, numeric `echo`, `prompt`) is done by the presenter at present time over the
     capture-order record, never at record time, so a header-option edit shows without
-    re-running (decisions 10 and 11).
+    re-running (decisions 10 and 11). A numeric `eval` is an execution option, so its masking is
+    recorded: editing it changes the hash and re-executes.
 22. **`text/markdown` display data is opt-in through a marker (2026-11-01, I1, signed off by
     Gordon).** The adapter sets `metadata.quarto_markdown_passthrough: true` on the output
     metadata of knitr `asis` output; the shared presenter handles `text/markdown` only then.

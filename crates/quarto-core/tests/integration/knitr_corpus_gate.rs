@@ -165,6 +165,7 @@ mod tests {
                 diff: None,
                 q1: None,
             },
+            oracle: None,
         }
     }
 

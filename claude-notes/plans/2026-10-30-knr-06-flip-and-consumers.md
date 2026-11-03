@@ -77,8 +77,9 @@ record and runs the presenter again (decision 9 of the parent epic).
 options also come from R-side state the document does not show, such as
 `knitr::opts_chunk$set(echo = FALSE)` in a setup chunk, `opts_template`, `opts.label` and
 `ref.label`, and `opts_hooks` (`block.R:9-92`, `call_block`). The record carries the
-**resolved** presentation options per unit (KNR-1 S3), and the presenter reads those, with
-the chunk\'s current header options winning (epic decision 11). Parent decision 34 now
+**resolved** presentation options per unit (KNR-1 S3) and the code knitr echoed when it
+differs from the authored code (`quarto_echoed_code`, epic decision 21), and the presenter
+reads those, with the chunk\'s current header options winning (epic decision 11). Parent decision 34 now
 anticipates this layering and leaves knitr\'s exact layering to this epic (EXR-14 defers it);
 the document scope is not layered for now, and an `execute:` edit re-executes (KNR-3
 decision 3, settled 2026-10-31; revisited after S8).
