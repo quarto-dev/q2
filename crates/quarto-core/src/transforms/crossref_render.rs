@@ -735,13 +735,14 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
             None => ("center".to_string(), None, Vec::new()),
         };
 
-        // Caption location: attr-level `cap-location` / `<ref>-cap-location`
-        // (metadata-level configuration lands with the cap-location feature).
+        // Caption location: attr-level `cap-location` / `<ref>-cap-location`,
+        // else Q1's per-category default (metadata-level configuration lands
+        // with the cap-location feature).
         let (_id0, mut user_classes, mut user_kvs) = node.attr;
         let caption_location = user_kvs
             .remove("cap-location")
             .or_else(|| user_kvs.remove(&format!("{ref_type}-cap-location")))
-            .unwrap_or_else(|| "bottom".to_string());
+            .unwrap_or_else(|| default_caption_location(&ref_type).to_string());
 
         // Listings hard-code left alignment and a `listing` class (Q1 #9724).
         let is_listing = ref_type == "lst";
@@ -1407,6 +1408,17 @@ fn sec_ref_text(
     }
 }
 
+/// Q1's default caption location for a float category, used when the float
+/// sets no `cap-location` attribute: tables and listings put the caption on
+/// top, figures and custom float types below (`categories.all` in
+/// `quarto-cli/src/resources/filters/mainstateinit.lua`).
+fn default_caption_location(ref_type: &str) -> &'static str {
+    match ref_type {
+        "tbl" | "lst" => "top",
+        _ => "bottom",
+    }
+}
+
 /// Prepend a numbered prefix onto the first block of a caption block list,
 /// returning a fresh Blocks. No-op if the kind is empty or the caption is
 /// empty.
@@ -2023,6 +2035,14 @@ mod tests {
             fig.attr.2.get("data-qf-ref-type").map(String::as_str),
             Some("tbl")
         );
+        // GH #1030: table captions default to the top, as in Q1.
+        assert_eq!(
+            fig.attr
+                .2
+                .get("data-qf-caption-location")
+                .map(String::as_str),
+            Some("top")
+        );
         // The table itself lives inside the aria wrapper.
         let Block::Div(content_div) = &fig.content[0] else {
             panic!()
@@ -2035,6 +2055,17 @@ mod tests {
             panic!()
         };
         assert_eq!(s.text, "Table\u{a0}1: ");
+    }
+
+    /// GH #1030: with no `cap-location` attribute, the caption location
+    /// follows Q1's per-category default (`mainstateinit.lua`): tables and
+    /// listings on top, everything else (figures, custom float types) below.
+    #[test]
+    fn default_caption_location_matches_q1_categories() {
+        assert_eq!(default_caption_location("fig"), "bottom");
+        assert_eq!(default_caption_location("tbl"), "top");
+        assert_eq!(default_caption_location("lst"), "top");
+        assert_eq!(default_caption_location("vid"), "bottom");
     }
 
     /// bd-4m2n6qf1: when a table float's caption comes from the Table's own
