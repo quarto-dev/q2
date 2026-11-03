@@ -856,9 +856,8 @@ fn stringify_config_value(lua: &Lua, node: &ConfigValue) -> Result<String> {
 fn stringify_inline(inline: &Inline) -> String {
     match inline {
         Inline::Str(s) => s.text.clone(),
-        Inline::Space(_) => " ".to_string(),
-        Inline::SoftBreak(_) => "\n".to_string(),
-        Inline::LineBreak(_) => "\n".to_string(),
+        // Pandoc parity: both breaks read as a space (GH #1014).
+        Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => " ".to_string(),
         Inline::Emph(e) => stringify_inlines(&e.content),
         Inline::Strong(s) => stringify_inlines(&s.content),
         Inline::Underline(u) => stringify_inlines(&u.content),
@@ -1073,7 +1072,29 @@ mod tests {
             .eval()
             .unwrap();
 
-        assert_eq!(result, "\n");
+        assert_eq!(result, " ");
+    }
+
+    /// GH #1014: Pandoc's `stringify` renders a soft break and a line
+    /// break as a space, so wrapped prose reads as one line.
+    #[test]
+    fn test_stringify_breaks_as_space() {
+        let lua = create_test_lua();
+        assert_eq!(stringify(&lua, "pandoc.SoftBreak()"), " ");
+        assert_eq!(
+            stringify(
+                &lua,
+                "pandoc.Para({pandoc.Str('a'), pandoc.SoftBreak(), pandoc.Str('b')})"
+            ),
+            "a b"
+        );
+        assert_eq!(
+            stringify(
+                &lua,
+                "{pandoc.Str('a'), pandoc.LineBreak(), pandoc.Str('b')}"
+            ),
+            "a b"
+        );
     }
 
     #[test]
@@ -1865,20 +1886,21 @@ mod tests {
     }
 
     /// bd-lt7rgi90: `blocks_to_inlines` takes a `pandoc.Nodes`, resolved in
-    /// block context, alone or as an element of the list.
+    /// block context, alone or as an element of the list. (The default
+    /// `LineBreak` separator stringifies as a space, GH #1014.)
     #[test]
     fn test_blocks_to_inlines_accepts_nodes() {
         let lua = create_test_lua();
         let bti = |src: &str| stringify(&lua, &format!("pandoc.utils.blocks_to_inlines({src})"));
         assert_eq!(
             bti("pandoc.Nodes({pandoc.Para{'a'}, pandoc.Para{'b'}})"),
-            "a\nb"
+            "a b"
         );
         assert_eq!(bti("pandoc.Nodes('x')"), "x");
         assert_eq!(bti("pandoc.Nodes({})"), "");
         assert_eq!(
             bti("{pandoc.Nodes(pandoc.Para{'a'}), pandoc.Para{'b'}, pandoc.Nodes({})}"),
-            "a\nb"
+            "a b"
         );
     }
 }
