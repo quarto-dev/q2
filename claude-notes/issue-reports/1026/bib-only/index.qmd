@@ -1,0 +1,6 @@
+---
+format: html
+bibliography: refs.bib
+---
+
+See [@doe2020].
