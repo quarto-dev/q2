@@ -47,14 +47,23 @@ export interface PdfViewerOptions {
   onFrameReady?(win: Window, doc: Document): void;
 }
 
+/**
+ * How a `show()` ended: `shown` once its document is on screen and painted; `superseded` when a newer
+ * `show()` (or `dispose()`) replaced it before it was promoted, so it was dropped without ever being
+ * on screen. A superseded load is not an error: the newer document's own `show()` reports for it.
+ */
+export type ShowResult = 'shown' | 'superseded';
+
 export interface PdfViewerHandle {
   /**
    * Show `pdf`. A call with the same `key` as the previous one keeps the reader's zoom and scroll;
-   * a new `key` starts from the top. Resolves once the new document is on screen and painted;
-   * rejects if the viewer fails to open it (pdf.js reports an error, or nothing is drawn within
-   * `VIEWER_WATCHDOG_MS`), in which case the previous document stays on screen.
+   * a new `key` starts from the top. Resolves `shown` once the new document is on screen and
+   * painted, or `superseded` if a newer call replaced it first (its watchdog and listeners are
+   * cancelled, so it never reports afterwards). Rejects if the viewer fails to open it (pdf.js
+   * reports an error, or nothing is drawn within `VIEWER_WATCHDOG_MS`), in which case the previous
+   * document stays on screen.
    */
-  show(pdf: Uint8Array, options: { key: string; fileName: string }): Promise<void>;
+  show(pdf: Uint8Array, options: { key: string; fileName: string }): Promise<ShowResult>;
   dispose(): void;
 }
 
@@ -83,13 +92,19 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
   interface Frame {
     iframe: HTMLIFrameElement;
     blobUrl: string;
+    /** Stops the load reporting: clears its watchdog and listeners and settles `ready` as superseded. */
+    cancel: () => void;
   }
   let current: Frame | null = null;
   let pending: Frame | null = null;
   let lastKey: string | null = null;
   let disposed = false;
 
+  // Cancelling before removing matters: a discarded frame's watchdog would otherwise fire up to
+  // VIEWER_WATCHDOG_MS later and reject a `show()` whose document was never on screen, which the
+  // host then reports as an error over a perfectly good newer document (bd-xmb7rdc7).
   const discard = (f: Frame) => {
+    f.cancel();
     f.iframe.remove();
     URL.revokeObjectURL(f.blobUrl);
   };
@@ -107,19 +122,32 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
    * prevent (bd-c72wsugj). The gate is therefore: pages loaded, the initial view set, and the current
    * page's view in the FINISHED state, re-checked on every `pagerendered` and on `documentinit`.
    */
-  function load(pdf: Uint8Array, zIndex: number, restore: boolean): { frame: Frame; ready: Promise<void> } {
+  function load(pdf: Uint8Array, zIndex: number, restore: boolean): { frame: Frame; ready: Promise<boolean> } {
     const blobUrl = URL.createObjectURL(new Blob([pdf as BlobPart], { type: 'application/pdf' }));
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
     iframe.inert = true;
     iframe.style.cssText = `position:absolute;inset:0;width:100%;height:100%;border:0;display:block;z-index:${zIndex}`;
-    const ready = new Promise<void>((resolve, reject) => {
+    // `ready` resolves true once painted, false when cancelled (superseded or disposed) first. A cancel
+    // before the viewer has started just stops the handlers below from arming anything.
+    let cancelled = false;
+    let settle: (painted: boolean) => void = () => {};
+    let cleanup = () => {};
+    const cancel = () => {
+      cancelled = true;
+      cleanup();
+      settle(false);
+    };
+    const ready = new Promise<boolean>((resolve, reject) => {
+      settle = resolve;
       // `once`: the subscriptions and the watchdog below belong to this one document load.
       iframe.addEventListener('load', () => {
+        if (cancelled) return;
         const app = (iframe.contentWindow as ViewerWindow | null)?.PDFViewerApplication;
         if (!app) return reject(new Error('The PDF viewer did not start'));
         const bus = app.eventBus;
         app.initializedPromise.then(() => {
+          if (cancelled) return;
           let loaded = false;
           const timer = setTimeout(
             () => fail(new Error(`The PDF viewer drew nothing within ${VIEWER_WATCHDOG_MS / 1000} s`)),
@@ -147,7 +175,7 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
             try {
               const win = iframe.contentWindow;
               if (win) options.onFrameReady?.(win, win.document);
-              resolve();
+              resolve(true);
             } catch (e) {
               reject(e);
             }
@@ -156,6 +184,7 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
             done();
             reject(error);
           }
+          cleanup = done;
           bus.on('pagesloaded', onLoaded);
           bus.on('documentinit', check);
           bus.on('pagerendered', check);
@@ -165,10 +194,10 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
     });
     iframe.src = viewerUrl(base, blobUrl, restore);
     container.appendChild(iframe);
-    return { frame: { iframe, blobUrl }, ready };
+    return { frame: { iframe, blobUrl, cancel }, ready };
   }
 
-  async function open(pdf: Uint8Array, restore: boolean): Promise<void> {
+  async function open(pdf: Uint8Array, restore: boolean): Promise<ShowResult> {
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
     // Reopening a document in the live viewer empties it for a few frames, which flashes the pane's
     // background. So the new bytes load in a second iframe underneath, and it replaces the first (in
@@ -176,8 +205,9 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
     if (pending) discard(pending);
     const { frame, ready } = load(pdf, current ? 0 : 1, restore);
     pending = frame;
+    let painted: boolean;
     try {
-      await ready;
+      painted = await ready;
     } catch (e) {
       if (pending === frame) {
         discard(frame);
@@ -185,7 +215,7 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
       }
       throw e;
     }
-    if (pending !== frame || disposed) return; // superseded, or the pane closed
+    if (!painted || pending !== frame || disposed) return 'superseded'; // a newer load took over, or the pane closed
     pending = null;
     frame.iframe.style.zIndex = '2';
     frame.iframe.title = VIEWER_TITLE;
@@ -193,16 +223,17 @@ export function mountPdfViewer(container: HTMLElement, base: string, options: Pd
     frame.iframe.inert = false;
     if (current) discard(current);
     current = frame;
+    return 'shown';
   }
 
   return {
     async show(pdf, { key }) {
-      if (disposed) return;
+      if (disposed) return 'superseded';
       // The history is keyed by fingerprint alone: start over for another file, and for the first document.
       const restore = lastKey === key;
       if (!restore) localStorage.removeItem(PDF_HISTORY_KEY);
       lastKey = key;
-      await open(pdf, restore);
+      return open(pdf, restore);
     },
     dispose() {
       disposed = true;

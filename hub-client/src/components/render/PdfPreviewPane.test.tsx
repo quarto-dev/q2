@@ -7,6 +7,8 @@ let onPdf: (pdf: Uint8Array, info: { path: string; fileName: string; seq: number
 const shown: { key: string }[] = [];
 /** When set, the viewer rejects the next show with this message (it keeps the previous document). */
 let showError: string | null = null;
+/** What the viewer's show resolves with: `superseded` means a newer PDF replaced it before it was on screen. */
+let showResult: 'shown' | 'superseded' = 'shown';
 let warmFlag = true;
 let embedFlag = false;
 let nativeCreated = 0;
@@ -47,6 +49,7 @@ vi.mock('../../pandoc/pdfViewer', () => ({
     show: async (_b: Uint8Array, o: { key: string }) => {
       if (showError) throw new Error(showError);
       shown.push(o);
+      return showResult;
     },
     dispose: vi.fn(),
   }),
@@ -63,6 +66,7 @@ beforeEach(() => {
   starts.length = 0;
   shown.length = 0;
   showError = null;
+  showResult = 'shown';
   warmFlag = true;
   embedFlag = false;
   nativeCreated = 0;
@@ -152,6 +156,24 @@ describe('PdfPreviewPane', () => {
     setStatus({ phase: 'working', clickId: 3, format: FORMAT, stage: 'preparing' });
     expect(screen.queryByTestId('pdf-preview-error')).toBeNull();
     expect(screen.getByTestId('pdf-preview-status')).toBeTruthy();
+  });
+
+  it('a superseded show is neither a PDF on screen nor an error; the newer PDF reports for the pane', async () => {
+    render(<PdfPreviewPane path="/p/doc.qmd" content="a" />);
+    await act(async () => void vi.advanceTimersByTime(0));
+    // The first PDF's load is replaced by the second before it painted (a fast edit during a slow first compile).
+    showResult = 'superseded';
+    await act(async () => onPdf(new Uint8Array([1]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 1 }));
+    expect(screen.queryByTestId('pdf-preview-error')).toBeNull();
+    setStatus({ phase: 'working', clickId: 2, format: FORMAT, stage: 'preparing' });
+    // Still no PDF on screen: the pane shows the loading state, not the "Updating" status.
+    expect(screen.getByTestId('pdf-preview-loading')).toBeTruthy();
+    expect(screen.queryByTestId('pdf-preview-status')).toBeNull();
+    showResult = 'shown';
+    await act(async () => onPdf(new Uint8Array([2]), { path: '/p/doc.qmd', fileName: 'doc.pdf', seq: 2 }));
+    expect(screen.queryByTestId('pdf-preview-loading')).toBeNull();
+    expect(screen.getByTestId('pdf-preview-status')).toBeTruthy();
+    expect(screen.queryByTestId('pdf-preview-error')).toBeNull();
   });
 
   it('passes the project key to start, and a project change with the same path starts at once with the new key', async () => {

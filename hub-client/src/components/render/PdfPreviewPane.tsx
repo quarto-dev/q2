@@ -71,7 +71,9 @@ export default function PdfPreviewPane({
     const viewer = mountPdfViewer(hostRef.current);
     const onPdf = (pdf: Uint8Array, info: { path: string; fileName: string }) => {
       viewer.show(pdf, { key: info.path, fileName: info.fileName }).then(
-        () => {
+        (result) => {
+          // A superseded load was never on screen: the newer PDF's own show() reports for the pane.
+          if (result === 'superseded') return;
           setHasPdf(true);
           setViewerError(null);
         },
