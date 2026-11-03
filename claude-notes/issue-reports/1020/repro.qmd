@@ -1,0 +1,9 @@
+---
+format: html
+---
+
+::: {#nte-x .callout-note}
+Body.
+:::
+
+See @nte-x.
