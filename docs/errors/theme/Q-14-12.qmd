@@ -1,0 +1,40 @@
+---
+title: "`theme: pandoc` is not supported"
+description: "Quarto 2 does not implement Quarto 1's Bootstrap-free `pandoc` theme yet; the entry is ignored and the page uses the default Bootstrap theme."
+code: Q-14-12
+subsystem: theme
+status: stub
+since: "99.9.9"
+categories:
+  - theme
+---
+
+# `Q-14-12` — `theme: pandoc` Is Not Supported
+
+> Quarto 2 does not implement Quarto 1's Bootstrap-free `pandoc`
+> theme yet; the entry is ignored and the page uses the default
+> Bootstrap theme.
+
+## What this means
+
+In Quarto 1, `theme: pandoc` renders a page that looks like plain
+Pandoc HTML output, with no Bootstrap. Quarto 2 does not have that
+page style yet. It ignores the `pandoc` entry and renders the page
+with the default Bootstrap theme, as if `theme:` were not set. This
+is a warning, not an error: the render completes.
+
+## How to fix
+
+Pick the option closest to what you want:
+
+- **No Bootstrap at all.** `theme: none` drops Bootstrap's CSS and
+  JavaScript. The page is unstyled, which is closer to Pandoc's
+  output than Bootstrap is.
+- **Plain Bootstrap.** `theme: default`, or remove `theme:`, to keep
+  the result you get today without the warning.
+
+```yaml
+format:
+  html:
+    theme: none
+```

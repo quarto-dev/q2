@@ -1224,6 +1224,63 @@ fn light_dark_pair(value: &ConfigValue) -> Option<LightDarkPair<'_>> {
     })
 }
 
+/// Quarto 1 theme names that contribute no Bootswatch layer and are
+/// skipped by [`extract_theme_specs`] (GH #1036):
+///
+/// - `default` — plain Bootstrap, exactly what an absent `theme:`
+///   compiles.
+/// - `pandoc` — in Quarto 1, a Pandoc-style page without Bootstrap.
+///   Quarto 2 does not implement that page yet (it needs a different
+///   HTML pipeline), so the entry is ignored and the page gets plain
+///   Bootstrap; [`ignored_pandoc_themes`] reports the entries so
+///   quarto-core can warn (Q-14-12).
+fn is_layerless_theme_name(s: &str) -> bool {
+    s.eq_ignore_ascii_case("default") || is_pandoc_theme_name(s)
+}
+
+fn is_pandoc_theme_name(s: &str) -> bool {
+    s.eq_ignore_ascii_case("pandoc")
+}
+
+/// Locations of every `pandoc` entry in the format-flattened `theme:`
+/// value: the scalar, array items, and either half of a
+/// `light:`/`dark:` pair. Those entries are ignored when the theme is
+/// compiled (see [`is_layerless_theme_name`]); quarto-sass only
+/// reports them, and `CompileThemeCssStage` turns each one into a
+/// Q-14-12 warning (the same split as Q-14-5).
+pub fn ignored_pandoc_themes(config: &ConfigValue) -> Vec<SourceInfo> {
+    fn collect(value: &ConfigValue, out: &mut Vec<SourceInfo>) {
+        if let Some(s) = config_value_as_text(value) {
+            if is_pandoc_theme_name(&s) {
+                out.push(value.source_info.clone());
+            }
+        } else if let Some(items) = value.as_array() {
+            for item in items {
+                if config_value_as_text(item).is_some_and(|s| is_pandoc_theme_name(&s)) {
+                    out.push(item.source_info.clone());
+                }
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    let Some(value) = config.get("theme") else {
+        return out;
+    };
+    match light_dark_pair(value) {
+        Some(pair) => {
+            if let Some(light) = pair.light {
+                collect(light, &mut out);
+            }
+            if let Some((dark, _)) = pair.dark {
+                collect(dark, &mut out);
+            }
+        }
+        None => collect(value, &mut out),
+    }
+    out
+}
+
 /// Extract theme specifications from a ConfigValue.
 ///
 /// Handles both string and array formats. Theme values from document
@@ -1233,6 +1290,9 @@ fn light_dark_pair(value: &ConfigValue) -> Option<LightDarkPair<'_>> {
 fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<(ThemeSpec, SourceInfo)>, SassError> {
     // Handle string value (single theme) — covers both Scalar and PandocInlines
     if let Some(s) = config_value_as_text(value) {
+        if is_layerless_theme_name(&s) {
+            return Ok(Vec::new());
+        }
         let spec = ThemeSpec::parse(&s).map_err(|e| e.with_location(value.source_info.clone()))?;
         return Ok(vec![(spec, value.source_info.clone())]);
     }
@@ -1242,6 +1302,9 @@ fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<(ThemeSpec, SourceInfo
         let mut specs = Vec::with_capacity(items.len());
         for item in items {
             if let Some(s) = config_value_as_text(item) {
+                if is_layerless_theme_name(&s) {
+                    continue;
+                }
                 specs.push((
                     ThemeSpec::parse(&s).map_err(|e| e.with_location(item.source_info.clone()))?,
                     item.source_info.clone(),
@@ -1834,7 +1897,7 @@ mod tests {
         let theme_source = SourceInfo::original(quarto_source_map::FileId(7), 500, 510);
 
         let theme_value = ConfigValue {
-            value: ConfigValueKind::scalar(Yaml::String("default".to_string())),
+            value: ConfigValueKind::scalar(Yaml::String("nosuchtheme".to_string())),
             source_info: theme_source.clone(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1851,7 +1914,7 @@ mod tests {
 
         match ThemeConfig::from_config_value(&config) {
             Err(SassError::UnknownTheme { name, location }) => {
-                assert_eq!(name, "default");
+                assert_eq!(name, "nosuchtheme");
                 assert_eq!(
                     location.as_ref(),
                     Some(&theme_source),
@@ -1905,6 +1968,84 @@ mod tests {
             }
             other => panic!("expected UnknownTheme error, got: {:?}", other),
         }
+    }
+
+    // === Quarto 1's `default` / `pandoc` theme names (GH #1036) ===
+
+    #[test]
+    fn test_default_and_pandoc_themes_contribute_no_layer() {
+        // `default` is plain Bootstrap; `pandoc` is ignored (with a
+        // Q-14-12 warning from quarto-core). Either way the compile
+        // sees no theme layer and Bootstrap stays on.
+        for name in ["default", "Default", "pandoc", "PANDOC"] {
+            let config = ThemeConfig::from_config_value(&flattened_config_with_theme_string(name))
+                .unwrap_or_else(|e| panic!("theme: {name} should parse, got {e:?}"));
+            assert!(config.themes.is_empty(), "theme: {name}");
+            assert!(config.theme_locations.is_empty(), "theme: {name}");
+            assert!(!config.suppress_bootstrap, "theme: {name}");
+        }
+    }
+
+    #[test]
+    fn test_default_and_pandoc_skipped_in_arrays_and_pairs() {
+        let config = ThemeConfig::from_config_value(&config_with_theme_value(array_value(&[
+            "default",
+            "custom.scss",
+            "pandoc",
+        ])))
+        .unwrap();
+        assert_eq!(
+            config.themes,
+            vec![ThemeSpec::Custom(PathBuf::from("custom.scss"))]
+        );
+        assert_eq!(config.theme_locations.len(), 1);
+
+        let config = ThemeConfig::from_config_value(&config_with_theme_value(map_value(vec![
+            map_entry("light", scalar_value("default")),
+            map_entry("dark", scalar_value("darkly")),
+        ])))
+        .unwrap();
+        assert!(config.themes.is_empty());
+        let dark = config.dark.expect("dark variant");
+        assert_eq!(
+            dark.themes,
+            vec![ThemeSpec::BuiltIn(crate::themes::BuiltInTheme::Darkly)]
+        );
+    }
+
+    #[test]
+    fn test_ignored_pandoc_themes_reports_each_entry() {
+        let loc = |n| SourceInfo::original(quarto_source_map::FileId(3), n, n + 6);
+        let at = |s: &str, n| ConfigValue {
+            source_info: loc(n),
+            ..scalar_value(s)
+        };
+
+        assert_eq!(
+            ignored_pandoc_themes(&config_with_theme_value(at("pandoc", 10))),
+            vec![loc(10)]
+        );
+        let array = ConfigValue {
+            value: ConfigValueKind::Array(vec![at("cosmo", 20), at("pandoc", 30)]),
+            ..scalar_value("")
+        };
+        assert_eq!(
+            ignored_pandoc_themes(&config_with_theme_value(array)),
+            vec![loc(30)]
+        );
+        let pair = map_value(vec![
+            map_entry("light", at("pandoc", 40)),
+            map_entry("dark", at("Pandoc", 50)),
+        ]);
+        assert_eq!(
+            ignored_pandoc_themes(&config_with_theme_value(pair)),
+            vec![loc(40), loc(50)]
+        );
+
+        assert!(
+            ignored_pandoc_themes(&config_with_theme_value(scalar_value("default"))).is_empty()
+        );
+        assert!(ignored_pandoc_themes(&empty_config()).is_empty());
     }
 
     // === Light/dark theme map tests (bd-0pic6 epic, phase A1) ===
