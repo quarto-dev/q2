@@ -1,0 +1,23 @@
+---
+# contract: a first stdout output beginning title= becomes the card title
+title: "C13 Dynamic Title"
+format: dashboard
+---
+
+::: {.cell}
+
+::: {.cell-output .cell-output-stdout}
+
+```
+title= C13-DYNAMIC Title
+```
+
+:::
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

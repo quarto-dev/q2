@@ -7442,6 +7442,9 @@ name = "quarto-output-extract"
 version = "0.39.0"
 dependencies = [
  "quick-xml 0.39.4",
+ "scraper",
+ "serde",
+ "toml 0.9.12+spec-1.1.0",
  "zip",
 ]
 

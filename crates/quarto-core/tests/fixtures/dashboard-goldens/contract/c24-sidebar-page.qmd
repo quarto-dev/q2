@@ -1,0 +1,31 @@
+---
+# contract: a level-2 .sidebar heading makes a page sidebar with width
+title: "C24 Sidebar"
+format: dashboard
+---
+
+## {.sidebar width="300px"}
+
+C24-SIDEBAR text.
+
+## Column
+
+::: {.cell title="C24-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C24-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

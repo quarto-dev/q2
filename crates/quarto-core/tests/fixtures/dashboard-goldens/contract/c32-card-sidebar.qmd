@@ -1,0 +1,35 @@
+---
+# contract: card sidebars: next (left), previous (right), width
+title: "C32 Card Sidebar"
+format: dashboard
+---
+
+## Row
+
+::: {.card-sidebar width="150px"}
+C32-LEFT-SIDEBAR
+:::
+
+::: {.cell title="C32-TARGET-NEXT"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C32-TARGET-PREV"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.card-sidebar target="previous"}
+C32-RIGHT-SIDEBAR
+:::

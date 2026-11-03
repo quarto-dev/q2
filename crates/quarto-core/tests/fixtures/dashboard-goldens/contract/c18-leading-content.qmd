@@ -1,0 +1,19 @@
+---
+# contract: content before the first heading is emitted without card chrome
+title: "C18 Leading"
+format: dashboard
+---
+
+C18-LEADING paragraph above everything.
+
+## Row
+
+::: {.cell title="C18-CARD"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

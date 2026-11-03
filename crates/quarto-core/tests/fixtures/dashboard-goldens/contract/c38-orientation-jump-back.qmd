@@ -1,0 +1,57 @@
+---
+# contract: orientation after jumping back more than one level
+title: "C38 Jump Back"
+format: dashboard
+---
+
+# Page
+
+## Row
+
+### Column
+
+#### Row
+
+::: {.cell title="C38-DEEP-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+#### Row
+
+::: {.cell title="C38-DEEP-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Row
+
+::: {.cell title="C38-AFTER-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C38-AFTER-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

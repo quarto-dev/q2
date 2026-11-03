@@ -47,6 +47,7 @@ pub mod crossref_number_parity;
 pub mod crossref_numbering_matrix;
 pub mod custom_node_schema_conformance;
 pub mod custom_project_type;
+pub mod dashboard_goldens;
 pub mod document_profile_pipeline;
 pub mod echo_engine_e2e;
 pub mod editorial_marks_ooxml;

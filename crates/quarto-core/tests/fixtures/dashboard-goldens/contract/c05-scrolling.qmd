@@ -1,0 +1,37 @@
+---
+# contract: scrolling: true lays out content at natural height
+title: "C05 Scrolling"
+format:
+  dashboard:
+    scrolling: true
+---
+
+::: {.cell title="C05-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C05-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C05-C"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

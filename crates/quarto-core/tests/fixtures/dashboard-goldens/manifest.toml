@@ -1,0 +1,596 @@
+# Dashboard compatibility corpus manifest.
+# Schema: crates/quarto-output-extract/src/dashboard_corpus.rs. Plan:
+# claude-notes/plans/2026-11-03-dashboard-format-port.md (Phase 0). Every .qmd/.ipynb
+# under contract/, q1/ and regressions/ must appear here exactly once.
+#
+# status: pending (skipped; note names the phase) | match | divergence | deferred
+# q1_golden = false: Q1 cannot render it; note says why.
+
+[[fixture]]
+path = "acceptance/gapminder.qmd"
+requires = ["jupyter"]
+status = "pending"
+q1_golden = false
+note = "Phase 4 (cards and tabsets): real-world acceptance dashboard, the quarto-web gapminder example (rows with heights, titled cards, a tabset, document expandable: false with a per-card override). No Q1 golden yet: capture needs Python package plotly, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "acceptance/navigation.qmd"
+requires = ["jupyter"]
+status = "pending"
+note = "Phase 7 (navigation chrome): real-world acceptance, the quarto-web navigation example (logo, nav-buttons, pages)"
+
+[[fixture]]
+path = "acceptance/valuebox.qmd"
+requires = ["jupyter"]
+status = "pending"
+note = "Phase 5 (value boxes): real-world acceptance, the quarto-web value box example"
+
+[[fixture]]
+path = "contract/c01-rows-default.qmd"
+status = "pending"
+note = "Phase 3 (layout core): level-2 headings are rows; height percentages; cells become cards laid out in columns"
+
+[[fixture]]
+path = "contract/c02-orientation-columns.qmd"
+status = "pending"
+note = "Phase 3 (layout core): orientation: columns flips the first level; width percentages"
+
+[[fixture]]
+path = "contract/c03-nested-levels.qmd"
+status = "pending"
+note = "Phase 3 (layout core): alternating orientation at each heading level; px, %, and unsized mix"
+
+[[fixture]]
+path = "contract/c04-fill-flow-rows.qmd"
+status = "pending"
+note = "Phase 3 (layout core): explicit .fill / .flow on row headings (Q1 ignores these for grid sizing; D5 fixes). Expected divergence: D5 Q2: container .fill/.flow honoured for sizing"
+
+[[fixture]]
+path = "contract/c05-scrolling.qmd"
+status = "pending"
+note = "Phase 3 (layout core): scrolling: true lays out content at natural height"
+
+[[fixture]]
+path = "contract/c06-pages.qmd"
+status = "pending"
+note = "Phase 3 (layout core): level-1 headings are pages; per-page orientation and scrolling attributes"
+
+[[fixture]]
+path = "contract/c07-tabset-row.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): .tabset on a row; each titled cell becomes a tab"
+
+[[fixture]]
+path = "contract/c08-tabset-multi-card.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): tabs holding several cards via a deeper heading level"
+
+[[fixture]]
+path = "contract/c09-tabset-in-column.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): tabset nested in a column of a row"
+
+[[fixture]]
+path = "contract/c10-tabset-markdown-cards.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): tabs made of markdown .card divs with title attributes"
+
+[[fixture]]
+path = "contract/c11-card-div-options.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): .card div options: title, padding, height, min/max-height, expandable, fill"
+
+[[fixture]]
+path = "contract/c12-cell-options.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): cell options arrive as cell div attributes: title, padding, expandable; classes flow/expandable"
+
+[[fixture]]
+path = "contract/c13-dynamic-title.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): a first stdout output beginning title= becomes the card title"
+
+[[fixture]]
+path = "contract/c14-hidden-empty-asis-cells.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): cells with no output, hidden cells and output: asis cells do not become cards"
+
+[[fixture]]
+path = "contract/c15-card-footer.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): a blockquote or .card-footer div becomes the card footer"
+
+[[fixture]]
+path = "contract/c16-card-headings-demoted.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): headings inside a card are demoted to h4-or-lower divs"
+
+[[fixture]]
+path = "contract/c17-literal-card-markup.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): explicit .card-header + .card-body markup passes through"
+
+[[fixture]]
+path = "contract/c18-leading-content.qmd"
+status = "pending"
+note = "Phase 3 (layout core): content before the first heading is emitted without card chrome"
+
+[[fixture]]
+path = "contract/c19-loose-markdown.qmd"
+status = "pending"
+note = "Phase 3 (layout core): loose markdown blocks in a row merge into one flow card"
+
+[[fixture]]
+path = "contract/c20-valuebox-markdown.qmd"
+status = "pending"
+note = "Phase 5 (value boxes): markdown .valuebox: color aliases, hex, bg/fg colors, icon, title attribute, extra content"
+
+[[fixture]]
+path = "contract/c21-valuebox-cell-python.qmd"
+status = "pending"
+note = "Phase 5 (value boxes): content: valuebox cell whose printed Python dict supplies options"
+
+[[fixture]]
+path = "contract/c22-valuebox-cell-r.qmd"
+status = "pending"
+note = "Phase 5 (value boxes): content: valuebox cell whose printed R list supplies options"
+
+[[fixture]]
+path = "contract/c23-valuebox-showcase.qmd"
+status = "pending"
+note = "Phase 5 (value boxes): value-box showcase position (Q1 ignores it; D5 implements). Expected divergence: D5 Q11/Q13: showcase position implemented"
+
+[[fixture]]
+path = "contract/c24-sidebar-page.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): a level-2 .sidebar heading makes a page sidebar with width"
+
+[[fixture]]
+path = "contract/c25-sidebar-right.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): a sidebar after content goes on the right"
+
+[[fixture]]
+path = "contract/c26-sidebar-global.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): a level-1 .sidebar heading is global across pages"
+
+[[fixture]]
+path = "contract/c27-sidebar-inline.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): a sidebar inside a row (inline)"
+
+[[fixture]]
+path = "contract/c28-toolbar-top.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): a level-2 .toolbar heading makes a page toolbar"
+
+[[fixture]]
+path = "contract/c29-toolbar-bottom-height.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): a toolbar after content goes to the bottom; height (Q1 ignores; D5 implements). Expected divergence: D5 Q1: toolbar height implemented"
+
+[[fixture]]
+path = "contract/c30-toolbar-global.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): a level-1 .toolbar heading is global across pages"
+
+[[fixture]]
+path = "contract/c31-card-toolbar.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): card toolbars: div and cell forms, next/previous targets, footer, and footer-for an id inside the target card"
+
+[[fixture]]
+path = "contract/c32-card-sidebar.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): card sidebars: next (left), previous (right), width"
+
+[[fixture]]
+path = "contract/c33-content-sidebar-toolbar-cells.qmd"
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): content: sidebar / content: toolbar cells (Q1 schema-only; D5 implements). Expected divergence: D5 Q9: content: sidebar/toolbar implemented"
+
+[[fixture]]
+path = "contract/c34-nav-buttons.qmd"
+status = "pending"
+note = "Phase 7 (navigation chrome): nav-buttons aliases and custom nav items"
+
+[[fixture]]
+path = "contract/c35-navbar-meta.qmd"
+status = "pending"
+note = "Phase 7 (navigation chrome): navbar title, subtitle, multiple authors and logo"
+
+[[fixture]]
+path = "contract/c36-dark-mode-toggle.qmd"
+status = "pending"
+note = "Phase 7 (navigation chrome): multi-page dashboard with light and dark themes gets a color-scheme toggle"
+
+[[fixture]]
+path = "contract/c37-orientation-skip-level.qmd"
+status = "pending"
+note = "Phase 3 (layout core): orientation when heading levels are skipped (Q1 toggles globally; D5 uses a level stack). Expected divergence: D5 Q3: orientation by level stack"
+
+[[fixture]]
+path = "contract/c38-orientation-jump-back.qmd"
+status = "pending"
+note = "Phase 3 (layout core): orientation after jumping back more than one level. Expected divergence: D5 Q3: orientation by level stack"
+
+[[fixture]]
+path = "contract/c39-bslib-raw-output.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): raw HTML output containing bslib- markup is lifted out of the card"
+
+[[fixture]]
+path = "contract/c40-title-inline-markup.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): card titles keep inline markup (code, emphasis, math) in place"
+
+[[fixture]]
+path = "contract/c41-expandable-doc-false.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): document-level expandable: false"
+
+[[fixture]]
+path = "contract/c42-valuebox-row-then-charts.qmd"
+status = "pending"
+note = "Phase 3 (layout core): common layout: a value-box row then a chart row (value-box rows flow)"
+
+[[fixture]]
+path = "contract/c43-card-toolbar-own-id.qmd"
+status = "pending"
+q1_golden = false
+note = "Phase 6 (sidebars and toolbars): header-for / footer-for naming the target card's or cell's own id. Q1 only resolves ids *inside* a card and fails fatally here (dashboard.lua:732); D5 accepts the own id. Expected divergence: D5: header-for/footer-for accept the target's own id (Q1 is fatal)"
+
+[[fixture]]
+path = "q1/0-card-syntax.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/0-layout-headings.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/1-card-advanced.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/1-card-cell-options-execute.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/1-card-cell-options.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/1-card-cell-syntax.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/1-card-content.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/1-card-tabset-advanced.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/2-layout-cell-attr.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/2-layout-cells-simple.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/2-layout-complex.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/2-layout-divs.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/2-layout-flow-fill-2.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/2-layout-flow-fill.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/2-layout-height.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/3-valuebox-knitr.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 5 (value boxes): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/3-valuebox-python.qmd"
+requires = ["jupyter"]
+status = "pending"
+note = "Phase 5 (value boxes): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/3-valuebox-static.qmd"
+status = "pending"
+note = "Phase 5 (value boxes): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/4-tabset-basic.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/4-tabset-footer.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/4-tabset-nested.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/5-inputpanel.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/5-sample-layout-cells.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/5-sample-layout-scrolling.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/5-sample-layout.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/6-broken-example-card.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/6-sidebar-columns.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/6-sidebar-global.qmd"
+requires = ["knitr"]
+status = "pending"
+q1_golden = false
+note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture. No Q1 golden yet: capture needs R packages bsicons and shiny, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "q1/6-sidebar.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/7-navbar-social-nopages.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/7-navbar-social.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/7-navbar.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/8-pages.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/9-bslib.qmd"
+requires = ["knitr"]
+status = "pending"
+q1_golden = false
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture. No Q1 golden yet: capture needs R package bsicons, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "q1/9-no-title.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 2 (page shell): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/9-page-fill-flow.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/9-page-orientation.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/9-r-cells.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/9-theme-dark.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/bugs/8552.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/content/finance.qmd"
+requires = ["jupyter"]
+status = "deferred"
+q1_golden = false
+note = "Shiny dashboards: bd-c9gy4cez. No Q1 golden yet: capture needs Python package shiny, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "q1/content/flow.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/content/mdtables.qmd"
+requires = ["jupyter"]
+status = "deferred"
+q1_golden = false
+note = "itables / DataTables: bd-6f0kslxu. No Q1 golden yet: capture needs Python packages itables and seaborn, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "q1/content/ojs.qmd"
+status = "deferred"
+note = "OJS cells: bd-oq1i764m"
+
+[[fixture]]
+path = "q1/content/ojs2.qmd"
+status = "deferred"
+note = "OJS cells: bd-oq1i764m"
+
+[[fixture]]
+path = "q1/content/penguins.qmd"
+requires = ["jupyter"]
+status = "deferred"
+q1_golden = false
+note = "Shiny dashboards: bd-c9gy4cez. No Q1 golden yet: capture needs Python packages shiny and seaborn, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "q1/content/rtables.qmd"
+requires = ["knitr"]
+status = "deferred"
+q1_golden = false
+note = "DT / DataTables: bd-6f0kslxu. No Q1 golden yet: capture needs R package DT, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "q1/loose-content.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "q1/notebooks/gapminder.ipynb"
+status = "pending"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+
+[[fixture]]
+path = "regressions/10334.qmd"
+status = "pending"
+note = "Phase 7 (navigation chrome): multiple authors in the navbar (Q1 #10334)"
+
+[[fixture]]
+path = "regressions/11150.qmd"
+requires = ["jupyter"]
+status = "pending"
+q1_golden = false
+note = "Phase 4 (cards and tabsets): ipynb-shell-interactivity: all shows every top-level output (Q1 #11150; needs bd-uqma6gec). No Q1 golden yet: capture needs Python packages plotly and seaborn, not installed on the capture machine (2026-11-03)"
+
+[[fixture]]
+path = "regressions/9796.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): an output-less cell makes no card (Q1 #9796)"
+
+[[fixture]]
+path = "regressions/color-scheme-toggle-dashboard.qmd"
+status = "pending"
+note = "Phase 7 (navigation chrome): dark-mode color-scheme toggle (Q1 dark-mode smoke)"
+
+[[fixture]]
+path = "regressions/issue-10340.qmd"
+status = "pending"
+note = "Phase 4 (cards and tabsets): inline markup stays in place in card titles (Q1 #10340)"
+
+[[fixture]]
+path = "regressions/issue-11338.qmd"
+status = "deferred"
+note = "DataTables sentinel stripping (#11338): bd-6f0kslxu"
+
+[[fixture]]
+path = "regressions/issue-11549.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): tabset cards without titles get .dashboard-card-no-title (Q1 #11549)"
+
+[[fixture]]
+path = "regressions/issue-14646.qmd"
+requires = ["jupyter"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): inline code stays in place in card titles (Q1 #14646)"
+
+[[fixture]]
+path = "regressions/issue-14684-dashboard.qmd"
+status = "pending"
+note = "Phase 2 (page shell): skip-to-content link (Q1 #14684)"
+
+[[fixture]]
+path = "regressions/issue-15023.qmd"
+requires = ["jupyter"]
+status = "pending"
+note = "Phase 4 (cards and tabsets): bslib raw output detection; .card.cell kept (Q1 #15023)"
+
+[[fixture]]
+path = "regressions/issue-9056.ipynb"
+status = "pending"
+note = "Phase 4 (cards and tabsets): no empty .card-body.flow from notebook markdown cells (Q1 #9056)"

@@ -1,0 +1,15 @@
+---
+# contract: tabs made of markdown .card divs with title attributes
+title: "C10 Tabset Markdown"
+format: dashboard
+---
+
+## Row {.tabset}
+
+::: {.card title="C10-FIRST"}
+First tab text.
+:::
+
+::: {.card title="C10-SECOND"}
+Second tab text.
+:::

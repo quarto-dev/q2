@@ -1,0 +1,53 @@
+---
+# contract: level-1 headings are pages; per-page orientation and scrolling attributes
+title: "C06 Pages"
+format: dashboard
+---
+
+# Bills
+
+::: {.cell title="C06-BILLS"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+# Flippers {orientation="columns" scrolling="true"}
+
+## Column
+
+::: {.cell title="C06-F1"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C06-F2"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Column
+
+::: {.cell title="C06-F3"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

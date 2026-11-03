@@ -1,0 +1,21 @@
+---
+# contract: a level-2 .toolbar heading makes a page toolbar
+title: "C28 Toolbar"
+format: dashboard
+---
+
+## {.toolbar}
+
+C28-TOOLBAR text.
+
+## Row
+
+::: {.cell title="C28-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

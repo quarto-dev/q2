@@ -1,0 +1,31 @@
+---
+# contract: markdown .valuebox: color aliases, hex, bg/fg colors, icon, title attribute, extra content
+title: "C20 Valueboxes"
+format: dashboard
+---
+
+## Row
+
+::: {.valuebox icon="pencil" color="primary"}
+C20-ARTICLES
+
+45
+:::
+
+::: {.valuebox icon="chat" color="#ff00aa"}
+C20-HEX
+
+126
+:::
+
+::: {.valuebox bg-color="#003366" fg-color="#ffffff" title="C20-BGFG"}
+50
+:::
+
+::: {.valuebox color="danger"}
+C20-EXTRA
+
+7
+
+Extra content line.
+:::

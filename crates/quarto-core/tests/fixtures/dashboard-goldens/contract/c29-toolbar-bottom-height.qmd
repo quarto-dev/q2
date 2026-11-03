@@ -1,0 +1,21 @@
+---
+# contract: a toolbar after content goes to the bottom; height (Q1 ignores; D5 implements)
+title: "C29 Toolbar Bottom"
+format: dashboard
+---
+
+## Row
+
+::: {.cell title="C29-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## {.toolbar height="80px"}
+
+C29-TOOLBAR text.

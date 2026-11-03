@@ -1,0 +1,41 @@
+---
+# contract: orientation: columns flips the first level; width percentages
+title: "C02 Columns"
+format:
+  dashboard:
+    orientation: columns
+---
+
+## Column {width=60%}
+
+::: {.cell title="C02-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Column {width=40%}
+
+::: {.cell title="C02-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C02-C"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

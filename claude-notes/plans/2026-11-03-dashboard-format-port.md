@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: draft  # all decisions settled 2026-11-03; awaiting go-ahead; nothing implemented
+status: in-progress  # Phase 0 done 2026-11-03; Phase 1 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -233,10 +233,12 @@ The goal is "very familiar, straightforward to port", not byte compatibility. Fi
 |---|---|---|
 | Q1 | Toolbar `height` / `position` options are never read (undefined `kSidebarHeightAttr`, nil argument at `dashboard.lua:694`) | Implement `height=` on toolbars as documented. |
 | Q2 | Container `.fill` / `.flow` on headings is ignored for grid sizing (only cards' `data-fill` is read) | Honour it. The docs promise it ("specify filling or flowing behavior using the `.fill` and `.flow` classes applied to a row"). |
-| Q3 | Orientation is a global toggle flipped on every heading-level change | Use a stack keyed by level. This differs from Q1 only for documents that skip levels or jump back more than one level. Check against the corpus in Phase 0; if any real fixture differs, revisit. |
+| Q3 | Orientation is a global toggle flipped on every heading-level change (`dashboard.lua:481`) | Orientation by nesting depth in the section tree. **Measured in Phase 0 (2026-11-03):** besides the two contract fixtures written for it (c37, c38), 2 of the 55 Q1 and regression fixtures change: `q1/3-valuebox-knitr.qmd` and `q1/loose-content.qmd`. In both, a deeper heading (`### TODOS`) comes before shallower `##` sections, and Q1\'s toggle then lays the `##` sections out the opposite way from the documented rule (`##` under `orientation: rows` is a row). The depth rule matches the docs, so keep it; the two become `divergence` fixtures in Phase 3. |
 | Q4 | Headings in sidebars and toolbars are not demoted (undefined `contents`, `dashboard.lua:40`) | Demote, as cards already do. |
 | Q9 | `content: sidebar` / `content: toolbar` are in the schema but do nothing | Implement them, since they are cheap once the model exists. The alternative is a Q-code warning ("use a `{.sidebar}` heading"). |
 | Q11/13 | `showcase=` / `showcase-position` are effectively ignored | Implement `showcase-position` (`left-center`, `top-right`, `bottom`), all of which bslib supports. |
+| Q14 | Markdown value-box title nests paragraphs: `<p class="value-box-title"><p>Title</p></p>` (`valuebox.lua:171` takes the title as a `Para`; the TS pass turns its wrapper into a `p`). Browsers close the outer `p` early, so the documented form (`::: {.valuebox}` with the title as the first paragraph) shows an empty title slot and the title as an unstyled paragraph. Found by the Phase 0 goldens (`contract/c20`, `q1/3-valuebox-static`). | Emit the title's inlines inside `p.value-box-title`. |
+| Q15 | `header-for` / `footer-for` only resolve an id *inside* the target card; the card\'s or cell\'s own id is a fatal error (`dashboard.lua:732`). Found while writing `contract/c31`. | Accept the target\'s own id too (`contract/c43`, no Q1 golden). An id that resolves nowhere is a located `Q-*` error. |
 | Q5–Q8, Q10 | Internal no-ops | Nothing to port. |
 
 ### D6. Parse value-box output with a safe parser, and diagnose failures `[decided]` (lever 1)
@@ -307,14 +309,22 @@ Filed 2026-11-03, each `discovered-from` the epic: DataTables/itables bd-6f0kslx
 
 Strict TDD per `AGENTS.md`. Every phase ends with `cargo xtask verify` green, a real `q2 render` of a fixture with the output inspected, and the checkboxes updated here.
 
-### Phase 0: Compatibility corpus
+### Phase 0: Compatibility corpus (done 2026-11-03)
 
-- [ ] Copy the Q1 fixtures into `crates/quarto/tests/smoke-all/dashboard/`. The sources are the 45 entries in `tests/docs/smoke-all/dashboard/`, plus the regression fixtures: #9056, #9796, #10334, #10340, #11549, #11150, #14646, #14684, #15023, the dark-mode toggle, and the brand logo variants. Do not reference `external-sources/` at test time.
-- [ ] Render each with Q1 (pinned binary) and save the DOM shape as goldens, in the same way as `pandoc-goldens`. Use structural assertions (`ensureHtmlElements`), not byte snapshots, because Bootstrap CSS hashes and script tags differ between Q1 and Q2.
-- [ ] Write contract fixtures, one per contract item above, each with a unique output token.
-- [ ] Add one real-world acceptance dashboard: the quarto-web gapminder or penguins example.
-- [ ] Measure Q3 (orientation stack vs toggle) across the corpus and record the result in D5.
-- [ ] Sort the corpus into TDD targets, accepted deviations, and deferred (skipped, with a reason naming the strand).
+Built as a golden harness rather than smoke-all copies: Q1 output is reduced to a *dashboard skeleton* (grid containers and templates, the `html-fill-*` chain, bslib card / value-box / sidebar markup, page tabs, navbar; no theme CSS, scripts or card content) and Q2 output is reduced with the same function. Corpus: `crates/quarto-core/tests/fixtures/dashboard-goldens/` (README there).
+
+- [x] Skeleton extractor, shared by capture and test: `crates/quarto-output-extract/src/dashboard.rs`; `quarto-output-extract extract <file>.html` prints one. Manifest schema and golden naming: `dashboard_corpus.rs`.
+- [x] Copy the Q1 fixtures (`q1/`, the 40 top-level fixtures plus `_content/` as `content/`, `bugs/8552`, `notebooks/gapminder.ipynb`) and 11 Q1 regression fixtures (`regressions/`: #9056, #9796, #10334, #10340, #11338, #11549, #11150, #14646, #14684, the dark-mode toggle, #15023), from quarto-cli `d3263862a`. The brand logo variants are left for Phase 7, where logo resolution is implemented.
+- [x] Write 43 engine-free contract fixtures (`contract/`), one per contract item, cells written as pre-executed `::: {.cell}` divs so they run in CI.
+- [x] Add real-world acceptance dashboards from quarto-web (`acceptance/`: gapminder, navigation, valuebox).
+- [x] `cargo xtask capture-dashboard-goldens` renders with Quarto 1 and writes `goldens/*.q1.skeleton` + provenance. 97 goldens captured with a Q1 dev build of `d3263862a` (no release binary was at hand; recorded in `goldens/q1-provenance.txt`).
+- [x] Assertion harness `crates/quarto-core/tests/integration/dashboard_goldens.rs`: manifest and tree agree, goldens exist exactly where promised, notes explain each status, and every `match` / `divergence` fixture renders to its golden. Negative-checked: flipping `c01` to `match` fails with `Unknown format: dashboard`, Phase 1\'s first target.
+- [x] Measure Q3 across the corpus (result recorded in D5).
+- [x] Sort the corpus (`manifest.toml`): 99 `pending` (each note names its phase and, for the D5 items, the expected divergence) and 7 `deferred` (OJS, Shiny, DataTables, each naming its strand).
+
+**Findings recorded elsewhere:** Q14 and Q15 added to D5.
+
+**Capture gaps** (`q1_golden = false`; capture needs packages not installed here): `q1/6-sidebar-global` (R bsicons, shiny), `q1/9-bslib` (R bsicons), `regressions/11150` and `acceptance/gapminder` (Python plotly, seaborn), plus four deferred fixtures. Install and run `cargo xtask capture-dashboard-goldens --only <name>` to fill them.
 
 ### Phase 1: Prerequisites
 

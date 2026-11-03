@@ -1,0 +1,31 @@
+---
+# contract: content: valuebox cell whose printed Python dict supplies options
+title: "C21 VB Python"
+format: dashboard
+---
+
+## Row
+
+::: {.cell content="valuebox" title="C21-PY"}
+
+::: {.cell-output .cell-output-display}
+
+```
+{'icon': 'chat', 'color': 'warning', 'value': 126}
+```
+
+:::
+
+:::
+
+::: {.cell content="valuebox" title="C21-YAML" icon="pencil" color="primary"}
+
+::: {.cell-output .cell-output-display}
+
+```
+{'value': 45}
+```
+
+:::
+
+:::

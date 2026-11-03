@@ -1,0 +1,21 @@
+---
+# contract: loose markdown blocks in a row merge into one flow card
+title: "C19 Loose"
+format: dashboard
+---
+
+## Row
+
+C19-LOOSE first paragraph.
+
+Second paragraph.
+
+::: {.cell title="C19-CELL"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

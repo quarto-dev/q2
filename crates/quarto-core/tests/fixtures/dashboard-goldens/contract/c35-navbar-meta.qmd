@@ -1,0 +1,21 @@
+---
+# contract: navbar title, subtitle, multiple authors and logo
+title: "C35 Navbar"
+format:
+  dashboard:
+    logo: who.jpg
+subtitle: "C35-SUBTITLE"
+author:
+  - C35-AUTHOR-ONE
+  - C35-AUTHOR-TWO
+---
+
+::: {.cell title="C35-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
