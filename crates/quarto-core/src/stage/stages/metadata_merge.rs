@@ -746,6 +746,77 @@ mod tests {
         );
     }
 
+    /// GH #1001: bare execute options are folded into `execute:` per layer
+    /// *before* the layers merge, so cross-layer precedence is unchanged
+    /// (a document `execute:` key beats a project bare key, as in Q1) and
+    /// keys from different layers combine.
+    #[tokio::test]
+    async fn test_bare_execute_options_fold_per_layer() {
+        let runtime = Arc::new(MockRuntime);
+        let project_metadata = config_map(vec![
+            ("fig-format", config_str("svg")),
+            ("df-print", config_str("kable")),
+        ]);
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::with_metadata(project_metadata),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let mut ctx = StageContext::new(runtime, Format::html(), project, doc).unwrap();
+
+        let doc_metadata = config_map(vec![
+            (
+                "execute",
+                config_map(vec![("fig-format", config_str("pdf"))]),
+            ),
+            (
+                "format",
+                config_map(vec![(
+                    "html",
+                    config_map(vec![("fig-dpi", config_str("300"))]),
+                )]),
+            ),
+        ]);
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: doc_metadata,
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+            recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
+        };
+        let output = MetadataMergeStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+        let meta = output.into_document_ast().unwrap().ast.meta;
+        let execute = meta.get("execute").expect("execute map");
+
+        assert_eq!(
+            execute.get("fig-format").unwrap().as_str(),
+            Some("pdf"),
+            "document execute: beats project bare key"
+        );
+        assert_eq!(
+            execute.get("df-print").unwrap().as_str(),
+            Some("kable"),
+            "project bare key survives the merge"
+        );
+        assert_eq!(
+            execute.get("fig-dpi").unwrap().as_str(),
+            Some("300"),
+            "document format.html bare key folds in"
+        );
+    }
+
     #[tokio::test]
     async fn test_project_format_specific_settings_inherited() {
         // Project has format.html.toc: true
