@@ -497,8 +497,7 @@ mod tests {
         // bd-o76p01wb, was retired when dual light/dark compilation
         // landed — bd-0pic6 phase A2.)
         for code in [
-            "Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5", "Q-14-6", "Q-14-7", "Q-14-8",
-            "Q-14-12",
+            "Q-14-1", "Q-14-2", "Q-14-4", "Q-14-5", "Q-14-6", "Q-14-7", "Q-14-8", "Q-14-12",
         ] {
             let info = quarto_error_catalog::ERROR_CATALOG.get(code);
             assert!(

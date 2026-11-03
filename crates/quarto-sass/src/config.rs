@@ -2007,7 +2007,10 @@ mod tests {
         .unwrap();
         assert!(config.themes.is_empty());
         let dark = config.dark.expect("dark variant");
-        assert_eq!(dark.themes, vec![ThemeSpec::BuiltIn(crate::themes::BuiltInTheme::Darkly)]);
+        assert_eq!(
+            dark.themes,
+            vec![ThemeSpec::BuiltIn(crate::themes::BuiltInTheme::Darkly)]
+        );
     }
 
     #[test]
@@ -2039,7 +2042,9 @@ mod tests {
             vec![loc(40), loc(50)]
         );
 
-        assert!(ignored_pandoc_themes(&config_with_theme_value(scalar_value("default"))).is_empty());
+        assert!(
+            ignored_pandoc_themes(&config_with_theme_value(scalar_value("default"))).is_empty()
+        );
         assert!(ignored_pandoc_themes(&empty_config()).is_empty());
     }
 
