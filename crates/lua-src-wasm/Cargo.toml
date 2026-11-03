@@ -16,3 +16,4 @@ ucid = [] # accept UniCode IDentifiers
 
 [dependencies]
 cc = "1.2"
+include_dir = { workspace = true }

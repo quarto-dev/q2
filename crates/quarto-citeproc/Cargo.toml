@@ -13,7 +13,10 @@ quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-source-map = { workspace = true }
 quarto-xml = { path = "../quarto-xml" }
 hashlink = "0.11.0"
-rust-embed = { version = "8", features = ["include-exclude"] }
+# debug-embed: embed in debug builds too, instead of baking the absolute
+# folder path in and reading at runtime (location-dependent artifacts);
+# deterministic-timestamps: reproducible bytes (bd-corgi-build-8fb3mzki).
+rust-embed = { version = "8", features = ["include-exclude", "debug-embed", "deterministic-timestamps"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 similar = "3"

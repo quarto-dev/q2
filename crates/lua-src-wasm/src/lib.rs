@@ -106,8 +106,7 @@ impl Build {
     pub fn try_build(&self, version: Version) -> Result<Artifacts, Box<dyn Error>> {
         let target = self.target.as_ref().ok_or("TARGET is not set")?;
         let out_dir = self.out_dir.as_ref().ok_or("OUT_DIR is not set")?;
-        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let mut source_dir = manifest_dir.join(version.source_dir());
+        let mut source_dir = materialize_sources(out_dir, &version)?;
         let lib_dir = out_dir.join("lib");
         let include_dir = out_dir.join("include");
 
@@ -276,6 +275,32 @@ impl Build {
             libs,
         })
     }
+}
+
+/// The vendored Lua 5.4 sources, embedded rather than located through
+/// `env!("CARGO_MANIFEST_DIR")`: a baked-in absolute path makes this
+/// rlib location-dependent, so it can't be shared across checkouts by a
+/// content-addressed build cache such as corgi (which rejects such
+/// artifacts outright), and the dependent build script would need read
+/// access to this crate's directory (bd-corgi-build-8fb3mzki).
+static LUA54_SOURCES: include_dir::Dir<'static> =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/lua-5.4.8");
+
+/// Write the embedded sources for `version` under `out_dir` and return
+/// their directory. Only Lua 5.4 is vendored in this fork.
+fn materialize_sources(out_dir: &Path, version: &Version) -> Result<PathBuf, Box<dyn Error>> {
+    if *version != Lua54 {
+        return Err(format!("{version:?} sources are not vendored in this fork").into());
+    }
+    let dest = out_dir.join(version.source_dir());
+    if dest.exists() {
+        fs::remove_dir_all(&dest).context(|| format!("Cannot remove '{}'", dest.display()))?;
+    }
+    fs::create_dir_all(&dest).context(|| format!("Cannot create '{}'", dest.display()))?;
+    LUA54_SOURCES
+        .extract(&dest)
+        .context(|| format!("Cannot extract Lua sources to '{}'", dest.display()))?;
+    Ok(dest)
 }
 
 impl Version {

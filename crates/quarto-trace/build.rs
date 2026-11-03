@@ -7,6 +7,17 @@
 use std::process::Command;
 
 fn main() {
+    // A build driver that runs build scripts without git (corgi's sandbox)
+    // computes the value itself and passes it in; see the [env] probe in
+    // scripts/corgi/corgi.base.toml (bd-corgi-build-8fb3mzki). Same format:
+    // `<short-hash>[-dirty]`.
+    println!("cargo:rerun-if-env-changed=QUARTO_GIT_HASH");
+    if let Ok(value) = std::env::var("QUARTO_GIT_HASH")
+        && !value.is_empty()
+    {
+        println!("cargo:rustc-env=QUARTO_GIT_HASH={value}");
+        return;
+    }
     let hash = git_short_hash().unwrap_or_else(|| "unknown".to_string());
     let dirty = git_is_dirty().unwrap_or(false);
     let value = if hash == "unknown" {

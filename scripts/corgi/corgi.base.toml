@@ -1,0 +1,58 @@
+# Hand-written half of corgi.toml. `scripts/corgi/scan-extra-inputs.py`
+# merges this with the include_*!-derived [extra-inputs] and writes the
+# repo-root corgi.toml. Edit this file, not corgi.toml.
+#
+# Exploration config (bd-corgi-build-8fb3mzki); see
+# claude-notes/plans/2026-11-03-corgi-build-exploration.md.
+#
+# Requires the q2-compat corgi fork (external-sources/corgi, branch
+# q2-compat): `?`-prefixed optional extra-inputs, [lints] check-cfg, and
+# `target.<t>.runner` in .cargo/config.toml are not in corgi 0.1.99.
+
+# wasmtime-c-api-impl (via tree-sitter's `wasm` feature, quarto-highlight's
+# native user-grammar loader) drives a CMake build from its build.rs.
+[tools.cmake]
+version = "3.31.6"
+url = "https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-macos-universal.tar.gz"
+sha256 = "330b9514f5112e5ed4fb08b8b05803b776fd9b539a6ae12927d14dcc0ee2ba8d"
+bin = "cmake-3.31.6-macos-universal/CMake.app/Contents/bin/cmake"
+env = "CMAKE"
+packages = ["wasmtime-c-api-impl"]
+
+# quarto-trace's build.rs runs git, which the sandbox can't. Release
+# builds get the hash computed outside it (`--exclude=*` keeps describe
+# from naming tags, so the format is `<hash>[-dirty]` as the build script
+# produces); dev builds see `unknown`, so a commit doesn't rebuild
+# quarto-trace and everything above it.
+[env.QUARTO_GIT_HASH]
+command = "git describe --always --dirty --abbrev=7 --exclude=*"
+packages = ["quarto-trace"]
+profiles = ["release"]
+
+# Build-script reads and generated trees the include_*! scan cannot see.
+# A leading `?` = optional (npm build outputs absent on fresh clones; the
+# build script embeds a placeholder then).
+[extra-inputs]
+quarto-sass = [
+    "../../resources/scss/**",
+    "../../resources/pandoc/highlight-styles/**",
+]
+quarto-citeproc = [
+    "tests/enabled_tests.txt",
+    "test-data/csl-suite/**",
+]
+tree-sitter-lmd = ["grammar/src/**"]
+tree-sitter-doctemplate = ["grammar/src/**"]
+tree-sitter-qmd = ["tree-sitter-markdown/src/**"]
+lua-src = ["lua-5.4.8/**"]
+quarto-preview = [
+    "?../../q2-preview-spa/dist/**",
+    "?../../hub-client/dist-preview-embed/**",
+]
+quarto-mcp-launcher = ["?../../ts-packages/quarto-hub-mcp/dist-bundle/**"]
+quarto-wasm-embed = [
+    "?../../q2-preview-spa/dist/**",
+    "?../../ts-packages/quarto-hub-mcp/dist-bundle/**",
+]
+quarto-trace-server = ["?../../trace-viewer/dist/**"]
+quarto = ["?../../agents-docs-dist/**"]
