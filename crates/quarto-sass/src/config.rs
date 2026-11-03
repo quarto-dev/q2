@@ -1094,9 +1094,11 @@ fn builtin_darkness(themes: &[ThemeSpec], fallback: bool) -> bool {
     if saw_builtin { any_dark } else { fallback }
 }
 
-/// Parse the `highlight-style:` key (scalar or `{light:, dark:}` map)
-/// into per-variant [`HighlightStyle`] entries on `result`
-/// (bd-0pic6 phase B).
+/// Parse the `syntax-highlighting:` key — or its deprecated alias
+/// `highlight-style:`, consulted only when the former is absent, as in
+/// the Typst filter's `declared_style` (GH #1035) — (scalar or
+/// `{light:, dark:}` map) into per-variant [`HighlightStyle`] entries
+/// on `result` (bd-0pic6 phase B).
 ///
 /// Adaptive-name resolution: with a theme pair, each half's ROLE
 /// decides (the quarto-web shape darkens a cosmo base via custom
@@ -1104,7 +1106,10 @@ fn builtin_darkness(themes: &[ThemeSpec], fallback: bool) -> bool {
 /// config the built-in themes decide (`theme: darkly` + `a11y` →
 /// `a11y-dark`).
 fn parse_highlight_style(config: &ConfigValue, result: &mut ThemeConfig) -> Result<(), SassError> {
-    let Some(value) = config.get("highlight-style") else {
+    let Some((key, value)) = ["syntax-highlighting", "highlight-style"]
+        .into_iter()
+        .find_map(|key| config.get(key).map(|value| (key, value)))
+    else {
         return Ok(());
     };
     if value.is_null() {
@@ -1122,7 +1127,7 @@ fn parse_highlight_style(config: &ConfigValue, result: &mut ThemeConfig) -> Resu
         if let Some(light_value) = pair.light {
             let Some(name) = config_value_as_text(light_value) else {
                 return Err(SassError::InvalidThemeConfig {
-                    message: "`highlight-style:` entries must be strings".to_string(),
+                    message: format!("`{key}:` entries must be strings"),
                     location: Some(light_value.source_info.clone()),
                 });
             };
@@ -1134,7 +1139,7 @@ fn parse_highlight_style(config: &ConfigValue, result: &mut ThemeConfig) -> Resu
         if let Some((dark_value, _key_source)) = pair.dark {
             let Some(name) = config_value_as_text(dark_value) else {
                 return Err(SassError::InvalidThemeConfig {
-                    message: "`highlight-style:` entries must be strings".to_string(),
+                    message: format!("`{key}:` entries must be strings"),
                     location: Some(dark_value.source_info.clone()),
                 });
             };
@@ -1158,9 +1163,10 @@ fn parse_highlight_style(config: &ConfigValue, result: &mut ThemeConfig) -> Resu
 
     let Some(name) = config_value_as_text(value) else {
         return Err(SassError::InvalidThemeConfig {
-            message: "`highlight-style:` must be a string or a map with only \
-                      `light:`/`dark:` keys"
-                .to_string(),
+            message: format!(
+                "`{key}:` must be a string or a map with only \
+                 `light:`/`dark:` keys"
+            ),
             location: Some(value.source_info.clone()),
         });
     };
@@ -2374,6 +2380,82 @@ mod tests {
                 .map(|h| h.name.as_str()),
             Some("arrow-dark")
         );
+    }
+
+    #[test]
+    fn test_syntax_highlighting_key_is_read() {
+        // GH #1035: `syntax-highlighting:` is Quarto 1's current name
+        // (`highlight-style:` is the deprecated alias); both the scalar
+        // and the map form must reach the palette.
+        let cfg = ThemeConfig::from_config_value(&map_value(vec![
+            map_entry("theme", scalar_value("cosmo")),
+            map_entry("syntax-highlighting", scalar_value("github")),
+        ]))
+        .unwrap();
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("github-light")
+        );
+
+        let cfg = ThemeConfig::from_config_value(&map_value(vec![
+            map_entry(
+                "theme",
+                map_value(vec![
+                    map_entry("light", scalar_value("cosmo")),
+                    map_entry("dark", scalar_value("darkly")),
+                ]),
+            ),
+            map_entry(
+                "syntax-highlighting",
+                map_value(vec![
+                    map_entry("light", scalar_value("github")),
+                    map_entry("dark", scalar_value("arrow")),
+                ]),
+            ),
+        ]))
+        .unwrap();
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("github-light")
+        );
+        assert_eq!(
+            cfg.dark
+                .as_ref()
+                .and_then(|d| d.highlight_style.as_ref())
+                .map(|h| h.name.as_str()),
+            Some("arrow-dark")
+        );
+    }
+
+    #[test]
+    fn test_syntax_highlighting_wins_over_highlight_style() {
+        // Same precedence as the Typst filter (`declared_style`).
+        let cfg = ThemeConfig::from_config_value(&map_value(vec![
+            map_entry("theme", scalar_value("cosmo")),
+            map_entry("highlight-style", scalar_value("tango")),
+            map_entry("syntax-highlighting", scalar_value("github")),
+        ]))
+        .unwrap();
+        assert_eq!(
+            cfg.highlight_style.as_ref().map(|h| h.name.as_str()),
+            Some("github-light")
+        );
+    }
+
+    #[test]
+    fn test_syntax_highlighting_invalid_value_names_its_key() {
+        let err = ThemeConfig::from_config_value(&map_value(vec![
+            map_entry("theme", scalar_value("cosmo")),
+            map_entry(
+                "syntax-highlighting",
+                map_value(vec![map_entry("other", scalar_value("x"))]),
+            ),
+        ]))
+        .unwrap_err();
+        let SassError::InvalidThemeConfig { message, .. } = err else {
+            panic!("expected InvalidThemeConfig, got {err:?}");
+        };
+        assert!(message.contains("`syntax-highlighting:`"), "{message}");
     }
 
     #[test]
