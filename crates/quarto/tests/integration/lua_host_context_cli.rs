@@ -211,34 +211,36 @@ fn website_pages_see_project_paths_profiles_and_environment() {
     );
 }
 
+/// GH #1013: outside a project, Q1 treats the document's directory as the
+/// project (its single-file context), so `quarto.project`'s paths are the
+/// document's directory and the offset is `"."`, never nil. The document
+/// sits in a subdirectory of the working directory so the project is the
+/// document's directory, not the cwd.
 #[test]
-fn single_file_render_has_q1_nils_and_no_profiles() {
+fn single_file_render_uses_document_dir_as_project_and_no_profiles() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
-    write(root, "probe.lua", PROBE_LUA);
+    write(root, "sub/probe.lua", PROBE_LUA);
     write(
         root,
-        "doc.qmd",
+        "sub/doc.qmd",
         "---\ntitle: Doc\nfilters: [probe.lua]\n---\n\nhello\n",
     );
 
-    let out = q2(root, &["render", "doc.qmd"]);
+    let out = q2(
+        root,
+        &[
+            "render",
+            &Path::new("sub").join("doc.qmd").to_string_lossy(),
+        ],
+    );
     assert!(
         out.status.success(),
         "render failed:\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let doc = probe_values(&std::fs::read_to_string(root.join("doc.html")).unwrap());
-    assert_eq!(doc["directory"], "nil");
-    assert_eq!(doc["offset"], "nil");
-    assert_eq!(doc["output_directory"], "nil");
-    assert_eq!(doc["profile"], "");
-    assert_eq!(doc["profile_type"], "List");
-    assert_eq!(doc["QUARTO_PROFILE"], "nil");
-    assert_eq!(doc["Q2_TEST_REAL"], "real");
-    // No project, no `_environment`: file-only variables do not exist.
-    assert_eq!(doc["Q2_TEST_FILE_ONLY"], "nil");
-    // Paths are still known outside a project.
+    let doc = probe_values(&std::fs::read_to_string(root.join("sub").join("doc.html")).unwrap());
+    // Paths are known outside a project.
     let input = Path::new(&doc["input_file"]);
     assert!(
         input.is_absolute() && input.ends_with("doc.qmd"),
@@ -249,4 +251,15 @@ fn single_file_render_has_q1_nils_and_no_profiles() {
         input.with_file_name("doc.html")
     );
     assert_eq!(doc["state_input"], doc["input_file"]);
+    // quarto.project: the document's directory, as in Q1.
+    let doc_dir = input.parent().unwrap();
+    assert_eq!(Path::new(&doc["directory"]), doc_dir);
+    assert_eq!(Path::new(&doc["output_directory"]), doc_dir);
+    assert_eq!(doc["offset"], ".");
+    assert_eq!(doc["profile"], "");
+    assert_eq!(doc["profile_type"], "List");
+    assert_eq!(doc["QUARTO_PROFILE"], "nil");
+    assert_eq!(doc["Q2_TEST_REAL"], "real");
+    // No project, no `_environment`: file-only variables do not exist.
+    assert_eq!(doc["Q2_TEST_FILE_ONLY"], "nil");
 }

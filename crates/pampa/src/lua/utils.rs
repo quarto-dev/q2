@@ -15,10 +15,11 @@ use crate::pandoc::{Block, Inline, LineBreak};
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use quarto_source_map::{By, SourceInfo};
 
-use super::config_value::{LuaConfigNull, LuaConfigSpecial, push_config_value};
+use super::config_value::{LuaConfigNull, LuaConfigSpecial, peek_config_value, push_config_value};
 use super::constructors::LuaListAttributes;
 use super::metadata::LuaMetaProxy;
 use super::nodes::{LuaNodes, NodesShape};
+use super::pandoc_doc::peek_pandoc_doc;
 use super::types::{
     LuaAttr, LuaBlock, LuaCitation, LuaInline, filter_source_info, inlines_to_lua_table,
 };
@@ -320,15 +321,19 @@ fn create_type(lua: &Lua) -> Result<Function> {
     })
 }
 
-/// The `pandoc.utils.type` name of a userdata: the element type for an
-/// Inline or Block, the fixed name for q2's other userdata, else the
-/// metatable's `__name`. `None` when there is no name to give.
+/// The `pandoc.utils.type` name of a userdata: `Inline` or `Block` for
+/// an element (Pandoc's `__name`; the tag is `elem.t`), the fixed name
+/// for q2's other userdata, else the metatable's `__name`. `None` when
+/// there is no name to give.
 fn userdata_type_name(ud: &AnyUserData) -> Option<String> {
-    if let Ok(inline) = ud.borrow::<LuaInline>() {
-        return Some(get_inline_type_name(&inline.borrow_inline()));
+    if ud.is::<LuaInline>() {
+        return Some("Inline".to_string());
     }
-    if let Ok(block) = ud.borrow::<LuaBlock>() {
-        return Some(get_block_type_name(&block.borrow_block()));
+    if ud.is::<LuaBlock>() {
+        return Some("Block".to_string());
+    }
+    if ud.is::<LuaAttr>() {
+        return Some("Attr".to_string());
     }
     if ud.is::<LuaCitation>() {
         return Some("Citation".to_string());
@@ -354,65 +359,6 @@ fn userdata_type_name(ud: &AnyUserData) -> Option<String> {
     ud.metatable()
         .ok()
         .and_then(|mt| mt.get::<String>("__name").ok())
-}
-
-/// Get the type name for an inline element
-fn get_inline_type_name(inline: &Inline) -> String {
-    match inline {
-        Inline::Str(_) => "Str".to_string(),
-        Inline::Space(_) => "Space".to_string(),
-        Inline::SoftBreak(_) => "SoftBreak".to_string(),
-        Inline::LineBreak(_) => "LineBreak".to_string(),
-        Inline::Emph(_) => "Emph".to_string(),
-        Inline::Strong(_) => "Strong".to_string(),
-        Inline::Underline(_) => "Underline".to_string(),
-        Inline::Strikeout(_) => "Strikeout".to_string(),
-        Inline::Superscript(_) => "Superscript".to_string(),
-        Inline::Subscript(_) => "Subscript".to_string(),
-        Inline::SmallCaps(_) => "SmallCaps".to_string(),
-        Inline::Quoted(_) => "Quoted".to_string(),
-        Inline::Code(_) => "Code".to_string(),
-        Inline::Math(_) => "Math".to_string(),
-        Inline::RawInline(_) => "RawInline".to_string(),
-        Inline::Link(_) => "Link".to_string(),
-        Inline::Image(_) => "Image".to_string(),
-        Inline::Span(_) => "Span".to_string(),
-        Inline::Note(_) => "Note".to_string(),
-        Inline::Cite(_) => "Cite".to_string(),
-        Inline::Shortcode(_) => "Shortcode".to_string(),
-        Inline::NoteReference(_) => "NoteReference".to_string(),
-        Inline::Attr(_) => "Attr".to_string(),
-        Inline::Insert(_) => "Insert".to_string(),
-        Inline::Delete(_) => "Delete".to_string(),
-        Inline::Highlight(_) => "Highlight".to_string(),
-        Inline::EditComment(_) => "EditComment".to_string(),
-        Inline::Custom(_) => "Custom".to_string(),
-    }
-}
-
-/// Get the type name for a block element
-fn get_block_type_name(block: &Block) -> String {
-    match block {
-        Block::Paragraph(_) => "Para".to_string(),
-        Block::Plain(_) => "Plain".to_string(),
-        Block::Header(_) => "Header".to_string(),
-        Block::CodeBlock(_) => "CodeBlock".to_string(),
-        Block::RawBlock(_) => "RawBlock".to_string(),
-        Block::BlockQuote(_) => "BlockQuote".to_string(),
-        Block::BulletList(_) => "BulletList".to_string(),
-        Block::OrderedList(_) => "OrderedList".to_string(),
-        Block::DefinitionList(_) => "DefinitionList".to_string(),
-        Block::Div(_) => "Div".to_string(),
-        Block::LineBlock(_) => "LineBlock".to_string(),
-        Block::Table(_) => "Table".to_string(),
-        Block::Figure(_) => "Figure".to_string(),
-        Block::HorizontalRule(_) => "HorizontalRule".to_string(),
-        Block::CaptionBlock(_) => "CaptionBlock".to_string(),
-        Block::BlockMetadata(_) => "BlockMetadata".to_string(),
-        Block::NoteDefinitionPara(_) => "NoteDefinitionPara".to_string(),
-        Block::NoteDefinitionFencedBlock(_) => "NoteDefinitionFencedBlock".to_string(),
-        Block::Custom(_) => "Custom".to_string(),
-    }
 }
 
 /// sha1(input)
@@ -798,6 +744,9 @@ fn create_to_roman_numeral(lua: &Lua) -> Result<Function> {
 /// `Attr` or `ListAttributes`, and errors on anything else. This mirrors
 /// that over q2's userdata, with two things pandoc has no counterpart
 /// for: a `pandoc.Nodes` stringifies its contents (blocks or inlines),
+/// a document's metadata is stringified like any other metadata map
+/// (q2's metadata also carries project config, so it is larger than
+/// pandoc's, and scalars count, where pandoc's document walk skips them),
 /// and `nil` (and an explicit `quarto.config.null()`) is `""`, because a
 /// missing metadata key or shortcode kwarg reads as `nil` here
 /// (D-stringify-nil).
@@ -841,7 +790,23 @@ pub(crate) fn stringify_value(lua: &Lua, value: &Value) -> Result<String> {
             )))
         }
         Value::Table(table) => {
-            // Handle table of elements
+            // A document: pandoc's `query` over `Pandoc meta blocks`
+            // visits the metadata first, then the blocks (GH #1015).
+            if table
+                .metatable()
+                .is_some_and(|mt| mt.raw_get::<String>("__name").is_ok_and(|n| n == "Pandoc"))
+            {
+                let doc = peek_pandoc_doc(lua, value.clone())?;
+                return Ok(stringify_config_value(lua, &doc.meta)? + &stringify_blocks(&doc.blocks));
+            }
+            // A map with no array part (a `Meta` table, or a nested
+            // metadata map, which reads as a plain table) is a MetaMap:
+            // its values in key order (GH #1015).
+            if table.raw_len() == 0 && table.clone().pairs::<Value, Value>().next().is_some() {
+                let meta = peek_config_value(lua, value.clone(), None, &filter_source_info(lua))?;
+                return stringify_config_value(lua, &meta);
+            }
+            // A list of elements.
             let mut result = String::new();
             for item in table.clone().sequence_values::<Value>() {
                 let item = item?;
@@ -891,7 +856,7 @@ fn stringify_config_value(lua: &Lua, node: &ConfigValue) -> Result<String> {
 fn stringify_inline(inline: &Inline) -> String {
     match inline {
         Inline::Str(s) => s.text.clone(),
-        // Pandoc parity (GH #1014): both breaks stringify to a space.
+        // Pandoc parity: both breaks read as a space (GH #1014).
         Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => " ".to_string(),
         Inline::Emph(e) => stringify_inlines(&e.content),
         Inline::Strong(s) => stringify_inlines(&s.content),
@@ -1107,8 +1072,29 @@ mod tests {
             .eval()
             .unwrap();
 
-        // Pandoc parity (GH #1014): a LineBreak stringifies to a space.
         assert_eq!(result, " ");
+    }
+
+    /// GH #1014: Pandoc's `stringify` renders a soft break and a line
+    /// break as a space, so wrapped prose reads as one line.
+    #[test]
+    fn test_stringify_breaks_as_space() {
+        let lua = create_test_lua();
+        assert_eq!(stringify(&lua, "pandoc.SoftBreak()"), " ");
+        assert_eq!(
+            stringify(
+                &lua,
+                "pandoc.Para({pandoc.Str('a'), pandoc.SoftBreak(), pandoc.Str('b')})"
+            ),
+            "a b"
+        );
+        assert_eq!(
+            stringify(
+                &lua,
+                "{pandoc.Str('a'), pandoc.LineBreak(), pandoc.Str('b')}"
+            ),
+            "a b"
+        );
     }
 
     #[test]
@@ -1133,6 +1119,64 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_stringify_pandoc_doc() {
+        // GH #1015: a whole document stringifies to its text, meta
+        // first then blocks (pandoc's `query` over `Pandoc meta blocks`).
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Pandoc({pandoc.Para({pandoc.Str('built')})}))")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "built");
+
+        let result: String = lua
+            .load(
+                "return pandoc.utils.stringify(pandoc.Pandoc(
+                    {pandoc.Para({pandoc.Str('body')})},
+                    {title = pandoc.Inlines({pandoc.Str('Title')})}))",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Titlebody");
+    }
+
+    #[test]
+    fn test_stringify_meta() {
+        // GH #1015: a Meta table (and a nested metadata map, a plain
+        // table) stringifies to its values in key order.
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load(
+                "return pandoc.utils.stringify(pandoc.Meta({
+                    b = pandoc.Inlines({pandoc.Str('two')}),
+                    a = pandoc.Inlines({pandoc.Str('one')}),
+                }))",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "onetwo");
+
+        let result: String = lua
+            .load(
+                "return pandoc.utils.stringify({
+                    name = pandoc.Inlines({pandoc.Str('Ada')}),
+                    affiliation = {city = 'London'},
+                })",
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "LondonAda");
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify({})")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "");
     }
 
     #[test]
@@ -1248,7 +1292,8 @@ mod tests {
             .eval()
             .unwrap();
 
-        assert_eq!(result, "Str");
+        // Pandoc's `__name` for every inline is `Inline` (GH #1019).
+        assert_eq!(result, "Inline");
     }
 
     #[test]
@@ -1260,7 +1305,21 @@ mod tests {
             .eval()
             .unwrap();
 
-        assert_eq!(result, "Para");
+        // Pandoc's `__name` for every block is `Block` (GH #1019).
+        assert_eq!(result, "Block");
+    }
+
+    #[test]
+    fn test_type_attr() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.type(pandoc.Attr('id', {'a'}))")
+            .eval()
+            .unwrap();
+
+        // Not the Rust wrapper's name, `LuaAttr` (GH #1019).
+        assert_eq!(result, "Attr");
     }
 
     #[test]
@@ -1844,7 +1903,8 @@ mod tests {
     }
 
     /// bd-lt7rgi90: `blocks_to_inlines` takes a `pandoc.Nodes`, resolved in
-    /// block context, alone or as an element of the list.
+    /// block context, alone or as an element of the list. (The default
+    /// `LineBreak` separator stringifies as a space, GH #1014.)
     #[test]
     fn test_blocks_to_inlines_accepts_nodes() {
         let lua = create_test_lua();
@@ -1870,67 +1930,6 @@ mod tests {
         assert_eq!(
             bti("{pandoc.Nodes(pandoc.Para{'a'}), pandoc.Para{'b'}, pandoc.Nodes({})}"),
             "a|b"
-        );
-    }
-
-    // ========== get_inline_type_name tests ==========
-
-    #[test]
-    fn test_get_inline_type_name_all() {
-        use crate::pandoc::*;
-
-        assert_eq!(
-            get_inline_type_name(&Inline::Str(Str {
-                text: String::new(),
-                source_info: SourceInfo::for_test()
-            })),
-            "Str"
-        );
-        assert_eq!(
-            get_inline_type_name(&Inline::Space(Space {
-                source_info: SourceInfo::for_test()
-            })),
-            "Space"
-        );
-        assert_eq!(
-            get_inline_type_name(&Inline::SoftBreak(SoftBreak {
-                source_info: SourceInfo::for_test()
-            })),
-            "SoftBreak"
-        );
-        assert_eq!(
-            get_inline_type_name(&Inline::LineBreak(LineBreak {
-                source_info: SourceInfo::for_test()
-            })),
-            "LineBreak"
-        );
-    }
-
-    // ========== get_block_type_name tests ==========
-
-    #[test]
-    fn test_get_block_type_name_all() {
-        use crate::pandoc::*;
-
-        assert_eq!(
-            get_block_type_name(&Block::Paragraph(Paragraph {
-                content: vec![],
-                source_info: SourceInfo::for_test()
-            })),
-            "Para"
-        );
-        assert_eq!(
-            get_block_type_name(&Block::Plain(Plain {
-                content: vec![],
-                source_info: SourceInfo::for_test()
-            })),
-            "Plain"
-        );
-        assert_eq!(
-            get_block_type_name(&Block::HorizontalRule(HorizontalRule {
-                source_info: SourceInfo::for_test()
-            })),
-            "HorizontalRule"
         );
     }
 }

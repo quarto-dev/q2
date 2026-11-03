@@ -314,10 +314,21 @@ impl ExecutionEngine for KnitrEngine {
 /// `execute: echo: false` was not merely dropped — the hardcoded
 /// `echo: true` default actively overrode it, and every document-scope
 /// execute option was inert for knitr (GH issue #523).
+///
+/// The document's `knitr:` map is forwarded as `metadata.knitr`, which
+/// `knitr_options` in `execute.R` merges into `opts_chunk`/`opts_knit`
+/// (GH issue #1009). Only that key is sent: the R scripts also read
+/// `crossref`, `r-options` and `fig-responsive` from `format$metadata`,
+/// and those are not forwarded yet.
 fn build_format_config(ctx: &ExecutionContext) -> KnitrFormatConfig {
     let mut config = KnitrFormatConfig::with_defaults(&ctx.format);
     if let Some(scope) = ctx.execute_scope.as_ref() {
         config.execute.overlay_document_scope(scope);
+    }
+    if let Some(knitr) = ctx.metadata.get("knitr") {
+        config.metadata = serde_json::to_value(knitr)
+            .ok()
+            .map(|knitr| serde_json::json!({ "knitr": knitr }));
     }
     config
 }
@@ -397,6 +408,7 @@ fn convert_includes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_knitr_engine_name() {
@@ -677,6 +689,58 @@ mod tests {
 
         let config = build_format_config(&ctx);
         assert_eq!(config.pandoc.to, Some("pdf".to_string()));
+    }
+
+    /// GH #1009: the front-matter `knitr:` map reaches R as
+    /// `format$metadata$knitr`, where `knitr_options` in `execute.R`
+    /// merges its `opts_chunk`/`opts_knit` into knitr's options.
+    #[test]
+    fn test_build_format_config_forwards_knitr_metadata() {
+        use crate::engine::ts_protocol::TsMetadataValue;
+
+        let opts_chunk = HashMap::from([(
+            "comment".to_string(),
+            TsMetadataValue::String("#>".to_string()),
+        )]);
+        let knitr = HashMap::from([("opts_chunk".to_string(), TsMetadataValue::Map(opts_chunk))]);
+        let metadata = HashMap::from([
+            ("knitr".to_string(), TsMetadataValue::Map(knitr)),
+            (
+                "title".to_string(),
+                TsMetadataValue::String("t".to_string()),
+            ),
+        ]);
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/project"),
+            PathBuf::from("/project/doc.qmd"),
+            "html",
+        )
+        .with_metadata(metadata);
+
+        let json = serde_json::to_value(build_format_config(&ctx)).unwrap();
+        assert_eq!(
+            json["metadata"],
+            serde_json::json!({ "knitr": { "opts_chunk": { "comment": "#>" } } }),
+            "only the knitr key is forwarded"
+        );
+    }
+
+    #[test]
+    fn test_build_format_config_without_knitr_metadata_omits_metadata() {
+        let metadata = HashMap::from([(
+            "title".to_string(),
+            crate::engine::ts_protocol::TsMetadataValue::String("t".to_string()),
+        )]);
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/project"),
+            PathBuf::from("/project/doc.qmd"),
+            "html",
+        )
+        .with_metadata(metadata);
+
+        assert!(build_format_config(&ctx).metadata.is_none());
     }
 
     #[test]

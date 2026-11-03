@@ -121,15 +121,15 @@ pub fn lua_options_for_document(
     options
 }
 
-/// `quarto.project`'s paths for `input`, or `None` for a single-file
-/// render (Q1: `quarto.project.directory` is nil outside a project).
+/// `quarto.project`'s paths for `input`. A single-file render has them
+/// too: Q1 renders a lone document in a single-file project context whose
+/// directory is the document's (exported as `QUARTO_PROJECT_DIR`), so
+/// `directory` and `output_directory` are that directory and `offset` is
+/// `"."` (GH #1013); `ProjectContext` already carries exactly that.
 /// `offset` is Q1's `projectOffset`: the relative path from the input's
 /// directory back to the project root, forward slashes, `"."` when
 /// they coincide.
 fn host_project(project: &crate::project::ProjectContext, input: &Path) -> Option<HostProject> {
-    if project.is_single_file {
-        return None;
-    }
     let input_dir = input.parent().unwrap_or(Path::new("."));
     let offset = pathdiff::diff_paths(&project.dir, input_dir)
         .filter(|p| !p.as_os_str().is_empty())
@@ -167,7 +167,10 @@ mod tests {
             is_single_file: true,
             ..Default::default()
         };
-        assert!(host_project(&single, &dir.join("doc.qmd")).is_none());
+        let single = host_project(&single, &dir.join("doc.qmd")).unwrap();
+        assert_eq!(single.directory, dir, "GH #1013: the document's directory");
+        assert_eq!(single.output_directory, dir);
+        assert_eq!(single.offset, ".");
     }
 
     #[test]
