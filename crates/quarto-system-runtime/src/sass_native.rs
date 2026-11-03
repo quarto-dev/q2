@@ -90,6 +90,20 @@ impl<'a> RuntimeFs<'a> {
         std::mem::take(&mut *self.loaded.borrow_mut())
     }
 
+    /// The embedded provider, if any, for a lookup of `path`.
+    ///
+    /// Embedded resources live under a rooted virtual prefix
+    /// (`/__quarto_resources__/...`), and every load path that points into
+    /// them is rooted. A relative path is grass trying the importing file's
+    /// directory, which for the `stdin` bundle is bare `mixins`,
+    /// `_variables.scss`, etc. The embedded provider also answers bare
+    /// relative names, so consulting it there would let Bootstrap's
+    /// partials shadow a custom theme's same-named partial before the
+    /// theme's load path is searched (GH #1032).
+    fn embedded_for(&self, path: &Path) -> Option<&'a dyn EmbeddedResourceProvider> {
+        self.embedded.filter(|_| path.has_root())
+    }
+
     fn record(&self, path: &Path) {
         let mut loaded = self.loaded.borrow_mut();
         if !loaded.iter().any(|p| p == path) {
@@ -110,7 +124,7 @@ impl Debug for RuntimeFs<'_> {
 impl grass::Fs for RuntimeFs<'_> {
     fn is_dir(&self, path: &Path) -> bool {
         // Check embedded resources first
-        if let Some(embedded) = self.embedded
+        if let Some(embedded) = self.embedded_for(path)
             && embedded.is_dir(path)
         {
             return true;
@@ -121,7 +135,7 @@ impl grass::Fs for RuntimeFs<'_> {
 
     fn is_file(&self, path: &Path) -> bool {
         // Check embedded resources first
-        if let Some(embedded) = self.embedded
+        if let Some(embedded) = self.embedded_for(path)
             && embedded.is_file(path)
         {
             return true;
@@ -132,7 +146,7 @@ impl grass::Fs for RuntimeFs<'_> {
 
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
         // Check embedded resources first
-        if let Some(embedded) = self.embedded
+        if let Some(embedded) = self.embedded_for(path)
             && let Some(content) = embedded.read(path)
         {
             return Ok(content.to_vec());
@@ -397,6 +411,43 @@ mod tests {
             out.loaded_files,
             vec![dir.join("_colors.scss")],
             "only the runtime-resolved file is reported"
+        );
+    }
+
+    /// GH #1032: grass first tries an `@import` relative to `stdin`, i.e.
+    /// as a bare relative path. The embedded provider must not answer that
+    /// lookup, or its partial shadows a same-named one in a load path
+    /// listed ahead of the embedded resources.
+    #[test]
+    fn embedded_resources_do_not_answer_relative_lookups() {
+        /// Answers both the rooted and the bare form, like the real
+        /// quarto-sass provider does.
+        struct ShadowingEmbedded;
+        impl EmbeddedResourceProvider for ShadowingEmbedded {
+            fn is_file(&self, path: &Path) -> bool {
+                path == Path::new("/__test_resources__/_colors.scss")
+                    || path == Path::new("_colors.scss")
+            }
+            fn is_dir(&self, path: &Path) -> bool {
+                path == Path::new("/__test_resources__")
+            }
+            fn read(&self, path: &Path) -> Option<&'static [u8]> {
+                self.is_file(path).then_some(b"$c: #999999;\n".as_slice())
+            }
+        }
+        let runtime = NativeRuntime::new();
+        let (_guard, dir) = partial_dir();
+        let scss = "@import \"colors\";\n.x { color: $c; }";
+        let load_paths = [dir.clone(), PathBuf::from("/__test_resources__")];
+
+        let out =
+            compile_scss_with_embedded(&runtime, &ShadowingEmbedded, scss, &load_paths, false)
+                .unwrap();
+
+        assert!(
+            out.css.contains("#123457"),
+            "the earlier load path wins: {}",
+            out.css
         );
     }
 

@@ -1,0 +1,7 @@
+// A theme whose own partial shares a name with a Bootstrap partial
+// (`_mixins.scss`). `@import "mixins"` must resolve to the file next to
+// this theme, not to Bootstrap's (GH #1032).
+
+/*-- scss:rules --*/
+@import "mixins";
+@include accent-box(red);
