@@ -122,7 +122,10 @@ which conformance cases are permanently xfailed.
   does not have stringify by their contents: a `pandoc.Nodes` as its
   blocks or inlines, a `meta` map proxy as the concatenation of its
   values in key order (pandoc's own MetaMap rule), a path/glob/expr
-  special as its text.
+  special as its text. A whole document stringifies as its metadata
+  followed by its blocks, as in pandoc, but q2's metadata also carries
+  project configuration and its scalars count, where pandoc's document
+  walk collects only inlines (GH #1015, bd-af9vl9d6).
 - **Why**: in q2 a missing metadata key and a missing shortcode kwarg
   both read as `nil` (D-null), and `pandoc.utils.stringify(kwargs.title)`
   with a fallback on `""` is the idiom every Quarto 1 shortcode uses.

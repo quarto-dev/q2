@@ -185,6 +185,37 @@ fn a_ref_tries_the_tag_before_the_branch() {
 }
 
 #[test]
+fn a_commit_sha_falls_through_to_the_plain_archive_path() {
+    // A commit is neither a tag nor a branch, so both `refs/` probes
+    // 404 and the plain `archive/<sha>` path serves it (#1005).
+    let commit = "https://github.com/org/repo/archive/6b52091.tar.gz";
+    let fake = FakeFetch::new().serving(
+        commit,
+        brand_archive("repo-6b520912a7b26a72e1b0826f6b201c2e69b2b3c7"),
+    );
+    let work = TempDir::new().unwrap();
+
+    let root = fetch_into(
+        &remote_target("org/repo@6b52091"),
+        work.path(),
+        &fake,
+        &ExtractLimits::default(),
+    )
+    .unwrap()
+    .root;
+
+    assert_eq!(
+        fake.requests(),
+        [
+            "https://github.com/org/repo/archive/refs/tags/6b52091.tar.gz",
+            "https://github.com/org/repo/archive/refs/heads/6b52091.tar.gz",
+            commit,
+        ]
+    );
+    assert!(root.join("_brand.yml").is_file());
+}
+
+#[test]
 fn exhausting_every_candidate_reports_what_was_tried() {
     let fake = FakeFetch::new(); // everything 404s
     let work = TempDir::new().unwrap();

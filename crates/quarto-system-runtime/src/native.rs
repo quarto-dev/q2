@@ -420,7 +420,7 @@ impl SystemRuntime for NativeRuntime {
     // ═══════════════════════════════════════════════════════════════════════
 
     fn os_name(&self) -> &'static str {
-        std::env::consts::OS
+        pandoc_os_name(std::env::consts::OS)
     }
 
     fn arch(&self) -> &'static str {
@@ -683,6 +683,18 @@ mod dirs {
             .or_else(|_| std::env::var("USERPROFILE"))
             .map(PathBuf::from)
             .ok()
+    }
+}
+
+/// Map a Rust OS name (`std::env::consts::OS`) to the name Pandoc reports
+/// for `pandoc.system.os`, which comes from Haskell's `System.Info.os`.
+/// The two agree except for macOS, Windows and Android.
+fn pandoc_os_name(rust_os: &'static str) -> &'static str {
+    match rust_os {
+        "macos" => "darwin",
+        "windows" => "mingw32",
+        "android" => "linux-android",
+        other => other,
     }
 }
 
@@ -1062,26 +1074,27 @@ mod tests {
     }
 
     #[test]
+    fn test_pandoc_os_name_maps_rust_names() {
+        // Rust's names that differ from Haskell's System.Info.os.
+        assert_eq!(pandoc_os_name("macos"), "darwin");
+        assert_eq!(pandoc_os_name("windows"), "mingw32");
+        assert_eq!(pandoc_os_name("android"), "linux-android");
+        // Names the two agree on pass through.
+        for os in ["linux", "freebsd", "netbsd", "openbsd"] {
+            assert_eq!(pandoc_os_name(os), os);
+        }
+    }
+
+    #[test]
     fn test_os_name() {
         let rt = runtime();
-        let os = rt.os_name();
-
-        // Should be a known OS
-        assert!(
-            [
-                "linux",
-                "macos",
-                "windows",
-                "freebsd",
-                "openbsd",
-                "netbsd",
-                "dragonfly",
-                "ios",
-                "android"
-            ]
-            .contains(&os)
-                || os == "darwin" // macOS reports as "darwin"
-        );
+        assert_eq!(rt.os_name(), pandoc_os_name(std::env::consts::OS));
+        #[cfg(target_os = "macos")]
+        assert_eq!(rt.os_name(), "darwin");
+        #[cfg(target_os = "windows")]
+        assert_eq!(rt.os_name(), "mingw32");
+        #[cfg(target_os = "linux")]
+        assert_eq!(rt.os_name(), "linux");
     }
 
     #[test]

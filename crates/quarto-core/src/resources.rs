@@ -335,18 +335,25 @@ mod tests {
 #[cfg(not(target_arch = "wasm32"))]
 mod embedded {
     use std::io;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    use include_dir::Dir;
-    use tempfile::TempDir;
+    use include_dir::{Dir, DirEntry};
+    use sha2::{Digest, Sha256};
     use thiserror::Error;
+
+    /// Uniquifier for staging dirs within this process.
+    static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// Env var overriding the resource cache root (tests, hermetic CI).
+    pub(super) const CACHE_DIR_ENV: &str = "QUARTO_RESOURCE_CACHE_DIR";
 
     /// Errors that can occur during resource extraction.
     #[derive(Debug, Error)]
     pub enum ResourceError {
-        /// Failed to create the temporary directory.
-        #[error("Failed to create temp directory: {0}")]
+        /// Failed to create the cache or staging directory.
+        #[error("Failed to create resource directory: {0}")]
         TempDir(#[from] io::Error),
 
         /// Failed to extract resources to disk.
@@ -357,8 +364,18 @@ mod embedded {
     /// A bundle of embedded resources from a directory.
     ///
     /// Resources are embedded at compile time using `include_dir!` and extracted
-    /// to a temporary directory on first access. The temp directory persists for
-    /// the lifetime of the process and is automatically cleaned up on exit.
+    /// on first access into a content-addressed directory in the per-user cache
+    /// (`<os cache dir>/quarto/resources/<name>-<hash>/`, overridable with
+    /// `QUARTO_RESOURCE_CACHE_DIR`). The payload is identical on every run, so
+    /// it is extracted once and reused by later processes. It is deliberately
+    /// *not* a `TempDir`: a bundle lives in a `static`, and statics never run
+    /// `Drop`, so a `TempDir` here leaked one directory per process.
+    ///
+    /// Extraction is atomic: files are written to a private staging dir inside
+    /// the cache root and renamed into place, so concurrent processes never
+    /// observe (or corrupt) a half-extracted bundle. Entries are keyed by
+    /// content hash, so a changed payload gets a new directory; old ones are
+    /// never rewritten.
     ///
     /// # Directory Structure Preservation
     ///
@@ -386,9 +403,8 @@ mod embedded {
         /// The embedded directory tree.
         dir: &'static Dir<'static>,
         /// Lazily-initialized extraction directory.
-        /// `Ok(TempDir)` on success, `Err(message)` if extraction failed
-        /// (e.g. in WASM where there's no real filesystem).
-        extracted: OnceLock<Result<TempDir, String>>,
+        /// `Ok(path)` on success, `Err(message)` if extraction failed.
+        extracted: OnceLock<Result<PathBuf, String>>,
     }
 
     impl ResourceBundle {
@@ -410,21 +426,21 @@ mod embedded {
 
         /// Get the path to the extracted resources directory.
         ///
-        /// On first call, extracts all embedded resources to a temp directory.
-        /// Subsequent calls return the same directory.
+        /// On first call, extracts all embedded resources into the cache
+        /// (unless an earlier process already did). Subsequent calls return the
+        /// same directory.
         ///
         /// # Errors
         ///
-        /// Returns an error if the temp directory cannot be created or if
-        /// resource extraction fails (e.g. in WASM where `tempdir()` is
-        /// unavailable).
+        /// Returns an error if the cache directory cannot be created or if
+        /// resource extraction fails.
         pub fn path(&self) -> Result<&Path, ResourceError> {
             let result = self
                 .extracted
                 .get_or_init(|| self.extract().map_err(|e| e.to_string()));
 
             match result {
-                Ok(dir) => Ok(dir.path()),
+                Ok(dir) => Ok(dir.as_path()),
                 Err(msg) => Err(ResourceError::Extract(msg.clone())),
             }
         }
@@ -439,24 +455,87 @@ mod embedded {
             self.extracted.get().is_some_and(|r| r.is_ok())
         }
 
-        /// Extract all resources to a temp directory.
-        fn extract(&self) -> Result<TempDir, ResourceError> {
-            let temp_dir = tempfile::Builder::new()
-                .prefix(&format!("quarto-{}-", self.name))
-                .tempdir()?;
+        /// Resolve (extracting if needed) this bundle's cache directory.
+        fn extract(&self) -> Result<PathBuf, ResourceError> {
+            let root = cache_root();
+            let target = root.join(format!("{}-{}", self.name, content_hash(self.dir)));
+            if target.is_dir() {
+                return Ok(target);
+            }
+            std::fs::create_dir_all(&root)?;
 
-            self.dir
-                .extract(temp_dir.path())
-                .map_err(|e| ResourceError::Extract(e.to_string()))?;
+            // Stage inside the cache root so the final rename stays on one
+            // filesystem. Nothing is held open across the rename (Windows
+            // refuses to rename a directory with open handles inside).
+            let staging = root.join(format!(
+                ".tmp-{}-{}-{}",
+                self.name,
+                std::process::id(),
+                STAGING_COUNTER.fetch_add(1, Ordering::Relaxed)
+            ));
+            let _ = std::fs::remove_dir_all(&staging);
+            std::fs::create_dir(&staging)?;
 
-            Ok(temp_dir)
+            let result = self
+                .dir
+                .extract(&staging)
+                .map_err(|e| ResourceError::Extract(e.to_string()))
+                .and_then(|()| match std::fs::rename(&staging, &target) {
+                    Ok(()) => Ok(()),
+                    // Lost a race with another process that extracted the same
+                    // (identical) content first: theirs is as good as ours.
+                    Err(_) if target.is_dir() => Ok(()),
+                    Err(e) => Err(ResourceError::Extract(format!(
+                        "renaming {} to {}: {e}",
+                        staging.display(),
+                        target.display()
+                    ))),
+                });
+            // No-op after a successful rename; cleans up on every failure path.
+            let _ = std::fs::remove_dir_all(&staging);
+            result.map(|()| target)
         }
+    }
+
+    /// `<os cache dir>/quarto/resources`, or `$QUARTO_RESOURCE_CACHE_DIR`.
+    /// With no cache dir at all (HOME unset) fall back to a *stable* path under
+    /// the temp dir: still one directory per payload, never one per process.
+    fn cache_root() -> PathBuf {
+        if let Some(dir) = std::env::var_os(CACHE_DIR_ENV) {
+            return PathBuf::from(dir);
+        }
+        dirs::cache_dir()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("quarto")
+            .join("resources")
+    }
+
+    /// Hash of every embedded file's relative path and bytes, in a stable order.
+    fn content_hash(dir: &Dir<'_>) -> String {
+        fn walk(dir: &Dir<'_>, hasher: &mut Sha256) {
+            let mut entries: Vec<&DirEntry<'_>> = dir.entries().iter().collect();
+            entries.sort_by_key(|e| e.path());
+            for entry in entries {
+                match entry {
+                    DirEntry::Dir(d) => walk(d, hasher),
+                    DirEntry::File(f) => {
+                        let path = f.path().to_string_lossy();
+                        hasher.update((path.len() as u64).to_le_bytes());
+                        hasher.update(path.as_bytes());
+                        hasher.update((f.contents().len() as u64).to_le_bytes());
+                        hasher.update(f.contents());
+                    }
+                }
+            }
+        }
+        let mut hasher = Sha256::new();
+        walk(dir, &mut hasher);
+        hex::encode(&hasher.finalize()[..8])
     }
 
     // ResourceBundle is Send + Sync because:
     // - name and dir are 'static references (inherently Send + Sync)
-    // - OnceLock<Result<TempDir, String>> is Send + Sync when TempDir is Send
-    // - TempDir is Send (it's just a PathBuf internally)
+    // - OnceLock<Result<PathBuf, String>> is Send + Sync
     unsafe impl Send for ResourceBundle {}
     unsafe impl Sync for ResourceBundle {}
 
@@ -510,6 +589,54 @@ mod embedded {
             // may have already triggered extraction. Just verify the method works.
             let _ = FRESH_BUNDLE.path();
             assert!(FRESH_BUNDLE.is_extracted());
+        }
+
+        /// Regression (temp-dir leak): extracting a bundle must not leave
+        /// anything behind in `$TMPDIR`. The old implementation parked a
+        /// `TempDir` in a `static OnceLock`; statics never run `Drop`, so every
+        /// process leaked `quarto-<name>-XXXXXX` (~1.5 MB per trio of bundles).
+        /// Extraction now goes to a content-addressed cache dir, so a second
+        /// bundle over the same payload (a "second process") reuses it.
+        ///
+        /// nextest runs each test in its own process, so mutating the process
+        /// environment here is safe.
+        #[test]
+        fn test_bundle_leaves_nothing_in_tmpdir_and_reuses_cache() {
+            static DIR_A: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/engine/knitr/resources");
+            static DIR_B: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/engine/knitr/resources");
+            static BUNDLE_A: ResourceBundle = ResourceBundle::new("leakcheck", &DIR_A);
+            static BUNDLE_B: ResourceBundle = ResourceBundle::new("leakcheck", &DIR_B);
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let cache = tempfile::tempdir().unwrap();
+            unsafe {
+                std::env::set_var("TMPDIR", tmpdir.path());
+                std::env::set_var("TEMP", tmpdir.path());
+                std::env::set_var("TMP", tmpdir.path());
+                std::env::set_var(CACHE_DIR_ENV, cache.path());
+            }
+
+            let first = BUNDLE_A.path().expect("first extraction").to_path_buf();
+            let second = BUNDLE_B.path().expect("cached extraction").to_path_buf();
+            assert_eq!(first, second, "same payload must resolve to the same dir");
+            assert!(first.starts_with(cache.path()));
+            assert!(!std::fs::read_dir(&first).unwrap().next().is_none());
+
+            let leaked: Vec<_> = std::fs::read_dir(tmpdir.path())
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            assert!(leaked.is_empty(), "leaked into $TMPDIR: {leaked:?}");
+
+            let entries: Vec<_> = std::fs::read_dir(cache.path())
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            assert_eq!(
+                entries.len(),
+                1,
+                "one cache entry, no staging debris: {entries:?}"
+            );
         }
 
         #[test]

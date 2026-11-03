@@ -162,9 +162,13 @@ fn parse_github(input: &str) -> Result<RemoteTarget, FetchError> {
         // A ref could be either a tag or a branch, and GitHub serves
         // them from different paths. Try tag first: `@v1.2.0` is
         // overwhelmingly a tag, and a branch of the same name is rare.
+        // A commit SHA (full or short) is neither, and GitHub serves it
+        // only at the plain `archive/<sha>` path, so that comes last:
+        // a tag or branch with the same name still wins (#1005).
         Some(r) => vec![
             github_archive_url(org, repo, "tags", r),
             github_archive_url(org, repo, "heads", r),
+            format!("https://github.com/{org}/{repo}/archive/{r}{GITHUB_ARCHIVE_EXT}"),
         ],
         None => DEFAULT_BRANCHES
             .iter()
@@ -302,15 +306,32 @@ mod tests {
     }
 
     #[test]
-    fn a_ref_probes_tag_then_branch() {
+    fn a_ref_probes_tag_then_branch_then_commit() {
         let r = remote("org/repo@v1.2.0");
         assert_eq!(
             r.candidates,
             [
                 "https://github.com/org/repo/archive/refs/tags/v1.2.0.tar.gz",
                 "https://github.com/org/repo/archive/refs/heads/v1.2.0.tar.gz",
+                "https://github.com/org/repo/archive/v1.2.0.tar.gz",
             ]
         );
+    }
+
+    #[test]
+    fn a_commit_sha_is_reachable_through_the_plain_archive_path() {
+        // GitHub serves a commit (full or short SHA) only at
+        // `archive/<sha>.tar.gz`; both `refs/` paths 404 for it (#1005).
+        for sha in ["6b520912a7b26a72e1b0826f6b201c2e69b2b3c7", "6b52091"] {
+            let r = remote(&format!("quarto-ext/fontawesome@{sha}"));
+            assert_eq!(
+                r.candidates.last().map(String::as_str),
+                Some(
+                    format!("https://github.com/quarto-ext/fontawesome/archive/{sha}.tar.gz")
+                        .as_str()
+                )
+            );
+        }
     }
 
     #[test]

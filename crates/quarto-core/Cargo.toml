@@ -128,6 +128,8 @@ clap = ["dep:clap"]
 # Node discovery for the TS engine host (QUARTO_NODE / PATH / fnm / nvm / volta).
 quarto-node-discovery = { path = "../quarto-node-discovery" }
 tempfile = "3"
+# Per-user cache dir for extracted embedded resources (resources.rs).
+dirs = "6"
 which = "8"
 # hephaestus plot documents (`.hep`) → SVG at render time
 # (bd-3qych45b). Renderer-free configuration on purpose: `document-read`
