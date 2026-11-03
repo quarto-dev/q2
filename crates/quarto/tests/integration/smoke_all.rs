@@ -23,7 +23,7 @@ use walkdir::WalkDir;
 /// are collected and reported together.
 #[test]
 fn smoke_all() {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
     let smoke_all_dir = Path::new(manifest_dir).join("tests/smoke-all");
 
     if !smoke_all_dir.exists() {

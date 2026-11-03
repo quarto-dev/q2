@@ -1069,11 +1069,9 @@ mod tests {
             version.to_string()
         }
 
-        let root_version = katex_pin(concat!(env!("CARGO_MANIFEST_DIR"), "/../../package.json"));
-        let sandboxed_version = katex_pin(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../hub-client/quarto-hub-sandboxed-preview/package.json"
-        ));
+        let root_version = katex_pin("../../package.json");
+        let sandboxed_version =
+            katex_pin("../../hub-client/quarto-hub-sandboxed-preview/package.json");
         assert_eq!(
             root_version, sandboxed_version,
             "root package.json and quarto-hub-sandboxed-preview/package.json \

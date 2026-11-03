@@ -92,7 +92,8 @@ fn knitr_r_package_available() -> bool {
 /// (`crates/quarto-core/tests/fixtures/extensions/marimo`). This root is a
 /// project dir; the engine package itself lives under `_extensions/marimo`.
 fn marimo_fixture_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/marimo")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/extensions/marimo")
 }
 
 /// Recursively copy `src` into `dst` (dst is created).

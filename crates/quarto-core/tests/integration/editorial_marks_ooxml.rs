@@ -28,7 +28,8 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use super::import_support as support;
 
 fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/editorial-marks-ooxml")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/editorial-marks-ooxml")
 }
 
 fn render(dir: &Path, name: &str, qmd: &str, format: &str) -> PathBuf {

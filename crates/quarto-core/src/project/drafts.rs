@@ -527,7 +527,8 @@ mod tests {
     /// found the check hand-written at 5 sites and missing at 19.
     #[test]
     fn no_direct_draft_field_reads_outside_the_policy() {
-        let src_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let src_root =
+            std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("src");
         let allowed = [
             src_root.join("project").join("drafts.rs"),
             src_root.join("document_profile.rs"),

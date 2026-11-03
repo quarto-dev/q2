@@ -1449,7 +1449,7 @@ fn the_parity_books_input_json_matches_its_golden_and_holds_no_absolute_path() {
         !text.contains("/var/folders") && !text.contains("/Users/") && !text.contains("/tmp/"),
         "an absolute path is left in the input JSON"
     );
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("tests/integration/pandoc_request_books/pandoc-input.golden.json");
     if std::env::var("BOOK_REQUEST_GOLDEN").as_deref() == Ok("record") {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();

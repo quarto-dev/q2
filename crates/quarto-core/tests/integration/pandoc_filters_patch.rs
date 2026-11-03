@@ -17,7 +17,7 @@ use walkdir::WalkDir;
 const MARKER_PREFIX: &str = "QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#";
 
 fn filters_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .parent()
         .expect("crate dir has a parent")
         .parent()

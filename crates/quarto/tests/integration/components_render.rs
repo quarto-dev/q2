@@ -28,7 +28,8 @@ use std::process::Command;
 const Q2_BIN: &str = env!("CARGO_BIN_EXE_q2");
 
 fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/integration/fixtures/components-basic")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/integration/fixtures/components-basic")
 }
 
 fn copy_dir(src: &Path, dst: &Path) {
@@ -151,7 +152,7 @@ fn head_carries_import_map_manifest_and_runtime_in_order() {
 #[test]
 fn modules_runtime_and_react_land_under_site_libs_verbatim() {
     let r = render(&[]);
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let repo = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("../..");
     let pairs = [
         (
             "site_libs/quarto-components/counter.js",
@@ -305,7 +306,7 @@ fn element_route_binds_a_span_and_carries_its_props() {
 fn lmd_listing_component_ships_props_and_fallback() {
     let dir = tempfile::TempDir::new().unwrap();
     copy_dir(
-        &Path::new(env!("CARGO_MANIFEST_DIR"))
+        &Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("tests/integration/fixtures/components-listing"),
         dir.path(),
     );

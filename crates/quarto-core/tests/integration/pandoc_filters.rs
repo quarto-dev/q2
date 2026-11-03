@@ -88,7 +88,7 @@ fn test_embedded_datadir_requires_resolve() {
 fn test_readme_records_the_pins() {
     use quarto_core::pandoc_filters::{PANDOC_PIN, QUARTO_CLI_PIN};
 
-    let readme_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let readme_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .parent()
         .unwrap()
         .parent()

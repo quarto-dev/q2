@@ -66,7 +66,8 @@ use quarto_system_runtime::NativeRuntime;
 /// package itself lives under `_extensions/marimo/` (co-located `.js`
 /// bundle + `_extension.yml` with the Option B `claims:` map).
 fn marimo_fixture_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/marimo")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/extensions/marimo")
 }
 
 /// Recursively copy `src` into `dst` (dst is created). Mirrors

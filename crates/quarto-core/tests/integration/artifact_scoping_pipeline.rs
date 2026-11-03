@@ -89,8 +89,8 @@ fn normalize_for_hash(rel: &str, bytes: Vec<u8>) -> Vec<u8> {
 fn single_doc_render_unchanged_under_scope_refactor() {
     let temp = TempDir::new().unwrap();
     let qmd_path = temp.path().join("doc.qmd");
-    let baseline_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/phase5-single-doc-baseline");
+    let baseline_dir = PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/phase5-single-doc-baseline");
     let baseline_qmd = read(&baseline_dir.join("doc.qmd"));
     write_file(&qmd_path, &baseline_qmd);
 

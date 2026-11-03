@@ -58,7 +58,8 @@ fn flag_names(argv: &[String]) -> Vec<String> {
 }
 
 fn matrix_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc-argv-matrix")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc-argv-matrix")
 }
 
 fn copy_dir(from: &Path, to: &Path) {
@@ -75,7 +76,7 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 fn listed_flags() -> BTreeSet<String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../../ts-packages/pandoc-host/src/typst-argv-flags.json");
     let json: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();

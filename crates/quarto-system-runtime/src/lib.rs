@@ -133,7 +133,8 @@ mod tests {
     /// release-target implications worked through — not by accident.
     #[test]
     fn test_no_v8_in_workspace_lockfile() {
-        let lockfile = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock");
+        let lockfile = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+            .join("../../Cargo.lock");
         let contents = std::fs::read_to_string(&lockfile)
             .unwrap_or_else(|e| panic!("read {}: {e}", lockfile.display()));
 

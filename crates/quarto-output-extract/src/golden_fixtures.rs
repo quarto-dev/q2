@@ -128,7 +128,7 @@ mod tests {
                 );
             }
         }
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("../quarto-core/tests/fixtures/pandoc-goldens/fixtures.json");
         let committed = std::fs::read_to_string(&path).expect("fixtures.json is committed");
         assert_eq!(

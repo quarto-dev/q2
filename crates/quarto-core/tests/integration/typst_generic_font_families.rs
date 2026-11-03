@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn typst_css_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../../resources/pandoc-filters/filters/modules/typst_css.lua")
 }
 

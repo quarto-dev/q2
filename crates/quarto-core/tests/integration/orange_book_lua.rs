@@ -22,7 +22,7 @@ use quarto_core::pandoc_filters::harness::{assert_pandoc_available, run_main_lua
 const MINIMAL_AST_JSON: &str = r#"{"pandoc-api-version":[1,23,1],"meta":{"quarto_pandoc_reader_opts":{"t":"MetaMap","c":{}}},"blocks":[{"t":"Header","c":[1,["sec-one",[],[]],[{"t":"Str","c":"One"}]]}]}"#;
 
 fn orange_book_lua_path() -> String {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../../resources/extension-subtrees/orange-book/_extensions/orange-book/orange-book.lua")
         .canonicalize()
         .expect("orange-book.lua must exist at the vendored subtree path")

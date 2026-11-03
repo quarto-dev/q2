@@ -23,7 +23,7 @@ fn main() {
     let run_all = args.iter().any(|a| a == "--all");
     let run_unknown = args.iter().any(|a| a == "--unknown");
 
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
     let test_dir = Path::new(manifest_dir).join("test-data/csl-suite");
     let enabled_file = Path::new(manifest_dir).join("tests/enabled_tests.txt");
     let deferred_file = Path::new(manifest_dir).join("tests/deferred_tests.txt");

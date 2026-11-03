@@ -1074,7 +1074,8 @@ Some chapter text.\n";
     /// which is `/tmp` on Linux, so they are relocated under the scratch root
     /// too (each nextest test is its own process, so setting the env is safe).
     fn scratch_root() -> (tempfile::TempDir, std::path::PathBuf) {
-        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
+        let base = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+            .join("../../target/tmp");
         std::fs::create_dir_all(&base).unwrap();
         let dir = tempfile::Builder::new()
             .prefix("q2-r9-core-")

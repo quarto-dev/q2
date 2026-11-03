@@ -54,7 +54,7 @@ use quarto_core::engine::ts_process::node_available_for_tests;
 /// Absolute path to a committed fixture extension directory. The
 /// fixtures live in `quarto-core`, so this walks up out of `crates/quarto`.
 fn fixture_ext_dir(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../quarto-core/tests/fixtures/extensions")
         .join(name)
 }

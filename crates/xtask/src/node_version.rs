@@ -345,7 +345,7 @@ mod tests {
         // Guards the real pin: if someone rewrites `engines.node` into a form
         // the check cannot interpret, this test fails before the check
         // starts failing everyone's `verify`.
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("../..");
         let r = load_requirement(&root).expect("root package.json declares engines.node");
         assert!(!r.raw.is_empty());
     }

@@ -650,7 +650,7 @@ fn build_lockfile(suite_total: usize, enabled: &HashSet<String>) -> String {
 /// Ensures enabled_tests.txt is valid and matches tests/csl_conformance.lock.
 #[test]
 fn csl_validate_manifest() {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
     let fixture_dir = Path::new(manifest_dir).join("test-data/csl-suite");
     let enabled_path = Path::new(manifest_dir).join("tests/enabled_tests.txt");
     let lockfile_path = Path::new(manifest_dir).join("tests/csl_conformance.lock");

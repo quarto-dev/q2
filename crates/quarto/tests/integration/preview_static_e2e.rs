@@ -24,7 +24,7 @@ const Q2_BIN: &str = env!("CARGO_BIN_EXE_q2");
 const EVENT_DEADLINE: Duration = Duration::from_secs(30);
 
 fn fixture_source() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../../examples/websites/01-minimal")
         .canonicalize()
         .expect("examples/websites/01-minimal exists")

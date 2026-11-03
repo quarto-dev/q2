@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use quarto_brand::Brand;
 
 fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("tests/fixtures")
 }
 
 fn load_fixture(rel_path: &str) -> Brand {

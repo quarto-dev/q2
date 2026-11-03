@@ -526,7 +526,7 @@ fn create_project_blog_writes_full_scaffold_including_binaries() {
 
     // The binaries must round-trip byte-identical through the
     // ScaffoldContent::Binary path and the disk writer.
-    let embedded = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let embedded = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../quarto-project-create/resources/templates/website/blog");
     for (written, source) in [
         ("posts/welcome/thumbnail.jpg", "posts/welcome/thumbnail.jpg"),

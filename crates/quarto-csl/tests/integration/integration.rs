@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 /// Get the test-data directory path.
 fn test_data_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("test-data")
 }
 
 /// Test parsing the APA style.

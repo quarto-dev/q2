@@ -270,7 +270,7 @@ async fn config_reports_editor_boot_when_stashed() {
 /// `build.rs` saw at compile time, and `build.rs` watches the dist
 /// tree, so the on-disk manifest and the embedded one move together.
 fn viewer_manifest_path() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../../q2-preview-spa/dist/spa-manifest.json")
 }
 

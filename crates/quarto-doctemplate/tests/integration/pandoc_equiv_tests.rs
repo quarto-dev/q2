@@ -13,7 +13,7 @@ use std::path::Path;
 
 /// Helper to get the path to test fixtures
 fn fixture_path(name: &str) -> std::path::PathBuf {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
     Path::new(manifest_dir)
         .join("tests")
         .join("pandoc-equiv")

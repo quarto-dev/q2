@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 fn conformance_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/lua-conformance")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("tests/lua-conformance")
 }
 
 #[derive(Debug)]

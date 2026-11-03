@@ -1690,7 +1690,7 @@ mod tests {
     #[test]
     fn test_compile_theme_css_with_custom_file() {
         // Use the test fixture
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
 
         let runtime = NativeRuntime::new();
@@ -1709,7 +1709,7 @@ mod tests {
 
     #[test]
     fn test_compile_theme_css_builtin_then_custom() {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
 
         let runtime = NativeRuntime::new();

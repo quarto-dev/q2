@@ -624,7 +624,7 @@ fn default_project_theme_artifact_lands_in_vfs() {
 }
 
 fn copy_fixture(rel: &str, dst: &Path) {
-    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let src = PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("tests/fixtures")
         .join(rel);
     copy_dir_recursive(&src, dst);

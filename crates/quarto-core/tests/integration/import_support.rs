@@ -23,7 +23,7 @@ pub const FIXTURES: &[&str] = &[
 ];
 
 pub fn fixture_dir(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("tests/fixtures/import-recordings")
         .join(name)
 }

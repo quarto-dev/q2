@@ -50,7 +50,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn repo_root() -> PathBuf {
     // CARGO_MANIFEST_DIR is crates/quarto regardless of this file's
     // location inside tests/integration/.
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../..")
         .canonicalize()
         .unwrap()

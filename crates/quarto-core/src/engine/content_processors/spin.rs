@@ -383,8 +383,8 @@ mod tests {
     use super::*;
 
     fn golden(name: &str) -> (String, String) {
-        let base =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/spin-goldens");
+        let base = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+            .join("tests/fixtures/spin-goldens");
         let r = std::fs::read_to_string(base.join(format!("{name}.R"))).unwrap();
         let qmd = std::fs::read_to_string(base.join(format!("{name}.qmd"))).unwrap();
         (r, qmd)

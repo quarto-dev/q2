@@ -48,7 +48,8 @@ const FIXTURES: &[&str] = &[
 const HTML_FIXTURES: &[&str] = &["desugar"];
 
 fn fixtures_dir() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/integration/fixtures/lmd")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/integration/fixtures/lmd")
 }
 
 /// Render one fixture to markdown in a scratch copy; return (markdown,
@@ -189,7 +190,7 @@ fn render_project(fixture: &str, page: &str) -> (String, String) {
     let temp = tempfile::TempDir::new().unwrap();
     let dir = temp.path().to_path_buf();
     copy_dir(
-        &Path::new(env!("CARGO_MANIFEST_DIR"))
+        &Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join(format!("tests/integration/fixtures/{fixture}")),
         &dir,
     );

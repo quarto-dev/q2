@@ -346,7 +346,7 @@ fn qmd_files_under(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
 /// (they are other tests' business), but the sweep must find real math.
 #[test]
 fn every_in_tree_fixture_math_maps_byte_for_byte() {
-    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak());
     let repo = manifest.parent().unwrap().parent().unwrap();
     let mut files = Vec::new();
     for rel in [

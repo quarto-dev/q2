@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../..")
         .canonicalize()
         .unwrap()

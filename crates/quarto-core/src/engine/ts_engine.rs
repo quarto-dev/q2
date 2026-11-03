@@ -2724,7 +2724,7 @@ mod tests {
     #[test]
     fn julia_fixture_jl_percent_converts_natively() {
         watchdog(Duration::from_secs(10), || {
-            let manifest_yml = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            let manifest_yml = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join(
                 "../../resources/extension-subtrees/julia-engine/_extensions/julia-engine/_extension.yml",
             );
             let runtime = quarto_system_runtime::NativeRuntime::new();

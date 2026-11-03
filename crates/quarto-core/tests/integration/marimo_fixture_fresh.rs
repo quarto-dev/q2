@@ -25,7 +25,7 @@ use std::process::Command;
 use sha2::{Digest, Sha256};
 
 fn extension_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("tests/fixtures/extensions/marimo/_extensions/marimo")
 }
 

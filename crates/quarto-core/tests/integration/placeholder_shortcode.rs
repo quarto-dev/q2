@@ -20,7 +20,7 @@ use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn script() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../../resources/extensions/quarto/placeholder/placeholder.lua")
 }
 
@@ -101,7 +101,8 @@ async fn explicit_svg_overrides_the_png_default() {
 /// A typst that cannot run is a `fatal`, naming the failure.
 #[tokio::test]
 async fn a_broken_typst_fails_loudly() {
-    let missing = Path::new(env!("CARGO_MANIFEST_DIR")).join("no-such-typst-binary");
+    let missing = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("no-such-typst-binary");
     let err = error(placeholder("html", Some("png"), Some(missing)).await);
     assert!(
         err.contains("failed to rasterize SVG to PNG via typst"),

@@ -554,7 +554,8 @@ fn e2e_render_epub_callout_and_crossref() {
 /// image as unfetchable, which is exactly the failure mode T4.3/T4.4
 /// guard *against* seeing on a correctly-staged resource.
 fn tiny_png_bytes() -> Vec<u8> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/smoke-all/q2-preview/hero.png");
+    let path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/smoke-all/q2-preview/hero.png");
     std::fs::read(&path).unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e))
 }
 

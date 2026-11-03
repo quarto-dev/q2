@@ -505,10 +505,7 @@ mod tests {
     use quarto_core::import::formats::IMPORT_FORMATS;
     use std::io::{Read, Write};
 
-    const FIXTURES: &str = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../quarto-core/tests/fixtures/import-recordings"
-    );
+    const FIXTURES: &str = "../quarto-core/tests/fixtures/import-recordings";
 
     fn fixture(name: &str, file: &str) -> Vec<u8> {
         std::fs::read(Path::new(FIXTURES).join(name).join(file))
@@ -586,11 +583,8 @@ mod tests {
     #[test]
     fn the_collection_limits_match_the_browser_host() {
         // ts-packages/pandoc-host/src/limits.ts (DEFAULT_LIMITS).
-        let limits = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../ts-packages/pandoc-host/src/limits.ts"
-        ))
-        .unwrap();
+        let limits =
+            std::fs::read_to_string("../../ts-packages/pandoc-host/src/limits.ts").unwrap();
         assert!(limits.contains(&format!("collected_file_bytes: {COLLECTED_FILE_BYTES}")));
         assert!(limits.contains(&format!("collected_total_bytes: {COLLECTED_TOTAL_BYTES}")));
     }

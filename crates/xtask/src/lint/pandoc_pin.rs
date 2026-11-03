@@ -335,7 +335,8 @@ mod tests {
     /// prove the rule discriminates; this proves the real tree is clean.
     #[test]
     fn test_real_tree_pins_agree() {
-        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let workspace_root =
+            Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("../..");
         let violations = check(&workspace_root).unwrap();
         assert!(
             violations.is_empty(),

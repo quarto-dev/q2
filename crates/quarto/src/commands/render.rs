@@ -3085,7 +3085,7 @@ mod tests {
             &dir.join("index.qmd"),
             "---\ntitle: Index\n---\n\nContent.\n",
         );
-        let fixture_ext = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let fixture_ext = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("../quarto-core/tests/fixtures/extensions/echo-engine");
         assert!(
             fixture_ext.exists(),

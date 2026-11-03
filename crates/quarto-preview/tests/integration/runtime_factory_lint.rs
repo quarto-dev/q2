@@ -48,7 +48,7 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 
 #[test]
 fn preview_sites_use_the_runtime_factory() {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak());
     let mut files = rust_files(&manifest.join("src"));
     let commands = manifest.join("../quarto/src/commands");
     files.extend(

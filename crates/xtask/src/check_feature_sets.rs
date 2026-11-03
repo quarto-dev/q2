@@ -316,7 +316,7 @@ mod tests {
     /// no-op.
     #[test]
     fn discovers_the_wasm_consumers_in_this_repo() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("../..");
         let sets = discover_feature_sets(&root).unwrap();
         assert!(
             sets.get(&set(&[]))

@@ -47,7 +47,7 @@ mod registry_build_tests {
     /// (`crates/quarto-core/tests/fixtures/extensions/<name>`). Mirrors
     /// `synth_engines_e2e.rs::fixture_ext_dir`.
     fn fixture_ext_dir(name: &str) -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
+        Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("tests/fixtures/extensions")
             .join(name)
     }

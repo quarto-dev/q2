@@ -32,7 +32,8 @@ use quarto_core::engine::ts_process::node_available_for_tests;
 /// Absolute path to the committed `synth-echo` subtree fixture, shaped like
 /// a whole vendored repo: `_extensions/synth-echo/{_extension.yml,src/}`.
 fn fixture_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extension-subtrees/synth-echo")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/extension-subtrees/synth-echo")
 }
 
 /// Recursively copy `src` into `dst` (dst is created).

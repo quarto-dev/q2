@@ -10,7 +10,7 @@ use quarto_pandoc_recording::tree::{ManifestEntry, list_files};
 use std::path::{Path, PathBuf};
 
 fn set_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../quarto-core/tests/fixtures/pandoc-recordings/recordings")
 }
 
@@ -79,7 +79,8 @@ fn recordings_name_no_machine_paths() {
 #[cfg(unix)]
 fn require_pinned_pandoc() {
     let text = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../resources/pandoc-wasm.json"),
+        Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+            .join("../../resources/pandoc-wasm.json"),
     )
     .unwrap();
     let json: serde_json::Value = serde_json::from_str(&text).unwrap();

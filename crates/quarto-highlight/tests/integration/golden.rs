@@ -64,8 +64,8 @@ fn golden_user_grammar_toml() {
     // A user-supplied grammar loaded dynamically from the
     // `user-grammar-toml` fixture. Snapshot tracks that dynamic loading
     // produces the same shape of output as static built-ins.
-    let fixture_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/user-grammar-toml");
+    let fixture_dir = PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/user-grammar-toml");
     let mut user = quarto_highlight::UserGrammars::new();
     user.load_from_directory(&fixture_dir)
         .expect("toml fixture should load");

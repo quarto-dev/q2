@@ -43,7 +43,7 @@ fn copy_dir(src: &Path, dst: &Path) {
 }
 
 fn workspace_root() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .parent() // crates/
         .and_then(|p| p.parent()) // repo root
         .expect("Failed to find workspace root from CARGO_MANIFEST_DIR")
@@ -75,7 +75,7 @@ fn build_ts_extension_produces_bundle() {
         return;
     }
     // The fixture is committed relative to the quarto crate root.
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
     // quarto crate is at crates/quarto/, so workspace root is ../..
     let workspace_root = Path::new(manifest_dir)
         .parent() // crates/
@@ -168,7 +168,7 @@ fn build_ts_extension_produces_bundle() {
 /// to `Commands` in main.rs makes this command parse again → RED.
 #[test]
 fn top_level_build_ts_extension_removed() {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
     let workspace_root = Path::new(manifest_dir)
         .parent()
         .and_then(|p| p.parent())

@@ -576,7 +576,7 @@ mod tests {
     /// `Cargo.lock`. The TS side asserts the same pair from its end.
     #[test]
     fn npm_client_version_matches_crate_version() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("../..");
 
         let lock = std::fs::read_to_string(root.join("Cargo.lock")).expect("read Cargo.lock");
         let mut lines = lock.lines();

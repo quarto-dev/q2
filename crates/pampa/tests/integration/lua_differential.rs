@@ -29,7 +29,8 @@ use std::process::Command;
 use super::lua_conformance::load_xfail_file;
 
 fn differential_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/lua-conformance/differential")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/lua-conformance/differential")
 }
 
 /// Strip q2's source-tracking extensions so the AST is comparable with

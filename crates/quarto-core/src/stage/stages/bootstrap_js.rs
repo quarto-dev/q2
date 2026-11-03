@@ -709,10 +709,7 @@ mod tests {
         let js = std::str::from_utf8(BOOTSTRAP_JS).expect("Bootstrap JS must be valid UTF-8");
         let js_version = version_after(js, "Bootstrap v", "bootstrap.bundle.min.js banner");
 
-        let readme_path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../resources/scss/README.md"
-        );
+        let readme_path = "../../resources/scss/README.md";
         let readme = std::fs::read_to_string(readme_path)
             .unwrap_or_else(|e| panic!("reading {readme_path}: {e}"));
         let scss_version = version_after(&readme, "Bootstrap ", "resources/scss/README.md");

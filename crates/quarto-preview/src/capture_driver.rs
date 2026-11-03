@@ -503,7 +503,7 @@ mod tests {
     /// Absolute path to the committed echo-engine fixture extension
     /// (lives under the sibling `quarto-core` crate's test fixtures).
     fn echo_engine_fixture_dir() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("../quarto-core/tests/fixtures/extensions/echo-engine")
     }
 
@@ -532,7 +532,7 @@ mod tests {
                 config: None,
                 workspace: false,
                 workspace_root: Some(
-                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
                         .join("../..")
                         .canonicalize()
                         .expect("workspace root"),

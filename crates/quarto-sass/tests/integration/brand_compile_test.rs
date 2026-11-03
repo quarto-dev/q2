@@ -13,7 +13,7 @@ use quarto_brand::Brand;
 use quarto_sass::brand_to_layers;
 
 fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .parent()
         .unwrap()
         .join("quarto-brand/tests/fixtures")

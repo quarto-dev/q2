@@ -1699,7 +1699,7 @@ mod tests {
 
     #[test]
     fn test_ts_wire_parity_fixture() {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let path = std::path::PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("tests")
             .join("fixtures")
             .join("ts_wire_parity.json");

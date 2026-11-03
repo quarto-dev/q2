@@ -55,7 +55,7 @@ fn limits_are_the_designed_ones() {
 
 #[test]
 fn ci_workflows_agree_with_pandoc_pin() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("../..");
     for wf in ["ts-test-suite.yml", "test-suite.yml"] {
         let path = root.join(".github/workflows").join(wf);
         let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));

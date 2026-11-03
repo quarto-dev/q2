@@ -121,8 +121,8 @@ fn real_echo_capture_splices() {
         return;
     }
     let tmp = TempDir::new().unwrap();
-    let ext_src =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/echo-engine");
+    let ext_src = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/extensions/echo-engine");
     let dest = tmp.path().join("_extensions/echo-engine");
     copy_dir(&ext_src, &dest);
     crate::engine_fixture_build::ensure_bundle(&dest, "echo-engine");

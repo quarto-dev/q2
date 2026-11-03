@@ -341,8 +341,8 @@ fn orange_book_files() -> Vec<(String, Vec<u8>)> {
             }
         }
     }
-    let base =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../quarto/tests/smoke-all/typst/orange-book");
+    let base = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("../quarto/tests/smoke-all/typst/orange-book");
     let mut out = Vec::new();
     walk(&base, &base, &mut out);
     out

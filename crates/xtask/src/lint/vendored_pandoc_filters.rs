@@ -132,7 +132,7 @@ The following files are *not* from `v1.11.3`:
 
     #[test]
     fn test_real_tree_is_clean() {
-        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let manifest_dir = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak());
         let workspace_root = manifest_dir.parent().unwrap().parent().unwrap();
 
         // Run against real tree - should have no violations (all "ours" files should exist)

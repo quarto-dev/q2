@@ -62,7 +62,8 @@ impl grass::Fs for CombinedFs {
 }
 
 fn get_fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-fixtures/custom")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("test-fixtures/custom")
 }
 
 fn compile_themes(specs: &[ThemeSpec], context: &ThemeContext) -> Result<String, String> {

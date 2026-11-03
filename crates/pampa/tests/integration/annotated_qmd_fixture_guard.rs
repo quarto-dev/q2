@@ -39,7 +39,7 @@ use std::process::Command;
 
 /// Repo root, derived from this crate's manifest dir (`<root>/crates/pampa`).
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .ancestors()
         .nth(2)
         .expect("crates/pampa should be two levels below the repo root")

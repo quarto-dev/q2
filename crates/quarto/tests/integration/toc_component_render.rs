@@ -21,7 +21,8 @@ use std::process::Command;
 const Q2_BIN: &str = env!("CARGO_BIN_EXE_q2");
 
 fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/integration/fixtures/components-toc")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/integration/fixtures/components-toc")
 }
 
 fn copy_dir(src: &Path, dst: &Path) {

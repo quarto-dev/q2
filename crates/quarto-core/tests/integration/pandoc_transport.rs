@@ -951,7 +951,8 @@ const L_TIER_TEST_COUNT: usize = 70;
 /// here as the mechanical half of that guarantee).
 #[test]
 fn test_l_tier_census() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/integration");
+    let dir =
+        Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("tests/integration");
     let mut found = 0usize;
 
     for entry in std::fs::read_dir(&dir).expect("failed to read tests/integration") {
@@ -1007,8 +1008,8 @@ fn test_l_tier_census() {
 /// they are caller-supplied `&'a` references that the pipeline never
 /// mutates, so they are identical before and after `run_pipeline` runs.
 fn build_smoke_ast_and_params(sentinel: Option<&str>) -> (String, String) {
-    let fixture_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc_transport/smoke.qmd");
+    let fixture_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc_transport/smoke.qmd");
     let content = std::fs::read(&fixture_path).expect("failed to read smoke.qmd fixture");
 
     let project_dir = tempfile::tempdir().expect("failed to create temp project dir");
@@ -1114,8 +1115,8 @@ fn build_smoke_ast_and_params(sentinel: Option<&str>) -> (String, String) {
 fn test_transport_smoke_produces_valid_docx() {
     assert_pandoc_available();
 
-    let fixture_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc_transport/smoke.qmd");
+    let fixture_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc_transport/smoke.qmd");
     let content = std::fs::read(&fixture_path).expect("failed to read smoke.qmd fixture");
 
     let project_dir = tempfile::tempdir().expect("failed to create temp project dir");
@@ -1275,8 +1276,8 @@ fn test_transport_smoke_stderr_is_quiet() {
 /// makes `assert!(!src.contains("{.callout"))` RED.
 #[test]
 fn test_smoke_fixture_has_no_custom_nodes() {
-    let fixture_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc_transport/smoke.qmd");
+    let fixture_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc_transport/smoke.qmd");
     let src = std::fs::read_to_string(&fixture_path).expect("failed to read smoke.qmd fixture");
 
     for forbidden in [":::", "{.callout", "{#thm-", "{#fig-"] {

@@ -566,7 +566,8 @@ fn j4_error_handling_does_not_wedge_host() {
 /// notebook environment are committed there (they are copied in at runtime
 /// from the sibling `julia-engine` fixture — the echo `setup_project` pattern).
 fn julia_website_fixture_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/julia-website")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/extensions/julia-website")
 }
 
 /// Build a temp WEBSITE project for the Phase-4H rows: just the committed

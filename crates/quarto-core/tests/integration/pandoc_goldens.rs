@@ -58,11 +58,13 @@ const ACCEPTED_DIVERGENT_SNAPSHOTS: &[&str] = &[
 ];
 
 fn fixtures_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc-goldens")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc-goldens")
 }
 
 fn snapshots_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/integration/snapshots")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/integration/snapshots")
 }
 
 fn divergences_ledger_path() -> PathBuf {

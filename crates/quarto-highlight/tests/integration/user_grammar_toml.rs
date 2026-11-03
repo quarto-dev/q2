@@ -12,7 +12,8 @@ use std::path::PathBuf;
 use quarto_highlight::{encoding, is_language_supported};
 
 fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/user-grammar-toml")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/user-grammar-toml")
 }
 
 #[test]

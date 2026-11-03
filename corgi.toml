@@ -32,13 +32,33 @@ command = "git describe --always --dirty --abbrev=7 --exclude=*"
 packages = ["quarto-trace"]
 profiles = ["release"]
 
+# insta's assert_*_snapshot! macros expand `env!("CARGO_MANIFEST_DIR")`
+# into every test, which corgi rejects as a location leak. insta reads
+# INSTA_WORKSPACE_ROOT at compile time instead when it is set. corgi
+# compiles from the package root with package-relative paths (so
+# `file!()` is package-relative) and runs tests there, so "." is
+# correct at runtime and location-free. The scanner fills `packages`
+# with every member that depends on insta.
+[env.INSTA_WORKSPACE_ROOT]
+command = "echo ."
+packages = ["comrak-to-pandoc", "mitex-lexer", "mitex-parser", "pampa", "quarto", "quarto-analysis", "quarto-citeproc", "quarto-config", "quarto-core", "quarto-csl", "quarto-highlight", "quarto-lsp", "quarto-lsp-core", "quarto-math", "quarto-sass", "quarto-xml", "xtask"]
+
 # Build-script reads and generated trees the include_*! scan cannot see.
 # A leading `?` = optional (npm build outputs absent on fresh clones; the
 # build script embeds a placeholder then).
 
 [extra-inputs]
+comrak-to-pandoc = [
+    "tests/**",
+]
 lua-src = [
     "lua-5.4.8/**",
+]
+mitex-lexer = [
+    "../../spec/upstream/mitex-default-spec.json",
+]
+mitex-parser = [
+    "../../spec/upstream/mitex-default-spec.json",
 ]
 pampa = [
     "resources/csl/chicago-author-date.csl",
@@ -46,17 +66,27 @@ pampa = [
     "resources/templates/html/main.html",
     "resources/templates/html/styles.citations.html",
     "resources/templates/html/styles.html",
+    "snapshots/**",
+    "test-fixtures/**",
+    "tests/**",
 ]
 qmd-syntax-helper = [
     "resources/**",
+    "tests/**",
 ]
 quarto = [
     "?../../agents-docs-dist/**",
+    "tests/**",
+]
+quarto-brand = [
+    "tests/**",
 ]
 quarto-citeproc = [
     "../pampa/resources/csl/chicago-author-date.csl",
     "locales/**",
+    "test-data/**",
     "test-data/csl-suite/**",
+    "tests/**",
     "tests/enabled_tests.txt",
 ]
 quarto-core = [
@@ -123,6 +153,7 @@ quarto-core = [
     "src/project/listing/templates/listing-default.template",
     "src/project/listing/templates/listing-grid.template",
     "src/project/listing/templates/listing-table.template",
+    "tests/**",
     "tests/fixtures/attribution-blame/multi-commit.porcelain",
     "tests/fixtures/attribution-blame/single-commit.porcelain",
     "tests/fixtures/hephaestus/basic.hep",
@@ -132,21 +163,32 @@ quarto-core = [
     "tests/integration/fixtures/ipynb/flagship-malformed-cell.ipynb",
     "tests/integration/fixtures/ipynb/front-matter.ipynb",
 ]
+quarto-csl = [
+    "test-data/**",
+]
+quarto-doctemplate = [
+    "test-fixtures/**",
+    "tests/**",
+]
 quarto-error-catalog = [
     "error_catalog.json",
 ]
 quarto-highlight = [
     "../../resources/highlights/julia/highlights.scm",
+    "tests/**",
     "tests/fixtures/builtin-snippets.json",
 ]
 quarto-lsp-core = [
     "../../resources/scss/html/templates/highlight-default.scss",
+    "src/snapshots/**",
+    "tests/**",
     "tests/fixtures/highlight-corpus.qmd",
 ]
 quarto-math = [
     "spec/commands.json",
     "spec/overrides.json",
     "spec/upstream/mitex-default-spec.json",
+    "tests/**",
 ]
 quarto-mcp-launcher = [
     "?../../ts-packages/quarto-hub-mcp/dist-bundle/**",
@@ -220,8 +262,10 @@ quarto-sass = [
     "../../resources/scss/bootstrap/themes/**",
     "../../resources/scss/html/templates/**",
     "../../resources/scss/revealjs/**",
+    "test-fixtures/**",
 ]
 quarto-test = [
+    "tests/**",
     "tests/fixtures/pdf_text_position.pdf",
 ]
 quarto-trace-server = [
@@ -247,11 +291,6 @@ tree-sitter-qmd = [
     "tree-sitter-markdown/queries/injections.scm",
     "tree-sitter-markdown/src/**",
     "tree-sitter-markdown/src/node-types.json",
-]
-wasm-quarto-hub-client = [
-    "../../resources/extension-subtrees/julia-engine/_extensions/**",
-    "../../resources/extension-subtrees/orange-book/_extensions/**",
-    "../../resources/extensions/**",
 ]
 xtask = [
     "../../.github/workflows/test-suite.yml",

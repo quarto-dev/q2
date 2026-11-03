@@ -2394,8 +2394,8 @@ mod tests {
     #[tokio::test]
     async fn test_builtin_plus_custom_theme_array() {
         // Use the quarto-sass test fixture directory as the "document dir"
-        let fixture_dir =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../quarto-sass/test-fixtures/custom");
+        let fixture_dir = PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+            .join("../quarto-sass/test-fixtures/custom");
         let fixture_dir = fixture_dir.canonicalize().unwrap();
         let doc_path = fixture_dir.join("test.qmd");
 

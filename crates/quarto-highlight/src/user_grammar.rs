@@ -333,7 +333,7 @@ mod tests {
     /// untouched.
     #[test]
     fn flatten_resolves_equal_extent_collision() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let dir = PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("tests/fixtures/user-grammar-equal-extent");
         let mut user = UserGrammars::new();
         let class = user

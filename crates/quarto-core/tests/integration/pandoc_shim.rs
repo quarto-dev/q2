@@ -169,7 +169,7 @@ end
 /// `pandoc_transport::build_smoke_ast_and_params`, kept as a separate
 /// (non-`pub`) helper here since that one is private to its own module.
 pub(crate) fn build_fixture_ast_and_params(fixture_name: &str) -> (String, String) {
-    let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let fixture_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("tests/fixtures/pandoc_shim")
         .join(fixture_name);
     let content = std::fs::read(&fixture_path)
@@ -402,7 +402,7 @@ fn test_probe_file_is_embedded_and_documented() {
         "quarto2-shim-probe.lua not found in FILTERS_DIR"
     );
 
-    let readme_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let readme_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .parent()
         .unwrap()
         .parent()
@@ -881,8 +881,8 @@ fn test_order_goes_on_the_data_table() {
 fn test_theorem_end_to_end_through_production_path() {
     assert_pandoc_available();
 
-    let fixture_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc_shim/theorem-basic.qmd");
+    let fixture_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc_shim/theorem-basic.qmd");
     let content = std::fs::read(&fixture_path)
         .unwrap_or_else(|e| panic!("failed to read fixture {fixture_path:?}: {e}"));
 
@@ -1402,8 +1402,8 @@ fn test_resolved_ref_number_is_an_integer() {
 fn test_resolved_ref_honours_ref_hyperlink() {
     assert_pandoc_available();
 
-    let fixture_path =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc_shim/ref-figure.qmd");
+    let fixture_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc_shim/ref-figure.qmd");
     let body = std::fs::read_to_string(&fixture_path)
         .unwrap_or_else(|e| panic!("failed to read fixture {fixture_path:?}: {e}"));
     let content = format!("---\ncrossref:\n  ref-hyperlink: false\n---\n{body}");
@@ -2240,7 +2240,7 @@ fn remove_proof_type_field(doc: &mut quarto_pandoc_types::pandoc::Pandoc) -> boo
 fn test_proof_missing_type_surfaces_lua_traceback() {
     assert_pandoc_available();
 
-    let fixture_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let fixture_path = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("tests/fixtures/pandoc_shim/proof-missing-type.qmd");
     let content = std::fs::read(&fixture_path)
         .unwrap_or_else(|e| panic!("failed to read fixture {fixture_path:?}: {e}"));

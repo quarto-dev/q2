@@ -126,7 +126,7 @@ fn locate_fixture() -> PathBuf {
     // Resolve relative to this test's source position: we're in
     // `crates/quarto/tests/`, the fixture is in
     // `crates/quarto-core/tests/fixtures/`.
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .parent()
         .expect("crates/")
         .join("quarto-core")

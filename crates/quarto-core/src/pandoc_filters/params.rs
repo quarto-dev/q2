@@ -959,7 +959,8 @@ mod tests {
     /// the render still succeeds, and callouts simply have no icons.
     #[test]
     fn test_docx_callout_icons_present() {
-        let resources_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../resources");
+        let resources_dir = PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+            .join("../../resources");
         let contributor = DocxCalloutIconsContributor {
             share_dir: resources_dir,
         };

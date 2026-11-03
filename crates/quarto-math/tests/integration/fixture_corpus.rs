@@ -15,7 +15,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const FIXTURE_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+pub const FIXTURE_ROOT: &str = "tests/fixtures";
 
 #[derive(Debug, Clone)]
 pub struct Fixture {

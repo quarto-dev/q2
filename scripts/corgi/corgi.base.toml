@@ -29,6 +29,17 @@ command = "git describe --always --dirty --abbrev=7 --exclude=*"
 packages = ["quarto-trace"]
 profiles = ["release"]
 
+# insta's assert_*_snapshot! macros expand `env!("CARGO_MANIFEST_DIR")`
+# into every test, which corgi rejects as a location leak. insta reads
+# INSTA_WORKSPACE_ROOT at compile time instead when it is set. corgi
+# compiles from the package root with package-relative paths (so
+# `file!()` is package-relative) and runs tests there, so "." is
+# correct at runtime and location-free. The scanner fills `packages`
+# with every member that depends on insta.
+[env.INSTA_WORKSPACE_ROOT]
+command = "echo ."
+packages = []  # @insta-users
+
 # Build-script reads and generated trees the include_*! scan cannot see.
 # A leading `?` = optional (npm build outputs absent on fresh clones; the
 # build script embeds a placeholder then).

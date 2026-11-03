@@ -287,7 +287,7 @@ fn fixture_missing_csl(dir: &Path) {
 /// A copy of a smoke-all orange-book fixture, minus its stale outputs.
 fn copy_smoke_fixture(name: &str) -> impl Fn(&Path) + '_ {
     move |dir: &Path| {
-        let src = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let src = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
             .join("../quarto/tests/smoke-all/typst")
             .join(name);
         copy_tree(&src, dir);
@@ -332,7 +332,8 @@ fn copy_tree(src: &Path, dst: &Path) {
 // ---------------------------------------------------------------------
 
 fn golden_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/integration/book_refactor_guard")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/integration/book_refactor_guard")
 }
 
 /// Compare `actual` with the recorded golden, or (re)record it when

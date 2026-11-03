@@ -333,7 +333,7 @@ const DOCX_FIXTURES: &[(&str, &str, &str, &[&str])] = &[
 ];
 
 fn fixtures_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak()).join("tests/fixtures")
 }
 
 /// Rewrite the request's real roots to R0's placeholders. The recordings put
@@ -684,10 +684,7 @@ fn walk(dir: &Path) -> Vec<PathBuf> {
 
 // --- the published golden is a real request ----------------------------
 
-const GOLDEN_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/schemas/pandoc-request.golden.json"
-);
+const GOLDEN_PATH: &str = "schemas/pandoc-request.golden.json";
 const GOLDEN_DOC: &[u8] =
     b"---\ntitle: Golden\n---\n\n# Hello\n\nA *docx* paragraph.\n\n![A figure](figure.png)\n";
 

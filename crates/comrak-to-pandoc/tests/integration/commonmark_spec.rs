@@ -35,7 +35,7 @@ fn spec_examples(spec: &str) -> Vec<String> {
 
 #[test]
 fn every_commonmark_spec_example_converts() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../../external-sources/commonmark-spec/spec.txt");
     let spec = std::fs::read_to_string(&path).expect("spec.txt is checked in");
     let examples = spec_examples(&spec);

@@ -724,10 +724,7 @@ mod tests {
     /// fails. Skips when node_modules is absent (fresh checkout before `npm install`).
     #[test]
     fn vendored_reveal_assets_match_npm_package() {
-        let npm_dist = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../node_modules/reveal.js/dist"
-        );
+        let npm_dist = "../../node_modules/reveal.js/dist";
         if !std::path::Path::new(npm_dist).exists() {
             eprintln!(
                 "skipping reveal vendoring check: {npm_dist} absent (run `npm install` from repo root)"

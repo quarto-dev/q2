@@ -1087,7 +1087,7 @@ mod tests {
     #[test]
     fn test_load_custom_theme_success() {
         // Use the test fixture directory
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
 
         let context = ThemeContext::native(fixture_dir);
@@ -1119,7 +1119,7 @@ mod tests {
     #[test]
     fn test_load_custom_theme_no_boundaries() {
         // Use the test fixture without boundary markers
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
 
         let context = ThemeContext::native(fixture_dir);
@@ -1149,7 +1149,7 @@ mod tests {
 
     #[test]
     fn test_resolve_theme_spec_custom() {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
 
         let context = ThemeContext::native(fixture_dir);
@@ -1197,7 +1197,7 @@ mod tests {
     #[test]
     fn test_process_theme_specs_custom_only() {
         // Custom-only themes should produce: [customize, custom]
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
         let context = ThemeContext::native(fixture_dir);
 
@@ -1220,7 +1220,7 @@ mod tests {
     #[test]
     fn test_process_theme_specs_builtin_then_custom() {
         // [builtin, custom] should produce: [builtin, customize, custom]
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
         let context = ThemeContext::native(fixture_dir);
 
@@ -1242,7 +1242,7 @@ mod tests {
     #[test]
     fn test_process_theme_specs_custom_then_builtin() {
         // [custom, builtin] should produce: [custom, builtin, customize]
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
         let context = ThemeContext::native(fixture_dir);
 
@@ -1297,7 +1297,7 @@ mod tests {
     fn test_process_theme_specs_ordering_affects_defaults() {
         // Verify that [A, B] and [B, A] produce different layer orderings
         // which will affect the merged defaults due to !default semantics
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
         let context = ThemeContext::native(fixture_dir);
 

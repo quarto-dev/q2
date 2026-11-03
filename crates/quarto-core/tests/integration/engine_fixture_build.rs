@@ -53,7 +53,7 @@ pub fn build_bundle(ext_dir: &Path) {
 
 /// The q2 workspace root (two levels above this crate).
 pub fn workspace_root() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("../..")
         .canonicalize()
         .expect("workspace root")
@@ -69,7 +69,7 @@ pub fn ensure_bundle(ext_dir: &Path, name: &str) {
 /// Absolute path to a committed fixture extension directory
 /// (`crates/quarto-core/tests/fixtures/extensions/<name>`).
 fn fixture_ext_dir(name: &str) -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
         .join("tests/fixtures/extensions")
         .join(name)
 }

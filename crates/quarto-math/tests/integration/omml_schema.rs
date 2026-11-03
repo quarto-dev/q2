@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
 /// Directory holding the vendored schema closure.
-pub const SCHEMA_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/schemas/ooxml");
+pub const SCHEMA_DIR: &str = "tests/schemas/ooxml";
 
 /// Outcome of a schema check.
 #[derive(Debug)]

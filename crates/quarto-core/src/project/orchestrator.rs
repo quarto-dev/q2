@@ -3598,8 +3598,8 @@ mod tests {
     }
 
     fn install_legacy_python_fixture(project_dir: &Path) {
-        let src =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/legacy-python");
+        let src = Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+            .join("tests/fixtures/extensions/legacy-python");
         copy_dir_recursive(&src, &project_dir.join("_extensions/legacy-python"));
     }
 

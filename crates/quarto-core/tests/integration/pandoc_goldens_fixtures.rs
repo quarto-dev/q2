@@ -19,7 +19,8 @@
 use std::path::PathBuf;
 
 fn fixtures_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pandoc-goldens")
+    PathBuf::from(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("tests/fixtures/pandoc-goldens")
 }
 
 fn qmd_files(dir: &std::path::Path) -> Vec<PathBuf> {

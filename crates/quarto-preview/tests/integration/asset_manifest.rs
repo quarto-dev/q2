@@ -119,7 +119,8 @@ fn decide_mode_tunnel_under_spa_dir_override() {
 
 #[test]
 fn rust_generator_matches_the_npm_written_viewer_manifest() {
-    let dist = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../q2-preview-spa/dist");
+    let dist = std::path::Path::new(&*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak())
+        .join("../../q2-preview-spa/dist");
     let manifest_path = dist.join(spa_manifest::MANIFEST_FILENAME);
     if !manifest_path.is_file() {
         // Fresh clone / dist not built: nothing to compare. The

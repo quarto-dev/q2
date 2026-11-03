@@ -11,10 +11,7 @@ use quarto_hub::HubContext;
 use quarto_preview::{PreviewConfig, run_with_on_ready};
 use tokio::sync::oneshot;
 
-const FIXTURES: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../quarto-core/tests/fixtures/import-recordings"
-);
+const FIXTURES: &str = "../quarto-core/tests/fixtures/import-recordings";
 
 fn pick_free_port() -> u16 {
     let listener = StdTcpListener::bind("127.0.0.1:0").expect("probe bind");

@@ -690,10 +690,7 @@ mod tests {
     /// drift. Mirrors `vendored_reveal_assets_match_npm_package`.
     #[test]
     fn vendored_bundle_matches_npm_package() {
-        let npm_path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../node_modules/mermaid/dist/mermaid.min.js"
-        );
+        let npm_path = "../../node_modules/mermaid/dist/mermaid.min.js";
         if !Path::new(npm_path).exists() {
             eprintln!(
                 "skipping mermaid vendoring check: {npm_path} absent \

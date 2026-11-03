@@ -1193,7 +1193,7 @@ mod tests {
     fn test_assemble_themes_custom() {
         use std::path::PathBuf;
 
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
         let context = ThemeContext::native(fixture_dir);
 
@@ -1212,7 +1212,7 @@ mod tests {
     fn test_assemble_themes_builtin_and_custom() {
         use std::path::PathBuf;
 
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = &*std::env::var("CARGO_MANIFEST_DIR").unwrap().leak();
         let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
         let context = ThemeContext::native(fixture_dir);
 
