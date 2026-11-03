@@ -826,7 +826,14 @@ fn revealjs_extension_format_uses_reveal_theme_and_assets() {
         "expected the extension deck to link reveal.css"
     );
     let theme = theme_href(&html);
-    let css = read(&result.output_path.parent().unwrap().join("talk_files").join(&theme));
+    let css = read(
+        &result
+            .output_path
+            .parent()
+            .unwrap()
+            .join("talk_files")
+            .join(&theme),
+    );
     assert!(
         css.contains("#123456"),
         "the extension's theme.scss should be compiled into the reveal theme"
