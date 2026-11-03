@@ -212,20 +212,20 @@ async fn test_type_inline_elements() {
 function Para(elem)
     local str = pandoc.Str("hello")
     local typ = pandoc.utils.type(str)
-    if typ ~= "Str" then
-        error("Expected type 'Str', got '" .. typ .. "'")
+    if typ ~= "Inline" then
+        error("Expected type 'Inline', got '" .. typ .. "'")
     end
 
     local space = pandoc.Space()
     typ = pandoc.utils.type(space)
-    if typ ~= "Space" then
-        error("Expected type 'Space', got '" .. typ .. "'")
+    if typ ~= "Inline" then
+        error("Expected type 'Inline', got '" .. typ .. "'")
     end
 
     local emph = pandoc.Emph{pandoc.Str("text")}
     typ = pandoc.utils.type(emph)
-    if typ ~= "Emph" then
-        error("Expected type 'Emph', got '" .. typ .. "'")
+    if typ ~= "Inline" then
+        error("Expected type 'Inline', got '" .. typ .. "'")
     end
 
     return elem
@@ -246,14 +246,14 @@ async fn test_type_block_elements() {
 function Para(elem)
     local para = pandoc.Para{pandoc.Str("text")}
     local typ = pandoc.utils.type(para)
-    if typ ~= "Para" then
-        error("Expected type 'Para', got '" .. typ .. "'")
+    if typ ~= "Block" then
+        error("Expected type 'Block', got '" .. typ .. "'")
     end
 
     local header = pandoc.Header(1, {pandoc.Str("Title")})
     typ = pandoc.utils.type(header)
-    if typ ~= "Header" then
-        error("Expected type 'Header', got '" .. typ .. "'")
+    if typ ~= "Block" then
+        error("Expected type 'Block', got '" .. typ .. "'")
     end
 
     return elem
