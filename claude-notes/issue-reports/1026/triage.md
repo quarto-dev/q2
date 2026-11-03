@@ -137,6 +137,24 @@ Filed **bd-0hq9pwem** (P1 bug). Fix scope:
 
 Filed related **bd-390vcoox** (P2): the HTML `link-citations` default.
 
+### Implementation note (same session, after triage)
+
+Two items above changed during the fix:
+
+- **Book projects are excluded from the new default.** The default places
+  citeproc after the `quarto` sentinel (`.post`). A pre-crossref citeproc
+  fails on `@fig-x` references ("Reference 'fig-a' not found", checked by
+  experiment), so `.post` is right for single documents. A multi-file HTML
+  book, however, aggregates references only from a citeproc in `.pre`, and
+  raises the Q-23-1 *error* for one in `.post`. Applying the default there
+  would turn every HTML book with a bibliography into a failing render. So
+  HTML book chapters get no entry, and Pandoc-hybrid book chapters keep
+  the explicit-`citeproc: true`-only rule. Books therefore still need
+  `filters: [citeproc]`, and `docs/guides/projects/book.qmd` keeps it.
+- **The default also covers Pandoc-hybrid formats other than Typst**
+  (docx, epub, gfm, …). They had the same gap, and Q1 registers only
+  Typst with `citeproc: false`.
+
 Suggested GH reply: confirm the bug, note that `filters: [citeproc]` is a
 workaround rather than intended syntax, and that `citeproc: true` is affected
 too.

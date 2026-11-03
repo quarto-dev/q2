@@ -62,6 +62,43 @@ impl UserFiltersStage {
 /// a `main.lua` entry-point mechanism for `UserFiltersStage::post()` to
 /// redirect `Position::Post` filters into — HTML has no `main.lua` leg at
 /// all, so it must keep running them via pampa exactly as before.
+/// The citeproc defaults this render applies (see
+/// [`crate::filter_resolve::apply_citeproc_default`]), or `None` when it
+/// adds no citeproc entry at all.
+///
+/// - Typst keeps Q1's `citeproc: false` format default: only an explicit
+///   `citeproc: true` runs citeproc (bd-ysqekrm2).
+/// - Every other format follows Q1's `citeMethod()`: a bibliography alone
+///   runs citeproc (GH #1026).
+/// - On the Pandoc-hybrid leg, margin-citation mode belongs to the Lua
+///   margin handler. HTML has no such handler, so its margin citations
+///   still need citeproc.
+/// - Book projects keep their pre-#1026 behavior. A multi-file HTML book
+///   aggregates references only from a citeproc placed in `.pre`
+///   (`Q-23-1`), and this default places citeproc in `.post`, so it would
+///   turn every HTML book with a bibliography into a Q-23-1 error. HTML
+///   book chapters get no entry; Pandoc-hybrid ones only for
+///   `citeproc: true`.
+fn citeproc_defaults(ctx: &StageContext) -> Option<crate::filter_resolve::CiteprocDefaults> {
+    use crate::filter_resolve::CiteprocDefaults;
+
+    let in_book = ctx.project.project_kind() == crate::project::ProjectKind::Book;
+    if is_pandoc_hybrid(&ctx.format) {
+        let is_typst = ctx.format.identifier == crate::format::FormatIdentifier::Typst;
+        Some(CiteprocDefaults {
+            from_bibliography: !is_typst && !in_book,
+            margin_handled_elsewhere: true,
+        })
+    } else if in_book {
+        None
+    } else {
+        Some(CiteprocDefaults {
+            from_bibliography: true,
+            margin_handled_elsewhere: false,
+        })
+    }
+}
+
 fn is_pandoc_hybrid(format: &crate::format::Format) -> bool {
     matches!(
         crate::format::PipelineProfile::from_format(&format.target_format),
@@ -108,24 +145,24 @@ impl PipelineStage for UserFiltersStage {
             crate::project::book::strip_citeproc_from_filters(&mut doc.ast.meta);
         }
 
+        // Citation settings (`citeproc: true`, or a bibliography alone)
+        // reach citeproc only through the `filters` list `resolve_filters`
+        // reads, so spell the entry out there. This runs after the
+        // deferral strip above: a deferred render must leave citeproc to
+        // its driver.
+        if matches!(self.position, FilterPosition::Pre)
+            && !ctx.defer_citeproc
+            && let Some(defaults) = citeproc_defaults(ctx)
+        {
+            crate::filter_resolve::apply_citeproc_default(&mut doc.ast.meta, defaults);
+        }
+
         // book-projects P6: a non-references book chapter gets
         // `suppress-bibliography: true` written into its metadata before
         // filter resolution reads it, so its own per-chapter citeproc pass
         // renders in-text citations normally but appends no local
         // bibliography div — the project-wide merge owns the one true
         // bibliography, installed later into the references chapter only.
-        // The `citeproc: true` shorthand only reaches citeproc through the
-        // `filters` list `resolve_filters` reads, so spell it out there
-        // (after the deferral strip above — a deferred render must leave
-        // citeproc to its driver). Pandoc-hybrid targets only: HTML has
-        // its own citation path.
-        if matches!(self.position, FilterPosition::Pre)
-            && !ctx.defer_citeproc
-            && is_pandoc_hybrid(&ctx.format)
-        {
-            crate::filter_resolve::apply_citeproc_shorthand(&mut doc.ast.meta);
-        }
-
         if matches!(self.position, FilterPosition::Pre) && ctx.suppress_book_bibliography {
             crate::project::book::set_suppress_bibliography(&mut doc.ast.meta);
         }
@@ -939,9 +976,26 @@ mod tests {
     async fn run_pre_post(
         format: crate::format::Format,
         defer_citeproc: bool,
+        meta_entries: Vec<(&str, ConfigValue)>,
+    ) -> Result<(), PipelineError> {
+        run_pre_post_in(
+            crate::project::ProjectKind::Default,
+            format,
+            defer_citeproc,
+            meta_entries,
+        )
+        .await
+    }
+
+    /// [`run_pre_post`] inside a project of the given kind.
+    async fn run_pre_post_in(
+        project_kind: crate::project::ProjectKind,
+        format: crate::format::Format,
+        defer_citeproc: bool,
         mut meta_entries: Vec<(&str, ConfigValue)>,
     ) -> Result<(), PipelineError> {
         let mut ctx = make_ctx();
+        ctx.project.config.project_kind = project_kind;
         ctx.format = format;
         ctx.defer_citeproc = defer_citeproc;
         meta_entries.push(("bibliography", cv_str("/nonexistent/path/refs.json")));
@@ -1032,7 +1086,7 @@ mod tests {
     }
 
     /// The book single-file driver defers citeproc to the merged document;
-    /// the shorthand must not reintroduce it per chapter.
+    /// `citeproc: true` must not reintroduce it per chapter.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn deferred_citeproc_is_not_reintroduced_by_shorthand() {
         let result = run_pre_post(
@@ -1047,20 +1101,124 @@ mod tests {
         assert!(result.is_ok(), "{result:?}");
     }
 
-    /// Scope guard: the shorthand is only wired for Pandoc-hybrid targets;
-    /// an HTML render is untouched.
+    /// GH #1026: on HTML a bibliography alone runs citeproc, as in Q1.
+    /// (Every `run_pre_post` call sets a missing bibliography, so citeproc
+    /// running shows up as an error.)
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn citeproc_shorthand_leaves_html_untouched() {
+    async fn bibliography_alone_runs_citeproc_on_html() {
+        let result = run_pre_post(crate::format::Format::html(), false, vec![]).await;
+        assert!(
+            result.is_err(),
+            "a bibliography must run citeproc on HTML (failing on the missing file)"
+        );
+    }
+
+    /// GH #1026: an explicit `citeproc: true` on HTML used to do nothing.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn citeproc_true_runs_citeproc_on_html() {
         let result = run_pre_post(
             crate::format::Format::html(),
             false,
-            vec![(
-                "citeproc",
-                ConfigValue::new_bool(true, SourceInfo::for_test()),
-            )],
+            vec![("citeproc", cv_bool(true))],
+        )
+        .await;
+        assert!(result.is_err(), "citeproc: true must run citeproc on HTML");
+    }
+
+    /// `citeproc: false` turns the bibliography default off.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn citeproc_false_skips_citeproc_on_html() {
+        let result = run_pre_post(
+            crate::format::Format::html(),
+            false,
+            vec![("citeproc", cv_bool(false))],
         )
         .await;
         assert!(result.is_ok(), "{result:?}");
+    }
+
+    /// HTML has no margin-citation handler of its own, so margin mode
+    /// still resolves citations with citeproc.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn margin_citations_still_run_citeproc_on_html() {
+        let result = run_pre_post(
+            crate::format::Format::html(),
+            false,
+            vec![("citation-location", cv_str("margin"))],
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "margin mode must still run citeproc on HTML"
+        );
+    }
+
+    /// The bibliography default also covers Pandoc-hybrid targets other
+    /// than Typst (Q1 registers only Typst with `citeproc: false`).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bibliography_alone_runs_citeproc_on_docx() {
+        let result = run_pre_post(crate::format::Format::docx(), false, vec![]).await;
+        assert!(result.is_err(), "a bibliography must run citeproc on docx");
+    }
+
+    /// Typst keeps Q1's `citeproc: false` default: a bibliography alone
+    /// leaves citations to Typst's native `#bibliography()`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bibliography_alone_skips_citeproc_on_typst() {
+        let result = run_pre_post(
+            crate::format::Format::from_format_string("typst").unwrap(),
+            false,
+            vec![],
+        )
+        .await;
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    /// Book projects keep their own citation handling: a multi-file HTML
+    /// book needs citeproc in `.pre` to aggregate its references (Q-23-1),
+    /// so neither the bibliography default nor `citeproc: true` adds a
+    /// post-position citeproc to an HTML book chapter.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn book_projects_get_no_citeproc_default_on_html() {
+        for extra in [vec![], vec![("citeproc", cv_bool(true))]] {
+            let result = run_pre_post_in(
+                crate::project::ProjectKind::Book,
+                crate::format::Format::html(),
+                false,
+                extra,
+            )
+            .await;
+            assert!(result.is_ok(), "{result:?}");
+        }
+    }
+
+    /// A Pandoc-hybrid book chapter keeps the pre-#1026 rule: only an
+    /// explicit `citeproc: true` adds citeproc, not the bibliography.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn book_projects_get_only_explicit_citeproc_on_docx() {
+        let bib_only = run_pre_post_in(
+            crate::project::ProjectKind::Book,
+            crate::format::Format::docx(),
+            false,
+            vec![],
+        )
+        .await;
+        assert!(bib_only.is_ok(), "{bib_only:?}");
+        let explicit = run_pre_post_in(
+            crate::project::ProjectKind::Book,
+            crate::format::Format::docx(),
+            false,
+            vec![("citeproc", cv_bool(true))],
+        )
+        .await;
+        assert!(
+            explicit.is_err(),
+            "citeproc: true must still run on a docx book"
+        );
+    }
+
+    fn cv_bool(b: bool) -> ConfigValue {
+        ConfigValue::new_bool(b, SourceInfo::for_test())
     }
 
     /// book-projects P6 regression: a non-book (or ordinary) render leaves

@@ -477,7 +477,7 @@ fn render_citation_to_typst(frontmatter: &str) -> String {
 /// rendered text, the bibliography is the `<refs>` div citeproc built, and
 /// the pandoc writer (run as `typst-citations`) emits no `#bibliography()`.
 ///
-/// Revert hunks: dropping `apply_citeproc_shorthand` from
+/// Revert hunks: dropping `apply_citeproc_default` from
 /// `UserFiltersStage::pre` leaves the native `@sample2020`; dropping the
 /// `-citations` writer suffix in `PandocWriteStage` brings back a trailing
 /// `#bibliography(...)`.
