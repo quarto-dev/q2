@@ -31,6 +31,7 @@ pub mod lua_os_exit_cli;
 pub mod metadata_flag_cli_e2e;
 pub mod nested_projects_cli;
 pub mod nightly_gate;
+pub mod no_execute_cli;
 pub mod output_dir_images_e2e;
 pub mod pandoc_read_locations_e2e;
 pub mod pandoc_read_stderr_e2e;

@@ -19,6 +19,34 @@ would, if run, produce `55` underneath it in the rendered page. (This page
 only *shows* cells like this one — see the next section — so nothing on it
 actually runs.)
 
+## Rendering without running any code
+
+`q2 render --no-execute` renders a document, or a whole project, without
+executing any cell:
+
+```bash
+q2 render report.qmd --no-execute
+```
+
+Each cell is shown as code with no output, and no engine is started, so
+this works on a machine without R, Python or Julia installed. Use it to
+check a layout quickly, or to render a document whose cells are slow or
+currently failing. A Jupyter notebook (`.ipynb`) still shows the outputs
+stored in it; see [Notebooks](notebooks.qmd).
+
+`--execute` is the default, and it means "execute as the documents ask".
+It exists to cancel an earlier `--no-execute` on the same command line
+(the last of the two wins).
+
+::: callout-note
+## Migrating from Quarto 1
+
+In Quarto 1, `--execute` *forces* execution, overriding a document's
+`execute: enabled: false`. In Quarto 2 it does not: a document that turns
+execution off stays off. To execute such a document anyway, override its
+metadata for the one render, with `-M 'execute:{enabled: true}'`.
+:::
+
 ## Displaying code cells without running them
 
 Writing *about* Quarto means showing readers what a cell looks like without
