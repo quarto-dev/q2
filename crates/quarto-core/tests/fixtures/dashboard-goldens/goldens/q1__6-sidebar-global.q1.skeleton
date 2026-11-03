@@ -1,0 +1,69 @@
+body.dashboard-fill.dashboard-sidebar.fullcontent.quarto-dashboard.quarto-light
+  header#quarto-dashboard-header
+    nav.navbar.navbar-expand-md.slim [data-bs-theme=dark]
+      div.container-fluid.navbar-container
+        button.navbar-toggler [aria-controls=dashboard-collapse aria-label=Toggle navigation data-bs-target=#dashboard-collapse data-bs-toggle=collapse]
+          span.navbar-toggler-icon
+        div.navbar-brand-container
+          div.navbar-title
+            div.navbar-title-text "Sidebar Example"
+        div#dashboard-collapse.collapse.navbar-collapse
+          ul.me-auto.navbar-nav.navbar-nav-scroll [role=tablist]
+            li.nav-item [role=presentation]
+              a#tab-page-1.active.nav-link [aria-controls=page-1 aria-selected=true data-bs-target=#page-1 data-bs-toggle=tab data-scrolling=false href=#page-1 role=tab]
+                span.nav-link-text "Page 1"
+            li.nav-item [role=presentation]
+              a#tab-page-2.nav-link [aria-controls=page-2 aria-selected=false data-bs-target=#page-2 data-bs-toggle=tab data-scrolling=false href=#page-2 role=tab]
+                span.nav-link-text "Page 2"
+  div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.dashboard-sidebar-container.html-fill-container.page-layout-custom.quarto-dashboard-content.quarto-dashboard-pages [role=main]
+    div.bslib-sidebar-layout.html-fill-container.html-fill-item [data-bslib-sidebar-border=false data-bslib-sidebar-border-radius=false data-bslib-sidebar-init=true data-bslib-sidebar-open=desktop style=--bslib-sidebar-width: 200px]
+      div.html-fill-container.html-fill-item.main
+        div.html-fill-container.html-fill-item.sidebar-content
+          div.bslib-grid.html-fill-container.html-fill-item.tab-content [style=display: grid; grid-template-columns: minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+            div#page-1.active.dashboard-page.html-fill-container.html-fill-item.show.tab-pane [aria-labelledby=tab-page-1]
+              div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, max-content) minmax(3em, 1fr) minmax(3em, 1fr); grid-auto-columns: minmax(0, 1fr);]
+                div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: minmax(3em, 1fr) minmax(3em, 1fr) minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+                  div.bg-secondary.bslib-card.bslib-value-box.card.html-fill-container.html-fill-item.showcase-left-center.valuebox [data-bslib-card-init=]
+                    div.card-body.html-fill-container.html-fill-item
+                      div.html-fill-container.html-fill-item.value-box-grid
+                        div.html-fill-container.html-fill-item.value-box-showcase
+                        div.value-box-area
+                          p.value-box-title "Title"
+                          p.value-box-value "45"
+                  div.bg-green.bslib-card.bslib-value-box.card.cell.html-fill-container.html-fill-item.showcase-left-center.valuebox [data-bslib-card-init=]
+                    div.card-body.html-fill-container.html-fill-item
+                      div.html-fill-container.html-fill-item.value-box-grid
+                        div.html-fill-container.html-fill-item.value-box-showcase
+                        div.value-box-area
+                          p.value-box-title "Total Dollars"
+                          p.value-box-value "3243.33"
+                  div.bg-pink.bslib-card.bslib-mb-spacing.bslib-value-box.card.html-fill-container.html-fill-item.showcase-left-center [data-bslib-card-init= data-full-screen=false]
+                    div.bslib-gap-spacing.card-body.html-fill-container.html-fill-item [style=margin-top:auto;margin-bottom:auto;flex:1 1 auto; padding:0;]
+                      div.html-fill-item.value-box-grid [style=--bslib-grid-height:auto;--bslib-grid-height-mobile:auto;---bslib-value-box-showcase-w:30%;---bslib-value-box-showcase-w-fs:1fr;---bslib-value-box-showcase-max-h:100px;---bslib-value-box-showcase-max-h-fs:67%;]
+                        div.html-fill-container.html-fill-item.value-box-showcase
+                        div.html-fill-container.html-fill-item.value-box-area
+                          p.value-box-title "3rd value"
+                          p.value-box-value "789"
+                    bslib-tooltip
+                      span.badge.bslib-full-screen-enter.rounded-pill
+                div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+                  div.bslib-card.card.cell.html-fill-container.html-fill-item [data-bslib-card-init= data-full-screen=false]
+                    div.card-body.html-fill-container.html-fill-item
+                      div.cell-output-display.html-fill-container.html-fill-item
+                        img.img-fluid.quarto-dashboard-img-contain
+                    bslib-tooltip
+                      span.badge.bslib-full-screen-enter.rounded-pill
+                div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+                  div.bslib-card.bslib-mb-spacing.card.html-fill-container.html-fill-item [data-bslib-card-init= data-full-screen=false]
+                    div.bslib-gap-spacing.card-header
+                      div.card-title.html-fill-container.html-fill-item "A header"
+                    div.bslib-gap-spacing.card-body.html-fill-container.html-fill-item [style=margin-top:auto;margin-bottom:auto;flex:1 1 auto;]
+                    bslib-tooltip
+                      span.badge.bslib-full-screen-enter.rounded-pill
+            div#page-2.dashboard-page.grid-skip.html-fill-container.html-fill-item.tab-pane [aria-labelledby=tab-page-2]
+              div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, max-content); grid-auto-columns: minmax(0, 1fr);]
+                div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: ; grid-auto-rows: minmax(0, 1fr);]
+                  div#<uuid>.hidden.html-fill-container.html-fill-item
+      aside#bslib-sidebar-1.html-fill-container.html-fill-item.sidebar
+        div.html-fill-container.html-fill-item
+      button.collapse-toggle [aria-controls=bslib-sidebar-1 title=Toggle sidebar]

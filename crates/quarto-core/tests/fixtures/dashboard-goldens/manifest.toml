@@ -10,8 +10,7 @@
 path = "acceptance/gapminder.qmd"
 requires = ["jupyter"]
 status = "pending"
-q1_golden = false
-note = "Phase 4 (cards and tabsets): real-world acceptance dashboard, the quarto-web gapminder example (rows with heights, titled cards, a tabset, document expandable: false with a per-card override). No Q1 golden yet: capture needs Python package plotly, not installed on the capture machine (2026-11-03)"
+note = "Phase 4 (cards and tabsets): real-world acceptance dashboard, the quarto-web gapminder example (rows with heights, titled cards, a tabset, document expandable: false with a per-card override)"
 
 [[fixture]]
 path = "acceptance/navigation.qmd"
@@ -404,8 +403,7 @@ note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
 path = "q1/6-sidebar-global.qmd"
 requires = ["knitr"]
 status = "pending"
-q1_golden = false
-note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture. No Q1 golden yet: capture needs R packages bsicons and shiny, not installed on the capture machine (2026-11-03)"
+note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/6-sidebar.qmd"
@@ -441,8 +439,7 @@ note = "Phase 3 (layout core): Q1 smoke-all fixture"
 path = "q1/9-bslib.qmd"
 requires = ["knitr"]
 status = "pending"
-q1_golden = false
-note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture. No Q1 golden yet: capture needs R package bsicons, not installed on the capture machine (2026-11-03)"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/9-no-title.qmd"
@@ -544,8 +541,7 @@ note = "Phase 7 (navigation chrome): multiple authors in the navbar (Q1 #10334)"
 path = "regressions/11150.qmd"
 requires = ["jupyter"]
 status = "pending"
-q1_golden = false
-note = "Phase 4 (cards and tabsets): ipynb-shell-interactivity: all shows every top-level output (Q1 #11150; needs bd-uqma6gec). No Q1 golden yet: capture needs Python packages plotly and seaborn, not installed on the capture machine (2026-11-03)"
+note = "Phase 4 (cards and tabsets): ipynb-shell-interactivity: all shows every top-level output (Q1 #11150; needs bd-uqma6gec)"
 
 [[fixture]]
 path = "regressions/9796.qmd"

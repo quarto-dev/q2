@@ -317,14 +317,14 @@ Built as a golden harness rather than smoke-all copies: Q1 output is reduced to 
 - [x] Copy the Q1 fixtures (`q1/`, the 40 top-level fixtures plus `_content/` as `content/`, `bugs/8552`, `notebooks/gapminder.ipynb`) and 11 Q1 regression fixtures (`regressions/`: #9056, #9796, #10334, #10340, #11338, #11549, #11150, #14646, #14684, the dark-mode toggle, #15023), from quarto-cli `d3263862a`. The brand logo variants are left for Phase 7, where logo resolution is implemented.
 - [x] Write 43 engine-free contract fixtures (`contract/`), one per contract item, cells written as pre-executed `::: {.cell}` divs so they run in CI.
 - [x] Add real-world acceptance dashboards from quarto-web (`acceptance/`: gapminder, navigation, valuebox).
-- [x] `cargo xtask capture-dashboard-goldens` renders with Quarto 1 and writes `goldens/*.q1.skeleton` + provenance. 97 goldens captured with a Q1 dev build of `d3263862a` (no release binary was at hand; recorded in `goldens/q1-provenance.txt`).
+- [x] `cargo xtask capture-dashboard-goldens` renders with Quarto 1 and writes `goldens/*.q1.skeleton` + provenance. 97 goldens captured (101 after the gap fill below) with a Q1 dev build of `d3263862a` (no release binary was at hand; recorded in `goldens/q1-provenance.txt`).
 - [x] Assertion harness `crates/quarto-core/tests/integration/dashboard_goldens.rs`: manifest and tree agree, goldens exist exactly where promised, notes explain each status, and every `match` / `divergence` fixture renders to its golden. Negative-checked: flipping `c01` to `match` fails with `Unknown format: dashboard`, Phase 1\'s first target.
 - [x] Measure Q3 across the corpus (result recorded in D5).
 - [x] Sort the corpus (`manifest.toml`): 99 `pending` (each note names its phase and, for the D5 items, the expected divergence) and 7 `deferred` (OJS, Shiny, DataTables, each naming its strand).
 
 **Findings recorded elsewhere:** Q14 and Q15 added to D5.
 
-**Capture gaps** (`q1_golden = false`; capture needs packages not installed here): `q1/6-sidebar-global` (R bsicons, shiny), `q1/9-bslib` (R bsicons), `regressions/11150` and `acceptance/gapminder` (Python plotly, seaborn), plus four deferred fixtures. Install and run `cargo xtask capture-dashboard-goldens --only <name>` to fill them.
+**Capture gaps:** none in scope. The four gaps of the first capture (`q1/6-sidebar-global`, `q1/9-bslib`, `regressions/11150`, `acceptance/gapminder`) were filled on 2026-11-03 after installing R bsicons and shiny and Python plotly and seaborn; 101 Q1 goldens in all. Still without a golden: `contract/c43` (Q1 is fatal, Q15) and four deferred fixtures (Shiny, itables, DT).
 
 ### Phase 1: Prerequisites
 

@@ -51,8 +51,8 @@ were captured that way.
 - **Landing a phase:** flip its fixtures from `pending` to `match` (or to
   `divergence` with a `.q2.skeleton` and a note naming the plan decision).
 - **Recapture:** `cargo xtask capture-dashboard-goldens [--quarto <bin>] [--only <substr>]`.
-  Needs R (knitr, ggplot2, bslib, gt, palmerpenguins) and Python (pandas,
-  matplotlib) for the engine fixtures. A fixture that Quarto 1 cannot render
+  Needs R (knitr, ggplot2, bslib, bsicons, shiny, gt, palmerpenguins) and
+  Python (pandas, matplotlib, plotly, seaborn) for the in-scope engine fixtures. A fixture that Quarto 1 cannot render
   is reported; mark it `q1_golden = false` with a reason.
 - **Adding a fixture:** add the file, add its manifest entry, capture its golden.
   The harness fails if the manifest and the tree disagree.
