@@ -147,7 +147,8 @@ pub struct ExecutionContext {
     /// carries this into `TsExecuteOptions.format.metadata`, which the Node
     /// host's `metadataAsFormat` partitions into Q1's six-bin `Format`
     /// (`execute`/`render`/`pandoc`/`identifier`/`language`/`metadata`).
-    /// Built-in engines (knitr/jupyter) ignore this field.
+    /// knitr reads only its `knitr` key, forwarded to R as
+    /// `format$metadata$knitr` (GH #1009); jupyter ignores this field.
     ///
     /// Defaults to empty so existing call sites (tests, knitr, jupyter) are
     /// unaffected.
