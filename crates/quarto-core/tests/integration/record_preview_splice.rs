@@ -123,6 +123,14 @@ async fn record_with(dir: &Path, source: &str, engine: StubEngine) -> Record {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let mut registry = EngineRegistry::new();
+    // Never let the real knitr own a `{r}` cell: it needs Rscript, which CI lacks, and the
+    // test's point is the cell index, not R. A stub also named `knitr` replaces it.
+    if engine.name != "knitr" {
+        registry.register(Arc::new(StubEngine {
+            name: "knitr",
+            lang: "r",
+        }));
+    }
     registry.register(Arc::new(engine));
     record_capture_run(&path, &project, runtime, Some(Arc::new(registry)))
         .await
@@ -295,8 +303,8 @@ async fn splice_ids_equal_the_writers_with_and_without_the_mask() {
         let source = format!("---\nformat: q2-preview\n---\n\n{source}");
         let dir = tempfile::tempdir().unwrap();
         let record = record_for(dir.path(), &source).await;
-        // The stub engine's cells only: with R installed the real knitr engine also records
-        // a `{r}` chunk (EXR-11), which this fixture does not count.
+        // The Python stub's cells only: the `knitr` stub also records a `{r}` chunk, which this
+        // fixture does not count.
         let written: Vec<String> = record
             .cells
             .iter()

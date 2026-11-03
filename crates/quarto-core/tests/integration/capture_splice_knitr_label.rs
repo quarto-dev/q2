@@ -109,7 +109,7 @@ async fn unlabeled_cell_splices() {
 /// gate) splices too. Hand-built capture; the engine name is irrelevant.
 #[tokio::test]
 async fn labeled_figure_splices_for_any_engine_name() {
-    let doc = "---\nengine: knitr\n---\n\n```{r}\n#| label: fig-two-sines\n#| fig-cap: Two sines\nplot(1)\n```\n";
+    let doc = "```{r}\n#| label: fig-two-sines\n#| fig-cap: Two sines\nplot(1)\n```\n";
     let capture = quarto_trace::EngineCapture {
         engine_name: "someengine".into(),
         input_qmd: "::: {#fig-two-sines}\n\n```{r}\n#| label: fig-two-sines\nplot(1)\n```\n\nTwo sines\n\n:::\n".into(),
@@ -150,7 +150,7 @@ async fn labeled_figure_splices_for_any_engine_name() {
 /// previous test covers the old-style capture (line present).
 #[tokio::test]
 async fn canonical_capture_without_injected_line_splices() {
-    let doc = "---\nengine: knitr\n---\n\n```{r}\n#| label: fig-two-sines\n#| fig-cap: Two sines\nplot(1)\n```\n";
+    let doc = "```{r}\n#| label: fig-two-sines\n#| fig-cap: Two sines\nplot(1)\n```\n";
     let capture = quarto_trace::EngineCapture {
         engine_name: "someengine".into(),
         input_qmd: "::: {#fig-two-sines}\n\n```{r}\nplot(1)\n```\n\nTwo sines\n\n:::\n".into(),
