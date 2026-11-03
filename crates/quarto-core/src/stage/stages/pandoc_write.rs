@@ -1178,8 +1178,13 @@ impl PandocWriteStage {
         // The document's own directory is the base a
         // `reference-doc`/`template` entry's `FORMAT_PATH_KEYS`-resolved,
         // document-relative `Path` value is rebased against.
-        let mut forwarded_args =
-            build_forwarded_args(name, &path_ctx, &doc.ast.meta, ctx.format.identifier)?;
+        let mut forwarded_args = build_forwarded_args(
+            name,
+            &path_ctx,
+            &|p: &std::path::Path| ctx.runtime.is_file(p).unwrap_or(false),
+            &doc.ast.meta,
+            ctx.format.identifier,
+        )?;
 
         if is_typst {
             let args = crate::pandoc_filters::typst_highlight::typst_highlight_args(

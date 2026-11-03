@@ -1957,6 +1957,15 @@ struct ProfileApplyOutcome {
     paths: Vec<PathBuf>,
 }
 
+/// The `_extension.yml` of each discovered extension (see
+/// [`ProjectConfig::extension_manifest_paths`]).
+fn extension_manifest_paths(extensions: &[Extension]) -> Vec<PathBuf> {
+    extensions
+        .iter()
+        .map(|ext| ext.path.join("_extension.yml"))
+        .collect()
+}
+
 /// The file name of a config path, for diagnostics (`_quarto.yml`,
 /// `_quarto-prod.yml`, …). Falls back to the full display string for
 /// pathological paths.
@@ -2187,6 +2196,10 @@ impl ProjectContext {
                 ProjectConfig {
                     active_config_profiles: active,
                     config_diagnostics: diagnostics,
+                    // Registered by the metadata merge so a value from an
+                    // extension format resolves against its manifest
+                    // (GH #1010), as it does under a `_quarto.yml`.
+                    extension_manifest_paths: extension_manifest_paths(&extensions),
                     ..Default::default()
                 }
             }
@@ -2443,10 +2456,7 @@ impl ProjectContext {
 
         // See the field docs: candidate source files for
         // config-anchored diagnostics (bd-m6wmztln).
-        let extension_manifest_paths = extensions
-            .iter()
-            .map(|ext| ext.path.join("_extension.yml"))
-            .collect();
+        let extension_manifest_paths = extension_manifest_paths(&extensions);
 
         // Profile warnings first (they arose first), then
         // type-resolution warnings.
@@ -3457,6 +3467,42 @@ mod tests {
             // Config should be default with no metadata
             assert_eq!(ctx.config.project_kind, ProjectKind::Default);
             assert!(ctx.config.metadata.is_none());
+        }
+
+        /// GH #1010: a single-file render records its extensions'
+        /// manifests too, so the metadata merge registers them and an
+        /// extension format's `reference-doc` resolves against the
+        /// manifest's directory.
+        #[test]
+        fn test_discover_without_quarto_yml_records_extension_manifests() {
+            let temp = TempDir::new().unwrap();
+            let ext_dir = temp.path().join("_extensions").join("demo");
+            fs::create_dir_all(&ext_dir).unwrap();
+            fs::write(
+                ext_dir.join("_extension.yml"),
+                "title: Demo\ncontributes:\n  formats:\n    docx:\n      reference-doc: ref.docx\n",
+            )
+            .unwrap();
+            let qmd_path = temp.path().join("doc.qmd");
+            fs::write(&qmd_path, "# Hello\n").unwrap();
+
+            let runtime = NativeRuntime::new();
+            let ctx = ProjectContext::discover(&qmd_path, &runtime).unwrap();
+
+            assert!(ctx.is_single_file);
+            let manifests: Vec<_> = ctx
+                .config
+                .extension_manifest_paths
+                .iter()
+                .map(|p| runtime.canonicalize(p).unwrap())
+                .collect();
+            let expected = runtime
+                .canonicalize(&ext_dir.join("_extension.yml"))
+                .unwrap();
+            assert!(
+                manifests.contains(&expected),
+                "{manifests:?} must contain {expected:?}"
+            );
         }
 
         #[test]
