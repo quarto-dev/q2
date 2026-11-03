@@ -50,6 +50,7 @@ use std::collections::HashMap;
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, OrderedList, Paragraph};
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::{Inline, Link, Span, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, ListNumberDelim, ListNumberStyle};
@@ -278,6 +279,19 @@ fn process_block(block: &mut Block, collector: &mut FootnoteCollector) {
         }
         Block::Div(div) => {
             process_blocks(&mut div.content, collector);
+        }
+        // Custom-node slots (since #1050 a callout is still a `Callout` custom node here (bd-akkproqy)). Document order
+        // matters for numbering: slots iterate in insertion order, and
+        // `CalloutTransform` inserts `title` before `content`.
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                match slot {
+                    Slot::Blocks(blocks) => process_blocks(blocks, collector),
+                    Slot::Block(b) => process_block(b, collector),
+                    Slot::Inlines(inlines) => process_inlines(inlines, collector),
+                    Slot::Inline(i) => process_inline(i, collector),
+                }
+            }
         }
         Block::Figure(fig) => {
             process_blocks(&mut fig.content, collector);

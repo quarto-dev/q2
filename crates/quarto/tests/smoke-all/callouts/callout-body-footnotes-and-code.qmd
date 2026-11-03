@@ -1,0 +1,52 @@
+---
+title: Footnotes and code blocks inside callouts
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            # Numbered in document order: title, body ref, inline note,
+            # tab inside the callout, then the paragraph after it.
+            'div.callout-title-container a.footnote-ref[href="#fn1"]',
+            'div.callout-body-container a.footnote-ref[href="#fn2"]',
+            'div.callout-body-container a.footnote-ref[href="#fn3"]',
+            'div.callout div.tab-pane a.footnote-ref[href="#fn4"]',
+            'section#footnotes div#fn5',
+            # The code block keeps its filename header and copy scaffold.
+            'div.callout div.code-with-filename div.code-with-filename-file',
+            'div.callout div.code-copy-outer-scaffold button.code-copy-button',
+          ]
+        - [
+            'span.quarto-note-reference',
+            'section#footnotes div#fn6',
+          ]
+---
+
+Regression fixture for bd-akkproqy. Since #1050 a callout stays a `Callout`
+custom node until the crossref phase, so the footnote and code-block
+transforms that run earlier must walk into its slots.
+
+::: {#nte-x .callout-note}
+## Title with a note[^t]
+
+Body reference.[^b] Inline^[An inline note.].
+
+```{.python filename="x.py"}
+x = 1
+```
+
+::: {.panel-tabset}
+## Tab
+
+In a tab.[^c]
+:::
+:::
+
+After the callout.[^a]
+
+[^t]: Note T.
+[^b]: Note B.
+[^c]: Note C.
+[^a]: Note A.
