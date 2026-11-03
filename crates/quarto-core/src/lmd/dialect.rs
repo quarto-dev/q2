@@ -97,13 +97,16 @@ pub fn lua_options(
 /// `output_file`, `PANDOC_STATE`, and the environment `os.getenv`
 /// answers from (GH #939, #940). `env_snapshot` is
 /// [`crate::stage::StageContext::env_snapshot`]; `None` leaves `os.getenv`
-/// to the stdlib.
+/// to the stdlib. `base_format` is [`crate::format::Format::base_format`],
+/// which `quarto.doc.is_format` also recognizes (a dashboard's `FORMAT` is
+/// `"html"`, its base format `"dashboard"`).
 pub fn lua_options_for_document(
     project: &crate::project::ProjectContext,
     runtime: &dyn quarto_system_runtime::SystemRuntime,
     document: &crate::project::DocumentInfo,
     output_file: std::path::PathBuf,
     env_snapshot: Option<Arc<crate::project::environment::EnvSnapshot>>,
+    base_format: &str,
 ) -> LuaOptions {
     let mut options = lua_options(project, runtime);
     options.host = HostContext {
@@ -117,6 +120,7 @@ pub fn lua_options_for_document(
             .map(|p| p.name.clone())
             .collect(),
         env: env_snapshot,
+        base_format: Some(base_format.to_string()),
     };
     options
 }

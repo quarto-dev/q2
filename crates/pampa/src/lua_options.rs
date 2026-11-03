@@ -46,6 +46,12 @@ pub struct HostContext {
     /// `getenv` off filter worker threads, where it would race any
     /// `setenv` elsewhere in the process.
     pub env: Option<Arc<HashMap<String, String>>>,
+    /// The base format, Q1's `format-identifier.base-format`, when it
+    /// differs from what `FORMAT` says: a dashboard is written by pandoc's
+    /// `html` writer (`FORMAT == "html"`) but `quarto.doc.is_format`
+    /// must still recognize `"dashboard"`. `None` leaves `is_format` to
+    /// `FORMAT` alone.
+    pub base_format: Option<String>,
 }
 
 /// The project a document renders inside, as `quarto.project` reports it.

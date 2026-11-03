@@ -32,6 +32,9 @@ pub fn register_host_context(lua: &Lua, host: &HostContext) -> Result<()> {
     if let Some(env) = &host.env {
         super::process_view::set_env_base(lua, env.clone());
     }
+    if let Some(base) = &host.base_format {
+        lua.set_named_registry_value(super::quarto_doc::BASE_FORMAT_REGISTRY_KEY, base.as_str())?;
+    }
     Ok(())
 }
 
@@ -173,6 +176,43 @@ mod tests {
             &lua,
             "return quarto.project.profile:includes('drafts') and #quarto.project.profile == 2"
         ));
+    }
+
+    /// Q1 writes a dashboard with pandoc's `html` writer (so `FORMAT` is
+    /// `"html"`) but `quarto.doc.is_format("dashboard")` is still true: it
+    /// answers from `format-identifier.base-format` (`_format.lua:226`).
+    #[test]
+    fn is_format_answers_from_the_base_format() {
+        let host = HostContext {
+            base_format: Some("dashboard".to_string()),
+            ..Default::default()
+        };
+        let lua = lua_with(&host);
+        lua.globals().set("FORMAT", "html").unwrap();
+        assert!(eval::<bool>(
+            &lua,
+            "return quarto.doc.is_format('dashboard')"
+        ));
+        assert!(eval::<bool>(
+            &lua,
+            "return quarto.doc.isFormat('dashboard')"
+        ));
+        assert!(eval::<bool>(&lua, "return quarto.doc.is_format('html')"));
+        assert!(!eval::<bool>(
+            &lua,
+            "return quarto.doc.is_format('revealjs')"
+        ));
+    }
+
+    #[test]
+    fn is_format_without_a_base_format_uses_format_only() {
+        let lua = lua_with(&HostContext::default());
+        lua.globals().set("FORMAT", "html").unwrap();
+        assert!(!eval::<bool>(
+            &lua,
+            "return quarto.doc.is_format('dashboard')"
+        ));
+        assert!(eval::<bool>(&lua, "return quarto.doc.is_format('html')"));
     }
 
     #[test]

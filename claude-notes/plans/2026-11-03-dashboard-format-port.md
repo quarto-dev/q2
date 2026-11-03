@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phase 0 done 2026-11-03; Phase 1 next
+status: in-progress  # Phases 0-1 done 2026-11-03; Phase 2 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -210,6 +210,8 @@ Dashboards need `echo: false`, `warning: false`, `fig-width: 8`, `fig-height: 5`
 
 The alternative is a dashboard-only special case, which would leave bd-cymkcyaf open.
 
+**Correction found in Phase 1 (2026-11-03):** the layer already existed. `format_execute_defaults` in `stage/stages/engine_execution.rs` (pandoc-hybrid P7 Task 5, after bd-cymkcyaf was filed) is a per-format `execute:` defaults table, merged under the document's own `execute:` by `merge_execute_scope`. It already covered pptx and the JS slide formats. It lacked revealjs and dashboard, and it reached knitr and Jupyter (through `ExecutionContext.execute_scope`) but **not TS engines**, which read `execute:` from the metadata map. Phase 1 therefore added the revealjs and dashboard rows and folded the merged scope into the TS metadata map (`ts_document_metadata`). beamer has no Q2 format yet (the LaTeX epic), so it stays out.
+
 ### D4. Vendor bslib components and htmltools fill CSS from the quarto-cli copy `[decided 2026-11-03: vendor, dashboard pages only]`
 
 - Vendor from the quarto-cli copy, pinned to the quarto-cli tag already in `vendored.toml`:
@@ -328,10 +330,15 @@ Built as a golden harness rather than smoke-all copies: Q1 output is reduced to 
 
 ### Phase 1: Prerequisites
 
-- [ ] `FormatIdentifier::Dashboard`, `PipelineProfile`, `KNOWN_BASE_FORMATS`, Lua `FORMAT` and `is_format`, and the knitr `base-format` handoff (D2).
-- [ ] The per-format defaults layer (D3), with tests for each format named there.
+- [x] `FormatIdentifier::Dashboard` (native, HTML-based, `.html` output), `PipelineProfile::DashboardRender`, `dashboard` in `KNOWN_BASE_FORMATS` (so `acme-dashboard` resolves). For now a dashboard runs the plain HTML transform list; the dashboard transforms arrive in Phases 2–6.
+- [x] Lua: `FORMAT == "html"` (`lua_format_for`, `Format::lua_format`), and a new `Format::base_format()` (`"dashboard"`) carried to Lua through `HostContext::base_format`, so `quarto.doc.is_format("dashboard")` is true. The same matcher (`pampa::lua::quarto_doc::is_format_match_with_base`) serves `when-format="dashboard"` in conditional content.
+- [x] knitr hand-off: `pandoc.to: html` (so `knitr::is_html_output()` holds) and `identifier.base-format: dashboard` (so the vendored `execute.R`\'s `is_dashboard_output` fires). Every format now reports its base format to knitr; only that dashboard check reads it.
+- [x] Per-format defaults (D3, see the correction there): revealjs (fig 10×5, echo/warning off) and dashboard (fig 8×5, echo/warning off, `ipynb-shell-interactivity: all`, `plotly-connected: false`) rows; TS engines receive the merged scope. Unit tests plus end-to-end probe-engine tests (`pandoc_execute_defaults.rs`).
+- [x] `crates/quarto-core/tests/integration/dashboard_format.rs`: a dashboard renders to `.html`; a user filter sees `FORMAT=html`, `is_format("dashboard")`; `format: dashboard:` options flatten into metadata.
+- [x] End to end with the CLI (2026-11-03): `q2 render` of `q1/8-pages.qmd` (R cells, `format: dashboard:` in front matter) renders through knitr with no echoed source and 8×5 figures. Found on the way, not a dashboard issue: q2 knitr figures are 1× where Q1\'s are 2× retina for every HTML format (`fig-format: png` default vs Q1\'s `retina`); noted on bd-x8hqtvm0.
 - [ ] Jupyter cell-option forwarding: **not built here** (D7). Track KNR-2 Phase 2C. Add a test pinning that the dashboard option names reach the cell Div once it lands.
-- [ ] `ipynb-shell-interactivity: all` (bd-uqma6gec), after PR #1007 merges.
+- [ ] `ipynb-shell-interactivity: all` (bd-uqma6gec), after PR #1007 merges. The default now reaches Jupyter in the `execute:` scope; the engine does not act on it yet.
+- [ ] Deferred to Phase 8: `format_class("dashboard")` (hub/preview routing) and `q2 preview --static` (`check_servable_format`) still exclude dashboards.
 
 ### Phase 2: Page shell and runtime
 

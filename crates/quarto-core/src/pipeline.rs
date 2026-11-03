@@ -2778,7 +2778,8 @@ pub fn build_transform_pipeline(
     // Format-profile exclude-list application: the same `retain_excluding`
     // seam used by `build_q2_preview_transform_pipeline`, applied here so
     // `build_transform_pipeline` itself is total over `PipelineProfile` —
-    // `HtmlRender`/`RevealjsRender` (native renders) keep every transform;
+    // `HtmlRender`/`RevealjsRender`/`DashboardRender` (native renders) keep
+    // every transform;
     // `HtmlPreview`/`RevealjsPreview` drop `Q2_PREVIEW_TRANSFORM_EXCLUDED`;
     // `Pandoc(_)` (docx, pptx, gfm, …) drops `PANDOC_TRANSFORM_EXCLUDED`,
     // since a Pandoc writer has no HTML chrome/decoration to consume those
@@ -2792,7 +2793,8 @@ pub fn build_transform_pipeline(
             pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
         }
         crate::format::PipelineProfile::HtmlRender
-        | crate::format::PipelineProfile::RevealjsRender => {}
+        | crate::format::PipelineProfile::RevealjsRender
+        | crate::format::PipelineProfile::DashboardRender => {}
     }
 
     pipeline

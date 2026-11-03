@@ -249,6 +249,7 @@ impl PipelineStage for UserFiltersStage {
             &ctx.document,
             ctx.output_path(),
             Some(ctx.env_snapshot.clone()),
+            ctx.format.base_format(),
         );
 
         // The Lua filter future is !Send (mlua::Lua is !Send), but this

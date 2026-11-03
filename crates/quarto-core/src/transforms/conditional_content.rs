@@ -159,6 +159,7 @@ impl AstTransform for ConditionalContentTransform {
         {
             let env = ConditionEnv {
                 format: &lua_format,
+                base_format: Some(ctx.format.base_format()),
                 llms_view,
                 active_profiles: &active,
                 meta: &ast.meta,
@@ -176,6 +177,10 @@ impl AstTransform for ConditionalContentTransform {
 struct ConditionEnv<'a> {
     /// Canonical Pandoc format (`lua_format_for`), for the alias table.
     format: &'a str,
+    /// The base format ([`crate::format::Format::base_format`]), which
+    /// also matches: `when-format="dashboard"` under a dashboard whose
+    /// `format` is `html`.
+    base_format: Option<&'a str>,
     /// When true, also evaluate visibility for the `llms` view and
     /// tag view-specific content instead of resolving it here.
     llms_view: bool,
@@ -336,9 +341,17 @@ impl Walker<'_> {
             return pampa::lua::quarto_doc::is_format_match(
                 crate::transforms::llms::LLMS_FORMAT,
                 query,
-            ) || pampa::lua::quarto_doc::is_format_match(self.env.format, query);
+            ) || pampa::lua::quarto_doc::is_format_match_with_base(
+                self.env.format,
+                self.env.base_format,
+                query,
+            );
         }
-        pampa::lua::quarto_doc::is_format_match(self.env.format, query)
+        pampa::lua::quarto_doc::is_format_match_with_base(
+            self.env.format,
+            self.env.base_format,
+            query,
+        )
     }
 
     fn check_profile(&self, name: &str) -> bool {
@@ -704,6 +717,7 @@ mod tests {
         let mut diagnostics = Vec::new();
         let env = ConditionEnv {
             format,
+            base_format: None,
             llms_view,
             active_profiles: active,
             meta,
@@ -1099,6 +1113,56 @@ mod tests {
             !text.contains("HTML-VISIBLE"),
             "when-format=html content dropped under a real docx Format: {text}"
         );
+    }
+
+    /// Q1 1.7 added `dashboard` to `when-format` / `unless-format`
+    /// (changelog #12462). A dashboard is written by the `html` writer, so
+    /// both `html` and `dashboard` match it, and `revealjs` does not.
+    #[test]
+    fn when_format_dashboard_matches_base_format_and_html() {
+        use crate::project::{DocumentInfo, ProjectContext};
+        use crate::render::BinaryDependencies;
+
+        let project = ProjectContext {
+            dir: std::path::PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = crate::format::Format::from_format_string("dashboard").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks: vec![
+                div(
+                    &["content-visible"],
+                    &[("when-format", "dashboard")],
+                    "DASH-VISIBLE",
+                ),
+                div(
+                    &["content-visible"],
+                    &[("when-format", "html")],
+                    "HTML-VISIBLE",
+                ),
+                div(
+                    &["content-visible"],
+                    &[("when-format", "revealjs")],
+                    "REVEAL-VISIBLE",
+                ),
+                div(
+                    &["content-hidden"],
+                    &[("when-format", "dashboard")],
+                    "DASH-HIDDEN",
+                ),
+            ],
+        };
+        pollster::block_on(ConditionalContentTransform::new().transform(&mut ast, &mut ctx))
+            .unwrap();
+        let text = texts(&ast.blocks);
+        assert!(text.contains("DASH-VISIBLE"), "{text}");
+        assert!(text.contains("HTML-VISIBLE"), "{text}");
+        assert!(!text.contains("REVEAL-VISIBLE"), "{text}");
+        assert!(!text.contains("DASH-HIDDEN"), "{text}");
     }
 
     /// T1.5: the same four-quadrant matrix as T1.2, for `pptx`.

@@ -321,7 +321,22 @@ impl ExecutionEngine for KnitrEngine {
 /// `crossref`, `r-options` and `fig-responsive` from `format$metadata`,
 /// and those are not forwarded yet.
 fn build_format_config(ctx: &ExecutionContext) -> KnitrFormatConfig {
-    let mut config = KnitrFormatConfig::with_defaults(&ctx.format);
+    // `ctx.format` is the base format (`FormatIdentifier::as_str`). A
+    // dashboard is written by pandoc's `html` writer, which is what knitr
+    // must see as `pandoc.to` (`knitr::is_html_output()`, htmlwidgets);
+    // `identifier.base-format` keeps it recognizable as a dashboard to
+    // `execute.R` (`is_dashboard_output`), as in Quarto 1.
+    let base_format = ctx.format.as_str();
+    let writer = if base_format == "dashboard" {
+        "html"
+    } else {
+        base_format
+    };
+    let mut config = KnitrFormatConfig::with_defaults(writer);
+    config.identifier = Some(format::IdentifierConfig {
+        base_format: Some(base_format.to_string()),
+        ..Default::default()
+    });
     if let Some(scope) = ctx.execute_scope.as_ref() {
         config.execute.overlay_document_scope(scope);
     }
@@ -689,6 +704,37 @@ mod tests {
 
         let config = build_format_config(&ctx);
         assert_eq!(config.pandoc.to, Some("pdf".to_string()));
+    }
+
+    /// Q1 sends a dashboard to knitr as `pandoc.to: html` (so
+    /// `knitr::is_html_output()` holds and htmlwidgets render live) with
+    /// `identifier.base-format: dashboard`, which the vendored `execute.R`
+    /// keys its dashboard defaults on (`is_dashboard_output`, `DT.options`).
+    #[test]
+    fn test_build_format_config_dashboard() {
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/project"),
+            PathBuf::from("/project/doc.qmd"),
+            "dashboard",
+        );
+        let json = serde_json::to_value(build_format_config(&ctx)).unwrap();
+        assert_eq!(json["pandoc"]["to"], "html");
+        assert_eq!(json["identifier"]["base-format"], "dashboard");
+    }
+
+    /// Every format reports its base format to knitr, as Q1 does.
+    #[test]
+    fn test_build_format_config_reports_base_format() {
+        let ctx = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/project"),
+            PathBuf::from("/project/doc.qmd"),
+            "html",
+        );
+        let json = serde_json::to_value(build_format_config(&ctx)).unwrap();
+        assert_eq!(json["pandoc"]["to"], "html");
+        assert_eq!(json["identifier"]["base-format"], "html");
     }
 
     /// GH #1009: the front-matter `knitr:` map reaches R as
