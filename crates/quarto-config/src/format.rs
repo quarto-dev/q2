@@ -76,13 +76,14 @@ pub fn resolve_format_config(metadata: &ConfigValue, target_format: &str) -> Con
         _ => return ConfigValue::new_map(vec![], metadata.source_info.clone()),
     };
 
-    // 2. Start with all top-level entries EXCEPT "format"
-    let mut result_entries: Vec<ConfigMapEntry> = Vec::new();
-    for entry in entries {
-        if entry.key != "format" {
-            result_entries.push(entry.clone());
-        }
-    }
+    // 2. Start with all top-level entries EXCEPT "format", with bare
+    //    execute options folded into `execute:` (Q1's `metadataAsFormat`).
+    let top_level: Vec<ConfigMapEntry> = entries
+        .iter()
+        .filter(|e| e.key != "format")
+        .cloned()
+        .collect();
+    let mut result_entries = fold_execute_options(top_level);
 
     // 3. Find format key and extract target format settings
     if let Some(format_entry) = entries.iter().find(|e| e.key == "format") {
@@ -92,12 +93,26 @@ pub fn resolve_format_config(metadata: &ConfigValue, target_format: &str) -> Con
                 if let Some(target_entry) = format_map.iter().find(|e| e.key == target_format)
                     && let ConfigValueKind::Map(target_settings) = &target_entry.value.value
                 {
-                    // Merge target settings (override existing keys)
-                    for setting in target_settings {
+                    // Merge target settings (override existing keys). The
+                    // sublevel is folded the same way as the top level.
+                    for setting in fold_execute_options(target_settings.clone()) {
+                        if setting.key == "execute"
+                            && let Some(merged) = merge_execute_maps(&result_entries, &setting)
+                        {
+                            // `execute:` merges one level deep, as in Q1:
+                            // a `format.<fmt>.execute` key overrides the
+                            // same top-level key and leaves the others.
+                            let existing = result_entries
+                                .iter_mut()
+                                .find(|e| e.key == "execute")
+                                .expect("merge_execute_maps found a top-level execute");
+                            *existing = merged;
+                            continue;
+                        }
                         // Remove existing entry with same key
                         result_entries.retain(|e| e.key != setting.key);
                         // Add the format-specific entry
-                        result_entries.push(setting.clone());
+                        result_entries.push(setting);
                     }
                 }
                 // If target_entry exists but isn't a map (e.g., format: { html: true }),
@@ -126,6 +141,155 @@ pub fn resolve_format_config(metadata: &ConfigValue, target_format: &str) -> Con
     }
 
     ConfigValue::new_map(result_entries, metadata.source_info.clone())
+}
+
+/// The execute options Quarto 1 accepts outside `execute:`.
+///
+/// Verbatim copy of Q1's `kExecuteDefaultsKeys`
+/// (`quarto-cli/src/config/constants.ts`). Q1's `metadataAsFormat` moves
+/// each of these keys, found at the top level of a metadata layer or of its
+/// `format.<fmt>` map, into `format.execute`, so `fig-width: 9` in the front
+/// matter means `execute: fig-width: 9` (GH #1001).
+pub const EXECUTE_DEFAULTS_KEYS: &[&str] = &[
+    "fig-width",
+    "fig-height",
+    "fig-format",
+    "fig-dpi",
+    "fig-asp",
+    "mermaid-format",
+    "df-print",
+    "error",
+    "eval",
+    "engine",
+    "cache",
+    "freeze",
+    "echo",
+    "output",
+    "warning",
+    "include",
+    "keep-md",
+    "keep-ipynb",
+    "enabled",
+    "ipynb",
+    "daemon",
+    "daemon-restart",
+    "debug",
+    "ipynb-filter",
+    "ipynb-filters",
+    "ipynb-shell-interactivity",
+    "plotly-connected",
+];
+
+/// Copy the bare execute options of one map level into its `execute:` map.
+///
+/// Follows Q1's `metadataAsFormat`: entries are visited in YAML order and
+/// both a bare key and an `execute:` map write into the same `execute`
+/// map, so on a conflict the later entry wins. A boolean `execute:` becomes
+/// `enabled:`. The bare keys are also kept where they are, so code that
+/// reads a top-level key (e.g. `engine`) is unaffected.
+///
+/// A level with no bare execute options is returned unchanged, including a
+/// scalar `execute:` value.
+fn fold_execute_options(entries: Vec<ConfigMapEntry>) -> Vec<ConfigMapEntry> {
+    let is_bare = |e: &ConfigMapEntry| EXECUTE_DEFAULTS_KEYS.contains(&e.key.as_str());
+    let Some(first_bare) = entries.iter().find(|e| is_bare(e)) else {
+        return entries;
+    };
+    let first_bare_source = first_bare.key_source.clone();
+
+    let mut execute: Vec<ConfigMapEntry> = Vec::new();
+    let mut upsert = |entry: ConfigMapEntry| {
+        execute.retain(|e| e.key != entry.key);
+        execute.push(entry);
+    };
+    let mut original_execute: Option<&ConfigMapEntry> = None;
+    for entry in &entries {
+        if entry.key == "execute" {
+            original_execute = Some(entry);
+            match &entry.value.value {
+                ConfigValueKind::Map(inner) => inner.iter().cloned().for_each(&mut upsert),
+                ConfigValueKind::Scalar {
+                    yaml: Yaml::Boolean(_),
+                    ..
+                } => upsert(ConfigMapEntry {
+                    key: "enabled".to_string(),
+                    key_source: entry.key_source.clone(),
+                    value: entry.value.clone(),
+                }),
+                _ => {}
+            }
+        } else if is_bare(entry) {
+            upsert(entry.clone());
+        }
+    }
+
+    let execute_entry = match original_execute {
+        Some(orig) => ConfigMapEntry {
+            key: "execute".to_string(),
+            key_source: orig.key_source.clone(),
+            value: ConfigValue {
+                value: ConfigValueKind::Map(execute),
+                source_info: orig.value.source_info.clone(),
+                merge_op: orig.value.merge_op,
+            },
+        },
+        None => ConfigMapEntry {
+            key: "execute".to_string(),
+            key_source: first_bare_source.clone(),
+            value: ConfigValue::new_map(execute, first_bare_source),
+        },
+    };
+
+    let mut folded: Vec<ConfigMapEntry> = Vec::with_capacity(entries.len() + 1);
+    let mut placed = false;
+    for entry in entries {
+        if entry.key == "execute" {
+            if !placed {
+                folded.push(execute_entry.clone());
+                placed = true;
+            }
+        } else {
+            folded.push(entry);
+        }
+    }
+    if !placed {
+        folded.push(execute_entry);
+    }
+    folded
+}
+
+/// Merge a `format.<fmt>.execute` entry into the top level's `execute` map.
+///
+/// Returns `None` (meaning "replace as usual") unless both values are maps
+/// and the format-level map is not tagged `!prefer`.
+fn merge_execute_maps(
+    top_level: &[ConfigMapEntry],
+    format_execute: &ConfigMapEntry,
+) -> Option<ConfigMapEntry> {
+    if format_execute.value.merge_op == crate::types::MergeOp::Prefer {
+        return None;
+    }
+    let base = top_level.iter().find(|e| e.key == "execute")?;
+    let ConfigValueKind::Map(base_entries) = &base.value.value else {
+        return None;
+    };
+    let ConfigValueKind::Map(override_entries) = &format_execute.value.value else {
+        return None;
+    };
+    let mut merged = base_entries.clone();
+    for entry in override_entries {
+        merged.retain(|e| e.key != entry.key);
+        merged.push(entry.clone());
+    }
+    Some(ConfigMapEntry {
+        key: "execute".to_string(),
+        key_source: format_execute.key_source.clone(),
+        value: ConfigValue {
+            value: ConfigValueKind::Map(merged),
+            source_info: format_execute.value.source_info.clone(),
+            merge_op: format_execute.value.merge_op,
+        },
+    })
 }
 
 /// Extract plain text from Pandoc inlines.
@@ -412,5 +576,139 @@ mod tests {
         // Should be empty since html value isn't a map with settings
         assert!(result.is_map());
         assert!(result.get("format").is_none());
+    }
+
+    // ---- GH #1001: execute options outside `execute:` ----
+
+    fn exec<'a>(result: &'a ConfigValue, key: &str) -> Option<&'a ConfigValue> {
+        result.get("execute").and_then(|e| e.get(key))
+    }
+
+    #[test]
+    fn test_bare_execute_option_folds_into_execute() {
+        // fig-format: svg  →  execute: { fig-format: svg }, bare key kept
+        let metadata = map(vec![
+            ("title", scalar("t")),
+            ("fig-format", scalar("svg")),
+            ("echo", bool_val(false)),
+        ]);
+        let result = resolve_format_config(&metadata, "html");
+        assert_eq!(exec(&result, "fig-format").unwrap().as_str(), Some("svg"));
+        assert_eq!(exec(&result, "echo").unwrap().as_bool(), Some(false));
+        assert_eq!(result.get("fig-format").unwrap().as_str(), Some("svg"));
+        assert!(
+            exec(&result, "title").is_none(),
+            "non-execute keys stay out"
+        );
+    }
+
+    #[test]
+    fn test_bare_execute_option_merges_with_execute_map() {
+        let metadata = map(vec![
+            ("execute", map(vec![("echo", bool_val(false))])),
+            ("fig-format", scalar("svg")),
+        ]);
+        let result = resolve_format_config(&metadata, "html");
+        assert_eq!(exec(&result, "echo").unwrap().as_bool(), Some(false));
+        assert_eq!(exec(&result, "fig-format").unwrap().as_str(), Some("svg"));
+    }
+
+    #[test]
+    fn test_same_level_conflict_later_entry_wins() {
+        // Q1 visits keys in YAML order; the later one wins either way.
+        let execute_last = map(vec![
+            ("fig-format", scalar("svg")),
+            ("execute", map(vec![("fig-format", scalar("pdf"))])),
+        ]);
+        let result = resolve_format_config(&execute_last, "html");
+        assert_eq!(exec(&result, "fig-format").unwrap().as_str(), Some("pdf"));
+
+        let bare_last = map(vec![
+            ("execute", map(vec![("fig-format", scalar("pdf"))])),
+            ("fig-format", scalar("svg")),
+        ]);
+        let result = resolve_format_config(&bare_last, "html");
+        assert_eq!(exec(&result, "fig-format").unwrap().as_str(), Some("svg"));
+    }
+
+    #[test]
+    fn test_format_level_bare_execute_option_folds() {
+        let metadata = map(vec![(
+            "format",
+            map(vec![("html", map(vec![("fig-format", scalar("svg"))]))]),
+        )]);
+        let result = resolve_format_config(&metadata, "html");
+        assert_eq!(exec(&result, "fig-format").unwrap().as_str(), Some("svg"));
+        // Not for another target.
+        let pdf = resolve_format_config(&metadata, "pdf");
+        assert!(pdf.get("execute").is_none());
+    }
+
+    #[test]
+    fn test_format_level_execute_option_beats_top_level_execute_map() {
+        // execute: { fig-format: png }; format.html: fig-format: svg  → svg
+        let metadata = map(vec![
+            ("execute", map(vec![("fig-format", scalar("png"))])),
+            (
+                "format",
+                map(vec![("html", map(vec![("fig-format", scalar("svg"))]))]),
+            ),
+        ]);
+        let result = resolve_format_config(&metadata, "html");
+        assert_eq!(exec(&result, "fig-format").unwrap().as_str(), Some("svg"));
+    }
+
+    #[test]
+    fn test_format_level_execute_map_deep_merges_with_top_level() {
+        // Top-level fig-format: svg and format.html.execute.echo: false
+        // must both survive (previously format.html.execute replaced the
+        // top-level execute map wholesale).
+        let metadata = map(vec![
+            ("fig-format", scalar("svg")),
+            (
+                "format",
+                map(vec![(
+                    "html",
+                    map(vec![("execute", map(vec![("echo", bool_val(false))]))]),
+                )]),
+            ),
+        ]);
+        let result = resolve_format_config(&metadata, "html");
+        assert_eq!(exec(&result, "fig-format").unwrap().as_str(), Some("svg"));
+        assert_eq!(exec(&result, "echo").unwrap().as_bool(), Some(false));
+    }
+
+    #[test]
+    fn test_format_level_execute_map_tagged_prefer_replaces() {
+        let mut preferred = map(vec![("echo", bool_val(false))]);
+        preferred.merge_op = crate::types::MergeOp::Prefer;
+        let metadata = map(vec![
+            ("execute", map(vec![("fig-format", scalar("svg"))])),
+            (
+                "format",
+                map(vec![("html", map(vec![("execute", preferred)]))]),
+            ),
+        ]);
+        let result = resolve_format_config(&metadata, "html");
+        assert!(exec(&result, "fig-format").is_none());
+        assert_eq!(exec(&result, "echo").unwrap().as_bool(), Some(false));
+    }
+
+    #[test]
+    fn test_boolean_execute_becomes_enabled_when_folding() {
+        let metadata = map(vec![
+            ("execute", bool_val(false)),
+            ("echo", bool_val(false)),
+        ]);
+        let result = resolve_format_config(&metadata, "html");
+        assert_eq!(exec(&result, "enabled").unwrap().as_bool(), Some(false));
+        assert_eq!(exec(&result, "echo").unwrap().as_bool(), Some(false));
+    }
+
+    #[test]
+    fn test_no_bare_execute_options_leaves_scalar_execute_untouched() {
+        let metadata = map(vec![("execute", bool_val(false)), ("title", scalar("t"))]);
+        let result = resolve_format_config(&metadata, "html");
+        assert_eq!(result.get("execute").unwrap().as_bool(), Some(false));
     }
 }
