@@ -118,3 +118,27 @@ fn unknown_top_level_key_is_rejected() {
         "error message should mention the offending key: {msg}"
     );
 }
+
+/// The brand.yml spec allows keys under `meta` beyond `name` and
+/// `link` (GH #1033); they must parse, and are kept as written.
+#[test]
+fn parse_meta_with_extra_keys() {
+    let yaml = "meta:\n  name: Acme\n  license: MIT\n  tags: [a, b]\n";
+    let brand = quarto_brand::UnifiedBrand::from_yaml_str(yaml)
+        .unwrap_or_else(|e| panic!("parse: {e}"))
+        .split()
+        .light;
+    let meta = brand.meta.as_ref().expect("meta");
+    assert_eq!(meta.name.as_ref().and_then(|n| n.full_name()), Some("Acme"));
+    let keys: Vec<&str> = meta.extra.keys().map(String::as_str).collect();
+    assert_eq!(keys, ["license", "tags"]);
+    assert_eq!(meta.extra["license"].as_str(), Some("MIT"));
+}
+
+/// A typo in a top-level section is still rejected: only `meta` is open.
+#[test]
+fn parse_rejects_unknown_top_level_key() {
+    let err = quarto_brand::UnifiedBrand::from_yaml_str("metta:\n  license: MIT\n")
+        .expect_err("unknown top-level key must fail");
+    assert!(err.to_string().contains("metta"), "{err}");
+}

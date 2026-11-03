@@ -102,14 +102,21 @@ impl<V> Default for Brand<V> {
 
 // ── meta ────────────────────────────────────────────────────────────
 
+/// Unlike the other sections, `meta` is open: the brand.yml spec allows
+/// keys beyond `name` and `link` (e.g. `license`), so it does not deny
+/// unknown fields (GH #1033). Those keys land in [`Self::extra`].
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct BrandMeta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<BrandMetaName>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<BrandMetaLink>,
+
+    /// Any other keys, in authored order. Valid by the spec and read by
+    /// no consumer, so they are kept without a warning.
+    #[serde(flatten, skip_serializing_if = "LinkedHashMap::is_empty")]
+    pub extra: LinkedHashMap<String, serde_yaml::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
