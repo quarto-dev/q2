@@ -46,12 +46,32 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 use quarto_core::engine::ts_process::node_available_for_tests;
 
-/// Return `true` when `julia` is on PATH (the QuartoNotebookRunner backend).
-fn julia_available() -> bool {
-    Command::new("julia")
+/// Return `true` when Julia can run a document here: `julia` is on PATH (the
+/// QuartoNotebookRunner backend) AND the QuartoNotebookRunner environment is already
+/// instantiated.
+///
+/// A bare `julia` on PATH is not enough. CI images ship one, but the engine then has to
+/// resolve and precompile QuartoNotebookRunner on first use, and that fails there
+/// ("Ensuring an updated julia server environment failed"). So these tests run where
+/// someone has set the environment up, the same precondition the isolated rows below
+/// already require, and skip everywhere else. The environment is `QUARTO_JULIA_PROJECT`
+/// when set, else the engine's default: the `julia` runtime directory.
+pub fn julia_available() -> bool {
+    let on_path = Command::new("julia")
         .arg("--version")
         .output()
-        .is_ok_and(|o| o.status.success())
+        .is_ok_and(|o| o.status.success());
+    if !on_path {
+        return false;
+    }
+    let project = std::env::var_os("QUARTO_JULIA_PROJECT")
+        .map(PathBuf::from)
+        .or_else(|| {
+            quarto_util::quarto_runtime_dir()
+                .ok()
+                .map(|d| d.join("julia"))
+        });
+    project.is_some_and(|dir| dir.join("Manifest.toml").exists())
 }
 
 /// Recursively copy `src` into `dst` (dst is created).
@@ -211,7 +231,9 @@ fn j1_minimal_julia_render() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j1_minimal_julia_render");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j1_minimal_julia_render"
+        );
         return;
     }
     let tmp = setup_julia_project();
@@ -280,7 +302,7 @@ fn j2_document_level_echo_false_hides_source_keeps_output() {
     }
     if !julia_available() {
         eprintln!(
-            "SKIP: julia not on PATH — j2_document_level_echo_false_hides_source_keeps_output"
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j2_document_level_echo_false_hides_source_keeps_output"
         );
         return;
     }
@@ -403,7 +425,9 @@ fn j3_exeflags_and_env_through_julia_block() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j3_exeflags_and_env_through_julia_block");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j3_exeflags_and_env_through_julia_block"
+        );
         return;
     }
     let tmp = setup_julia_project();
@@ -473,7 +497,9 @@ fn j4_error_handling_does_not_wedge_host() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j4_error_handling_does_not_wedge_host");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j4_error_handling_does_not_wedge_host"
+        );
         return;
     }
     let tmp = setup_julia_project();
@@ -703,7 +729,9 @@ fn j5_website_figure_lands_as_file_and_is_referenced() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j5_website_figure_lands_as_file_and_is_referenced");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j5_website_figure_lands_as_file_and_is_referenced"
+        );
         return;
     }
     let tmp = setup_julia_website_project();
@@ -809,7 +837,9 @@ fn j6_one_engine_host_per_project_render() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j6_one_engine_host_per_project_render");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j6_one_engine_host_per_project_render"
+        );
         return;
     }
     // SAFETY/scope: process-local under nextest (one process per test).
@@ -1314,7 +1344,9 @@ fn j7_failed_run_does_not_leak_worker() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j7_failed_run_does_not_leak_worker");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j7_failed_run_does_not_leak_worker"
+        );
         return;
     }
     let Some(real_home) = std::env::var("HOME").ok().map(PathBuf::from) else {
@@ -1422,7 +1454,9 @@ fn j8_record_row_core_presents_the_output() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j8_record_row_core_presents_the_output");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j8_record_row_core_presents_the_output"
+        );
         return;
     }
     let tmp = setup_julia_project();
@@ -1530,7 +1564,9 @@ fn j9_units_qnr_does_not_run_stay_as_source_and_the_rest_are_recorded() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j9_units_qnr_does_not_run_stay_as_source");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j9_units_qnr_does_not_run_stay_as_source"
+        );
         return;
     }
     let tmp = setup_julia_project();

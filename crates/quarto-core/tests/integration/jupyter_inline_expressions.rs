@@ -205,6 +205,15 @@ fn jupyter_inline_in_display_fence_is_not_run() {
 #[test]
 fn jupyter_inline_in_ceded_block_is_not_run() {
     require_kernel!("jupyter_inline_in_ceded_block_is_not_run");
+    // The `{r}` fence makes knitr a declared engine, and a declared engine that cannot
+    // run is an error. Skip where R is absent rather than stubbing the engine.
+    if !EngineRegistry::default()
+        .get("knitr")
+        .is_some_and(|e| e.is_available())
+    {
+        eprintln!("SKIP: no Rscript — jupyter_inline_in_ceded_block_is_not_run");
+        return;
+    }
     // A `{python}` span inside a braced `{r}` fence: literal (divergence 8).
     let html = render(&doc("```{r}\n#| eval: false\n`{python} 777`\n```\n"));
     assert!(!html.contains(">777<"), "{html}");

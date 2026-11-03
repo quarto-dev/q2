@@ -496,23 +496,22 @@ fn parity_jupyter_record_present_equals_live() {
 /// or jupyter missing: Julia is a TS engine (a Node host driving QuartoNotebookRunner),
 /// found through the bundled extension subtree, so the default registry does not list it
 /// and `is_available` cannot gate it. The gate matches `julia_engine_e2e.rs`; like its
-/// non-isolated rows, a first run instantiates the QuartoNotebookRunner project.
+/// rows, it needs the QuartoNotebookRunner environment already instantiated.
 ///
 /// Deliberately not asserted: the value of a span that evaluates to an empty string. The
 /// engines differ there (Jupyter leaves the source in place), and whether Julia should
 /// match is still open (bd-30k2j00f), so this test must not pin either answer.
 #[test]
 fn parity_julia_cell_and_inline_span() {
-    let julia_on_path = std::process::Command::new("julia")
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success());
+    let julia_on_path = crate::julia_engine_e2e::julia_available();
     let jupyter_ok = EngineRegistry::default()
         .get("jupyter")
         .is_some_and(|e| e.is_available());
     if !quarto_core::engine::ts_process::node_available_for_tests() || !julia_on_path || !jupyter_ok
     {
-        eprintln!("Skipping test: Julia parity needs node, julia and jupyter installed");
+        eprintln!(
+            "Skipping test: Julia parity needs node, an instantiated julia environment and jupyter"
+        );
         return;
     }
     let doc = |engine: &str, lang: &str, setup: &str| {
