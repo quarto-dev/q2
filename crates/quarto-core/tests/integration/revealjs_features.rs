@@ -351,6 +351,34 @@ fn footnotes_renumber_per_slide() {
 }
 
 #[test]
+fn footnote_inside_callout_coalesces_into_slide_aside() {
+    // bd-akkproqy: since #1050 a callout is still a `Callout` custom node
+    // while the footnote transforms run, so their walkers must descend
+    // into its slots. The note must be resolved, renumbered per slide and
+    // land in that slide's aside, like a note outside a callout.
+    let html = body_markup(&render_revealjs(
+        "---\nformat: revealjs\n---\n\n## S\n\n::: {.callout-note}\nInside.^[In the callout.]\n:::\n",
+    ));
+    assert!(
+        compact(&html).contains("<sup>1</sup>"),
+        "the callout's footnote ref must render as `<sup>1</sup>`; html:\n{}",
+        &html[..html.len().min(3500)]
+    );
+    assert_eq!(
+        count(&html, "class=\"aside-footnotes\""),
+        1,
+        "the callout's footnote must be coalesced into the slide aside; html:\n{}",
+        &html[..html.len().min(3500)]
+    );
+    assert!(html.contains("In the callout."));
+    assert!(
+        !html.contains("role=\"doc-noteref\""),
+        "no uncoalesced doc-noteref link may survive; html:\n{}",
+        &html[..html.len().min(3500)]
+    );
+}
+
+#[test]
 fn reference_location_document_keeps_trailing_slide() {
     // Opt out of coalescing: `reference-location: document` restores the
     // trailing footnotes section and does NOT coalesce onto the slide.
