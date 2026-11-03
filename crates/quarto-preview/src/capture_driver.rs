@@ -93,6 +93,23 @@ pub async fn record_eager_captures(
         // Sidecar is keyed by the same path as the index — skip files
         // that already have a capture so re-runs are idempotent.
         if ctx.index().has_capture(&rel_path) {
+            // A persisted `--data-dir` carries the ref (and its staleness
+            // flag) over from the previous session. The file may have
+            // changed while the server was stopped, and no file-change
+            // event will fire for that, so check it now (RIU-0 S1, D1).
+            // Under `auto` this also re-executes a changed document.
+            if let Err(e) = recompute_staleness(
+                ctx.clone(),
+                runtime.clone(),
+                &rel_path,
+                policy,
+                engine_registry.clone(),
+                cache_dir,
+            )
+            .await
+            {
+                tracing::warn!(rel_path = %rel_path, error = %e, "startup staleness recompute failed");
+            }
             tracing::debug!(rel_path = %rel_path, "capture already recorded, skipping");
             continue;
         }
@@ -1329,6 +1346,94 @@ mod tests {
         .unwrap();
         assert_eq!(count, 1, "fixture must produce a capture");
         (tmp, ctx, runtime)
+    }
+
+    /// RIU-0 S1 defect D1: a persisted `--data-dir` keeps the capture ref
+    /// (and its staleness flag) across a restart. The eager driver used to
+    /// skip a path that already had a ref without re-checking it, so code
+    /// edited while the server was stopped showed as fresh (no Re-execute
+    /// banner) until the next file-change event.
+    #[tokio::test]
+    async fn restart_marks_existing_capture_stale_when_code_changed_offline() {
+        let (tmp, ctx, runtime) = build_ctx_record_then_return_root(
+            "doc.qmd",
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n",
+        )
+        .await;
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false)
+        );
+
+        // Edit the cell while "the server is stopped": no file-change
+        // event reaches `recompute_staleness`.
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n",
+        )
+        .unwrap();
+
+        // "Restart": the eager driver runs again over the persisted index.
+        let count = record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(count, 0, "an existing ref is not re-recorded");
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(true),
+            "startup must recompute staleness against the current file"
+        );
+    }
+
+    /// The other direction of D1: a stale flag persisted from the previous
+    /// session clears on restart when the file again matches the capture.
+    #[tokio::test]
+    async fn restart_clears_persisted_stale_flag_when_content_matches() {
+        let original = "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nfirst\n```\n";
+        let (tmp, ctx, runtime) = build_ctx_record_then_return_root("doc.qmd", original).await;
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\nsecond\n```\n",
+        )
+        .unwrap();
+        assert!(
+            recompute_staleness(
+                ctx.clone(),
+                runtime.clone(),
+                "doc.qmd",
+                EnginePolicy::Manual,
+                None,
+                &cache_dir_for_test()
+            )
+            .await
+            .unwrap()
+        );
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(true)
+        );
+
+        // Reverted while the server was stopped, then restarted.
+        std::fs::write(tmp.path().join("doc.qmd"), original).unwrap();
+        record_eager_captures(
+            ctx.clone(),
+            runtime,
+            Some(make_registry()),
+            EnginePolicy::Manual,
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false)
+        );
     }
 
     #[tokio::test]
