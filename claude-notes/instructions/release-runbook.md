@@ -366,11 +366,15 @@ carries the record reader (`parse_capture_payload`, preview splice, `hub admin`
 classification) and the writers with the gate **off**. Release N+1 flips
 `RECORD_WRITING_DEFAULT` in `crates/quarto-core/src/engine/capture_files.rs` to `true`.
 Do not flip it in the same release that first ships the reader: once a store holds
-record documents, reverting to a reader that cannot parse them strands them (they show
-as source). The hub exposes no version or capability a writer can read, so the rule is
+record documents, reverting to a reader that cannot parse them strands them (an older
+`q2 preview` replaces the whole page with "Render Error: Failed to parse capture: JSON
+parse failed"). The hub exposes no version or capability a writer can read, so the rule is
 operational: a `provide-hub` or `q2 preview` newer than the hub it writes to must keep
-the gate off (`QUARTO_ENGINE_RECORD_WRITE=0`) until that hub is on release N. An
-operator can opt in earlier with `QUARTO_ENGINE_RECORD_WRITE=1`. Plan:
+the gate off (`QUARTO_ENGINE_RECORD_WRITE=0`) until that hub is on release N. The hosted
+hub is not deployed by release number: the `quarto-hub` binary and hub-client are built
+from a `q2_ref` input and deployed by hand, so for it "on release N" means "the deployed
+`q2_ref` contains the reader commits" (`cat /etc/quarto-hub/version.json` on the instance
+says which). An operator can opt in earlier with `QUARTO_ENGINE_RECORD_WRITE=1`. Plan:
 `claude-notes/plans/2026-10-28-exr-13-hub-wire.md` (Phase D).
 
 ## Gotchas (learned the hard way in the v0.1.0 dry-run)
