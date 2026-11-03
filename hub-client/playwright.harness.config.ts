@@ -42,6 +42,10 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     // Fixed viewport for consistent layout assertions
     viewport: { width: 1280, height: 720 },
+    // A failed harness run used to leave only the error-context snapshot behind; the job uploads
+    // playwright-report/ on failure, so a trace of the retry and a screenshot of the failure come for free.
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
     // NOTE: the config-level `reducedMotion` option is silently ignored
     // by Playwright 1.60's default context (verified: newContext honors
     // it, project use does not), so reduced-motion emulation lives in
