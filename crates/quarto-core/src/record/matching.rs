@@ -11,7 +11,7 @@
 //! match by occurrence: the k-th document unit with hash H takes the k-th record cell with
 //! hash H, counting in document order and record order respectively.
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use super::exec_hash::{HashError, UnitHashInput, hash_unit, partition_author_text};
 use super::hash_definition::HashDefinition;
@@ -31,7 +31,15 @@ pub struct UnitKey {
     /// is matched by one of these (KNR-3 decision 8). Empty for a unit built by
     /// [`UnitKey::from_author_text`].
     pub alt_exec_hashes: Vec<String>,
+    /// The keys of the unit's `#|` header as written (a span has none: `None`, and so does a
+    /// unit whose options did not partition). Read by [`lost_header_keys`] only.
+    pub header_keys: Option<BTreeSet<String>>,
 }
+
+/// The cell-metadata key under which an engine records the `#|` header keys of the unit it ran
+/// (a JSON array of names, as written). It is an internal `quarto_` key, so it is in no hash and
+/// not an option. A cell without it makes no claim about its header (KNR-3 slice 8, D2/D4).
+pub const HEADER_KEYS_KEY: &str = "quarto_header_keys";
 
 /// The reserved flat cell option that carries the output format on a cell that names a hash
 /// profile (KNR-3 decision 8). It must not start with `quarto_`: `CellMetadata::options()` drops
@@ -71,11 +79,16 @@ impl UnitKey {
                 attr_tail,
             },
         )?;
+        let header_keys = match kind {
+            UnitKind::Inline => None,
+            UnitKind::Cell => Some(options.keys().cloned().collect()),
+        };
         Ok(Self {
             kind,
             exec_hash,
             content_hash: content,
             alt_exec_hashes: Vec::new(),
+            header_keys,
         })
     }
 
@@ -134,6 +147,14 @@ pub struct Matching {
 }
 
 impl Matching {
+    /// Unmatch a unit: it becomes stale and its record cell becomes an orphan.
+    pub fn demote(&mut self, unit_index: usize) {
+        if let Some(cell) = self.assignment.get_mut(unit_index).and_then(Option::take) {
+            let at = self.orphaned.partition_point(|c| *c < cell);
+            self.orphaned.insert(at, cell);
+        }
+    }
+
     pub fn staleness(&self, unit_index: usize) -> UnitStaleness {
         match self.assignment.get(unit_index) {
             Some(Some(_)) => UnitStaleness::Fresh,
@@ -198,6 +219,50 @@ pub fn match_units(units: &[UnitKey], cells: &[RecordCell]) -> Matching {
         assignment,
         orphaned,
     }
+}
+
+/// The matched units whose record cell recorded a header key the unit no longer has (KNR-3
+/// slice 8). Such a unit is stale: the cell\'s presentation options were derived from a header
+/// that has since lost a key, and the record cannot say what the presenter would now show.
+///
+/// A key counts as present when the unit has one that differs only by `-` versus `.`. No alias
+/// table and no list of known options is used, so this module does not depend on the presenter;
+/// swapping one spelling of an option for another therefore re-runs needlessly, which is the safe
+/// direction (two spellings of one option differ only in separators, so a lost key is never
+/// missed). A value, an added key and an `!expr` value never demote. A cell without
+/// [`HEADER_KEYS_KEY`], a unit whose keys are unknown, and an unmatched unit are left alone.
+pub fn lost_header_keys(
+    matching: &Matching,
+    units: &[UnitKey],
+    cells: &[RecordCell],
+) -> Vec<usize> {
+    let normalize = |k: &str| k.replace('-', ".");
+    let mut lost = Vec::new();
+    for (u, unit) in units.iter().enumerate() {
+        let Some(Some(c)) = matching.assignment.get(u) else {
+            continue;
+        };
+        let Some(current) = &unit.header_keys else {
+            continue;
+        };
+        let Some(recorded) = cells[*c]
+            .metadata
+            .extra
+            .get(HEADER_KEYS_KEY)
+            .and_then(|v| v.as_array())
+        else {
+            continue;
+        };
+        let current: BTreeSet<String> = current.iter().map(|k| normalize(k)).collect();
+        let missing = recorded
+            .iter()
+            .filter_map(|k| k.as_str())
+            .any(|k| !current.contains(&normalize(k)));
+        if missing {
+            lost.push(u);
+        }
+    }
+    lost
 }
 
 #[derive(Clone, Copy)]
@@ -518,5 +583,98 @@ mod tests {
             [Some(0)],
             "without the rule, pass 2 matches"
         );
+    }
+
+    // ---- KNR-3 slice 8: a header key deleted from a matched unit.
+
+    fn with_recorded_keys(mut cell: RecordCell, keys: &[&str]) -> RecordCell {
+        cell.metadata
+            .extra
+            .insert(HEADER_KEYS_KEY.into(), serde_json::json!(keys));
+        cell
+    }
+
+    /// One unit and one recorded cell that match; the cell recorded `recorded` as its keys.
+    fn lost(current: &str, recorded: &[&str]) -> Vec<usize> {
+        let unit = profiled_key(current, "html");
+        // The cell is built from the same text, so the pair matches whatever it recorded.
+        let cell = with_recorded_keys(structured_cell(current, "html"), recorded);
+        let cells = [cell];
+        let units = [unit];
+        let m = match_units(&units, &cells);
+        assert_eq!(m.assignment, [Some(0)], "the pair must match first");
+        lost_header_keys(&m, &units, &cells)
+    }
+
+    #[test]
+    fn a_recorded_key_missing_from_the_current_header_demotes_the_pair() {
+        assert_eq!(lost("x", &["echo"]), vec![0]);
+        assert_eq!(lost("#| echo: true\nx", &["echo", "fig-cap"]), vec![0]);
+    }
+
+    #[test]
+    fn the_same_key_spelled_with_dots_or_dashes_is_present() {
+        assert!(lost("#| fig.cap: a\nx", &["fig-cap"]).is_empty());
+        assert!(lost("#| fig-cap: a\nx", &["fig.cap"]).is_empty());
+    }
+
+    #[test]
+    fn an_added_key_a_changed_value_and_an_expr_value_do_not_demote() {
+        assert!(lost("#| echo: true\n#| fig-cap: a\nx", &["echo"]).is_empty());
+        assert!(lost("#| echo: false\nx", &["echo"]).is_empty());
+        assert!(lost("#| echo: !expr FALSE\nx", &["echo"]).is_empty());
+    }
+
+    #[test]
+    fn a_cell_without_the_field_is_never_demoted() {
+        let unit = profiled_key("x", "html");
+        let cells = [structured_cell("x", "html")];
+        let units = [unit];
+        let m = match_units(&units, &cells);
+        assert!(lost_header_keys(&m, &units, &cells).is_empty());
+    }
+
+    #[test]
+    fn a_unit_whose_keys_are_unknown_is_never_demoted() {
+        let mut unit = profiled_key("x", "html");
+        unit.header_keys = None;
+        let cells = [with_recorded_keys(structured_cell("x", "html"), &["echo"])];
+        let units = [unit];
+        let m = match_units(&units, &cells);
+        assert!(lost_header_keys(&m, &units, &cells).is_empty());
+    }
+
+    #[test]
+    fn an_unmatched_unit_is_left_alone() {
+        let unit = profiled_key("y", "html");
+        let cells = [with_recorded_keys(structured_cell("x", "html"), &["echo"])];
+        let units = [unit];
+        let m = match_units(&units, &cells);
+        assert_eq!(m.assignment, [None]);
+        assert!(lost_header_keys(&m, &units, &cells).is_empty());
+    }
+
+    #[test]
+    fn demoting_unmatches_the_unit_and_orphans_its_cell() {
+        let cells = [with_recorded_keys(structured_cell("x", "html"), &["echo"])];
+        let units = [profiled_key("x", "html")];
+        let mut m = match_units(&units, &cells);
+        for i in lost_header_keys(&m, &units, &cells) {
+            m.demote(i);
+        }
+        assert_eq!(m.assignment, [None]);
+        assert_eq!(m.orphaned, [0]);
+        assert_eq!(m.staleness(0), UnitStaleness::Stale);
+    }
+
+    #[test]
+    fn a_unit_key_carries_the_header_keys_as_written() {
+        let k = key("#| echo: true\n#| fig-cap: a\nx = 1");
+        assert_eq!(
+            k.header_keys.unwrap().into_iter().collect::<Vec<_>>(),
+            ["echo", "fig-cap"]
+        );
+        let span = UnitKey::from_author_text(&def(), UnitKind::Inline, "python", "x", "").unwrap();
+        assert_eq!(span.header_keys, None);
     }
 }

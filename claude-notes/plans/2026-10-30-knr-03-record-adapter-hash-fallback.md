@@ -647,9 +647,10 @@ code once nothing reads it, and keeps the chunk hook (see KNR-6).
   recorder, so this test needs EXR-11 merged; until then, hand-build one from EXR-11\'s
   format.
   *Done (2026-11-03; EXR-11 is merged, the record is hand-built in `record_splice.rs`\'s `exr11_record`). **Finding:** the record does not read as stale. The splice judges a record by the declaration it stores (version 1), so it is fresh and its pass-through markdown is placed; no code compares the stored declaration with the current one. The version bump does what decision 1 needs in practice: the current declaration never reproduces a version 1 hash, so a new run's record shares no hash with the old. The test asserts those two facts; decision 1's "reads as stale" wording is loose.*
-- [ ] The option sweep (formerly risk 2): vary every option in the `opts_chunk` defaults
+- [x] The option sweep (formerly risk 2): vary every option in the `opts_chunk` defaults
   (`R/defaults.R`) and every Quarto cell option over a fixture and assert that either the hash or the presented output changes; an option that
   does neither is a silent divergence.
+  *Done (2026-11-03, slice 6): `record_splice/tests/option_sweep.rs` varies 96 options (every `opts_chunk` default, every Quarto cell option, the whole `structured` exclusion list) over a structured knitr record and asserts each is hashed (stale), presented (output changes) or inert with a reason. It found 17 silent divergences, see "Slice 6 notes".*
 - [x] *(for the `quarto_format` tag)* Adapter tests over hand-built
   pieces: stream, error, display_data per KNR-1\'s table; flat option keys per decision 2; notebook-level folding of `includes`, `preserve`,
   `needs_postprocess` and `knit_meta` dependencies, unchanged from EXR-11\'s behavior; and the
@@ -676,6 +677,35 @@ code once nothing reads it, and keeps the chunk hook (see KNR-6).
   *Reconciled 2026-11-03: open. Only the corpus generator (`generate_sweep`) exists, not the assert-hash-or-output-changes test.*
   *Reconciled 2026-11-03: stream, error, display_data and flat option keys are covered; the neutral `knit_meta` manifest and the four-widget test are open, waiting on WGT-2\'s schema (slice 2 note).*
   *Reconciled 2026-11-03: open as a dedicated test. The reader rejects invalid structure and every read-back in slices 3 and 4 goes through it, but nothing runs EXR-4\'s validator over each produced record.*
+
+- [ ] Slice 7, the slice 6 gaps ([plan](2026-11-03-presenter-generic-cell-options.md)): the shared
+  presenter reads 16 of the 17 options of "Slice 6 notes" (each a `Gap` row of the sweep that flips
+  to `Presents`), and `indent` becomes `Inert` with a documented departure (row `Gap` to `Inert`, its two corpus
+  cases allowlisted, Gordon\'s decision D8). Then freeze the new corpus cases in the oracle and confirm the
+  gate has only `s9/01_inline` (KNR-4\'s) as an unexpected blocker.
+
+- [x] Slice 8, a header option removed from a knitr chunk ([plan](2026-11-04-knr-slice-8-header-removal.md);
+  spikes done 2026-11-04, [findings](../research/2026-11-04-stale-presentation-options.md)). A presentation-only option
+  deleted from a `#|` header keeps its recorded value, because the hash excludes it and `layer_options` only overlays the
+  current header (run, knitr 1.50). Header-only: document-level options re-run, fence forms are rejected. Design (c),
+  chosen by Gordon 2026-11-04: the knitr adapter records each structured cell\'s header keys from the author text
+  (`quarto_header_keys`), and a unit whose current header lost one is stale in both the splice and `record_is_stale`, so the
+  document re-runs; adds and value changes still show at once. Restoring recorded defaults was
+  dropped because q2\'s `opts_hooks` derive options (`results`, `fig.show`, `comment`) from other keys. Slice 7 pins the known-gap test; this slice lands before KNR-6 flips the live path. Done 2026-11-04 (see the plan\'s "Slice 8 notes"). Its one finding, that `record_is_stale` hashed under the default profile, is slice 9\'s.
+
+- [x] Slice 9, `record_is_stale` under hash profiles (Gordon, 2026-11-04: land it in KNR-3. Done 2026-11-04, before slice 7 at Gordon\'s direction).
+  Slice 8 found that the whole-document check hashes every unit with `UnitHashRef { profile: None }`, while the adapter
+  rehashes a knitr record\'s document hash with each structured cell\'s profile (`structured`), so an unchanged real knitr
+  record reads stale. Tests first, each failing before the fix: (a) a record written by the real knitr adapter (hand-built
+  from `adapter.rs`\'s test builders; one R-gated case through `KnitrEngine`, as in `knitr_header_deletion.rs`) is not
+  stale against its own document; (b) a code edit, a changed non-presentation option and a changed `execute:` key each
+  make it stale; (c) a presentation-only option edit (excluded by the profile) and a prose edit keep it fresh; (d) the
+  slice 8 whole-document leg now fires for knitr (a deleted header key makes the record stale, which the integration test
+  could not assert); (e) a Jupyter record is unchanged (no profile anywhere). Fix: in `record/staleness.rs`, run `match_units`
+  over the profile-aware keys the function already builds before the document-hash comparison, and give each unit\'s
+  `UnitHashRef` its matched cell\'s `quarto_hash_rule`; keep the signature. Gates: clippy and nextest for `quarto-core`
+  and `quarto-preview`. Then tick the prerequisite in KNR-6 (do not delete it) and drop the slice 8 "finding" sentence.
+  *Done 2026-11-04. `record_is_stale` (`record/staleness.rs`) now builds every unit key, runs `match_units`, and hashes a unit matched to a profiled cell with that cell\'s recorded hash and `quarto_hash_rule`; any other unit keeps its default-profile hash, so an edit that matches no cell still changes the document hash. Six unit tests (`an_unchanged_profiled_record_is_fresh` and five more, including a mixed profiled and default record and the slice 8 deletion leg) and the R-gated `a_real_knitr_record_is_fresh_unchanged_and_stale_without_its_header` through `KnitrEngine`. Red first: the four "fresh" unit tests failed before the fix. Mutation check: with the profile lookup disabled, five tests fail, including the real-record one. The Jupyter guard is the existing `a_jupyter_record_with_a_deleted_presentation_key_stays_fresh` and the unchanged Jupyter tests.*
 
 - [x] Slice 5 tests, each failing first (see "Slice 4 notes"): (a) an `include_graphics` image
   built by the mapper presents as `![](made.png){width=200}`, not `FIG1`; (b) a `#|` header
@@ -793,3 +823,34 @@ code once nothing reads it, and keeps the chunk hook (see KNR-6).
 - `external-sources/knitr/R/block.R` lines 100-101 and 300-340 (development snapshot, see
   KNR-1 Background)
 - `crates/quarto-core/src/engine/knitr/{types.rs,mod.rs}`
+
+
+## Slice 6 notes: the option sweep (2026-11-03)
+
+The splice-level sweep (`stage/stages/record_splice/tests/option_sweep.rs`) varies one option at
+a time in the current `#|` header of a record built from a rich cell (stdout, message, warning,
+figure) and classifies it: **hashed** (the unit reads as stale), **presented** (fresh, and the
+markdown changes), or **inert** (neither). Inert needs an entry in `INERT_REASONS`; a second test
+fails if a name on the `structured` exclusion list is not swept.
+
+To judge each inert option against live knitr, the corpus manifest gained 49 cases (the
+`KNR-3 slice 6` block). Live output differs from the record\'s presentation for **17 options**;
+the structured reader ignores them, so editing one changes nothing until something else
+re-runs the document. All are `Gap` rows today:
+
+- image attributes: `fig.align` and `fig-align` (cell `layout-align` plus `{fig-align=...}`),
+  `out.width`, `out.height`, `out.extra`, `fig.scap`, `fig.env`, `fig.pos`
+- the figure link: `fig.link` (`[![](FIG)]("url")`)
+- cell classes: `classes`, `cap-location`, `fig-cap-location`, `tbl-cap-location`,
+  `code-overflow`, `fig-column`, `tbl-column`
+- output indentation: `indent` (slice 7 leaves it inert and allowlists its cases; D8)
+
+Inert with live agreement: `background`, `highlight`, `size`, `fig.lp`, `chunk.echo`,
+`html-table-processing`. `strip.white` is inert but the corpus body has no blank lines, so the
+corpus cannot confirm it; `class.error` and `attr.error` need an error output the fixture lacks.
+
+The new corpus cases are not in the frozen oracle yet and the 17 gaps fail the corpus gate (227
+accepted, 31 unexpected at the time of writing; `s9/01_inline` is KNR-4\'s). Freeze them in slice 7: edit the
+manifest values first, then freeze (the oracle is live knitr output, so it does not depend on the
+gaps closing). Slice 7 expects 255 accepted, 7 allowlisted and one
+unexpected case.

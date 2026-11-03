@@ -1537,11 +1537,23 @@ mod tests {
     /// An engine that records the units it owns, as the Jupyter engine does (EXR-4's
     /// `RecordBuilder` over the stage's units and author texts). The passthrough engine
     /// above builds no record.
-    struct RecordingTestEngine;
+    /// `header_keys`: behave like the knitr adapter (KNR-3 slice 8): `echo` and `warning` are
+    /// presentation options outside the hash, and each cell records the keys of its `#|` header.
+    struct RecordingTestEngine {
+        header_keys: bool,
+    }
 
     impl ExecutionEngine for RecordingTestEngine {
         fn name(&self) -> &str {
             "test-recording"
+        }
+
+        fn hash_definition(&self) -> quarto_core::record::HashDefinition {
+            let mut def = quarto_core::record::HashDefinition::conservative(self.name());
+            if self.header_keys {
+                def.presentation_cell_options = vec!["echo".into(), "warning".into()];
+            }
+            def
         }
 
         fn execute(
@@ -1549,7 +1561,9 @@ mod tests {
             input: &str,
             ctx: &ExecutionContext,
         ) -> Result<ExecuteResult, ExecutionError> {
-            use quarto_core::record::{EngineEntryInput, RecordBuilder, UnitResult};
+            use quarto_core::record::{
+                EngineEntryInput, HEADER_KEYS_KEY, RecordBuilder, UnitResult, partition_author_text,
+            };
             let mut result = ExecuteResult::passthrough(input);
             if ctx.want_record {
                 let fail = |e: &dyn std::fmt::Display| {
@@ -1566,15 +1580,32 @@ mod tests {
                             .map_err(|e| fail(&e))?;
                     }
                 }
-                result.record = Some(
-                    builder
-                        .finish(EngineEntryInput {
-                            owned_languages: ctx.owned_languages.clone(),
-                            document_metadata: ctx.document_metadata_json(),
-                            ..Default::default()
+                let mut record = builder
+                    .finish(EngineEntryInput {
+                        owned_languages: ctx.owned_languages.clone(),
+                        document_metadata: ctx.document_metadata_json(),
+                        ..Default::default()
+                    })
+                    .map_err(|e| fail(&e))?;
+                if self.header_keys {
+                    let owned: Vec<usize> = (0..ctx.units.len())
+                        .filter(|i| {
+                            ctx.owned_languages
+                                .iter()
+                                .any(|l| l == ctx.units[*i].lang())
                         })
-                        .map_err(|e| fail(&e))?,
-                );
+                        .collect();
+                    for (cell, i) in record.cells.iter_mut().zip(owned) {
+                        let (options, _) =
+                            partition_author_text(ctx.units[i].lang(), &ctx.author_texts.0[i].text)
+                                .map_err(|e| fail(&e))?;
+                        cell.metadata.extra.insert(
+                            HEADER_KEYS_KEY.into(),
+                            serde_json::json!(options.keys().collect::<Vec<_>>()),
+                        );
+                    }
+                }
+                result.record = Some(record);
             }
             Ok(result)
         }
@@ -1592,9 +1623,9 @@ mod tests {
         }
     }
 
-    fn make_recording_registry() -> Arc<EngineRegistry> {
+    fn recording_registry(header_keys: bool) -> Arc<EngineRegistry> {
         let mut reg = EngineRegistry::new();
-        reg.register(Arc::new(RecordingTestEngine));
+        reg.register(Arc::new(RecordingTestEngine { header_keys }));
         Arc::new(reg)
     }
 
@@ -1608,6 +1639,14 @@ mod tests {
         files: &[(&str, &str)],
         rel: &str,
     ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
+        build_ctx_record_doc_with(files, rel, false).await
+    }
+
+    async fn build_ctx_record_doc_with(
+        files: &[(&str, &str)],
+        rel: &str,
+        header_keys: bool,
+    ) -> (TempDir, Arc<HubContext>, Arc<dyn SystemRuntime>) {
         let (tmp, ctx, runtime) = build_ctx_with_files(files).await;
         let abs = tmp.path().join(rel);
         let project = ProjectContext::discover(&abs, runtime.as_ref()).unwrap();
@@ -1615,7 +1654,7 @@ mod tests {
             &abs,
             &project,
             runtime.clone(),
-            Some(make_recording_registry()),
+            Some(recording_registry(header_keys)),
         )
         .await
         .unwrap();
@@ -1697,6 +1736,85 @@ mod tests {
             staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
             Some(false)
         );
+    }
+
+    const HEADED_DOC: &str = "---\nengine: test-recording\n---\n\nA paragraph.\n\n```{test-recording}\n#| echo: true\nx\n```\n";
+
+    /// KNR-3 slice 8: deleting a header key the cell recorded flips the sidecar staleness, though
+    /// the hashes (which leave `echo` out) still say fresh. Adding a key does not.
+    #[tokio::test]
+    async fn a_deleted_header_key_flips_staleness() {
+        let (tmp, ctx, runtime) =
+            build_ctx_record_doc_with(&[("doc.qmd", HEADED_DOC)], "doc.qmd", true).await;
+        assert_eq!(
+            staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
+            Some(false)
+        );
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            HEADED_DOC.replace("#| echo: true\n", "#| echo: true\n#| warning: false\n"),
+        )
+        .unwrap();
+        assert_eq!(
+            staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
+            Some(false),
+            "an added key is not a deletion"
+        );
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            HEADED_DOC.replace("#| echo: true\n", ""),
+        )
+        .unwrap();
+        assert_eq!(
+            staleness_after_edit(&ctx, &runtime, "doc.qmd").await,
+            Some(true)
+        );
+    }
+
+    /// Under `Auto` the same deletion re-runs (a new capture, staleness cleared); under `Manual`
+    /// it only sets the flag.
+    #[tokio::test]
+    async fn auto_policy_re_executes_after_a_header_key_is_deleted() {
+        crate::re_execute::reset_in_flight_for_tests();
+        let (tmp, ctx, runtime) =
+            build_ctx_record_doc_with(&[("doc.qmd", HEADED_DOC)], "doc.qmd", true).await;
+        let initial = ctx
+            .index()
+            .get_capture("doc.qmd")
+            .unwrap()
+            .capture_doc_id
+            .clone();
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            HEADED_DOC.replace("#| echo: true\n", ""),
+        )
+        .unwrap();
+        let flipped = recompute_staleness(
+            ctx.clone(),
+            runtime,
+            "doc.qmd",
+            EnginePolicy::Auto,
+            Some(recording_registry(true)),
+            &cache_dir_for_test(),
+        )
+        .await
+        .unwrap();
+        assert!(flipped, "Auto reports the flip");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let entry = ctx.index().get_capture("doc.qmd").unwrap();
+            if entry.state == Some(quarto_hub::index::CaptureState::Idle)
+                && entry.capture_doc_id != initial
+            {
+                assert_eq!(entry.staleness, Some(false));
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "no re-run within 10s; entry = {entry:?}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
     }
 
     /// The function, not the watcher: recomputing the includer after an edit inside an

@@ -658,3 +658,185 @@ dir = "s8"
 
 [[handwritten]]
 dir = "s9"
+
+# ---------------------------------------------------------------------------------------------
+# KNR-3 slice 6: options the splice-level option sweep found neither hashed nor presented, so the
+# live oracle decides whether each one really has no effect on the page.
+# ---------------------------------------------------------------------------------------------
+
+[[sweep]]
+group = "options"
+option = "indent"
+body_ref = "single_body"
+values = ["'\"  \"'"]
+
+[[sweep]]
+group = "options"
+option = "fig.link"
+body_ref = "plot_body"
+values = ["'\"http://example.com\"'"]
+
+[[sweep]]
+group = "options"
+option = "attr.message"
+values = ["'.myclass key=\"value\"'"]
+
+[[sweep]]
+group = "options"
+option = "attr.warning"
+values = ["'.myclass key=\"value\"'"]
+
+[[sweep]]
+group = "options"
+option = "fig.align"
+body_ref = "plot_body"
+values = ['"center"', '"right"']
+
+[[sweep]]
+group = "options"
+option = "out.width"
+body_ref = "plot_body"
+values = ['"50%"']
+
+[[sweep]]
+group = "options"
+option = "out.height"
+body_ref = "plot_body"
+values = ['"50%"']
+
+[[sweep]]
+group = "options"
+option = "out.extra"
+body_ref = "plot_body"
+values = ['"style=\"border: 1px\""']
+
+[[sweep]]
+group = "options"
+option = "fig.scap"
+body_ref = "plot_body"
+values = ['"short"']
+
+[[sweep]]
+group = "options"
+option = "fig.env"
+body_ref = "plot_body"
+values = ['"figure*"']
+
+[[sweep]]
+group = "options"
+option = "fig.pos"
+body_ref = "plot_body"
+values = ['"h"']
+
+[[sweep]]
+group = "options"
+option = "fig.lp"
+body_ref = "plot_body"
+values = ['"fig:"']
+
+[[sweep]]
+group = "options"
+option = "strip.white"
+body_ref = "single_body"
+values = ["FALSE"]
+
+[[sweep]]
+group = "options"
+option = "highlight"
+body_ref = "single_body"
+values = ["FALSE"]
+
+[[sweep]]
+group = "options"
+option = "size"
+body_ref = "single_body"
+values = ['"small"']
+
+[[sweep]]
+group = "options"
+option = "background"
+body_ref = "single_body"
+values = ['"#ff0000"']
+
+[[sweep]]
+group = "options"
+option = "chunk.echo"
+body_ref = "single_body"
+values = ["FALSE"]
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "classes"
+body_ref = "single_body"
+values = ['"foo"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "cap-location"
+body_ref = "plot_body"
+values = ['"top"', '"margin"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-cap-location"
+body_ref = "plot_body"
+values = ['"top"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "tbl-cap-location"
+body_ref = "single_body"
+values = ['"top"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "code-overflow"
+body_ref = "single_body"
+values = ['"wrap"', '"scroll"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-column"
+body_ref = "plot_body"
+values = ['"margin"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "tbl-column"
+body_ref = "single_body"
+values = ['"margin"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "html-table-processing"
+body_ref = "single_body"
+values = ['"none"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-align"
+body_ref = "plot_body"
+values = ['"center"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-alt"
+body_ref = "plot_body"
+values = ['"Alt"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-cap"
+body_ref = "plot_body"
+values = ['"Cap"']

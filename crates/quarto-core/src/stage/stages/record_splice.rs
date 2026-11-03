@@ -40,8 +40,8 @@ use crate::presenter::options::CellOptions;
 use crate::presenter::output::{CellOutput, CellResult};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
 use crate::record::{
-    EngineEntry, Record, UnitKey, UnitKind, UnitLocation, UnitStaleness, match_units, replacement,
-    stored_markdown,
+    EngineEntry, Record, UnitKey, UnitKind, UnitLocation, UnitStaleness, lost_header_keys,
+    match_units, replacement, stored_markdown,
 };
 use crate::stage::data::DocumentAst;
 use crate::stage::stages::engine_execution::{
@@ -163,10 +163,15 @@ fn splice_units(
                     exec_hash: String::new(),
                     content_hash: text.content_hash.clone(),
                     alt_exec_hashes: Vec::new(),
+                    header_keys: None,
                 })
         })
         .collect();
-    let matching = match_units(&keys, &record.cells);
+    let mut matching = match_units(&keys, &record.cells);
+    // A unit that lost a header key its cell recorded is stale (KNR-3 slice 8).
+    for unit_index in lost_header_keys(&matching, &keys, &record.cells) {
+        matching.demote(unit_index);
+    }
     let report = SpliceReport {
         units: units
             .iter()
@@ -639,6 +644,50 @@ mod tests {
         assert!(without.contains("shown"), "{without}");
         assert!(!without.contains("cell-code"), "{without}");
         assert_eq!(report.units[0].1, UnitStaleness::Fresh);
+    }
+
+    /// KNR-3 slice 8: a unit that lost a header key the record's cell carried is stale, stays
+    /// source, and does not disturb its fresh neighbors.
+    #[test]
+    fn a_header_deleted_unit_is_stale_and_its_neighbors_still_splice() {
+        let with = "```{python}\na = 1\n```\n\n```{python}\n#| echo: true\nb = 2\n```\n\n```{python}\nc = 3\n```\n";
+        let hash_def = {
+            let mut d = HashDefinition::conservative("jupyter");
+            d.presentation_cell_options = vec!["echo".into()];
+            d
+        };
+        let doc = parse(with);
+        let (qmd, _) = serialize_ast_to_qmd(&doc.ast).unwrap();
+        let (units, texts) = scan_and_fill_ids(&qmd, &[]);
+        let mut b = RecordBuilder::new("jupyter", &hash_def, &units, &texts).unwrap();
+        for i in 0..3 {
+            b.push(i, stdout(&format!("out{i}\n"))).unwrap();
+        }
+        let mut entry = b
+            .finish(EngineEntryInput {
+                owned_languages: vec!["python".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        entry.cells[1]
+            .metadata
+            .extra
+            .insert("quarto_header_keys".into(), json!(["echo"]));
+        let record = coalesce(&[entry], &units).unwrap();
+
+        // Unchanged: all three splice.
+        let (text, report) = splice(with, &record);
+        assert!(text.contains("out1"), "{text}");
+        assert!(report.units.iter().all(|(_, s)| *s == UnitStaleness::Fresh));
+
+        // Header deleted: the unit stays source and reports Stale; the others splice.
+        let (text, report) = splice(&with.replace("#| echo: true\n", ""), &record);
+        assert!(text.contains("out0") && text.contains("out2"), "{text}");
+        assert!(!text.contains("out1"), "{text}");
+        assert!(text.contains("b = 2"), "{text}");
+        assert_eq!(report.units[1].1, UnitStaleness::Stale);
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh);
+        assert_eq!(report.orphaned.len(), 1);
     }
 
     #[test]
@@ -1168,6 +1217,8 @@ mod tests {
         assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
         fixture::assert_rich(&text);
     }
+
+    mod option_sweep;
 
     const MIXED: &str =
         "```{r}\n#| echo: true\nx <- 1\nx\n```\n\n```{r}\n#| echo: true\ny <- 2\ny\n```\n";

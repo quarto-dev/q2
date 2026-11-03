@@ -84,11 +84,13 @@ fixture and a test that fails first.
   `fig.show = "animate"` (two corpus cases are unavailable here for want of `gifski`) and
   `fig.beforecode`. Done in KNR-2: logical and numeric `echo`, `results` (`markup`, `asis`,
   `hide`), numeric `warning` and `message`, and the message and warning classes.
-- [ ] The image and caption options Phase 2C slice 3 left unbuilt: the `#fig-` label and
-  cell-level caption when `fig.cap` and `fig.subcap` are both set, `fig.scap`, `fig.link`,
-  image `width` and `height`, `fig.align`, the `fig.sep` layout synthesis, `fig-column`,
-  `tbl-column` and the `cap-location` family. For each, add a fixture and build it, or record
-  it as unsupported with a reason.
+- [ ] The image and caption options Phase 2C slice 3 left unbuilt. KNR-3 slice 7
+  ([plan](2026-11-03-presenter-generic-cell-options.md)) builds `fig.scap`, `fig.link`, image
+  `width` and `height`, `fig.align`, `fig-column`, `tbl-column` and the `cap-location` family, for
+  every engine, so they leave this list once it lands. What stays here: the `#fig-` label and
+  cell-level caption when `fig.cap` and `fig.subcap` are both set, the `fig.sep` and `fig.ncol`
+  layout synthesis, and `fig.valign` (`layout-valign`). For each, add a fixture and build it, or
+  record it as unsupported with a reason.
 - [ ] Language fences (`hooks_markdown()`) and the `knit_asis` fence length when the HTML
   contains backtick runs. No corpus case fails (`s1/11_knit_asis` is syntax-level), so write a
   fixture for each and decide whether anything is missing.
@@ -125,11 +127,12 @@ fixture and a test that fails first.
   after the widget, three-tick `{=html}` fence) is done here (slice 5) and is the knitr half of
   the shared raw-HTML path that WGT-2 wants.
 - [ ] Re-run the corpus. Every difference is classified; zero blockers; the intentional
-  divergences are written down with one-line reasons. State at 2026-11-03 (KNR-3 slice 4,
-  through the written record, 221 cases): 193 accepted (identical or syntax-level), 5
-  allowlisted, 7 not compared (4 consistent aborts, 3 unavailable packages), and 16 blockers
-  outside the allowlist: 15 are KNR-3 slice 5 (see its notes) and `s9/01_inline` is KNR-4.
-  This item stays open until both have landed and the count is zero.
+  divergences are written down with one-line reasons. State at 2026-11-03 (KNR-3 slice 6,
+  through the written record, 270 cases): 227 accepted (identical or syntax-level), 5
+  allowlisted, 7 not compared (4 consistent aborts, 3 unavailable packages), and 31 blockers
+  outside the allowlist: 30 are the option gaps KNR-3 slice 7 closes (expected after it: 255, 7, 7
+  and 1) and `s9/01_inline` is KNR-4. This item stays open until both have landed and the
+  count is zero.
 - [ ] Assert the gate. `corpus_report` currently writes the gate verdict
   (`knitr_corpus_gate`, epic decision 26) into its summary without failing on it, because
   the residual cases waited on other plans. Once they have landed, make a failed gate fail a

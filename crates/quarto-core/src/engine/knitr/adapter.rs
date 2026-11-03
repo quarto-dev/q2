@@ -31,7 +31,10 @@ use crate::presenter::options::OutputKind;
 use crate::presenter::output::CellOutput;
 #[cfg(test)]
 use crate::record::QUARTO_MARKDOWN_MIME;
-use crate::record::{EngineEntryInput, EngineRecord, HashDefinition, RecordBuilder, UnitResult};
+use crate::record::{
+    EngineEntryInput, EngineRecord, HEADER_KEYS_KEY, HashDefinition, RecordBuilder, UnitResult,
+    partition_author_text,
+};
 
 use super::chunk_records::{UNIT_ID_OPTION, align, chunk_output};
 
@@ -114,6 +117,9 @@ pub(super) fn build_structured(
         };
         let outputs: Vec<Value> = result.outputs.iter().map(CellOutput::to_nbformat).collect();
         let mut extra = BTreeMap::new();
+        if let Some(keys) = header_keys(&ctx.units[index], &ctx.author_texts.0[index].text) {
+            extra.insert(HEADER_KEYS_KEY.to_string(), json!(keys));
+        }
         extra.insert(RESOLVED_OPTIONS_KEY.to_string(), resolved_options(chunk));
         if let Some(anchors) = anchors {
             extra.insert(OUTPUT_ANCHORS_KEY.to_string(), json!(anchors));
@@ -217,6 +223,23 @@ fn echoed_code(author_text: &str, echoed: &str, unit: &Unit) -> Option<Vec<Strin
         last.pop();
     }
     Some(lines)
+}
+
+/// The keys of the unit\'s `#|` header as the author wrote them, sorted, from the same partition
+/// the record builder hashes (KNR-3 slice 8, D1). The join id is not a header key. `None` for a
+/// span, or when the options do not partition. Nothing is read from R, so the list is the same
+/// for a blank chunk, `eval: false` and every knitr version.
+fn header_keys(unit: &Unit, author_text: &str) -> Option<Vec<String>> {
+    let Unit::Cell(cell) = unit else {
+        return None;
+    };
+    let (options, _) = partition_author_text(&cell.lang, author_text).ok()?;
+    Some(
+        options
+            .into_keys()
+            .filter(|k| k != UNIT_ID_OPTION)
+            .collect(),
+    )
 }
 
 /// The chunk's resolved options as the record stores them: the options object as the capture
@@ -368,6 +391,104 @@ y
         assert!(extra[RESOLVED_OPTIONS_KEY].get("quarto-unit-id").is_none());
         assert_eq!(cell.outputs[0]["output_type"], "stream");
         assert_eq!(cell.outputs[1]["name"], "stderr");
+    }
+
+    /// KNR-3 slice 8 (D1): every `#|` key of the author text, presentation ones included, and
+    /// never the join id.
+    #[test]
+    fn a_structured_cell_records_every_header_key_from_the_author_text() {
+        let c = ctx();
+        let record = build(&c, &pieces(&ids(&c)), &[]).unwrap();
+        assert_eq!(
+            record.cells[0].metadata.extra[HEADER_KEYS_KEY],
+            json!(["echo"])
+        );
+        assert_eq!(
+            record.cells[1].metadata.extra[HEADER_KEYS_KEY],
+            json!(["class-source"])
+        );
+        for cell in &record.cells {
+            let keys = cell.metadata.extra[HEADER_KEYS_KEY].to_string();
+            assert!(!keys.contains("quarto-unit-id"), "{keys}");
+        }
+    }
+
+    #[test]
+    fn a_chunk_without_a_header_records_an_empty_key_list() {
+        let doc = "```{r}
+x
+```
+";
+        let mut units = scan_units(doc);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        let c = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_owned_languages(vec!["r".into()])
+        .with_units(units)
+        .with_author_texts(texts)
+        .with_want_record(true);
+        let (_, ids) = insert_unit_ids(doc, &c);
+        let found = vec![chunk(
+            &ids[0],
+            "x",
+            json!({}),
+            json!([{"class": "source", "text": "x\n"}]),
+        )];
+        let record = build_structured(
+            &c,
+            &knitr_hash_definition(),
+            &ids,
+            &Captured {
+                pieces: &found,
+                known_options: None,
+                read_file: &no_files,
+            },
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(record.cells[0].metadata.extra[HEADER_KEYS_KEY], json!([]));
+    }
+
+    #[test]
+    fn a_fallback_cell_has_no_header_keys() {
+        let c = ctx();
+        let found = ids(&c);
+        let mut chunks = pieces(&found);
+        chunks[1].hook_override = Some("output".into());
+        let fallback = [KnitrChunkRecord {
+            id: found[1].clone(),
+            markdown: "OVERRIDDEN\n".into(),
+            options_digest: "d".into(),
+            files: vec![],
+        }];
+        let record = build(&c, &chunks, &fallback).unwrap();
+        assert!(!record.cells[1].metadata.extra.contains_key(HEADER_KEYS_KEY));
+        assert!(record.cells[0].metadata.extra.contains_key(HEADER_KEYS_KEY));
+    }
+
+    #[test]
+    fn the_header_keys_are_in_no_hash_and_not_an_option() {
+        let c = ctx();
+        let record = build(&c, &pieces(&ids(&c)), &[]).unwrap();
+        let def = knitr_hash_definition();
+        for cell in &record.cells {
+            let mut without = cell.clone();
+            without.metadata.extra.remove(HEADER_KEYS_KEY);
+            assert_eq!(
+                crate::record::recompute_cell_hash(&def, cell).unwrap(),
+                crate::record::recompute_cell_hash(&def, &without).unwrap()
+            );
+            assert!(
+                cell.metadata.options().all(|(k, _)| k != HEADER_KEYS_KEY),
+                "options() must not list it"
+            );
+        }
     }
 
     #[test]

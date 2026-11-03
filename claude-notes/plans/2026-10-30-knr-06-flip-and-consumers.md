@@ -47,7 +47,10 @@ Rust assembling the document itself would have to reproduce knitr's group splitt
 build the rest, knitr could return a *skeleton*: the chunk hook returns a marker (for
 example an HTML comment carrying the unit id, indented by `options$indent`) instead of the
 formatted chunk, so knitr's own join builds the document around the markers, and Rust
-replaces each marker with the presenter's output. What reading the code says about it:
+replaces each marker with the presenter's output. (KNR-3 slice 7 leaves `indent` inert in the
+presenter, so whether a header `indent` still takes effect after the flip depends on how this
+marker's indent survives the replacement; its allowlist entry says KNR-6 decides.) What reading
+the code says about it:
 - `include=FALSE` returns `''` or the indent after the hook, so the marker disappears and
   the unit presents nothing, as today (`block.R:425`).
 - A level-3 cache hit returns the cached string without running the hook (`block.R:100-101`);
@@ -175,6 +178,7 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 - [ ] A document with a setup chunk setting `opts_chunk` presents the same as before (the
   resolved-options layering), and the layering tests of KNR-7: a header-option edit shows
   without re-running, a setup-chunk edit does not show until the next run.
+- [ ] A header option deleted from a knitr chunk marks that unit stale and re-runs ([KNR-3 slice 8](2026-11-04-knr-slice-8-header-removal.md)); a setup-chunk edit re-runs the whole document only under `EnginePolicy::Auto` in the preview, and otherwise leaves its neighbors showing the old record (state this in the user-facing behavior). Prerequisite found in slice 8: `record_is_stale` hashes every unit under the default profile, so a real knitr record reads stale even unchanged; hash profiled cells the way the writer did (their `quarto_hash_rule` and the format) before this item can pass. Done in [KNR-3 slice 9](2026-10-30-knr-03-record-adapter-hash-fallback.md) (2026-11-04): `record_is_stale` hashes a profiled cell under its recorded profile, so a real knitr record reads fresh when unchanged.
 - [ ] Fallback chunks (`child=`, cache hit, overridden hook) in a mixed document present
   exactly as before.
 

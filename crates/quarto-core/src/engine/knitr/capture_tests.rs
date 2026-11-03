@@ -292,6 +292,34 @@ fn capture_records_resolved_options_and_forces_cache_off() {
     assert!(!dir.path().join("doc_cache").exists(), "no cache directory");
 }
 
+/// KNR-3 slice 8: why a deleted header key re-runs instead of restoring a recorded default.
+/// q2\'s `opts_hooks` derive presentation options from other keys, so deleting one key changes
+/// options that are not header keys, and `opts_chunk$get` would give the wrong values back.
+#[test]
+fn deleting_a_header_key_changes_the_options_derived_from_it() {
+    if !r_available("deleting_a_header_key_changes_the_options_derived_from_it") {
+        return;
+    }
+    let options = |markdown: &str| execute(markdown, true).0.pieces[0].options.clone();
+
+    let with = options("```{r fig-x}\n#| echo: fenced\nplot(1)\n```\n");
+    let without = options("```{r fig-x}\nplot(1)\n```\n");
+    // (`fig.show` is `hold` either way: the `fig-` label sets it on its own.)
+    for derived in ["fenced.echo", "results"] {
+        assert_ne!(
+            with[derived], without[derived],
+            "`{derived}` is derived from `echo: fenced`: {with} vs {without}"
+        );
+    }
+
+    let with = options("```{r k}\n#| collapse: true\n1\n```\n");
+    let without = options("```{r k}\n1\n```\n");
+    assert_ne!(
+        with["comment"], without["comment"],
+        "`comment` is derived from `collapse`: {with} vs {without}"
+    );
+}
+
 #[test]
 fn capture_flags_an_overridden_hook_from_that_chunk_on() {
     if !r_available("capture_flags_an_overridden_hook_from_that_chunk_on") {

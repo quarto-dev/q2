@@ -125,6 +125,7 @@ pub mod knitr_corpus_run;
 pub mod knitr_corpus_runner;
 pub mod knitr_corpus_support;
 pub mod knitr_display_fence;
+pub mod knitr_header_deletion;
 pub mod knitr_html_dependency;
 pub mod knitr_inline_expressions;
 pub mod knitr_inline_records;
