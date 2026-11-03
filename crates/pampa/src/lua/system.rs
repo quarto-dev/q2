@@ -553,6 +553,13 @@ mod tests {
 
         let os: String = lua.load("pandoc.system.os").eval().unwrap();
         assert!(!os.is_empty());
+        // Pandoc's names (Haskell's System.Info.os), not Rust's.
+        #[cfg(target_os = "macos")]
+        assert_eq!(os, "darwin");
+        #[cfg(target_os = "windows")]
+        assert_eq!(os, "mingw32");
+        #[cfg(target_os = "linux")]
+        assert_eq!(os, "linux");
 
         let arch: String = lua.load("pandoc.system.arch").eval().unwrap();
         assert!(!arch.is_empty());

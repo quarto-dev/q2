@@ -583,7 +583,8 @@ pub trait SystemRuntime: Send + Sync {
 
     /// Operating system identifier.
     ///
-    /// Returns: "darwin", "linux", "windows", "wasm", etc.
+    /// Returns Pandoc's names (Haskell's `System.Info.os`): "darwin", "linux",
+    /// "mingw32", ... — or "wasm" in the browser.
     ///
     /// Corresponds to: `pandoc.system.os`
     fn os_name(&self) -> &'static str;
