@@ -1,0 +1,64 @@
+From 6e46469aab81f58c223d37cfc98a1036d7c4e198 Mon Sep 17 00:00:00 2001
+From: Carlos Scheidegger <carlos.scheidegger@posit.co>
+Date: Tue, 3 Nov 2026 08:00:59 -0600
+Subject: [PATCH 4/5] q2-compat: set CARGO_MANIFEST_DIR when running tests
+
+---
+ src/build.rs | 15 ++++++++++++---
+ 1 file changed, 12 insertions(+), 3 deletions(-)
+
+diff --git a/src/build.rs b/src/build.rs
+index 5d545dd..a9f5a09 100644
+--- a/src/build.rs
++++ b/src/build.rs
+@@ -6291,13 +6291,18 @@ fn build_inner(
+                     let ActionSpec::Compile(spec) = &r.action.spec else {
+                         bail!("test harness compile action expected");
+                     };
+-                    let binary_environment = spec
++                    let mut binary_environment: Vec<(String, String)> = spec
+                         .environment
+                         .iter()
+                         .filter(|(name, _)| name.starts_with("CARGO_BIN_EXE_"))
+                         .chain(runtime_environment.iter())
+                         .cloned()
+                         .collect();
++                    // cargo test and nextest set CARGO_MANIFEST_DIR when
++                    // they run a test binary. Tests that read it at runtime
++                    // (std::env::var, not env!) stay location-free.
++                    binary_environment
++                        .push(("CARGO_MANIFEST_DIR".to_string(), cwd.display().to_string()));
+                     if matches!(mode, Mode::Test) {
+                         opaque_test_executables.push(BenchmarkExecutable {
+                             name,
+@@ -7807,7 +7812,8 @@ fn run_test_action(
+     let ActionSpec::Compile(compile) = &compiled.action.spec else {
+         bail!("test executable compile action expected");
+     };
+-    let binary_environment = compile
++    let cwd = ctx.meta.packages[unit.pkg].root();
++    let mut binary_environment: Vec<(String, String)> = compile
+         .environment
+         .iter()
+         .filter(|(name, _)| name.starts_with("CARGO_BIN_EXE_"))
+@@ -7818,13 +7824,16 @@ fn run_test_action(
+         )
+         .cloned()
+         .collect();
++    // As cargo test and nextest do; runtime only, so not part of any key
++    // (like `cwd`, it is the package root).
++    binary_environment.push(("CARGO_MANIFEST_DIR".to_string(), cwd.display().to_string()));
+     fs::create_dir_all("/tmp/corgi/target-tmp")?;
+     let plan = &ctx.action_plans[index];
+     let mut harness = TestHarness {
+         unit_id: index,
+         name: unit.target.name.clone(),
+         path,
+-        cwd: ctx.meta.packages[unit.pkg].root(),
++        cwd,
+         binary_environment,
+         action_key: action.key.clone(),
+         cache_bypassed: !plan.cache_policy.reads(),
+-- 
+2.50.1 (Apple Git-155)
+

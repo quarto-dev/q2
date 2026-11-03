@@ -1,0 +1,87 @@
+From eb4434546c915eb8b390d9a09b7b079e8876e7cc Mon Sep 17 00:00:00 2001
+From: Carlos Scheidegger <carlos.scheidegger@posit.co>
+Date: Tue, 3 Nov 2026 07:47:14 -0600
+Subject: [PATCH 1/5] q2-compat: accept target.<t>.runner and [lints] check-cfg
+
+---
+ src/build.rs  | 34 ++++++++++++++++++++++++++++++++--
+ src/config.rs |  4 +++-
+ 2 files changed, 35 insertions(+), 3 deletions(-)
+
+diff --git a/src/build.rs b/src/build.rs
+index b15f4b4..d3f3751 100644
+--- a/src/build.rs
++++ b/src/build.rs
+@@ -2615,6 +2615,10 @@ struct LintFlags {
+ /// (priority, tool, lint) — cargo's documented flag ordering.
+ type LintEntry = (i64, String, String, String);
+ 
++/// Pseudo-tool for `check-cfg` values in a [`LintEntry`] (the value rides in
++/// the lint slot).
++const CHECK_CFG_TOOL: &str = "\u{0}check-cfg";
++
+ /// `{ rust: { lint: "level" | { level, priority } }, clippy: {...} }`.
+ fn lint_entries_from_table(table: &toml::Table) -> Result<Vec<LintEntry>> {
+     let mut entries = Vec::new();
+@@ -2626,8 +2630,28 @@ fn lint_entries_from_table(table: &toml::Table) -> Result<Vec<LintEntry>> {
+             let (level, priority) = match value {
+                 toml::Value::String(level) => (level.clone(), 0),
+                 toml::Value::Table(cfg) => {
+-                    if cfg.contains_key("check-cfg") {
+-                        bail!("[lints] `{tool}::{lint}`: check-cfg configuration is not supported yet");
++                    // `check-cfg` (only meaningful on `rust::unexpected_cfgs`)
++                    // names extra expected cfgs; cargo forwards each as
++                    // `--check-cfg <value>`. Carried as pseudo-entries so they
++                    // share the lint flags' sorting and keying.
++                    if let Some(check_cfg) = cfg.get("check-cfg") {
++                        if tool != "rust" || lint != "unexpected_cfgs" {
++                            bail!("[lints] `{tool}::{lint}`: check-cfg is only valid on rust::unexpected_cfgs");
++                        }
++                        let values = check_cfg.as_array().with_context(|| {
++                            format!("[lints] `{tool}::{lint}`: check-cfg must be an array")
++                        })?;
++                        for value in values {
++                            let value = value.as_str().with_context(|| {
++                                format!("[lints] `{tool}::{lint}`: check-cfg entries must be strings")
++                            })?;
++                            entries.push((
++                                i64::MAX,
++                                CHECK_CFG_TOOL.to_string(),
++                                value.to_string(),
++                                String::new(),
++                            ));
++                        }
+                     }
+                     let level = cfg
+                         .get("level")
+@@ -2655,6 +2679,12 @@ fn lint_entries_to_flags(entries: &[LintEntry]) -> Result<LintFlags> {
+         if tool == "rustdoc" {
+             continue; // rustdoc lints apply to rustdoc runs only
+         }
++        if tool == CHECK_CFG_TOOL {
++            for flags in [&mut out.rustc_only, &mut out.with_clippy] {
++                flags.extend(["--check-cfg".to_string(), lint.clone()]);
++            }
++            continue;
++        }
+         let name = if tool == "rust" {
+             lint.clone()
+         } else {
+diff --git a/src/config.rs b/src/config.rs
+index 28bd5c0..67f16ec 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -148,7 +148,9 @@ fn parse(text: &str) -> Result<CargoConfig> {
+                                 spec.clone(),
+                                 flag_list(v).with_context(|| format!("target.{spec}.rustflags"))?,
+                             )),
+-                            "rustdocflags" => {}
++                            // `runner` only changes how a built test or binary is
++                            // launched, never what gets compiled.
++                            "rustdocflags" | "runner" => {}
+                             other => bail!("unsupported .cargo/config key target.{spec}.{other}"),
+                         }
+                     }
+-- 
+2.50.1 (Apple Git-155)
+

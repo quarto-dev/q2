@@ -1,0 +1,86 @@
+From a13376fbdb494b14e685094a0be0099d66d51d0a Mon Sep 17 00:00:00 2001
+From: Carlos Scheidegger <carlos.scheidegger@posit.co>
+Date: Tue, 3 Nov 2026 08:22:41 -0600
+Subject: [PATCH 5/5] q2-compat: drop git-ignored files from extra-input
+ expansion
+
+---
+ src/build.rs | 55 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 55 insertions(+)
+
+diff --git a/src/build.rs b/src/build.rs
+index a9f5a09..a05cb60 100644
+--- a/src/build.rs
++++ b/src/build.rs
+@@ -1071,6 +1071,60 @@ struct ExtraInput {
+ /// in a component) matches any number of components, and a trailing `**`
+ /// means everything under that directory. Matches are whatever is on disk,
+ /// directories included, and may be empty.
++/// Drops files git ignores from an extra-input expansion.
++///
++/// A broad pattern such as `tests/**` otherwise sweeps in build and test
++/// outputs (rendered fixtures, `.snap.new` files) that the tests themselves
++/// write, so every run changes the inputs of the next one and no test pass
++/// is ever reused. Tracked files are never reported as ignored. Outside a
++/// git checkout, or if git is unavailable, nothing is dropped.
++fn drop_git_ignored(workspace_root: &Path, files: Vec<PathBuf>) -> Vec<PathBuf> {
++    use std::io::Write;
++    if files.is_empty() {
++        return files;
++    }
++    let child = Command::new("git")
++        .args(["check-ignore", "--stdin", "-z"])
++        .current_dir(workspace_root)
++        .stdin(std::process::Stdio::piped())
++        .stdout(std::process::Stdio::piped())
++        .stderr(std::process::Stdio::null())
++        .spawn();
++    let Ok(mut child) = child else {
++        return files;
++    };
++    let mut input = Vec::new();
++    for file in &files {
++        input.extend_from_slice(file.to_string_lossy().as_bytes());
++        input.push(0);
++    }
++    let writer = child.stdin.take().map(|mut stdin| {
++        std::thread::spawn(move || {
++            let _ = stdin.write_all(&input);
++        })
++    });
++    let Ok(output) = child.wait_with_output() else {
++        return files;
++    };
++    if let Some(writer) = writer {
++        let _ = writer.join();
++    }
++    // Exit status 1 means "nothing ignored"; 128 means not a repository.
++    if !matches!(output.status.code(), Some(0)) {
++        return files;
++    }
++    let ignored: HashSet<PathBuf> = output
++        .stdout
++        .split(|byte| *byte == 0)
++        .filter(|entry| !entry.is_empty())
++        .map(|entry| PathBuf::from(String::from_utf8_lossy(entry).into_owned()))
++        .collect();
++    files
++        .into_iter()
++        .filter(|file| !ignored.contains(file))
++        .collect()
++}
++
+ fn expand_extra_input(root: &Path, entry: &str) -> Result<Vec<PathBuf>> {
+     let root = root
+         .to_slash()
+@@ -2321,6 +2375,7 @@ impl ExtraInputs {
+                     .filter(|path| !path.is_dir())
+                     .cloned()
+                     .collect();
++                let files = drop_git_ignored(workspace_root, files);
+                 if files.is_empty() && optional {
+                     continue;
+                 }
+-- 
+2.50.1 (Apple Git-155)
+

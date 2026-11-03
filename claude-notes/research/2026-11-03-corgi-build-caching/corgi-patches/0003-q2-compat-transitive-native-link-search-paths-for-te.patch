@@ -1,0 +1,29 @@
+From 6da8d0e94f189b3634a06bcbd72a860ca253965b Mon Sep 17 00:00:00 2001
+From: Carlos Scheidegger <carlos.scheidegger@posit.co>
+Date: Tue, 3 Nov 2026 07:59:35 -0600
+Subject: [PATCH 3/5] q2-compat: transitive native link search paths for test
+ harnesses
+
+---
+ src/build.rs | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/build.rs b/src/build.rs
+index 9326246..5d545dd 100644
+--- a/src/build.rs
++++ b/src/build.rs
+@@ -10449,7 +10449,10 @@ fn compile(
+ 
+     let mut link_search: Vec<String> = bs.link_search.clone();
+     let mut link_args: Vec<String> = Vec::new();
+-    if matches!(unit.kind, Kind::Bin) {
++    // Test harnesses are final links too: a test that reaches a native
++    // static lib (mlua-sys's `-llua5.4`, say) fails with "library not
++    // found" unless it sees the same transitive search paths as a bin.
++    if matches!(unit.kind, Kind::Bin | Kind::Test) {
+         link_args = bs.link_args.clone();
+         // native lib search paths from all transitive build scripts must be
+         // visible when linking the final binary
+-- 
+2.50.1 (Apple Git-155)
+

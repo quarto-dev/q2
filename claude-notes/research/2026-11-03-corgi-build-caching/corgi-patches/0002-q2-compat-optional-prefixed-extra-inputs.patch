@@ -1,0 +1,40 @@
+From dc9e076fc5be5e088e2d34933b742d48cc80ed94 Mon Sep 17 00:00:00 2001
+From: Carlos Scheidegger <carlos.scheidegger@posit.co>
+Date: Tue, 3 Nov 2026 07:56:43 -0600
+Subject: [PATCH 2/5] q2-compat: optional ?-prefixed extra-inputs
+
+---
+ src/build.rs | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/build.rs b/src/build.rs
+index d3f3751..9326246 100644
+--- a/src/build.rs
++++ b/src/build.rs
+@@ -2307,12 +2307,23 @@ impl ExtraInputs {
+             let root = pkg.root();
+             let mut resolved: Vec<ExtraInput> = Vec::new();
+             for declared in declared_patterns {
++                // A leading `?` marks an optional input: a generated
++                // directory (an npm `dist/`, say) that a build script embeds
++                // when present and replaces with a placeholder otherwise.
++                // Matching nothing is then a valid, hashed state.
++                let (optional, declared) = match declared.strip_prefix('?') {
++                    Some(rest) => (true, &rest.to_string()),
++                    None => (false, declared),
++                };
+                 let matched = expand_extra_input(&root, declared)?;
+                 let files: Vec<PathBuf> = matched
+                     .iter()
+                     .filter(|path| !path.is_dir())
+                     .cloned()
+                     .collect();
++                if files.is_empty() && optional {
++                    continue;
++                }
+                 if files.is_empty() {
+                     let hint = if matched.is_empty() {
+                         ""
+-- 
+2.50.1 (Apple Git-155)
+

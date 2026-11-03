@@ -76,12 +76,19 @@ All six patches are small; together they are about 150 lines. They are
 good upstream issues/PRs. #4 and #5 are clear bugs; #3 and #6 are design
 questions for corgi.
 
-`external-sources/` is gitignored, so these patches live only in the
-local corgi checkout. Build the patched binary outside the q2 tree,
-because the q2 workspace glob otherwise claims `external-sources/corgi`:
+`external-sources/` is gitignored, so the patches are also saved as
+`git format-patch` output in
+`claude-notes/research/2026-11-03-corgi-build-caching/corgi-patches/`
+(against upstream `49254b6`). The findings summary and the
+re-evaluation protocol are in
+`claude-notes/research/2026-11-03-corgi-build-caching.md`. Build the
+patched binary outside the q2 tree, because the q2 workspace glob
+otherwise claims `external-sources/corgi`:
 
 ```bash
-git -C external-sources/corgi worktree add /tmp/corgi-q2 q2-compat
+git clone https://github.com/ConradIrwin/corgi /tmp/corgi-q2
+git -C /tmp/corgi-q2 checkout 49254b6
+git -C /tmp/corgi-q2 am "$PWD"/claude-notes/research/2026-11-03-corgi-build-caching/corgi-patches/*.patch
 cargo build --release --manifest-path /tmp/corgi-q2/Cargo.toml
 /tmp/corgi-q2/target/release/corgi check --workspace
 ```
