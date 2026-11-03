@@ -586,8 +586,9 @@ impl PipelineStage for CompileThemeCssStage {
         // `q2-slides` pseudo-format whose `FormatIdentifier` is `Html`
         // (`format.rs`). Gating on the identifier would route the preview into
         // the Bootstrap branch and never apply the reveal theme (bd-y259zb57).
-        // `is_revealjs_target` is true for both `revealjs` (render) and
-        // `q2-slides` (preview), so render output stays byte-identical.
+        // `is_revealjs_target` is true for `revealjs` (render), `q2-slides`
+        // (preview), and extension formats based on revealjs
+        // (`demo-revealjs`, GH #1034), so render output stays byte-identical.
         if crate::format::is_revealjs_target(&ctx.format.target_format) {
             // Resolve `theme:` into SCSS theme layers (built-in reveal themes
             // and/or user `.scss` files). An unresolvable theme (unknown name /
