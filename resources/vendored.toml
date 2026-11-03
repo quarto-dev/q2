@@ -235,6 +235,68 @@ and `html/styles-callout.html` are byte-identical copies.
 '''
 
 [[asset]]
+id = "bslib-components"
+title = "bslib component SCSS, htmltools fill CSS and bslib component JS (dashboards)"
+paths = [
+  "resources/scss/bslib",
+  "resources/js/bslib",
+]
+policy = "track"
+version = "v1.11.6"
+group = "quarto-cli"
+version_sources = [
+  { kind = "file-contains", file = "resources/scss/bslib/README.md" },
+  { kind = "file-contains", file = "resources/js/bslib/README.md" },
+]
+upstream = { kind = "git", repo = "https://github.com/quarto-dev/quarto-cli", track = "tags", tag_prefix = "v", paths = [
+  "src/resources/formats/html/bslib/bslib-scss",
+  "src/resources/formats/html/bslib/components/scss",
+  "src/resources/formats/html/htmltools/fill.css",
+  "src/resources/formats/html/bslib/components/dist/components.js",
+  "src/resources/formats/html/bslib/components/dist/web-components.js",
+] }
+guards = ["dashboard corpus (crates/quarto-core/tests/fixtures/dashboard-goldens)"]
+procedure = "resources/scss/bslib/README.md"
+license = "MIT"
+last_reviewed = "2026-11-03"
+notes = '''
+Byte-identical copies (dashboard plan D4, bd-dashboard-format-k21hd4vy). Q1
+compiles the SCSS into every Bootstrap page; q2 compiles it into dashboard
+pages only. Q1's own copy comes from R bslib 0.5.1 + consolidated components
+and htmltools 0.5.7.
+'''
+
+[[asset]]
+id = "dashboard-runtime"
+title = "Quarto 1's dashboard Sass layer and JavaScript (quarto-dashboard.scss/js, stickythead.js)"
+paths = [
+  "resources/scss/dashboard",
+  "resources/js/dashboard",
+]
+policy = "track"
+version = "v1.11.6"
+group = "quarto-cli"
+version_sources = [
+  { kind = "file-contains", file = "resources/scss/dashboard/README.md" },
+  { kind = "file-contains", file = "resources/js/dashboard/README.md" },
+]
+upstream = { kind = "git", repo = "https://github.com/quarto-dev/quarto-cli", track = "tags", tag_prefix = "v", paths = [
+  "src/resources/formats/dashboard/quarto-dashboard.scss",
+  "src/resources/formats/dashboard/quarto-dashboard.js",
+  "src/resources/formats/dashboard/js/stickythead.js",
+] }
+guards = ["dashboard corpus (crates/quarto-core/tests/fixtures/dashboard-goldens)"]
+procedure = "resources/scss/dashboard/README.md"
+license = "MIT"
+last_reviewed = "2026-11-03"
+notes = '''
+Byte-identical copies (bd-dashboard-format-k21hd4vy). The dashboard templates
+(template.html, title-block.html, _nav-container.html) are not vendored: q2
+ports them into crates/quarto-core/src/template.rs. DataTables (js/dt) is
+deferred to bd-6f0kslxu.
+'''
+
+[[asset]]
 id = "bootstrap-quarto-layer"
 title = "Quarto 1's Bootstrap layer: Bootswatch themes, _bootstrap-*.scss, title-block/listing/search SCSS"
 paths = [

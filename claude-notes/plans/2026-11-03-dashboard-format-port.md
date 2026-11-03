@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-1 done 2026-11-03; Phase 2 next
+status: in-progress  # Phases 0-2 done 2026-11-03; Phase 3 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -340,12 +340,14 @@ Built as a golden harness rather than smoke-all copies: Q1 output is reduced to 
 - [ ] `ipynb-shell-interactivity: all` (bd-uqma6gec), after PR #1007 merges. The default now reaches Jupyter in the `execute:` scope; the engine does not act on it yet.
 - [ ] Deferred to Phase 8: `format_class("dashboard")` (hub/preview routing) and `q2 preview --static` (`check_servable_format`) still exclude dashboards.
 
-### Phase 2: Page shell and runtime
+### Phase 2: Page shell and runtime (done 2026-11-03)
 
-- [ ] Vendor bslib components, htmltools `fill.css` and the dashboard SCSS layer (D4); add `vendored.toml` entries.
-- [ ] Add a `quarto-dashboard` SCSS layer to the hard-coded layer list in `quarto-sass/src/compile.rs:87`, gated on the format; check that brand and Bootswatch theming still compose.
-- [ ] Add a dashboard template and partials: header, navbar, title, subtitle, multiple authors, logo light and dark, `page-layout-custom` body, skip link.
-- [ ] Ship the JS artifacts: bslib components and web-components, `quarto-dashboard.js` (vendored from quarto-cli, page and hash navigation), and `stickythead.js`.
+- [x] Vendored from quarto-cli `v1.11.6` (byte-identical to the corpus commit for every file below): bslib component SCSS and htmltools `fill.css` (`resources/scss/bslib/`), the dashboard Sass layer (`resources/scss/dashboard/`), bslib `components.js` and `web-components.js` (`resources/js/bslib/`), `quarto-dashboard.js` and `stickythead.js` (`resources/js/dashboard/`). `vendored.toml` assets `bslib-components` and `dashboard-runtime`.
+- [x] Sass (`crates/quarto-sass`): `ThemeConfig::dashboard_layer`. When set, bslib\'s mixins and rules (plus `fill.css`) join the Bootstrap framework sections as in Q1, and `quarto-dashboard.scss` is the first user layer. bslib\'s `@import`s are resolved by flattening in a fixed order (`BSLIB_RULE_FILES`); an unknown `@import` is an error, since the tree has no load path in WASM. The five hand-copied built-in layer lists in `compile.rs` became one `builtin_user_layers`. `CompileThemeCssStage` sets the flag from `Format::base_format()`; the flag joins the CSS cache key (only when set), and dashboards skip the default-bundle fast paths. `build.rs` now hashes `.css` under `resources/scss`.
+- [x] Template (`template.rs`): `DASHBOARD_HTML_TEMPLATE` on the full template\'s `<head>` (shared through an `html_head!` macro; `FULL_HTML_TEMPLATE` verified byte-identical), with `title-block` / `_nav-container` dashboard partials that `template-partials` can override, as in Q1. Body `quarto-dashboard` + `dashboard-fill` (unless `scrolling`); `div#quarto-document-content.page-layout-custom.quarto-dashboard-content…[role=main][tabindex=-1]` as the skip-link target; navbar title, subtitle and comma-separated authors (Q1 #10334); the bslib card init script. Q1\'s `_nav-container.html` closes the navbar container itself (unbalanced without a title); q2 closes it in the header.
+- [x] `DashboardJsStage` ships the four scripts after every other page script, in Q1\'s order, `web-components.js` as `type="module"`. Native-only, like the other JS stages.
+- [x] Tests: quarto-sass loader and compile tests; `dashboard_format.rs` page shell, scrolling, no-title, partial override, theme CSS and script tests. End to end: the header and content-container skeleton of `contract/c35` matches its Q1 golden except the logo (Phase 7).
+- [ ] Left for later phases: the logo (Phase 7), un-hiding the navbar toggler and the page tabs (Phase 3), `dashboard-sidebar` / `dashboard-toolbar` body classes (Phase 6).
 
 ### Phase 3: Layout core
 

@@ -249,7 +249,13 @@ $endfor$
 ///   for the page-footer slot, written by `RepoActionsRenderTransform`.
 /// - `$rendered.navigation.page_navigation$` - Rendered prev/next page-nav strip
 /// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
-const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
+/// The `<head>` shared by [`FULL_HTML_TEMPLATE`] and
+/// [`DASHBOARD_HTML_TEMPLATE`] (meta tags, title, linked CSS and scripts,
+/// math, header includes). A macro so both templates are built with
+/// `concat!` from one literal.
+macro_rules! html_head {
+    () => {
+        r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
 <meta charset="utf-8">
@@ -292,7 +298,11 @@ $for(header-includes)$
 $header-includes$
 $endfor$
 </head>
-<body class="$body-classes$">
+"#
+    };
+}
+
+const FULL_HTML_TEMPLATE: &str = concat!(html_head!(), r#"<body class="$body-classes$">
 $skip-link()$
 $if(color-mode-script)$
 $color-mode-script$
@@ -376,7 +386,88 @@ $rendered.navigation.footer$
 $endif$
 </body>
 </html>
-"#;
+"#);
+
+/// The dashboard page (`format: dashboard`): Q1's
+/// `formats/dashboard/template.html` on Q2's shared head, plus the
+/// container classes Q1's DOM postprocessor adds (`format-dashboard.ts:322-341`).
+///
+/// - `<body>` gets `quarto-dashboard`, and `dashboard-fill` unless
+///   `scrolling: true`, ahead of the computed `$body-classes$`.
+/// - The header is the `title-block` partial, which for dashboards is
+///   [`DASHBOARD_TITLE_BLOCK_PARTIAL`] (overridable through
+///   `template-partials`, as in Q1).
+/// - The body sits in Q1's `div.page-layout-custom`, which also carries
+///   the skip link's `#quarto-document-content` target with
+///   `tabindex="-1"` and `role="main"` (Q1's `injectSkipLink` and
+///   `format-dashboard.ts:337`).
+/// - The closing script initializes bslib cards, as Q1's template does.
+///
+/// Plan: `claude-notes/plans/2026-11-03-dashboard-format-port.md`, Phase 2.
+pub const DASHBOARD_HTML_TEMPLATE: &str = concat!(
+    html_head!(),
+    r#"<body class="$if(scrolling)$quarto-dashboard$else$quarto-dashboard dashboard-fill$endif$ $body-classes$">
+$skip-link()$
+$if(color-mode-script)$
+$color-mode-script$
+$endif$
+$title-block()$
+$for(include-before)$
+$include-before$
+$endfor$
+<div class="page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$" id="quarto-document-content" tabindex="-1" role="main">
+$body$
+</div>
+$for(include-after)$
+$include-after$
+$endfor$
+<script type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (_event) {
+  if (window.bslib && window.bslib.Card) {
+    window.bslib.Card.initializeAllCards();
+  }
+});
+</script>
+</body>
+</html>
+"#
+);
+
+/// A dashboard's header and navbar: Q1's `formats/dashboard/title-block.html`.
+/// Registered as `title-block` in [`dashboard_html_partials`]. Unlike Q1,
+/// the `navbar-container` closes here rather than inside `_nav-container`,
+/// so the markup stays balanced when there is no title, subtitle or
+/// author. The toggler stays `hidden` until pages exist (Phase 3).
+pub const DASHBOARD_TITLE_BLOCK_PARTIAL: &str = r##"<header id="quarto-dashboard-header">
+<nav class="navbar navbar-expand-md slim" data-bs-theme="dark">
+<div class="navbar-container container-fluid">
+<button class="navbar-toggler hidden" type="button" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-controls="dashboard-collapse" aria-expanded="false" aria-label="Toggle navigation">
+<span class="navbar-toggler-icon"></span>
+</button>
+$if(title)$
+${_nav-container()}
+$elseif(subtitle)$
+${_nav-container()}
+$elseif(by-author)$
+${_nav-container()}
+$endif$
+</div>
+</nav>
+</header>
+"##;
+
+/// The navbar's brand block: Q1's `formats/dashboard/_nav-container.html`
+/// (title, subtitle, authors). Authors come from the normalized
+/// `by-author` list, comma-separated (Q1 #10334). The logo arrives with
+/// Phase 7.
+pub const DASHBOARD_NAV_CONTAINER_PARTIAL: &str = r##"<div class="navbar-brand-container">
+<div class="navbar-title">
+$if(title)$<div class="navbar-title-text"><a href="#">$title$</a></div>$endif$
+$if(subtitle)$<div class="navbar-subtitle">$subtitle$</div>$endif$
+$if(by-author)$<div class="navbar-author">$for(by-author)$$it.name.literal$$sep$, $endfor$</div>$endif$
+</div>
+</div>
+"##;
 
 // =============================================================================
 // Built-in template partials (title block)
@@ -761,6 +852,22 @@ pub fn builtin_html_partials() -> MemoryResolver {
     resolver
 }
 
+/// The dashboard's own partials, which shadow the built-in ones of the same
+/// name (`title-block`) and add `_nav-container`; chained ahead of
+/// [`builtin_html_partials`] for a dashboard. Registered bare and with the
+/// `.html` suffix, like the built-ins.
+pub fn dashboard_html_partials() -> MemoryResolver {
+    let mut resolver = MemoryResolver::new();
+    for (name, content) in [
+        ("title-block", DASHBOARD_TITLE_BLOCK_PARTIAL),
+        ("_nav-container", DASHBOARD_NAV_CONTAINER_PARTIAL),
+    ] {
+        resolver.add(name, content);
+        resolver.add(format!("{name}.html"), content);
+    }
+    resolver
+}
+
 // =============================================================================
 // Template Compilation
 // =============================================================================
@@ -777,6 +884,21 @@ pub fn full_html_template() -> Result<Template> {
         FULL_HTML_TEMPLATE,
         std::path::Path::new("<builtin>.html"),
         &builtin_html_partials(),
+        0,
+    )
+    .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+}
+
+/// Compile the dashboard template ([`DASHBOARD_HTML_TEMPLATE`]) with the
+/// dashboard partials ahead of the built-in ones.
+pub fn dashboard_html_template() -> Result<Template> {
+    let partials = dashboard_html_partials();
+    let builtins = builtin_html_partials();
+    let chained = ChainedResolver::new(&partials, builtins);
+    Template::compile_with_resolver(
+        DASHBOARD_HTML_TEMPLATE,
+        std::path::Path::new("<builtin>.html"),
+        &chained,
         0,
     )
     .map_err(|e| crate::error::QuartoError::other(e.to_string()))
@@ -1308,16 +1430,31 @@ pub fn compile_builtin_template_with_partials(
     meta: &ConfigValue,
     resolver: &impl PartialResolver,
     source_context: &mut quarto_source_map::SourceContext,
+    dashboard: bool,
 ) -> Result<Template> {
+    // User-supplied partials shadow the built-in ones (so a document
+    // can override `title-block.html` Q1-style); built-ins resolve
+    // anything the user didn't provide. A dashboard's own partials
+    // (`title-block`, `_nav-container`) sit between the two.
+    if dashboard {
+        let dashboard_partials = dashboard_html_partials();
+        let builtins = ChainedResolver::new(&dashboard_partials, builtin_html_partials());
+        let chained = ChainedResolver::new(resolver, builtins);
+        return Template::compile_with_resolver_and_context(
+            DASHBOARD_HTML_TEMPLATE,
+            std::path::Path::new("<builtin>.html"),
+            &chained,
+            0,
+            source_context,
+        )
+        .map_err(|e| crate::error::QuartoError::other(e.to_string()));
+    }
     let minimal = is_minimal_html(meta);
     let source = if minimal {
         MINIMAL_HTML_TEMPLATE
     } else {
         FULL_HTML_TEMPLATE
     };
-    // User-supplied partials shadow the built-in ones (so a document
-    // can override `title-block.html` Q1-style); built-ins resolve
-    // anything the user didn't provide.
     let chained = ChainedResolver::new(resolver, builtin_html_partials());
     Template::compile_with_resolver_and_context(
         source,

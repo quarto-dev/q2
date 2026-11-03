@@ -460,6 +460,96 @@ pub fn load_search_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("quarto-search.scss"))
 }
 
+/// Load the dashboard Sass layer (`resources/scss/dashboard/quarto-dashboard.scss`,
+/// Q1's `dashboardScssLayer`). Q1 puts it first among the user layers
+/// (`format-dashboard.ts:186`, `unshift`).
+pub fn load_dashboard_layer() -> Result<SassLayer, SassError> {
+    let content = crate::resources::dashboard_file("quarto-dashboard.scss").ok_or_else(|| {
+        SassError::CompilationFailed {
+            message: "quarto-dashboard.scss not found in dashboard resources".to_string(),
+        }
+    })?;
+    parse_layer(content, Some("quarto-dashboard.scss"))
+}
+
+/// bslib's files in the order the flattened rules use. `bslib.scss` is
+/// absent: it only `@import`s `spacer`, `tab-fill` and `color-utilities`,
+/// which are listed directly. Q1 concatenates the two directories in
+/// `readDirSync` order (`format-html-shared.ts:149`), which is unspecified
+/// and includes those three twice; a fixed order including each once is
+/// equivalent.
+const BSLIB_RULE_FILES: &[&str] = &[
+    "bslib-scss/functions.scss",
+    "bslib-scss/color-utilities.scss",
+    "bslib-scss/spacer.scss",
+    "bslib-scss/tab-fill.scss",
+    "components/scss/accordion.scss",
+    "components/scss/card.scss",
+    "components/scss/grid.scss",
+    "components/scss/nav_spacer.scss",
+    "components/scss/page_fillable.scss",
+    "components/scss/page_navbar.scss",
+    "components/scss/page_sidebar.scss",
+    "components/scss/sidebar.scss",
+    "components/scss/value_box.scss",
+    "htmltools/fill.css",
+];
+
+/// `@import` lines the flattening makes redundant: bslib's own siblings
+/// (listed in [`BSLIB_RULE_FILES`]) and Bootstrap's `color-contrast`
+/// (already in the framework functions, [`load_bootstrap_framework`]).
+const BSLIB_RESOLVED_IMPORTS: &[&str] = &[
+    "@import \"spacer\";",
+    "@import \"tab-fill\";",
+    "@import \"color-utilities\";",
+    "@import \"../sass-utils/color-contrast.scss\";",
+];
+
+fn bslib_text(path: &str) -> Result<String, SassError> {
+    let content = crate::resources::bslib_file(path).ok_or_else(|| SassError::CompilationFailed {
+        message: format!("bslib resource {path} not found"),
+    })?;
+    let mut out = String::with_capacity(content.len());
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if BSLIB_RESOLVED_IMPORTS.contains(&trimmed) {
+            continue;
+        }
+        if trimmed.starts_with("@import") {
+            // A new upstream import would silently break in WASM (no
+            // load path for this tree) — fail loudly instead.
+            return Err(SassError::CompilationFailed {
+                message: format!("unexpected `{trimmed}` in bslib resource {path}"),
+            });
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// bslib's component SCSS as a framework extension: its mixins
+/// (`components/scss/mixins/_mixins.scss`) and its rules plus htmltools'
+/// `fill.css`, which Q1 appends to Bootstrap's own mixins and rules
+/// (`format-html-scss.ts:120-127`). Q2 adds it for dashboards only
+/// (dashboard plan D4).
+pub fn load_bslib_extension() -> Result<SassLayer, SassError> {
+    let mixins = bslib_text("components/scss/mixins/_mixins.scss")?;
+    let mut rules = String::new();
+    for path in BSLIB_RULE_FILES {
+        rules.push_str(&format!("// bslib: {path}\n"));
+        rules.push_str(&bslib_text(path)?);
+        rules.push('\n');
+    }
+    Ok(SassLayer {
+        uses: String::new(),
+        functions: String::new(),
+        defaults: String::new(),
+        mixins,
+        rules,
+    })
+}
+
 /// Load the reveal.js framework layer.
 ///
 /// This is the reveal analogue of [`load_bootstrap_framework`]: it provides the
@@ -791,9 +881,24 @@ pub fn assemble_bootstrap() -> Result<String, SassError> {
 /// let scss = assemble_with_user_layers(&result.layers).unwrap();
 /// ```
 pub fn assemble_with_user_layers(user_layers: &[SassLayer]) -> Result<String, SassError> {
+    assemble_with_user_layers_opts(user_layers, false)
+}
+
+/// [`assemble_with_user_layers`], with bslib's component SCSS appended to
+/// the framework's mixins and rules when `bslib` is set
+/// ([`load_bslib_extension`]).
+pub fn assemble_with_user_layers_opts(
+    user_layers: &[SassLayer],
+    bslib: bool,
+) -> Result<String, SassError> {
     use crate::layer::merge_layers;
 
-    let framework = load_bootstrap_framework()?;
+    let mut framework = load_bootstrap_framework()?;
+    if bslib {
+        let ext = load_bslib_extension()?;
+        framework.mixins = format!("{}\n\n{}", framework.mixins, ext.mixins);
+        framework.rules = format!("{}\n\n{}", framework.rules, ext.rules);
+    }
     let quarto = load_quarto_layer()?;
 
     if user_layers.is_empty() {
@@ -1233,6 +1338,43 @@ mod tests {
     }
 
     // Title block layer tests
+
+    /// The dashboard layer (`quarto-dashboard.scss`, Q1's dashboard Sass
+    /// layer) parses into its three sections.
+    #[test]
+    fn test_load_dashboard_layer() {
+        let layer = load_dashboard_layer().unwrap();
+        assert!(layer.defaults.contains("$dashboard-card-toolbar-top-margin"));
+        assert!(layer.mixins.contains("@mixin"));
+        assert!(layer.rules.contains(".quarto-dashboard"));
+    }
+
+    /// bslib's component SCSS joins the Bootstrap framework sections as Q1
+    /// composes them (`format-html-scss.ts:120`): mixins into mixins, the
+    /// component rules plus htmltools' `fill.css` into rules. The `@import`s
+    /// between bslib files are resolved by flattening, so none survive.
+    #[test]
+    fn test_bslib_framework_extension_is_flattened() {
+        let ext = load_bslib_extension().unwrap();
+        assert!(ext.mixins.contains("@mixin bslib-breakpoints-css-vars"));
+        assert!(ext.rules.contains(".bslib-card"), "card.scss");
+        assert!(ext.rules.contains(".bslib-value-box"), "value_box.scss");
+        assert!(ext.rules.contains(".bslib-sidebar-layout"), "sidebar.scss");
+        assert!(ext.rules.contains(".html-fill-container"), "fill.css");
+        assert!(ext.rules.contains("@function is-css-variable"), "bslib functions.scss");
+        assert!(!ext.rules.contains("@import"), "no @import survives flattening");
+        assert!(!ext.mixins.contains("@import"));
+    }
+
+    /// With the bslib flag, the assembled bundle carries the bslib rules
+    /// after Bootstrap's own rules; without it, none of them.
+    #[test]
+    fn test_assembly_with_and_without_bslib() {
+        let with = assemble_with_user_layers_opts(&[], true).unwrap();
+        let without = assemble_with_user_layers(&[]).unwrap();
+        assert!(with.contains(".bslib-value-box"));
+        assert!(!without.contains(".bslib-value-box"));
+    }
 
     #[test]
     fn test_load_title_block_layer() {

@@ -102,6 +102,7 @@ mod resource_report;
 mod search_capture;
 #[cfg(not(target_arch = "wasm32"))]
 mod tabsets_js;
+mod dashboard_js;
 // pandoc-hybrid-typst Phase 2: compiles PandocWriteStage's intermediate
 // `.typ` output to PDF via a real `typst compile` subprocess. Native-only
 // for the same reason as `pandoc_write`: shells out to a real binary, no
@@ -172,6 +173,7 @@ pub use search_capture::SearchCaptureStage;
 pub use source_conversion::SourceConversionStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use tabsets_js::TabsetsJsStage;
+pub use dashboard_js::DashboardJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use typst_compile::TypstCompileStage;
 pub use unwrap_profile::UnwrapProfileStage;
