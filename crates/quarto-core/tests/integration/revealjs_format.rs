@@ -785,3 +785,57 @@ fn scaffold_html_lang_follows_document_lang() {
         "expected <html lang=\"en\"> default in scaffold"
     );
 }
+
+/// A Reveal.js *format extension* (`demo-revealjs`) renders through the
+/// Reveal.js path, not the Bootstrap one (GH #1034, bd-eco47h7r). Before the
+/// fix the theme stage gated on the raw target name (`revealjs` /
+/// `q2-slides` only), so the extension's `theme: [default, theme.scss]`
+/// failed with Q-14-2 (an unknown Bootswatch name), and without `theme` the
+/// deck called `Reveal.initialize` without loading reveal.js or its CSS.
+#[test]
+fn revealjs_extension_format_uses_reveal_theme_and_assets() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write_file(
+        &temp.path().join("_extensions/demo/_extension.yml"),
+        "title: Demo\ncontributes:\n  formats:\n    revealjs:\n      theme: [default, theme.scss]\n",
+    );
+    write_file(
+        &temp.path().join("_extensions/demo/theme.scss"),
+        "/*-- scss:defaults --*/\n$body-bg: #123456;\n",
+    );
+    let qmd_path = temp.path().join("talk.qmd");
+    write_file(
+        &qmd_path,
+        "---\ntitle: \"Talk\"\nformat: demo-revealjs\n---\n\n## Slide\n\nHi.\n",
+    );
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let result = render_to_file(&qmd_path, "demo-revealjs", &options, runtime_arc())
+        .expect("demo-revealjs render failed");
+    let html = read(&result.output_path);
+
+    assert!(
+        html.contains(r#"<script src="talk_files/revealjs/reveal.js"></script>"#),
+        "expected the extension deck to load reveal.js; head was:\n{}",
+        &html[..html.len().min(1200)]
+    );
+    assert!(
+        html.contains(r#"<link rel="stylesheet" href="talk_files/revealjs/reveal.css">"#),
+        "expected the extension deck to link reveal.css"
+    );
+    let theme = theme_href(&html);
+    let css = read(
+        &result
+            .output_path
+            .parent()
+            .unwrap()
+            .join("talk_files")
+            .join(&theme),
+    );
+    assert!(
+        css.contains("#123456"),
+        "the extension's theme.scss should be compiled into the reveal theme"
+    );
+}

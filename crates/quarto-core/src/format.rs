@@ -476,10 +476,13 @@ fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static st
 
 /// Whether a `target_format` string should build the reveal.js slide tree
 /// (`RevealSlidesTransform` replacing the generic title-block + sectionize).
-/// True for the native render format (`revealjs`) and its preview
-/// pseudo-format (`q2-slides`).
+/// True for the native render format (`revealjs`), its preview
+/// pseudo-format (`q2-slides`), and extension formats whose base is
+/// `revealjs` (`demo-revealjs`) — the same base-format mapping
+/// [`PipelineProfile::from_format`] applies (GH #1034).
 pub fn is_revealjs_target(target_format: &str) -> bool {
     matches!(target_format, "revealjs" | "q2-slides")
+        || parse_format_descriptor(target_format).base_format == "revealjs"
 }
 
 /// The pipeline-composition axis: which family of transforms
@@ -1778,6 +1781,20 @@ mod tests {
             .position(|a| a == flag)
             .and_then(|i| args.get(i + 1))
             .cloned()
+    }
+
+    #[test]
+    fn test_is_revealjs_target_extension_formats() {
+        // GH #1034: an extension format whose base is revealjs is a reveal
+        // target, like `revealjs` itself and the `q2-slides` preview.
+        assert!(is_revealjs_target("revealjs"));
+        assert!(is_revealjs_target("q2-slides"));
+        assert!(is_revealjs_target("demo-revealjs"));
+        assert!(is_revealjs_target("my-org-revealjs"));
+        assert!(!is_revealjs_target("html"));
+        assert!(!is_revealjs_target("demo-html"));
+        assert!(!is_revealjs_target("q2-preview"));
+        assert!(!is_revealjs_target("revealjs-html"));
     }
 
     #[test]
