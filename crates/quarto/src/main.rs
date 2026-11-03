@@ -78,9 +78,17 @@ enum Commands {
         #[arg(long)]
         site_url: Option<String>,
 
-        /// Execute code (--no-execute to skip execution)
-        #[arg(long)]
+        /// Execute code cells (the default). This does not override
+        /// `execute: enabled: false` in a document, and it does not make a
+        /// .ipynb re-run instead of replaying its stored outputs
+        #[arg(long, overrides_with = "no_execute")]
         execute: bool,
+
+        /// Render without executing any code cells: cells are shown as code,
+        /// with no output, and no engine (R, Python, Julia) is started.
+        /// Notebooks still show their stored outputs
+        #[arg(long, overrides_with = "execute")]
+        no_execute: bool,
 
         /// Execution parameter (KEY:VALUE)
         #[arg(short = 'P', long)]
@@ -1117,6 +1125,22 @@ impl From<PreviewUiArg> for quarto_preview::PreviewUi {
     }
 }
 
+/// The execution policy for `q2 render` (issue #1008, bd-2luq2ath).
+///
+/// `--no-execute` skips every engine. `--execute`, or neither flag, executes
+/// as the documents ask. Unlike Quarto 1, `--execute` does not force
+/// execution past a document's `execute: enabled: false`: an explicit
+/// document setting wins over the default. `--execute` exists only to
+/// cancel an earlier `--no-execute` on the same command line (clap's
+/// `overrides_with` keeps the last of the two).
+fn render_execution_policy(no_execute: bool) -> quarto_core::engine::ExecutionPolicy {
+    if no_execute {
+        quarto_core::engine::ExecutionPolicy::None
+    } else {
+        quarto_core::engine::ExecutionPolicy::All
+    }
+}
+
 #[cfg(test)]
 mod cli_parse_tests {
     //! clap parse harness (live-share plan, Phase 2). These are the first
@@ -1152,6 +1176,41 @@ mod cli_parse_tests {
             Commands::AgentsInfo(a) => a,
             _ => panic!("expected docs llms / agents-info from {args:?}"),
         }
+    }
+
+    /// The policy `q2 render <args>` would run with (issue #1008).
+    fn render_policy(args: &[&str]) -> quarto_core::engine::ExecutionPolicy {
+        let argv: Vec<&str> = std::iter::once("render")
+            .chain(args.iter().copied())
+            .collect();
+        let cli = try_parse(&argv).expect("args should parse");
+        match cli.command {
+            Commands::Render { no_execute, .. } => super::render_execution_policy(no_execute),
+            _ => panic!("expected a Render command from {argv:?}"),
+        }
+    }
+
+    #[test]
+    fn render_execute_flags_choose_the_execution_policy() {
+        use quarto_core::engine::ExecutionPolicy;
+        assert_eq!(render_policy(&["doc.qmd"]), ExecutionPolicy::All);
+        assert_eq!(
+            render_policy(&["doc.qmd", "--execute"]),
+            ExecutionPolicy::All
+        );
+        assert_eq!(
+            render_policy(&["doc.qmd", "--no-execute"]),
+            ExecutionPolicy::None
+        );
+        // The last of the pair wins, as with any negatable flag.
+        assert_eq!(
+            render_policy(&["doc.qmd", "--execute", "--no-execute"]),
+            ExecutionPolicy::None
+        );
+        assert_eq!(
+            render_policy(&["doc.qmd", "--no-execute", "--execute"]),
+            ExecutionPolicy::All
+        );
     }
 
     #[test]
@@ -1710,6 +1769,7 @@ fn main() -> Result<()> {
             no_render_scripts,
             profile,
             metadata,
+            no_execute,
             ..
         } => commands::render::execute(commands::render::RenderArgs {
             metadata,
@@ -1727,9 +1787,7 @@ fn main() -> Result<()> {
             strict,
             no_render_scripts,
             profile,
-            // `q2 render` always executes; only `q2 preview --static`
-            // narrows this (bd-sl79jjiq).
-            execution_policy: quarto_core::engine::ExecutionPolicy::All,
+            execution_policy: render_execution_policy(no_execute),
             audience: quarto_core::project::drafts::RenderAudience::Reading,
         }),
         Commands::Preview {
