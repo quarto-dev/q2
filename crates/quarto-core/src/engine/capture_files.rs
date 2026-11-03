@@ -300,7 +300,7 @@ pub fn encode_capture_payload(
     record: Option<&crate::record::Record>,
     record_gate: bool,
 ) -> std::io::Result<EncodedCapturePayload> {
-    match record.filter(|r| record_gate && !r.metadata.quarto_engines.is_empty()) {
+    match record.filter(|r| record_gate && r.describes_something()) {
         Some(record) => Ok(EncodedCapturePayload {
             gzipped: gzip_record(record)?,
             is_record: true,
@@ -317,6 +317,45 @@ pub fn encode_capture_payload(
             engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
         }),
     }
+}
+
+/// Whether a run has no form the gate-off writer can publish: a record that describes something,
+/// no legacy captures, and the gate off. The legacy form would be an empty list and the page
+/// would silently show nothing. This is the one statement of the rule: [`encode_for_publish`]
+/// and the record-source walk both call it.
+pub fn record_has_no_legacy_form(
+    record_gate: bool,
+    captures: &[quarto_trace::EngineCapture],
+    record: Option<&crate::record::Record>,
+) -> bool {
+    !record_gate && captures.is_empty() && record.is_some_and(|r| r.describes_something())
+}
+
+/// Why a run could not be encoded for publishing.
+#[derive(Debug, thiserror::Error)]
+pub enum PublishError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    /// The run is a record with no legacy form and the writer gate is off.
+    #[error(
+        "this record source needs the record writer on: set {RECORD_WRITING_ENV}=1 \
+         (the record has no legacy capture form to publish)"
+    )]
+    RecordWriterOff,
+}
+
+/// [`encode_capture_payload`] for a publish seam: the same encoding, except that a run with no
+/// legacy form under a gate that is off is refused ([`record_has_no_legacy_form`]) instead of
+/// being written as an empty legacy list.
+pub fn encode_for_publish(
+    captures: &[quarto_trace::EngineCapture],
+    record: Option<&crate::record::Record>,
+    record_gate: bool,
+) -> Result<EncodedCapturePayload, PublishError> {
+    if record_has_no_legacy_form(record_gate, captures, record) {
+        return Err(PublishError::RecordWriterOff);
+    }
+    Ok(encode_capture_payload(captures, record, record_gate)?)
 }
 
 /// A capture file path is safe when it is relative and contains no
@@ -447,6 +486,95 @@ mod writer_tests {
         let enc = encode_capture_payload(&caps, Some(&empty), true).unwrap();
         assert!(!enc.is_record);
         assert_eq!(enc.engines, vec!["test-passthrough".to_string()]);
+    }
+
+    /// What RIU-3 imports: no engines, but cells. It describes something, so with the gate on it
+    /// is stored as a record (EXR-15's rule is extended, not reversed).
+    #[test]
+    fn gate_on_with_an_engineless_record_with_cells_encodes_a_record() {
+        let mut imported = record();
+        imported.metadata.quarto_engines.clear();
+        assert!(!imported.cells.is_empty());
+        let enc = encode_capture_payload(&[], Some(&imported), true).unwrap();
+        assert!(enc.is_record);
+        assert_eq!(enc.gzipped, gzip_record(&imported).unwrap());
+        assert!(enc.engines.is_empty());
+    }
+
+    fn imported() -> crate::record::Record {
+        let mut r = record();
+        r.metadata.quarto_engines.clear();
+        r
+    }
+
+    fn nothing() -> crate::record::Record {
+        let mut r = imported();
+        r.cells.clear();
+        r
+    }
+
+    /// The refusal predicate: a record that describes something, no captures, gate off.
+    #[test]
+    fn refusal_predicate_covers_every_combination() {
+        let caps = [capture("jupyter")];
+        let full = record();
+        for (gate, captures, rec, want) in [
+            (false, &[][..], Some(&full), true),
+            (false, &[][..], Some(&imported()), true),
+            (false, &caps[..], Some(&full), false),
+            (true, &[][..], Some(&full), false),
+            (true, &caps[..], Some(&full), false),
+            (false, &[][..], Some(&nothing()), false),
+            (false, &[][..], None, false),
+            (false, &caps[..], None, false),
+        ] {
+            assert_eq!(
+                record_has_no_legacy_form(gate, captures, rec),
+                want,
+                "gate={gate} captures={} record={:?}",
+                captures.len(),
+                rec.map(|r| r.describes_something())
+            );
+        }
+    }
+
+    #[test]
+    fn publish_refuses_a_record_with_no_legacy_form_naming_the_variable() {
+        let err = encode_for_publish(&[], Some(&imported()), false).unwrap_err();
+        assert!(matches!(err, PublishError::RecordWriterOff));
+        assert!(err.to_string().contains(RECORD_WRITING_ENV), "{err}");
+    }
+
+    #[test]
+    fn publish_gate_off_with_captures_gives_the_legacy_form() {
+        let caps = vec![capture("jupyter")];
+        let enc = encode_for_publish(&caps, Some(&record()), false).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.gzipped, gzip_captures(&caps).unwrap());
+    }
+
+    /// `encode_for_publish` and `encode_capture_payload` take the same decision for each
+    /// combination, so the rule cannot drift between them.
+    #[test]
+    fn publish_and_encoder_agree_wherever_publish_does_not_refuse() {
+        let caps = [capture("jupyter")];
+        let full = record();
+        let imp = imported();
+        let none = nothing();
+        for gate in [false, true] {
+            for captures in [&[][..], &caps[..]] {
+                for rec in [None, Some(&full), Some(&imp), Some(&none)] {
+                    let refused = record_has_no_legacy_form(gate, captures, rec);
+                    let published = encode_for_publish(captures, rec, gate);
+                    assert_eq!(published.is_err(), refused);
+                    if let Ok(p) = published {
+                        let e = encode_capture_payload(captures, rec, gate).unwrap();
+                        assert_eq!(p.is_record, e.is_record);
+                        assert_eq!(p.gzipped, e.gzipped);
+                    }
+                }
+            }
+        }
     }
 }
 

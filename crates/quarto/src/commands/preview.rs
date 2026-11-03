@@ -362,6 +362,8 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // passthrough engine via the integration-test surface.
         engine_registry: None,
         engine_policy,
+        // The `--records` flag arrives with RIU-3a; until then the preview default.
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files,
         // Phase C.7: derive the capture cache dir from `data_dir`
         // (per-session; tracked as a follow-up for per-project reuse).

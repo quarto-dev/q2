@@ -28,6 +28,15 @@ impl Record {
     pub const RECORD_VERSION: u32 = 1;
     /// Emitted only while the schema subset really is Positron-compatible.
     pub const CACHE_VERSION: u32 = 1;
+
+    /// Whether the record carries anything a reader can use: an engine entry or a cell.
+    ///
+    /// An engine that builds no record leaves one that describes nothing, which must never
+    /// replace the legacy captures (EXR-15). A record with cells and no engines, which only the
+    /// Positron importer produces, does describe something.
+    pub fn describes_something(&self) -> bool {
+        !self.metadata.quarto_engines.is_empty() || !self.cells.is_empty()
+    }
 }
 
 /// Notebook `metadata`: flat keys.
@@ -339,6 +348,27 @@ mod tests {
             },
             cells: vec![cell()],
         }
+    }
+
+    #[test]
+    fn describes_something_is_true_with_engines_or_cells_and_false_when_empty() {
+        let full = record();
+        assert!(full.describes_something());
+
+        let mut cells_only = record();
+        cells_only.metadata.quarto_engines.clear();
+        assert!(!cells_only.cells.is_empty(), "fixture has cells");
+        assert!(cells_only.describes_something());
+
+        let mut engines_only = record();
+        engines_only.cells.clear();
+        assert!(!engines_only.metadata.quarto_engines.is_empty());
+        assert!(engines_only.describes_something());
+
+        let mut empty = record();
+        empty.metadata.quarto_engines.clear();
+        empty.cells.clear();
+        assert!(!empty.describes_something());
     }
 
     #[test]

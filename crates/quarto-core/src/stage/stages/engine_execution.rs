@@ -875,7 +875,10 @@ impl PipelineStage for EngineExecutionStage {
             let mut record = crate::record::coalesce(&engine_records, unit_order).map_err(|e| {
                 PipelineError::stage_error(self.name(), format!("execution record: {e}"))
             })?;
-            record.metadata.quarto_source = Some(project_relative_source(&ctx.project.dir, &path));
+            record.metadata.quarto_source = Some(crate::record::project_relative_source(
+                &ctx.project.dir,
+                &path,
+            ));
             match serde_json::to_value(&record) {
                 Ok(value) => {
                     ctx.observer
@@ -1102,16 +1105,6 @@ fn emit_engine_record(
     }
 }
 
-/// The document's path relative to the project directory, with forward slashes
-/// (the record's `quarto_source`; a standalone document is relative to its own
-/// directory). A path outside the project keeps its file name.
-fn project_relative_source(project_dir: &std::path::Path, path: &std::path::Path) -> String {
-    let rel = path
-        .strip_prefix(project_dir)
-        .unwrap_or_else(|_| path.file_name().map_or(path, std::path::Path::new));
-    quarto_util::to_forward_slashes(rel)
-}
-
 /// EXR-5 (epic decisions 3 and 33): write the coalesced record to
 /// `.quarto/execution-records/<doc path without extension>.ipynb`,
 /// project-relative (a `.quarto/` beside a standalone document), with the
@@ -1123,14 +1116,8 @@ fn write_record_file(
     path: &std::path::Path,
     record: &crate::record::Record,
 ) -> Result<(), PipelineError> {
-    let rel = std::path::PathBuf::from(project_relative_source(&ctx.project.dir, path))
-        .with_extension("ipynb");
-    let target = ctx
-        .project
-        .dir
-        .join(".quarto")
-        .join("execution-records")
-        .join(rel);
+    // The reader (the `q2` record source) derives the path from the same function.
+    let target = crate::record::execution_record_path(&ctx.project.dir, path);
     let text = crate::record::write_record(record).map_err(|e| {
         PipelineError::stage_error(stage, format!("serializing the execution record: {e}"))
     })?;

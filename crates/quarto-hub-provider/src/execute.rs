@@ -335,7 +335,7 @@ impl Provider {
             record_capture_run(&abs_path, &project, runtime.clone(), self.registry.clone())
                 .await
                 .map_err(|e| format!("engine pipeline failed: {e}"))?;
-        if run.captures.is_empty() {
+        if !run.has_content() {
             return Err("engine produced no capture (no code cells?)".to_string());
         }
         if let Some(overlay) = &self.overlay {
@@ -524,7 +524,7 @@ pub fn overlay_free_run(
 /// Encode the run (a record doc when the writer gate is on and the run has a
 /// record, else a legacy capture doc) and store it as a binary automerge doc.
 /// Mirror of `quarto-preview`'s `write_capture_doc`; both go through
-/// `encode_capture_payload` (serialize + gzip + 10MB size warning, bd-qbhp2cvv)
+/// `encode_for_publish` (serialize + gzip + 10MB size warning, bd-qbhp2cvv)
 /// and `create_engine_payload_document`, behind the one gate
 /// `record_writing_enabled` (EXR-13b; the caller passes the gate).
 async fn write_capture_doc(
@@ -533,27 +533,27 @@ async fn write_capture_doc(
     run: &CaptureRun,
     record_gate: bool,
 ) -> Result<String, ProviderError> {
-    let encoded = quarto_core::engine::capture_files::encode_capture_payload(
-        &run.captures,
-        run.record.as_ref(),
-        record_gate,
-    )
-    .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
+    use quarto_core::engine::capture_files::{PublishError, encode_for_publish};
+    let encoded = encode_for_publish(&run.captures, run.record.as_ref(), record_gate).map_err(
+        |e| match e {
+            PublishError::Io(e) => ProviderError::Protocol(format!("serialize/gzip captures: {e}")),
+            refused @ PublishError::RecordWriterOff => ProviderError::Protocol(refused.to_string()),
+        },
+    )?;
     let meta = quarto_hub::resource::CaptureDocMeta {
         source_path: rel_path.to_string(),
         engines: encoded.engines,
     };
-    let doc = quarto_hub::resource::create_engine_payload_document(
-        encoded.is_record,
-        &encoded.gzipped,
-        &meta,
-    )
-    .map_err(|e| ProviderError::Protocol(format!("binary doc: {e}")))?;
-    let handle = repo
-        .create(doc)
+    quarto_hub::resource::publish_payload_doc(repo, encoded.is_record, &encoded.gzipped, &meta)
         .await
-        .map_err(|_| ProviderError::Repo("samod repo stopped".into()))?;
-    Ok(handle.document_id().to_string())
+        .map_err(|e| match e {
+            quarto_hub::resource::PublishDocError::Build(e) => {
+                ProviderError::Protocol(format!("binary doc: {e}"))
+            }
+            quarto_hub::resource::PublishDocError::RepoStopped => {
+                ProviderError::Repo("samod repo stopped".into())
+            }
+        })
 }
 
 #[cfg(test)]
@@ -570,7 +570,12 @@ mod tests {
         ))
         .unwrap();
         let run = CaptureRun {
-            captures: Vec::new(),
+            captures: vec![
+                serde_json::from_value::<quarto_trace::EngineCapture>(serde_json::json!({
+                    "engine_name": "jupyter", "input_qmd": "x", "result": {}
+                }))
+                .unwrap(),
+            ],
             record: Some(record),
         };
         let repo = Repo::build_tokio().load().await;
@@ -601,6 +606,30 @@ mod tests {
         let (mime, kind) = written_kind(false).await;
         assert_eq!(mime, quarto_hub::resource::CAPTURE_MIME_TYPE);
         assert_eq!(kind, "engine-capture");
+    }
+
+    /// RIU-2: a record with no captures has no legacy form, so the gate-off publish refuses
+    /// and names the variable.
+    #[tokio::test]
+    async fn gate_off_refuses_a_record_with_no_legacy_form() {
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(record),
+        };
+        let repo = Repo::build_tokio().load().await;
+        let err = write_capture_doc(&repo, "doc.qmd", &run, false)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ProviderError::Protocol(_)), "{err:?}");
+        assert!(
+            err.to_string()
+                .contains(quarto_core::engine::capture_files::RECORD_WRITING_ENV),
+            "{err}"
+        );
     }
 
     #[tokio::test]

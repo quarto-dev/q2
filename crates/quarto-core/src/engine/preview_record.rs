@@ -86,6 +86,19 @@ pub struct CaptureRun {
     pub record: Option<Record>,
 }
 
+impl CaptureRun {
+    /// Whether there is anything to publish: legacy captures, or a record that describes
+    /// something. An engine run has captures; an imported record (no engines, no captures,
+    /// cells) has only the second, so "no captures" must not mean "nothing to show".
+    pub fn has_content(&self) -> bool {
+        !self.captures.is_empty()
+            || self
+                .record
+                .as_ref()
+                .is_some_and(|r| r.describes_something())
+    }
+}
+
 impl PipelineObserver for CaptureCollector {
     fn on_auxiliary_data(&self, _stage: &str, _index: usize, kind: &str, data: &serde_json::Value) {
         if kind == ENGINE_RECORD_KIND {
@@ -345,6 +358,45 @@ pub async fn compute_source_inputs(
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    /// A run has content when it has captures or a record that describes something. An import
+    /// has the second and never the first.
+    #[test]
+    fn a_run_has_content_with_captures_or_a_record_that_describes_something() {
+        let record =
+            crate::record::read_record(include_str!("../../tests/fixtures/records/basic.json"))
+                .unwrap();
+        let mut nothing = record.clone();
+        nothing.metadata.quarto_engines.clear();
+        nothing.cells.clear();
+        let capture: EngineCapture = serde_json::from_value(serde_json::json!({
+            "engine_name": "jupyter", "input_qmd": "x", "result": {}
+        }))
+        .unwrap();
+
+        assert!(!CaptureRun::default().has_content());
+        assert!(
+            !CaptureRun {
+                captures: Vec::new(),
+                record: Some(nothing.clone())
+            }
+            .has_content()
+        );
+        assert!(
+            CaptureRun {
+                captures: Vec::new(),
+                record: Some(record.clone())
+            }
+            .has_content()
+        );
+        assert!(
+            CaptureRun {
+                captures: vec![capture],
+                record: Some(nothing)
+            }
+            .has_content()
+        );
+    }
 
     use quarto_system_runtime::NativeRuntime;
     use tempfile::TempDir;

@@ -2,7 +2,7 @@
 title: 'RIU-0 spikes: findings'
 date: 2026-11-03
 description: 'Per-spike results for the records-in-use spikes (S0 to S7): the question, the exact invocation, how the output was inspected, a go or no-go, and what was not tested.'
-status: done  # S0 to S7 done 2026-11-03; the plans RIU-1 to RIU-6 are not yet rewritten (see the plan, After the spikes)
+status: done  # S0 to S7 done 2026-11-03
 ---
 
 **Plan:** [RIU-0](../plans/2026-11-02-riu-00-spikes.md)
@@ -430,9 +430,14 @@ created `~/Library/Application Support/code-oss-dev/User/globalStorage/quarto-in
 (1,123 bytes, nbformat 4.5, two code cells, per-cell `quarto_cell_id` and `quarto_content_hash`
 metadata, top-level `last_updated`, `quarto_cache_version`, `quarto_source`). The installed
 release build keeps its cache under `~/Library/Application Support/Positron/User/globalStorage/quarto-inline-outputs/`
-and that directory did not change. The file name is **not** `sha256(path)[:16]` of the
-document's path (`1e7644de6b7e5d3e` for this one), so a q2 command cannot compute a document's
-cache path by itself; `QuartoOutputCacheService._getCachePath` decides it.
+and that directory did not change. **Correction (2026-11-03, after the first S5 write-up):** the file
+name is `sha1(document URI string)[0:16]` plus `.ipynb`, from `_getCachePath` and `_hashUri` in
+`quartoOutputCacheService.ts`. Checked: `sha1("file:///Users/gordon/docs/inline-output/python.qmd")`
+starts `bcfd94bdc5437bc3`, the file the dev build wrote. An earlier version of this section said
+the path could not be computed; that came from trying only SHA-256 of the path. Caveat: the
+string is `URI.toString()`, which percent-encodes some characters and has its own form for
+Windows drive letters and remote schemes, so a q2 command must reproduce that encoding, and
+only the plain macOS `file://` case was checked.
 
 **Same file, through q2.** The dev build's cache file converts through `record_from_positron`
 (the S4 spike branch, `riu_s4_import convert ... jupyter`): `units=3 import_hashes=2
@@ -587,7 +592,7 @@ none. Inline spans are not cached cells in Positron. Anything with a rendered
 - Array-valued and JSON-valued outputs (Plotly, widgets, IPython JSON mimes), where the exporter
   does change the bytes.
 - Positron loading the exported file through its normal open path, instead of the S5 push
-  command. That needs the document cache path, which a q2 command cannot compute (S5).
+  command. That needs the document cache path, which is `sha1(URI string)[0:16]` (S5), checked only for one plain macOS `file://` path.
 - Outputs with `quarto_webview_metadata` or per-image `width` and `height` metadata.
 - Large records (this one was 30 KB; Positron has a 100 MB cache cap).
 - Whether the `positron_loader` mirror in `positron_conformance.rs` agrees; the real window was
@@ -616,7 +621,7 @@ U1 and U2 are in S0. U17 and U18 are answered by S5, U19 by S6, U20 by S7.
 | U15 | At conversion, with a caller-supplied owner function; the occurrence is counted per hash before the gate. | S4 |
 | U16 | Yes, WASM-clean through the npm build. | S4 |
 | U17 | Yes. One method on `QuartoOutputContribution` (`spikePushCells`) plus a parse helper on the cache service, matched by content hash; no reload path and no change to `_cachedOutputsLoaded`. Seen live, persisted, and unharmed by a dirty document. | S5 |
-| U18 | Dev build: `~/Library/Application Support/code-oss-dev/User/globalStorage/quarto-inline-outputs/`. Installed release: `~/Library/Application Support/Positron/User/globalStorage/quarto-inline-outputs/`. Observed on disk, not read from code. | S5 |
+| U18 | Dev build: `~/Library/Application Support/code-oss-dev/User/globalStorage/quarto-inline-outputs/`. Installed release: `~/Library/Application Support/Positron/User/globalStorage/quarto-inline-outputs/`. Observed on disk. File name: `sha1(document URI string)[0:16]` plus `.ipynb` (checked on one file). | S5 |
 | U19 | An extension command runs `q2` with `child_process.execFile` in the extension host and hands the result to a workbench command through an internal `_` command (same pattern as `_executeQuartoCellFormattingProvider`). `q2` is **not** found by name when Positron starts without the shell PATH; an absolute path in a setting works. The `q2` on PATH can be an old nightly. | S6 |
 | U20 | Positron shows a q2 record of Jupyter Python cells correctly: stream, PNG figure, HTML table, error with traceback and colors, labels, and a duplicate-hash pair. A raw record loads with no transform for these; the exporter only matters for outputs that are arrays or objects (untested). Inline spans, and any non-Jupyter cell, are skipped. `quarto_source` is ignored on load. | S7 |
 
@@ -642,8 +647,9 @@ U1 and U2 are in S0. U17 and U18 are answered by S5, U19 by S6, U20 by S7.
   parse helper. S6: an extension runs `q2` with `execFile` and hands the result to the workbench
   through an internal command; `q2` is not found by name without the shell PATH, so a path
   setting is required, and `q2 --version` must be checked because the `q2` on PATH can be an old
-  nightly. The cache path cannot be computed from the document path, so the cache service must
-  supply it.
+  nightly. The cache path is `sha1(URI string)[0:16]` plus `.ipynb` in the user-data cache directory, so
+  the extension can compute it, but it must reproduce `URI.toString()` encoding; asking the
+  cache service for the path is safer.
 
 ### What Gordon needed to do for S5 (the Positron window; done, see S5)
 
