@@ -2651,6 +2651,9 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
     // - '}', EOF: that was a language specifier
     // - '=': that was a key-value key
     // - ' ', '\t': look ahead of whitespace to peek for an '=' to make the call
+    //
+    // ':' is a word character, as in pandoc's attribute keys
+    // (`html:style="..."`, GH #1027).
 
     do {
         if (
@@ -2660,6 +2663,7 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
             (lexer->lookahead == '_') ||
             (lexer->lookahead == '%') ||
             (lexer->lookahead == '.') ||
+            (lexer->lookahead == ':') ||
             (lexer->lookahead == '-')
         ) {
             lexer->advance(lexer, false);
