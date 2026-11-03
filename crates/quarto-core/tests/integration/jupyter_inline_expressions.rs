@@ -30,6 +30,15 @@ fn python_kernel_available() -> bool {
             .any(|s| s.language.eq_ignore_ascii_case("python"))
 }
 
+/// Whether knitr can run, i.e. `Rscript` was found. A document with a braced `{r}` fence
+/// declares knitr, and a declared engine that cannot run is an error, so tests that use
+/// one skip where R is absent rather than stubbing the engine.
+fn knitr_available() -> bool {
+    EngineRegistry::default()
+        .get("knitr")
+        .is_some_and(|e| e.is_available())
+}
+
 /// Skip the test (return from it) when no Python kernel is installed.
 macro_rules! require_kernel {
     ($name:literal) => {
@@ -205,12 +214,7 @@ fn jupyter_inline_in_display_fence_is_not_run() {
 #[test]
 fn jupyter_inline_in_ceded_block_is_not_run() {
     require_kernel!("jupyter_inline_in_ceded_block_is_not_run");
-    // The `{r}` fence makes knitr a declared engine, and a declared engine that cannot
-    // run is an error. Skip where R is absent rather than stubbing the engine.
-    if !EngineRegistry::default()
-        .get("knitr")
-        .is_some_and(|e| e.is_available())
-    {
+    if !knitr_available() {
         eprintln!("SKIP: no Rscript — jupyter_inline_in_ceded_block_is_not_run");
         return;
     }
@@ -341,6 +345,11 @@ fn q1_equivalence_fixtures() {
         "r-fence",
     ];
     for case in cases {
+        // The r-fence case declares knitr; skip just that case where R is absent.
+        if case == "r-fence" && !knitr_available() {
+            eprintln!("SKIP: no Rscript — q1_equivalence_fixtures case r-fence");
+            continue;
+        }
         let qmd = std::fs::read_to_string(dir.join(format!("{case}.qmd"))).unwrap();
         let q2_path = dir.join(format!("{case}.q2.html"));
         let expected_path = if q2_path.exists() {

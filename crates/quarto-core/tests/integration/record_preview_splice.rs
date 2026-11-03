@@ -12,7 +12,8 @@ use serde_json::json;
 
 use quarto_core::engine::preview_record::{compute_source_inputs, record_capture_run};
 use quarto_core::engine::{
-    EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError, LanguageClaim,
+    EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine, ExecutionError,
+    LanguageClaim, MarkdownEngine,
 };
 use quarto_core::format::Format;
 use quarto_core::pandoc_request::captures::CapturePayload;
@@ -139,6 +140,16 @@ async fn record_with(dir: &Path, source: &str, engine: StubEngine) -> Record {
         .expect("the stub engine produced a record")
 }
 
+/// The registry for the preview side: markdown only. A recorded document's cells are
+/// spliced from the record and never run, so no real engine belongs here. `new()` would
+/// register the real Jupyter engine, which runs when Jupyter is installed and then
+/// panics (`block_on` inside the test's runtime).
+fn splice_only_registry() -> Arc<EngineRegistry> {
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MarkdownEngine::new()));
+    Arc::new(registry)
+}
+
 /// Preview-render `source` with `record` and an empty registry; the AST JSON.
 async fn preview(dir: &Path, source: &str, record: &Record) -> String {
     let path = dir.join("doc.qmd");
@@ -155,7 +166,7 @@ async fn preview(dir: &Path, source: &str, record: &Record) -> String {
         &path.display().to_string(),
         &mut ctx,
         runtime,
-        Some(Arc::new(EngineRegistry::new())),
+        Some(splice_only_registry()),
         CapturePayload::Record(Arc::new(record.clone())),
     )
     .await
@@ -247,7 +258,7 @@ async fn splice_report(dir: &Path, source: &str, record: &Record) -> serde_json:
     )
     .unwrap()
     .with_observer(observer.clone());
-    ctx.registry = Arc::new(EngineRegistry::new());
+    ctx.registry = splice_only_registry();
     let stages = build_q2_preview_pipeline_stages(CapturePayload::Record(Arc::new(record.clone())));
     let input = PipelineData::LoadedSource(LoadedSource::new(path, source.as_bytes().to_vec()));
     Pipeline::new(stages)
@@ -467,19 +478,21 @@ fn fixtures() -> std::path::PathBuf {
 }
 
 /// Render `source` to HTML with an empty engine registry and the given config.
-async fn html_with(path: &Path, source: &str, config: &HtmlRenderConfig) -> String {
+async fn html_with(path: &Path, source: &str, config: HtmlRenderConfig) -> String {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(path, runtime.as_ref()).unwrap();
     let doc_info = DocumentInfo::from_path(path);
     let format = Format::html();
     let bins = BinaryDependencies::new();
     let mut ctx = RenderContext::new(&project, &doc_info, &format, &bins);
-    ctx.engine_registry_override = Some(Arc::new(EngineRegistry::new()));
+    // Through the config: `render_qmd_to_html` overwrites the context's override with
+    // `config.engine_registry`, so setting it on `ctx` would silently do nothing.
+    let config = config.with_engine_registry(splice_only_registry());
     render_qmd_to_html(
         source.as_bytes(),
         &path.display().to_string(),
         &mut ctx,
-        config,
+        &config,
         runtime,
     )
     .await
@@ -527,13 +540,13 @@ async fn record_splice_matches_legacy_splice_on_the_jupyter_fixtures() {
         let from_legacy = html_with(
             &path,
             &source,
-            &HtmlRenderConfig::default().with_captures(vec![legacy]),
+            HtmlRenderConfig::default().with_captures(vec![legacy]),
         )
         .await;
         let from_record = html_with(
             &path,
             &source,
-            &HtmlRenderConfig::default().with_record(Arc::new(record)),
+            HtmlRenderConfig::default().with_record(Arc::new(record)),
         )
         .await;
         if *name == "include-false" {
