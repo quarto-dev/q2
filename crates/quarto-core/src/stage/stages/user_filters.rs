@@ -62,6 +62,44 @@ impl UserFiltersStage {
 /// a `main.lua` entry-point mechanism for `UserFiltersStage::post()` to
 /// redirect `Position::Post` filters into — HTML has no `main.lua` leg at
 /// all, so it must keep running them via pampa exactly as before.
+/// Whether this render defaults `link-citations` to true, as Q1's
+/// Bootstrap HTML and revealjs formats do (`format-html-bootstrap.ts`,
+/// `format-reveal.ts`). Citeproc reads the key with a `false` default,
+/// Pandoc's, which every other format keeps.
+///
+/// Minimal HTML is not Bootstrap HTML, so it keeps `false`; so do book
+/// projects, where a chapter's citations point at a references chapter
+/// on another page and a `#ref-` link would dangle.
+fn links_citations_by_default(ctx: &StageContext, meta: &quarto_pandoc_types::ConfigValue) -> bool {
+    use crate::format::PipelineProfile;
+
+    if ctx.project.project_kind() == crate::project::ProjectKind::Book {
+        return false;
+    }
+    match PipelineProfile::from_format(&ctx.format.target_format) {
+        PipelineProfile::RevealjsRender | PipelineProfile::RevealjsPreview => true,
+        PipelineProfile::HtmlRender | PipelineProfile::HtmlPreview => {
+            !crate::format::is_minimal_html(meta)
+        }
+        PipelineProfile::Pandoc(_) => false,
+    }
+}
+
+/// Set `link-citations: true` unless the document already sets it.
+fn default_link_citations(meta: &mut quarto_pandoc_types::ConfigValue) {
+    if meta.get("link-citations").is_none() {
+        meta.insert_path(
+            &["link-citations"],
+            quarto_pandoc_types::ConfigValue::new_bool(
+                true,
+                quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            ),
+        );
+    }
+}
+
 /// The citeproc defaults this render applies (see
 /// [`crate::filter_resolve::apply_citeproc_default`]), or `None` when it
 /// adds no citeproc entry at all.
@@ -155,6 +193,11 @@ impl PipelineStage for UserFiltersStage {
             && let Some(defaults) = citeproc_defaults(ctx)
         {
             crate::filter_resolve::apply_citeproc_default(&mut doc.ast.meta, defaults);
+        }
+        if matches!(self.position, FilterPosition::Pre)
+            && links_citations_by_default(ctx, &doc.ast.meta)
+        {
+            default_link_citations(&mut doc.ast.meta);
         }
 
         // book-projects P6: a non-references book chapter gets
@@ -1215,6 +1258,73 @@ mod tests {
             explicit.is_err(),
             "citeproc: true must still run on a docx book"
         );
+    }
+
+    /// The `link-citations` value the `Pre` stage leaves in the metadata
+    /// of a document with `meta_entries` (no bibliography, so citeproc
+    /// itself never runs).
+    async fn link_citations_after_pre(
+        project_kind: crate::project::ProjectKind,
+        format: crate::format::Format,
+        meta_entries: Vec<(&str, ConfigValue)>,
+    ) -> Option<bool> {
+        let mut ctx = make_ctx();
+        ctx.project.config.project_kind = project_kind;
+        ctx.format = format;
+        let out = UserFiltersStage::pre()
+            .run(
+                PipelineData::DocumentAst(make_doc_ast(cv_map(meta_entries))),
+                &mut ctx,
+            )
+            .await
+            .expect("pre stage");
+        out.into_document_ast()
+            .unwrap()
+            .ast
+            .meta
+            .get("link-citations")
+            .and_then(|v| v.as_bool())
+    }
+
+    /// bd-390vcoox: Q1's Bootstrap HTML and revealjs formats default
+    /// `link-citations: true`; Pandoc-writer formats keep Pandoc's
+    /// `false`, and book projects keep it too (a chapter's `#ref-` link
+    /// would point at another page).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn link_citations_defaults_follow_q1_formats() {
+        use crate::format::Format;
+        use crate::project::ProjectKind::{Book, Default};
+
+        let cases = [
+            (Default, Format::html(), Some(true)),
+            (
+                Default,
+                Format::from_format_string("revealjs").unwrap(),
+                Some(true),
+            ),
+            (Default, Format::docx(), None),
+            (Book, Format::html(), None),
+        ];
+        for (kind, format, expected) in cases {
+            let label = format!("{kind:?} {}", format.target_format);
+            assert_eq!(
+                link_citations_after_pre(kind, format, vec![]).await,
+                expected,
+                "{label}"
+            );
+        }
+    }
+
+    /// An explicit `link-citations` setting is never overridden.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn explicit_link_citations_wins_over_the_default() {
+        let value = link_citations_after_pre(
+            crate::project::ProjectKind::Default,
+            crate::format::Format::html(),
+            vec![("link-citations", cv_bool(false))],
+        )
+        .await;
+        assert_eq!(value, Some(false));
     }
 
     fn cv_bool(b: bool) -> ConfigValue {

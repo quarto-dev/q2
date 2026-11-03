@@ -98,3 +98,37 @@ fn bibliography_default_runs_after_crossref_resolution() {
     );
     assert!(html.contains("Doe 2020"), "citation not resolved:\n{html}");
 }
+
+/// Q1's Bootstrap HTML format defaults `link-citations: true`, so the
+/// rendered citation keeps its `citation` span and links to its entry,
+/// matching Q1's output for the issue's repro (bd-390vcoox).
+#[test]
+fn html_citations_link_to_their_entries_by_default() {
+    let html = render_html("", "See [@doe2020].");
+    assert!(
+        html.contains(
+            r##"<span class="citation" data-cites="doe2020">(<a href="#ref-doe2020" role="doc-biblioref">Doe 2020</a>)</span>"##
+        ),
+        "{html}"
+    );
+}
+
+/// An explicit `link-citations: false` turns the links off; the citation
+/// span stays.
+#[test]
+fn link_citations_false_leaves_html_citations_unlinked() {
+    let html = render_html("link-citations: false\n", "See [@doe2020].");
+    assert!(
+        html.contains(r#"<span class="citation" data-cites="doe2020">(Doe 2020)</span>"#),
+        "{html}"
+    );
+}
+
+/// Minimal HTML (`theme: none`) is not Bootstrap HTML, which is where Q1
+/// sets the default, so it keeps Pandoc's `link-citations: false`.
+#[test]
+fn minimal_html_does_not_link_citations_by_default() {
+    let html = render_html("theme: none\n", "See [@doe2020].");
+    assert!(!html.contains(r##"href="#ref-doe2020""##), "{html}");
+    assert!(html.contains("(Doe 2020)"), "{html}");
+}
