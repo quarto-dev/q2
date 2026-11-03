@@ -58,6 +58,20 @@ use std::sync::OnceLock;
 /// expensive (~100-500 ms per compile).
 static DEFAULT_CSS_CACHE: OnceLock<String> = OnceLock::new();
 
+/// Order the SCSS load paths for a themed compile: custom theme
+/// directories first, then the context's extra paths, then the embedded
+/// Bootstrap / Sass-utility defaults.
+///
+/// Sass takes the first match, so a theme's own partial named like a
+/// Bootstrap one (`_mixins.scss`, `_variables.scss`, ...) must be found
+/// before Bootstrap's. Quarto 1 orders them the same way (GH #1032).
+fn theme_load_paths(theme_dirs: Vec<PathBuf>, context: &ThemeContext<'_>) -> Vec<PathBuf> {
+    let mut load_paths = theme_dirs;
+    load_paths.extend(context.load_paths().iter().cloned());
+    load_paths.extend(default_load_paths());
+    load_paths
+}
+
 /// Assemble the SCSS bundle for a themed configuration.
 ///
 /// This extracts the assembly step from `compile_theme_css`: processing theme
@@ -115,10 +129,7 @@ pub fn assemble_theme_scss(
     // Assemble SCSS
     let scss = assemble_with_user_layers(&user_layers)?;
 
-    // Build load paths: default paths + custom theme directories
-    let mut load_paths = default_load_paths();
-    load_paths.extend(result.load_paths);
-    load_paths.extend(context.load_paths().iter().cloned());
+    let load_paths = theme_load_paths(result.load_paths, context);
 
     Ok((scss, load_paths))
 }
@@ -272,13 +283,13 @@ pub fn compile_with_doc_vars(
         search_layer,
     ]);
 
-    let mut load_paths = default_load_paths();
+    let mut theme_dirs = Vec::new();
     if config.has_themes() {
         let result = process_theme_specs(&config.themes, context)?;
         user_layers.extend(result.layers);
-        load_paths.extend(result.load_paths);
+        theme_dirs = result.load_paths;
     }
-    load_paths.extend(context.load_paths().iter().cloned());
+    let load_paths = theme_load_paths(theme_dirs, context);
 
     user_layers.push(doc_vars.clone());
 
@@ -584,13 +595,13 @@ pub async fn compile_with_doc_vars(
         search_layer,
     ]);
 
-    let mut load_paths = default_load_paths();
+    let mut theme_dirs = Vec::new();
     if config.has_themes() {
         let result = process_theme_specs(&config.themes, context)?;
         user_layers.extend(result.layers);
-        load_paths.extend(result.load_paths);
+        theme_dirs = result.load_paths;
     }
-    load_paths.extend(context.load_paths().iter().cloned());
+    let load_paths = theme_load_paths(theme_dirs, context);
 
     user_layers.push(doc_vars.clone());
 
@@ -1705,6 +1716,24 @@ mod tests {
 
         // Should have custom rule from the fixture
         assert!(css.contains(".custom-rule"));
+    }
+
+    #[test]
+    fn test_compile_theme_css_theme_partial_shadows_bootstrap_partial() {
+        // GH #1032: a theme's own `_mixins.scss` must win over Bootstrap's
+        // when the theme does `@import "mixins"`.
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/shadowed-partial");
+
+        let runtime = NativeRuntime::new();
+        let themes = vec![ThemeSpec::parse("custom.scss").unwrap()];
+        let config = ThemeConfig::new(themes, false);
+        let context = ThemeContext::new(fixture_dir, &runtime);
+
+        let css = compile_theme_css(&config, &context)
+            .expect("theme importing its own _mixins.scss should compile")
+            .css;
+        assert!(css.contains(".accent-box"));
     }
 
     #[test]
