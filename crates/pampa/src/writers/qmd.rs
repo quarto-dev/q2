@@ -90,6 +90,10 @@ pub struct QmdWriterContext {
     /// uses it to tell a line-start list marker (`1.` then a space) from a
     /// number or a hyphen that merely begins a word (`1.5`, `-5`).
     pub next_is_boundary: bool,
+    /// Set by `write_inline_run` for each inline: it is the first or the
+    /// last of its run. A `Space` there would be stripped on re-read, so
+    /// `write_space` writes it as the non-breaking-space escape.
+    pub at_run_edge: bool,
 
     /// The last byte the previous inline wrote, if any inline has written since
     /// the block started. `write_str` reads it to see that the text before it
@@ -127,6 +131,7 @@ impl QmdWriterContext {
             at_line_start: false,
             sub_sup_depth: 0,
             next_is_boundary: false,
+            at_run_edge: false,
             last_byte: None,
             prev_bullet_marker: None,
             bullet_marker: '*',
@@ -2133,6 +2138,18 @@ fn write_space(
         // See `QmdWriterContext::sub_sup_depth`.
         return write!(buf, "\\ ");
     }
+    // A `Space` right after a space (consecutive `Space` nodes, which an
+    // AST edit can produce — the reader never does): a plain second space
+    // would be collapsed on re-read, so write it as the non-breaking-space
+    // escape (`\ `, read back as U+00A0) and the run of spaces survives.
+    if ctx.last_byte == Some(b' ') {
+        return write!(buf, "\\ ");
+    }
+    // Likewise a `Space` first or last in its run (leading / trailing
+    // whitespace is stripped on re-read): only the escape keeps it.
+    if ctx.at_run_edge {
+        return write!(buf, "\\ ");
+    }
     write!(buf, " ")
 }
 
@@ -3024,6 +3041,7 @@ fn write_inline_run(
     ends_at_boundary: bool,
 ) -> std::io::Result<()> {
     for (i, inline) in inlines.iter().enumerate() {
+        ctx.at_run_edge = i == 0 || i + 1 == inlines.len();
         ctx.next_is_boundary = match inlines.get(i + 1) {
             Some(next) => matches!(
                 next,
