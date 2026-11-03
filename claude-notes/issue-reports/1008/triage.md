@@ -68,7 +68,7 @@ The fixture has to be rendered from outside this repo. Under
    suppresses the output (`[1] 2` count goes from 1 to 0), but knitr still
    launches, so it does not help on a machine without R. The colon form
    `-M execute:enabled:false` does **not** work, because dotted keys are not
-   expanded (documented in `-M`'s help).
+   expanded (as the `-M` help text says).
 3. **Is there an existing strand?** No. `braid search no-execute` returned
    nothing. bd-nn2fou8h (execute-visibility options) is adjacent but separate.
 
@@ -87,7 +87,7 @@ Filed bd-2luq2ath. Fix scope:
   time.
 - Update the stale comment in the `Render` arm.
 - Tests: a clap-parse unit test (`--no-execute` parses and maps to `None`),
-  plus an integration test showing that a `{r}` / `{python}` document renders
+  plus an integration test showing that a document with R and Python cells renders
   under `--no-execute` with no engine output. Check that the inert cell still
   renders as an echoed code block, like Quarto 1's `--no-execute` output.
 - Docs: mention `--no-execute` in the render CLI docs if they list flags.
