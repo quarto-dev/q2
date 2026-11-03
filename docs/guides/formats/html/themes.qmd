@@ -109,9 +109,11 @@ only in the matching scheme:
 
 ### Syntax highlighting
 
-The `highlight-style:` option selects the code-highlighting palette.
-Quarto ships the full Quarto 1 palette catalog. An *adaptive* style
-pairs naturally with a light/dark theme — each variant gets the
+The `syntax-highlighting:` option selects the code-highlighting
+palette. (`highlight-style:` is accepted as a deprecated alias, as in
+Quarto 1; when both are set, `syntax-highlighting:` wins.) Quarto
+ships the full Quarto 1 palette catalog. An *adaptive* style pairs
+naturally with a light/dark theme — each variant gets the
 matching palette:
 
 ``` yaml
@@ -120,13 +122,13 @@ format:
     theme:
       light: cosmo
       dark: darkly
-highlight-style: a11y
+syntax-highlighting: a11y
 ```
 
 You can also select palettes explicitly, per variant:
 
 ``` yaml
-highlight-style:
+syntax-highlighting:
   light: github
   dark: arrow
 ```
@@ -147,7 +149,7 @@ its designed canvas. To override those while keeping the token
 colors, set the `code-block-bg` / `code-block-color` options:
 
 ``` yaml
-highlight-style: github
+syntax-highlighting: github
 code-block-bg: "#f6f8fa"
 ```
 

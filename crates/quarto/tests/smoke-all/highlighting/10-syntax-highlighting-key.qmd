@@ -1,0 +1,26 @@
+---
+title: syntax-highlighting key (Quarto 1's current name)
+format:
+  html:
+    syntax-highlighting: github
+_quarto:
+  tests:
+    html:
+      noErrorsOrWarnings: true
+      ensureCssRegexMatches:
+        # github-light's keyword red reaches the stylesheet (GH #1035:
+        # the HTML parser used to read only the deprecated
+        # `highlight-style:` alias and fell back to the default palette).
+        - ["\\.hl-keyword", "#d73a49"]
+        # No fallback to the default palette's solarized keyword green.
+        - ["#859900"]
+---
+
+`syntax-highlighting:` is Quarto 1's current name for the palette option;
+`highlight-style:` is its deprecated alias. Both select the HTML palette,
+and `syntax-highlighting:` wins when both are set.
+
+```python
+def hello():
+    print("Hello, World!")
+```
