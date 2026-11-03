@@ -18,11 +18,13 @@ mod exec_hash;
 mod freeze_readiness;
 mod hash_definition;
 mod ids;
+mod location;
 mod matching;
 mod overlay;
 mod place;
 mod positron_import;
 mod reader;
+mod sources;
 mod staleness;
 mod types;
 mod writer;
@@ -39,6 +41,7 @@ pub use ids::{
     FillIdsError, author_label, cell_id, content_hash, fill_ids, scanned_author_text,
     span_content_hash, span_id,
 };
+pub use location::{execution_record_path, project_relative_source};
 pub use matching::{
     HEADER_KEYS_KEY, Matching, OUTPUT_FORMAT_OPTION, UnitKey, UnitStaleness, lost_header_keys,
     match_units,
@@ -51,6 +54,10 @@ pub use positron_import::{
     PositronImport, Provenance, import_positron_cache,
 };
 pub use reader::{ReadError, read_record, read_record_value};
+pub use sources::{
+    Chosen, EngineError, EngineResult, LookupError, OutcomeKind, RecordLookup, RecordSource,
+    RecordSources, Resolution, SourceOutcome, WalkContext, resolve_records,
+};
 pub use staleness::record_is_stale;
 pub use types::{
     AuthorText, AuthorTexts, CellMetadata, CellType, EngineEntry, EngineRecord, Record, RecordCell,

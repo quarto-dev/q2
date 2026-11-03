@@ -33,8 +33,7 @@ use quarto_hub::HubContext;
 use quarto_hub::index::CaptureRef;
 use quarto_system_runtime::SystemRuntime;
 
-use crate::cache::record_capture_run_cached;
-use crate::config::EnginePolicy;
+use crate::config::{EnginePolicy, ReExecuteConfig};
 use crate::diagnostics;
 
 /// MIME type marker written into the capture binary doc so the
@@ -59,15 +58,11 @@ pub async fn record_eager_captures(
     ctx: Arc<HubContext>,
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<Arc<EngineRegistry>>,
-    policy: EnginePolicy,
-    cache_dir: &std::path::Path,
+    cfg: &ReExecuteConfig,
 ) -> Result<usize, RecordError> {
-    // C.6: `preview.engine: off` disables all engine execution, including
-    // the eager run. Code cells render as inert source in the SPA.
-    if policy == EnginePolicy::Off {
-        tracing::debug!("eager capture driver skipped: engine policy = off");
-        return Ok(0);
-    }
+    // C.6: `preview.engine: off` forbids running the engine, but it no longer returns here:
+    // the record sources are still consulted, so a cached or `.quarto` record shows and only
+    // the engine is skipped (the walk reports it unavailable; RIU epic, decision 5).
     let Some(project_root) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
         // Standalone mode — nothing to record.
         return Ok(0);
@@ -102,9 +97,8 @@ pub async fn record_eager_captures(
                 ctx.clone(),
                 runtime.clone(),
                 &rel_path,
-                policy,
                 engine_registry.clone(),
-                cache_dir,
+                cfg,
             )
             .await
             {
@@ -125,7 +119,7 @@ pub async fn record_eager_captures(
             &ctx,
             &runtime,
             engine_registry.clone(),
-            cache_dir,
+            cfg,
         )
         .await
         {
@@ -175,35 +169,74 @@ async fn record_one(
     ctx: &Arc<HubContext>,
     runtime: &Arc<dyn SystemRuntime>,
     engine_registry: Option<Arc<EngineRegistry>>,
-    cache_dir: &std::path::Path,
+    cfg: &ReExecuteConfig,
 ) -> Result<bool, RecordError> {
     // Project discovery walks up for `_quarto.yml`; for single-file
     // projects this produces an is_single_file context.
     let project = ProjectContext::discover(abs_path, runtime.as_ref())
         .map_err(|e| RecordError::DiscoverFailed(format!("{}", e)))?;
 
-    // C.7: route through the cache-aware wrapper so identical content
-    // across (re-)opens hits the filesystem cache instead of re-running
-    // the engine.
-    let run = record_capture_run_cached(
-        cache_dir,
+    // RIU-2: walk the ordered record sources (cache, the `.quarto` copy, the engine) and publish
+    // whichever supplies first. The pre-engine pipeline runs once, here; the cache key and the
+    // staleness check both derive from its result.
+    let inputs = compute_source_inputs(abs_path, &project, runtime.clone())
+        .await
+        .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+    let lookup = crate::record_lookup::PreviewLookup {
         abs_path,
-        &project,
-        runtime.clone(),
-        engine_registry,
-    )
-    .await
-    .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+        project: &project,
+        runtime: runtime.clone(),
+        registry: engine_registry,
+        cache_dir: &cfg.cache_dir,
+    };
+    let walk_ctx = quarto_core::record::WalkContext {
+        list: &cfg.sources,
+        engine_enabled: cfg.policy != EnginePolicy::Off,
+        record_gate: cfg.record_gate,
+    };
+    let resolution = quarto_core::record::resolve_records(&walk_ctx, &inputs, &lookup).await;
 
-    if run.captures.is_empty() {
-        return Ok(false);
+    let (source, run) = match resolution.chosen {
+        Some(quarto_core::record::Chosen::Run { source, run }) => (source, run),
+        // The preview's engine step always returns a run to publish.
+        Some(quarto_core::record::Chosen::EnginePublished) => return Ok(false),
+        None => {
+            // A refusal that nothing else overrode stands, naming the variable; an engine
+            // error is the document's error. Otherwise nothing supplied (a prose-only
+            // document, or sources that hold nothing): not an error.
+            if let Some(why) = resolution.refusal() {
+                return Err(RecordError::Refused(why.to_string()));
+            }
+            if let Some(failure) = resolution.first_failure() {
+                return Err(RecordError::RecordFailed(failure.to_string()));
+            }
+            return Ok(false);
+        }
+    };
+
+    // A refused source that a later source replaced is reported on the page.
+    if let Some(refused) = resolution.outcomes.iter().find_map(|o| match &o.kind {
+        quarto_core::record::OutcomeKind::Refused(why) => Some((o.source.label(), why.clone())),
+        _ => None,
+    }) && let Some(sink) = crate::diagnostics::current_sink()
+    {
+        sink.emit(
+            rel_path,
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
+                "The {} record was not used",
+                refused.0
+            ))
+            .problem(refused.1)
+            .build(),
+        );
     }
 
-    let capture_doc_id = write_capture_doc(ctx, rel_path, &run).await?;
+    let staleness = source_staleness(&source, &run, &inputs);
+    let capture_doc_id = write_capture_doc_gated(ctx, rel_path, &run, cfg.record_gate).await?;
 
     let capture_ref = CaptureRef {
         capture_doc_id,
-        staleness: Some(false),
+        staleness: Some(staleness),
         state: None,
         last_error: None,
     };
@@ -211,18 +244,53 @@ async fn record_one(
         .set_capture(rel_path, &capture_ref)
         .map_err(|e| RecordError::SidecarFailed(format!("{}", e)))?;
 
-    let engines = run
-        .captures
-        .iter()
-        .map(|c| c.engine_name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ");
+    // An imported record has no captures, so name the record's engines then.
+    let engines = if run.captures.is_empty() {
+        run.record
+            .iter()
+            .flat_map(|r| r.metadata.quarto_engines.iter().map(|e| e.name.as_str()))
+            .collect::<Vec<_>>()
+    } else {
+        run.captures
+            .iter()
+            .map(|c| c.engine_name.as_str())
+            .collect::<Vec<_>>()
+    }
+    .join(", ");
     tracing::info!(
         rel_path = %rel_path,
         engines = %engines,
         "recorded engine capture(s)",
     );
     Ok(true)
+}
+
+/// Whether the record a source supplied is stale for the document as it is now.
+///
+/// A cache hit is keyed by the document's content and an engine run is fresh by construction,
+/// so neither is stale. A `.quarto` copy was written by some earlier render, so it is checked
+/// when chosen (the same comparison the watcher uses). An unreadable declaration counts as
+/// stale: the viewer then offers Re-execute rather than claiming freshness. The imported
+/// sources have their own rule (RIU-3).
+fn source_staleness(
+    source: &quarto_core::record::RecordSource,
+    run: &CaptureRun,
+    inputs: &quarto_core::engine::preview_record::SourceInputs,
+) -> bool {
+    use quarto_core::record::RecordSource;
+    match source {
+        RecordSource::Cache | RecordSource::Engine => false,
+        RecordSource::Q2 => run.record.as_ref().is_some_and(|record| {
+            record_is_stale(
+                record,
+                &String::from_utf8_lossy(&inputs.input_qmd),
+                &inputs.sugared_blocks,
+                &inputs.metadata,
+            )
+            .unwrap_or(true)
+        }),
+        RecordSource::Positron | RecordSource::Dir(_) => false,
+    }
 }
 
 /// What the sidecar's capture doc held, as far as staleness is concerned.
@@ -253,13 +321,12 @@ pub async fn recompute_staleness(
     ctx: Arc<HubContext>,
     runtime: Arc<dyn SystemRuntime>,
     rel_path: &str,
-    policy: EnginePolicy,
     engine_registry: Option<Arc<EngineRegistry>>,
-    cache_dir: &std::path::Path,
+    cfg: &ReExecuteConfig,
 ) -> Result<bool, RecordError> {
     // C.6: `preview.engine: off` skips the watcher staleness hook
     // entirely (no captures exist anyway, but defensive).
-    if policy == EnginePolicy::Off {
+    if cfg.policy == EnginePolicy::Off {
         return Ok(false);
     }
     let Some(project_root) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
@@ -371,12 +438,12 @@ pub async fn recompute_staleness(
     // the HTTP /api/preview/re-execute handler takes, including its
     // in-flight guard (so a debounced flurry of file changes is
     // collapsed to one engine run at a time per doc).
-    if policy == EnginePolicy::Auto && is_stale {
+    if cfg.policy == EnginePolicy::Auto && is_stale {
         crate::re_execute::trigger_auto_re_execute(
             ctx.clone(),
             rel_path.to_string(),
             engine_registry,
-            cache_dir.to_path_buf(),
+            cfg.clone(),
         );
     }
 
@@ -414,31 +481,31 @@ pub async fn write_capture_doc_gated(
     run: &CaptureRun,
     record_gate: bool,
 ) -> Result<String, RecordError> {
-    let encoded = quarto_core::engine::capture_files::encode_capture_payload(
-        &run.captures,
-        run.record.as_ref(),
-        record_gate,
-    )
-    .map_err(|e| RecordError::Gzip(format!("{}", e)))?;
+    use quarto_core::engine::capture_files::{PublishError, encode_for_publish};
+    let encoded = encode_for_publish(&run.captures, run.record.as_ref(), record_gate).map_err(
+        |e| match e {
+            PublishError::Io(e) => RecordError::Gzip(e.to_string()),
+            refused @ PublishError::RecordWriterOff => RecordError::Refused(refused.to_string()),
+        },
+    )?;
 
     let meta = quarto_hub::resource::CaptureDocMeta {
         source_path: rel_path.to_string(),
         engines: encoded.engines,
     };
-    let automerge_doc = quarto_hub::resource::create_engine_payload_document(
+    quarto_hub::resource::publish_payload_doc(
+        ctx.repo(),
         encoded.is_record,
         &encoded.gzipped,
         &meta,
     )
-    .map_err(|e| RecordError::CreateBinaryDoc(format!("{}", e)))?;
-
-    let handle = ctx
-        .repo()
-        .create(automerge_doc)
-        .await
-        .map_err(|_stopped| RecordError::RepoStopped)?;
-
-    Ok(handle.document_id().to_string())
+    .await
+    .map_err(|e| match e {
+        quarto_hub::resource::PublishDocError::Build(e) => {
+            RecordError::CreateBinaryDoc(e.to_string())
+        }
+        quarto_hub::resource::PublishDocError::RepoStopped => RecordError::RepoStopped,
+    })
 }
 
 /// Errors the driver can surface. Each variant is a short message
@@ -459,6 +526,9 @@ pub enum RecordError {
     CreateBinaryDoc(String),
     #[error("samod repo is stopped")]
     RepoStopped,
+    /// The run is a record with no legacy form and the writer gate is off (RIU-2).
+    #[error("{0}")]
+    Refused(String),
     #[error("writing sidecar entry failed: {0}")]
     SidecarFailed(String),
 }
@@ -525,8 +595,14 @@ mod tests {
             ))
             .unwrap()
         });
+        // An engine run always has captures; a run with a record and none has no legacy form.
         let run = CaptureRun {
-            captures: Vec::new(),
+            captures: vec![
+                serde_json::from_value::<quarto_trace::EngineCapture>(serde_json::json!({
+                    "engine_name": "jupyter", "input_qmd": "x", "result": {}
+                }))
+                .unwrap(),
+            ],
             record,
         };
         let id = write_capture_doc_gated(&ctx, "doc.qmd", &run, gate)
@@ -609,6 +685,41 @@ mod tests {
             panic!("expected a record payload");
         };
         assert_eq!(*back, record);
+    }
+
+    /// RIU-2: a record that describes something, with no captures (an imported one), has no
+    /// legacy form. With the gate off the publish seam refuses and names the variable, rather
+    /// than writing an empty legacy list that shows an empty page.
+    #[tokio::test]
+    async fn gate_off_refuses_a_record_with_no_legacy_form() {
+        let temp = TempDir::new().unwrap();
+        let storage = StorageManager::new_standalone(temp.path()).unwrap();
+        let ctx = Arc::new(
+            HubContext::new(storage, HubConfig::default())
+                .await
+                .unwrap(),
+        );
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(record),
+        };
+        let err = write_capture_doc_gated(&ctx, "doc.qmd", &run, false)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, RecordError::Refused(_)), "{err:?}");
+        assert!(
+            err.to_string()
+                .contains(quarto_core::engine::capture_files::RECORD_WRITING_ENV),
+            "{err}"
+        );
+        // With the gate on the same run publishes a record doc.
+        write_capture_doc_gated(&ctx, "doc.qmd", &run, true)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -773,8 +884,7 @@ mod tests {
             ctx.clone(),
             runtime,
             None,
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -839,8 +949,7 @@ mod tests {
             ctx.clone(),
             runtime.clone(),
             None,
-            EnginePolicy::Manual,
-            &cache_dir,
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()),
         )
         .await
         .unwrap();
@@ -864,9 +973,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Auto,
             None,
-            &cache_dir,
+            &ReExecuteConfig::new(EnginePolicy::Auto, cache_dir.clone()),
         )
         .await
         .unwrap();
@@ -985,12 +1093,386 @@ mod tests {
             ctx,
             runtime,
             None,
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
         assert_eq!(count, 0);
+    }
+
+    /// RIU-2: a cache entry holding only a record (what an import stores) is published through
+    /// `record_one`, with no engine and no registry. Before, the `captures.is_empty()` guard
+    /// dropped it and the page showed nothing.
+    #[tokio::test]
+    async fn a_record_only_cache_entry_is_published() {
+        let doc = "---\ntitle: T\n---\n\n```{python}\n1 + 1\n```\n";
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", doc)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let cache_dir = cache_dir_for_test();
+        let project = ProjectContext::discover(&abs, runtime.as_ref()).unwrap();
+        let input_qmd =
+            quarto_core::engine::preview_record::compute_input_qmd(&abs, &project, runtime.clone())
+                .await
+                .unwrap();
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        crate::cache::store_run(
+            &cache_dir,
+            &crate::cache::compute_key(&input_qmd),
+            &CaptureRun {
+                captures: Vec::new(),
+                record: Some(record),
+            },
+        );
+
+        let wrote = record_one(
+            &abs,
+            "doc.qmd",
+            &ctx,
+            &runtime,
+            None,
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()).with_gate(true),
+        )
+        .await
+        .unwrap();
+        assert!(wrote, "a record-only run is published");
+        assert!(ctx.index().has_capture("doc.qmd"));
+
+        // With the gate off the same run has no legacy form: refused, nothing published.
+        ctx.index().remove_capture("doc.qmd").ok();
+        let err = record_one(
+            &abs,
+            "doc.qmd",
+            &ctx,
+            &runtime,
+            None,
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, RecordError::Refused(_)), "{err:?}");
+    }
+
+    // ── RIU-2: record_one walks the source list ──────────────────────────
+
+    const WALK_DOC: &str = "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n1\n```\n";
+
+    struct CountingPassthrough(Arc<std::sync::atomic::AtomicUsize>);
+    impl ExecutionEngine for CountingPassthrough {
+        fn name(&self) -> &str {
+            "test-passthrough"
+        }
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<ExecuteResult, ExecutionError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(ExecuteResult::passthrough(input))
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == "test-passthrough" {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    fn counting_registry() -> (Arc<EngineRegistry>, Arc<std::sync::atomic::AtomicUsize>) {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut reg = EngineRegistry::new();
+        reg.register(Arc::new(CountingPassthrough(calls.clone())));
+        (Arc::new(reg), calls)
+    }
+
+    fn basic_record() -> quarto_core::record::Record {
+        quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap()
+    }
+
+    /// Put `record` in the preview cache under the key of `abs`'s current content.
+    async fn seed_cache(
+        abs: &std::path::Path,
+        runtime: &Arc<dyn SystemRuntime>,
+        cache_dir: &std::path::Path,
+        record: quarto_core::record::Record,
+    ) {
+        let project = ProjectContext::discover(abs, runtime.as_ref()).unwrap();
+        let input_qmd =
+            quarto_core::engine::preview_record::compute_input_qmd(abs, &project, runtime.clone())
+                .await
+                .unwrap();
+        crate::cache::store_run(
+            cache_dir,
+            &crate::cache::compute_key(&input_qmd),
+            &CaptureRun {
+                captures: Vec::new(),
+                record: Some(record),
+            },
+        );
+    }
+
+    fn cfg_for(
+        cache_dir: &std::path::Path,
+        policy: EnginePolicy,
+        sources: Vec<quarto_core::record::RecordSource>,
+        gate: bool,
+    ) -> ReExecuteConfig {
+        let mut c = ReExecuteConfig::new(policy, cache_dir.to_path_buf()).with_gate(gate);
+        c.sources = quarto_core::record::RecordSources::new(sources);
+        c
+    }
+
+    /// The `q2` source: a file at `.quarto/execution-records/<doc>.ipynb` supplies the record
+    /// with the cache empty, no engine runs, and the staleness comes from the source (the
+    /// record's hashes do not match this document, so the page is flagged stale).
+    #[tokio::test]
+    async fn the_q2_source_supplies_a_record_with_no_engine_run() {
+        use quarto_core::record::RecordSource;
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", WALK_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let project = ProjectContext::discover(&abs, runtime.as_ref()).unwrap();
+        let file = quarto_core::record::execution_record_path(&project.dir, &abs);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(
+            &file,
+            quarto_core::record::write_record(&basic_record()).unwrap(),
+        )
+        .unwrap();
+        let (registry, calls) = counting_registry();
+        let cfg = cfg_for(
+            &cache_dir_for_test(),
+            EnginePolicy::Manual,
+            vec![RecordSource::Cache, RecordSource::Q2, RecordSource::Engine],
+            true,
+        );
+
+        let wrote = record_one(&abs, "doc.qmd", &ctx, &runtime, Some(registry), &cfg)
+            .await
+            .unwrap();
+        assert!(wrote);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let entry = ctx.index().get_capture("doc.qmd").unwrap();
+        assert_eq!(
+            entry.staleness,
+            Some(true),
+            "staleness comes from the supplying source, not a constant"
+        );
+    }
+
+    /// An unreadable `.quarto` file is skipped and the next source is tried.
+    #[tokio::test]
+    async fn an_unreadable_q2_file_is_skipped_and_the_next_source_is_tried() {
+        use quarto_core::record::RecordSource;
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", WALK_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let project = ProjectContext::discover(&abs, runtime.as_ref()).unwrap();
+        let file = quarto_core::record::execution_record_path(&project.dir, &abs);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "not json").unwrap();
+        let (registry, calls) = counting_registry();
+        let cfg = cfg_for(
+            &cache_dir_for_test(),
+            EnginePolicy::Manual,
+            vec![RecordSource::Q2, RecordSource::Engine],
+            false,
+        );
+        let wrote = record_one(&abs, "doc.qmd", &ctx, &runtime, Some(registry), &cfg)
+            .await
+            .unwrap();
+        assert!(wrote, "the engine supplied after the bad file");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// A record the gate-off writer refuses falls through to the next source.
+    #[tokio::test]
+    async fn a_refused_cache_record_falls_through_to_the_engine() {
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", WALK_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let cache_dir = cache_dir_for_test();
+        seed_cache(&abs, &runtime, &cache_dir, basic_record()).await;
+        let (registry, calls) = counting_registry();
+        let cfg = cfg_for(
+            &cache_dir,
+            EnginePolicy::Manual,
+            quarto_core::record::RecordSources::preview_default()
+                .iter()
+                .cloned()
+                .collect(),
+            false,
+        );
+        let wrote = record_one(&abs, "doc.qmd", &ctx, &runtime, Some(registry), &cfg)
+            .await
+            .unwrap();
+        assert!(wrote);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// With the refused record the last source that could supply, the error stands.
+    #[tokio::test]
+    async fn a_refusal_stands_when_nothing_else_supplies() {
+        use quarto_core::record::RecordSource;
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", WALK_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let cache_dir = cache_dir_for_test();
+        seed_cache(&abs, &runtime, &cache_dir, basic_record()).await;
+        let cfg = cfg_for(
+            &cache_dir,
+            EnginePolicy::Manual,
+            vec![RecordSource::Cache],
+            false,
+        );
+        let err = record_one(&abs, "doc.qmd", &ctx, &runtime, None, &cfg)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, RecordError::Refused(_)), "{err:?}");
+    }
+
+    /// `preview.engine: off` still consults the sources: a cached record shows and the
+    /// engine is never run (the lookup sits outside the old `off` early return).
+    #[tokio::test]
+    async fn policy_off_shows_a_cached_record_and_never_runs_the_engine() {
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", WALK_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let cache_dir = cache_dir_for_test();
+        seed_cache(&abs, &runtime, &cache_dir, basic_record()).await;
+        let (registry, calls) = counting_registry();
+        let cfg = ReExecuteConfig::new(EnginePolicy::Off, cache_dir).with_gate(true);
+        let count = record_eager_captures(ctx.clone(), runtime, Some(registry), &cfg)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+        assert!(ctx.index().has_capture("doc.qmd"));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// `off` with nothing cached shows nothing and never runs the engine.
+    #[tokio::test]
+    async fn policy_off_with_no_record_runs_nothing() {
+        let (_tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", WALK_DOC)]).await;
+        let (registry, calls) = counting_registry();
+        let cfg = ReExecuteConfig::new(EnginePolicy::Off, cache_dir_for_test());
+        let count = record_eager_captures(ctx.clone(), runtime, Some(registry), &cfg)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        assert!(!ctx.index().has_capture("doc.qmd"));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    // ── RIU-2: reuse across a restart (RIU-0 S1 B3, S2b) ─────────────────
+
+    /// One session over a persisted store: seed, then drop everything so `hub.lock` is free.
+    async fn session(
+        project: &std::path::Path,
+        data: &std::path::Path,
+        cfg: &ReExecuteConfig,
+    ) -> (Arc<HubContext>, usize) {
+        let storage = StorageManager::new_with_data_dir(project, data).unwrap();
+        let ctx = Arc::new(
+            HubContext::new(storage, HubConfig::default())
+                .await
+                .unwrap(),
+        );
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let (registry, calls) = crate::test_support::counting_recording_registry();
+        record_eager_captures(ctx.clone(), runtime, Some(registry), cfg)
+            .await
+            .unwrap();
+        (ctx, calls.load(std::sync::atomic::Ordering::SeqCst))
+    }
+
+    fn restart_cfg(data: &std::path::Path) -> ReExecuteConfig {
+        ReExecuteConfig::new(EnginePolicy::Manual, data.join("captures")).with_gate(true)
+    }
+
+    /// With a persisted store a prose edit while stopped reuses the record through the
+    /// `CaptureRef`: no engine run and no stale flag.
+    #[tokio::test]
+    async fn a_prose_edit_while_stopped_reuses_the_record_through_the_ref() {
+        let project = TempDir::with_prefix("riu2-restart-project-").unwrap();
+        let data = TempDir::with_prefix("riu2-restart-data-").unwrap();
+        let doc = project.path().join("doc.qmd");
+        std::fs::write(&doc, crate::test_support::RECORDING_DOC).unwrap();
+        let cfg = restart_cfg(data.path());
+
+        let (ctx, first_calls) = session(project.path(), data.path(), &cfg).await;
+        assert_eq!(first_calls, 1, "first open runs the engine once");
+        drop(ctx);
+
+        std::fs::write(
+            &doc,
+            format!(
+                "{}\nA prose edit while stopped.\n",
+                crate::test_support::RECORDING_DOC
+            ),
+        )
+        .unwrap();
+        let (ctx, calls) = session(project.path(), data.path(), &cfg).await;
+        assert_eq!(calls, 0, "the ref carries reuse across the restart");
+        let entry = ctx.index().get_capture("doc.qmd").expect("ref persisted");
+        assert_eq!(entry.staleness, Some(false), "a prose edit is not stale");
+    }
+
+    /// With no ref (a cache copied into a fresh data dir) a prose edit misses the
+    /// content-keyed cache and runs the engine once. This documents RIU-0 S1 B3 so a later
+    /// change to it is deliberate.
+    #[tokio::test]
+    async fn without_a_ref_a_prose_edit_misses_the_content_keyed_cache() {
+        let project = TempDir::with_prefix("riu2-noref-project-").unwrap();
+        let data1 = TempDir::with_prefix("riu2-noref-data1-").unwrap();
+        let data2 = TempDir::with_prefix("riu2-noref-data2-").unwrap();
+        let doc = project.path().join("doc.qmd");
+        std::fs::write(&doc, crate::test_support::RECORDING_DOC).unwrap();
+
+        let (ctx, first_calls) =
+            session(project.path(), data1.path(), &restart_cfg(data1.path())).await;
+        assert_eq!(first_calls, 1);
+        drop(ctx);
+
+        // Copy the cache into a fresh data dir: the cache survives, the ref does not.
+        std::fs::create_dir_all(data2.path().join("captures")).unwrap();
+        for entry in std::fs::read_dir(data1.path().join("captures")).unwrap() {
+            let entry = entry.unwrap();
+            std::fs::copy(
+                entry.path(),
+                data2.path().join("captures").join(entry.file_name()),
+            )
+            .unwrap();
+        }
+
+        // Unedited: a hit, no engine.
+        let (ctx, calls) = session(project.path(), data2.path(), &restart_cfg(data2.path())).await;
+        assert_eq!(calls, 0, "the same content hits the copied cache");
+        drop(ctx);
+
+        // Edited: a different key, a miss, one engine run.
+        let data3 = TempDir::with_prefix("riu2-noref-data3-").unwrap();
+        std::fs::create_dir_all(data3.path().join("captures")).unwrap();
+        for entry in std::fs::read_dir(data1.path().join("captures")).unwrap() {
+            let entry = entry.unwrap();
+            std::fs::copy(
+                entry.path(),
+                data3.path().join("captures").join(entry.file_name()),
+            )
+            .unwrap();
+        }
+        std::fs::write(
+            &doc,
+            format!("{}\nA prose edit.\n", crate::test_support::RECORDING_DOC),
+        )
+        .unwrap();
+        let (_ctx, calls) = session(project.path(), data3.path(), &restart_cfg(data3.path())).await;
+        assert_eq!(calls, 1, "a prose edit with no ref re-runs the engine once");
     }
 
     #[tokio::test]
@@ -1002,8 +1484,7 @@ mod tests {
             ctx.clone(),
             runtime,
             None,
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1038,8 +1519,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1070,8 +1550,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1113,8 +1592,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1134,8 +1612,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1241,8 +1718,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry_with_failing_and_passthrough()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1305,8 +1781,7 @@ mod tests {
             ctx.clone(),
             runtime.clone(),
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1314,8 +1789,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1339,8 +1813,7 @@ mod tests {
             ctx.clone(),
             runtime.clone(),
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1378,8 +1851,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1407,9 +1879,8 @@ mod tests {
                 ctx.clone(),
                 runtime.clone(),
                 "doc.qmd",
-                EnginePolicy::Manual,
                 None,
-                &cache_dir_for_test()
+                &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone())
             )
             .await
             .unwrap()
@@ -1425,8 +1896,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1449,9 +1919,8 @@ mod tests {
                 ctx.clone(),
                 runtime.clone(),
                 "doc.qmd",
-                EnginePolicy::Manual,
                 None,
-                &cache_dir_for_test()
+                &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone())
             )
             .await
             .unwrap(),
@@ -1473,9 +1942,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1506,8 +1974,7 @@ mod tests {
             ctx.clone(),
             runtime.clone(),
             Some(make_registry()),
-            EnginePolicy::Manual,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1524,9 +1991,8 @@ mod tests {
             ctx.clone(),
             runtime.clone(),
             "_inc.qmd",
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1542,9 +2008,8 @@ mod tests {
                 ctx.clone(),
                 runtime,
                 "doc.qmd",
-                EnginePolicy::Manual,
                 None,
-                &cache_dir_for_test(),
+                &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone())
             )
             .await
             .unwrap(),
@@ -1572,9 +2037,8 @@ mod tests {
             ctx.clone(),
             runtime.clone(),
             "doc.qmd",
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1593,9 +2057,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1626,9 +2089,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1790,9 +2252,8 @@ mod tests {
             ctx.clone(),
             runtime.clone(),
             rel,
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1898,9 +2359,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Auto,
             Some(recording_registry(true)),
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Auto, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1962,9 +2422,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -1988,9 +2447,8 @@ mod tests {
             ctx,
             runtime,
             "anything.qmd",
-            EnginePolicy::Manual,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -2017,8 +2475,7 @@ mod tests {
             ctx.clone(),
             runtime,
             Some(make_registry()),
-            EnginePolicy::Off,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Off, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -2050,9 +2507,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Off,
             None,
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Off, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();
@@ -2097,9 +2553,8 @@ mod tests {
             ctx.clone(),
             runtime,
             "doc.qmd",
-            EnginePolicy::Auto,
             Some(make_registry()),
-            &cache_dir_for_test(),
+            &ReExecuteConfig::new(EnginePolicy::Auto, cache_dir_for_test().clone()),
         )
         .await
         .unwrap();

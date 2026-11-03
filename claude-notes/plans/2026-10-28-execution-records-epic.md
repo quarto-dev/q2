@@ -84,7 +84,7 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
    `classify.rs` must learn the new MIME or orphaned records leak. Immutable
    gzipped blob, not structured automerge (single writer, history bloat). One
    `CaptureRef` per path points at a legacy capture or a record, never both;
-   old docs are never rewritten. **Readers ship one release before writers.**
+   old docs are never rewritten. **Readers ship before writers, per writer and reader pair:** a writer may flip once every reader of the store it writes can parse a record. For the local preview, whose writer and reader are one binary, that is the first release that carries the reader; for a hosted hub it is the deployed `q2_ref`. See the records-in-use epic, decision 2 (2026-11-06).
    Upgrade path kept open: content-addressed figure docs for single-cell runs.
 5. **Engine API scope.** Julia and marimo are in. New wire fields are optional
    and versioned; the Quarto API is not published to npm (bd-ixz93hjp, retitled
@@ -122,7 +122,8 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
    stays keyed by `sha256(input_qmd)` until freeze: a hit there skips
    execution, which is reuse. Staleness is advisory and drives only a
    user-edit-triggered re-execution in preview; nothing in this epic skips
-   execution on a hit. Intended, user-visible consequence: a prose-only edit no
+   execution on a record's staleness. (The records-in-use epic later adds reuse of a record file, bounded by a
+   staleness check at choice; its decision 3.) Intended, user-visible consequence: a prose-only edit no
    longer flips staleness or auto re-executes a record (it also fixes the second
    symptom of bd-n1vmlalw). The hash is overlay-free (`provide-hub -M`, as the
    F8-D9 rewrite does today); the record also stores the overlay's

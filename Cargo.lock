@@ -7520,6 +7520,7 @@ name = "quarto-preview"
 version = "0.44.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "automerge",
  "axum",
  "base64 0.22.1",

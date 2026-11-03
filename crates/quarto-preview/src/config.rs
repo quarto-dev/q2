@@ -17,6 +17,50 @@
 use quarto_pandoc_types::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
 
+/// Everything the re-execute paths and the capture driver need to know about *whether and how*
+/// the engine may run, built once at start-up in `lib.rs` and carried to the HTTP handler as an
+/// axum `Extension` (it replaces the process-wide `CACHE_DIR` static, whose first writer won).
+///
+/// The writer gate is read from the environment where this is built and nowhere else, so a test
+/// builds a config with the gate it wants and never touches the process environment.
+#[derive(Debug, Clone)]
+pub struct ReExecuteConfig {
+    /// `preview.engine`: `off` forbids every engine run.
+    pub policy: EnginePolicy,
+    /// The ordered record sources; re-execute needs `engine` in it (epic decision 5).
+    pub sources: quarto_core::record::RecordSources,
+    /// The writer gate (`QUARTO_ENGINE_RECORD_WRITE`), read once at start-up.
+    pub record_gate: bool,
+    /// The capture cache root (`<data_dir>/captures/` unless overridden).
+    pub cache_dir: std::path::PathBuf,
+}
+
+impl ReExecuteConfig {
+    /// The preview defaults for `policy` and `cache_dir`, writer gate off. Tests and the
+    /// production path (which sets the gate and the list explicitly) start here.
+    pub fn new(policy: EnginePolicy, cache_dir: std::path::PathBuf) -> Self {
+        Self {
+            policy,
+            sources: quarto_core::record::RecordSources::preview_default(),
+            record_gate: false,
+            cache_dir,
+        }
+    }
+
+    /// The same config with the writer gate set (tests choose it; production reads the
+    /// environment once in `lib.rs`).
+    pub fn with_gate(mut self, record_gate: bool) -> Self {
+        self.record_gate = record_gate;
+        self
+    }
+
+    /// Whether any engine run may start: the policy is not `off` **and** `engine` is in the
+    /// source list. The one question `claim_and_spawn` asks before it claims a slot.
+    pub fn allows_engine(&self) -> bool {
+        self.policy != EnginePolicy::Off && self.sources.contains_engine()
+    }
+}
+
 /// What the preview server should do with engine execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EnginePolicy {

@@ -268,6 +268,35 @@ pub fn create_engine_payload_document(
     }
 }
 
+/// Why [`publish_payload_doc`] failed.
+#[derive(Debug, thiserror::Error)]
+pub enum PublishDocError {
+    /// Building the automerge document failed.
+    #[error("{0}")]
+    Build(#[from] crate::error::Error),
+    /// The samod repo was stopped before the document could be created.
+    #[error("samod repo is stopped")]
+    RepoStopped,
+}
+
+/// Build the engine payload document ([`create_engine_payload_document`]) and create it in
+/// `repo`, returning its stringified `DocumentId`. This is the whole part the preview and the
+/// provider shared; each caller encodes the payload itself (`quarto-core` cannot be a dependency
+/// of this crate) and updates its own sidecar afterwards.
+pub async fn publish_payload_doc(
+    repo: &samod::Repo,
+    is_record: bool,
+    gzipped: &[u8],
+    meta: &CaptureDocMeta,
+) -> std::result::Result<String, PublishDocError> {
+    let doc = create_engine_payload_document(is_record, gzipped, meta)?;
+    let handle = repo
+        .create(doc)
+        .await
+        .map_err(|_stopped| PublishDocError::RepoStopped)?;
+    Ok(handle.document_id().to_string())
+}
+
 /// The shared body of the capture and record writers: they differ only in
 /// MIME and `meta.kind`.
 fn create_payload_document(
@@ -425,6 +454,42 @@ pub fn read_content_hash(doc: &Automerge) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The publish half the preview and the provider share: build the payload document and
+    /// create it in the repo. The kind and MIME follow `is_record`.
+    #[tokio::test]
+    async fn publish_payload_doc_creates_the_doc_the_flag_names() {
+        use automerge::ReadDoc;
+        let repo = samod::Repo::build_tokio().load().await;
+        let meta = CaptureDocMeta {
+            source_path: "doc.qmd".into(),
+            engines: vec!["jupyter".into()],
+        };
+        for (is_record, mime, kind) in [
+            (true, RECORD_MIME_TYPE, RECORD_META_KIND),
+            (false, CAPTURE_MIME_TYPE, CAPTURE_META_KIND),
+        ] {
+            let id = publish_payload_doc(&repo, is_record, b"gz", &meta)
+                .await
+                .unwrap();
+            let handle = repo
+                .find(id.parse().unwrap())
+                .await
+                .unwrap()
+                .expect("doc exists");
+            handle.with_document(|doc| {
+                let got = doc
+                    .get(ROOT, "mimeType")
+                    .unwrap()
+                    .and_then(|(v, _)| v.into_string().ok())
+                    .unwrap_or_default();
+                assert_eq!(got, mime);
+                let m = read_capture_meta(doc).expect("meta");
+                assert_eq!(m.kind.as_deref(), Some(kind));
+                assert_eq!(m.source_path.as_deref(), Some("doc.qmd"));
+            });
+        }
+    }
 
     #[test]
     fn test_is_binary_extension() {
