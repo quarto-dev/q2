@@ -891,9 +891,8 @@ fn stringify_config_value(lua: &Lua, node: &ConfigValue) -> Result<String> {
 fn stringify_inline(inline: &Inline) -> String {
     match inline {
         Inline::Str(s) => s.text.clone(),
-        Inline::Space(_) => " ".to_string(),
-        Inline::SoftBreak(_) => "\n".to_string(),
-        Inline::LineBreak(_) => "\n".to_string(),
+        // Pandoc parity (GH #1014): both breaks stringify to a space.
+        Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => " ".to_string(),
         Inline::Emph(e) => stringify_inlines(&e.content),
         Inline::Strong(s) => stringify_inlines(&s.content),
         Inline::Underline(u) => stringify_inlines(&u.content),
@@ -1108,7 +1107,8 @@ mod tests {
             .eval()
             .unwrap();
 
-        assert_eq!(result, "\n");
+        // Pandoc parity (GH #1014): a LineBreak stringifies to a space.
+        assert_eq!(result, " ");
     }
 
     #[test]
@@ -1779,6 +1779,23 @@ mod tests {
         );
     }
 
+    /// GH #1014: pandoc's stringify renders SoftBreak and LineBreak as a
+    /// space, not a newline (checked against pandoc 3.12.1).
+    #[test]
+    fn test_stringify_breaks_are_spaces() {
+        let lua = create_test_lua();
+        assert_eq!(
+            stringify(
+                &lua,
+                "pandoc.Para{pandoc.Str'a', pandoc.SoftBreak(), pandoc.Str'b', \
+                 pandoc.LineBreak(), pandoc.Str'c'}"
+            ),
+            "a b c"
+        );
+        assert_eq!(stringify(&lua, "pandoc.SoftBreak()"), " ");
+        assert_eq!(stringify(&lua, "pandoc.LineBreak()"), " ");
+    }
+
     /// Pandoc parity: a Citation stringifies to its prefix and suffix text.
     #[test]
     fn test_stringify_citation() {
@@ -1831,16 +1848,28 @@ mod tests {
     #[test]
     fn test_blocks_to_inlines_accepts_nodes() {
         let lua = create_test_lua();
-        let bti = |src: &str| stringify(&lua, &format!("pandoc.utils.blocks_to_inlines({src})"));
+        // Render each inline as its text, or `|` for the LineBreak separator
+        // (stringify alone can't tell a LineBreak from a Space).
+        let bti = |src: &str| -> String {
+            lua.load(format!(
+                "local out = {{}} \
+                 for _, il in ipairs(pandoc.utils.blocks_to_inlines({src})) do \
+                   out[#out + 1] = il.t == 'LineBreak' and '|' or pandoc.utils.stringify(il) \
+                 end \
+                 return table.concat(out)"
+            ))
+            .eval()
+            .unwrap()
+        };
         assert_eq!(
             bti("pandoc.Nodes({pandoc.Para{'a'}, pandoc.Para{'b'}})"),
-            "a\nb"
+            "a|b"
         );
         assert_eq!(bti("pandoc.Nodes('x')"), "x");
         assert_eq!(bti("pandoc.Nodes({})"), "");
         assert_eq!(
             bti("{pandoc.Nodes(pandoc.Para{'a'}), pandoc.Para{'b'}, pandoc.Nodes({})}"),
-            "a\nb"
+            "a|b"
         );
     }
 
