@@ -23,16 +23,17 @@ use crate::dialect::SourceDialect;
 /// `quarto.doc.input_file` / `quarto.doc.output_file`, `PANDOC_STATE`,
 /// and the environment `os.getenv` reads (GH #939, #940). All optional:
 /// pampa's own tests and the Lua conformance suite run without a host,
-/// and then these registrations produce the Quarto 1 "outside a project"
-/// shape (nil directory, empty profile list).
+/// and then these registrations leave the paths nil and the profile list
+/// empty.
 #[derive(Clone, Debug, Default)]
 pub struct HostContext {
     /// Absolute path of the input being rendered → `quarto.doc.input_file`.
     pub input_file: Option<PathBuf>,
     /// Absolute path of the output → `quarto.doc.output_file`.
     pub output_file: Option<PathBuf>,
-    /// `None` for single-file renders (Q1: `quarto.project.directory` is
-    /// nil outside a project).
+    /// `None` when there is no host (the paths are then nil). A host
+    /// rendering a single file passes the document's directory as the
+    /// project, as Q1 did (GH #1013).
     pub project: Option<HostProject>,
     /// Active profile names → `quarto.project.profile` (a `pandoc.List`).
     pub profiles: Vec<String>,

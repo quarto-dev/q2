@@ -6,8 +6,8 @@
  * `HostContext` (GH #939, #940):
  *
  * - `quarto.project` — `directory`, `offset`, `output_directory`,
- *   `profile`, with Quarto 1's shape (nil paths outside a project, the
- *   profile list always present);
+ *   `profile`, with Quarto 1's shape (the profile list always present;
+ *   nil paths only when there is no host);
  * - `os.getenv` and `pandoc.system.environment` — answered from the host's
  *   environment snapshot when it supplied one (see `process_view`), so libc
  *   `getenv` never runs on a filter worker thread and `--profile` is visible
