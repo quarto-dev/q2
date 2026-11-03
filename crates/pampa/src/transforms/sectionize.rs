@@ -46,6 +46,7 @@
 use crate::pandoc::block::{Block, Div, Header};
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
+use quarto_pandoc_types::custom::Slot;
 use quarto_source_map::{By, SourceInfo};
 
 /// Wrap headers in section Divs.
@@ -162,13 +163,50 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
 }
 
 /// Sectionize the content of a non-section `Div`, then apply pandoc's
-/// absorb rule.
+/// absorb rule ([`absorb_section_wrapper`]).
 ///
-/// `makeSections` recurses into Divs and replaces a Div by the section it
-/// wraps when — and only when — the Div has an **empty id** and its
-/// content is **exactly one section**; the Div's classes and key-values
-/// are merged onto that section. Anything else keeps the Div and nests
-/// the section(s) inside it.
+/// A custom node's block slots are sectionized too, as if each were a
+/// Div's content (GH #1020). Quarto 1 renders callouts to Divs before
+/// pandoc's `makeSections` runs, so headings in a callout body become
+/// sections; q2 keeps the callout a `Callout` custom node until the
+/// crossref phase, after this pass. The node is not a wrapper Div, so
+/// nothing is absorbed into it here — `callout-resolve` applies the absorb
+/// rule to the body Div it builds.
+///
+/// Blocks other than `Div` / `Custom` are returned untouched — in
+/// particular `BlockQuote`, which pandoc does not descend into, so a
+/// heading quoted there stays a bare `Header` and never reaches the table
+/// of contents.
+fn sectionize_div(block: Block) -> Block {
+    let mut div = match block {
+        Block::Div(div) => div,
+        Block::Custom(mut node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                *slot = match std::mem::replace(slot, Slot::Blocks(Vec::new())) {
+                    Slot::Blocks(blocks) => Slot::Blocks(sectionize_blocks(blocks)),
+                    Slot::Block(b) => Slot::Block(Box::new(sectionize_div(*b))),
+                    inlines => inlines,
+                };
+            }
+            return Block::Custom(node);
+        }
+        other => return other,
+    };
+    if is_section(&div.attr.1) {
+        return Block::Div(div);
+    }
+    div.content = sectionize_blocks(std::mem::take(&mut div.content));
+    absorb_section_wrapper(div)
+}
+
+/// Pandoc's absorb rule for a wrapper `Div` whose content is already
+/// sectionized.
+///
+/// `makeSections` replaces a Div by the section it wraps when — and only
+/// when — the Div has an **empty id** and its content is **exactly one
+/// section**; the Div's classes and key-values are merged onto that
+/// section. Anything else keeps the Div and nests the section(s) inside
+/// it.
 ///
 /// The five cases are pinned by Quarto 1's render of
 /// `claude-notes/plans/tabset-headings-in-toc-investigation/absorb-rule-probe/`:
@@ -176,24 +214,15 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
 /// a Div with its own id does not; leading content before the heading
 /// does not; two sibling headings do not; key-values are merged.
 ///
-/// Blocks other than `Div` are returned untouched — in particular
-/// `BlockQuote`, which pandoc does not descend into, so a heading quoted
-/// there stays a bare `Header` and never reaches the table of contents.
-fn sectionize_div(block: Block) -> Block {
-    let Block::Div(div) = block else {
-        return block;
-    };
-    if is_section(&div.attr.1) {
-        return Block::Div(div);
-    }
-
+/// Public so a transform that builds a wrapper *after* sectionize (the
+/// callout body, `callout-resolve`) produces the DOM pandoc would have.
+pub fn absorb_section_wrapper(div: Div) -> Block {
     let Div {
         attr,
-        content,
+        mut content,
         source_info,
         attr_source,
     } = div;
-    let mut content = sectionize_blocks(content);
 
     let absorbable = attr.0.is_empty()
         && content.len() == 1
@@ -875,5 +904,76 @@ mod tests {
         assert_eq!(classes[1], "level2");
         assert_eq!(classes[2], "alpha");
         assert_eq!(classes[3], "beta");
+    }
+
+    /// A custom node's block slots are sectionized like a Div's content
+    /// (GH #1020): a callout stays a `Callout` custom node through
+    /// sectionize now, and Q1 sectionizes headings in its body. The node
+    /// itself is not a wrapper, so nothing is absorbed into it.
+    #[test]
+    fn test_sectionize_recurses_into_custom_node_block_slots() {
+        use quarto_pandoc_types::custom::{CustomNode, Slot};
+        let mut node = CustomNode::new(
+            "Callout",
+            (String::new(), vec![], LinkedHashMap::new()),
+            dummy_source_info(),
+        );
+        node.set_slot(
+            "content",
+            Slot::Blocks(vec![
+                make_header(4, "body-heading", vec![], "Body heading"),
+                make_para("Body."),
+            ]),
+        );
+        let result = sectionize_blocks(vec![Block::Custom(node)]);
+        let Block::Custom(node) = &result[0] else {
+            panic!("custom node survives");
+        };
+        let Some(Slot::Blocks(content)) = node.slots.get("content") else {
+            panic!("content slot survives");
+        };
+        assert_eq!(content.len(), 1);
+        assert_is_section(&content[0], "body-heading", 4, &[]);
+    }
+
+    /// `absorb_section_wrapper` is pandoc's absorb rule on its own: an
+    /// empty-id wrapper whose content is exactly one section merges into
+    /// it; any other wrapper is kept.
+    #[test]
+    fn test_absorb_section_wrapper() {
+        let section = sectionize_blocks(vec![make_header(4, "h", vec![], "H"), make_para("Body.")])
+            .pop()
+            .unwrap();
+        let wrapper = |id: &str, content: Vec<Block>| Div {
+            attr: (
+                id.to_string(),
+                vec!["wrap".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content,
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+
+        let Block::Div(absorbed) = absorb_section_wrapper(wrapper("", vec![section.clone()]))
+        else {
+            panic!("expected Div");
+        };
+        assert_eq!(absorbed.attr.0, "h");
+        assert_eq!(absorbed.attr.1, vec!["section", "level4", "wrap"]);
+
+        let Block::Div(kept) = absorb_section_wrapper(wrapper("own-id", vec![section.clone()]))
+        else {
+            panic!("expected Div");
+        };
+        assert_eq!(kept.attr.0, "own-id");
+        assert_is_section(&kept.content[0], "h", 4, &[]);
+
+        let Block::Div(kept) =
+            absorb_section_wrapper(wrapper("", vec![make_para("lead"), section]))
+        else {
+            panic!("expected Div");
+        };
+        assert_eq!(kept.attr.1, vec!["wrap"]);
     }
 }
