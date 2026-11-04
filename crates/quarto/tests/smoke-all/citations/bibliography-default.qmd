@@ -1,0 +1,16 @@
+---
+format: html
+bibliography: refs.bib
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["#refs #ref-doe2020.csl-entry", 'span.citation[data-cites="doe2020"] > a[href="#ref-doe2020"][role="doc-biblioref"]']
+        - []
+      ensureFileRegexMatches:
+        - ["Doe 2020"]
+        - [">@doe2020<"]
+---
+
+GH #1026: a bibliography alone resolves citations, as in Quarto 1. See [@doe2020].

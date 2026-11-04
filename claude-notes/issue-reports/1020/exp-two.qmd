@@ -1,0 +1,13 @@
+---
+format: html
+---
+
+::: {#nte-a .callout-note}
+First.
+:::
+
+::: {#nte-b .callout-note}
+Second.
+:::
+
+See @nte-a and @nte-b and @nte-missing.

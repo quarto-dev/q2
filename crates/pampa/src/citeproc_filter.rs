@@ -12,14 +12,16 @@
 use std::path::{Path, PathBuf};
 
 use biblatex::{Bibliography, ChunksExt, DateValue, EntryType, PermissiveType};
+use quarto_citeproc::output::{Output, Tag};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
+use quarto_csl::StyleClass;
 use quarto_csl::parse_csl;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
 use serde::{Deserialize, Serialize};
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::{Block, Div, Inline, Pandoc};
+use crate::pandoc::{Block, Div, Inline, Inlines, Pandoc};
 use crate::unified_filter::CiteprocFilterError;
 use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
@@ -108,7 +110,7 @@ pub struct ChapterCitationManifest {
 pub fn apply_citeproc_filter(
     pandoc: Pandoc,
     context: ASTContext,
-    _target_format: &str,
+    target_format: &str,
     base_dir: &Path,
     runtime: &dyn SystemRuntime,
 ) -> Result<
@@ -172,23 +174,26 @@ pub fn apply_citeproc_filter(
         })
     };
 
-    // Process citations with disambiguation
-    let rendered_citations = processor
-        .process_citations_with_disambiguation(&citations)
+    // Process citations with disambiguation, keeping the Output AST so
+    // the rendered text keeps its formatting and its per-item structure.
+    let outputs = processor
+        .process_citations_with_disambiguation_to_outputs(&citations)
         .map_err(|e| CiteprocFilterError::ProcessingError(e.to_string()))?;
+    // `link-citations` applies to in-text (author-date, numeric) styles
+    // only, as in Pandoc.
+    let link_citations = config.link_citations && processor.style.class != StyleClass::Note;
+    let rendered = RenderedCitations {
+        content: outputs
+            .into_iter()
+            .map(|output| render_citation(output, link_citations))
+            .collect(),
+        keep_cite_nodes: keeps_resolved_cite_nodes(target_format),
+    };
 
-    // Build a map from citation index to rendered output
-    let citation_outputs: Vec<_> = citations.iter().zip(rendered_citations.iter()).collect();
-
-    // Transform the document, replacing Cite inlines with rendered content
+    // Transform the document, filling each Cite with its rendered content
     let mut pandoc = pandoc;
     let mut citation_index = 0;
-    transform_blocks(
-        &mut pandoc.blocks,
-        &citation_outputs,
-        &mut citation_index,
-        &processor,
-    );
+    transform_blocks(&mut pandoc.blocks, &rendered, &mut citation_index);
 
     // Generate bibliography if not suppressed
     if !config.suppress_bibliography {
@@ -860,111 +865,240 @@ fn collect_citations_from_inlines(
     }
 }
 
+/// Each citation's rendered content, in document order, and how the
+/// `transform_*` walkers install it.
+struct RenderedCitations {
+    content: Vec<Inlines>,
+    /// Keep each `Cite` node, with the rendered text as its content, as
+    /// Pandoc's citeproc does; otherwise splice the rendered text in
+    /// place of the node. See [`keeps_resolved_cite_nodes`].
+    keep_cite_nodes: bool,
+}
+
+/// Whether a resolved `Cite` node survives for `target_format`.
+///
+/// Q2's own HTML writers render a `Cite` as its content inside
+/// `<span class="citation" data-cites="...">`, as Pandoc does. A Pandoc
+/// writer with the `citations` extension (markdown, org, typst) would
+/// instead re-emit native `@key` syntax and drop the rendered text, so
+/// every other target gets the rendered text in place of the `Cite` node,
+/// the shape Q2 has always handed Pandoc writers.
+fn keeps_resolved_cite_nodes(target_format: &str) -> bool {
+    matches!(target_format, "html" | "revealjs")
+}
+
+/// Render one citation's Output AST to inlines. With `link_citations`,
+/// each cited item links to its bibliography entry (`#ref-<id>`, the id
+/// [`generate_bibliography`] gives the entry's div).
+fn render_citation(output: Output, link_citations: bool) -> Inlines {
+    let mut inlines = if link_citations {
+        let mut inlines = link_cited_items(output).to_inlines();
+        mark_bibliography_links(&mut inlines);
+        inlines
+    } else {
+        output.to_inlines()
+    };
+    merge_adjacent_strs(&mut inlines);
+    inlines
+}
+
+/// Merge each run of adjacent `Str` inlines into one, at every level, as
+/// Pandoc's builder does for its citeproc output. `to_inlines` emits a
+/// `Str` per output fragment, and writers treat each `Str` as a separate
+/// chunk: Typst, for one, escapes a `;` delimiter that starts a chunk.
+fn merge_adjacent_strs(inlines: &mut Inlines) {
+    let mut merged: Inlines = Vec::with_capacity(inlines.len());
+    for mut inline in inlines.drain(..) {
+        match &mut inline {
+            Inline::Emph(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Strong(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Underline(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Strikeout(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Superscript(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Subscript(x) => merge_adjacent_strs(&mut x.content),
+            Inline::SmallCaps(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Quoted(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Span(x) => merge_adjacent_strs(&mut x.content),
+            Inline::Link(x) => merge_adjacent_strs(&mut x.content),
+            _ => {}
+        }
+        match (merged.last_mut(), inline) {
+            (Some(Inline::Str(prev)), Inline::Str(next)) => prev.text.push_str(&next.text),
+            (_, inline) => merged.push(inline),
+        }
+    }
+    *inlines = merged;
+}
+
+/// Wrap each cited item (`Tag::Item`) in a link to its bibliography entry,
+/// unless the item already holds a link (a link inside a link is invalid
+/// HTML). Prefixes, suffixes and the citation's own delimiters sit outside
+/// the items, so they stay unlinked, as in Pandoc.
+fn link_cited_items(output: Output) -> Output {
+    match output {
+        Output::Tagged {
+            tag: tag @ Tag::Item { .. },
+            child,
+        } => {
+            let Tag::Item { item_id, .. } = &tag else {
+                unreachable!()
+            };
+            let child = if contains_link(&child) {
+                *child
+            } else {
+                Output::Linked {
+                    url: bibliography_anchor(item_id),
+                    children: vec![*child],
+                }
+            };
+            Output::Tagged {
+                tag,
+                child: Box::new(child),
+            }
+        }
+        Output::Tagged { tag, child } => Output::Tagged {
+            tag,
+            child: Box::new(link_cited_items(*child)),
+        },
+        Output::Formatted {
+            formatting,
+            children,
+        } => Output::Formatted {
+            formatting,
+            children: children.into_iter().map(link_cited_items).collect(),
+        },
+        Output::InNote(child) => Output::InNote(Box::new(link_cited_items(*child))),
+        other => other,
+    }
+}
+
+fn contains_link(output: &Output) -> bool {
+    match output {
+        Output::Linked { .. } => true,
+        Output::Tagged { child, .. } | Output::InNote(child) => contains_link(child),
+        Output::Formatted { children, .. } => children.iter().any(contains_link),
+        Output::Literal(_) | Output::Null => false,
+    }
+}
+
+/// The in-document anchor of a reference's bibliography entry.
+fn bibliography_anchor(item_id: &str) -> String {
+    format!("#ref-{item_id}")
+}
+
+/// Give the links [`link_cited_items`] made `role="doc-biblioref"`, the
+/// DPUB-ARIA role Pandoc puts on citation links. CSL-generated links
+/// (URLs, DOIs) never target a `#ref-` anchor, so the target identifies
+/// ours.
+fn mark_bibliography_links(inlines: &mut [Inline]) {
+    for inline in inlines.iter_mut() {
+        match inline {
+            Inline::Link(link) => {
+                if link.target.0.starts_with("#ref-") && link.attr.2.get("role").is_none() {
+                    link.attr
+                        .2
+                        .insert("role".to_string(), "doc-biblioref".to_string());
+                }
+                mark_bibliography_links(&mut link.content);
+            }
+            Inline::Emph(x) => mark_bibliography_links(&mut x.content),
+            Inline::Strong(x) => mark_bibliography_links(&mut x.content),
+            Inline::Underline(x) => mark_bibliography_links(&mut x.content),
+            Inline::Strikeout(x) => mark_bibliography_links(&mut x.content),
+            Inline::Superscript(x) => mark_bibliography_links(&mut x.content),
+            Inline::Subscript(x) => mark_bibliography_links(&mut x.content),
+            Inline::SmallCaps(x) => mark_bibliography_links(&mut x.content),
+            Inline::Quoted(x) => mark_bibliography_links(&mut x.content),
+            Inline::Span(x) => mark_bibliography_links(&mut x.content),
+            _ => {}
+        }
+    }
+}
+
 /// Transform blocks, replacing Cite inlines with rendered content.
 fn transform_blocks(
     blocks: &mut Vec<Block>,
-    citation_outputs: &[(&Citation, &String)],
+    rendered: &RenderedCitations,
     citation_index: &mut usize,
-    processor: &Processor,
 ) {
     for block in blocks.iter_mut() {
-        transform_block(block, citation_outputs, citation_index, processor);
+        transform_block(block, rendered, citation_index);
     }
 }
 
 /// Transform a single block.
-fn transform_block(
-    block: &mut Block,
-    citation_outputs: &[(&Citation, &String)],
-    citation_index: &mut usize,
-    processor: &Processor,
-) {
+fn transform_block(block: &mut Block, rendered: &RenderedCitations, citation_index: &mut usize) {
     match block {
         Block::Paragraph(p) => {
-            transform_inlines(&mut p.content, citation_outputs, citation_index, processor);
+            transform_inlines(&mut p.content, rendered, citation_index);
         }
         Block::Plain(p) => {
-            transform_inlines(&mut p.content, citation_outputs, citation_index, processor);
+            transform_inlines(&mut p.content, rendered, citation_index);
         }
         Block::Header(h) => {
-            transform_inlines(&mut h.content, citation_outputs, citation_index, processor);
+            transform_inlines(&mut h.content, rendered, citation_index);
         }
         Block::BlockQuote(bq) => {
-            transform_blocks(&mut bq.content, citation_outputs, citation_index, processor);
+            transform_blocks(&mut bq.content, rendered, citation_index);
         }
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                transform_blocks(item, citation_outputs, citation_index, processor);
+                transform_blocks(item, rendered, citation_index);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                transform_blocks(item, citation_outputs, citation_index, processor);
+                transform_blocks(item, rendered, citation_index);
             }
         }
         Block::DefinitionList(dl) => {
             for (term, defs) in &mut dl.content {
-                transform_inlines(term, citation_outputs, citation_index, processor);
+                transform_inlines(term, rendered, citation_index);
                 for def in defs {
-                    transform_blocks(def, citation_outputs, citation_index, processor);
+                    transform_blocks(def, rendered, citation_index);
                 }
             }
         }
         Block::Div(d) => {
-            transform_blocks(&mut d.content, citation_outputs, citation_index, processor);
+            transform_blocks(&mut d.content, rendered, citation_index);
         }
         Block::Figure(f) => {
             if let Some(ref mut short) = f.caption.short {
-                transform_inlines(short, citation_outputs, citation_index, processor);
+                transform_inlines(short, rendered, citation_index);
             }
             if let Some(ref mut long) = f.caption.long {
-                transform_blocks(long, citation_outputs, citation_index, processor);
+                transform_blocks(long, rendered, citation_index);
             }
-            transform_blocks(&mut f.content, citation_outputs, citation_index, processor);
+            transform_blocks(&mut f.content, rendered, citation_index);
         }
         Block::Table(t) => {
             if let Some(ref mut short) = t.caption.short {
-                transform_inlines(short, citation_outputs, citation_index, processor);
+                transform_inlines(short, rendered, citation_index);
             }
             if let Some(ref mut long) = t.caption.long {
-                transform_blocks(long, citation_outputs, citation_index, processor);
+                transform_blocks(long, rendered, citation_index);
             }
             for row in &mut t.head.rows {
                 for cell in &mut row.cells {
-                    transform_blocks(
-                        &mut cell.content,
-                        citation_outputs,
-                        citation_index,
-                        processor,
-                    );
+                    transform_blocks(&mut cell.content, rendered, citation_index);
                 }
             }
             for body in &mut t.bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        transform_blocks(
-                            &mut cell.content,
-                            citation_outputs,
-                            citation_index,
-                            processor,
-                        );
+                        transform_blocks(&mut cell.content, rendered, citation_index);
                     }
                 }
             }
             for row in &mut t.foot.rows {
                 for cell in &mut row.cells {
-                    transform_blocks(
-                        &mut cell.content,
-                        citation_outputs,
-                        citation_index,
-                        processor,
-                    );
+                    transform_blocks(&mut cell.content, rendered, citation_index);
                 }
             }
         }
         Block::LineBlock(lb) => {
             for line in &mut lb.content {
-                transform_inlines(line, citation_outputs, citation_index, processor);
+                transform_inlines(line, rendered, citation_index);
             }
         }
         // See the matching arm in `collect_citations_from_block` for why
@@ -973,21 +1107,10 @@ fn transform_block(
         Block::Custom(node) => {
             for slot in node.slots.values_mut() {
                 match slot {
-                    Slot::Block(b) => {
-                        transform_block(b, citation_outputs, citation_index, processor)
-                    }
-                    Slot::Blocks(bs) => {
-                        transform_blocks(bs, citation_outputs, citation_index, processor)
-                    }
-                    Slot::Inline(i) => transform_inlines(
-                        std::slice::from_mut(i),
-                        citation_outputs,
-                        citation_index,
-                        processor,
-                    ),
-                    Slot::Inlines(is) => {
-                        transform_inlines(is, citation_outputs, citation_index, processor)
-                    }
+                    Slot::Block(b) => transform_block(b, rendered, citation_index),
+                    Slot::Blocks(bs) => transform_blocks(bs, rendered, citation_index),
+                    Slot::Inline(i) => transform_inline_slot(i, rendered, citation_index),
+                    Slot::Inlines(is) => transform_inlines(is, rendered, citation_index),
                 }
             }
         }
@@ -995,99 +1118,104 @@ fn transform_block(
     }
 }
 
+/// Transform a custom node's single-inline slot. A resolved `Cite` that
+/// does not keep its node may expand to several inlines, which a single
+/// slot can hold only inside an attribute-less `Span`.
+fn transform_inline_slot(
+    inline: &mut Inline,
+    rendered: &RenderedCitations,
+    citation_index: &mut usize,
+) {
+    let mut one = vec![inline.clone()];
+    transform_inlines(&mut one, rendered, citation_index);
+    *inline = if one.len() == 1 {
+        one.pop().unwrap()
+    } else {
+        Inline::Span(crate::pandoc::Span {
+            attr: quarto_pandoc_types::empty_attr(),
+            content: one,
+            source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc()),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+        })
+    };
+}
+
 /// Transform inlines, replacing Cite with rendered content.
 fn transform_inlines(
-    inlines: &mut [Inline],
-    citation_outputs: &[(&Citation, &String)],
+    inlines: &mut Vec<Inline>,
+    rendered: &RenderedCitations,
     citation_index: &mut usize,
-    processor: &Processor,
 ) {
     let mut i = 0;
     while i < inlines.len() {
         match &mut inlines[i] {
-            Inline::Cite(_) => {
-                if *citation_index < citation_outputs.len() {
-                    let (citation, rendered) = citation_outputs[*citation_index];
-                    *citation_index += 1;
-
-                    // Get the Output AST for this citation to convert to Inlines
-                    // For now, we use the rendered string and create a simple Str inline
-                    // TODO: Use processor.process_citation_to_output() for proper Inline conversion
-                    let _ = citation; // silence unused warning
-                    let _ = processor; // silence unused warning
-
-                    let replacement = Inline::Str(crate::pandoc::Str {
-                        text: rendered.clone(),
-                        source_info: quarto_source_map::SourceInfo::generated(
-                            quarto_source_map::By::citeproc(),
-                        ),
-                    });
-                    inlines[i] = replacement;
+            Inline::Cite(cite) => {
+                let Some(content) = rendered.content.get(*citation_index) else {
+                    i += 1;
+                    continue;
+                };
+                *citation_index += 1;
+                if rendered.keep_cite_nodes {
+                    cite.content = content.clone();
+                    i += 1;
+                } else {
+                    inlines.splice(i..=i, content.iter().cloned());
+                    i += content.len();
                 }
-                i += 1;
             }
             Inline::Emph(e) => {
-                transform_inlines(&mut e.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut e.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Strong(s) => {
-                transform_inlines(&mut s.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut s.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Underline(u) => {
-                transform_inlines(&mut u.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut u.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Strikeout(s) => {
-                transform_inlines(&mut s.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut s.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Superscript(s) => {
-                transform_inlines(&mut s.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut s.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Subscript(s) => {
-                transform_inlines(&mut s.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut s.content, rendered, citation_index);
                 i += 1;
             }
             Inline::SmallCaps(s) => {
-                transform_inlines(&mut s.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut s.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Quoted(q) => {
-                transform_inlines(&mut q.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut q.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Link(l) => {
-                transform_inlines(&mut l.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut l.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Span(s) => {
-                transform_inlines(&mut s.content, citation_outputs, citation_index, processor);
+                transform_inlines(&mut s.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Note(n) => {
-                transform_blocks(&mut n.content, citation_outputs, citation_index, processor);
+                transform_blocks(&mut n.content, rendered, citation_index);
                 i += 1;
             }
             Inline::Custom(node) => {
                 for slot in node.slots.values_mut() {
                     match slot {
-                        Slot::Block(b) => {
-                            transform_block(b, citation_outputs, citation_index, processor)
+                        Slot::Block(b) => transform_block(b, rendered, citation_index),
+                        Slot::Blocks(bs) => transform_blocks(bs, rendered, citation_index),
+                        Slot::Inline(inner) => {
+                            transform_inline_slot(inner, rendered, citation_index)
                         }
-                        Slot::Blocks(bs) => {
-                            transform_blocks(bs, citation_outputs, citation_index, processor)
-                        }
-                        Slot::Inline(inner) => transform_inlines(
-                            std::slice::from_mut(inner),
-                            citation_outputs,
-                            citation_index,
-                            processor,
-                        ),
-                        Slot::Inlines(is) => {
-                            transform_inlines(is, citation_outputs, citation_index, processor)
-                        }
+                        Slot::Inlines(is) => transform_inlines(is, rendered, citation_index),
                     }
                 }
                 i += 1;
@@ -2425,31 +2553,9 @@ mod tests {
             })]),
         );
         let mut block = Block::Custom(node);
-        let citation = Citation {
-            id: None,
-            note_number: Some(1),
-            items: vec![CitationItem {
-                id: "callout2020".to_string(),
-                locator: None,
-                label: None,
-                prefix: None,
-                suffix: None,
-                suppress_author: Some(false),
-                author_only: Some(false),
-                position: None,
-            }],
-        };
-        let rendered = "(Callout, 2020)".to_string();
-        let citation_outputs: Vec<(&Citation, &String)> = vec![(&citation, &rendered)];
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = Processor::new(style);
+        let rendered = str_renders(&["(Callout, 2020)"]);
         let mut citation_index = 0;
-        transform_block(
-            &mut block,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_block(&mut block, &rendered, &mut citation_index);
 
         let Block::Custom(node) = &block else {
             panic!("expected Block::Custom");
@@ -2461,7 +2567,7 @@ mod tests {
             panic!("expected a Paragraph");
         };
         assert!(
-            matches!(&p.content[0], Inline::Str(s) if s.text == "(Callout, 2020)"),
+            resolved_str(&p.content[0]).is_some_and(|s| s.text == "(Callout, 2020)"),
             "citation inside the custom node was not replaced: {:?}",
             p.content
         );
@@ -3054,8 +3160,6 @@ mod tests {
     // Tests for transform functions
     #[test]
     fn test_transform_blocks_basic() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let cite = make_cite("smith2020");
         let mut blocks = vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![cite],
@@ -3063,40 +3167,16 @@ mod tests {
         })];
 
         // Create a mock citation output
-        let citations = [CpCitation {
-            id: None,
-            note_number: Some(1),
-            items: vec![quarto_citeproc::CitationItem {
-                id: "smith2020".to_string(),
-                locator: None,
-                label: None,
-                prefix: None,
-                suffix: None,
-                suppress_author: Some(false),
-                author_only: Some(false),
-                position: None,
-            }],
-        }];
-        let rendered = ["(Smith 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        // Create a minimal processor
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Smith 2020)"]);
 
         let mut citation_index = 0;
-        transform_blocks(
-            &mut blocks,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_blocks(&mut blocks, &rendered, &mut citation_index);
 
         // After transformation, the cite should be replaced with a Str
         assert_eq!(blocks.len(), 1);
         if let Block::Paragraph(p) = &blocks[0] {
             assert_eq!(p.content.len(), 1);
-            if let Inline::Str(s) = &p.content[0] {
+            if let Some(s) = resolved_str(&p.content[0]) {
                 assert_eq!(s.text, "(Smith 2020)");
             } else {
                 panic!("Expected Str inline");
@@ -3108,45 +3188,20 @@ mod tests {
 
     #[test]
     fn test_transform_inlines_with_nested_cite() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let cite = make_cite("nested2020");
         let mut inlines = vec![Inline::Emph(Emph {
             content: vec![cite],
             source_info: si(),
         })];
 
-        let citations = [CpCitation {
-            id: None,
-            note_number: Some(1),
-            items: vec![quarto_citeproc::CitationItem {
-                id: "nested2020".to_string(),
-                locator: None,
-                label: None,
-                prefix: None,
-                suffix: None,
-                suppress_author: Some(false),
-                author_only: Some(false),
-                position: None,
-            }],
-        }];
-        let rendered = ["(Nested 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Nested 2020)"]);
 
         let mut citation_index = 0;
-        transform_inlines(
-            &mut inlines,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_inlines(&mut inlines, &rendered, &mut citation_index);
 
         // The Emph should now contain a Str instead of Cite
         if let Inline::Emph(e) = &inlines[0] {
-            if let Inline::Str(s) = &e.content[0] {
+            if let Some(s) = resolved_str(&e.content[0]) {
                 assert_eq!(s.text, "(Nested 2020)");
             } else {
                 panic!("Expected Str inside Emph");
@@ -3158,8 +3213,6 @@ mod tests {
 
     #[test]
     fn test_transform_blocks_in_various_containers() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let cite = make_cite("container2020");
         let mut blocks = vec![
             // Test in BlockQuote
@@ -3182,54 +3235,15 @@ mod tests {
             }),
         ];
 
-        let citations = [
-            CpCitation {
-                id: None,
-                note_number: Some(1),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "container2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-            CpCitation {
-                id: None,
-                note_number: Some(2),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "div2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-        ];
-        let rendered = ["(Container 2020)".to_string(), "(Div 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Container 2020)", "(Div 2020)"]);
 
         let mut citation_index = 0;
-        transform_blocks(
-            &mut blocks,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_blocks(&mut blocks, &rendered, &mut citation_index);
 
         // Check BlockQuote
         if let Block::BlockQuote(bq) = &blocks[0]
             && let Block::Paragraph(p) = &bq.content[0]
-            && let Inline::Str(s) = &p.content[0]
+            && let Some(s) = resolved_str(&p.content[0])
         {
             assert_eq!(s.text, "(Container 2020)");
         }
@@ -3237,7 +3251,7 @@ mod tests {
         // Check Div
         if let Block::Div(d) = &blocks[1]
             && let Block::Paragraph(p) = &d.content[0]
-            && let Inline::Str(s) = &p.content[0]
+            && let Some(s) = resolved_str(&p.content[0])
         {
             assert_eq!(s.text, "(Div 2020)");
         }
@@ -3245,8 +3259,6 @@ mod tests {
 
     #[test]
     fn test_transform_blocks_in_lists() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let mut blocks = vec![
             // Test in OrderedList
             Block::OrderedList(crate::pandoc::OrderedList {
@@ -3271,54 +3283,15 @@ mod tests {
             }),
         ];
 
-        let citations = [
-            CpCitation {
-                id: None,
-                note_number: Some(1),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "ordered2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-            CpCitation {
-                id: None,
-                note_number: Some(2),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "bullet2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-        ];
-        let rendered = ["(Ordered 2020)".to_string(), "(Bullet 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Ordered 2020)", "(Bullet 2020)"]);
 
         let mut citation_index = 0;
-        transform_blocks(
-            &mut blocks,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_blocks(&mut blocks, &rendered, &mut citation_index);
 
         // Check OrderedList
         if let Block::OrderedList(ol) = &blocks[0]
             && let Block::Paragraph(p) = &ol.content[0][0]
-            && let Inline::Str(s) = &p.content[0]
+            && let Some(s) = resolved_str(&p.content[0])
         {
             assert_eq!(s.text, "(Ordered 2020)");
         }
@@ -3326,7 +3299,7 @@ mod tests {
         // Check BulletList
         if let Block::BulletList(bl) = &blocks[1]
             && let Block::Paragraph(p) = &bl.content[0][0]
-            && let Inline::Str(s) = &p.content[0]
+            && let Some(s) = resolved_str(&p.content[0])
         {
             assert_eq!(s.text, "(Bullet 2020)");
         }
@@ -3334,8 +3307,6 @@ mod tests {
 
     #[test]
     fn test_transform_inlines_various_types() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let mut inlines = vec![
             // Strong
             Inline::Strong(Strong {
@@ -3402,44 +3373,18 @@ mod tests {
             "link2020",
             "span2020",
         ];
-        let citations: Vec<_> = ids
-            .iter()
-            .enumerate()
-            .map(|(i, id)| CpCitation {
-                id: None,
-                note_number: Some(i as i32 + 1),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: id.to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            })
-            .collect();
-        let rendered: Vec<_> = ids.iter().map(|id| format!("({})", id)).collect();
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered: Vec<String> = ids.iter().map(|id| format!("({})", id)).collect();
+        let rendered = str_renders(&rendered);
 
         let mut citation_index = 0;
-        transform_inlines(
-            &mut inlines,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_inlines(&mut inlines, &rendered, &mut citation_index);
 
         // Check that all citations were transformed
         assert_eq!(citation_index, 9);
 
         // Verify Strong transformation
         if let Inline::Strong(s) = &inlines[0]
-            && let Inline::Str(str) = &s.content[0]
+            && let Some(str) = resolved_str(&s.content[0])
         {
             assert_eq!(str.text, "(strong2020)");
         }
@@ -3447,8 +3392,6 @@ mod tests {
 
     #[test]
     fn test_transform_blocks_in_note() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let mut inlines = vec![Inline::Note(crate::pandoc::Note {
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![make_cite("note2020")],
@@ -3457,38 +3400,15 @@ mod tests {
             source_info: si(),
         })];
 
-        let citations = [CpCitation {
-            id: None,
-            note_number: Some(1),
-            items: vec![quarto_citeproc::CitationItem {
-                id: "note2020".to_string(),
-                locator: None,
-                label: None,
-                prefix: None,
-                suffix: None,
-                suppress_author: Some(false),
-                author_only: Some(false),
-                position: None,
-            }],
-        }];
-        let rendered = ["(Note 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Note 2020)"]);
 
         let mut citation_index = 0;
-        transform_inlines(
-            &mut inlines,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_inlines(&mut inlines, &rendered, &mut citation_index);
 
         // Check Note transformation
         if let Inline::Note(n) = &inlines[0]
             && let Block::Paragraph(p) = &n.content[0]
-            && let Inline::Str(s) = &p.content[0]
+            && let Some(s) = resolved_str(&p.content[0])
         {
             assert_eq!(s.text, "(Note 2020)");
         }
@@ -3496,8 +3416,6 @@ mod tests {
 
     #[test]
     fn test_transform_blocks_plain_and_header() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let mut blocks = vec![
             Block::Plain(crate::pandoc::Plain {
                 content: vec![make_cite("plain2020")],
@@ -3512,60 +3430,21 @@ mod tests {
             }),
         ];
 
-        let citations = [
-            CpCitation {
-                id: None,
-                note_number: Some(1),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "plain2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-            CpCitation {
-                id: None,
-                note_number: Some(2),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "header2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-        ];
-        let rendered = ["(Plain 2020)".to_string(), "(Header 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Plain 2020)", "(Header 2020)"]);
 
         let mut citation_index = 0;
-        transform_blocks(
-            &mut blocks,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_blocks(&mut blocks, &rendered, &mut citation_index);
 
         // Check Plain
         if let Block::Plain(p) = &blocks[0]
-            && let Inline::Str(s) = &p.content[0]
+            && let Some(s) = resolved_str(&p.content[0])
         {
             assert_eq!(s.text, "(Plain 2020)");
         }
 
         // Check Header
         if let Block::Header(h) = &blocks[1]
-            && let Inline::Str(s) = &h.content[0]
+            && let Some(s) = resolved_str(&h.content[0])
         {
             assert_eq!(s.text, "(Header 2020)");
         }
@@ -3573,8 +3452,6 @@ mod tests {
 
     #[test]
     fn test_transform_blocks_definition_list() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let mut blocks = vec![Block::DefinitionList(crate::pandoc::DefinitionList {
             content: vec![(
                 vec![make_cite("term2020")],
@@ -3586,58 +3463,19 @@ mod tests {
             source_info: si(),
         })];
 
-        let citations = [
-            CpCitation {
-                id: None,
-                note_number: Some(1),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "term2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-            CpCitation {
-                id: None,
-                note_number: Some(2),
-                items: vec![quarto_citeproc::CitationItem {
-                    id: "def2020".to_string(),
-                    locator: None,
-                    label: None,
-                    prefix: None,
-                    suffix: None,
-                    suppress_author: Some(false),
-                    author_only: Some(false),
-                    position: None,
-                }],
-            },
-        ];
-        let rendered = ["(Term 2020)".to_string(), "(Def 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Term 2020)", "(Def 2020)"]);
 
         let mut citation_index = 0;
-        transform_blocks(
-            &mut blocks,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_blocks(&mut blocks, &rendered, &mut citation_index);
 
         // Check DefinitionList
         if let Block::DefinitionList(dl) = &blocks[0] {
             let (term, defs) = &dl.content[0];
-            if let Inline::Str(s) = &term[0] {
+            if let Some(s) = resolved_str(&term[0]) {
                 assert_eq!(s.text, "(Term 2020)");
             }
             if let Block::Paragraph(p) = &defs[0][0]
-                && let Inline::Str(s) = &p.content[0]
+                && let Some(s) = resolved_str(&p.content[0])
             {
                 assert_eq!(s.text, "(Def 2020)");
             }
@@ -3646,44 +3484,19 @@ mod tests {
 
     #[test]
     fn test_transform_blocks_line_block() {
-        use quarto_citeproc::Citation as CpCitation;
-
         let mut blocks = vec![Block::LineBlock(crate::pandoc::LineBlock {
             content: vec![vec![make_cite("line2020")]],
             source_info: si(),
         })];
 
-        let citations = [CpCitation {
-            id: None,
-            note_number: Some(1),
-            items: vec![quarto_citeproc::CitationItem {
-                id: "line2020".to_string(),
-                locator: None,
-                label: None,
-                prefix: None,
-                suffix: None,
-                suppress_author: Some(false),
-                author_only: Some(false),
-                position: None,
-            }],
-        }];
-        let rendered = ["(Line 2020)".to_string()];
-        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
-
-        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
-        let processor = quarto_citeproc::Processor::new(style);
+        let rendered = str_renders(&["(Line 2020)"]);
 
         let mut citation_index = 0;
-        transform_blocks(
-            &mut blocks,
-            &citation_outputs,
-            &mut citation_index,
-            &processor,
-        );
+        transform_blocks(&mut blocks, &rendered, &mut citation_index);
 
         // Check LineBlock
         if let Block::LineBlock(lb) = &blocks[0]
-            && let Inline::Str(s) = &lb.content[0][0]
+            && let Some(s) = resolved_str(&lb.content[0][0])
         {
             assert_eq!(s.text, "(Line 2020)");
         }
@@ -3786,6 +3599,241 @@ mod tests {
         if let Block::Paragraph(p) = &result_pandoc.blocks[0] {
             // Citation should be replaced with rendered text
             assert!(!p.content.is_empty());
+        }
+    }
+
+    /// Pre-rendered citation content, one plain `Str` per citation, for
+    /// driving the `transform_*` walkers directly.
+    fn str_renders<S: AsRef<str>>(texts: &[S]) -> RenderedCitations {
+        RenderedCitations {
+            content: texts.iter().map(|t| vec![str_inline(t.as_ref())]).collect(),
+            keep_cite_nodes: true,
+        }
+    }
+
+    /// The rendered `Str` a resolved `Cite` holds as its content.
+    fn resolved_str(inline: &Inline) -> Option<&crate::pandoc::Str> {
+        match inline {
+            Inline::Cite(cite) => match cite.content.as_slice() {
+                [Inline::Str(s)] => Some(s),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// An inline CSL reference `{id, author: Family, issued: year}`.
+    fn inline_reference(id: &str, family: &str, year: i64) -> ConfigValue {
+        meta_map(vec![
+            ("id", meta_string(id)),
+            ("type", meta_string("book")),
+            ("title", meta_string("A Title")),
+            (
+                "author",
+                meta_array(vec![meta_map(vec![
+                    ("family", meta_string(family)),
+                    ("given", meta_string("Jane")),
+                ])]),
+            ),
+            (
+                "issued",
+                meta_map(vec![(
+                    "date-parts",
+                    meta_array(vec![meta_array(vec![meta_int(year)])]),
+                )]),
+            ),
+        ])
+    }
+
+    fn cite_of(ids: &[&str]) -> Inline {
+        Inline::Cite(crate::pandoc::Cite {
+            citations: ids
+                .iter()
+                .map(|id| crate::pandoc::Citation {
+                    id: id.to_string(),
+                    prefix: vec![],
+                    suffix: vec![],
+                    mode: crate::pandoc::CitationMode::NormalCitation,
+                    note_num: 0,
+                    hash: 0,
+                    id_source: None,
+                })
+                .collect(),
+            content: vec![],
+            source_info: si(),
+        })
+    }
+
+    /// Run the filter over one paragraph holding `cite`, with the two
+    /// inline references `doe2020` and `roe2021`, and return the
+    /// paragraph's inlines.
+    fn run_on_cite(cite: Inline, link_citations: Option<bool>) -> Vec<Inline> {
+        run_on_cite_for("html", cite, link_citations)
+    }
+
+    /// [`run_on_cite`] for the given target format.
+    fn run_on_cite_for(target: &str, cite: Inline, link_citations: Option<bool>) -> Vec<Inline> {
+        use crate::pandoc::ast_context::ASTContext;
+
+        let mut meta = vec![(
+            "references",
+            meta_array(vec![
+                inline_reference("doe2020", "Doe", 2020),
+                inline_reference("roe2021", "Roe", 2021),
+            ]),
+        )];
+        if let Some(link) = link_citations {
+            meta.push(("link-citations", meta_bool(link)));
+        }
+        let pandoc = Pandoc {
+            meta: meta_map(meta),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![cite],
+                source_info: si(),
+            })],
+        };
+        let (out, _, _, _) = apply_citeproc_filter(
+            pandoc,
+            ASTContext::new(),
+            target,
+            Path::new("."),
+            &NativeRuntime::new(),
+        )
+        .expect("citeproc filter");
+        match &out.blocks[0] {
+            Block::Paragraph(p) => p.content.clone(),
+            other => panic!("expected the paragraph first, got {other:?}"),
+        }
+    }
+
+    /// The text of `inlines`, looking through every container.
+    fn plain(inlines: &[Inline]) -> String {
+        inlines
+            .iter()
+            .map(|i| match i {
+                Inline::Str(s) => s.text.clone(),
+                Inline::Space(_) => " ".to_string(),
+                Inline::Cite(c) => plain(&c.content),
+                Inline::Link(l) => plain(&l.content),
+                Inline::Span(s) => plain(&s.content),
+                Inline::Emph(e) => plain(&e.content),
+                _ => String::new(),
+            })
+            .collect()
+    }
+
+    /// Every link under `inlines`, as (target, attributes, text).
+    fn links(inlines: &[Inline]) -> Vec<(String, Vec<(String, String)>, String)> {
+        let mut found = Vec::new();
+        for i in inlines {
+            match i {
+                Inline::Link(l) => found.push((
+                    l.target.0.clone(),
+                    l.attr
+                        .2
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect(),
+                    plain(&l.content),
+                )),
+                Inline::Cite(c) => found.extend(links(&c.content)),
+                Inline::Span(s) => found.extend(links(&s.content)),
+                _ => {}
+            }
+        }
+        found
+    }
+
+    /// A resolved citation stays a `Cite` node whose content is the
+    /// rendered text, as Pandoc's citeproc leaves it, so writers keep the
+    /// `<span class="citation" data-cites="...">` wrapper (GH #1026).
+    #[test]
+    fn resolved_citation_keeps_its_cite_node() {
+        let inlines = run_on_cite(cite_of(&["doe2020"]), None);
+        assert_eq!(inlines.len(), 1, "{inlines:?}");
+        let Inline::Cite(cite) = &inlines[0] else {
+            panic!("expected the Cite node to survive, got {inlines:?}")
+        };
+        assert_eq!(cite.citations[0].id, "doe2020");
+        assert_eq!(plain(&cite.content), "(Doe 2020)");
+    }
+
+    /// `link-citations: true` links each cited item to its bibliography
+    /// entry (`#ref-<id>`, `role="doc-biblioref"`), leaving the citation's
+    /// own delimiters outside the links, as Pandoc does.
+    #[test]
+    fn link_citations_links_each_item_to_its_entry() {
+        let inlines = run_on_cite(cite_of(&["doe2020", "roe2021"]), Some(true));
+        assert_eq!(plain(&inlines), "(Doe 2020; Roe 2021)");
+        let role = vec![("role".to_string(), "doc-biblioref".to_string())];
+        assert_eq!(
+            links(&inlines),
+            vec![
+                (
+                    "#ref-doe2020".to_string(),
+                    role.clone(),
+                    "Doe 2020".to_string()
+                ),
+                ("#ref-roe2021".to_string(), role, "Roe 2021".to_string()),
+            ]
+        );
+    }
+
+    /// A Pandoc writer would re-emit a surviving `Cite` as native `@key`
+    /// syntax (the `citations` extension), so Pandoc-writer targets get
+    /// the rendered inlines spliced in place of the `Cite` node, with no
+    /// wrapper (an empty `Span` would print as `<span>` in EPUB).
+    #[test]
+    fn pandoc_writer_targets_get_the_text_in_place_of_the_cite_node() {
+        for target in ["gfm", "typst", "epub"] {
+            let inlines = run_on_cite_for(target, cite_of(&["doe2020"]), Some(true));
+            assert!(
+                !inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Cite(_) | Inline::Span(_))),
+                "{target}: {inlines:?}"
+            );
+            assert_eq!(plain(&inlines), "(Doe 2020)", "{target}");
+            assert_eq!(links(&inlines).len(), 1, "{target}: link kept");
+        }
+    }
+
+    /// Rendered citation text arrives as merged `Str` runs, as Pandoc's
+    /// builder produces them. Split runs make writers escape the start of
+    /// each chunk: Typst wrote `2020\;` for the `;` delimiter.
+    #[test]
+    fn rendered_citation_merges_adjacent_strs() {
+        fn assert_no_adjacent_strs(inlines: &[Inline]) {
+            for pair in inlines.windows(2) {
+                assert!(
+                    !matches!(pair, [Inline::Str(_), Inline::Str(_)]),
+                    "adjacent Strs in {inlines:?}"
+                );
+            }
+            for i in inlines {
+                match i {
+                    Inline::Cite(c) => assert_no_adjacent_strs(&c.content),
+                    Inline::Link(l) => assert_no_adjacent_strs(&l.content),
+                    _ => {}
+                }
+            }
+        }
+        for target in ["html", "typst"] {
+            for link in [None, Some(true)] {
+                let inlines = run_on_cite_for(target, cite_of(&["doe2020", "roe2021"]), link);
+                assert_no_adjacent_strs(&inlines);
+                assert_eq!(plain(&inlines), "(Doe 2020; Roe 2021)");
+            }
+        }
+    }
+
+    /// Without `link-citations` (or with it false) nothing is linked.
+    #[test]
+    fn citations_are_not_linked_by_default() {
+        for setting in [None, Some(false)] {
+            let inlines = run_on_cite(cite_of(&["doe2020"]), setting);
+            assert!(links(&inlines).is_empty(), "{setting:?}: {inlines:?}");
+            assert_eq!(plain(&inlines), "(Doe 2020)");
         }
     }
 

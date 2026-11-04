@@ -8,7 +8,7 @@ export const Link = (args: NodeArgs<LinkInline>) => {
     if (classes.length) props.className = classes.join(' ');
     if (title) props.title = title;
     for (const [k, v] of kvs) {
-        if (k.startsWith('data-') || k === 'rel' || k === 'target') props[k] = v;
+        if (k.startsWith('data-') || k === 'rel' || k === 'target' || k === 'role') props[k] = v;
     }
     return <a {...props}>{renderChildren(args)}</a>;
 };

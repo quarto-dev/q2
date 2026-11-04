@@ -59,6 +59,7 @@ use std::collections::HashMap;
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, OrderedList};
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::{Inline, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, ListNumberDelim, ListNumberStyle};
@@ -307,6 +308,20 @@ fn renumber_refs_block(
             }
         }
         Block::Div(div) => renumber_refs_blocks(&mut div.content, defs, order, numbering),
+        // Custom-node slots: since #1050 a callout is still a `Callout`
+        // custom node when this transform runs (bd-akkproqy).
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                match slot {
+                    Slot::Blocks(blocks) => renumber_refs_blocks(blocks, defs, order, numbering),
+                    Slot::Block(b) => renumber_refs_block(b, defs, order, numbering),
+                    Slot::Inlines(inlines) => {
+                        renumber_refs_inlines(inlines, defs, order, numbering)
+                    }
+                    Slot::Inline(_) => {}
+                }
+            }
+        }
         Block::Figure(fig) => {
             renumber_refs_blocks(&mut fig.content, defs, order, numbering);
             if let Some(ref mut long) = fig.caption.long {

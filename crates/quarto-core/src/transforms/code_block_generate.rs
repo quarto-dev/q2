@@ -27,6 +27,7 @@
 //! full epic plan and the Phase 0 acceptance criteria.
 
 use quarto_pandoc_types::block::{Block, Blocks};
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 use quarto_source_map::types::FileId;
@@ -292,35 +293,51 @@ pub(crate) fn decoration_has_any_field(d: &CodeBlockDecoration) -> bool {
 /// blocks must extend the match arms here.
 fn walk_blocks_mut(blocks: &mut Blocks, f: &mut impl FnMut(&mut Block)) {
     for block in blocks.iter_mut() {
-        match block {
-            Block::CodeBlock(_) => f(block),
-            Block::BlockQuote(bq) => walk_blocks_mut(&mut bq.content, f),
-            Block::Div(div) => walk_blocks_mut(&mut div.content, f),
-            Block::Figure(fig) => walk_blocks_mut(&mut fig.content, f),
-            Block::OrderedList(list) => {
-                for item in list.content.iter_mut() {
-                    walk_blocks_mut(item, f);
+        walk_block_mut(block, f);
+    }
+}
+
+/// Single-block counterpart of [`walk_blocks_mut`].
+fn walk_block_mut(block: &mut Block, f: &mut impl FnMut(&mut Block)) {
+    match block {
+        Block::CodeBlock(_) => f(block),
+        Block::BlockQuote(bq) => walk_blocks_mut(&mut bq.content, f),
+        Block::Div(div) => walk_blocks_mut(&mut div.content, f),
+        // Custom-node block slots: since #1050 a callout is still a
+        // `Callout` custom node when this transform runs (bd-akkproqy).
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                match slot {
+                    Slot::Blocks(blocks) => walk_blocks_mut(blocks, f),
+                    Slot::Block(b) => walk_block_mut(b, f),
+                    Slot::Inline(_) | Slot::Inlines(_) => {}
                 }
             }
-            Block::BulletList(list) => {
-                for item in list.content.iter_mut() {
-                    walk_blocks_mut(item, f);
-                }
-            }
-            Block::DefinitionList(dl) => {
-                for (_term, defs) in dl.content.iter_mut() {
-                    for def in defs.iter_mut() {
-                        walk_blocks_mut(def, f);
-                    }
-                }
-            }
-            // Other block variants cannot contain a CodeBlock as a
-            // direct child. Header / Paragraph / Plain / LineBlock /
-            // RawBlock / HorizontalRule / Table / MetaBlock / Note
-            // variants / CaptionBlock / Custom are all leaf-ish from
-            // the perspective of block-level code-block discovery.
-            _ => {}
         }
+        Block::Figure(fig) => walk_blocks_mut(&mut fig.content, f),
+        Block::OrderedList(list) => {
+            for item in list.content.iter_mut() {
+                walk_blocks_mut(item, f);
+            }
+        }
+        Block::BulletList(list) => {
+            for item in list.content.iter_mut() {
+                walk_blocks_mut(item, f);
+            }
+        }
+        Block::DefinitionList(dl) => {
+            for (_term, defs) in dl.content.iter_mut() {
+                for def in defs.iter_mut() {
+                    walk_blocks_mut(def, f);
+                }
+            }
+        }
+        // Other block variants cannot contain a CodeBlock as a
+        // direct child. Header / Paragraph / Plain / LineBlock /
+        // RawBlock / HorizontalRule / Table / MetaBlock / Note
+        // variants / CaptionBlock are all leaf-ish from the perspective
+        // of block-level code-block discovery.
+        _ => {}
     }
 }
 
@@ -924,5 +941,47 @@ mod tests {
         let mut map = std::collections::HashMap::new();
         map.insert(a, CodeBlockDecoration::default());
         assert!(map.contains_key(&b));
+    }
+
+    /// Code blocks inside a custom node's block slots are decorated too
+    /// (bd-akkproqy): since #1050 a callout is still a `Callout` custom
+    /// node when this transform runs.
+    #[tokio::test]
+    async fn generate_visits_codeblocks_in_custom_node_slots() {
+        use quarto_pandoc_types::custom::{CustomNode, Slot};
+        let mut callout = CustomNode::new(
+            "Callout",
+            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            source_info_at(0, 0, 100),
+        );
+        callout.set_slot(
+            "content",
+            Slot::Blocks(vec![make_codeblock(
+                "x = 1",
+                vec!["python"],
+                vec![("filename", "in-callout.py")],
+            )]),
+        );
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Custom(callout)],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        CodeBlockGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        let filenames: Vec<_> = ctx
+            .code_block_decorations
+            .values()
+            .filter_map(|d| d.filename.clone())
+            .collect();
+        assert_eq!(filenames, vec!["in-callout.py".to_string()]);
     }
 }

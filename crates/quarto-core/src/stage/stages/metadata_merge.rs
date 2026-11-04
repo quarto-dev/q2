@@ -238,9 +238,14 @@ impl PipelineStage for MetadataMergeStage {
         // and appending to only one would desynchronize the shared
         // index space.
         {
+            // Each path is read at most once per document: extension
+            // manifests are registered under two ids (below), and a read
+            // per registration was most of this stage's cost on a
+            // website render.
+            let mut contents: std::collections::HashMap<std::path::PathBuf, Option<String>> =
+                std::collections::HashMap::new();
             let mut register_as = |id: quarto_source_map::FileId, path: &std::path::Path| {
                 let path_str = path.to_string_lossy().to_string();
-                let content = ctx.runtime.file_read_string(path).ok();
                 for source_context in [&mut doc.ast_context.source_context, &mut doc.source_context]
                 {
                     // Skip when already registered (pipeline
@@ -248,7 +253,11 @@ impl PipelineStage for MetadataMergeStage {
                     // hash collision with a sequential doc-file id —
                     // `add_file_with_id` would panic on a duplicate.
                     if source_context.get_file(id).is_none() {
-                        source_context.add_file_with_id(id, path_str.clone(), content.clone());
+                        let content = contents
+                            .entry(path.to_path_buf())
+                            .or_insert_with(|| ctx.runtime.file_read_string(path).ok())
+                            .clone();
+                        source_context.add_file_with_id(id, path_str.clone(), content);
                     }
                 }
             };

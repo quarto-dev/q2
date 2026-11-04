@@ -293,7 +293,9 @@ fn numeric_style_in_text_differs_per_chapter_but_merged_bibliography_is_book_num
     let references = read_output(&summary.outputs, "references");
 
     assert!(
-        ch1.contains("First [1], then [2]."),
+        ch1.contains(
+            r#"First <span class="citation" data-cites="doe2020">[1]</span>, then <span class="citation" data-cites="knuth1984">[2]</span>."#
+        ),
         "chapter one's own citation order must number 1 then 2: {ch1}"
     );
     // Documenting test: chapter two's own processor starts fresh, so the
@@ -301,7 +303,7 @@ fn numeric_style_in_text_differs_per_chapter_but_merged_bibliography_is_book_num
     // inherited, Q1-identical limitation this phase deliberately does not
     // fix (see plan Decisions).
     assert!(
-        ch2.contains("Again [1]."),
+        ch2.contains(r#"Again <span class="citation" data-cites="knuth1984">[1]</span>."#),
         "chapter two's per-chapter renumbering must reproduce Q1's own \
          behavior (not book-wide [2]): {ch2}"
     );

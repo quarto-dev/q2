@@ -467,7 +467,11 @@ export const DOM_ASSERTIONS_PENDING_PARITY: ReadonlyMap<string, string> = new Ma
   ['repo-actions/actions.qmd', 'bd-fandfn60'],
   // Callout body heading not sectionized in preview.
   ['toc-containers/callout-body-heading-not-in-toc.qmd', 'bd-bg0jze2i'],
+  // Code-block decorations (filename header, copy scaffold) are not
+  // rendered by q2-preview's CodeBlock.
+  ['callouts/callout-code-filename.qmd', 'bd-3zc4sye5'],
   // Tabsets are not rendered as a component in q2-preview.
+  ['callouts/callout-tabset-footnote.qmd', 'bd-47afd5ro'],
   ['toc-containers/tabset-pane-heading-not-in-toc.qmd', 'bd-47afd5ro'],
 ]);
 

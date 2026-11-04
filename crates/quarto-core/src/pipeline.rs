@@ -2159,7 +2159,7 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///
 /// ## Normalization Phase
 /// 1. `CalloutTransform` - Convert callout Divs to CustomNodes
-/// 2. `CalloutResolveTransform` - Resolve CustomNodes to structured Divs
+/// 2. (`CalloutResolveTransform` runs in the Crossref Phase — see 8c)
 /// 3. `ShortcodeResolveTransform` - Resolve shortcodes (e.g., `{{< meta title >}}`)
 /// 3a. `HeadingIdTransform` - Re-derive heading ids that expansion (shortcodes,
 ///     lmd cells) made stale, unique document-wide
@@ -2183,6 +2183,13 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// 7a. `FootnotesResolveTransform` - Resolve `Inline::Note`s into HTML footnote chrome
 ///     (excluded for `Pandoc(_)` profiles — pandoc's own writer numbers/places `Note`s)
 /// 8. `FloatRefTargetSugarTransform` - Wrap float crossref Divs / Figures in canonical CustomNode
+///
+/// ## Crossref Phase
+/// 8a. `CrossrefIndexTransform` - Number crossref targets (`plain_data.order`)
+/// 8b. `CrossrefResolveTransform` - Rewrite `@ref` citations into resolved-ref nodes
+/// 8c. `CalloutResolveTransform` - Resolve Callout CustomNodes to structured Divs;
+///     here, not in Normalization, so crossref callout titles carry their
+///     number ("Note 1", GH #1020)
 ///
 /// ## Navigation Phase
 ///
@@ -2313,10 +2320,12 @@ pub fn build_transform_pipeline(
     // before any sugaring rewrites spans, so it still sees the document
     // essentially as the author wrote it.
     pipeline.push(Box::new(ReferenceLinkDiagnosticsTransform::new()));
+    // The callout's resolve half runs in the CROSSREF PHASE below, not
+    // here: a crossref callout's title shows its number ("Note 1"), which
+    // `CrossrefIndexTransform` assigns (GH #1020, bd-h14a4m83).
     pipeline.push(Box::new(CalloutTransform::new()));
-    pipeline.push(Box::new(CalloutResolveTransform::new()));
     // Panel-tabset pair (bd-toc-tabset-titles-zq93gjvf), mirroring the
-    // callout pair above. Position is load-bearing: the parse half
+    // callout sugar above. Position is load-bearing: the parse half
     // consumes the tab-title Headers *before* SectionizeTransform and
     // TocGenerateTransform run, which is what keeps tab titles out of
     // sections and the TOC (Q1 does the same by filter ordering).
@@ -2468,6 +2477,14 @@ pub fn build_transform_pipeline(
     // === CROSSREF PHASE ===
     pipeline.push(Box::new(CrossrefIndexTransform::new()));
     pipeline.push(Box::new(CrossrefResolveTransform::new()));
+    // Callout resolve needs `plain_data.order` from the indexer for the
+    // crossref title prefix. Until here callouts stay `Callout` custom
+    // nodes — the same shape every transform above already handles in the
+    // q2-preview pipeline, which never resolves them. Keeping them custom
+    // also keeps a callout's `#nte-…` id away from
+    // `FloatRefTargetSugarTransform`, which used to wrap the resolved Div
+    // as a float target.
+    pipeline.push(Box::new(CalloutResolveTransform::new()));
 
     // === NAVIGATION PHASE ===
     // All generates run before any renders so a future user filter or
@@ -3471,6 +3488,56 @@ mod tests {
         assert!(output.html.contains("callout-warning"));
         assert!(output.html.contains("Watch Out"));
         assert!(output.html.contains("Be careful!"));
+    }
+
+    /// GH #1020 (bd-h14a4m83): a crossref callout's title carries the same
+    /// "Kind N" its `@ref` link shows — untitled, titled, and untitled
+    /// `simple` alike (Q1 `decorate_callout_title_with_crossref`). Guards
+    /// the pipeline position: `callout-resolve` must run after
+    /// `crossref-index`, or no number exists when the title is built.
+    #[test]
+    fn test_render_crossref_callout_titles_carry_number() {
+        let content = b"---\ntitle: Test\n---\n\n\
+            ::: {#nte-a .callout-note}\nBody A.\n:::\n\n\
+            ::: {#nte-b .callout-note}\n## My title\n\nBody B.\n:::\n\n\
+            ::: {#tip-c .callout-tip appearance=\"simple\"}\nBody C.\n:::\n\n\
+            See @nte-a, @nte-b and @tip-c.\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+        let html = &output.html;
+
+        let title = |text: &str| {
+            format!("<div class=\"callout-title-container flex-fill\">\n{text}\n</div>")
+        };
+        for expected in [
+            title("Note\u{a0}1"),
+            title("Note\u{a0}2: My title"),
+            title("Tip\u{a0}1"),
+        ] {
+            assert!(html.contains(&expected), "missing {expected:?} in:\n{html}");
+        }
+        for link in ["Note\u{a0}1</a>", "Note\u{a0}2</a>", "Tip\u{a0}1</a>"] {
+            assert!(
+                html.contains(link),
+                "missing xref text {link:?} in:\n{html}"
+            );
+        }
+        // The callouts stay callouts — not re-wrapped as float targets.
+        assert!(
+            !html.contains("quarto-float"),
+            "callout became a float:\n{html}"
+        );
     }
 
     #[test]
@@ -6653,7 +6720,6 @@ mod tests {
                 "conditional-content",
                 "reference-link-diagnostics",
                 "callout",
-                "callout-resolve",
                 "panel-tabset",
                 "panel-tabset-resolve",
                 "config-markdown",
@@ -6682,6 +6748,7 @@ mod tests {
                 "image-alt-normalize",
                 "crossref-index",
                 "crossref-resolve",
+                "callout-resolve",
                 "toc-generate",
                 "navbar-generate",
                 "sidebar-generate",
@@ -6750,7 +6817,6 @@ mod tests {
                 "conditional-content",
                 "reference-link-diagnostics",
                 "callout",
-                "callout-resolve",
                 "panel-tabset",
                 "panel-tabset-resolve",
                 "config-markdown",
@@ -6780,6 +6846,7 @@ mod tests {
                 "image-alt-normalize",
                 "crossref-index",
                 "crossref-resolve",
+                "callout-resolve",
                 "toc-generate",
                 "navbar-generate",
                 "sidebar-generate",
