@@ -281,7 +281,32 @@ pub(crate) fn write_search_index(
             html: synthesize_document(p),
         })
         .collect();
-    let bundle: Bundle = match build_bundle(index_pages) {
+    // Pagefind's indexing is single-threaded for most of its run (each
+    // `add_html_file` holds the index lock while it parses the page), so
+    // extract the `search.json` records on a second thread meanwhile;
+    // that took ~1 s on a 1600-page site, all on the critical path.
+    // `QUARTO_JOBS=1` keeps everything on this thread. Extraction is
+    // pure (no I/O), so doing it before the bundle result is known only
+    // wastes work on the error paths below.
+    let (bundle_result, early_records) =
+        if crate::project::orchestrator::worker_count() > 1 {
+            std::thread::scope(|scope| {
+                let extraction = scope.spawn(|| {
+                    pages
+                        .iter()
+                        .flat_map(extract_records)
+                        .collect::<Vec<_>>()
+                });
+                let bundle_result = build_bundle(index_pages);
+                let records = extraction
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                (bundle_result, Some(records))
+            })
+        } else {
+            (build_bundle(index_pages), None)
+        };
+    let bundle: Bundle = match bundle_result {
         Ok(bundle) => bundle,
         Err(err) => {
             diagnostics.push(
@@ -340,7 +365,8 @@ pub(crate) fn write_search_index(
         .file_write(&manifest_path, manifest_json.as_bytes())
         .map_err(|e| io_err("write", &manifest_path, e))?;
 
-    let records: Vec<_> = pages.iter().flat_map(extract_records).collect();
+    let records: Vec<_> = early_records
+        .unwrap_or_else(|| pages.iter().flat_map(extract_records).collect());
     let search_json_path = project.output_dir.join("search.json");
     let records_json = serde_json::to_string_pretty(&records).expect("records serialize");
     runtime
