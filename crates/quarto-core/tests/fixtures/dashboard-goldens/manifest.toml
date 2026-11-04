@@ -22,7 +22,7 @@ note = "Phase 7 (navigation chrome): real-world acceptance, the quarto-web navig
 path = "acceptance/valuebox.qmd"
 requires = ["jupyter"]
 status = "pending"
-note = "Phase 5 (value boxes): real-world acceptance, the quarto-web value box example"
+note = "Phase 5 (value boxes): real-world acceptance, the quarto-web value box example. Waits on Jupyter cell-option forwarding (#| content: valuebox) from KNR-2 Phase 2C (plan D7)"
 
 [[fixture]]
 path = "contract/c01-rows-default.qmd"
@@ -121,23 +121,23 @@ note = "Phase 3 (layout core): loose markdown blocks in a row merge into one flo
 
 [[fixture]]
 path = "contract/c20-valuebox-markdown.qmd"
-status = "pending"
+status = "match"
 note = "Phase 5 (value boxes): markdown .valuebox: color aliases, hex, bg/fg colors, icon, title attribute, extra content"
 
 [[fixture]]
 path = "contract/c21-valuebox-cell-python.qmd"
-status = "pending"
+status = "match"
 note = "Phase 5 (value boxes): content: valuebox cell whose printed Python dict supplies options"
 
 [[fixture]]
 path = "contract/c22-valuebox-cell-r.qmd"
-status = "pending"
+status = "match"
 note = "Phase 5 (value boxes): content: valuebox cell whose printed R list supplies options"
 
 [[fixture]]
 path = "contract/c23-valuebox-showcase.qmd"
-status = "pending"
-note = "Phase 5 (value boxes): value-box showcase position (Q1 ignores it; D5 implements). Expected divergence: D5 Q11/Q13: showcase position implemented"
+status = "divergence"
+note = "D5-Q11/13: showcase-position and its alias showcase are honoured (showcase-top-right, showcase-bottom); Quarto 1 reads neither, so its golden is always showcase-left-center"
 
 [[fixture]]
 path = "contract/c24-sidebar-page.qmd"
@@ -231,7 +231,7 @@ note = "Phase 4 (cards and tabsets): document-level expandable: false"
 
 [[fixture]]
 path = "contract/c42-valuebox-row-then-charts.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): common layout: a value-box row then a chart row (value-box rows flow)"
 
 [[fixture]]
@@ -339,12 +339,12 @@ note = "Q2 qmd has no setext headings (a documented difference, docs/guides/auth
 path = "q1/3-valuebox-python.qmd"
 requires = ["jupyter"]
 status = "pending"
-note = "Phase 5 (value boxes): Q1 smoke-all fixture. Not deterministic: value-box values are random Python draws; captures differ run to run, so flipping it needs a seed or a looser comparison"
+note = "Phase 5 (value boxes): Q1 smoke-all fixture. Not deterministic: value-box values are random Python draws; captures differ run to run, so flipping it needs a seed or a looser comparison. Waits on Jupyter cell-option forwarding (#| content: valuebox) from KNR-2 Phase 2C (plan D7)"
 
 [[fixture]]
 path = "q1/3-valuebox-static.qmd"
-status = "pending"
-note = "Phase 5 (value boxes): Q1 smoke-all fixture"
+status = "divergence"
+note = "D5-Q14: a multi-word markdown title shows in the title slot; Quarto 1 nests its paragraph in the title paragraph and browsers split them, leaving the slot empty"
 
 [[fixture]]
 path = "q1/4-tabset-basic.qmd"
@@ -618,8 +618,8 @@ note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-la
 [[fixture]]
 path = "q1-atx/2-layout-flow-fill.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-flow-fill.qmd (setext headings rewritten, nothing else)"
+status = "divergence"
+note = "D5-Q11/13 (showcase= honoured) and D5-Q14 (a ### heading used as a value-box title shows as the title; a cell used as the value stays inside .value-box-value instead of being split out of a paragraph). ATX-heading copy of q1/2-layout-flow-fill.qmd"
 
 [[fixture]]
 path = "q1-atx/2-layout-height.qmd"

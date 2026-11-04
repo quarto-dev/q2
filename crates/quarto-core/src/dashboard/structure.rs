@@ -26,6 +26,8 @@ use quarto_pandoc_types::block::{Block, Blocks, Div, Header, Plain};
 use quarto_pandoc_types::inline::{Inline, Inlines, Str};
 use quarto_source_map::SourceInfo;
 
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
+
 use super::model::{
     BodyData, CARD_TYPE, CONTAINER_TYPE, Card, CardData, Container, ContainerData, Layout,
     Orientation, Page, PageData, as_dashboard_node,
@@ -484,7 +486,11 @@ fn shiny_inputs_only(content: &[Block]) -> bool {
 }
 
 /// Q1 pass 1: turn code cells and `.card` divs into cards, everywhere.
-pub fn build_cards(blocks: Blocks, doc: &DashboardOptions) -> Blocks {
+pub fn build_cards(
+    blocks: Blocks,
+    doc: &DashboardOptions,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Blocks {
     let mut out = Vec::with_capacity(blocks.len());
     for block in blocks {
         let Block::Div(mut d) = block else {
@@ -493,9 +499,9 @@ pub fn build_cards(blocks: Blocks, doc: &DashboardOptions) -> Blocks {
         };
         if has_class(&d.attr, "cell") && has_class(&d.attr, "markdown") {
             // Notebook markdown cells unwrap (Q1 #9056).
-            out.extend(build_cards(d.content, doc));
+            out.extend(build_cards(d.content, doc, diagnostics));
         } else if d.attr.2.get("output").is_some_and(|v| v == "asis") {
-            d.content = build_cards(d.content, doc);
+            d.content = build_cards(d.content, doc, diagnostics);
             out.push(Block::Div(d));
         } else if has_class(&d.attr, "card") {
             if is_literal_card(&d) {
@@ -508,14 +514,186 @@ pub fn build_cards(blocks: Blocks, doc: &DashboardOptions) -> Blocks {
                 Some(card) => out.push(card),
                 None => out.push(Block::Div(d)),
             }
+        } else if is_value_box(&d.attr) {
+            out.push(make_value_box(d, doc, diagnostics));
         } else if has_class(&d.attr, "cell") {
             out.extend(cell_to_card(d, doc));
         } else {
-            d.content = build_cards(d.content, doc);
+            d.content = build_cards(d.content, doc, diagnostics);
             out.push(Block::Div(d));
         }
     }
     out
+}
+
+/// Q1 `isValueBox`: the `.valuebox` class, or `content` / `component` set
+/// to `valuebox` (a value-box cell).
+fn is_value_box(attr: &Attr) -> bool {
+    has_class(attr, "valuebox") || is_value_box_content(attr)
+}
+
+fn is_value_box_content(attr: &Attr) -> bool {
+    ["content", "component"]
+        .iter()
+        .any(|k| attr.2.get(*k).is_some_and(|v| v == "valuebox"))
+}
+
+fn plain(inlines: Inlines) -> Block {
+    Block::Plain(Plain {
+        content: inlines,
+        source_info: generated(),
+    })
+}
+
+fn text_inlines(text: &str) -> Inlines {
+    vec![Inline::Str(Str {
+        text: text.to_string(),
+        source_info: generated(),
+    })]
+}
+
+/// Q1 `valuebox.makeValueBox` (see [`super::valuebox`]).
+fn make_value_box(
+    el: Div,
+    doc: &DashboardOptions,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> Block {
+    let mut title: Option<Blocks> = el
+        .attr
+        .2
+        .get("title")
+        .map(|t| vec![plain(title_inlines(t, &el.source_info))]);
+    let mut options: LinkedHashMap<String, String> = LinkedHashMap::new();
+    let value: Blocks;
+    let mut extra: Blocks = Vec::new();
+
+    if is_value_box_content(&el.attr) {
+        let mut printed = None;
+        find_printed_output(&el.content, &mut printed);
+        match printed {
+            Some(text) => match super::valuebox::parse_printed(&text) {
+                Ok(p) => {
+                    if let Some(t) = p.options.get("title") {
+                        title = Some(vec![plain(text_inlines(t))]);
+                    }
+                    value = match p.value {
+                        Some(v) => vec![plain(text_inlines(&v))],
+                        None => el.content.clone(),
+                    };
+                    options = p.options;
+                }
+                Err(problem) => {
+                    diagnostics.push(
+                        DiagnosticMessageBuilder::warning(
+                            "value box output could not be read",
+                        )
+                        .with_code("Q-27-1")
+                        .with_location(el.source_info.clone())
+                        .problem(format!(
+                            "This `content: valuebox` cell printed something that looks like a \
+                             Python dict or an R list, but it could not be read: {problem}."
+                        ))
+                        .add_hint(
+                            "Print a dict such as `dict(value = 42, icon = \"chat\")` (Python) or \
+                             a list such as `list(value = 42, icon = \"chat\")` (R).",
+                        )
+                        .build(),
+                    );
+                    value = vec![plain(text_inlines(&text))];
+                }
+            },
+            None => value = el.content.clone(),
+        }
+    } else {
+        let mut pending = el.content.clone();
+        if title.is_none() && pending.len() > 1 {
+            title = Some(vec![pending.remove(0)]);
+        }
+        value = if pending.is_empty() {
+            Vec::new()
+        } else {
+            vec![pending.remove(0)]
+        };
+        extra = pending;
+    }
+
+    let mut vb_attr: Attr = (String::new(), Vec::new(), LinkedHashMap::new());
+    for key in ["color", "bg-color", "fg-color"] {
+        if let Some(v) = el.attr.2.get(key) {
+            vb_attr.2.insert(format!("data-{key}"), v.clone());
+        }
+    }
+    for (k, v) in &options {
+        vb_attr.2.insert(format!("data-{k}"), v.clone());
+    }
+    let mut vb_content = Vec::new();
+    let mut showcase: LinkedHashMap<String, String> = LinkedHashMap::new();
+    // D5-Q11/13: `showcase` is accepted as an alias of Q1's
+    // `showcase-position`, which Q1's own fixtures use but Q1 never reads.
+    for (key, out) in [
+        ("icon", "data-icon"),
+        ("showcase-position", "data-showcase-position"),
+        ("showcase", "data-showcase-position"),
+    ] {
+        if let Some(v) = el.attr.2.get(key).or_else(|| options.get(key))
+            && !showcase.contains_key(out)
+        {
+            showcase.insert(out.to_string(), v.clone());
+        }
+    }
+    if !showcase.is_empty() {
+        vb_content.push(div(
+            (
+                String::new(),
+                vec!["value-box-showcase".to_string()],
+                showcase,
+            ),
+            Vec::new(),
+        ));
+    }
+    let title_blocks = title.unwrap_or_else(|| vec![plain(text_inlines("\u{a0}"))]);
+    let mut area = vec![
+        div(class_attr(&["value-box-title"]), title_blocks),
+        div(class_attr(&["value-box-value"]), value),
+    ];
+    area.extend(extra);
+    vb_content.push(div(class_attr(&["value-box-area"]), area));
+    let vb = div(vb_attr, vb_content);
+
+    let mut classes = vec!["valuebox".to_string()];
+    classes.extend(el.attr.1.iter().cloned());
+    make_card(
+        vec![vb],
+        classes,
+        CardOptions::default(),
+        doc,
+        el.source_info,
+    )
+    .unwrap_or_else(|| {
+        Block::Div(Div {
+            attr: class_attr(&["valuebox"]),
+            content: Vec::new(),
+            source_info: generated(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    })
+}
+
+/// Q1 `valueboxContent`: the text of a value-box cell's printed output (a
+/// code block in a `cell-output-stdout` or `cell-output-display`; the last
+/// one wins, as Q1's walk overwrites it).
+fn find_printed_output(blocks: &[Block], found: &mut Option<String>) {
+    for b in blocks {
+        if let Block::Div(d) = b {
+            if (has_class(&d.attr, "cell-output-stdout")
+                || has_class(&d.attr, "cell-output-display"))
+                && let Some(cb) = first_code_block(&d.content)
+            {
+                *found = Some(cb.text.clone());
+            }
+            find_printed_output(&d.content, found);
+        }
+    }
 }
 
 /// Q1 `isLiteralCard`: a `.card` whose first two children are an explicit
@@ -1067,7 +1245,7 @@ mod tests {
     }
 
     fn build(body: &str, doc: &DashboardOptions) -> (Blocks, LayoutInfo) {
-        let blocks = build_cards(parse(body), doc);
+        let blocks = build_cards(parse(body), doc, &mut Vec::new());
         build_layout(pampa::transforms::sectionize_blocks(blocks), doc)
     }
 
@@ -1143,7 +1321,11 @@ mod tests {
     /// Q1 #9796: an output-less cell makes no card.
     #[test]
     fn empty_cell_makes_nothing() {
-        let blocks = build_cards(parse("::: {.cell}\n:::\n"), &DashboardOptions::default());
+        let blocks = build_cards(
+            parse("::: {.cell}\n:::\n"),
+            &DashboardOptions::default(),
+            &mut Vec::new(),
+        );
         assert!(blocks.is_empty(), "{blocks:?}");
     }
 
@@ -1154,6 +1336,7 @@ mod tests {
         let blocks = build_cards(
             parse("::: {.card}\nWord.\n:::\n\n::: {.card}\nTwo words.\n:::\n"),
             &DashboardOptions::default(),
+            &mut Vec::new(),
         );
         let cards = cards(&blocks);
         assert!(
@@ -1224,6 +1407,7 @@ mod tests {
         let blocks = build_cards(
             parse("::: {.card}\nA b.\n:::\n\n::: {.card expandable=\"true\"}\nA b.\n:::\n"),
             &doc,
+            &mut Vec::new(),
         );
         let cards = cards(&blocks);
         assert!(!cards[0].data.expandable);

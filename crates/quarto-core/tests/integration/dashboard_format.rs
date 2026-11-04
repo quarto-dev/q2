@@ -348,3 +348,35 @@ fn dashboard_ships_runtime_scripts_in_order() {
     assert!(!html.contains("quarto-dashboard.js"));
     assert!(!html.contains("web-components.js"));
 }
+
+// --- Value boxes (Phase 5) --------------------------------------------------
+
+/// Dashboard plan D6: printed value-box output that looks like a dict but
+/// cannot be read is a located `Q-27-1` warning, and the box still renders
+/// with the printed text as its value (Q1 ran it as Lua and failed).
+#[test]
+fn unreadable_value_box_output_warns_q_27_1() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: V\n---\n\n## Row\n\n::: {.cell content=\"valuebox\" title=\"Broken\"}\n\n::: {.cell-output .cell-output-display}\n\n```\n{'value': 1\n```\n\n:::\n\n:::\n",
+    );
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&temp.path().join("doc.qmd"), "dashboard", &options, runtime)
+        .expect("renders despite the warning");
+    let codes: Vec<_> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter_map(|d| d.code.clone())
+        .collect();
+    assert!(codes.iter().any(|c| c == "Q-27-1"), "{codes:?}");
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    let doc = scraper::Html::parse_document(&html);
+    assert_eq!(text(one(&doc, "p.value-box-title")), "Broken");
+    assert_eq!(text(one(&doc, "p.value-box-value")), "{'value': 1");
+}

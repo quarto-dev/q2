@@ -508,6 +508,9 @@ website:
             - errors/lmd/Q-26-7.qmd
             - errors/lmd/Q-26-8.qmd
             - errors/lmd/Q-26-9.qmd
+        - section: "dashboard"
+          contents:
+            - errors/dashboard/Q-27-1.qmd
 
 format:
   html:

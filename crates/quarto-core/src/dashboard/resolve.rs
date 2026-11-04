@@ -442,6 +442,116 @@ fn take_loose_header_text(
     ((!title.is_empty()).then_some(title), rest)
 }
 
+/// Q1 `processValueBoxes` (`format-dashboard-valuebox.ts`), run after the
+/// body's fill pass as in Q1 (so the value-box grid keeps its fill
+/// classes): bslib classes, the color (`data-color`, else `data-bg-color` /
+/// `data-fg-color`, else `bg-secondary`; a `#` color is a style), the
+/// showcase icon and position, and the title and value as paragraphs.
+///
+/// The title and value become `<p class=…>` around their inlines (raw tags
+/// around a `Plain`), never a paragraph inside a paragraph: Q1 nests the
+/// title's `<p>` in another, which browsers split, emptying the title slot
+/// (dashboard plan D5-Q14).
+fn finish_value_box(card_attr: &mut Attr, body: &mut Block) {
+    add_class(card_attr, "bslib-value-box");
+    let Block::Div(body) = body else { return };
+    let Some(Block::Div(vb)) = body.content.iter_mut().find(|b| matches!(b, Block::Div(_))) else {
+        return;
+    };
+    add_class(&mut vb.attr, "value-box-grid");
+
+    let mut colored = false;
+    if let Some(c) = vb.attr.2.remove("data-color") {
+        color(card_attr, &c, true);
+        colored = true;
+    }
+    if !colored {
+        if let Some(c) = vb.attr.2.remove("data-bg-color") {
+            color(card_attr, &c, true);
+            colored = true;
+        }
+        if let Some(c) = vb.attr.2.remove("data-fg-color") {
+            color(card_attr, &c, false);
+            colored = true;
+        }
+    }
+    vb.attr.2.remove("data-bg-color");
+    vb.attr.2.remove("data-fg-color");
+    if !colored {
+        color(card_attr, "secondary", true);
+    }
+
+    for block in vb.content.iter_mut() {
+        let Block::Div(d) = block else { continue };
+        if has_class(&d.attr, "value-box-showcase") {
+            if let Some(icon) = d.attr.2.remove("data-icon") {
+                d.content.push(raw_html(&format!(
+                    r#"<i class="bi bi-{}"></i>"#,
+                    html_escape(&icon)
+                )));
+            }
+            let position = d
+                .attr
+                .2
+                .remove("data-showcase-position")
+                .unwrap_or_else(|| "left-center".to_string());
+            add_class(card_attr, &format!("showcase-{position}"));
+        } else if has_class(&d.attr, "value-box-area") {
+            d.content = std::mem::take(&mut d.content)
+                .into_iter()
+                .flat_map(paragraph_for_value_part)
+                .collect();
+        }
+    }
+    vb.attr.2.retain(|k, _| !k.starts_with("data-"));
+}
+
+/// Q1 `colorEl`: a `#` color is an inline style, a name a `bg-` / `text-`
+/// class.
+fn color(attr: &mut Attr, color: &str, background: bool) {
+    if color.starts_with('#') {
+        let prop = if background { "background" } else { "color" };
+        append_style(attr, format!("{prop}: {color};"));
+    } else {
+        let prefix = if background { "bg-" } else { "text-" };
+        add_class(attr, &format!("{prefix}{color}"));
+    }
+}
+
+/// A `.value-box-title` / `.value-box-value` Div as `<p class=…>` around
+/// its inlines. Content that is not inline (a cell's display output used
+/// as the value) stays a Div.
+fn paragraph_for_value_part(block: Block) -> Vec<Block> {
+    let Block::Div(d) = &block else {
+        return vec![block];
+    };
+    let Some(class) = ["value-box-title", "value-box-value"]
+        .into_iter()
+        .find(|c| has_class(&d.attr, c))
+    else {
+        return vec![block];
+    };
+    let mut inlines = Vec::new();
+    for b in &d.content {
+        match b {
+            Block::Plain(p) => inlines.extend(p.content.iter().cloned()),
+            Block::Paragraph(p) => inlines.extend(p.content.iter().cloned()),
+            // A heading as the title (`### Title` first in a `.valuebox`):
+            // its text, rather than Q1's heading inside the paragraph.
+            Block::Header(h) => inlines.extend(h.content.iter().cloned()),
+            _ => return vec![block],
+        }
+    }
+    vec![
+        raw_html(&format!(r#"<p class="{class}">"#)),
+        Block::Plain(Plain {
+            content: inlines,
+            source_info: generated(),
+        }),
+        raw_html("</p>"),
+    ]
+}
+
 /// Q1 `convertToTabsetHeader`: the tab list in a tabset card's header.
 fn tab_nav_html(id: &str, bodies: &[super::model::BodyData]) -> String {
     let mut html = format!(
@@ -483,6 +593,7 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
         .tabset
         .then(|| format!("card-tabset-{}", cx.cards));
     let data = card.data;
+    let is_valuebox = data.classes.iter().any(|c| c == "valuebox");
     let mut attr: Attr = (String::new(), data.classes.clone(), LinkedHashMap::new());
     add_class(&mut attr, "bslib-card");
     add_class(&mut attr, "html-fill-container");
@@ -599,6 +710,9 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
             }
             None => {
                 apply_fill_recursive(&mut body_div);
+                if is_valuebox && index == 0 {
+                    finish_value_box(&mut attr, &mut body_div);
+                }
                 content.push(body_div);
             }
         }

@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-4 done 2026-11-03; Phase 5 next
+status: in-progress  # Phases 0-5 done 2026-11-03; Phase 6 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -394,11 +394,15 @@ Most card behavior landed with Phase 3 (titles, bodies, footers, dynamic titles,
 
 **D5-Q5 corrected.** The table above listed Q5 among the internal no-ops. It is not one: `attrToCardBodyStyle` reads the *card\'s* style and writes it, plus the padding, over each body\'s style, so a card\'s `height` or `max-height` lands on its bodies too and replaces their own. q2 applies the padding alone.
 
-### Phase 5: Value boxes
+### Phase 5: Value boxes (done 2026-11-03)
 
-- [ ] The markdown `.valuebox` form, with color aliases, `#hex`, `bg-color` / `fg-color`, icon, and `showcase-position` (D5).
-- [ ] The `content: valuebox` cell form, using the safe Python and R output parser and a `Q-*` diagnostic on failure (D6). Test it with knitr and Jupyter captures.
-- [ ] `$valuebox-bg-*` theme variables.
+- [x] `dashboard/valuebox.rs`: value boxes as cards (classes `card valuebox`) holding Q1\'s value-box Div; the markdown form (title attribute or first block, value, extra content) and the `content: valuebox` / `component: valuebox` cell form.
+- [x] D6: `parse_printed` reads a printed Python dict repr, an R list or vector, or a bare value without evaluating anything; an unreadable dict or list is a located warning `Q-27-1` (new subsystem 27, `dashboard`; catalog entry, `docs/errors/dashboard/Q-27-1.qmd`, docs sidebar), and the printed text is shown as the value.
+- [x] Lowering per Q1 `processValueBoxes`, after the body\'s fill pass as in Q1: `bslib-value-box`, `value-box-grid`, colors (`data-color`, else bg/fg, else `bg-secondary`; `#` colors as styles), the showcase icon and `showcase-<position>`.
+- [x] D5-Q14: titles and values become `<p class=…>` around their inlines (raw tags around a `Plain`), never nested paragraphs. A heading used as the title contributes its text; non-inline values (a cell\'s plot) stay in a `div.value-box-value`.
+- [x] D5-Q11/13: `showcase-position`, and `showcase` as its alias, are honoured.
+- [x] Corpus: c20, c21, c22, c42 `match`; c23, `q1/3-valuebox-static`, `q1-atx/2-layout-flow-fill` divergences. `q1/3-valuebox-python` and `acceptance/valuebox` wait on D7 (`#| content: valuebox` from Jupyter); `q1-atx/3-valuebox-knitr` is nondeterministic.
+- [x] `$valuebox-bg-*` theme variables come with the vendored `quarto-dashboard.scss` (Phase 2).
 
 ### Phase 6: Sidebars and toolbars
 

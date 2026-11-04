@@ -1,0 +1,57 @@
+---
+title: "Value Box Output Could Not Be Read"
+description: "A `content: valuebox` cell printed a Python dict or an R list that could not be read. The printed text is shown as the value."
+code: Q-27-1
+subsystem: dashboard
+status: stub
+since: "99.9.9"
+categories:
+  - dashboard
+---
+
+# `Q-27-1` — Value Box Output Could Not Be Read
+
+> A `content: valuebox` cell printed a Python dict or an R list that could not be read. The printed text is shown as the value.
+
+## What this means
+
+In a dashboard, a cell with `content: valuebox` makes a value box from
+what the cell prints. A Python cell prints a dict and an R cell prints a
+list, and the value box reads `value`, `icon`, `color`, `bg-color` and
+`fg-color` from it:
+
+```python
+#| content: valuebox
+#| title: "Articles per day"
+dict(icon = "pencil", color = "primary", value = 45)
+```
+
+Quarto warns with this code when the printed output starts like a dict
+(`{`) or an R list (`$`) but does not have that shape, for example a
+dict that is cut off or uses unquoted keys. The value box still renders,
+with the printed text as its value.
+
+## Why this happens
+
+- The cell prints more than the dict, or the dict spans several outputs.
+- The dict's keys are not quoted strings (`{value: 45}` instead of
+  `{'value': 45}`).
+- An R list entry is missing its `[1] …` value line.
+
+## How to fix
+
+Make the dict or list the cell's only printed output, with string keys:
+
+```python
+#| content: valuebox
+dict(value = 45, icon = "pencil")
+```
+
+```r
+#| content: valuebox
+list(value = 45, icon = "pencil")
+```
+
+## Related
+
+- Dashboard value boxes: the `dashboard` format's documentation.

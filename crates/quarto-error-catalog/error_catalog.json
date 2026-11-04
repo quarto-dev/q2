@@ -2322,5 +2322,12 @@
     "message_template": "A module listed under `lmd: modules:` (in `_quarto.yml` or the front matter) could not be loaded before the document's first cell, or the entry is not a module name or a one-key `global: module` map. The document's lmd cells are left as written.",
     "docs_url": "https://quarto.org/docs/errors/lmd/Q-26-9",
     "since_version": "99.9.9"
+  },
+  "Q-27-1": {
+    "subsystem": "dashboard",
+    "title": "Value Box Output Could Not Be Read",
+    "message_template": "A `content: valuebox` cell printed something that looks like a Python dict or an R list, but it does not have the expected shape. The printed text is shown as the value.",
+    "docs_url": "https://quarto.org/docs/errors/dashboard/Q-27-1",
+    "since_version": "99.9.9"
   }
 }

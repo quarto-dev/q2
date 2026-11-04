@@ -20,6 +20,7 @@ pub mod model;
 pub mod resolve;
 pub mod sizing;
 pub mod structure;
+pub mod valuebox;
 
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue};
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -83,7 +84,10 @@ impl AstTransform for DashboardTransform {
             return Ok(());
         }
         let options = dashboard_options(&ast.meta);
-        let blocks = structure::build_cards(std::mem::take(&mut ast.blocks), &options);
+        let mut diagnostics = Vec::new();
+        let blocks =
+            structure::build_cards(std::mem::take(&mut ast.blocks), &options, &mut diagnostics);
+        ctx.diagnostics.extend(diagnostics);
         // Sections are made here, after the cards (Q1 pass 2 calls
         // `make_sections` itself); `SectionizeTransform` is skipped for
         // dashboards.
