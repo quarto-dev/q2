@@ -751,7 +751,10 @@ fn has_valid_abbrev_boundary(text: &str, abbrev: &str) -> bool {
 
 /// Check if a text string ends with a known abbreviation
 fn ends_with_abbreviation(text: &str) -> bool {
-    ABBREVIATIONS
+    // Every entry in ABBREVIATIONS ends with '.', so this cheap check
+    // rules out almost every Str before the per-abbreviation scan.
+    text.ends_with('.')
+        && ABBREVIATIONS
         .iter()
         .any(|abbrev| has_valid_abbrev_boundary(text, abbrev))
 }
@@ -823,6 +826,16 @@ fn contiguous_hull_for_run(run: &[Inline]) -> SourceInfo {
 
 /// Returns (result, did_coalesce) tuple
 pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
+    // Fast path: coalescing only starts at a Str that ends with an
+    // abbreviation. When there is none, the loop below would rebuild an
+    // element-for-element identical list (deep-cloning every non-Str
+    // inline on the way), so hand the input back untouched.
+    if !inlines
+        .iter()
+        .any(|inline| matches!(inline, Inline::Str(s) if ends_with_abbreviation(&s.text)))
+    {
+        return (inlines, false);
+    }
     let mut result: Vec<Inline> = Vec::new();
     let mut i = 0;
     // Accumulates whether *any* Str coalesced (the function's return value,
