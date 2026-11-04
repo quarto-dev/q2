@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-9 done 2026-11-04; wrap-up next
+status: in-progress  # Phases 0-9 and docs first pass done 2026-11-04; in review
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -475,8 +475,9 @@ Done 2026-11-04.
 
 ### Wrap-up
 
-- [ ] Write user docs under `docs/` and add a migration note for any accepted deviations.
-- [ ] File follow-on strands for everything in D9 and the React preview (D8), each `discovered-from` the epic.
+- [x] User docs, first pass (2026-11-04): `docs/dashboards/index.qmd` (navbar entry "Dashboards", its own sidebar): layout, sizing, pages, cards, tabsets, value boxes, sidebars and toolbars with card-input targeting, the navigation bar, websites, preview, "Differences from Quarto 1" (the D5 fixes as a migration note) and "Not yet supported" (D9 cuts, Jupyter cell options per D7, the `github` alias, the preview dark-mode toggle). Worth a second pass with rendered examples (`.embed-example-iframe`, as the reveal.js page has).
+- [x] Follow-on strands for D9 (filed 2026-11-03) and those found later: bd-q04oxic2 (`github` nav-button), bd-tolifxld (bslib jQuery error), bd-f19dbajh (site footer offset). The React preview (D8) is built, not deferred.
+- [ ] Close bd-cymkcyaf (per-format defaults, absorbed by D3) when the branch merges.
 
 ## Open questions for the user
 

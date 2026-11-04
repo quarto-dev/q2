@@ -1,0 +1,376 @@
+---
+title: "Dashboards"
+---
+
+## Overview
+
+A dashboard arranges a document's outputs (plots, tables, numbers, text) into
+a grid of cards that fills the browser window. Add `format: dashboard` to the
+front matter:
+
+```yaml
+---
+title: "Sales"
+format: dashboard
+---
+```
+
+Headings lay the page out as rows and columns. Code cells and `.card` divs
+become cards. Value boxes, sidebars and toolbars add summary numbers and
+controls. The result is a single HTML page built on
+[Bootstrap](https://getbootstrap.com) and the
+[bslib](https://rstudio.github.io/bslib/) card and sidebar components.
+
+Dashboards in Quarto 2 follow Quarto 1's dashboard format closely, so existing
+dashboards should port with few or no changes.
+[Differences from Quarto 1](#differences-from-quarto-1) lists where they
+differ.
+
+## Layout
+
+### Rows and columns
+
+Each level-2 heading (`##`) starts a row, and each level-3 heading (`###`)
+inside it starts a column:
+
+````markdown
+---
+title: "Layout"
+format: dashboard
+---
+
+## Row {height=70%}
+
+```{r}
+plot(cars)
+```
+
+## Row {height=30%}
+
+### Column {width=40%}
+
+```{r}
+summary(cars)
+```
+
+### Column {width=60%}
+
+```{r}
+hist(cars$speed)
+```
+````
+
+Set `orientation: columns` to swap the roles: level-2 headings become columns
+and level-3 headings become rows inside them.
+
+```yaml
+format:
+  dashboard:
+    orientation: columns
+```
+
+The orientation always follows nesting depth: under `orientation: rows`, a
+`##` section is a row and a `###` section inside it is a column, wherever the
+headings appear. The heading text itself is not displayed; it only names the
+section.
+
+### Sizing: `height`, `width`, fill and flow
+
+Give a row a `height` or a column a `width` as an attribute on its heading.
+Percentages share the space between siblings; other CSS units (`300px`,
+`20em`) fix the size. Sections without a size share what is left.
+
+By default a dashboard *fills* the window: rows stretch to use the full height
+and cards grow with them. A card or section that should keep its natural
+height instead *flows*. Add `.flow` to the heading (or `.fill` to force
+filling):
+
+```markdown
+## Row {.flow}
+```
+
+Text-only cards flow automatically, so a row of explanatory text doesn't
+stretch to half the page.
+
+### Scrolling
+
+With `scrolling: true` the page grows with its content and scrolls, instead
+of fitting the window:
+
+```yaml
+format:
+  dashboard:
+    scrolling: true
+```
+
+### Pages
+
+Level-1 headings (`#`) split the dashboard into pages, listed as tabs in the
+navigation bar:
+
+```markdown
+# Overview
+
+## Row
+
+...
+
+# Details {orientation="columns" scrolling="true"}
+
+## Column
+
+...
+```
+
+A page can set its own `orientation` and `scrolling`. The page in the URL hash
+(`dashboard.html#details`) opens first, so you can link to a page directly.
+
+## Cards
+
+### Cells and `.card` divs
+
+Every code cell with output becomes a card. A cell's `title` option gives the
+card a title:
+
+````markdown
+```{r}
+#| title: "Stopping distance"
+plot(cars)
+```
+````
+
+Any markdown can go in a card through a `.card` div:
+
+```markdown
+::: {.card title="About this dashboard"}
+The data come from the 1920s `cars` dataset.
+:::
+```
+
+Card options, on the cell or the div:
+
+| Option        | Effect                                                          |
+|---------------|-----------------------------------------------------------------|
+| `title`       | The card's header text. Inline markdown (code, emphasis) works. |
+| `padding`     | Padding around the card body, e.g. `padding: 0`.                |
+| `height`      | A fixed height, as for rows.                                    |
+| `expandable`  | `false` removes the button that opens the card full screen.     |
+| `.fill` / `.flow` | Whether the card stretches or keeps its natural height.     |
+
+Cards are expandable by default. Set `expandable: false` under
+`format: dashboard` to turn that off for every card.
+
+### Tabsets
+
+Add `.tabset` to a row or column heading to show its cards as tabs inside one
+card. Each card's title becomes its tab label:
+
+````markdown
+## Row {.tabset}
+
+```{r}
+#| title: "Speed"
+hist(cars$speed)
+```
+
+```{r}
+#| title: "Distance"
+hist(cars$dist)
+```
+````
+
+## Value boxes
+
+A value box shows a single number with a title and an optional icon. Write it
+as a `.valuebox` div whose first paragraph (or heading) is the title and
+second is the value:
+
+```markdown
+::: {.valuebox icon="pencil" color="primary"}
+Articles per day
+
+45
+:::
+```
+
+Or produce it from a cell with `content: valuebox`, printing a list (R) or a
+dict (Python) with `value` and, optionally, `icon` and `color`:
+
+````markdown
+```{r}
+#| content: valuebox
+#| title: "Spam"
+list(icon = "trash", color = "danger", value = 12)
+```
+````
+
+The output is read, not evaluated. If it doesn't have the expected shape,
+Quarto warns ([`Q-27-1`](/errors/dashboard/Q-27-1.qmd)) and shows the printed
+text as the value.
+
+- `icon` is a [Bootstrap Icons](https://icons.getbootstrap.com) name.
+- `color` is a Bootstrap theme color (`primary`, `success`, `danger`, …) or any
+  CSS color. `bg-color` and `fg-color` set the background and text colors
+  separately.
+- `showcase-position` (or `showcase`) moves the icon: `left-center` (the
+  default), `top-right` or `bottom`.
+
+## Sidebars and toolbars
+
+### Page sidebars
+
+A section whose heading has the `.sidebar` class becomes a collapsible sidebar
+next to the rest of its page:
+
+````markdown
+## {.sidebar width="250px"}
+
+Filters and notes go here.
+
+## Column
+
+```{r}
+plot(cars)
+```
+````
+
+A sidebar placed after the content goes on the right. A level-1 `.sidebar`
+heading before the pages makes a *global* sidebar shared by every page. A
+sidebar inside a row applies to that row only.
+
+Headings inside a sidebar are styled as small headings, not as new sections.
+
+### Toolbars
+
+A `.toolbar` section is a horizontal strip above (or, placed after the
+content, below) the rest of its page or row. Set its `height` with an
+attribute:
+
+```markdown
+## {.toolbar}
+
+Choose a region: ...
+```
+
+A cell with `content: sidebar` or `content: toolbar` makes a sidebar or
+toolbar from its output, without a heading.
+
+### Card toolbars and card sidebars
+
+A `.card-toolbar` div (or a cell with `content: card-toolbar`) adds a toolbar
+to a card's header. A `.card-sidebar` div (or `content: card-sidebar`) adds a
+sidebar inside the card. By default either attaches to the card that follows
+it:
+
+```markdown
+::: {.card-toolbar}
+Options for the next card.
+:::
+
+::: {.card title="Results"}
+...
+:::
+```
+
+To place it somewhere else:
+
+- `target-element="previous"` (toolbars) or `target="previous"` (sidebars)
+  attaches it to the card before it. A previous-card toolbar goes in the
+  card's footer.
+- `header-for="<id>"` or `footer-for="<id>"` puts a toolbar in the header or
+  footer of the card with that id, or of the card holding an element with
+  that id. `target="<id>"` does the same for a sidebar.
+- A card sidebar's `position` is `left` or `right`, and its `width` sets its
+  width.
+
+A toolbar or sidebar that finds no card is left out with a warning
+([`Q-27-2`](/errors/dashboard/Q-27-2.qmd)).
+
+## Navigation bar
+
+The navigation bar shows the document's `title`, `subtitle` and authors, and
+the page tabs. Under `format: dashboard` you can add:
+
+- `logo`: an image path, `{path, alt}`, or `{light, dark}` variants. A logo
+  set in `_quarto.yml` is resolved relative to the project, so it works on
+  pages in any directory.
+- `nav-buttons`: links at the end of the navigation bar. Use `linkedin`,
+  `facebook`, `reddit` or `twitter` for share links to the current page, or a
+  map with `href` and, optionally, `icon`, `text`, `title`, `rel`, `target`
+  and `aria-label`:
+
+```yaml
+format:
+  dashboard:
+    logo: images/logo.png
+    nav-buttons:
+      - twitter
+      - icon: github
+        href: https://github.com/quarto-dev/quarto
+```
+
+An unknown alias is left out with a warning
+([`Q-27-3`](/errors/dashboard/Q-27-3.qmd)).
+
+With a light and a dark theme, the navigation bar gets a dark-mode toggle:
+
+```yaml
+format:
+  dashboard:
+    theme:
+      light: flatly
+      dark: darkly
+```
+
+## Dashboards in websites
+
+A page with `format: dashboard` can be part of a website. It keeps the site's
+navigation bar, with the dashboard's own bar (title and page tabs) under it,
+and the site footer. It uses the site's `format: html` theme unless the page
+sets a theme of its own.
+
+## Previewing
+
+`q2 preview` shows a live preview of a dashboard that updates as you edit,
+with working page tabs, card tabs, sidebars and full-screen cards.
+
+## Differences from Quarto 1
+
+Quarto 2 fixes several Quarto 1 dashboard bugs rather than reproducing them:
+
+- Orientation follows nesting depth. Quarto 1 flipped it on every change of
+  heading level, so a deeper heading before shallower ones could turn rows
+  into columns.
+- `.fill` and `.flow` on a row or column heading size the grid, as the
+  Quarto 1 documentation describes.
+- A toolbar's `height` is honored.
+- Headings inside sidebars and toolbars are demoted, as they are in cards.
+- `content: sidebar` and `content: toolbar` cells work.
+- A value box's title can be a paragraph or a heading, and it always shows.
+  Quarto 1 nested paragraphs, which hid the documented form's title.
+- `showcase-position` is honored, with `showcase` as an alias.
+- `header-for` and `footer-for` accept the card's or cell's own id. Quarto 1
+  failed with an error.
+- A card toolbar or sidebar that finds no card is a warning with a location,
+  not a fatal error or a silent drop.
+- A card's `height` is no longer copied onto its body.
+- Empty rows and columns are dropped consistently. Quarto 1 kept the last
+  empty one.
+- A single-page dashboard with a dark theme gets the toggle in its navigation
+  bar. Quarto 1 only added it with pages.
+- Share links leave out the title when the document has none, instead of
+  `title=undefined`.
+- In a website, the site's html theme is used only when the dashboard page
+  sets no theme. Quarto 1 replaced even the page's own theme.
+
+## Not yet supported
+
+- Shiny (`server: shiny`) and Observable JS dashboards.
+- Interactive DataTables / itables tables. Static markdown tables work.
+- Arranging several outputs in one card with `layout-ncol`.
+- `title`, `padding` and `content` options on **Jupyter** (Python, Julia)
+  cells: they are not passed on yet, so such cells become untitled cards and
+  `content: valuebox` has no effect. R (knitr) cells, `.card` and `.valuebox`
+  divs work.
+- The `github` nav-button alias. Give the repository URL as a link instead.
+- The dark-mode toggle in the live preview.

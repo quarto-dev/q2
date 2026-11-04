@@ -40,6 +40,8 @@ website:
       - guides/index.qmd
       - href: presentations/revealjs/index.qmd
         text: Presentations
+      - href: dashboards/index.qmd
+        text: Dashboards
       - href: errors/index.qmd
         text: Errors
   sidebar:
@@ -124,6 +126,10 @@ website:
           href: presentations/revealjs/index.qmd
           contents:
             - presentations/revealjs/index.qmd
+    - id: dashboards
+      title: "Dashboards"
+      contents:
+        - dashboards/index.qmd
     - id: errors
       title: "Error reference"
       contents:
