@@ -2,13 +2,13 @@
 title: 'Write search.json only when Algolia is configured (bd-cdehspam)'
 date: 2026-11-04
 description: 'Stop writing the Quarto 1-shaped search.json by default; write it only with a complete Algolia config or an explicit website.search.search-json override, and skip record extraction when it is not needed.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: in-progress
 braid:
   strand: bd-cdehspam
 ---
 
-**Checkout:** main checkout, branch `main` @ `94e1f8afe`.
-**Do not start implementation until the user gives the go-ahead.**
+**Branch:** `braid/bd-cdehspam-search-json-algolia-gate` (off `main` @ `94e1f8afe`).
+The user gave the go-ahead on 2026-11-04.
 
 ## Triage verdict
 
@@ -157,10 +157,12 @@ The investigation confirmed everything at HEAD (`94e1f8afe`):
    user docs must not present this as a general promise that q2 never
    touches user files. Word it as: "if the file is unchanged since q2
    wrote it, q2 removes it". The state file grows from the boolean to
-   `search_json_sha256: Option<String>`, so bump `STATE_VERSION`. A
-   v1 state with `search_json: true` has no hash. For that case,
-   either fall back to the old boolean behavior once or leave the
-   file. Pick one during implementation and record it in the plan.
+   `search_json_sha256: Option<String>`, so bump `STATE_VERSION`.
+   **Implemented choice:** a v1 state with `search_json: true` (no
+   hash) falls back to the old boolean behavior once, and the file is
+   removed. Leaving it would keep a stale file, possibly 30 MB, on
+   every site already rendered by q2, which defeats the point. v1
+   states only exist from q2 builds of the last few weeks.
 3. **Books:** they already behave the same, by construction. The book
    project's `pre_render` (`project/book/project_type.rs:104`) calls
    `copy_book_keys_to_website` on `project.config.metadata` before
@@ -177,8 +179,31 @@ The investigation confirmed everything at HEAD (`94e1f8afe`):
    `docs/guides/projects/website-search.qmd`. Nothing goes on a
    central migration page.
 
-The plan has no open questions left. Implementation waits on the
-user's go-ahead.
+The plan has no open questions left.
+
+## Progress
+
+- [x] Config: `SearchOptions::search_json`, resolved after the key
+  loop; Q-5-38 hint and Q-5-39 for non-booleans; unit tests in
+  `config.rs`.
+- [x] Writer: extraction (thread and serial) and write gated on the
+  flag. `WriterState` v2 stores a hash, and `remove_own_search_json`
+  is used by the off path, the empty-pages path, and
+  `website.search: false`.
+- [x] Integration tests: `records_site` fixture for the record-shape
+  tests, plus new cases (default absent, `true`, `false` with
+  Algolia, flip off and on, edited file survives, foreign file
+  survives, v1 state, book default).
+- [x] `format_resolution_cli.rs` filter removed.
+- [x] Docs: guide (options table, output files, Algolia section,
+  migration note), Q-5-38 and Q-5-39 option lists.
+- [x] `cargo xtask verify --skip-hub-build` green. `q2 render docs`
+  is clean in the edited pages (`--strict` reports 34 errors that
+  were already there, in figures/brand/lua-filters), and the docs
+  site no longer writes `search.json`.
+- [x] Windows cross-clippy attempted. It can't build `aws-lc-sys` from
+  macOS; the change has no platform-specific code.
+- [ ] PR, CI.
 
 ## Risks / tradeoffs (draft)
 

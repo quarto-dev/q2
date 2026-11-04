@@ -9,8 +9,12 @@
 //! Derive Quarto 1's `search.json` records from a [`PageCapture`].
 //!
 //! Quarto 1 documents `search.json` as uploadable to Algolia and some
-//! users consume it directly, so q2 keeps emitting it in the same
-//! shape (`website-search.ts::updateSearchIndex`, 310-415):
+//! users consume it directly, so q2 can still emit it in the same
+//! shape (`website-search.ts::updateSearchIndex`, 310-415). q2's own
+//! search box reads the Pagefind bundle instead, so the file is
+//! written only when Algolia is configured or the site sets
+//! `website.search.search-json: true` (see
+//! [`SearchOptions::search_json`](super::SearchOptions::search_json)):
 //!
 //! - one record per page with `section: ""` and the text that is not
 //!   inside any level-2 section (`objectID == href`);

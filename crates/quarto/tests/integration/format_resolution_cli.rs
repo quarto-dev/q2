@@ -59,8 +59,7 @@ fn text(out: &Output) -> String {
 }
 
 /// Every output file under `_book/` (or `_site/`), relative, sorted, with the
-/// `site_libs` support directory and the search index (`search.json`, which
-/// a book render writes whatever the format) left out.
+/// `site_libs` support directory (which holds the search index) left out.
 fn outputs(dir: &Path) -> Vec<String> {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
         let Ok(rd) = std::fs::read_dir(dir) else {
@@ -75,14 +74,12 @@ fn outputs(dir: &Path) -> Vec<String> {
                     walk(root, &path, out);
                 }
             } else {
-                let rel = path
-                    .strip_prefix(root)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                if rel != "search.json" {
-                    out.push(rel);
-                }
+                out.push(
+                    path.strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
             }
         }
     }

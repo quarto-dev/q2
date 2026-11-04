@@ -29,7 +29,7 @@ website:
 
 The known options are `location`, `type`, `limit`, `collapse-after`,
 `copy-button`, `keyboard-shortcut`, `show-item-context`,
-`merge-navbar-crumbs`, `federate`, and `algolia`. Inside a `federate`
+`merge-navbar-crumbs`, `federate`, `algolia`, and `search-json`. Inside a `federate`
 entry, the known keys are `url`, `title`, `weight`, and `bundle`.
 
 ## How to fix it
