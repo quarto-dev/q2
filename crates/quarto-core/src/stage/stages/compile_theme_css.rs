@@ -542,6 +542,10 @@ fn cache_key(
     if theme_config.dashboard_layer {
         hasher.update(b"db1");
     }
+    // Hashed only when cleared, for the same reason.
+    if !theme_config.listing_layer {
+        hasher.update(b"nl1");
+    }
 
     let hash = hasher.finalize();
     Ok(hex::encode(hash))
@@ -713,6 +717,11 @@ impl PipelineStage for CompileThemeCssStage {
         // layer (dashboard plan D4). Keyed on the base format, not the
         // identifier, so a dashboard preview pseudo-format can map onto it.
         theme_config.dashboard_layer = ctx.format.base_format() == "dashboard";
+        // Q1 compiles the listing bundle into website pages only; a
+        // standalone dashboard without it keeps Bootstrap's light card
+        // headers (the listing layer's `$card-cap-bg` default is darker).
+        theme_config.listing_layer = !theme_config.dashboard_layer
+            || ctx.project.config.project_kind == crate::project::ProjectKind::Website;
 
         // `theme: pandoc` (Quarto 1's Bootstrap-free page) is not
         // implemented: quarto-sass drops the entry, so the page gets
@@ -982,6 +991,7 @@ async fn variant_css(
         && variant_config.title_block_layer
         && variant_config.highlight_style.is_none()
         && !variant_config.dashboard_layer
+        && variant_config.listing_layer
     {
         // Try the runtime cache first (cross-session persistence). The
         // default bundle loads nothing through the runtime, so its

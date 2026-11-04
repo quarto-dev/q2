@@ -117,6 +117,11 @@ fn dashboard_page_takes_the_site_html_theme_unless_it_sets_one() {
         dash.contains("bslib-sidebar-layout"),
         "with the dashboard layers"
     );
+    // Inside a website the listing layer stays, as in Q1 (one site theme).
+    assert!(
+        dash.contains(".quarto-listing"),
+        "website dashboards keep the listing layer"
+    );
     let own = theme_css(&site, "own.html");
     assert!(!own.contains("Source Sans Pro"), "own.html sets darkly");
     assert!(own.contains("#222"), "darkly");

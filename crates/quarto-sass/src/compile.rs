@@ -134,9 +134,11 @@ fn builtin_user_layers(config: &ThemeConfig) -> Result<Vec<crate::SassLayer>, Sa
         load_copy_code_layer()?,
         load_equation_number_layer()?,
         load_link_external_layer()?,
-        load_listing_layer()?,
-        load_search_layer()?,
     ]);
+    if config.listing_layer {
+        layers.push(load_listing_layer()?);
+    }
+    layers.push(load_search_layer()?);
     Ok(layers)
 }
 

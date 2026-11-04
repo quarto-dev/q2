@@ -456,3 +456,48 @@ fn single_page_navbar_toggle_and_nav_buttons() {
         Some("https://twitter.com/intent/tweet?url=|url|&text=NAV")
     );
 }
+
+/// Found by the dashboard examples (examples/dashboards):
+///
+/// - Value-box icons and nav-buttons are `bi-*` classes, so a standalone
+///   dashboard ships Bootstrap Icons (Q1 does for every Bootstrap page).
+/// - A sidebar's content is not filled: Q1's fill passes stop at
+///   `aside.sidebar`, and filled sections stretched down the sidebar.
+/// - Outside a website the theme has no listing layer (Q1 compiles it into
+///   website pages only), so cards keep Bootstrap's light header color.
+/// - The navbar's `<button>` dark-mode toggle loses the browser's button
+///   chrome (Q1 `button.quarto-color-scheme-toggle`).
+#[test]
+fn standalone_dashboard_assets_match_quarto_1() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\nformat:\n  dashboard:\n    theme:\n      light: cosmo\n      dark: darkly\n---\n\n## {.sidebar}\n\n### About\n\nText.\n\n### Data\n\nMore.\n\n## Column\n\n::: {.valuebox icon=\"cart\"}\nOrders\n\n12\n:::\n",
+    );
+    let (path, html) = render(temp.path(), "dashboard");
+    assert!(
+        html.contains("bootstrap-icons.css"),
+        "Bootstrap Icons linked"
+    );
+    let doc = scraper::Html::parse_document(&html);
+    let sel = |s: &str| scraper::Selector::parse(s).unwrap();
+    let sections: Vec<_> = doc.select(&sel("aside.sidebar section")).collect();
+    assert_eq!(sections.len(), 2, "{html}");
+    for s in sections {
+        let classes: Vec<&str> = s.value().classes().collect();
+        assert!(!classes.contains(&"html-fill-item"), "{classes:?}");
+    }
+    assert!(
+        !html.contains("dashboard-fill-stop"),
+        "transient class removed"
+    );
+    let css = linked_theme_css(&path, &html);
+    assert!(
+        !css.contains(".quarto-listing"),
+        "no listing layer outside a website"
+    );
+    assert!(
+        css.contains("button.quarto-color-scheme-toggle"),
+        "toggle button rule"
+    );
+}

@@ -63,7 +63,14 @@ const FILL_CLASSES: &[&str] = &[
 ];
 
 /// Q1 `kFillDontRecurseInsideClasses`.
-const DONT_RECURSE: &[&str] = &["sidebar", "toolbar"];
+const DONT_RECURSE: &[&str] = &["sidebar", "toolbar", FILL_STOP];
+
+/// Marks a sidebar\'s Div while the lowering runs. Q1\'s fill passes stop
+/// at `aside.sidebar` (`sidebar` in [`DONT_RECURSE`]); q2\'s `<aside>` is
+/// raw HTML around the Div, so later passes (the page\'s) would otherwise
+/// fill the sidebar\'s content and stretch it down the sidebar.
+/// [`lower_document`] removes the class.
+const FILL_STOP: &str = "dashboard-fill-stop";
 
 const EXPAND_BUTTON: &str = r#"<bslib-tooltip placement="auto" bsoptions="[]" data-require-bs-version="5" data-require-bs-caller="tooltip()">
     <template>Expand</template>
@@ -172,7 +179,8 @@ fn apply_fill_page(block: &mut Block) {
     rename_class(block, "dashboard-flow-pending-page", FLOW_PENDING);
 }
 
-/// Rename `from` to `to` on every Div under `block`.
+/// Rename `from` to `to` on every Div under `block`; an empty `to` removes
+/// the class.
 fn rename_class(block: &mut Block, from: &str, to: &str) {
     match block {
         Block::Div(d) => {
@@ -181,6 +189,7 @@ fn rename_class(block: &mut Block, from: &str, to: &str) {
                     *c = to.to_string();
                 }
             }
+            d.attr.1.retain(|c| !c.is_empty());
             for child in d.content.iter_mut() {
                 rename_class(child, from, to);
             }
@@ -344,6 +353,7 @@ pub fn lower_document(blocks: Blocks, preview: bool) -> (Blocks, TopLevel) {
         .collect();
     for b in lowered_all.iter_mut() {
         rename_class(b, FLOW_PENDING, "flow");
+        rename_class(b, FILL_STOP, "");
     }
     if mark_top_level_sidebar(&mut lowered_all) {
         add_unique(&mut top.body_classes, "dashboard-sidebar");
@@ -518,6 +528,7 @@ fn sidebar_layout(
     if let Block::Div(d) = &mut sidebar {
         add_class(&mut d.attr, "html-fill-container");
         add_class(&mut d.attr, "html-fill-item");
+        add_class(&mut d.attr, FILL_STOP);
     }
     let aside = raw_html(&format!(
         r#"<aside id="{id}" class="sidebar html-fill-container html-fill-item">"#

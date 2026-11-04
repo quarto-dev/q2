@@ -27,5 +27,5 @@ body.dashboard-fill.dashboard-toolbar.fullcontent.quarto-dashboard.quarto-light
                       span.badge.bslib-full-screen-enter.rounded-pill
             aside#bslib-sidebar-1.html-fill-container.html-fill-item.sidebar
               div.html-fill-container.html-fill-item
-                div.cell-output-display.html-fill-container.html-fill-item
+                div.cell-output-display
             button.collapse-toggle [aria-controls=bslib-sidebar-1 title=Toggle sidebar]
