@@ -755,8 +755,8 @@ fn ends_with_abbreviation(text: &str) -> bool {
     // rules out almost every Str before the per-abbreviation scan.
     text.ends_with('.')
         && ABBREVIATIONS
-        .iter()
-        .any(|abbrev| has_valid_abbrev_boundary(text, abbrev))
+            .iter()
+            .any(|abbrev| has_valid_abbrev_boundary(text, abbrev))
 }
 
 /// Coalesce Str nodes that end with abbreviations with following words

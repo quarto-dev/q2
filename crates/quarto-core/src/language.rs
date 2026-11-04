@@ -285,9 +285,11 @@ fn embedded_term_layer(filename: &str) -> Option<Arc<Result<TermLayer, String>>>
         .get_or_init(Default::default)
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    Some(Arc::clone(parsed.entry(filename.to_string()).or_insert_with(
-        || Arc::new(parse_term_file(content, filename).map_err(|e| e.to_string())),
-    )))
+    Some(Arc::clone(
+        parsed.entry(filename.to_string()).or_insert_with(|| {
+            Arc::new(parse_term_file(content, filename).map_err(|e| e.to_string()))
+        }),
+    ))
 }
 
 /// Resolves the term table for `lang`.
