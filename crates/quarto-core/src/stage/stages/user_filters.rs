@@ -63,8 +63,8 @@ impl UserFiltersStage {
 /// redirect `Position::Post` filters into — HTML has no `main.lua` leg at
 /// all, so it must keep running them via pampa exactly as before.
 /// Whether this render defaults `link-citations` to true, as Q1's
-/// Bootstrap HTML and revealjs formats do (`format-html-bootstrap.ts`,
-/// `format-reveal.ts`). Citeproc reads the key with a `false` default,
+/// Bootstrap HTML (dashboards included) and revealjs formats do
+/// (`format-html-bootstrap.ts`, `format-reveal.ts`). Citeproc reads the key with a `false` default,
 /// Pandoc's, which every other format keeps.
 ///
 /// Minimal HTML is not Bootstrap HTML, so it keeps `false`; so do book
@@ -78,9 +78,12 @@ fn links_citations_by_default(ctx: &StageContext, meta: &quarto_pandoc_types::Co
     }
     match PipelineProfile::from_format(&ctx.format.target_format) {
         PipelineProfile::RevealjsRender | PipelineProfile::RevealjsPreview => true,
-        PipelineProfile::HtmlRender | PipelineProfile::HtmlPreview => {
-            !crate::format::is_minimal_html(meta)
-        }
+        // Q1 dashboards build on its Bootstrap HTML format, so they share
+        // its default.
+        PipelineProfile::HtmlRender
+        | PipelineProfile::HtmlPreview
+        | PipelineProfile::DashboardRender
+        | PipelineProfile::DashboardPreview => !crate::format::is_minimal_html(meta),
         PipelineProfile::Pandoc(_) => false,
     }
 }
