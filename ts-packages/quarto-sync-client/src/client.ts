@@ -71,7 +71,7 @@ import {
   recordLocalChange,
   recordLocalDelivery,
   recordConnectionEvent,
-  getDocSyncActivity,
+  getDocSyncActivityWithPersisted,
 } from './sync-activity.js';
 
 /**
@@ -258,6 +258,14 @@ interface SyncClientState {
   rawWsAdapter: NetworkAdapter | null;
   indexHandle: DocHandle<IndexDocument> | null;
   fileHandles: Map<string, DocHandle<FileDocument>>;
+  /**
+   * Registers a handle with the sync-activity bookkeeping installed by
+   * `trackPeers` (change classification + delivery stamping). Every
+   * handle this client obtains goes through `createDoc` / `findDoc`,
+   * which call it at creation, so listeners are in place before the
+   * first sync exchange. Null while no repo is connected.
+   */
+  watchHandle: ((handle: DocHandle<unknown>) => void) | null;
   /**
    * Dangling index entries (path → doc id as stored in the index):
    * files the index references but whose documents the sync server
@@ -481,6 +489,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     rawWsAdapter: null,
     indexHandle: null,
     fileHandles: new Map(),
+    watchHandle: null,
     unavailableFiles: new Map(),
     binaryFiles: new Set(),
     cleanupFns: [],
@@ -690,10 +699,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     //
     // The installed automerge-repo neither emits Repo `document` events
     // nor reports patchInfo.source (hardcoded 'change' — upstream TODO),
-    // so instead: periodically sweep the repo's handle cache to attach
-    // change listeners, and classify a change as remote when any of its
-    // applied automerge changes carries an actor other than the doc's
-    // own local actor. Handle-level listeners die with the repo.
+    // so instead: every handle is registered by `createDoc` / `findDoc`
+    // the moment it is obtained (state.watchHandle), and a change is
+    // classified as remote when any of its applied automerge changes
+    // carries an actor other than the doc's own local actor.
+    // Handle-level listeners die with the repo.
     const onHandleChange = ({
       handle,
       doc,
@@ -730,39 +740,50 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         // Classification is best-effort display info; never break sync.
       }
     };
-    const watchedHandles = new WeakSet<DocHandle<unknown>>();
-    const watchHandles = () => {
-      for (const handle of Object.values(repo.handles)) {
-        if (!watchedHandles.has(handle)) {
-          watchedHandles.add(handle);
-          handle.on('change', onHandleChange);
-          // Stamp "your change got synced": when a storage-backed peer's
-          // confirmed heads catch up to a doc that has an unacknowledged
-          // local change from this session, record the delivery time.
-          // Same signal the exit drain uses (isDelivered, bd-10deu8h4).
-          handle.on('remote-heads', () => {
-            try {
-              if (!handle.isReady()) return;
-              const docId = String(handle.documentId);
-              const a = getDocSyncActivity(docId);
-              if (!a.lastLocalChangeAt) return;
-              if ((a.lastLocalDeliveredAt ?? 0) >= a.lastLocalChangeAt) return;
-              if (isDelivered(handle)) recordLocalDelivery(docId);
-            } catch {
-              // Display-only bookkeeping; never break sync.
-            }
-          });
-        }
+    // Stamp "your change got synced": when a storage-backed peer's
+    // confirmed heads catch up to a doc that has an unacknowledged local
+    // change, record the delivery time. The local-change timestamp is
+    // read with its persisted value so an edit made offline in a previous
+    // page session (then reloaded, e.g. by the sign-in redirect) is still
+    // seen as pending and its first acknowledgement counts. Same signal
+    // the exit drain uses (isDelivered, bd-10deu8h4).
+    const checkDelivery = (handle: DocHandle<unknown>) => {
+      try {
+        if (!handle.isReady()) return;
+        const docId = String(handle.documentId);
+        const a = getDocSyncActivityWithPersisted(docId);
+        if (!a.lastLocalChangeAt) return;
+        if ((a.lastLocalDeliveredAt ?? 0) >= a.lastLocalChangeAt) return;
+        if (isDelivered(handle)) recordLocalDelivery(docId);
+      } catch {
+        // Display-only bookkeeping; never break sync.
       }
     };
-    watchHandles();
-    const watchTimer = setInterval(watchHandles, 2000);
-    repo.networkSubsystem.on('peer', onPeer);
+    const watchedHandles = new Set<DocHandle<unknown>>();
+    const watchHandle = (handle: DocHandle<unknown>) => {
+      if (watchedHandles.has(handle)) return;
+      watchedHandles.add(handle);
+      handle.on('change', onHandleChange);
+      handle.on('remote-heads', () => checkDelivery(handle));
+      // A handle obtained from the repo's cache may already have been
+      // acknowledged by the hub; evaluate once so that is not missed.
+      checkDelivery(handle);
+    };
+    state.watchHandle = watchHandle;
+    const onPeerWithDeliveryCheck = (ev: Parameters<typeof onPeer>[0]) => {
+      onPeer(ev);
+      // A peer's storageId is only known from here on; re-check every
+      // watched doc so a delivery acknowledged before the listener could
+      // compare against the storage peer gets stamped.
+      for (const handle of watchedHandles) checkDelivery(handle);
+    };
+    repo.networkSubsystem.on('peer', onPeerWithDeliveryCheck);
     repo.networkSubsystem.on('peer-disconnected', onPeerGone);
     repo.networkSubsystem.on('message', onMessage);
     state.cleanupFns.push(() => {
-      clearInterval(watchTimer);
-      repo.networkSubsystem.off('peer', onPeer);
+      state.watchHandle = null;
+      watchedHandles.clear();
+      repo.networkSubsystem.off('peer', onPeerWithDeliveryCheck);
       repo.networkSubsystem.off('peer-disconnected', onPeerGone);
       repo.networkSubsystem.off('message', onMessage);
     });
@@ -798,11 +819,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const doc = automergeFrom(initialValue ?? {}, { author: state.authorId });
       const handle = state.repo!.import<T>(automergeSerialize(doc), docId ? { docId } : undefined);
       applyAuthorId(handle, state.authorId);
+      state.watchHandle?.(handle as unknown as DocHandle<unknown>);
       return handle;
     }
     // No author ID (offline mode) - use import without author to respect the provided docId
     const doc = automergeFrom(initialValue ?? {});
     const handle = state.repo!.import<T>(automergeSerialize(doc), docId ? { docId } : undefined);
+    state.watchHandle?.(handle as unknown as DocHandle<unknown>);
     return handle;
   }
 
@@ -825,6 +848,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         const handle = await repo.find<T>(docId, {
           signal: AbortSignal.timeout(FIND_DOC_ATTEMPT_TIMEOUT_MS),
         });
+        // Watch before waiting on readiness so the change and
+        // remote-heads listeners are in place for the first sync
+        // exchange (the change handler itself skips the not-ready load).
+        state.watchHandle?.(handle as unknown as DocHandle<unknown>);
         await handle.whenReady();
         applyAuthorId(handle, state.authorId);
         return handle;
@@ -1459,15 +1486,18 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
     recordConnectionEvent('connect', syncServerUrl);
     try {
-      const rawAdapter = await buildWsAdapter(
-        syncServerUrl,
-        effectiveAuth,
-        options.retryIntervalMs,
-      );
-      state.rawWsAdapter = rawAdapter;
-      state.wsAdapter = wrapAdapter(rawAdapter);
+      const localOnly = options.network === 'none';
+      if (!localOnly) {
+        const rawAdapter = await buildWsAdapter(
+          syncServerUrl,
+          effectiveAuth,
+          options.retryIntervalMs,
+        );
+        state.rawWsAdapter = rawAdapter;
+        state.wsAdapter = wrapAdapter(rawAdapter);
+      }
       state.repo = new Repo({
-        network: [state.wsAdapter],
+        network: state.wsAdapter ? [state.wsAdapter] : [],
         storage: buildStorageAdapter(options.storage),
       });
       state.authorId = authorId ?? null;
@@ -1480,7 +1510,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
       // Try to connect to peer, but continue in offline mode if it fails
       let isOnline = false;
-      try {
+      if (localOnly) {
+        syncLog('No network adapter requested - local-only mode');
+      } else try {
         syncLog('Waiting for peer connection...');
         await waitForPeer(state.repo, peerTimeoutMs);
         syncLog('Peer connected - online mode');
@@ -2427,15 +2459,18 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      const rawAdapter = await buildWsAdapter(
-        options.syncServer,
-        options.auth,
-        options.retryIntervalMs,
-      );
-      state.rawWsAdapter = rawAdapter;
-      state.wsAdapter = wrapAdapter(rawAdapter);
+      const localOnly = options.network === 'none';
+      if (!localOnly) {
+        const rawAdapter = await buildWsAdapter(
+          options.syncServer,
+          options.auth,
+          options.retryIntervalMs,
+        );
+        state.rawWsAdapter = rawAdapter;
+        state.wsAdapter = wrapAdapter(rawAdapter);
+      }
       state.repo = new Repo({
-        network: [state.wsAdapter],
+        network: state.wsAdapter ? [state.wsAdapter] : [],
         storage: buildStorageAdapter(options.storage),
       });
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };
@@ -2446,7 +2481,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // The timeout defaults to 1 ms so the browser falls back to IDB
       // quickly; callers that need guaranteed online creation (e.g. test
       // helpers) should pass options.peerTimeoutMs to wait for the peer.
-      try {
+      if (localOnly) {
+        syncLog('No network adapter requested - creating project local-only');
+      } else try {
         syncLog('Waiting for peer connection...');
         await waitForPeer(state.repo, options.peerTimeoutMs ?? 1);
         syncLog('Peer connected - online mode');

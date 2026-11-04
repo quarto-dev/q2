@@ -21,6 +21,7 @@ import type { DocHandle, DocumentId } from '@automerge/automerge-repo';
 import { from as automergeFrom, save as automergeSerialize } from '@automerge/automerge';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import { repoStorageAdapter } from './ephemeralStorage';
+import { isSyncAllowed, onSyncAllowedChange } from './syncGate';
 import { resolveSyncServerUrl } from '../utils/routing';
 import { fetchAuthMe } from './authService';
 import { CollectionConnectError } from './collectionConnectError';
@@ -79,7 +80,13 @@ interface CollectionConnection {
 
 interface ServerConnection {
   repo: Repo;
-  wsAdapter: BrowserWebSocketClientAdapter;
+  /**
+   * The live WebSocket adapter, or null while the sync gate is closed
+   * (optional auth: signed out). Attached/detached by `applySyncGate`.
+   */
+  wsAdapter: BrowserWebSocketClientAdapter | null;
+  /** Resolved ws(s) URL the adapter connects to. */
+  url: string;
   /** Number of collection connections using this server. */
   refCount: number;
   /**
@@ -324,9 +331,12 @@ function acquireServer(syncServerUrl: string): ServerConnection {
   const resolved = resolveSyncServerUrl(syncServerUrl);
   let server = servers.get(resolved);
   if (!server) {
-    const wsAdapter = new BrowserWebSocketClientAdapter(resolved);
+    // Sync gate (optional auth): while signed out, the repo runs on its
+    // storage adapter alone; the WebSocket adapter is attached once the
+    // gate opens (see the onSyncAllowedChange subscription below).
+    const wsAdapter = isSyncAllowed() ? new BrowserWebSocketClientAdapter(resolved) : null;
     const repo = new Repo({
-      network: [wsAdapter],
+      network: wsAdapter ? [wsAdapter] : [],
       // Ephemeral storage mode (q2 preview embed build) keeps the
       // document cache in memory — see ephemeralStorage.ts.
       storage: repoStorageAdapter(),
@@ -334,6 +344,7 @@ function acquireServer(syncServerUrl: string): ServerConnection {
     const conn: ServerConnection = {
       repo,
       wsAdapter,
+      url: resolved,
       refCount: 0,
       connectedPeers: 0,
       whenConnected(timeoutMs: number): Promise<boolean> {
@@ -372,10 +383,36 @@ function releaseServer(syncServerUrl: string): void {
   if (!server) return;
   server.refCount--;
   if (server.refCount <= 0) {
-    server.wsAdapter.disconnect();
+    server.wsAdapter?.disconnect();
     servers.delete(resolved);
   }
 }
+
+/**
+ * Attach or detach every server's WebSocket adapter to match the sync
+ * gate. Opening the gate (sign-in) adds a fresh adapter to each existing
+ * repo, so collections opened from cache while signed out start syncing
+ * without a reconnect; closing it (sign-out) tears the adapters down so
+ * nothing keeps retrying an upgrade the hub would reject.
+ */
+function applySyncGate(allowed: boolean): void {
+  for (const server of servers.values()) {
+    if (allowed && !server.wsAdapter) {
+      const wsAdapter = new BrowserWebSocketClientAdapter(server.url);
+      server.wsAdapter = wsAdapter;
+      server.repo.networkSubsystem.addNetworkAdapter(wsAdapter);
+    } else if (!allowed && server.wsAdapter) {
+      const wsAdapter = server.wsAdapter;
+      server.wsAdapter = null;
+      wsAdapter.disconnect();
+      server.repo.networkSubsystem.removeNetworkAdapter(wsAdapter);
+      server.connectedPeers = 0;
+      onConnectionChange?.(false);
+    }
+  }
+}
+
+onSyncAllowedChange(applySyncGate);
 
 // ============================================================================
 // Connection Management
@@ -632,7 +669,7 @@ export async function disconnect(): Promise<void> {
   }
   connections.clear();
   for (const server of servers.values()) {
-    server.wsAdapter.disconnect();
+    server.wsAdapter?.disconnect();
   }
   servers.clear();
 }

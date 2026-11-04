@@ -33,8 +33,7 @@ import LoadingIndicator from './components/Loading';
 import SkipLink from './components/SkipLink';
 import Toast from './components/Toast';
 import { ViewModeProvider } from './components/ViewModeContext';
-import { LoginScreen } from './components/auth/LoginScreen';
-import { readAuthErrorReason } from './auth/authError';
+import { readAuthErrorReason, authErrorMessage } from './auth/authError';
 import { useAuthProvider } from './auth/AuthProvider';
 import {
   connect,
@@ -67,6 +66,7 @@ import { createConnectionChangeHandler } from './services/connectionHandlers';
 import type { Route, ShareRoute, LinkProjectSetRoute, JoinCollectionRoute } from './utils/routing';
 import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath, savePreAuthHash, clearPreAuthHash, buildHashRoute } from './utils/routing';
 import { isEphemeralStorage } from './services/ephemeralStorage';
+import { isSyncAllowed, setSyncAllowed } from './services/syncGate';
 import { probeHealth, startEphemeralServerWatchdog } from './services/ephemeralServerWatchdog';
 import { disconnect as disconnectProjectSet } from './services/projectSetService';
 import { fetchPreviewSessionConfig } from './services/previewConfig';
@@ -114,7 +114,9 @@ async function connectAndLoadContents(
   // is a fresh origin, so a persisted cache could never hit and would
   // just accumulate in IndexedDB.
   const storage: StorageKind = isEphemeralStorage() ? 'memory' : 'indexeddb';
-  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, authorId, screenName, color, { peerTimeoutMs, storage });
+  // Optional auth: signed out means local adapters only (see syncGate.ts).
+  const network = isSyncAllowed() ? 'websocket' : 'none';
+  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, authorId, screenName, color, { peerTimeoutMs, storage, network });
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -134,6 +136,11 @@ const AUTH_ENABLED =
   (import.meta.env.VITE_E2E === '1' &&
     (window as any).__QUARTO_TEST_AUTH_ENABLED__ === true);
 
+// Optional auth (prototype): with auth configured, repos start with local
+// adapters only; the gate opens once /auth/me confirms a session (see the
+// effect in App) and closes again on sign-out. Without auth it stays open.
+setSyncAllowed(!AUTH_ENABLED);
+
 
 function App() {
   const {
@@ -145,6 +152,15 @@ function App() {
     applyAuth,
   } = useAuth();
   const authProvider = useAuthProvider();
+  // Signed in through the hub (always false when auth is not configured).
+  const signedIn = AUTH_ENABLED && !!auth;
+
+  // Sync gate (optional auth): open the network to Automerge repos only
+  // while a session exists. Re-evaluated whenever auth resolves or ends.
+  useEffect(() => {
+    if (!AUTH_ENABLED || authLoading) return;
+    setSyncAllowed(!!auth);
+  }, [auth, authLoading]);
 
   const [project, setProject] = useState<ProjectEntry | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -232,8 +248,10 @@ function App() {
   // `resolveAuthorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
   const resolveAuthorId = useCallback(
-    (indexDocId: string) => resolveAuthorIdRequest(indexDocId, AUTH_ENABLED, expireSession, localAuthorId),
-    [expireSession, localAuthorId],
+    // Signed out under optional auth behaves like auth-disabled: the stable
+    // local author id is used and the network is never touched.
+    (indexDocId: string) => resolveAuthorIdRequest(indexDocId, signedIn, expireSession, localAuthorId),
+    [signedIn, expireSession, localAuthorId],
   );
 
   // Capture the auth error reason from the redirect query param (once,
@@ -682,7 +700,7 @@ function App() {
     // and a connection opened without them stamps no author on its edits and registers no
     // identity, so a docx download names comment authors by raw actor-id prefix. (With auth on,
     // the author id comes from the server, but the screen name is still needed for the identity.)
-    if (screenName === undefined || (!AUTH_ENABLED && localAuthorId === undefined)) return;
+    if (screenName === undefined || (!signedIn && localAuthorId === undefined)) return;
     initialLoadRef.current = true;
 
     const loadFromUrl = async () => {
@@ -792,21 +810,25 @@ function App() {
     };
 
     loadFromUrl();
-  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile, connectToSharedProject, screenName, localAuthorId]);
+  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile, connectToSharedProject, screenName, localAuthorId, signedIn]);
 
-  // Disconnect sync when auth is lost (token expired or user logged out).
-  // Without this, the WebSocket adapter keeps retrying with an expired cookie
-  // and the user sees "Connection lost" instead of the login screen.
+  // Disconnect sync when a session ends (token expired or user logged out)
+  // while a project is open. Without this, the WebSocket adapter keeps
+  // retrying with an expired cookie and the user sees "Connection lost".
+  // Only the signed-in → signed-out transition triggers this: under
+  // optional auth a signed-out user can have a local-only project open.
+  const wasSignedInRef = useRef(false);
   useEffect(() => {
-    if (AUTH_ENABLED && !auth && !authLoading && project) {
+    const lost = wasSignedInRef.current && !signedIn;
+    wasSignedInRef.current = signedIn;
+    if (lost && project) {
       disconnect();
       setProject(null);
       setFiles([]);
       setFileContents(new Map());
       setConnectionError(null);
-
     }
-  }, [auth, authLoading, project]);
+  }, [signedIn, project]);
 
   // Intercept Ctrl+S / Cmd+S to prevent browser save dialog
   useEffect(() => {
@@ -954,6 +976,8 @@ function App() {
         files,
         // Ephemeral storage mode (bd-sw4xy1vw): no IndexedDB cache.
         storage: isEphemeralStorage() ? 'memory' : 'indexeddb',
+        // Optional auth: signed out means local adapters only.
+        network: isSyncAllowed() ? 'websocket' : 'none',
       }, undefined, screenName, cursorColor, resolveAuthorId);
 
       // Store the project in IndexedDB
@@ -1024,8 +1048,8 @@ function App() {
   }
 
   if (AUTH_ENABLED && !auth) {
-    // Invite routes render the InviteLanding card instead of the generic
-    // login screen (bd-fxdcxbpq): who invited you, what to, and a single
+    // Invite routes render the InviteLanding card while signed out
+    // (bd-fxdcxbpq): who invited you, what to, and a single
     // Google CTA. The OAuth round trip returns to the same invite URL via
     // the pre-auth hash save/restore, then shows the signed-in variant.
     const signInCta = (
@@ -1069,13 +1093,21 @@ function App() {
         />
       );
     }
-    return (
-      <LoginScreen
-        errorReason={authErrorReason}
-        message={sessionExpired ? 'Your session expired — please sign in again.' : undefined}
-      />
-    );
+    // Otherwise fall through: optional auth shows the projects home with a
+    // sign-in button (local-only until the user signs in).
   }
+
+  // Sign-in affordance + status note for the projects home (optional auth).
+  const signInCta = AUTH_ENABLED && !auth ? (
+    <authProvider.SignInButton
+      loginUri={window.location.origin + hubPath('/auth/callback')}
+    />
+  ) : undefined;
+  const authNote = authErrorReason !== undefined
+    ? authErrorMessage(authErrorReason)
+    : sessionExpired
+      ? 'Your session expired — sign in again to resume syncing.'
+      : undefined;
 
   // Gate on screen name being loaded (fast IndexedDB read).
   // Prevents connects from firing before the identity can be written.
@@ -1169,7 +1201,9 @@ function App() {
                 ? () => void handleSelectProject(lastOpenAttempt.project, lastOpenAttempt.filePathOverride)
                 : undefined
             }
-            onSignOut={AUTH_ENABLED ? logout : undefined}
+            onSignOut={signedIn ? logout : undefined}
+            signInCta={signInCta}
+            authNote={authNote}
             authEmail={auth?.email}
             authPicture={auth?.picture}
             onScreenNameChange={setScreenName}
@@ -1201,7 +1235,7 @@ function App() {
               onSelectProject={handleSelectProject}
               onProjectCreated={handleProjectCreated}
               error={connectionError}
-              onSignOut={AUTH_ENABLED ? logout : undefined}
+              onSignOut={signedIn ? logout : undefined}
               authEmail={auth?.email}
               authPicture={auth?.picture}
               onScreenNameChange={setScreenName}

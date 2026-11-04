@@ -324,6 +324,14 @@ export interface ConnectOptions {
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
   /**
+   * Network backing for this connection. Default `'websocket'`. `'none'`
+   * builds the Repo with storage only — no WebSocket adapter is created,
+   * no peer wait runs, and the connection reports offline. Used by the
+   * optional-auth prototype while the user is signed out (the hub would
+   * reject the upgrade); a later sign-in reloads the page and reconnects.
+   */
+  network?: 'websocket' | 'none';
+  /**
    * WebSocket adapter retry interval (ms). Default: upstream's 5000.
    * Note for Firefox-sensitive callers: do not shorten this — the
    * upstream retry abandons CONNECTING sockets without closing them,
@@ -459,6 +467,14 @@ export interface CreateProjectOptions {
   requireOnline?: boolean;
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
+  /**
+   * Network backing for this connection. Default `'websocket'`. `'none'`
+   * builds the Repo with storage only — no WebSocket adapter is created,
+   * no peer wait runs, and the connection reports offline. Used by the
+   * optional-auth prototype while the user is signed out (the hub would
+   * reject the upgrade); a later sign-in reloads the page and reconnects.
+   */
+  network?: 'websocket' | 'none';
   /** WebSocket adapter retry interval (ms). See {@link ConnectOptions}. */
   retryIntervalMs?: number;
   /** Cold-start "unavailable" retry policy for post-create index syncs. */
