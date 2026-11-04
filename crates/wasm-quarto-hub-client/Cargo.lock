@@ -45,6 +45,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "android_system_properties"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -479,8 +488,10 @@ version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
+ "iana-time-zone",
  "num-traits",
  "serde",
+ "windows-link",
 ]
 
 [[package]]
@@ -700,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -2105,6 +2116,30 @@ dependencies = [
  "tokio",
  "tower-service",
  "tracing",
+]
+
+[[package]]
+name = "iana-time-zone"
+version = "0.1.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e31bc9ad994ba00e440a8aa5c9ef0ec67d5cb5e5cb0cc7f8b744a35b389cc470"
+dependencies = [
+ "android_system_properties",
+ "core-foundation-sys",
+ "iana-time-zone-haiku",
+ "js-sys",
+ "log",
+ "wasm-bindgen",
+ "windows-core",
+]
+
+[[package]]
+name = "iana-time-zone-haiku"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -4212,7 +4247,7 @@ checksum = "edecfcd5d755a5e5d98e24cf43113e7cdaec5a070edd0f6b250c03a573da30fa"
 
 [[package]]
 name = "quarto-analysis"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -4234,7 +4269,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "hashlink",
  "pathdiff",
@@ -4246,14 +4281,14 @@ dependencies = [
 
 [[package]]
 name = "quarto-build-support"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "filetime",
 ]
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -4284,13 +4319,14 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
  "css-inline",
  "cssparser 0.36.0",
+ "dirs",
  "ego-tree",
  "flate2",
  "fontique",
@@ -4357,7 +4393,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -4408,7 +4444,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "once_cell",
  "quarto-highlight-encoding",
@@ -4436,7 +4472,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4444,7 +4480,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "pampa",
  "pollster",
@@ -4465,7 +4501,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-math"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "mitex-lexer",
  "mitex-parser",
@@ -4481,7 +4517,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-navigation"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -4493,7 +4529,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-node-discovery"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "dirs",
  "thiserror 2.0.21",
@@ -4527,7 +4563,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
@@ -4537,7 +4573,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-sass"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "include_dir",
  "once_cell",
@@ -4570,11 +4606,12 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "async-lock",
  "async-trait",
  "base64 0.22.1",
+ "chrono",
  "dunce",
  "grass",
  "js-sys",
@@ -4590,7 +4627,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "flate2",
  "quarto-build-support",
@@ -4602,7 +4639,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-transpile"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "oxc_allocator",
  "oxc_codegen",
@@ -4623,7 +4660,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "dirs",
  "serde",
@@ -4632,7 +4669,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-xml"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -7165,7 +7202,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.39.0"
+version = "0.40.0"
 
 [[package]]
 name = "wasm-quarto-hub-client"
