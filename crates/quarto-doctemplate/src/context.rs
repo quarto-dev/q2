@@ -12,6 +12,7 @@
 //! from Pandoc's `MetaValue` to `TemplateValue` happens in the writer layer.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::doc::Doc;
 
@@ -143,13 +144,19 @@ impl TemplateValue {
 }
 
 /// A context for template evaluation containing variable bindings.
+///
+/// Both fields are reference-counted so [`child`](Self::child) is O(1):
+/// a `$for$` loop creates a child per iteration, and deep-cloning the
+/// parent scope's whole variable table (website navigation metadata and
+/// all) for each one dominated rendering large listing pages
+/// (bd-x17470jx). `insert` copies a shared table on write.
 #[derive(Debug, Clone, Default)]
 pub struct TemplateContext {
     /// Variable bindings at this level.
-    variables: HashMap<String, TemplateValue>,
+    variables: Arc<HashMap<String, TemplateValue>>,
 
     /// Parent context for nested scopes (e.g., inside for loops).
-    parent: Option<Box<TemplateContext>>,
+    parent: Option<Arc<TemplateContext>>,
 }
 
 impl TemplateContext {
@@ -160,7 +167,7 @@ impl TemplateContext {
 
     /// Insert a variable into the context.
     pub fn insert(&mut self, key: impl Into<String>, value: TemplateValue) {
-        self.variables.insert(key.into(), value);
+        Arc::make_mut(&mut self.variables).insert(key.into(), value);
     }
 
     /// Get a variable from the context, checking parent scopes.
@@ -184,8 +191,8 @@ impl TemplateContext {
     /// The child context inherits access to parent variables.
     pub fn child(&self) -> TemplateContext {
         TemplateContext {
-            variables: HashMap::new(),
-            parent: Some(Box::new(self.clone())),
+            variables: Arc::default(),
+            parent: Some(Arc::new(self.clone())),
         }
     }
 }
