@@ -302,7 +302,9 @@ $endfor$
     };
 }
 
-const FULL_HTML_TEMPLATE: &str = concat!(html_head!(), r#"<body class="$body-classes$">
+const FULL_HTML_TEMPLATE: &str = concat!(
+    html_head!(),
+    r#"<body class="$body-classes$">
 $skip-link()$
 $if(color-mode-script)$
 $color-mode-script$
@@ -386,7 +388,8 @@ $rendered.navigation.footer$
 $endif$
 </body>
 </html>
-"#);
+"#
+);
 
 /// The dashboard page (`format: dashboard`): Q1's
 /// `formats/dashboard/template.html` on Q2's shared head, plus the
@@ -415,7 +418,7 @@ $title-block()$
 $for(include-before)$
 $include-before$
 $endfor$
-<div class="page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$" id="quarto-document-content" tabindex="-1" role="main">
+<div class="page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$ $if(rendered.dashboard.pages)$quarto-dashboard-pages$endif$" id="quarto-document-content" tabindex="-1" role="main">
 $body$
 </div>
 $for(include-after)$
@@ -437,19 +440,34 @@ window.document.addEventListener("DOMContentLoaded", function (_event) {
 /// Registered as `title-block` in [`dashboard_html_partials`]. Unlike Q1,
 /// the `navbar-container` closes here rather than inside `_nav-container`,
 /// so the markup stays balanced when there is no title, subtitle or
-/// author. The toggler stays `hidden` until pages exist (Phase 3).
+/// author. With pages (`rendered.dashboard.pages`, written by
+/// `DashboardTransform`) the toggler is shown and the page tabs follow the
+/// brand block (Q1 `processPages`).
 pub const DASHBOARD_TITLE_BLOCK_PARTIAL: &str = r##"<header id="quarto-dashboard-header">
 <nav class="navbar navbar-expand-md slim" data-bs-theme="dark">
 <div class="navbar-container container-fluid">
+$if(rendered.dashboard.pages)$
+<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-controls="dashboard-collapse" aria-expanded="false" aria-label="Toggle navigation">
+<span class="navbar-toggler-icon"></span>
+</button>
+$else$
 <button class="navbar-toggler hidden" type="button" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-controls="dashboard-collapse" aria-expanded="false" aria-label="Toggle navigation">
 <span class="navbar-toggler-icon"></span>
 </button>
+$endif$
 $if(title)$
 ${_nav-container()}
 $elseif(subtitle)$
 ${_nav-container()}
 $elseif(by-author)$
 ${_nav-container()}
+$endif$
+$if(rendered.dashboard.pages)$
+<div id="dashboard-collapse" class="navbar-collapse collapse"><ul class="navbar-nav navbar-nav-scroll me-auto" role="tablist">
+$for(rendered.dashboard.pages)$
+<li class="nav-item" role="presentation"><a id="tab-$it.id$" class="nav-link$if(it.active)$ active$endif$" data-bs-toggle="tab" role="tab" data-bs-target="#$it.id$" data-scrolling="$it.scrolling$" href="#$it.id$" aria-controls="$it.id$" aria-selected="$if(it.active)$true$else$false$endif$"><span class="nav-link-text">$it.text$</span></a></li>
+$endfor$
+</ul></div>
 $endif$
 </div>
 </nav>

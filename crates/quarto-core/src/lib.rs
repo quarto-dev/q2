@@ -50,6 +50,7 @@ pub mod components;
 pub mod config_paths;
 pub mod config_sources;
 pub mod crossref;
+pub mod dashboard;
 pub mod dates;
 pub mod dependency;
 pub mod diagnostic_policy;

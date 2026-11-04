@@ -104,7 +104,10 @@ end
         "---\ntitle: D\nformat:\n  dashboard:\n    orientation: columns\n    scrolling: true\nfilters:\n  - probe.lua\n---\n\nBody.\n",
     );
     let (_, html) = render(temp.path(), "dashboard");
-    assert!(html.contains("ORIENTATION=columns SCROLLING=true"), "{html}");
+    assert!(
+        html.contains("ORIENTATION=columns SCROLLING=true"),
+        "{html}"
+    );
 }
 
 /// The theme stylesheet a page links (the first `<link rel="stylesheet">`
@@ -132,7 +135,10 @@ fn linked_theme_css(output: &Path, html: &str) -> String {
 #[test]
 fn dashboard_theme_css_carries_bslib_and_dashboard_layers() {
     let temp = tempfile::TempDir::new().unwrap();
-    write(&temp.path().join("doc.qmd"), "---\ntitle: D\n---\n\nBody.\n");
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\n---\n\nBody.\n",
+    );
     let (path, html) = render(temp.path(), "dashboard");
     let css = linked_theme_css(&path, &html);
     assert!(css.contains(".bslib-value-box"), "bslib value box rules");
@@ -140,7 +146,10 @@ fn dashboard_theme_css_carries_bslib_and_dashboard_layers() {
     assert!(css.contains(".quarto-dashboard"), "dashboard layer rules");
 
     let temp = tempfile::TempDir::new().unwrap();
-    write(&temp.path().join("doc.qmd"), "---\ntitle: D\n---\n\nBody.\n");
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\n---\n\nBody.\n",
+    );
     let (path, html) = render(temp.path(), "html");
     let css = linked_theme_css(&path, &html);
     assert!(css.contains(".btn"), "sanity: the theme CSS was found");
@@ -157,12 +166,22 @@ fn select<'a>(doc: &'a scraper::Html, css: &str) -> Vec<scraper::ElementRef<'a>>
 
 fn one<'a>(doc: &'a scraper::Html, css: &str) -> scraper::ElementRef<'a> {
     let found = select(doc, css);
-    assert_eq!(found.len(), 1, "expected exactly one `{css}`, found {}", found.len());
+    assert_eq!(
+        found.len(),
+        1,
+        "expected exactly one `{css}`, found {}",
+        found.len()
+    );
     found[0]
 }
 
 fn text(el: scraper::ElementRef<'_>) -> String {
-    el.text().collect::<Vec<_>>().join("").split_whitespace().collect::<Vec<_>>().join(" ")
+    el.text()
+        .collect::<Vec<_>>()
+        .join("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Q1's dashboard page shell (`formats/dashboard/template.html`,
@@ -183,13 +202,34 @@ fn dashboard_page_shell() {
     assert!(classes.contains(&"quarto-dashboard"), "{classes:?}");
     assert!(classes.contains(&"dashboard-fill"), "{classes:?}");
 
-    one(&doc, "a#quarto-skip-link[href=\"#quarto-document-content\"]");
-    one(&doc, "header#quarto-dashboard-header > nav.navbar.navbar-expand-md.slim[data-bs-theme=\"dark\"] > div.navbar-container.container-fluid");
-    one(&doc, "div.navbar-container > button.navbar-toggler.hidden[data-bs-target=\"#dashboard-collapse\"]");
-    assert_eq!(text(one(&doc, "div.navbar-brand-container div.navbar-title-text a")), "SHELL-TITLE");
-    assert_eq!(text(one(&doc, "div.navbar-title div.navbar-subtitle")), "SHELL-SUB");
+    one(
+        &doc,
+        "a#quarto-skip-link[href=\"#quarto-document-content\"]",
+    );
+    one(
+        &doc,
+        "header#quarto-dashboard-header > nav.navbar.navbar-expand-md.slim[data-bs-theme=\"dark\"] > div.navbar-container.container-fluid",
+    );
+    one(
+        &doc,
+        "div.navbar-container > button.navbar-toggler.hidden[data-bs-target=\"#dashboard-collapse\"]",
+    );
+    assert_eq!(
+        text(one(
+            &doc,
+            "div.navbar-brand-container div.navbar-title-text a"
+        )),
+        "SHELL-TITLE"
+    );
+    assert_eq!(
+        text(one(&doc, "div.navbar-title div.navbar-subtitle")),
+        "SHELL-SUB"
+    );
     // Q1 #10334: several authors, comma-separated.
-    assert_eq!(text(one(&doc, "div.navbar-title div.navbar-author")), "Ada One, Bob Two");
+    assert_eq!(
+        text(one(&doc, "div.navbar-title div.navbar-author")),
+        "Ada One, Bob Two"
+    );
 
     let content = one(
         &doc,
@@ -229,7 +269,10 @@ fn dashboard_page_shell_without_title() {
     write(&temp.path().join("doc.qmd"), "Body only.\n");
     let (_, html) = render(temp.path(), "dashboard");
     let doc = scraper::Html::parse_document(&html);
-    one(&doc, "header#quarto-dashboard-header nav.navbar > div.navbar-container");
+    one(
+        &doc,
+        "header#quarto-dashboard-header nav.navbar > div.navbar-container",
+    );
     assert!(select(&doc, "div.navbar-brand-container").is_empty());
     // The content container is a sibling of the header, not inside it.
     one(&doc, "body > div#quarto-document-content");
@@ -262,7 +305,10 @@ fn dashboard_title_block_partial_is_overridable() {
 #[test]
 fn dashboard_ships_runtime_scripts_in_order() {
     let temp = tempfile::TempDir::new().unwrap();
-    write(&temp.path().join("doc.qmd"), "---\ntitle: D\n---\n\nBody.\n");
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\n---\n\nBody.\n",
+    );
     let (path, html) = render(temp.path(), "dashboard");
     let doc = scraper::Html::parse_document(&html);
     let srcs: Vec<String> = select(&doc, "script[src]")
@@ -281,7 +327,10 @@ fn dashboard_ships_runtime_scripts_in_order() {
         pos("/components.js"),
     );
     assert!(dash < sticky && sticky < web && web < comp, "{srcs:?}");
-    assert!(pos("bootstrap.bundle.min.js") < dash, "after Bootstrap: {srcs:?}");
+    assert!(
+        pos("bootstrap.bundle.min.js") < dash,
+        "after Bootstrap: {srcs:?}"
+    );
     let web_tag = select(&doc, "script[src]")[web];
     assert_eq!(web_tag.value().attr("type"), Some("module"));
     // The files exist where the page points.
@@ -291,7 +340,10 @@ fn dashboard_ships_runtime_scripts_in_order() {
     }
 
     let temp = tempfile::TempDir::new().unwrap();
-    write(&temp.path().join("doc.qmd"), "---\ntitle: D\n---\n\nBody.\n");
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: D\n---\n\nBody.\n",
+    );
     let (_, html) = render(temp.path(), "html");
     assert!(!html.contains("quarto-dashboard.js"));
     assert!(!html.contains("web-components.js"));

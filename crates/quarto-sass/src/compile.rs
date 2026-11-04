@@ -88,7 +88,6 @@ pub fn assemble_theme_scss(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<(String, Vec<PathBuf>), SassError> {
-
     // Process theme specs into layers
     let result = process_theme_specs(&config.themes, context)?;
 
@@ -596,7 +595,6 @@ pub async fn compile_default_css(
     runtime: &dyn SystemRuntime,
     minified: bool,
 ) -> Result<String, SassError> {
-
     // Return cached version if available (only for minified, matching
     // native). Minified is always true in practice for hub-client.
     if minified {

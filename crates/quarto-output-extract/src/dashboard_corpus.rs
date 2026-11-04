@@ -31,6 +31,10 @@ pub enum Status {
     Divergence,
     /// Out of scope for the epic (a follow-up strand); `note` names it.
     Deferred,
+    /// Not a valid test of Q2: the input relies on something Q2 deliberately
+    /// does not support (e.g. setext headings); `note` says what, and where
+    /// the converted copy lives.
+    Excluded,
 }
 
 /// One fixture in `manifest.toml`.

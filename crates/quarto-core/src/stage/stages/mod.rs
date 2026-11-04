@@ -98,11 +98,11 @@ mod resource_report;
 // Tabsets-sync JS injection (bd-toc-tabset-titles-zq93gjvf): vendors
 // the grouped-tabset sync module as a Project-scoped artifact whenever
 // Bootstrap is active. Same WASM-exclusion reasoning as `bootstrap_js`.
+mod dashboard_js;
 #[cfg(not(target_arch = "wasm32"))]
 mod search_capture;
 #[cfg(not(target_arch = "wasm32"))]
 mod tabsets_js;
-mod dashboard_js;
 // pandoc-hybrid-typst Phase 2: compiles PandocWriteStage's intermediate
 // `.typ` output to PDF via a real `typst compile` subprocess. Native-only
 // for the same reason as `pandoc_write`: shells out to a real binary, no
@@ -162,6 +162,7 @@ pub use unexecuted_cell_count::{UnexecutedCellCountStage, count_engine_cells};
 // Pure, so ungated (the wasm host classifies a completion with it); the path
 // `stages::classify_pandoc_completion` is unchanged.
 pub use crate::pandoc_filters::diagnostics::classify_pandoc_completion;
+pub use dashboard_js::DashboardJsStage;
 pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
@@ -173,7 +174,6 @@ pub use search_capture::SearchCaptureStage;
 pub use source_conversion::SourceConversionStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use tabsets_js::TabsetsJsStage;
-pub use dashboard_js::DashboardJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use typst_compile::TypstCompileStage;
 pub use unwrap_profile::UnwrapProfileStage;

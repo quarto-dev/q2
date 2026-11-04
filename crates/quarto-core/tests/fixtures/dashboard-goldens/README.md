@@ -16,6 +16,7 @@ content. The extractor and its rules are in
 | `acceptance/` | Real-world dashboards from quarto-web (`docs/dashboards/_examples/`): `gapminder.qmd`, `navigation.qmd`, `valuebox.qmd`, copied unchanged. `penguins.png` (the navigation logo) is an 8×8 placeholder, not the 1.2 MB original: the skeleton records the logo element, never its pixels. |
 | `contract/` | Engine-free fixtures written for the port, one per contract item (`# contract:` comment in each front matter). Cells are written as pre-executed `::: {.cell}` divs with `cell-output-*` children, the shape engines emit, so they run in CI without R or Python. |
 | `q1/` | Quarto 1's own dashboard fixtures (`tests/docs/smoke-all/dashboard/`), copied unchanged except that `_content/` became `content/`. Mostly need R (`knitr`). Their `_quarto: tests:` blocks are inert here (this directory is not a smoke-all root). |
+| `q1-atx/` | Copies of the `q1/` fixtures that use setext headings (`Row` over `---`), rewritten with ATX headings (`## Row`) and nothing else. Q2 qmd has no setext headings by design, so the originals are `excluded` and these carry their coverage. |
 | `regressions/` | Quarto 1 regression fixtures for dashboard issues (`tests/docs/smoke-all/<date>/…`), copied unchanged. |
 | `manifest.toml` | Every fixture, with the engines it needs, its status and a note. Schema: `crates/quarto-output-extract/src/dashboard_corpus.rs`. |
 | `goldens/*.q1.skeleton` | Quarto 1 skeletons, written by `cargo xtask capture-dashboard-goldens`. |

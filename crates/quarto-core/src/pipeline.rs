@@ -2280,6 +2280,10 @@ pub fn build_transform_pipeline(
     // Family axis, from the single derivation point (`PipelineProfile`):
     // true for `RevealjsRender` (native render) and `RevealjsPreview`
     // (`q2-slides`).
+    let is_dashboard = matches!(
+        pipeline_profile,
+        crate::format::PipelineProfile::DashboardRender
+    );
     let is_revealjs = matches!(
         pipeline_profile,
         crate::format::PipelineProfile::RevealjsRender
@@ -2404,7 +2408,12 @@ pub fn build_transform_pipeline(
         // net shape after its DOM postprocessor).
         pipeline.push(Box::new(BookCoverImageTransform::new()));
         pipeline.push(Box::new(TitleBlockTransform::new()));
-        pipeline.push(Box::new(SectionizeTransform::new()));
+        // Dashboards sectionize inside `DashboardTransform`, after cards
+        // are built (Q1's order: a `.card` div that opens with a heading
+        // must not merge into a section first).
+        if !is_dashboard {
+            pipeline.push(Box::new(SectionizeTransform::new()));
+        }
     }
     pipeline.push(Box::new(FootnotesTransform::new()));
     // Immediately after: the HTML-chrome half consuming the `Inline::Note`s
@@ -2767,6 +2776,16 @@ pub fn build_transform_pipeline(
     // future finalization stage that mutates `SourceInfo` is
     // automatically covered without having to remember to insert it
     // before attribution-render.
+    // Dashboards (bd-dashboard-format-k21hd4vy): build the page / row /
+    // column / card structure, then lower it to bslib markup. Last of the
+    // content transforms, as Q1's dashboard filter runs in quarto-post:
+    // every transform above sees an ordinary sectioned document, including
+    // the ones whose walkers do not descend into custom-node slots. The
+    // q2 preview will exclude the resolve half (plan D8).
+    if is_dashboard {
+        pipeline.push(Box::new(crate::dashboard::DashboardTransform::new()));
+        pipeline.push(Box::new(crate::dashboard::DashboardResolveTransform::new()));
+    }
     pipeline.push(Box::new(AttributionRenderTransform::new()));
 
     // After attribution-render: auto-inject the default viewer
@@ -5528,7 +5547,14 @@ mod tests {
         // RevealjsRender, HtmlPreview, RevealjsPreview, Pandoc(_). Add new
         // format strings here as they land; the invariant then covers them
         // automatically.
-        for format in ["html", "revealjs", "q2-preview", "q2-slides", "docx"] {
+        for format in [
+            "html",
+            "revealjs",
+            "dashboard",
+            "q2-preview",
+            "q2-slides",
+            "docx",
+        ] {
             let runtime = make_test_runtime();
             let pipeline = build_transform_pipeline(
                 vec![],

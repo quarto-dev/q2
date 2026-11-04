@@ -506,9 +506,10 @@ const BSLIB_RESOLVED_IMPORTS: &[&str] = &[
 ];
 
 fn bslib_text(path: &str) -> Result<String, SassError> {
-    let content = crate::resources::bslib_file(path).ok_or_else(|| SassError::CompilationFailed {
-        message: format!("bslib resource {path} not found"),
-    })?;
+    let content =
+        crate::resources::bslib_file(path).ok_or_else(|| SassError::CompilationFailed {
+            message: format!("bslib resource {path} not found"),
+        })?;
     let mut out = String::with_capacity(content.len());
     for line in content.lines() {
         let trimmed = line.trim();
@@ -1344,7 +1345,11 @@ mod tests {
     #[test]
     fn test_load_dashboard_layer() {
         let layer = load_dashboard_layer().unwrap();
-        assert!(layer.defaults.contains("$dashboard-card-toolbar-top-margin"));
+        assert!(
+            layer
+                .defaults
+                .contains("$dashboard-card-toolbar-top-margin")
+        );
         assert!(layer.mixins.contains("@mixin"));
         assert!(layer.rules.contains(".quarto-dashboard"));
     }
@@ -1361,8 +1366,14 @@ mod tests {
         assert!(ext.rules.contains(".bslib-value-box"), "value_box.scss");
         assert!(ext.rules.contains(".bslib-sidebar-layout"), "sidebar.scss");
         assert!(ext.rules.contains(".html-fill-container"), "fill.css");
-        assert!(ext.rules.contains("@function is-css-variable"), "bslib functions.scss");
-        assert!(!ext.rules.contains("@import"), "no @import survives flattening");
+        assert!(
+            ext.rules.contains("@function is-css-variable"),
+            "bslib functions.scss"
+        );
+        assert!(
+            !ext.rules.contains("@import"),
+            "no @import survives flattening"
+        );
         assert!(!ext.mixins.contains("@import"));
     }
 

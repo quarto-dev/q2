@@ -31,7 +31,7 @@ use quarto_output_extract::dashboard_corpus::{CORPUS_DIR_RELATIVE, Manifest, q1_
 
 /// Corpus subdirectories staged wholesale into the capture work dir, so each
 /// fixture sees its sibling resources (images, CSVs) at the same relative paths.
-const STAGED_DIRS: &[&str] = &["acceptance", "contract", "q1", "regressions"];
+const STAGED_DIRS: &[&str] = &["acceptance", "contract", "q1", "q1-atx", "regressions"];
 
 pub struct Options {
     /// The Quarto 1 binary (default: `quarto` on `PATH`).

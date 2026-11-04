@@ -37,7 +37,7 @@ use quarto_output_extract::dashboard_corpus::{
 };
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-const FIXTURE_DIRS: &[&str] = &["acceptance", "contract", "q1", "regressions"];
+const FIXTURE_DIRS: &[&str] = &["acceptance", "contract", "q1", "q1-atx", "regressions"];
 
 fn corpus_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/dashboard-goldens")
@@ -150,6 +150,11 @@ fn notes_explain_each_status() {
                 "{}: a deferred note must name its follow-up strand",
                 f.path
             ),
+            Status::Excluded => assert!(
+                f.note.contains("q1-atx/") || f.note.contains("Q2 "),
+                "{}: an excluded note must say why and where the usable copy lives",
+                f.path
+            ),
             Status::Match | Status::Divergence => {}
         }
         if !f.q1_golden {
@@ -208,7 +213,7 @@ fn dashboard_skeletons_match_goldens() {
     let mut checked = 0usize;
     for f in &manifest().fixtures {
         let golden = match f.status {
-            Status::Pending | Status::Deferred => continue,
+            Status::Pending | Status::Deferred | Status::Excluded => continue,
             Status::Match => q1_golden_path(&f.path),
             Status::Divergence => q2_golden_path(&f.path),
         };

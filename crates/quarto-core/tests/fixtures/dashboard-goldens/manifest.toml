@@ -26,32 +26,32 @@ note = "Phase 5 (value boxes): real-world acceptance, the quarto-web value box e
 
 [[fixture]]
 path = "contract/c01-rows-default.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): level-2 headings are rows; height percentages; cells become cards laid out in columns"
 
 [[fixture]]
 path = "contract/c02-orientation-columns.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): orientation: columns flips the first level; width percentages"
 
 [[fixture]]
 path = "contract/c03-nested-levels.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): alternating orientation at each heading level; px, %, and unsized mix"
 
 [[fixture]]
 path = "contract/c04-fill-flow-rows.qmd"
-status = "pending"
-note = "Phase 3 (layout core): explicit .fill / .flow on row headings (Q1 ignores these for grid sizing; D5 fixes). Expected divergence: D5 Q2: container .fill/.flow honoured for sizing"
+status = "divergence"
+note = "D5-Q2: a .flow row sizes to its content (minmax(3em, max-content)); Quarto 1 ignores .fill/.flow on headings for grid sizing although the docs promise it"
 
 [[fixture]]
 path = "contract/c05-scrolling.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): scrolling: true lays out content at natural height"
 
 [[fixture]]
 path = "contract/c06-pages.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): level-1 headings are pages; per-page orientation and scrolling attributes"
 
 [[fixture]]
@@ -81,12 +81,12 @@ note = "Phase 4 (cards and tabsets): .card div options: title, padding, height, 
 
 [[fixture]]
 path = "contract/c12-cell-options.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): cell options arrive as cell div attributes: title, padding, expandable; classes flow/expandable"
 
 [[fixture]]
 path = "contract/c13-dynamic-title.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): a first stdout output beginning title= becomes the card title"
 
 [[fixture]]
@@ -96,27 +96,27 @@ note = "Phase 4 (cards and tabsets): cells with no output, hidden cells and outp
 
 [[fixture]]
 path = "contract/c15-card-footer.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): a blockquote or .card-footer div becomes the card footer"
 
 [[fixture]]
 path = "contract/c16-card-headings-demoted.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): headings inside a card are demoted to h4-or-lower divs"
 
 [[fixture]]
 path = "contract/c17-literal-card-markup.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): explicit .card-header + .card-body markup passes through"
 
 [[fixture]]
 path = "contract/c18-leading-content.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): content before the first heading is emitted without card chrome"
 
 [[fixture]]
 path = "contract/c19-loose-markdown.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): loose markdown blocks in a row merge into one flow card"
 
 [[fixture]]
@@ -186,7 +186,7 @@ note = "Phase 6 (sidebars and toolbars): card sidebars: next (left), previous (r
 
 [[fixture]]
 path = "contract/c33-content-sidebar-toolbar-cells.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): content: sidebar / content: toolbar cells (Q1 schema-only; D5 implements). Expected divergence: D5 Q9: content: sidebar/toolbar implemented"
 
 [[fixture]]
@@ -206,27 +206,27 @@ note = "Phase 7 (navigation chrome): multi-page dashboard with light and dark th
 
 [[fixture]]
 path = "contract/c37-orientation-skip-level.qmd"
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): orientation when heading levels are skipped (Q1 toggles globally; D5 uses a level stack). Expected divergence: D5 Q3: orientation by level stack"
 
 [[fixture]]
 path = "contract/c38-orientation-jump-back.qmd"
-status = "pending"
-note = "Phase 3 (layout core): orientation after jumping back more than one level. Expected divergence: D5 Q3: orientation by level stack"
+status = "divergence"
+note = "D5-Q3: orientation by nesting; after jumping back from #### to ##, Quarto 1's global toggle leaves the ## row laid out as columns"
 
 [[fixture]]
 path = "contract/c39-bslib-raw-output.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): raw HTML output containing bslib- markup is lifted out of the card"
 
 [[fixture]]
 path = "contract/c40-title-inline-markup.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): card titles keep inline markup (code, emphasis, math) in place"
 
 [[fixture]]
 path = "contract/c41-expandable-doc-false.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): document-level expandable: false"
 
 [[fixture]]
@@ -243,14 +243,14 @@ note = "Phase 6 (sidebars and toolbars): header-for / footer-for naming the targ
 [[fixture]]
 path = "q1/0-card-syntax.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/0-layout-headings.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/0-layout-headings.qmd"
 
 [[fixture]]
 path = "q1/1-card-advanced.qmd"
@@ -267,7 +267,7 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/1-card-cell-options.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -278,7 +278,7 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/1-card-content.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -290,50 +290,50 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/2-layout-cell-attr.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/2-layout-cell-attr.qmd"
 
 [[fixture]]
 path = "q1/2-layout-cells-simple.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/2-layout-cells-simple.qmd"
 
 [[fixture]]
 path = "q1/2-layout-complex.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/2-layout-complex.qmd"
 
 [[fixture]]
 path = "q1/2-layout-divs.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/2-layout-flow-fill-2.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/2-layout-flow-fill.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/2-layout-flow-fill.qmd"
 
 [[fixture]]
 path = "q1/2-layout-height.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/2-layout-height.qmd"
 
 [[fixture]]
 path = "q1/3-valuebox-knitr.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 5 (value boxes): Q1 smoke-all fixture. Not deterministic: value-box values (and so their colors) are random R draws; captures differ run to run, so flipping it needs a seed or a looser comparison"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/3-valuebox-knitr.qmd"
 
 [[fixture]]
 path = "q1/3-valuebox-python.qmd"
@@ -373,8 +373,8 @@ note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/5-sample-layout-cells.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/5-sample-layout-cells.qmd"
 
 [[fixture]]
 path = "q1/5-sample-layout-scrolling.qmd"
@@ -385,12 +385,12 @@ note = "Phase 3 (layout core): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/5-sample-layout.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/5-sample-layout.qmd"
 
 [[fixture]]
 path = "q1/6-broken-example-card.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -402,8 +402,8 @@ note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/6-sidebar-global.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/6-sidebar-global.qmd"
 
 [[fixture]]
 path = "q1/6-sidebar.qmd"
@@ -420,14 +420,14 @@ note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/7-navbar-social.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/7-navbar-social.qmd"
 
 [[fixture]]
 path = "q1/7-navbar.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/7-navbar.qmd"
 
 [[fixture]]
 path = "q1/8-pages.qmd"
@@ -444,25 +444,25 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/9-no-title.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 2 (page shell): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/9-page-fill-flow.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/9-page-orientation.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/9-r-cells.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -475,7 +475,7 @@ note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
 path = "q1/bugs/8552.qmd"
 requires = ["knitr"]
 status = "pending"
-note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture. Layout matches; waits on bd-xaaucvfz (q2 adds a code-copy scaffold to output blocks, Quarto 1 does not)"
 
 [[fixture]]
 path = "q1/content/finance.qmd"
@@ -487,7 +487,7 @@ note = "Shiny dashboards: bd-c9gy4cez. No Q1 golden yet: capture needs Python pa
 [[fixture]]
 path = "q1/content/flow.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 3 (layout core): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -524,17 +524,17 @@ note = "DT / DataTables: bd-6f0kslxu. No Q1 golden yet: capture needs R package 
 [[fixture]]
 path = "q1/loose-content.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "excluded"
+note = "Q2 qmd has no setext headings (a documented difference, docs/guides/authoring/migrating-markdown.qmd), so this file parses differently by design; the dashboard behavior is tested by q1-atx/loose-content.qmd"
 
 [[fixture]]
 path = "q1/notebooks/gapminder.ipynb"
 status = "pending"
-note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture. Waits on Jupyter cell-option forwarding (#| title:) from KNR-2 Phase 2C (plan D7)"
 
 [[fixture]]
 path = "regressions/10334.qmd"
-status = "pending"
+status = "match"
 note = "Phase 7 (navigation chrome): multiple authors in the navbar (Q1 #10334)"
 
 [[fixture]]
@@ -545,7 +545,7 @@ note = "Phase 4 (cards and tabsets): ipynb-shell-interactivity: all shows every 
 
 [[fixture]]
 path = "regressions/9796.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): an output-less cell makes no card (Q1 #9796)"
 
 [[fixture]]
@@ -555,7 +555,7 @@ note = "Phase 7 (navigation chrome): dark-mode color-scheme toggle (Q1 dark-mode
 
 [[fixture]]
 path = "regressions/issue-10340.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): inline markup stays in place in card titles (Q1 #10340)"
 
 [[fixture]]
@@ -573,20 +573,98 @@ note = "Phase 4 (cards and tabsets): tabset cards without titles get .dashboard-
 path = "regressions/issue-14646.qmd"
 requires = ["jupyter"]
 status = "pending"
-note = "Phase 4 (cards and tabsets): inline code stays in place in card titles (Q1 #14646)"
+note = "Phase 4 (cards and tabsets): inline code stays in place in card titles (Q1 #14646). Waits on Jupyter cell-option forwarding (#| title:) from KNR-2 Phase 2C (plan D7)"
 
 [[fixture]]
 path = "regressions/issue-14684-dashboard.qmd"
-status = "pending"
+status = "match"
 note = "Phase 2 (page shell): skip-to-content link (Q1 #14684)"
 
 [[fixture]]
 path = "regressions/issue-15023.qmd"
 requires = ["jupyter"]
 status = "pending"
-note = "Phase 4 (cards and tabsets): bslib raw output detection; .card.cell kept (Q1 #15023)"
+note = "Phase 4 (cards and tabsets): bslib raw output detection; .card.cell kept (Q1 #15023). Waits on Jupyter cell-option forwarding (#| title:) from KNR-2 Phase 2C (plan D7)"
 
 [[fixture]]
 path = "regressions/issue-9056.ipynb"
 status = "pending"
-note = "Phase 4 (cards and tabsets): no empty .card-body.flow from notebook markdown cells (Q1 #9056)"
+note = "Phase 4 (cards and tabsets): no empty .card-body.flow from notebook markdown cells (Q1 #9056). Waits on Jupyter cell-option forwarding (#| title:) from KNR-2 Phase 2C (plan D7)"
+
+[[fixture]]
+path = "q1-atx/0-layout-headings.qmd"
+requires = ["knitr"]
+status = "divergence"
+note = "D5-Q3: orientation by nesting. Under orientation: columns, Quarto 1 lays out the first ## Column as rows but the last two (after ##### headings) as columns; q2 lays out all three alike, as the docs describe. ATX-heading copy of q1/0-layout-headings.qmd"
+
+[[fixture]]
+path = "q1-atx/2-layout-cell-attr.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-cell-attr.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/2-layout-cells-simple.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-cells-simple.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/2-layout-complex.qmd"
+requires = ["knitr"]
+status = "match"
+note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-complex.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/2-layout-flow-fill.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-flow-fill.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/2-layout-height.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-height.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/3-valuebox-knitr.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 5 (value boxes): Q1 smoke-all fixture. Not deterministic: value-box values (and so their colors) are random R draws; captures differ run to run, so flipping it needs a seed or a looser comparison. ATX-heading copy of q1/3-valuebox-knitr.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/5-sample-layout-cells.qmd"
+requires = ["knitr"]
+status = "deferred"
+note = "Blocked on bd-1oqqb09a: a block-scalar fig-cap leaks into the knitr label, so the render fails. Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/5-sample-layout-cells.qmd (setext headings rewritten, and the attribute typo icon=calendar-date\"\" fixed to icon=\"calendar-date\", which Q2 rejects as a parse error)"
+
+[[fixture]]
+path = "q1-atx/5-sample-layout.qmd"
+requires = ["knitr"]
+status = "deferred"
+note = "Blocked on bd-1oqqb09a: a block-scalar fig-cap leaks into the knitr label, so the render fails. Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/5-sample-layout.qmd (setext headings rewritten, and the attribute typo icon=calendar-date\"\" fixed to icon=\"calendar-date\", which Q2 rejects as a parse error)"
+
+[[fixture]]
+path = "q1-atx/6-sidebar-global.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture. ATX-heading copy of q1/6-sidebar-global.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/7-navbar-social.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 7 (navigation chrome): Q1 smoke-all fixture. ATX-heading copy of q1/7-navbar-social.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/7-navbar.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 7 (navigation chrome): Q1 smoke-all fixture. ATX-heading copy of q1/7-navbar.qmd (setext headings rewritten, nothing else)"
+
+[[fixture]]
+path = "q1-atx/loose-content.qmd"
+requires = ["knitr"]
+status = "pending"
+note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/loose-content.qmd (setext headings rewritten, nothing else)"

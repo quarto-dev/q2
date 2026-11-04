@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-2 done 2026-11-03; Phase 3 next
+status: in-progress  # Phases 0-3 done 2026-11-03; Phase 4 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -349,11 +349,36 @@ Built as a golden harness rather than smoke-all copies: Q1 output is reduced to 
 - [x] Tests: quarto-sass loader and compile tests; `dashboard_format.rs` page shell, scrolling, no-title, partial override, theme CSS and script tests. End to end: the header and content-container skeleton of `contract/c35` matches its Q1 golden except the logo (Phase 7).
 - [ ] Left for later phases: the logo (Phase 7), un-hiding the navbar toggler and the page tabs (Phase 3), `dashboard-sidebar` / `dashboard-toolbar` body classes (Phase 6).
 
-### Phase 3: Layout core
+### Phase 3: Layout core and basic cards
 
-- [ ] Build the structure model: pages, rows and columns with level-keyed orientation, leading content, and loose content merged into flow cards.
-- [ ] Grid sizing: explicit height and width, fill and flow with fr sharing, the 3em minimum, container `.fill` / `.flow` (Q2), `scrolling` per document and per page, and fill classes.
-- [ ] Multi-page navbar tabs, the page `tab-pane` structure, and the `data-scrolling` handoff to the JS.
+**Revised 2026-11-03** (the user asked for the plan to be restructured as we learn). Three changes against D1 as written above:
+
+1. **Where the transforms run.** Both dashboard transforms run *last* in the transform list, adjacent, just before `AttributionRenderTransform` (which must stay last). Q1\'s dashboard filter likewise runs in `quarto-post`, after crossref and layout. The reason is walker coverage: several transforms walk the AST with their own walkers that do not descend into `CustomNode` slots (`code_block_generate`, `responsive_image`, `listing_render`, …). Nodes that lived from Normalization to Finalization would hide card content from them. Running last, every other transform sees an ordinary sectioned document. `SectionizeTransform` stays on for dashboards: its output is Pandoc\'s `make_sections` shape, which is what Q1\'s dashboard pass consumes.
+2. **User Lua filters see the final Divs**, not the nodes, since `UserFilters::post` runs after the AST transform stage. The nodes exist for the React preview (where `DashboardResolveTransform` is excluded) and for the typed model in Rust.
+3. **Basic cards move into Phase 3.** A layout fixture without cards renders nothing comparable. Phase 3 builds cards from code cells, `.card` divs and loose content, with title, bodies and footer. Phase 4 keeps the card *options* (padding, heights, explicit `expandable`, dynamic titles, headings, literal markup, bslib raw output) and tabsets.
+
+**Orientation rule (D5-Q3, final):** the root container takes the document `orientation`, a page container its page\'s `orientation`, and every other container flips its parent container\'s orientation. A container with a child `.sidebar` is forced to columns, one with a child `.toolbar` to rows (Q1\'s `suggestOrientation`).
+
+Work items (done 2026-11-03):
+
+- [x] `crates/quarto-core/src/dashboard/`: `model.rs` (page, container and card nodes with `CustomNode` round-trips), `structure.rs` (`DashboardTransform`: Q1 pass 1 cards from cells, `.card` divs and literal cards; Q1 pass 2 pages, heading containers, explicit `.rows` / `.columns` divs, loose-content cards, leading content), `sizing.rs` (grid templates, D5-Q2 applied), `resolve.rs` (`DashboardResolveTransform`: bslib lowering, fill classes, card titles including Q1\'s loose-header-text rule, expand button and init script, image contain, `Para`→`Plain` in bodies).
+- [x] Sectionizing moved inside `DashboardTransform`, after the card pass: Q2\'s `SectionizeTransform` runs in Normalization, and a `.card` div that opens with a heading would otherwise merge into its section (Pandoc `make_sections` behavior), as it never does in Q1.
+- [x] Pages: `tab-content` / `tab-pane` / `grid-skip`, `rendered.dashboard.pages` for the navbar tabs, toggler shown, `quarto-dashboard-pages` on the content area.
+- [x] Wired into `build_transform_pipeline` (gated on `DashboardRender`, before attribution-render); dashboards added to the phase-ordering test.
+- [x] Corpus: 33 fixtures `match`, 3 `divergence` (c04 for D5-Q2; c38 and `q1-atx/0-layout-headings` for D5-Q3). The harness renders all 36 in-process.
+- [ ] Custom-node schema entries: with Phase 8, since the schema conformance test requires a TS component per type.
+
+**Q1 quirks reproduced** (they are what the goldens show, and not worth a divergence): a text-only card body is `flow` (Q1\'s `shinyInputs` test is vacuously true without element children), so its row sizes to content; output-less cells make no card; a loose-content card stays expandable.
+
+**Corpus changes found on the way:**
+
+- Fourteen Q1 fixtures use setext headings, which Q2 qmd does not support (documented in `migrating-markdown.qmd`). They are `excluded` (a new manifest status), and ATX-heading copies in `q1-atx/` carry their coverage. Two of those copies also fix an attribute typo Q2 rejects (`icon=calendar-date""`).
+- Q1\'s AST vault (`div#3ade8a4a-….hidden`, internal) sat in every golden; the extractor now skips it.
+- Three fixtures are nondeterministic (random values, a random Jupyter id); their notes say so.
+
+**Bugs filed (not dashboard code):** bd-1oqqb09a (a block-scalar `fig-cap` leaks into the knitr label, so the figure path has spaces and the render fails; two `q1-atx` fixtures deferred to it); bd-xaaucvfz (q2 puts a code-copy button on cell *output* blocks, Q1 only on source; `q1/bugs/8552` waits on it).
+
+**Waiting on D7 (Jupyter `#| title:` forwarding, KNR-2):** #14646, #15023, #9056 and `q1/notebooks/gapminder.ipynb`; their layouts already match.
 
 ### Phase 4: Cards and tabsets
 
