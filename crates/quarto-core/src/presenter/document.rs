@@ -36,7 +36,7 @@ use super::inline::{
 use super::knitr_inputs::{knitr_header_options, original_chunk, present_knitr_cell};
 use super::options::CellOptions;
 use super::output::CellResult;
-use super::visibility::{CellVisibility, resolve_cell_options};
+use super::visibility::{CellVisibility, cell_config, resolve_cell_options};
 use crate::cell_options::partition_cell_options;
 use crate::engine::units::{InlineUnit, Unit};
 use crate::record::EngineEntry;
@@ -169,11 +169,13 @@ pub fn present_document(
                         message: e.to_string(),
                     })?;
                 let parsed_options = parsed.options.clone();
+                let cell_only = cell_config(parsed.options.clone());
                 let resolved = resolve_cell_options(scope, parsed.options);
                 let visibility = CellVisibility::resolve(resolved.as_ref());
                 // Every presented cell, visible or not, keeps its figure number.
                 fig.begin_cell();
-                let options = CellOptions::from_config(resolved.as_ref());
+                let options =
+                    CellOptions::from_config(resolved.as_ref()).forwarding(cell_only.as_ref());
                 let text = match split_expansions(&cell.outputs) {
                     // An expanded cell is one unit presented as one cell per expansion,
                     // each with its own options.

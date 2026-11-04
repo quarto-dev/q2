@@ -678,7 +678,7 @@ code once nothing reads it, and keeps the chunk hook (see KNR-6).
   *Reconciled 2026-11-03: stream, error, display_data and flat option keys are covered; the neutral `knit_meta` manifest and the four-widget test are open, waiting on WGT-2\'s schema (slice 2 note).*
   *Reconciled 2026-11-03: open as a dedicated test. The reader rejects invalid structure and every read-back in slices 3 and 4 goes through it, but nothing runs EXR-4\'s validator over each produced record.*
 
-- [ ] Slice 7, the slice 6 gaps ([plan](2026-11-03-presenter-generic-cell-options.md)): the shared
+- [x] Slice 7, the slice 6 gaps ([plan](2026-11-03-presenter-generic-cell-options.md)): the shared
   presenter reads 16 of the 17 options of "Slice 6 notes" (each a `Gap` row of the sweep that flips
   to `Presents`), and `indent` becomes `Inert` with a documented departure (row `Gap` to `Inert`, its two corpus
   cases allowlisted, Gordon\'s decision D8). Then freeze the new corpus cases in the oracle and confirm the
@@ -854,3 +854,17 @@ accepted, 31 unexpected at the time of writing; `s9/01_inline` is KNR-4\'s). Fre
 manifest values first, then freeze (the oracle is live knitr output, so it does not depend on the
 gaps closing). Slice 7 expects 255 accepted, 7 allowlisted and one
 unexpected case.
+
+## Slice 7 notes: generic cell options (2026-11-04)
+
+Slice 7 landed on `knr-2-presenter` (Phases 7.0 to 7g; [plan](2026-11-03-presenter-generic-cell-options.md)):
+the shared presenter reads 16 of the 17 slice-6 options for every engine, `indent` is `Inert` (D8), and the
+corpus reads 257 accepted, 7 allowlisted, 7 not compared and one blocker, `s9/01_inline` (KNR-4). The Jupyter
+sweep (D10) has no `Gap` outcome left: Phase 7g made `fig-cap` and `fig-subcap` the canonical reader names and
+forwards the unhandled cell-level options (`tbl-cap`, `tbl-subcap`, `tbl-scap`, `tbl-colwidths`, `code-copy`)
+as attributes. The nine Python smoke files were run with a kernel: eight pass, and `margin-subtable.qmd` stays
+skipped (`bd-gbaykhth`, the crossref pass makes no subfloats; not presenter work). `quarto-core` ran 7583 tests
+with one failure, the known `vendored_reveal_assets_match_npm_package`. Open for Gordon: the workspace run,
+`cargo xtask verify`, and a native Windows clippy (the cross-check fails on `aws-lc-sys`). Separately,
+`scripts/check-presenter-goldens-unchanged.sh` fails on three `notebooks/*/expected.md` goldens; that predates
+this slice and needs its own look.

@@ -22,14 +22,20 @@ pub fn resolve_cell_options(
     doc_scope: Option<&ConfigValue>,
     options: Option<quarto_yaml::YamlWithSourceInfo>,
 ) -> Option<ConfigValue> {
-    let cell_config = options.map(|o| {
+    let cell_config = cell_config(options);
+    merge_cell_over_scope(doc_scope, cell_config.as_ref())
+}
+
+/// The cell\'s own `#|` options as a config, without the document scope under them. Options
+/// that nothing handles are forwarded from this, not from the merged scope (Phase 7g).
+pub fn cell_config(options: Option<quarto_yaml::YamlWithSourceInfo>) -> Option<ConfigValue> {
+    options.map(|o| {
         let (config, diagnostics) = options_to_config(o);
         for d in diagnostics {
             tracing::warn!("cell option conversion diagnostic: {d:?}");
         }
         config
-    });
-    merge_cell_over_scope(doc_scope, cell_config.as_ref())
+    })
 }
 
 /// Read a boolean option out of resolved cell options, falling back to

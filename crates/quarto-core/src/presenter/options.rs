@@ -15,8 +15,161 @@
 //! A cell that sets none of these keys yields [`CellOptions::default`], which renders
 //! byte-identically to a cell without the layer.
 
-use quarto_pandoc_types::config_value::ConfigValue;
+use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
 use serde_json::Value;
+use yaml_rust2::Yaml;
+
+/// KNR-3 slice 7, D1: knitr\'s dotted option names and the one canonical (Quarto) spelling each
+/// is read under. The reader sees canonical names only; knitr\'s record and header spellings
+/// are renamed on the way in ([`canonicalize_options`]).
+const OPTION_ALIASES: &[(&str, &str)] = &[
+    ("fig.align", "fig-align"),
+    ("fig.link", "fig-link"),
+    ("fig.scap", "fig-scap"),
+    ("fig.env", "fig-env"),
+    ("fig.pos", "fig-pos"),
+    ("fig.column", "fig-column"),
+    ("fig.alt", "fig-alt"),
+    ("fig.cap", "fig-cap"),
+    ("fig.subcap", "fig-subcap"),
+    ("fig.cap-location", "fig-cap-location"),
+    ("out.width", "out-width"),
+    ("out.height", "out-height"),
+    ("out.extra", "out-extra"),
+];
+
+/// The cell options a Jupyter cell does not forward as attributes: Quarto 1\'s
+/// `kJupyterCellInternalOptionKeys` and its standard and third-party metadata keys, plus the keys
+/// the presenter reads itself (it writes the layout keys and `out-extra` in their own places).
+const JUPYTER_HANDLED: &[&str] = &[
+    "eval",
+    "echo",
+    "warning",
+    "error",
+    "output",
+    "include",
+    "label",
+    "classes",
+    "panel",
+    "column",
+    "fig-cap",
+    "fig-subcap",
+    "fig-scap",
+    "fig-cap-location",
+    "tbl-cap-location",
+    "cap-location",
+    "fig-column",
+    "tbl-column",
+    "fig-link",
+    "fig-align",
+    "fig-alt",
+    "fig-env",
+    "fig-pos",
+    "lst-label",
+    "lst-cap",
+    "out-width",
+    "out-height",
+    "md-indent",
+    "indent",
+    "code-fold",
+    "code-line-numbers",
+    "code-summary",
+    "code-overflow",
+    "html-table-processing",
+    "layout",
+    "layout-ncol",
+    "layout-nrow",
+    "layout-align",
+    "layout-valign",
+    "out-extra",
+    "keep-hidden",
+    "collapsed",
+    "autoscroll",
+    "deletable",
+    "format",
+    "name",
+    "id",
+    "colab",
+    "colab_type",
+    "outputid",
+    "lines_to_next_cell",
+    "language",
+];
+
+/// Every key [`CellOptions::from_lookup`] asks for, found by running it against a lookup that
+/// records the names. Forwarding skips these, so a key the reader handles (`class.source`, say)
+/// is never also written as a cell attribute, and a key added to the reader needs no second list.
+fn reader_keys() -> &'static std::collections::BTreeSet<String> {
+    static KEYS: std::sync::OnceLock<std::collections::BTreeSet<String>> =
+        std::sync::OnceLock::new();
+    KEYS.get_or_init(|| {
+        use std::cell::RefCell;
+        let seen = RefCell::new(std::collections::BTreeSet::new());
+        let _ = CellOptions::from_lookup(
+            &|k| {
+                seen.borrow_mut().insert(k.to_string());
+                Vec::new()
+            },
+            &|k| {
+                seen.borrow_mut().insert(k.to_string());
+                None
+            },
+            &|k| {
+                seen.borrow_mut().insert(k.to_string());
+                None
+            },
+        );
+        seen.into_inner()
+    })
+}
+
+/// The canonical name of `key`: its Quarto spelling for a knitr alias, else `key` itself.
+pub(crate) fn canonical_option_name(key: &str) -> &str {
+    OPTION_ALIASES
+        .iter()
+        .find(|(dotted, _)| *dotted == key)
+        .map_or(key, |(_, canonical)| canonical)
+}
+
+/// Whether `key` is the canonical spelling of an aliased option.
+pub(crate) fn is_canonical_alias(key: &str) -> bool {
+    OPTION_ALIASES
+        .iter()
+        .any(|(_, canonical)| *canonical == key)
+}
+
+/// The knitr (dotted) spelling of a canonical aliased name, if it has one.
+pub(crate) fn dotted_alias(canonical: &str) -> Option<&'static str> {
+    OPTION_ALIASES
+        .iter()
+        .find(|(_, c)| *c == canonical)
+        .map(|(dotted, _)| *dotted)
+}
+
+/// Rename every aliased key of `map` to its canonical name. When a map holds both spellings the
+/// canonical one wins (`hooks.R` reads the dashed one first).
+pub(crate) fn canonicalize_options(map: &mut serde_json::Map<String, Value>) {
+    for (dotted, canonical) in OPTION_ALIASES {
+        if let Some(value) = map.remove(*dotted) {
+            map.entry(canonical.to_string()).or_insert(value);
+        }
+    }
+}
+
+/// Drop knitr\'s defaults for the options whose default is a sentinel rather than "unset"
+/// (`fig.align = "default"`, `fig.env = "figure"`, `fig.pos = ""`), so the shared reader can
+/// treat empty as unset for every engine (D2). Run after the header overlay, never before.
+pub(crate) fn drop_knitr_sentinels(map: &mut serde_json::Map<String, Value>) {
+    for (key, sentinel) in [
+        ("fig-align", "default"),
+        ("fig-env", "figure"),
+        ("fig-pos", ""),
+    ] {
+        if map.get(key).and_then(Value::as_str) == Some(sentinel) {
+            map.remove(key);
+        }
+    }
+}
 
 /// Which output fence an option group targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,8 +212,19 @@ pub struct CellOptions {
     /// Parallel to the cell\'s outputs: which of them is a message or a warning. Empty when
     /// unknown (a Jupyter cell).
     output_kinds: Vec<Option<OutputKind>>,
+    /// `classes`: extra classes of the cell div (a leading dot is kept, nothing is split).
+    classes: Vec<String>,
     panel: Option<String>,
     column: Vec<String>,
+    /// `fig-column`, `tbl-column`, `cap-location`, `fig-cap-location`, `tbl-cap-location`: each
+    /// writes a class only when it is a scalar string (D5); anything else is `None`.
+    fig_column: Option<String>,
+    tbl_column: Option<String>,
+    cap_location: Option<String>,
+    fig_cap_location: Option<String>,
+    tbl_cap_location: Option<String>,
+    /// `code-overflow`: `wrap` or `scroll` adds a class to the source fence.
+    code_overflow: Option<String>,
     /// `layout`, `layout-nrow`, `layout-ncol`, `layout-align`, `layout-valign` that are set,
     /// in Quarto\'s forwarding order, as `(key, text)`.
     layout: Vec<(&'static str, String)>,
@@ -75,6 +239,18 @@ pub struct CellOptions {
     fig_cap: Vec<String>,
     fig_subcap: Vec<String>,
     fig_alt: Option<String>,
+    /// The image options of KNR-3 slice 7, each one value or one per figure (recycled by figure
+    /// index, D3), read under their canonical names: `fig-align`, `fig-env`, `fig-pos`,
+    /// `fig-scap`, `out-width`, `out-height`, `out-extra`.
+    fig_align: Vec<String>,
+    fig_env: Vec<String>,
+    fig_pos: Vec<String>,
+    fig_scap: Vec<String>,
+    /// `fig-link`: each image is wrapped in a link (one value, or one per figure).
+    fig_link: Vec<String>,
+    out_width: Vec<String>,
+    out_height: Vec<String>,
+    out_extra: Vec<String>,
     /// knitr `prompt`: `> ` before each expression, `+ ` on its continuation lines.
     prompt: bool,
     /// knitr `comment`: written before every output line (`## `); empty or unset is none.
@@ -120,14 +296,54 @@ impl CellOptions {
                     .and_then(|c| c.get(key))
                     .and_then(|v| json_text(&config_to_json(v)))
             },
+            &|key| {
+                resolved
+                    .and_then(|c| c.get(key))
+                    .and_then(|v| match config_to_json(v) {
+                        Value::String(s) => Some(s),
+                        _ => None,
+                    })
+            },
         )
+    }
+
+    /// Forward the cell options nothing handles as cell attributes (Phase 7g): Quarto 1\'s
+    /// `jupyter.ts` and hooks.R\'s `unknown_opts` do the same. `cell` is the cell\'s own options,
+    /// not the document scope merged under them, so a document-level `execute:` key is not
+    /// forwarded. A non-string value is written as compact JSON.
+    pub fn forwarding(mut self, cell: Option<&ConfigValue>) -> Self {
+        let Some(entries) = cell.and_then(ConfigValue::as_map_entries) else {
+            return self;
+        };
+        for entry in entries {
+            let lower = entry.key.to_lowercase();
+            if JUPYTER_HANDLED.contains(&lower.as_str()) || reader_keys().contains(&entry.key) {
+                continue;
+            }
+            let text = match config_to_json(&entry.value) {
+                Value::Null => continue,
+                Value::String(s) => s,
+                other => other.to_string(),
+            };
+            self.unknown
+                .push((entry.key.clone(), text.replace('\'', "\\'")));
+        }
+        self
     }
 
     /// Build from a knitr record's options object.
     pub fn from_knitr(options: &Value) -> Self {
+        // The same rename and sentinel drop `layer_options` applies, for callers that read a
+        // record\'s options without layering a header over them.
+        let mut options = options.clone();
+        if let Value::Object(map) = &mut options {
+            canonicalize_options(map);
+            drop_knitr_sentinels(map);
+        }
         let mut me = Self::from_lookup(
             &|key| options.get(key).map_or_else(Vec::new, json_strings),
             &|key| options.get(key).and_then(json_text),
+            &|key| options.get(key).and_then(Value::as_str).map(str::to_string),
         );
         me.keep_trailing_space = true;
         me
@@ -143,7 +359,14 @@ impl CellOptions {
             return me;
         };
         for (key, value) in map {
-            if known.iter().any(|k| k == key) || key.starts_with('.') || value.is_null() {
+            // A canonical alias (`fig-align`) is known when its dotted spelling is: the shipped
+            // list holds knitr\'s names only.
+            let is_known = |name: &str| known.iter().any(|k| k == name);
+            if is_known(key)
+                || dotted_alias(key).is_some_and(is_known)
+                || key.starts_with('.')
+                || value.is_null()
+            {
                 continue;
             }
             let text = match value {
@@ -158,9 +381,12 @@ impl CellOptions {
     /// The one place that decides what each key means. `get` returns the key's values as
     /// strings: empty when unset or null, one entry for a scalar, several for a list. `text`
     /// returns a key\'s value as one string, with a list written as compact JSON (`layout`).
+    /// `string` returns a key\'s value only when it is a scalar string (a bool, number or list
+    /// is `None`): the class options write a class for nothing else (D5).
     fn from_lookup(
         get: &dyn Fn(&str) -> Vec<String>,
         text: &dyn Fn(&str) -> Option<String>,
+        string: &dyn Fn(&str) -> Option<String>,
     ) -> Self {
         let words = |key: &str| -> Vec<String> {
             get(key)
@@ -193,8 +419,17 @@ impl CellOptions {
             class_warning: words("class.warning"),
             attr_warning: get("attr.warning"),
             output_kinds: Vec::new(),
+            classes: get("classes"),
+            fig_column: string("fig-column"),
+            tbl_column: string("tbl-column"),
+            cap_location: string("cap-location"),
+            fig_cap_location: string("fig-cap-location"),
+            tbl_cap_location: string("tbl-cap-location"),
+            code_overflow: first("code-overflow"),
             panel: first("panel"),
             column: get("column"),
+            // `fig-align` also aligns the cell (D4): its first element, and it beats an
+            // explicit `layout-align` (hooks.R).
             layout: [
                 "layout",
                 "layout-nrow",
@@ -203,7 +438,18 @@ impl CellOptions {
                 "layout-valign",
             ]
             .into_iter()
-            .filter_map(|k| text(k).map(|v| (k, v)))
+            .filter_map(|k| {
+                let value = if k == "layout-align" {
+                    get("fig-align")
+                        .into_iter()
+                        .next()
+                        .filter(|a| !a.is_empty())
+                        .or_else(|| text(k))
+                } else {
+                    text(k)
+                };
+                value.map(|v| (k, v))
+            })
             .collect(),
             keep_hidden: first("keep-hidden"),
             code_fold: first("code-fold"),
@@ -211,13 +457,23 @@ impl CellOptions {
             code_line_numbers: first("code-line-numbers"),
             lst_cap: first("lst-cap"),
             lst_label: first("lst-label"),
-            fig_cap: get("fig.cap"),
+            fig_cap: get("fig-cap"),
             // `fig.subcap: true` means empty subcaptions (Q1 hooks.R:827).
-            fig_subcap: match get("fig.subcap").as_slice() {
+            fig_subcap: match get("fig-subcap").as_slice() {
                 [t] if t == "true" => vec![String::new()],
                 other => other.to_vec(),
             },
-            fig_alt: first("fig.alt").filter(|a| !a.is_empty()),
+            fig_alt: first("fig-alt")
+                .or_else(|| first("fig.alt"))
+                .filter(|a| !a.is_empty()),
+            fig_align: get("fig-align"),
+            fig_env: get("fig-env"),
+            fig_pos: get("fig-pos"),
+            fig_scap: get("fig-scap"),
+            fig_link: get("fig-link"),
+            out_width: get("out-width"),
+            out_height: get("out-height"),
+            out_extra: get("out-extra"),
             prompt: first("prompt").as_deref() == Some("true"),
             // Quarto\'s opts hook (hooks.R): `collapse` with no `comment` sets it to `##`.
             comment: match (first("comment"), collapse) {
@@ -247,11 +503,27 @@ impl CellOptions {
     /// Text appended inside the `.cell` div's braces (` .column-margin keep-hidden='true'`).
     pub fn cell_div_attrs(&self) -> String {
         let mut out = String::new();
+        // hooks.R order: `classes`, panel, column, `fig-column`, `tbl-column`, the three
+        // caption locations. A leading dot on a user class is kept, not doubled.
+        for c in &self.classes {
+            out.push_str(&format!(" .{}", c.strip_prefix('.').unwrap_or(c)));
+        }
         if let Some(p) = &self.panel {
             out.push_str(&format!(" .panel-{p}"));
         }
         for c in &self.column {
             out.push_str(&format!(" .column-{c}"));
+        }
+        for (prefix, value) in [
+            ("fig-column", &self.fig_column),
+            ("tbl-column", &self.tbl_column),
+            ("caption", &self.cap_location),
+            ("fig-cap-location", &self.fig_cap_location),
+            ("tbl-cap-location", &self.tbl_cap_location),
+        ] {
+            if let Some(v) = value {
+                out.push_str(&format!(" .{prefix}-{v}"));
+            }
         }
         for (key, value) in &self.layout {
             out.push_str(&format!(" {key}=\"{value}\""));
@@ -294,19 +566,68 @@ impl CellOptions {
         }
     }
 
-    /// Attributes written after an image (`{fig-alt='...'}`), or an empty string.
-    pub fn image_attrs(&self) -> String {
-        self.image_attrs_with(None)
+    /// The `index`th (from 0) figure\'s value of a list-valued option: scalars apply to every
+    /// figure, lists recycle (D3), and an empty entry is unset.
+    fn recycled(list: &[String], index: usize) -> Option<&str> {
+        if list.is_empty() {
+            None
+        } else {
+            Some(list[index % list.len()].as_str()).filter(|v| !v.is_empty())
+        }
     }
 
-    /// [`Self::image_attrs`] plus a `width` (knitr `include_graphics` writes one).
-    pub fn image_attrs_with(&self, width: Option<f64>) -> String {
-        let mut attrs = Vec::new();
-        if let Some(a) = &self.fig_alt {
-            attrs.push(format!("fig-alt='{}'", a.replace('\'', "\\'")));
+    /// `image` (the `![alt](path){attrs}` markdown of the `index`th figure) wrapped in its
+    /// `fig-link`, as hooks.R does (`[![..](..)](link)`); unchanged without one.
+    pub fn link_image(&self, index: usize, image: String) -> String {
+        match Self::recycled(&self.fig_link, index) {
+            Some(link) => format!("[{image}]({link})"),
+            None => image,
         }
-        if let Some(w) = width {
+    }
+
+    /// Whether the figure written by [`Self::link_image`] goes without an output div: hooks.R
+    /// returns the bare markdown for a linked image under `results = "asis"`.
+    pub fn bare_linked_image(&self, index: usize) -> bool {
+        self.results_asis() && Self::recycled(&self.fig_link, index).is_some()
+    }
+
+    /// Attributes written after the `index`th image (`{fig-align='center' width=50%}`), or an
+    /// empty string. `width` and `height` are the size the output itself carries (knitr\'s
+    /// `include_graphics` width, a Jupyter output\'s metadata); a cell option wins over each.
+    /// The order is knitr\'s (D3): `fig-align`, `fig-env`, `fig-pos`, `fig-alt`, `fig-scap`,
+    /// `width`, `height`, then `out-extra`, verbatim.
+    pub fn image_attrs_with(
+        &self,
+        index: usize,
+        width: Option<String>,
+        height: Option<String>,
+    ) -> String {
+        let quoted = |value: &str| value.replace('\'', "\\'");
+        let mut attrs = Vec::new();
+        for (name, list) in [
+            ("fig-align", &self.fig_align),
+            ("fig-env", &self.fig_env),
+            ("fig-pos", &self.fig_pos),
+        ] {
+            if let Some(v) = Self::recycled(list, index) {
+                attrs.push(format!("{name}='{}'", quoted(v)));
+            }
+        }
+        if let Some(a) = &self.fig_alt {
+            attrs.push(format!("fig-alt='{}'", quoted(a)));
+        }
+        if let Some(v) = Self::recycled(&self.fig_scap, index) {
+            attrs.push(format!("fig-scap='{}'", quoted(v)));
+        }
+        let own = |list: &[String]| Self::recycled(list, index).map(str::to_string);
+        if let Some(w) = own(&self.out_width).or(width) {
             attrs.push(format!("width={w}"));
+        }
+        if let Some(h) = own(&self.out_height).or(height) {
+            attrs.push(format!("height={h}"));
+        }
+        if let Some(extra) = Self::recycled(&self.out_extra, index) {
+            attrs.push(extra.to_string());
         }
         if attrs.is_empty() {
             String::new()
@@ -444,6 +765,14 @@ impl CellOptions {
             .unwrap_or_default()
     }
 
+    /// The class `code-overflow` adds after `.cell-code` (` .code-overflow-wrap`), or nothing.
+    pub fn source_overflow(&self) -> String {
+        match self.code_overflow.as_deref() {
+            Some(v @ ("wrap" | "scroll")) => format!(" .code-overflow-{v}"),
+            _ => String::new(),
+        }
+    }
+
     /// Classes written between the language and `.cell-code` (` .foo .bar`).
     pub fn source_classes(&self) -> String {
         self.class_source.iter().map(|c| format!(" .{c}")).collect()
@@ -531,7 +860,22 @@ pub(crate) fn config_to_json(v: &ConfigValue) -> Value {
     if let Some(i) = v.as_int() {
         return Value::from(i);
     }
+    if let Some(f) = real(v) {
+        return Value::from(f);
+    }
     v.as_plain_text().map_or(Value::Null, Value::String)
+}
+
+/// An unquoted YAML float (`out-width: 0.5`). `as_int` and `as_plain_text` both miss it, so
+/// without this arm it would read as null.
+fn real(v: &ConfigValue) -> Option<f64> {
+    match &v.value {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Real(r),
+            ..
+        } => r.trim().parse().ok(),
+        _ => None,
+    }
 }
 
 /// The same for a resolved `ConfigValue`.
@@ -547,6 +891,9 @@ fn config_strings(v: &ConfigValue) -> Vec<String> {
     }
     if let Some(i) = v.as_int() {
         return vec![i.to_string()];
+    }
+    if let Some(f) = real(v) {
+        return vec![f.to_string()];
     }
     v.as_plain_text().into_iter().collect()
 }
@@ -566,6 +913,147 @@ mod tests {
     fn inert(mut o: CellOptions) -> CellOptions {
         o.keep_trailing_space = false;
         o
+    }
+
+    /// KNR-3 slice 7, D10 (the reverse check): every key `from_lookup` reads is declared
+    /// display-only for Jupyter, or is listed here with the reason it is not. A key the
+    /// presenter reads that the hash does not exclude only over-invalidates (a pointless
+    /// re-run), but D10 wants the two lists to agree, so each exception is explicit.
+    #[test]
+    fn every_key_the_reader_reads_is_declared_display_only_for_jupyter() {
+        use std::cell::RefCell;
+        let seen = RefCell::new(std::collections::BTreeSet::new());
+        let _ = CellOptions::from_lookup(
+            &|k| {
+                seen.borrow_mut().insert(k.to_string());
+                Vec::new()
+            },
+            &|k| {
+                seen.borrow_mut().insert(k.to_string());
+                None
+            },
+            &|k| {
+                seen.borrow_mut().insert(k.to_string());
+                None
+            },
+        );
+        // Read for knitr only (dotted knitr spellings and knitr-only behavior): a Jupyter
+        // author never writes them, and a Jupyter cell that does is hashed, which is safe.
+        const KNITR_ONLY: &[&str] = &[
+            "class.source",
+            "attr.source",
+            "class.output",
+            "attr.output",
+            "class.error",
+            "attr.error",
+            "class.message",
+            "attr.message",
+            "class.warning",
+            "attr.warning",
+            "fig.alt",
+            "fig.show",
+            "fenced.echo",
+            "prompt",
+            "comment",
+            "collapse",
+            "results",
+            "message",
+        ];
+        // Read for Jupyter too, and hashed on purpose.
+        const HASHED_ON_PURPOSE: &[(&str, &str)] = &[(
+            "label",
+            "a label names the cell and its figure ids, so it is part of the cell\'s identity",
+        )];
+        let def = crate::engine::jupyter::jupyter_hash_definition();
+        let undeclared: Vec<String> = seen
+            .into_inner()
+            .into_iter()
+            .filter(|k| !def.presentation_cell_options.contains(k))
+            .filter(|k| !KNITR_ONLY.contains(&k.as_str()))
+            .filter(|k| !HASHED_ON_PURPOSE.iter().any(|(n, _)| n == k))
+            .collect();
+        assert!(
+            undeclared.is_empty(),
+            "read by the presenter, not display-only for Jupyter: {undeclared:?}"
+        );
+    }
+
+    /// KNR-3 slice 7, D2 and D4 for a Jupyter cell: the shared reader writes the attributes,
+    /// and a Jupyter `fig-env: figure` is written (the sentinel is knitr\'s, not the reader\'s).
+    #[test]
+    fn a_jupyter_cell_reads_the_image_options() {
+        let o = CellOptions::from_config(Some(&config(
+            "fig-align: center\nfig-env: figure\nout-width: 50%\nfig-alt: alt text\n",
+        )));
+        assert_eq!(
+            o.image_attrs_with(0, None, None),
+            "{fig-align='center' fig-env='figure' fig-alt='alt text' width=50%}"
+        );
+        assert_eq!(o.cell_div_attrs(), " layout-align=\"center\"");
+        let f = CellOptions::from_config(Some(&config("out-width: 0.5\n")));
+        assert_eq!(f.image_attrs_with(0, None, None), "{width=0.5}");
+    }
+
+    /// KNR-3 slice 7, Phase 7g: `fig-cap` and `fig-subcap` are the canonical names, so a Jupyter
+    /// cell and a knitr record (`fig.cap`) reach the same reader.
+    #[test]
+    fn fig_cap_and_fig_subcap_are_read_under_their_canonical_names() {
+        let j = CellOptions::from_config(Some(&config("fig-cap: A caption\n")));
+        assert_eq!(j.figure_cap(0), "A caption");
+        let j = CellOptions::from_config(Some(&config(
+            "fig-cap: all\nfig-subcap:\n  - first\n  - second\n",
+        )));
+        assert_eq!(j.figure_cap(0), "first");
+        assert_eq!(j.figure_cap(1), "second");
+        let k = CellOptions::from_knitr(&serde_json::json!({"fig.cap": "A caption"}));
+        assert_eq!(k.figure_cap(0), "A caption");
+        let k = CellOptions::from_knitr(&serde_json::json!({"fig-cap": "A caption"}));
+        assert_eq!(k.figure_cap(0), "A caption");
+    }
+
+    /// Phase 7g: Quarto 1 (`jupyter.ts`) and knitr (hooks.R `unknown_opts`) forward the cell
+    /// options they do not handle as cell attributes, read from the cell\'s own options and not
+    /// from the document scope.
+    #[test]
+    fn a_jupyter_cell_forwards_the_options_nothing_handles() {
+        let cell = config(
+            "tbl-cap: A table\ntbl-subcap: [a, b]\ntbl-scap: short\ntbl-colwidths: [30, 70]\n\
+             code-copy: false\necho: false\nlabel: tbl-x\nfig-cap: c\n",
+        );
+        let resolved = config(
+            "tbl-cap: A table\ntbl-subcap: [a, b]\ntbl-scap: short\ntbl-colwidths: [30, 70]\n\
+             code-copy: false\necho: false\nlabel: tbl-x\nfig-cap: c\nfreeze: auto\n",
+        );
+        let o = CellOptions::from_config(Some(&resolved)).forwarding(Some(&cell));
+        assert_eq!(
+            o.cell_div_attrs(),
+            " tbl-cap='A table' tbl-subcap='[\"a\",\"b\"]' tbl-scap='short' \
+             tbl-colwidths='[30,70]' code-copy='false'"
+        );
+        let none = CellOptions::from_config(None).forwarding(None);
+        assert_eq!(none.cell_div_attrs(), "");
+    }
+
+    #[test]
+    fn a_jupyter_cell_with_fig_link_wraps_its_image() {
+        let o = CellOptions::from_config(Some(&config("fig-link: http://x\n")));
+        assert_eq!(o.link_image(0, "![](p)".into()), "[![](p)](http://x)");
+        assert_eq!(
+            CellOptions::default().link_image(0, "![](p)".into()),
+            "![](p)"
+        );
+    }
+
+    #[test]
+    fn a_jupyter_cell_reads_the_class_options() {
+        let o = CellOptions::from_config(Some(&config(
+            "classes: plain\ncap-location: top\nfig-column: page\ncode-overflow: wrap\n",
+        )));
+        assert_eq!(o.cell_div_attrs(), " .plain .fig-column-page .caption-top");
+        assert_eq!(o.source_overflow(), " .code-overflow-wrap");
+        // A bool or a list is not a class (D5).
+        let o = CellOptions::from_config(Some(&config("cap-location: true\ntbl-column: [a, b]\n")));
+        assert_eq!(o.cell_div_attrs(), "");
     }
 
     #[test]

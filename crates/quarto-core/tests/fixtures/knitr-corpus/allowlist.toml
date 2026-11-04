@@ -36,3 +36,13 @@ reason = "an empty chunk (the `blank` chunk has no code) still renders its `.cel
 name = "s8/01_setup_state"
 class = "blocker"
 reason = "same divergence as s1/03_eval_false: knitr writes an empty `.cell` div for a chunk that renders nothing (here `c_params`, eval false) and the presenter writes none; knitr's `.cell-code  code-fold` double space becomes one space, which is cosmetic (Gordon, 2026-11-02; epic decision 23 amended 2026-11-03)"
+
+[[entry]]
+name = "options/indent/header/00_empty"
+class = "blocker"
+reason = "live knitr indents the whole cell by the option's value (two spaces); the presenter ignores `indent`, because knitr sets it from the chunk's container indent and the splice re-applies container prefix and indent, so presenting it would double-indent a nested chunk (KNR-3 slice 7, D8: Gordon, 2026-11-03). KNR-6 decides what a header `indent` does once the skeleton marker's indent is known; `indent` is undocumented and unused in docs/ and the smoke tests"
+
+[[entry]]
+name = "options/indent/yaml/00_empty"
+class = "blocker"
+reason = "live knitr indents the whole cell by the option's value (two spaces); the presenter ignores `indent`, because knitr sets it from the chunk's container indent and the splice re-applies container prefix and indent, so presenting it would double-indent a nested chunk (KNR-3 slice 7, D8: Gordon, 2026-11-03). KNR-6 decides what a header `indent` does once the skeleton marker's indent is known; `indent` is undocumented and unused in docs/ and the smoke tests"

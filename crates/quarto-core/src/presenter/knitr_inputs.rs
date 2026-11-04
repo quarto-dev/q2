@@ -172,6 +172,9 @@ fn layer_options(
     let mut merged = recorded.as_object().cloned().unwrap_or_default();
     // The names R could not serialize are bookkeeping, not an option.
     merged.remove("unserializable");
+    // Step 1 (D1): the recorded keys under their canonical names.
+    super::options::canonicalize_options(&mut merged);
+    // Step 2: overlay the header.
     if let Some(entries) = header.and_then(ConfigValue::as_map_entries) {
         for entry in entries {
             // The capture evaluated an `!expr` in R and recorded the result; the expression
@@ -179,15 +182,24 @@ fn layer_options(
             if matches!(entry.value.value, ConfigValueKind::Expr(_)) {
                 continue;
             }
-            let dotted = entry.key.replace('-', ".");
-            let key = if known.is_some_and(|k| k.contains(&dotted)) {
-                dotted
+            // An aliased option is read under its canonical name, whichever spelling the
+            // header used; any other dashed key keeps the dotted rewrite when `known` lists it.
+            let canonical = super::options::canonical_option_name(&entry.key);
+            let key = if canonical != entry.key || super::options::is_canonical_alias(canonical) {
+                canonical.to_string()
             } else {
-                entry.key.clone()
+                let dotted = entry.key.replace('-', ".");
+                if known.is_some_and(|k| k.contains(&dotted)) {
+                    dotted
+                } else {
+                    entry.key.clone()
+                }
             };
             merged.insert(key, config_to_json(&entry.value));
         }
     }
+    // Step 3 (D2): knitr\'s sentinels, after the overlay.
+    super::options::drop_knitr_sentinels(&mut merged);
     Value::Object(merged)
 }
 
@@ -511,7 +523,155 @@ mod tests {
             h.as_ref(),
             e.known_options.as_deref(),
         );
-        assert_eq!(merged["fig.cap"], "evaluated", "{merged}");
+        assert_eq!(merged["fig-cap"], "evaluated", "{merged}");
+    }
+
+    /// The names `capture.R` ships as `known_options`: knitr\'s dotted spellings only.
+    const SHIPPED_KNOWN: &[&str] = &[
+        "echo",
+        "fig.align",
+        "fig.env",
+        "fig.pos",
+        "fig.scap",
+        "fig.link",
+        "fig.alt",
+        "fig.cap",
+        "fig.column",
+        "out.width",
+        "out.height",
+        "out.extra",
+        "class.source",
+        "classes",
+        "cap-location",
+        "tbl-column",
+        "tbl-cap-location",
+        "code-overflow",
+        "fig-column",
+        "fig-cap-location",
+        "layout-align",
+    ];
+
+    fn layered(recorded: Value, header_yaml: &str, known: &[&str]) -> Value {
+        let h = header(header_yaml);
+        let known: Vec<String> = known.iter().map(|s| s.to_string()).collect();
+        layer_options(&recorded, h.as_ref(), Some(&known))
+    }
+
+    /// KNR-3 slice 7, D1: one canonical (Quarto) spelling; a recorded knitr spelling and the
+    /// same option written in the header meet under it.
+    #[test]
+    fn a_recorded_dotted_name_and_a_canonical_one_give_the_same_merged_options() {
+        let dotted = layered(
+            json!({"fig.align": "center", "out.width": "50%"}),
+            "",
+            SHIPPED_KNOWN,
+        );
+        let canonical = layered(
+            json!({"fig-align": "center", "out-width": "50%"}),
+            "",
+            SHIPPED_KNOWN,
+        );
+        assert_eq!(dotted, canonical);
+        assert_eq!(dotted["fig-align"], "center");
+        assert_eq!(dotted["out-width"], "50%");
+        assert!(dotted.get("fig.align").is_none() && dotted.get("out.width").is_none());
+    }
+
+    /// D2: knitr\'s sentinels are dropped after the header overlay, never before, so a header
+    /// `default` clears a recorded value.
+    #[test]
+    fn knitr_sentinels_are_dropped_after_the_overlay() {
+        let m = layered(
+            json!({"fig.align": "default", "fig.env": "figure", "fig.pos": "", "echo": true}),
+            "",
+            SHIPPED_KNOWN,
+        );
+        for gone in [
+            "fig-align",
+            "fig-env",
+            "fig-pos",
+            "fig.align",
+            "fig.env",
+            "fig.pos",
+        ] {
+            assert!(m.get(gone).is_none(), "{gone} survived: {m}");
+        }
+        assert_eq!(m["echo"], true);
+        // A header `default` over a recorded `right` clears it (overlay first, then drop).
+        let m = layered(
+            json!({"fig.align": "right"}),
+            "#| fig-align: default",
+            SHIPPED_KNOWN,
+        );
+        assert!(
+            m.get("fig-align").is_none() && m.get("fig.align").is_none(),
+            "{m}"
+        );
+        // A header value over a recorded sentinel shows.
+        let m = layered(
+            json!({"fig.env": "figure"}),
+            "#| fig-env: figure*",
+            SHIPPED_KNOWN,
+        );
+        assert_eq!(m["fig-env"], "figure*");
+    }
+
+    #[test]
+    fn a_header_edit_replaces_the_recorded_value_with_no_stale_twin() {
+        let m = layered(
+            json!({"fig-column": "page", "fig.column": "screen", "fig.align": "left"}),
+            "#| fig-column: margin\n#| fig-align: right",
+            SHIPPED_KNOWN,
+        );
+        assert_eq!(m["fig-column"], "margin");
+        assert_eq!(m["fig-align"], "right");
+        assert!(
+            m.get("fig.column").is_none() && m.get("fig.align").is_none(),
+            "{m}"
+        );
+        // A layer holding both spellings keeps the dashed one (hooks.R reads it first).
+        let m = layered(
+            json!({"fig-column": "page", "fig.column": "screen"}),
+            "",
+            SHIPPED_KNOWN,
+        );
+        assert_eq!(m["fig-column"], "page");
+        // A non-aliased dashed header key still gets the existing dotted rewrite.
+        let m = layered(json!({}), "#| class-source: mine", SHIPPED_KNOWN);
+        assert_eq!(m["class.source"], "mine");
+    }
+
+    /// With the shipped `known_options` (dotted names only), a canonical dashed key is not an
+    /// unknown option: it must not become a `key='value'` on the cell div.
+    #[test]
+    fn a_canonical_alias_never_leaks_as_a_cell_attribute() {
+        let c = cell("a\n", vec![], vec![]);
+        let e = engine(Some(SHIPPED_KNOWN));
+        for line in [
+            "#| fig-align: center",
+            "#| fig-scap: short",
+            "#| fig-link: http://x",
+            "#| fig-env: figure*",
+            "#| fig-pos: h",
+            "#| out-width: 50%",
+            "#| out-height: 50%",
+            "#| out-extra: x",
+        ] {
+            let h = header(line);
+            let md = present("a\n", &c, Some(&e), h.as_ref()).unwrap();
+            let first = md.lines().next().unwrap();
+            assert!(!first.contains("='"), "{line} leaked onto the div: {first}");
+        }
+    }
+
+    #[test]
+    fn a_float_option_survives_the_layering() {
+        let m = layered(
+            json!({"out-width": "50%"}),
+            "#| out-width: 0.5",
+            SHIPPED_KNOWN,
+        );
+        assert_eq!(m["out-width"], 0.5, "{m}");
     }
 
     #[test]

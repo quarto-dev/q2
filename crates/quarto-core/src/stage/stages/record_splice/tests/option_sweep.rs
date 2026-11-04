@@ -245,7 +245,7 @@ const SWEEP: &[(&str, &str, Outcome)] = &[
     ("cache.rebuild", "true", Hashed),
     ("fig.keep", "none", Hashed),
     ("fig.show", "hide", Presents),
-    ("fig.align", "center", Gap),
+    ("fig.align", "center", Presents),
     ("fig.path", "\"'f/'\"", Hashed),
     ("dev", "svg", Hashed),
     ("dev.args", "\"list(bg = 'red')\"", Hashed),
@@ -253,15 +253,15 @@ const SWEEP: &[(&str, &str, Outcome)] = &[
     ("fig.ext", "\"'svg'\"", Hashed),
     ("fig.width", "3", Hashed),
     ("fig.height", "3", Hashed),
-    ("fig.env", "\"'figure*'\"", Gap),
+    ("fig.env", "\"'figure*'\"", Presents),
     ("fig.cap", "\"'A caption'\"", Presents),
-    ("fig.scap", "\"'short'\"", Gap),
+    ("fig.scap", "\"'short'\"", Presents),
     ("fig.lp", "\"'x:'\"", Inert),
     ("fig.subcap", "\"'sub'\"", Presents),
-    ("fig.pos", "\"'h'\"", Gap),
-    ("out.width", "\"'50%'\"", Gap),
-    ("out.height", "\"'50%'\"", Gap),
-    ("out.extra", "\"'style=\\\"x\\\"'\"", Gap),
+    ("fig.pos", "\"'h'\"", Presents),
+    ("out.width", "\"'50%'\"", Presents),
+    ("out.height", "\"'50%'\"", Presents),
+    ("out.extra", "\"'style=\\\"x\\\"'\"", Presents),
     ("fig.retina", "2", Hashed),
     ("external", "false", Hashed),
     ("sanitize", "true", Hashed),
@@ -285,17 +285,17 @@ const SWEEP: &[(&str, &str, Outcome)] = &[
     ("attr.source", "\"'.n'\"", Presents),
     ("attr.output", "\"'.n'\"", Presents),
     ("output", "false", Hashed),
-    ("classes", "foo", Gap),
+    ("classes", "foo", Presents),
     ("panel", "tabset", Presents),
     ("column", "margin", Presents),
-    ("fig-column", "margin", Gap),
-    ("tbl-column", "margin", Gap),
-    ("cap-location", "top", Gap),
-    ("fig-cap-location", "top", Gap),
-    ("tbl-cap-location", "top", Gap),
+    ("fig-column", "margin", Presents),
+    ("tbl-column", "margin", Presents),
+    ("cap-location", "top", Presents),
+    ("fig-cap-location", "top", Presents),
+    ("tbl-cap-location", "top", Presents),
     ("code-fold", "true", Presents),
     ("code-summary", "\"'Show'\"", Presents),
-    ("code-overflow", "wrap", Gap),
+    ("code-overflow", "wrap", Presents),
     ("code-line-numbers", "true", Presents),
     ("lst-cap", "\"'Listing'\"", Presents),
     ("lst-label", "lst-a", Presents),
@@ -308,18 +308,18 @@ const SWEEP: &[(&str, &str, Outcome)] = &[
     ("html-table-processing", "none", Inert),
     ("fig-width", "3", Hashed),
     ("fig-height", "3", Hashed),
-    ("fig-align", "center", Gap),
+    ("fig-align", "center", Presents),
     ("fig-alt", "\"'a'\"", Presents),
     ("fig-cap", "\"'cap'\"", Presents),
     ("label", "abc", Hashed),
     ("fig-format", "svg", Hashed),
     ("fig-dpi", "150", Hashed),
     ("dpi", "150", Hashed),
-    ("indent", "\"'  '\"", Gap),
+    ("indent", "\"'  '\"", Inert),
     ("attr.message", "\"'.n'\"", Presents),
     ("attr.warning", "\"'.n'\"", Presents),
     ("attr.error", "\"'.n'\"", Inert),
-    ("fig.link", "\"'http://x'\"", Gap),
+    ("fig.link", "\"'http://x'\"", Presents),
 ];
 
 const INERT_REASONS: &[(&str, &str)] = &[
@@ -358,6 +358,14 @@ const INERT_REASONS: &[(&str, &str)] = &[
     (
         "class.error",
         "the fixture has no error output; corpus options/class.error covers it",
+    ),
+    (
+        "indent",
+        "a departure (KNR-3 slice 7, D8): the presenter ignores `indent`, because knitr sets it \
+         from the chunk\'s container indent and the splice already re-applies container prefix \
+         and indent; presenting it would double-indent a nested chunk. Live knitr writes it on \
+         the output, so corpus options/indent differs; KNR-6 decides what a header `indent` does \
+         once the skeleton marker\'s indent is known",
     ),
 ];
 
@@ -423,4 +431,17 @@ fn deleting_any_swept_option_from_the_header_makes_the_unit_stale() {
         survived.is_empty(),
         "deletion left these fresh: {survived:?}"
     );
+}
+
+/// KNR-3 slice 7, Phase 7.0 (control): a header option whose value is *changed* shows at once,
+/// from the old record, with the unit still fresh. Deletion is the stale case, pinned by
+/// `deleting_any_swept_option_from_the_header_makes_the_unit_stale` (slice 8).
+#[test]
+fn a_changed_header_value_shows_at_once_from_the_old_record() {
+    let record = rich_record(&source_with(Some(("fig-cap", "\"'Cap one'\""))));
+    let (old, _) = splice_html(&source_with(Some(("fig-cap", "\"'Cap one'\""))), &record);
+    assert!(old.contains("Cap one"), "{old}");
+    let (new, report) = splice_html(&source_with(Some(("fig-cap", "\"'Cap two'\""))), &record);
+    assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{new}");
+    assert!(new.contains("Cap two") && !new.contains("Cap one"), "{new}");
 }

@@ -668,13 +668,16 @@ dir = "s9"
 group = "options"
 option = "indent"
 body_ref = "single_body"
-values = ["'\"  \"'"]
+values = ["'  '"]
 
 [[sweep]]
 group = "options"
 option = "fig.link"
 body_ref = "plot_body"
-values = ["'\"http://example.com\"'"]
+# The first value carries literal quote characters (live copies them into the link target); the
+# second is a normal URL in both forms, a single-quoted R string and a single-quoted YAML
+# string (KNR-3 slice 7, Phase 7c).
+values = ["'\"http://example.com\"'", "'http://example.com'"]
 
 [[sweep]]
 group = "options"

@@ -356,6 +356,29 @@ fn included_graphic(metadata: &serde_json::Value) -> Option<(String, Option<f64>
     ))
 }
 
+/// A figure\'s markdown in its output div, or bare for a linked image under `results = "asis"`
+/// (hooks.R).
+fn push_figure(output: &mut String, options: &CellOptions, index: usize, md: &str) {
+    if options.bare_linked_image(index) {
+        output.push_str(&format!("\n{md}\n"));
+    } else {
+        output.push_str(&format!("\n::: {{.cell-output-display}}\n\n{md}\n\n:::\n"));
+    }
+}
+
+/// The `width` and `height` a stored output carries for its image (`metadata[mime]`, the
+/// nbformat place for them), as the text of the number.
+fn metadata_size(metadata: &serde_json::Value, mime: &str) -> (Option<String>, Option<String>) {
+    let read = |key: &str| {
+        metadata
+            .get(mime)
+            .and_then(|m| m.get(key))
+            .filter(|v| v.is_number())
+            .map(|v| v.to_string())
+    };
+    (read("width"), read("height"))
+}
+
 fn widget_output(o: &CellOutput) -> bool {
     matches!(o, CellOutput::DisplayData { metadata, .. }
         if metadata["quarto_knitr"]["widget"] == true)
@@ -652,8 +675,9 @@ fn echoed_source_fence_with(
     let ticks = ticks_for_code(code);
     let id = options.source_id_prefix();
     let classes = options.source_classes();
+    let overflow = options.source_overflow();
     let attrs = options.source_attrs();
-    format!("{ticks}{{{id}.{language}{classes} .cell-code{attrs}}}\n{code}\n{ticks}")
+    format!("{ticks}{{{id}.{language}{classes} .cell-code{overflow}{attrs}}}\n{code}\n{ticks}")
 }
 
 /// Wrap already-trimmed output text in a `::: {<classes>}` div around
@@ -838,11 +862,11 @@ fn format_outputs_with(
                     // knitr `include_graphics`: the user\'s own file, referenced where it
                     // is, with the width knitr computed.
                     let alt = options.figure_cap(*figures);
+                    let attrs =
+                        options.image_attrs_with(*figures, width.map(|w| w.to_string()), None);
+                    let md = options.link_image(*figures, format!("![{alt}]({path}){attrs}"));
+                    push_figure(&mut output, options, *figures, &md);
                     *figures += 1;
-                    output.push_str(&format!(
-                        "\n::: {{.cell-output-display}}\n\n![{alt}]({path}){}\n\n:::\n",
-                        options.image_attrs_with(width),
-                    ));
                 } else if let Some(rel_path) =
                     image_entry.and_then(|(mime, value)| fig.write_image(mime, value))
                 {
@@ -856,11 +880,17 @@ fn format_outputs_with(
                     // the print stylesheet, also matches `img`
                     // directly.)
                     let alt = options.figure_cap(*figures);
+                    // A stored output may carry the image\'s size in its metadata (nbformat).
+                    let (width, height) = match (cell_output, image_entry) {
+                        (CellOutput::DisplayData { metadata, .. }, Some((mime, _))) => {
+                            metadata_size(metadata, mime)
+                        }
+                        _ => (None, None),
+                    };
+                    let attrs = options.image_attrs_with(*figures, width, height);
+                    let md = options.link_image(*figures, format!("![{alt}]({rel_path}){attrs}"));
+                    push_figure(&mut output, options, *figures, &md);
                     *figures += 1;
-                    output.push_str(&format!(
-                        "\n::: {{.cell-output-display}}\n\n![{alt}]({rel_path}){}\n\n:::\n",
-                        options.image_attrs(),
-                    ));
                 } else if let Some(text) = data.get("text/plain") {
                     let s = extract_text_content(text);
                     output.push_str(&fenced_output_div(
@@ -2215,11 +2245,346 @@ mod option_tests {
         assert!(md.contains("![second]("), "{md}");
     }
 
+    // === KNR-3 slice 7, Phase 7b: image attributes ===
+
+    fn one_image(json: serde_json::Value) -> String {
+        images(&opts(json), vec![plot()]).remove(0)
+    }
+
     #[test]
-    fn jupyter_figure_options_leave_images_alone() {
-        // Jupyter spells these `fig-cap` / `fig-alt` and Quarto handles them elsewhere.
-        let o = CellOptions::from_knitr(&serde_json::json!({"fig-cap": "c", "fig-alt": "a"}));
-        assert_eq!(images(&o, vec![plot()]), ["![](P)"]);
+    fn each_image_option_alone_writes_its_attribute() {
+        for (json, want) in [
+            (
+                serde_json::json!({"fig-align": "center"}),
+                "![](P){fig-align='center'}",
+            ),
+            (
+                serde_json::json!({"fig-env": "figure*"}),
+                "![](P){fig-env='figure*'}",
+            ),
+            (serde_json::json!({"fig-pos": "h"}), "![](P){fig-pos='h'}"),
+            (
+                serde_json::json!({"fig-scap": "it's short"}),
+                "![](P){fig-scap='it\\'s short'}",
+            ),
+            (serde_json::json!({"out-width": "50%"}), "![](P){width=50%}"),
+            (serde_json::json!({"out-width": 0.5}), "![](P){width=0.5}"),
+            (
+                serde_json::json!({"out-height": "2in"}),
+                "![](P){height=2in}",
+            ),
+            (
+                serde_json::json!({"out-extra": "style=\"border: 1px\""}),
+                "![](P){style=\"border: 1px\"}",
+            ),
+            // knitr\'s dotted spellings are aliases.
+            (
+                serde_json::json!({"fig.align": "left", "out.width": "30%"}),
+                "![](P){fig-align='left' width=30%}",
+            ),
+        ] {
+            assert_eq!(one_image(json.clone()), want, "{json}");
+        }
+    }
+
+    #[test]
+    fn all_image_options_together_follow_knitrs_order() {
+        let got = one_image(serde_json::json!({
+            "out-extra": "style=\"border: 1px\"", "out-height": "50%", "out-width": "50%",
+            "fig-scap": "short", "fig-alt": "a", "fig-pos": "h", "fig-env": "figure*",
+            "fig-align": "center",
+        }));
+        assert_eq!(
+            got,
+            "![](P){fig-align='center' fig-env='figure*' fig-pos='h' fig-alt='a' \
+             fig-scap='short' width=50% height=50% style=\"border: 1px\"}"
+        );
+    }
+
+    #[test]
+    fn the_knitr_defaults_write_nothing() {
+        assert_eq!(
+            one_image(
+                serde_json::json!({"fig.align": "default", "fig.env": "figure", "fig.pos": ""})
+            ),
+            "![](P)"
+        );
+    }
+
+    #[test]
+    fn a_list_valued_image_option_recycles_by_figure_index_for_every_figure() {
+        // D3: figure i gets value[i % len]; a scalar applies to every figure.
+        let o = opts(serde_json::json!({"fig-align": ["left", "center"], "out-width": "40%"}));
+        assert_eq!(
+            images(&o, vec![plot(), plot(), plot()]),
+            [
+                "![](P){fig-align='left' width=40%}",
+                "![](P){fig-align='center' width=40%}",
+                "![](P){fig-align='left' width=40%}",
+            ]
+        );
+    }
+
+    #[test]
+    fn every_figure_of_a_captioned_cell_carries_the_image_attributes() {
+        let o = opts(serde_json::json!({
+            "fig.cap": "c", "fig.subcap": ["one", "two"], "fig-align": "right"
+        }));
+        assert_eq!(
+            images(&o, vec![plot(), plot()]),
+            [
+                "![one](P){fig-align='right'}",
+                "![two](P){fig-align='right'}"
+            ]
+        );
+    }
+
+    #[test]
+    fn fig_align_also_writes_layout_align_on_the_cell() {
+        let div = |json: serde_json::Value| opts(json).cell_div_attrs();
+        assert_eq!(
+            div(serde_json::json!({"fig-align": "center"})),
+            " layout-align=\"center\""
+        );
+        // The first element of a list, never its compact JSON.
+        assert_eq!(
+            div(serde_json::json!({"fig-align": ["right", "left"]})),
+            " layout-align=\"right\""
+        );
+        // An explicit `layout-align` loses to it (hooks.R).
+        assert_eq!(
+            div(serde_json::json!({"fig-align": "right", "layout-align": "left"})),
+            " layout-align=\"right\""
+        );
+        assert_eq!(
+            div(serde_json::json!({"layout-align": "left"})),
+            " layout-align=\"left\""
+        );
+        // The default writes neither.
+        assert_eq!(div(serde_json::json!({"fig.align": "default"})), "");
+    }
+
+    #[test]
+    fn a_cell_option_width_beats_the_include_graphics_width() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!("AAAA"));
+        let graphic = || CellOutput::DisplayData {
+            data: data.clone(),
+            metadata: serde_json::json!({"quarto_file_path": "made.png", "quarto_knitr": {
+                "include_graphics": true, "width": 200.0}}),
+        };
+        let md = render_opts(
+            &opts(serde_json::json!({"out-width": "50%"})),
+            vec![graphic()],
+        );
+        assert!(md.contains("![](made.png){width=50%}"), "{md}");
+        // D7: the width knitr computed shows only while `out.width` is unset at capture time,
+        // so a record made without one keeps showing it until the cell re-runs (slice 8 makes
+        // deleting the option from the header stale).
+        let md = render_opts(&opts(serde_json::json!({})), vec![graphic()]);
+        assert!(md.contains("![](made.png){width=200}"), "{md}");
+    }
+
+    #[test]
+    fn a_stored_image_takes_its_size_from_the_output_metadata_and_a_cell_option_wins() {
+        let image = || {
+            let mut data = crate::presenter::output::MimeBundle::new();
+            data.insert("image/png".to_string(), serde_json::json!(PNG));
+            CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({"image/png": {"width": 300, "height": 200}}),
+            }
+        };
+        assert_eq!(
+            images(&CellOptions::default(), vec![image()]),
+            ["![](P){width=300 height=200}"]
+        );
+        assert_eq!(
+            images(
+                &opts(serde_json::json!({"out-width": "50%"})),
+                vec![image()]
+            ),
+            ["![](P){width=50% height=200}"]
+        );
+    }
+
+    // === KNR-3 slice 7, Phase 7c: the figure link ===
+
+    /// Like `render_opts`, with figures written under a temp dir so a plot is an image.
+    fn render_figs(o: &CellOptions, outputs: Vec<CellOutput>) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        render_cell_with(
+            "r",
+            "x\n",
+            &result(outputs),
+            o,
+            &mut fig,
+            CellVisibility::VISIBLE,
+        )
+    }
+
+    #[test]
+    fn a_plot_with_fig_link_is_wrapped_in_a_link() {
+        let o = opts(serde_json::json!({"fig-link": "http://example.com/x", "fig-align": "left"}));
+        let md = render_figs(&o, vec![plot()]);
+        let line = md.lines().find(|l| l.contains("![")).unwrap();
+        assert!(
+            line.starts_with("[![](")
+                && line.contains("){fig-align='left'}](http://example.com/x)"),
+            "{md}"
+        );
+        // knitr\'s dotted spelling is an alias; the link is verbatim.
+        let o = opts(serde_json::json!({"fig.link": "a b.html#c"}));
+        let md = render_figs(&o, vec![plot()]);
+        assert!(md.contains("](a b.html#c)"), "{md}");
+    }
+
+    #[test]
+    fn an_include_graphics_image_with_fig_link_is_wrapped_in_a_link() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!("AAAA"));
+        let o = opts(serde_json::json!({"fig-link": "http://x"}));
+        let md = render_opts(
+            &o,
+            vec![CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({"quarto_file_path": "made.png", "quarto_knitr": {
+                    "include_graphics": true, "width": 200.0}}),
+            }],
+        );
+        assert!(md.contains("[![](made.png){width=200}](http://x)"), "{md}");
+    }
+
+    #[test]
+    fn fig_link_recycles_by_figure_and_results_asis_returns_the_bare_link() {
+        let o = opts(serde_json::json!({"fig-link": ["http://a", "http://b"]}));
+        let md = render_figs(&o, vec![plot(), plot()]);
+        let tails: Vec<&str> = md
+            .lines()
+            .filter(|l| l.contains("!["))
+            .map(|l| &l[l.rfind("](").unwrap()..])
+            .collect();
+        assert_eq!(tails, ["](http://a)", "](http://b)"], "{md}");
+        // hooks.R returns the bare markdown (no output div) under `results = "asis"`.
+        let o = opts(serde_json::json!({"fig-link": "http://x", "results": "asis"}));
+        let md = render_figs(&o, vec![plot()]);
+        assert!(
+            !md.contains("cell-output-display") && md.contains("](http://x)"),
+            "{md}"
+        );
+    }
+
+    // === KNR-3 slice 7, Phase 7d: cell and source classes ===
+
+    #[test]
+    fn the_cell_classes_follow_hooks_rs_order() {
+        let o = opts(serde_json::json!({
+            "tbl-cap-location": "margin", "fig-cap-location": "bottom", "cap-location": "top",
+            "tbl-column": "screen", "fig-column": "page", "column": "margin", "panel": "tabset",
+            "classes": ["a", ".b"],
+        }));
+        assert_eq!(
+            o.cell_div_attrs(),
+            " .a .b .panel-tabset .column-margin .fig-column-page .tbl-column-screen \
+             .caption-top .fig-cap-location-bottom .tbl-cap-location-margin"
+        );
+        // A string is one class, never split; a leading dot is kept, not doubled.
+        assert_eq!(
+            opts(serde_json::json!({"classes": "plain"})).cell_div_attrs(),
+            " .plain"
+        );
+        assert_eq!(
+            opts(serde_json::json!({"classes": ".plain"})).cell_div_attrs(),
+            " .plain"
+        );
+        // knitr\'s dotted spelling of fig-column and fig-cap-location is an alias.
+        assert_eq!(
+            opts(serde_json::json!({"fig.column": "page", "fig.cap-location": "top"}))
+                .cell_div_attrs(),
+            " .fig-column-page .fig-cap-location-top"
+        );
+    }
+
+    #[test]
+    fn cap_location_writes_its_own_value_not_fig_cap_locations() {
+        // D5: Quarto 1 writes `.caption-margin` here (quarto-cli#15281); the presenter does not.
+        let o = opts(serde_json::json!({"cap-location": "top", "fig-cap-location": "margin"}));
+        let div = o.cell_div_attrs();
+        assert!(
+            div.contains(" .caption-top") && !div.contains(".caption-margin"),
+            "{div}"
+        );
+        assert!(
+            !opts(serde_json::json!({"fig-cap-location": "margin"}))
+                .cell_div_attrs()
+                .contains("caption-")
+        );
+    }
+
+    #[test]
+    fn a_class_option_writes_a_class_only_for_a_scalar_string() {
+        for value in [
+            serde_json::json!(true),
+            serde_json::json!(3),
+            serde_json::json!(["top", "bottom"]),
+        ] {
+            for key in [
+                "cap-location",
+                "fig-cap-location",
+                "tbl-cap-location",
+                "fig-column",
+                "tbl-column",
+            ] {
+                let div = opts(serde_json::json!({ key: value.clone() })).cell_div_attrs();
+                assert_eq!(div, "", "{key}: {value}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_class_or_a_derived_layout_align_keeps_the_div_under_results_asis() {
+        for json in [
+            serde_json::json!({"results": "asis", "classes": "plain"}),
+            serde_json::json!({"results": "asis", "cap-location": "top"}),
+            serde_json::json!({"results": "asis", "fig-align": "center"}),
+        ] {
+            let md = render_opts(&opts(json.clone()), vec![stream("t")]);
+            assert!(md.starts_with("::: {.cell"), "{json}: {md}");
+        }
+    }
+
+    #[test]
+    fn code_overflow_adds_a_class_to_the_source_fence_after_cell_code() {
+        let fence = |json: serde_json::Value| echoed_source_fence_with("r", "x", &opts(json), &[]);
+        assert!(
+            fence(serde_json::json!({"code-overflow": "wrap"}))
+                .starts_with("```{.r .cell-code .code-overflow-wrap}")
+        );
+        assert!(
+            fence(serde_json::json!({"code-overflow": "scroll"}))
+                .starts_with("```{.r .cell-code .code-overflow-scroll}")
+        );
+        assert!(
+            fence(serde_json::json!({"code-overflow": "other"})).starts_with("```{.r .cell-code}")
+        );
+        assert!(
+            fence(serde_json::json!({"code-overflow": "wrap", "class.source": "mine", "attr.source": "data-x=\"1\""}))
+                .starts_with("```{.r .mine .cell-code .code-overflow-wrap data-x=\"1\"}"),
+        );
+    }
+
+    #[test]
+    fn the_canonical_fig_alt_and_fig_cap_reach_the_image() {
+        // `fig-alt` is read under its canonical name (KNR-3 slice 7, D10), as `fig.alt` is.
+        let o = CellOptions::from_knitr(&serde_json::json!({"fig-alt": "a"}));
+        assert_eq!(images(&o, vec![plot()]), ["![](P){fig-alt='a'}"]);
+        let dotted = CellOptions::from_knitr(&serde_json::json!({"fig.alt": "a"}));
+        assert_eq!(images(&dotted, vec![plot()]), ["![](P){fig-alt='a'}"]);
+        // `fig-cap` is the caption of the figure, read under its canonical name (Phase 7g).
+        let o = CellOptions::from_knitr(&serde_json::json!({"fig-cap": "c"}));
+        assert_eq!(images(&o, vec![plot()]), ["![c](P)"]);
     }
 
     // === KNR-2 Phase 2D: knitr text hooks (prompt, comment) ===

@@ -175,6 +175,21 @@ mod tests {
         assert!(profile.presentation_cell_options.len() > 50);
     }
 
+    /// KNR-3 slice 7, D8: `indent` is inert for the presenter, so it is neither hashed nor
+    /// presented. It stays in the presentation list, which keeps every hash and the declaration
+    /// version where they were.
+    #[test]
+    fn an_indent_edit_does_not_move_a_structured_hash_and_the_version_stays_2() {
+        assert_eq!(KNITR_HASH_VERSION, 2);
+        assert!(STRUCTURED_PRESENTATION_OPTIONS.contains(&"indent"));
+        let base = structured(json!({"fig.width": 7}));
+        assert_eq!(
+            base,
+            structured(json!({"fig.width": 7, "indent": "  "})),
+            "indent moved the hash"
+        );
+    }
+
     #[test]
     fn a_presentation_only_option_does_not_move_a_structured_hash() {
         let base = structured(json!({"fig.width": 7}));

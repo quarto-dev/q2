@@ -30,8 +30,12 @@ use quarto_core::stage::stages::ENGINE_CAPTURE_KIND;
 use crate::engine_stage_driver::{AuxRecorder, run_engine_stage};
 
 const CASES: &[&str] = &[
+    "cap-location",
+    "cell-classes",
+    "code-overflow",
     "echo-false",
     "error-allowed",
+    "fig-column",
     "hidden-then-plot",
     "html-table",
     "markdown-latex",
@@ -42,6 +46,14 @@ const CASES: &[&str] = &[
 
 /// Divergences EXR-8 accepted: `(case, divergence prefix, reason)`.
 const ACCEPTED: &[(&str, &str, &str)] = &[
+    // KNR-3 slice 7, D5: the Rust presenter writes `caption-<cap-location>`; TS (and Quarto 1)
+    // write `caption-<fig-cap-location>`, which is `caption-undefined` when only `cap-location`
+    // is set (quarto-dev/quarto-cli#15281; the TS copy is bd-3uj42ytc). Classification: accept.
+    (
+        "cap-location",
+        "div-classes at blocks[0]",
+        "cap-location writes its own value, not fig-cap-location's",
+    ),
     // The Rust presenter's figure div carries only `cell-output-display`, matching
     // q2-knitr (`presenter/cell.rs`, "Figure divs carry ONLY `cell-output-display`").
     // TS adds `cell-output`. Classification: accept.
@@ -57,6 +69,23 @@ const ACCEPTED: &[(&str, &str, &str)] = &[
     ),
     (
         "hidden-then-plot",
+        "div-classes at blocks[0][1]",
+        "figure div classes",
+    ),
+    // The KNR-3 slice 7 fixtures plot a figure too; their option (classes, code-overflow,
+    // fig-column) matches TS, and only this known figure div difference remains.
+    (
+        "cell-classes",
+        "div-classes at blocks[0][1]",
+        "figure div classes",
+    ),
+    (
+        "code-overflow",
+        "div-classes at blocks[0][1]",
+        "figure div classes",
+    ),
+    (
+        "fig-column",
         "div-classes at blocks[0][1]",
         "figure div classes",
     ),

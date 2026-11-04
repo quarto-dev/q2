@@ -87,7 +87,7 @@ fixture and a test that fails first.
 - [ ] The image and caption options Phase 2C slice 3 left unbuilt. KNR-3 slice 7
   ([plan](2026-11-03-presenter-generic-cell-options.md)) builds `fig.scap`, `fig.link`, image
   `width` and `height`, `fig.align`, `fig-column`, `tbl-column` and the `cap-location` family, for
-  every engine, so they leave this list once it lands. What stays here: the `#fig-` label and
+  every engine, so they leave this list once it lands (landed 2026-11-04 on `knr-2-presenter`; the `cap-location` family, `classes` and `code-overflow` too). What stays here: the `#fig-` label and
   cell-level caption when `fig.cap` and `fig.subcap` are both set, the `fig.sep` and `fig.ncol`
   layout synthesis, and `fig.valign` (`layout-valign`). For each, add a fixture and build it, or
   record it as unsupported with a reason.
@@ -131,7 +131,9 @@ fixture and a test that fails first.
   through the written record, 270 cases): 227 accepted (identical or syntax-level), 5
   allowlisted, 7 not compared (4 consistent aborts, 3 unavailable packages), and 31 blockers
   outside the allowlist: 30 are the option gaps KNR-3 slice 7 closes (expected after it: 255, 7, 7
-  and 1) and `s9/01_inline` is KNR-4. This item stays open until both have landed and the
+  and 1) and `s9/01_inline` is KNR-4. State at 2026-11-04 after slice 7 (272 cases, two
+  `fig.link` URL cases added): 257 accepted, 7 allowlisted (the two new ones are `indent`, D8), 7 not
+  compared and 1 blocker, `s9/01_inline`. This item stays open until KNR-4 has landed and the
   count is zero.
 - [ ] Assert the gate. `corpus_report` currently writes the gate verdict
   (`knitr_corpus_gate`, epic decision 26) into its summary without failing on it, because
