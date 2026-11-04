@@ -218,6 +218,10 @@ struct CandidateFinder<'a> {
     output_dir: Option<PathBuf>,
     /// Canonical directory of the document being rendered.
     doc_dir: PathBuf,
+    /// Canonical paths of the project's input files (those that
+    /// canonicalize), computed once per document rather than once per
+    /// link target — the per-target loop was ~22 % of a website render.
+    canonical_inputs: HashSet<PathBuf>,
     /// Project-relative input paths with their extension removed, for
     /// the render-output sibling check.
     input_stems: HashSet<PathBuf>,
@@ -229,18 +233,20 @@ impl<'a> CandidateFinder<'a> {
         let project_dir = canon(&ctx.project.dir);
         let output_dir = Some(canon(&ctx.project.output_dir)).filter(|o| *o != project_dir);
         let doc_dir = canon(ctx.document.input.parent().unwrap_or(Path::new(".")));
-        let mut input_stems: HashSet<PathBuf> = ctx
-            .project
-            .files
-            .iter()
-            .filter_map(|f| {
-                canon(&f.input)
-                    .strip_prefix(&project_dir)
-                    .ok()
-                    .map(Path::to_path_buf)
-            })
-            .map(|p| p.with_extension(""))
-            .collect();
+        let mut canonical_inputs = HashSet::new();
+        let mut input_stems = HashSet::new();
+        for f in &ctx.project.files {
+            let canonical = match runtime.canonicalize(&f.input) {
+                Ok(c) => {
+                    canonical_inputs.insert(c.clone());
+                    c
+                }
+                Err(_) => f.input.clone(),
+            };
+            if let Ok(rel) = canonical.strip_prefix(&project_dir) {
+                input_stems.insert(rel.with_extension(""));
+            }
+        }
         if let Some(index) = ctx.project_index.as_ref() {
             input_stems.extend(
                 index
@@ -255,6 +261,7 @@ impl<'a> CandidateFinder<'a> {
             project_dir,
             output_dir,
             doc_dir,
+            canonical_inputs,
             input_stems,
         }
     }
@@ -305,11 +312,9 @@ impl<'a> CandidateFinder<'a> {
             .project_index
             .as_ref()
             .is_some_and(|index| index.lookup_by_source(project_rel).is_some());
-        let in_files = self.ctx.project.files.iter().any(|f| {
-            self.runtime
-                .canonicalize(&f.input)
-                .is_ok_and(|c| c == self.project_dir.join(project_rel))
-        });
+        let in_files = self
+            .canonical_inputs
+            .contains(&self.project_dir.join(project_rel));
         if in_index || in_files {
             return true;
         }
