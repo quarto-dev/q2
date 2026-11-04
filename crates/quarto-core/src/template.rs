@@ -772,14 +772,26 @@ pub fn minimal_html_template() -> Result<Template> {
 }
 
 /// Compile the full HTML template (resolving built-in partials).
+///
+/// The template and its partials are compile-time constants, so the
+/// result is compiled once per process and cloned per call: compiling
+/// (a tree-sitter parse plus partial resolution) per document was ~5.7 %
+/// of a website render (bd-wb9mp3lk).
 pub fn full_html_template() -> Result<Template> {
-    Template::compile_with_resolver(
-        FULL_HTML_TEMPLATE,
-        std::path::Path::new("<builtin>.html"),
-        &builtin_html_partials(),
-        0,
-    )
-    .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+    static COMPILED: std::sync::OnceLock<std::result::Result<Template, String>> =
+        std::sync::OnceLock::new();
+    COMPILED
+        .get_or_init(|| {
+            Template::compile_with_resolver(
+                FULL_HTML_TEMPLATE,
+                std::path::Path::new("<builtin>.html"),
+                &builtin_html_partials(),
+                0,
+            )
+            .map_err(|e| e.to_string())
+        })
+        .clone()
+        .map_err(crate::error::QuartoError::other)
 }
 
 /// Compile the default HTML template (minimal template for backwards compatibility).
