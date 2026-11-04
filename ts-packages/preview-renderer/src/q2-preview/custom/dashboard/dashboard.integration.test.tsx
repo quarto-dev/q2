@@ -182,3 +182,28 @@ describe('dashboard shell', () => {
         expect(window.location.hash).toBe('#two');
     });
 });
+
+describe('dashboard shell in a website', () => {
+    it('wraps the dashboard header in the site header and adds the footer', () => {
+        const meta = {
+            title: MS('Dash'),
+            rendered: MAP({
+                navigation: MAP({
+                    navbar: MS('<nav class="navbar" id="site-nav"><a class="nav-link" href="index.html">Home</a></nav>'),
+                    footer: MS('<footer class="footer"><div class="nav-footer">FOOT</div></footer>'),
+                }),
+            }),
+        };
+        const { container } = mount([DIV(['bslib-grid'], [PLAIN(STR('Body'))])], meta, true);
+        const site = container.querySelector('header#quarto-header.fixed-top')!;
+        expect(site.querySelector('#site-nav')).not.toBeNull();
+        expect(site.querySelector('header#quarto-dashboard-header')).not.toBeNull();
+        const content = container.querySelector('div#quarto-content')!;
+        expect(content.className).toContain('quarto-container');
+        expect(content.className).toContain('page-navbar');
+        expect(container.querySelector('#quarto-document-content')).toBeNull();
+        expect(container.querySelector('#quarto-skip-link')?.getAttribute('href')).toBe('#quarto-content');
+        expect(container.querySelector('footer.footer')?.textContent).toBe('FOOT');
+        expect(document.body.classList.contains('nav-fixed')).toBe(true);
+    });
+});

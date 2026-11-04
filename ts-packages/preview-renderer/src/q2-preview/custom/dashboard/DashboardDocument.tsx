@@ -9,6 +9,11 @@
  * nav-buttons, body-classes, content-classes}`) and owns the active page:
  * from the URL hash when it names a page (Q1 #14818 / #9411), else the
  * first, updated by the page tabs.
+ *
+ * In a website (dashboard plan Phase 9) the site's header wraps the
+ * dashboard header, the content area is the site's `#quarto-content`
+ * (the skip link's target), and the site footer follows, as in
+ * `DASHBOARD_SITE_HEADER_PARTIAL` and the dashboard template.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -19,7 +24,13 @@ import {
     renderChildren,
 } from '../../../framework';
 import type { PandocAST } from '../../../framework';
-import { HeaderIncludesEffect, SkipLinkSlot } from '../../chromeSlots';
+import {
+    AnnouncementSlot,
+    FooterSlot,
+    HeaderIncludesEffect,
+    NavbarSlot,
+    SkipLinkSlot,
+} from '../../chromeSlots';
 import { appendColorModeClass } from '../../PreviewDocument';
 import { DashboardPagesContext } from './shared';
 
@@ -157,12 +168,30 @@ export const DashboardDocument = ({
     }, [pages]);
     const activeId = active ?? pages.find((p) => p.active)?.id ?? pages[0]?.id ?? null;
 
-    // <body> classes, as the template composes them.
+    // Site chrome (`rendered.navigation.*`, as `PreviewDocument` reads it).
+    const nav = (key: string) => extractMetaString(getMetaPath(meta, ['rendered', 'navigation', key]));
+    const navbarHtml = nav('navbar');
+    const announceAbove = nav('announcement-above');
+    const announceBelow = nav('announcement-below');
+    const footerHtml = nav('footer');
+    const inSite = !!(navbarHtml || announceAbove || announceBelow);
+    const pinned =
+        extractMetaBool(getMetaPath(meta, ['navigation', 'navbar', 'pinned'])) === true ||
+        extractMetaBool(getMetaPath(meta, ['navigation', 'sidebar', 'pinned'])) === true;
+
+    // <body> classes, as the template composes them: the dashboard classes,
+    // then `$body-classes$` (a user `body-classes` wins wholesale; else the
+    // site's classes, `fullcontent`, and `nav-fixed` under a navbar, as in
+    // `PreviewDocument`), then the lowering's.
+    const userBodyClasses = extractMetaString(meta['body-classes']);
+    const structural =
+        userBodyClasses ??
+        [nav('body-classes'), 'fullcontent', navbarHtml ? 'nav-fixed' : null].filter(Boolean).join(' ');
     const bodyClasses = appendColorModeClass(
         [
             'quarto-dashboard',
             scrolling ? null : 'dashboard-fill',
-            extractMetaString(meta['body-classes']),
+            structural,
             extractMetaString(getMetaPath(meta, ['rendered', 'dashboard', 'body-classes'])),
         ]
             .filter(Boolean)
@@ -186,6 +215,7 @@ export const DashboardDocument = ({
     }, [meta, title]);
 
     const contentClasses = [
+        navbarHtml ? 'quarto-container page-navbar' : null,
         'page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container',
         scrolling ? 'dashboard-scrolling' : 'bslib-page-fill',
         pages.length ? 'quarto-dashboard-pages' : null,
@@ -211,12 +241,7 @@ export const DashboardDocument = ({
         ) : null;
     };
 
-    return (
-        <DashboardPagesContext.Provider value={{ active: activeId, setActive }}>
-            <SkipLinkSlot text={skipText} />
-            <HeaderIncludesEffect
-                items={extractMetaStringList(getMetaPath(meta, ['rendered', 'includes', 'header']))}
-            />
+    const dashboardHeader = (
             <header id="quarto-dashboard-header">
                 <nav className="navbar navbar-expand-md slim" data-bs-theme="dark">
                     <div className="navbar-container container-fluid">
@@ -282,9 +307,43 @@ export const DashboardDocument = ({
                     </div>
                 </nav>
             </header>
-            <div className={contentClasses} id="quarto-document-content" tabIndex={-1} role="main">
+    );
+
+    return (
+        <DashboardPagesContext.Provider value={{ active: activeId, setActive }}>
+            {navbarHtml ? (
+                <a id="quarto-skip-link" className="visually-hidden-focusable" href="#quarto-content">
+                    {skipText}
+                </a>
+            ) : (
+                <SkipLinkSlot text={skipText} />
+            )}
+            <HeaderIncludesEffect
+                items={extractMetaStringList(getMetaPath(meta, ['rendered', 'includes', 'header']))}
+            />
+            {inSite ? (
+                <header
+                    id="quarto-header"
+                    className="headroom fixed-top"
+                    {...(pinned ? { 'data-headroom-pinned': 'true' } : {})}
+                >
+                    {announceAbove ? <AnnouncementSlot html={announceAbove} /> : null}
+                    {navbarHtml ? <NavbarSlot html={navbarHtml} /> : null}
+                    {dashboardHeader}
+                    {announceBelow ? <AnnouncementSlot html={announceBelow} /> : null}
+                </header>
+            ) : (
+                dashboardHeader
+            )}
+            <div
+                className={contentClasses}
+                id={navbarHtml ? 'quarto-content' : 'quarto-document-content'}
+                tabIndex={-1}
+                role="main"
+            >
                 {children}
             </div>
+            {footerHtml ? <FooterSlot html={footerHtml} /> : null}
         </DashboardPagesContext.Provider>
     );
 };

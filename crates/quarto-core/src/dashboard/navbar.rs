@@ -205,12 +205,19 @@ pub fn nav_buttons_value(buttons: &[NavButton]) -> ConfigValue {
 
 /// `rendered.dashboard.logo`: `{light: {path, alt}, dark: {path, alt}}`
 /// from `logo` / `logo-alt` (Q1 always emits both images, each shown in
-/// its color mode, even for a single logo).
-pub fn logo_value(meta: &ConfigValue) -> Option<ConfigValue> {
+/// its color mode, even for a single logo). `resolve` turns each authored
+/// path into the `src` to emit (Q1 `resolveInputRelativeLogo`: relative to
+/// the file that declared it, so a project-level logo serves a page at
+/// any depth).
+pub fn logo_value(
+    meta: &ConfigValue,
+    mut resolve: impl FnMut(&str, &SourceInfo) -> String,
+) -> Option<ConfigValue> {
     let logo_alt = meta.get("logo-alt").and_then(|v| v.as_plain_text());
     let logo = quarto_navigation::navbar::parse_logo(meta.get("logo")?, logo_alt.as_deref())?;
-    let variant = |v: &quarto_navigation::navbar::LogoVariant| {
-        let mut entries = vec![entry("path", string(&v.path))];
+    let mut variant = |v: &quarto_navigation::navbar::LogoVariant| {
+        let src = resolve(&v.path, &v.source);
+        let mut entries = vec![entry("path", string(&src))];
         if let Some(alt) = &v.alt {
             entries.push(entry("alt", string(alt)));
         }
@@ -286,7 +293,10 @@ mod tests {
 
     #[test]
     fn single_logo_fills_both_variants() {
-        let v = logo_value(&meta("logo: who.jpg\nlogo-alt: WHO\n")).unwrap();
+        let v = logo_value(&meta("logo: who.jpg\nlogo-alt: WHO\n"), |p, _| {
+            p.to_string()
+        })
+        .unwrap();
         for mode in ["light", "dark"] {
             let m = v.get(mode).unwrap();
             assert_eq!(
@@ -298,6 +308,6 @@ mod tests {
                 Some("WHO")
             );
         }
-        assert!(logo_value(&meta("title: x\n")).is_none());
+        assert!(logo_value(&meta("title: x\n"), |p, _| p.to_string()).is_none());
     }
 }

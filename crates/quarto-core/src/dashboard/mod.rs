@@ -123,7 +123,21 @@ impl AstTransform for DashboardTransform {
                 navbar::nav_buttons_value(&buttons),
             );
         }
-        if let Some(logo) = navbar::logo_value(&ast.meta) {
+        let mut copies = Vec::new();
+        let logo = navbar::logo_value(&ast.meta, |path, source| {
+            let value = ConfigValue::new_string(path, source.clone());
+            match crate::revealjs::footer_logo::resolve_config_asset(&value, ctx) {
+                Some(resolved) => {
+                    copies.extend(resolved.copy);
+                    resolved.src
+                }
+                None => path.to_string(),
+            }
+        });
+        // A light/dark pair naming one file asks for one copy.
+        copies.dedup_by(|a, b| a.src == b.src);
+        ctx.resource_copies.extend(copies);
+        if let Some(logo) = logo {
             ast.meta
                 .insert_path(&["rendered", "dashboard", "logo"], logo);
         }

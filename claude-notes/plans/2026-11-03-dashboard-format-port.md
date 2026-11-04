@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-8 done 2026-11-04; Phase 9 next
+status: in-progress  # Phases 0-9 done 2026-11-04; wrap-up next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -461,7 +461,17 @@ Done:
 
 ### Phase 9: Websites
 
-- [ ] A dashboard page in a website: the theme comes from the site, the dashboard header merges under `#quarto-header`, and the body offset is right. Q1 also compiles the dashboard SCSS into every site page; decide whether to follow, which ties into D4.
+Done 2026-11-04.
+
+- [x] **Site chrome** (template `dashboard-site-header` partial): with a site navbar or announcement, the site\'s `header#quarto-header.headroom.fixed-top` wraps the dashboard header after the site navbar (Q1 `processNavigation` moves it there). The content area is the site\'s `div#quarto-content.quarto-container.page-navbar` (the dashboard CSS styles `#quarto-content.quarto-dashboard-content`), the skip link targets it, as in Q1, and the site footer follows the content.
+- [x] **Theme** (`metadata_merge.rs` `site_html_theme`): a dashboard page in a website with no `theme` of its own takes the site\'s html theme, flattened and path-marked as for an html page. Q1 forwards `format.html.theme` even over a theme the page sets at its top level; q2 forwards it only when the page has none (D5).
+- [x] **Logo**: `logo` paths resolve like the reveal deck logo (`revealjs/footer_logo.rs` `resolve_config_asset`, now shared): relative to the file that declared them, page-relative in the output, and copied into the site, so a project-level logo serves pages at any depth (Q1 `resolveInputRelativeLogo`).
+- [x] **Body offset**: the site\'s `quarto-nav.js` pads the body below the fixed header. Its port had dropped Q1\'s `footerOffset()`, which a fill layout needs (the content\'s min-height pushed the footer below the fold); it now subtracts the footer on dashboard pages. The general case for other site pages is bd-f19dbajh. Q1\'s `dashboardOffset()` is not ported: it double-counts the dashboard header that already sits inside `#quarto-header`.
+- [x] **Preview**: `DashboardDocument` renders the same site chrome from `rendered.navigation.*` (navbar, announcements, footer, `nav-fixed`, the `pinned` opt-out).
+- [x] **SCSS decision (D4 kept):** q2 does not compile the dashboard SCSS into every site page as Q1 does. A dashboard page compiles its own theme (the site theme plus the bslib and dashboard layers); other pages are unchanged. The cost is a second theme stylesheet in a site with dashboards.
+- [x] Tests: `dashboard_website.rs` (site chrome, theme forwarding and a page\'s own theme, logo at depth), a React shell test, and Playwright (rendered site page: content below the fixed header, footer on screen, tabs; live preview in a site). Screenshots of the same site page from Q1 and q2 match apart from the next item.
+
+**Remaining difference (not dashboard work):** in a site, Q1\'s dashboard brand has no right margin because of the navbar toggle-position rule `.navbar .navbar-container > .navbar-brand-container { margin-right: 0 !important }`, which q2 has deliberately not ported yet (bd-y5y10oir). q2 shows the dashboard\'s own `margin-right: 2em`, as a standalone Q1 dashboard does, so the page tabs sit about 34px further right.
 
 ### Wrap-up
 

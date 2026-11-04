@@ -405,25 +405,45 @@ $endif$
 ///   `tabindex="-1"` and `role="main"` (Q1's `injectSkipLink` and
 ///   `format-dashboard.ts:337`).
 /// - The closing script initializes bslib cards, as Q1's template does.
+/// - In a website with a navbar, as in Q1: the site header wraps the
+///   dashboard header (`dashboard-site-header`), the content area is the
+///   site\'s `div#quarto-content.quarto-container.page-navbar` (which the
+///   dashboard CSS styles) and the skip link targets it, and the site
+///   footer follows.
 ///
 /// Plan: `claude-notes/plans/2026-11-03-dashboard-format-port.md`, Phase 2.
 pub const DASHBOARD_HTML_TEMPLATE: &str = concat!(
     html_head!(),
-    r#"<body class="$if(scrolling)$quarto-dashboard$else$quarto-dashboard dashboard-fill$endif$ $body-classes$$if(rendered.dashboard.body-classes)$ $rendered.dashboard.body-classes$$endif$">
+    r##"<body class="$if(scrolling)$quarto-dashboard$else$quarto-dashboard dashboard-fill$endif$ $body-classes$$if(rendered.dashboard.body-classes)$ $rendered.dashboard.body-classes$$endif$">
+$if(rendered.navigation.navbar)$
+<a id="quarto-skip-link" class="visually-hidden-focusable" href="#quarto-content">$skip-to-content-text$</a>
+$else$
 $skip-link()$
+$endif$
 $if(color-mode-script)$
 $color-mode-script$
 $endif$
+$if(rendered.navigation.navbar)$
+${dashboard-site-header()}
+$elseif(rendered.navigation.announcement-above)$
+${dashboard-site-header()}
+$elseif(rendered.navigation.announcement-below)$
+${dashboard-site-header()}
+$else$
 $title-block()$
+$endif$
 $for(include-before)$
 $include-before$
 $endfor$
-<div class="page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$ $if(rendered.dashboard.pages)$quarto-dashboard-pages$endif$$if(rendered.dashboard.content-classes)$ $rendered.dashboard.content-classes$$endif$" id="quarto-document-content" tabindex="-1" role="main">
+<div class="$if(rendered.navigation.navbar)$quarto-container page-navbar $endif$page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$ $if(rendered.dashboard.pages)$quarto-dashboard-pages$endif$$if(rendered.dashboard.content-classes)$ $rendered.dashboard.content-classes$$endif$" id="$if(rendered.navigation.navbar)$quarto-content$else$quarto-document-content$endif$" tabindex="-1" role="main">
 $body$
 </div>
 $for(include-after)$
 $include-after$
 $endfor$
+$if(rendered.navigation.footer)$
+$rendered.navigation.footer$
+$endif$
 <script type="application/javascript">
 window.document.addEventListener("DOMContentLoaded", function (_event) {
   if (window.bslib && window.bslib.Card) {
@@ -433,8 +453,27 @@ window.document.addEventListener("DOMContentLoaded", function (_event) {
 </script>
 </body>
 </html>
-"#
+"##
 );
+
+/// A dashboard page in a website: the site\'s `#quarto-header` (its
+/// announcement banner and navbar, as [`QUARTO_HEADER_PARTIAL`] writes
+/// them) with the dashboard\'s own header inside it, after the site\'s
+/// navbar (Q1 `processNavigation`, `format-dashboard-website.ts`, which
+/// moves `#quarto-dashboard-header` into `#quarto-header`). A dashboard
+/// page has no site sidebar or secondary nav (its layout is custom).
+pub const DASHBOARD_SITE_HEADER_PARTIAL: &str = r#"<header id="quarto-header" class="headroom fixed-top">
+$if(rendered.navigation.announcement-above)$
+$rendered.navigation.announcement-above$
+$endif$
+$if(rendered.navigation.navbar)$
+$rendered.navigation.navbar$
+$endif$
+$title-block()$
+$if(rendered.navigation.announcement-below)$
+$rendered.navigation.announcement-below$
+$endif$
+</header>"#;
 
 /// A dashboard's header and navbar: Q1's `formats/dashboard/title-block.html`.
 /// Registered as `title-block` in [`dashboard_html_partials`]. Unlike Q1,
@@ -903,6 +942,7 @@ pub fn dashboard_html_partials() -> MemoryResolver {
         ("title-block", DASHBOARD_TITLE_BLOCK_PARTIAL),
         ("_nav-container", DASHBOARD_NAV_CONTAINER_PARTIAL),
         ("_nav-buttons", DASHBOARD_NAV_BUTTONS_PARTIAL),
+        ("dashboard-site-header", DASHBOARD_SITE_HEADER_PARTIAL),
     ] {
         resolver.add(name, content);
         resolver.add(format!("{name}.html"), content);

@@ -164,11 +164,12 @@ impl AstTransform for RevealFooterLogoTransform {
     }
 }
 
-/// The deck's `logo:` after resolution: the `src` to emit and, for a
-/// file inside the project, the copy that puts it in the output tree.
-struct ResolvedLogo {
-    src: String,
-    copy: Option<ResourceCopyIntent>,
+/// A config-authored asset path (a `logo:`) after resolution: the `src`
+/// to emit and, for a file inside the project, the copy that puts it in
+/// the output tree.
+pub(crate) struct ResolvedLogo {
+    pub(crate) src: String,
+    pub(crate) copy: Option<ResourceCopyIntent>,
 }
 
 /// Resolve `logo:` for emission, or `None` when unset/blank.
@@ -182,7 +183,16 @@ struct ResolvedLogo {
 /// - A file outside the project cannot be served from the site; it is
 ///   emitted as written, today's behaviour.
 fn resolve_logo(meta: &ConfigValue, ctx: &RenderContext) -> Option<ResolvedLogo> {
-    let value = meta.get("logo")?;
+    resolve_config_asset(meta.get("logo")?, ctx)
+}
+
+/// [`resolve_logo`] for any config-authored asset path `value` (its
+/// `SourceInfo` says which file declared it); shared with the dashboard
+/// navbar logo.
+pub(crate) fn resolve_config_asset(
+    value: &ConfigValue,
+    ctx: &RenderContext,
+) -> Option<ResolvedLogo> {
     let raw = value.as_plain_text()?;
     let raw = raw.trim();
     if raw.is_empty() {

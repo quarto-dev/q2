@@ -154,3 +154,66 @@ test('rendered page: hash navigation, tabs, collapse, expand, skip link', async 
 
   expect(errors, errors.join('\n')).toEqual([]);
 });
+
+test('rendered page in a website: under the site header, not beneath it', async ({ page }) => {
+  server = await startPreviewServer({
+    fixtureFiles: [
+      {
+        path: '_quarto.yml',
+        content:
+          'project:\n  type: website\nwebsite:\n  title: Site\n  navbar:\n    left:\n      - href: index.qmd\n        text: Home\n      - href: dash.qmd\n        text: Dash\n  page-footer: FOOTER-TEXT\nformat:\n  html:\n    theme: cosmo\n',
+      },
+      { path: 'index.qmd', content: '---\ntitle: Home\n---\n\nHome.\n' },
+      { path: 'dash.qmd', content: DASHBOARD },
+    ],
+    staticMode: true,
+  });
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto(server.url + 'dash.html');
+
+  const site = page.locator('#quarto-header');
+  const dashHeader = site.locator('#quarto-dashboard-header');
+  await expect(dashHeader).toBeVisible();
+  await expect(site.locator('nav.navbar a.nav-link', { hasText: 'Home' })).toBeVisible();
+
+  // The content area starts below the fixed site header (body offset) and
+  // the first card is fully on screen.
+  const headerBox = (await site.boundingBox())!;
+  const contentBox = (await page.locator('#quarto-content').boundingBox())!;
+  expect(contentBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height - 1);
+  const cardBox = (await page.locator('.bslib-card', { hasText: 'MAIN-CARD-TEXT' }).boundingBox())!;
+  expect(cardBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height - 1);
+  expect(cardBox.height).toBeGreaterThan(50);
+  // The site footer stays on screen below the fill layout (quarto-nav.js
+  // subtracts it from the content's min-height on dashboard pages).
+  const footerBox = (await page.locator('footer.footer').boundingBox())!;
+  expect(footerBox.y + footerBox.height).toBeLessThanOrEqual(800 + 1);
+
+  // Dashboard page tabs still work inside the site chrome.
+  await page.locator('#tab-details').click();
+  await expect(page.locator('#details')).toHaveClass(/\bactive\b/);
+});
+
+test('live preview in a website: site header wraps the dashboard header', async ({ page }) => {
+  server = await startPreviewServer({
+    fixtureFiles: [
+      {
+        path: '_quarto.yml',
+        content:
+          'project:\n  type: website\nwebsite:\n  title: Site\n  navbar:\n    left:\n      - href: index.qmd\n        text: Dash\n      - href: about.qmd\n        text: About\n  page-footer: FOOTER-TEXT\n',
+      },
+      { path: 'index.qmd', content: DASHBOARD },
+      { path: 'about.qmd', content: '---\ntitle: About\n---\n\nAbout.\n' },
+    ],
+  });
+  await page.goto(server.url);
+  const f = await previewFrame(page);
+  await expect(f.locator('header#quarto-header nav.navbar a', { hasText: 'About' })).toBeVisible();
+  await expect(f.locator('header#quarto-header #quarto-dashboard-header .navbar-title-text')).toHaveText(
+    'E2E Dashboard',
+  );
+  await expect(f.locator('div#quarto-content.quarto-dashboard-content')).toHaveCount(1);
+  await expect(f.locator('footer.footer')).toContainText('FOOTER-TEXT');
+  await f.locator('#tab-details').click();
+  await expect(f.locator('#details')).toHaveClass(/\bactive\b/);
+});
