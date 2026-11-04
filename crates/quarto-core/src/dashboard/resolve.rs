@@ -104,9 +104,9 @@ fn has_class(attr: &Attr, class: &str) -> bool {
     attr.1.iter().any(|c| c == class)
 }
 
-/// Q1 `ensureCssUnits`: a bare number is pixels.
+/// Q1 `ensureCssUnits`: a bare number is pixels, except `0`.
 fn css_units(v: &str) -> String {
-    if v.chars().last().is_some_and(|c| c.is_ascii_digit()) {
+    if v != "0" && v.chars().last().is_some_and(|c| c.is_ascii_digit()) {
         format!("{v}px")
     } else {
         v.to_string()
@@ -233,11 +233,12 @@ fn contain_image(inline: &mut Inline) {
 /// bslib markup.
 pub fn lower_document(blocks: Blocks) -> Blocks {
     let has_pages = contains_page(&blocks);
+    let mut cx = Lower::default();
     blocks
         .into_iter()
         .map(|block| {
             let is_root = matches!(&block, Block::Custom(n) if n.type_name == CONTAINER_TYPE);
-            let mut lowered = lower(block);
+            let mut lowered = lower(block, &mut cx);
             if is_root
                 && has_pages
                 && let Block::Div(d) = &mut lowered
@@ -268,30 +269,44 @@ fn contains_page(blocks: &[Block]) -> bool {
     })
 }
 
-fn lower_all(blocks: Blocks) -> Blocks {
-    blocks.into_iter().map(lower).collect()
+/// State threaded through one document's lowering: Q1 numbers tabsets by
+/// the card's position among all `.card` elements in document order
+/// (`card-tabset-<n>`).
+#[derive(Default)]
+struct Lower {
+    cards: usize,
+    /// The orientation of the container whose children are being lowered
+    /// (`None` inside pages, card bodies and other non-grid content).
+    parent: Option<Orientation>,
 }
 
-fn lower(block: Block) -> Block {
+fn lower_all(blocks: Blocks, cx: &mut Lower) -> Blocks {
+    blocks.into_iter().map(|b| lower(b, cx)).collect()
+}
+
+fn lower(block: Block, cx: &mut Lower) -> Block {
     let Block::Custom(node) = &block else {
         return match block {
+            Block::Div(d) if explicit_grid(&d.attr).is_some() => lower_explicit_grid(d, cx),
             Block::Div(mut d) => {
-                d.content = lower_all(d.content);
+                let parent = cx.parent.take();
+                d.content = lower_all(d.content, cx);
+                cx.parent = parent;
                 Block::Div(d)
             }
             other => other,
         };
     };
     match node.type_name.as_str() {
-        CONTAINER_TYPE => Container::from_custom(node).map(lower_container),
-        PAGE_TYPE => Page::from_custom(node).map(lower_page),
-        CARD_TYPE => Card::from_custom(node).map(lower_card),
+        CONTAINER_TYPE => Container::from_custom(node).map(|c| lower_container(c, cx)),
+        PAGE_TYPE => Page::from_custom(node).map(|p| lower_page(p, cx)),
+        CARD_TYPE => Card::from_custom(node).map(|c| lower_card(c, cx)),
         _ => None,
     }
     .unwrap_or(block)
 }
 
-fn lower_container(c: Container) -> Block {
+fn lower_container(c: Container, cx: &mut Lower) -> Block {
     let mut attr: Attr = (
         c.data.id.clone(),
         vec!["bslib-grid".to_string()],
@@ -315,10 +330,52 @@ fn lower_container(c: Container) -> Block {
         ),
     };
     attr.2.insert("style".to_string(), style);
-    div(attr, lower_all(c.children))
+    let parent = cx.parent.replace(c.data.orientation);
+    let children = lower_all(c.children, cx);
+    cx.parent = parent;
+    div(attr, children)
 }
 
-fn lower_page(p: Page) -> Block {
+/// Q1 grid-sizes every `div.rows` / `div.columns` in the page
+/// (`processRows` / `processColumns` query the whole document), including
+/// ones the structure pass did not turn into containers, e.g. inside a
+/// card body.
+fn explicit_grid(attr: &Attr) -> Option<Orientation> {
+    if has_class(attr, "rows") {
+        Some(Orientation::Rows)
+    } else if has_class(attr, "columns") {
+        Some(Orientation::Columns)
+    } else {
+        None
+    }
+}
+
+fn lower_explicit_grid(d: Div, cx: &mut Lower) -> Block {
+    let orientation = explicit_grid(&d.attr).expect("checked by the caller");
+    let mut container = Container {
+        data: super::model::ContainerData {
+            orientation,
+            id: d.attr.0.clone(),
+            classes: d
+                .attr
+                .1
+                .iter()
+                .filter(|c| c.as_str() != "rows" && c.as_str() != "columns")
+                .cloned()
+                .collect(),
+            layout: None,
+            height: None,
+            width: None,
+            root: false,
+            grid_template: String::new(),
+        },
+        children: d.content,
+    };
+    container.data.grid_template = super::sizing::grid_template(&container);
+    lower_container(container, cx)
+}
+
+fn lower_page(p: Page, cx: &mut Lower) -> Block {
     let mut attr: Attr = (
         p.data.id.clone(),
         vec!["dashboard-page".to_string(), "tab-pane".to_string()],
@@ -339,7 +396,9 @@ fn lower_page(p: Page) -> Block {
     }
     attr.2
         .insert("aria-labelledby".to_string(), format!("tab-{}", p.data.id));
-    let mut page = div(attr, lower_all(p.content));
+    let parent = cx.parent.take();
+    let mut page = div(attr, lower_all(p.content, cx));
+    cx.parent = parent;
     apply_fill_recursive(&mut page);
     page
 }
@@ -383,7 +442,46 @@ fn take_loose_header_text(
     ((!title.is_empty()).then_some(title), rest)
 }
 
-fn lower_card(card: Card) -> Block {
+/// Q1 `convertToTabsetHeader`: the tab list in a tabset card's header.
+fn tab_nav_html(id: &str, bodies: &[super::model::BodyData]) -> String {
+    let mut html = format!(
+        r#"<ul class="nav nav-tabs card-header-tabs" role="tablist" data-tabsetid="{id}">"#
+    );
+    for (i, body) in bodies.iter().enumerate() {
+        let n = i + 1;
+        let title = body.title.clone().unwrap_or_else(|| format!("Tab {n}"));
+        let title = html_escape(&title);
+        let (active, selected) = if n == 1 {
+            (" active", "true")
+        } else {
+            ("", "false")
+        };
+        html.push_str(&format!(
+            r##"<li class="nav-item" role="presentation"><a href="#{id}-{n}" role="tab" data-toggle="tab" data-bs-toggle="tab" data-value="{title}" aria-selected="{selected}" class="nav-link{active}">{title}</a></li>"##
+        ));
+    }
+    html.push_str("</ul>");
+    html
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+fn lower_card(card: Card, cx: &mut Lower) -> Block {
+    cx.cards += 1;
+    // A card's height sizes its row when its parent is a rows grid, and Q1
+    // then drops it (`computeRowLayouts` removes `data-height` before the
+    // card pass would turn it into a style).
+    let height_is_style = cx.parent != Some(Orientation::Rows);
+    let parent = cx.parent.take();
+    let tabset_id = card
+        .data
+        .tabset
+        .then(|| format!("card-tabset-{}", cx.cards));
     let data = card.data;
     let mut attr: Attr = (String::new(), data.classes.clone(), LinkedHashMap::new());
     add_class(&mut attr, "bslib-card");
@@ -401,7 +499,9 @@ fn lower_card(card: Card) -> Block {
         ("min-height", &data.min_height),
         ("height", &data.height),
     ] {
-        if let Some(v) = value {
+        if let Some(v) = value
+            && (prop != "height" || height_is_style)
+        {
             append_style(&mut attr, format!("{prop}: {};", css_units(v)));
         }
     }
@@ -413,7 +513,7 @@ fn lower_card(card: Card) -> Block {
         None => take_loose_header_text(card.header),
     };
     let mut content: Blocks = Vec::new();
-    if title.is_some() || !header.is_empty() {
+    if title.is_some() || !header.is_empty() || tabset_id.is_some() {
         let mut header_attr: Attr = (
             String::new(),
             vec!["card-header".to_string()],
@@ -449,11 +549,16 @@ fn lower_card(card: Card) -> Block {
             }
             _ => add_class(&mut header_attr, "dashboard-card-no-title"),
         }
-        header_content.extend(lower_all(header));
+        header_content.extend(lower_all(header, cx));
+        if let Some(id) = &tabset_id {
+            add_class(&mut header_attr, "bslib-navs-card-title");
+            header_content.push(raw_html(&tab_nav_html(id, &data.bodies)));
+        }
         content.push(div(header_attr, header_content));
     }
 
-    for (body_data, body) in data.bodies.iter().zip(card.bodies) {
+    let mut panes = Vec::new();
+    for (index, (body_data, body)) in data.bodies.iter().zip(card.bodies).enumerate() {
         let mut body_attr: Attr = (
             body_data.id.clone(),
             body_data.classes.clone(),
@@ -475,11 +580,40 @@ fn lower_card(card: Card) -> Block {
         if let Some(p) = &data.padding {
             append_style(&mut body_attr, format!("padding: {};", css_units(p)));
         }
-        let mut body_content = lower_all(body);
+        let mut body_content = lower_all(body, cx);
         contain_images(&mut body_content);
         let mut body_div = div(body_attr, body_content);
-        apply_fill_recursive(&mut body_div);
-        content.push(body_div);
+        match &tabset_id {
+            // Q1 `convertToTabs`: each body in its own tab pane.
+            Some(id) => {
+                let mut pane_attr: Attr = (
+                    format!("{id}-{}", index + 1),
+                    vec!["tab-pane".to_string()],
+                    LinkedHashMap::from_iter([("role".to_string(), "tabpanel".to_string())]),
+                );
+                if index == 0 {
+                    add_class(&mut pane_attr, "active");
+                    add_class(&mut pane_attr, "show");
+                }
+                panes.push(div(pane_attr, vec![body_div]));
+            }
+            None => {
+                apply_fill_recursive(&mut body_div);
+                content.push(body_div);
+            }
+        }
+    }
+    if let Some(id) = &tabset_id {
+        let mut tab_content = div(
+            (
+                String::new(),
+                vec!["tab-content".to_string()],
+                LinkedHashMap::from_iter([("data-tabset-id".to_string(), id.clone())]),
+            ),
+            panes,
+        );
+        apply_fill_recursive(&mut tab_content);
+        content.push(tab_content);
     }
 
     if !card.footer.is_empty() {
@@ -489,12 +623,13 @@ fn lower_card(card: Card) -> Block {
                 vec!["card-footer".to_string()],
                 LinkedHashMap::new(),
             ),
-            lower_all(card.footer),
+            lower_all(card.footer, cx),
         ));
     }
     if data.expandable {
         content.push(raw_html(EXPAND_BUTTON));
     }
     content.push(raw_html(CARD_INIT_SCRIPT));
+    cx.parent = parent;
     div(attr, content)
 }

@@ -183,6 +183,9 @@ pub struct CardData {
     pub has_footer: bool,
     #[serde(default)]
     pub has_header: bool,
+    /// A tabset card: each body is a tab, titled by `BodyData::title`.
+    #[serde(default)]
+    pub tabset: bool,
 }
 
 /// A dashboard container (row or column grid).

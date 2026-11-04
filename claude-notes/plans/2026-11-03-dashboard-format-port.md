@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-3 done 2026-11-03; Phase 4 next
+status: in-progress  # Phases 0-4 done 2026-11-03; Phase 5 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -241,7 +241,8 @@ The goal is "very familiar, straightforward to port", not byte compatibility. Fi
 | Q11/13 | `showcase=` / `showcase-position` are effectively ignored | Implement `showcase-position` (`left-center`, `top-right`, `bottom`), all of which bslib supports. |
 | Q14 | Markdown value-box title nests paragraphs: `<p class="value-box-title"><p>Title</p></p>` (`valuebox.lua:171` takes the title as a `Para`; the TS pass turns its wrapper into a `p`). Browsers close the outer `p` early, so the documented form (`::: {.valuebox}` with the title as the first paragraph) shows an empty title slot and the title as an unstyled paragraph. Found by the Phase 0 goldens (`contract/c20`, `q1/3-valuebox-static`). | Emit the title's inlines inside `p.value-box-title`. |
 | Q15 | `header-for` / `footer-for` only resolve an id *inside* the target card; the card\'s or cell\'s own id is a fatal error (`dashboard.lua:732`). Found while writing `contract/c31`. | Accept the target\'s own id too (`contract/c43`, no Q1 golden). An id that resolves nowhere is a located `Q-*` error. |
-| Q5–Q8, Q10 | Internal no-ops | Nothing to port. |
+| Q5 | `attrToCardBodyStyle` copies the card\'s own style (height, max-height) onto every body with the padding, overwriting the body\'s style | Apply the padding alone (c11, `1-card-cell-syntax`). |
+| Q6–Q8, Q10 | Internal no-ops | Nothing to port. |
 
 ### D6. Parse value-box output with a safe parser, and diagnose failures `[decided]` (lever 1)
 
@@ -380,12 +381,18 @@ Work items (done 2026-11-03):
 
 **Waiting on D7 (Jupyter `#| title:` forwarding, KNR-2):** #14646, #15023, #9056 and `q1/notebooks/gapminder.ipynb`; their layouts already match.
 
-### Phase 4: Cards and tabsets
+### Phase 4: Card options and tabsets (done 2026-11-03)
 
-- [ ] Code cells and `.card` divs become cards: title (markdown inline), padding, heights, expandable defaults, fill and flow, footer, demoted headings, image contain.
-- [ ] Hidden, no-output, `output: false` and `asis` cells; literal card markup passed through; engine bslib HTML lifted out (#15023 semantics).
-- [ ] Dynamic `title=` from the first stdout output.
-- [ ] Tabset cards: tab titles from cards or headings, ids, active state, `.dashboard-card-no-title` (#11549), and a footer that stays outside the tab content.
+Most card behavior landed with Phase 3 (titles, bodies, footers, dynamic titles, heading demotion, literal cards, hidden and empty cells, bslib raw output). Phase 4 added:
+
+- [x] Tabsets (Q1 `tabset.lua` + `convertToTabsetHeader` / `convertToTabs`): `.tabset` headings become tabset cards from their raw contents; tab titles from cards or subsection headings; footers merge; hidden cells follow; subsections are containers flipping the tabset\'s parent. Tab ids are `card-tabset-<n>` with `n` the card\'s position among all cards in document order, as in Q1, which needed a lowering context threaded through `resolve.rs`.
+- [x] Explicit `.rows` / `.columns` divs anywhere (including inside card bodies) are grid-sized, as Q1\'s `processRows` / `processColumns` query the whole document.
+- [x] A card\'s `height` sizes its row and is then dropped when its parent is a rows grid (Q1 `computeRowLayouts` removes `data-height` before the card pass); elsewhere it becomes a style. `ensureCssUnits` leaves `0` unitless.
+- [x] A cell carrying `.hidden` itself is hidden (Q1\'s walk includes the root element); found by a unit test.
+- [x] Raw `bslib-value-box` HTML sizes as flow, as Q1\'s DOM-based `isValueBox` does.
+- [x] Corpus: 8 more `match` (tabsets, `1-card-advanced`); divergences c11 and `1-card-cell-syntax` (D5-Q5), `9-bslib` (raw bslib markup left as written), c14 and `1-card-cell-options-execute` (writer-generated code block wrappers).
+
+**D5-Q5 corrected.** The table above listed Q5 among the internal no-ops. It is not one: `attrToCardBodyStyle` reads the *card\'s* style and writes it, plus the padding, over each body\'s style, so a card\'s `height` or `max-height` lands on its bodies too and replaces their own. q2 applies the padding alone.
 
 ### Phase 5: Value boxes
 

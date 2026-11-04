@@ -142,11 +142,19 @@ fn row_sizes(children: &[Block]) -> Vec<Size> {
                     Orientation::Columns => row_size_for_columns(&k.children),
                 }
             });
+        } else if is_raw_value_box(child) {
+            sizes.push(Size::Flow);
         } else {
             sizes.push(Size::Fill);
         }
     }
     sizes
+}
+
+/// Engine-emitted bslib value boxes pass through as raw HTML (Q1 #15023);
+/// Q1 sizes them like value boxes (its `isValueBox` reads the DOM).
+fn is_raw_value_box(block: &Block) -> bool {
+    matches!(block, Block::RawBlock(r) if r.format == "html" && r.text.contains("bslib-value-box"))
 }
 
 fn layout_size(layout: Layout) -> Size {
@@ -164,7 +172,7 @@ fn row_size_for_columns(children: &[Block]) -> Size {
             Some(fill) => fill,
             None => !(is_valuebox(&c) || is_flow_card(&c)),
         },
-        None => true,
+        None => !is_raw_value_box(child),
     });
     if any_fill { Size::Fill } else { Size::Flow }
 }
@@ -353,6 +361,17 @@ mod tests {
             grid_template(&p),
             "minmax(3em, max-content) minmax(3em, 1fr)"
         );
+    }
+
+    #[test]
+    fn raw_bslib_value_boxes_flow() {
+        let raw = Block::RawBlock(quarto_pandoc_types::block::RawBlock {
+            format: "html".into(),
+            text: r#"<div class="card bslib-value-box">1</div>"#.into(),
+            source_info: quarto_source_map::SourceInfo::for_test(),
+        });
+        let p = parent(Orientation::Rows, vec![raw]);
+        assert_eq!(grid_template(&p), "minmax(3em, max-content)");
     }
 
     #[test]

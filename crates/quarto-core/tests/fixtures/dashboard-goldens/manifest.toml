@@ -56,28 +56,28 @@ note = "Phase 3 (layout core): level-1 headings are pages; per-page orientation 
 
 [[fixture]]
 path = "contract/c07-tabset-row.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): .tabset on a row; each titled cell becomes a tab"
 
 [[fixture]]
 path = "contract/c08-tabset-multi-card.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): tabs holding several cards via a deeper heading level"
 
 [[fixture]]
 path = "contract/c09-tabset-in-column.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): tabset nested in a column of a row"
 
 [[fixture]]
 path = "contract/c10-tabset-markdown-cards.qmd"
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): tabs made of markdown .card divs with title attributes"
 
 [[fixture]]
 path = "contract/c11-card-div-options.qmd"
-status = "pending"
-note = "Phase 4 (cards and tabsets): .card div options: title, padding, height, min/max-height, expandable, fill"
+status = "divergence"
+note = "D5-Q5: a card's padding goes onto its bodies alone; Quarto 1's attrToCardBodyStyle copies the card's own style (here height: 200px) onto every body as well"
 
 [[fixture]]
 path = "contract/c12-cell-options.qmd"
@@ -91,8 +91,8 @@ note = "Phase 4 (cards and tabsets): a first stdout output beginning title= beco
 
 [[fixture]]
 path = "contract/c14-hidden-empty-asis-cells.qmd"
-status = "pending"
-note = "Phase 4 (cards and tabsets): cells with no output, hidden cells and output: asis cells do not become cards"
+status = "divergence"
+note = "Accepted: q2's HTML writer generates the source code block's div.sourceCode wrapper, so it gets no fill classes and no cb1 id; Quarto 1 adds both. Cards, hidden and empty cells match"
 
 [[fixture]]
 path = "contract/c15-card-footer.qmd"
@@ -255,14 +255,14 @@ note = "Q2 qmd has no setext headings (a documented difference, docs/guides/auth
 [[fixture]]
 path = "q1/1-card-advanced.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/1-card-cell-options-execute.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+status = "divergence"
+note = "Accepted: q2's writer-generated code block wrapper (no fill classes, no cb1 id), and q2's copy button on the output block (bd-xaaucvfz)"
 
 [[fixture]]
 path = "q1/1-card-cell-options.qmd"
@@ -273,8 +273,8 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/1-card-cell-syntax.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+status = "divergence"
+note = "D5-Q5: Quarto 1's attrToCardBodyStyle copies the card's own style (max-height: 500px) onto its body along with the padding"
 
 [[fixture]]
 path = "q1/1-card-content.qmd"
@@ -285,7 +285,7 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 path = "q1/1-card-tabset-advanced.qmd"
 requires = ["knitr"]
 status = "pending"
-note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture. Tabsets match; waits on layout-ncol panels (bd-mlxvysee)"
 
 [[fixture]]
 path = "q1/2-layout-cell-attr.qmd"
@@ -349,19 +349,19 @@ note = "Phase 5 (value boxes): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/4-tabset-basic.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/4-tabset-footer.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/4-tabset-nested.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -438,8 +438,8 @@ note = "Phase 3 (layout core): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/9-bslib.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
+status = "divergence"
+note = "Accepted: bslib::value_box() output is raw HTML; Quarto 1's DOM pass decorates even raw .card markup (full-screen buttons on value boxes, which bslib does not add by default); q2 leaves raw HTML as the engine wrote it. Row sizing matches (raw value boxes flow)"
 
 [[fixture]]
 path = "q1/9-no-title.qmd"
@@ -567,7 +567,7 @@ note = "DataTables sentinel stripping (#11338): bd-6f0kslxu"
 path = "regressions/issue-11549.qmd"
 requires = ["knitr"]
 status = "pending"
-note = "Phase 4 (cards and tabsets): tabset cards without titles get .dashboard-card-no-title (Q1 #11549)"
+note = "Phase 4 (cards and tabsets): tabset cards without titles get .dashboard-card-no-title (Q1 #11549). Tabsets match; waits on bd-xaaucvfz (copy button on output blocks)"
 
 [[fixture]]
 path = "regressions/issue-14646.qmd"

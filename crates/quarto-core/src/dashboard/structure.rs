@@ -591,7 +591,9 @@ fn cell_to_card(mut cell: Div, doc: &DashboardOptions) -> Vec<Block> {
     if cell.content.is_empty() {
         return Vec::new();
     }
-    let mut hidden = false;
+    // Q1's hidden check walks the cell itself as well as its descendants
+    // (`_quarto.ast.walk` applies the filter to the root element too).
+    let mut hidden = has_class(&cell.attr, "hidden");
     let mut markdown_output = false;
     let mut lifted: Blocks = Vec::new();
     lift_and_inspect(
@@ -867,6 +869,10 @@ fn convert_section(
         ];
     }
 
+    if has_class(&header.attr, "tabset") {
+        return make_tabset(header, content, parent, doc, info);
+    }
+
     let orientation = suggested_orientation(&content).unwrap_or(parent.flip());
     let children = organize(content, doc)
         .into_iter()
@@ -902,6 +908,86 @@ fn convert_section(
         }
         .to_block(),
     ]
+}
+
+/// Q1 `tabset.makeTabset` / `resolveTabs`: a `.tabset` heading becomes a
+/// tabset card built from the section's raw contents (not organized into
+/// loose cards). Each card becomes a tab titled by its title, holding all
+/// its body contents (its footer joins the tabset's); each subsection a
+/// tab titled by its heading (`title=` attribute first), laid out as a
+/// container; anything else a tab of its own. Hidden cells follow the card.
+///
+/// Subsections flip the orientation of the container holding the tabset
+/// (the tabset itself is a card, not a container).
+fn make_tabset(
+    header: Header,
+    contents: Blocks,
+    parent: Orientation,
+    doc: &DashboardOptions,
+    info: &mut LayoutInfo,
+) -> Vec<Block> {
+    let mut tabs: Vec<(BodyData, Blocks)> = Vec::new();
+    let mut footer: Blocks = Vec::new();
+    let mut hidden: Blocks = Vec::new();
+    for v in contents {
+        let mut body = BodyData {
+            classes: vec!["card-body".to_string()],
+            ..Default::default()
+        };
+        let content =
+            if let Some(card) = as_dashboard_node(&v, CARD_TYPE).and_then(Card::from_custom) {
+                body.title = card.title.as_deref().map(stringify_inlines);
+                footer.extend(card.footer);
+                card.bodies.into_iter().flatten().collect()
+            } else if as_div(&v).is_some_and(|d| has_class(&d.attr, "hidden")) {
+                hidden.push(v);
+                continue;
+            } else if let Some(Block::Header(h)) = as_div(&v)
+                .filter(|d| d.content.len() > 1)
+                .and_then(|d| d.content.first())
+            {
+                body.title = Some(
+                    h.attr
+                        .2
+                        .get("title")
+                        .cloned()
+                        .unwrap_or_else(|| stringify_inlines(&h.content)),
+                );
+                convert_section(v, parent, doc, info)
+            } else {
+                vec![v]
+            };
+        body.flow = shiny_inputs_only(&content);
+        tabs.push((body, content));
+    }
+    let (bodies_data, bodies): (Vec<BodyData>, Vec<Blocks>) = tabs.into_iter().unzip();
+    let mut classes = vec!["card".to_string(), "tabset".to_string()];
+    for c in header.attr.1.iter().filter(|c| c.as_str() != "tabset") {
+        if !classes.contains(c) {
+            classes.push(c.clone());
+        }
+    }
+    let title = header
+        .attr
+        .2
+        .get("title")
+        .map(|t| title_inlines(t, &header.source_info));
+    let card = Card {
+        data: CardData {
+            classes,
+            expandable: doc.expandable,
+            bodies: bodies_data,
+            tabset: true,
+            ..Default::default()
+        },
+        title,
+        header: Vec::new(),
+        bodies,
+        footer,
+    };
+    let mut out = vec![card.to_block(header.source_info.clone())];
+    out.extend(hidden);
+    out
 }
 
 /// An explicit `::: {.rows}` / `::: {.columns}` div: Q1 treats any div
@@ -1097,6 +1183,36 @@ mod tests {
         let (blocks, _) = build(&body, &DashboardOptions::default());
         assert!(matches!(blocks[0], Block::Paragraph(_)), "{:?}", blocks[0]);
         assert!(as_dashboard_node(&blocks[1], CONTAINER_TYPE).is_some());
+    }
+
+    #[test]
+    fn tabset_tabs_from_cards_and_subsections() {
+        let body = format!(
+            "## T {{.tabset title=\"Tabs\"}}\n\n::: {{.card title=\"First\"}}\nOne two.\n\n> foot\n:::\n\n::: {{.cell .hidden}}\nx\n:::\n\n### Second\n\n{CELL}"
+        );
+        let (blocks, _) = build(&body, &DashboardOptions::default());
+        let root = root(&blocks);
+        let tabset = cards(&root.children).remove(0);
+        assert!(tabset.data.tabset);
+        assert_eq!(tabset.data.classes, ["card", "tabset"]);
+        let titles: Vec<_> = tabset.data.bodies.iter().map(|b| b.title.clone()).collect();
+        assert_eq!(
+            titles,
+            [Some("First".to_string()), Some("Second".to_string())]
+        );
+        assert_eq!(
+            tabset.footer.len(),
+            1,
+            "the card footer joins the tabset footer"
+        );
+        // The subsection is laid out as a container that flips the root.
+        let inner = Container::from_custom(
+            as_dashboard_node(&tabset.bodies[1][0], CONTAINER_TYPE).expect("a container"),
+        )
+        .unwrap();
+        assert_eq!(inner.data.orientation, Orientation::Columns);
+        // The hidden cell follows the tabset card.
+        assert!(matches!(&root.children[1], Block::Div(d) if has_class(&d.attr, "hidden")));
     }
 
     #[test]
