@@ -131,8 +131,15 @@ fn append_style(attr: &mut Attr, decl: String) {
 // Fill classes
 // ---------------------------------------------------------------------------
 
+/// A card body\'s computed `flow` class (Q1 `cardBodyLayout`) while the
+/// lowering runs; [`lower_document`] renames it to `flow` at the end. Q1
+/// adds that class in `processCards`, after `processPages` has filled every
+/// page, so the page pass fills such a body while the card\'s own passes
+/// (and the later sidebar and toolbar passes) treat it as `flow`.
+const FLOW_PENDING: &str = "dashboard-flow-pending";
+
 fn never_fill(attr: &Attr) -> bool {
-    NEVER_FILL.iter().any(|c| has_class(attr, c))
+    NEVER_FILL.iter().any(|c| has_class(attr, c)) || has_class(attr, FLOW_PENDING)
 }
 
 fn fill_by_class(attr: &Attr) -> bool {
@@ -155,6 +162,41 @@ fn apply_fill_item(block: &mut Block) {
 /// (which q2 has already built) is skipped.
 pub fn apply_fill_recursive(block: &mut Block) {
     apply_fill(block, false);
+}
+
+/// Q1 `processPages`\' fill pass: it runs before card bodies get their
+/// computed `flow` class, so [`FLOW_PENDING`] bodies are filled.
+fn apply_fill_page(block: &mut Block) {
+    rename_class(block, FLOW_PENDING, "dashboard-flow-pending-page");
+    apply_fill(block, false);
+    rename_class(block, "dashboard-flow-pending-page", FLOW_PENDING);
+}
+
+/// Rename `from` to `to` on every Div under `block`.
+fn rename_class(block: &mut Block, from: &str, to: &str) {
+    match block {
+        Block::Div(d) => {
+            for c in d.attr.1.iter_mut() {
+                if c == from {
+                    *c = to.to_string();
+                }
+            }
+            for child in d.content.iter_mut() {
+                rename_class(child, from, to);
+            }
+        }
+        Block::Figure(f) => {
+            for child in f.content.iter_mut() {
+                rename_class(child, from, to);
+            }
+        }
+        Block::BlockQuote(q) => {
+            for child in q.content.iter_mut() {
+                rename_class(child, from, to);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Q1 `recursiveApplyFillClasses`. `titles`: whether card titles exist yet
@@ -296,6 +338,9 @@ pub fn lower_document(blocks: Blocks) -> (Blocks, TopLevel) {
             lowered
         })
         .collect();
+    for b in lowered_all.iter_mut() {
+        rename_class(b, FLOW_PENDING, "flow");
+    }
     if mark_top_level_sidebar(&mut lowered_all) {
         add_unique(&mut top.body_classes, "dashboard-sidebar");
     }
@@ -650,7 +695,7 @@ fn lower_page(p: Page, cx: &mut Lower) -> Block {
     let content = lower_children(p.content, cx, &mut attr);
     let mut page = div(attr, content);
     cx.parent = parent;
-    apply_fill_recursive(&mut page);
+    apply_fill_page(&mut page);
     page
 }
 
@@ -950,7 +995,7 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
         );
         add_class(&mut body_attr, "card-body");
         if body_data.flow {
-            add_class(&mut body_attr, "flow");
+            add_class(&mut body_attr, FLOW_PENDING);
         }
         for (prop, value) in [
             ("max-height", &body_data.max_height),

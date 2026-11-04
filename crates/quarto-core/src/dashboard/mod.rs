@@ -18,6 +18,7 @@
 
 pub mod inputs;
 pub mod model;
+pub mod navbar;
 pub mod resolve;
 pub mod sizing;
 pub mod structure;
@@ -86,8 +87,15 @@ impl AstTransform for DashboardTransform {
         }
         let options = dashboard_options(&ast.meta);
         let mut diagnostics = Vec::new();
-        let blocks =
-            structure::build_cards(std::mem::take(&mut ast.blocks), &options, &mut diagnostics);
+        // The appendix (footnotes, references) is built before this pass;
+        // Q1 adds it after its dashboard pass, so it is a top-level grid
+        // item after the layout rather than content in the last card.
+        let mut blocks = std::mem::take(&mut ast.blocks);
+        let appendix = blocks
+            .iter()
+            .position(|b| matches!(b, quarto_pandoc_types::block::Block::Div(d) if d.attr.0 == "quarto-appendix"))
+            .map(|i| blocks.remove(i));
+        let blocks = structure::build_cards(blocks, &options, &mut diagnostics);
         ctx.diagnostics.extend(diagnostics);
         // Sections are made here, after the cards (Q1 pass 2 calls
         // `make_sections` itself); `SectionizeTransform` is skipped for
@@ -99,7 +107,24 @@ impl AstTransform for DashboardTransform {
         ctx.diagnostics.extend(diagnostics);
         inputs::make_panels(&mut blocks);
         sizing::assign_grid_templates(&mut blocks);
+        blocks.extend(appendix);
         ast.blocks = blocks;
+
+        // Navbar extras (Q1 `processNavButtons`, `resolveLogo`).
+        let title = ast.meta.get("title").and_then(|t| t.as_plain_text());
+        let mut nav_diagnostics = Vec::new();
+        let buttons = navbar::nav_buttons(&ast.meta, title.as_deref(), &mut nav_diagnostics);
+        ctx.diagnostics.extend(nav_diagnostics);
+        if !buttons.is_empty() {
+            ast.meta.insert_path(
+                &["rendered", "dashboard", "nav-buttons"],
+                navbar::nav_buttons_value(&buttons),
+            );
+        }
+        if let Some(logo) = navbar::logo_value(&ast.meta) {
+            ast.meta
+                .insert_path(&["rendered", "dashboard", "logo"], logo);
+        }
 
         if !info.pages.is_empty() {
             let pages = info

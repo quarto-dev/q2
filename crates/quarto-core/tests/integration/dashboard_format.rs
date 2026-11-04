@@ -410,3 +410,49 @@ fn unplaceable_card_inputs_warn_q_27_2() {
     let doc = scraper::Html::parse_document(&html);
     assert_eq!(text(one(&doc, ".card-title")), "Kept");
 }
+
+/// D5-Q17: a single-page dashboard with a dark theme gets the color-scheme
+/// toggle in its navbar (Q1 only put it there for multi-page dashboards and
+/// otherwise fell back to the runtime's floating top-right toggle, over the
+/// navbar). Nav-buttons without pages sit in the navbar container, and an
+/// unknown alias is a `Q-27-3` warning.
+#[test]
+fn single_page_navbar_toggle_and_nav_buttons() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: NAV\nformat:\n  dashboard:\n    theme:\n      light: flatly\n      dark: darkly\n    nav-buttons:\n      - twitter\n      - github\n---\n\n## Row\n\nBody.\n",
+    );
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&temp.path().join("doc.qmd"), "dashboard", &options, runtime)
+        .expect("renders");
+    let codes: Vec<_> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter_map(|d| d.code.clone())
+        .collect();
+    assert_eq!(
+        codes.iter().filter(|c| *c == "Q-27-3").count(),
+        1,
+        "{codes:?}"
+    );
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    let doc = scraper::Html::parse_document(&html);
+    one(
+        &doc,
+        "div.navbar-container > button.quarto-color-scheme-toggle[role=\"switch\"][aria-label=\"Toggle dark mode\"]",
+    );
+    let link = one(
+        &doc,
+        "div.navbar-container > div.quarto-dashboard-links > a.quarto-dashboard-link",
+    );
+    assert_eq!(
+        link.value().attr("href"),
+        Some("https://twitter.com/intent/tweet?url=|url|&text=NAV")
+    );
+}

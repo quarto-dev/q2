@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-6 done 2026-11-03; Phase 7 next
+status: in-progress  # Phases 0-7 done 2026-11-03; Phase 8 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -242,6 +242,8 @@ The goal is "very familiar, straightforward to port", not byte compatibility. Fi
 | Q14 | Markdown value-box title nests paragraphs: `<p class="value-box-title"><p>Title</p></p>` (`valuebox.lua:171` takes the title as a `Para`; the TS pass turns its wrapper into a `p`). Browsers close the outer `p` early, so the documented form (`::: {.valuebox}` with the title as the first paragraph) shows an empty title slot and the title as an unstyled paragraph. Found by the Phase 0 goldens (`contract/c20`, `q1/3-valuebox-static`). | Emit the title's inlines inside `p.value-box-title`. |
 | Q15 | `header-for` / `footer-for` only resolve an id *inside* the target card; the card\'s or cell\'s own id is a fatal error (`dashboard.lua:732`). Found while writing `contract/c31`. | Accept the target\'s own id too (`contract/c43`, no Q1 golden). An id that resolves nowhere is a located `Q-*` error. |
 | Q16 | Empty layout containers are meant to be dropped (`dashboard.lua:649`), but Q1 appends its AST vault (a hidden Div) to the document before that pass, so the *last* section\'s container is never empty and survives as an empty grid (`grid-template-rows: ;`). Found in Phase 6 (`q1/9-no-title`, `regressions/10334`, `q1-atx/6-sidebar-global`; confirmed with a probe: one, two or three trailing empty rows always leave exactly one). | Drop every empty container. |
+| Q17 | The color-scheme toggle is added only inside `processPages`, so a single-page dashboard with a dark theme has none in its navbar; the color-mode runtime then adds its floating top-right toggle, over the navbar. Found in Phase 7 (probe). | Put the toggle in the navbar whenever there is a dark variant. |
+| Q18 | Share aliases append `&title=` / `&text=` with `encodeURI(title)` even without a title, giving `title=undefined`. Found in Phase 7. | Leave the parameter off without a title. |
 | Q5 | `attrToCardBodyStyle` copies the card\'s own style (height, max-height) onto every body with the padding, overwriting the body\'s style | Apply the padding alone (c11, `1-card-cell-syntax`). |
 | Q6–Q8, Q10 | Internal no-ops | Nothing to port. |
 
@@ -426,8 +428,14 @@ Most card behavior landed with Phase 3 (titles, bodies, footers, dynamic titles,
 
 ### Phase 7: Navigation chrome
 
-- [ ] `nav-buttons` (aliases, the GitHub context, nav-item objects, the `|url|` share placeholder).
-- [ ] The dark-mode toggle for multi-page dashboards; logo resolution through brand, relative to the document (#14946).
+Done 2026-11-03.
+
+- [x] `nav-buttons` (`dashboard/navbar.rs`): the `linkedin`, `facebook`, `reddit` and `twitter` aliases (title `encodeURI`d, D5-Q18) and `{href, text, icon, rel, target, title, aria-label}` maps go to `rendered.dashboard.nav-buttons`; a `_nav-buttons` partial renders them inside the page collapse with pages, else at the end of the navbar container (Q1 `processNavButtons`). The `|url|` placeholder is filled by the vendored `quarto-dashboard.js`. An unknown alias is a located warning `Q-27-3` (catalog, docs page). The `github` alias needs a git lookup and is follow-up bd-q04oxic2.
+- [x] The dark-mode toggle: Q1\'s `button.quarto-color-scheme-toggle` (aria label from `quarto.language.toggle-dark-mode`) in the navbar container whenever `color-mode-script` is set, with or without pages (D5-Q17).
+- [x] Logo: `logo` / `logo-alt` through `quarto_navigation::navbar::parse_logo` (now public; string, `{path, alt}` or `{light, dark}`) into `rendered.dashboard.logo`; both images are always emitted, as in Q1. Brand.yml logo names are not resolved (bd-v5z8w covers that for navbars generally), and paths are used as written; a project-relative logo in a website dashboard is Phase 9\'s concern.
+- [x] The footnotes / references appendix is set aside before the dashboard pass and re-appended after the layout, a top-level grid item as in Q1 (it used to land in the last card).
+- [x] Fill ordering for computed flow bodies: Q1 fills pages before `processCards` adds the computed `flow` class, so card bodies on pages keep fill classes while a pageless flow body has none (`c40`). The lowering marks computed flow as `dashboard-flow-pending`, which only the page fill pass ignores, and renames it to `flow` at the end.
+- [x] Corpus: c34–c36, `q1/7-navbar-social-nopages`, `q1/8-pages`, `q1/9-theme-dark`, `regressions/color-scheme-toggle-dashboard` `match`. Deferred on non-dashboard strands, with matching dashboard structure: `acceptance/navigation`, `q1-atx/7-navbar`, `q1-atx/7-navbar-social` (bd-xaaucvfz), `q1-atx/2-layout-*` and `q1-atx/loose-content` (bd-mlxvysee), `q1/5-sample-layout-scrolling` (bd-1oqqb09a).
 
 ### Phase 8: React preview (D8)
 

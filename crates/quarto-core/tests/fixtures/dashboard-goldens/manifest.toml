@@ -15,8 +15,8 @@ note = "Phase 4 (cards and tabsets): real-world acceptance dashboard, the quarto
 [[fixture]]
 path = "acceptance/navigation.qmd"
 requires = ["jupyter"]
-status = "pending"
-note = "Phase 7 (navigation chrome): real-world acceptance, the quarto-web navigation example (logo, nav-buttons, pages)"
+status = "deferred"
+note = "Blocked on bd-xaaucvfz (code-copy scaffold on output blocks); logo, nav-buttons and pages match (Phase 7). Also D5-Q16 drops a trailing empty row Q1 keeps. Real-world acceptance, the quarto-web navigation example"
 
 [[fixture]]
 path = "acceptance/valuebox.qmd"
@@ -191,17 +191,17 @@ note = "Phase 6. D5-Q9: content: sidebar / content: toolbar cells make a sidebar
 
 [[fixture]]
 path = "contract/c34-nav-buttons.qmd"
-status = "pending"
+status = "match"
 note = "Phase 7 (navigation chrome): nav-buttons aliases and custom nav items"
 
 [[fixture]]
 path = "contract/c35-navbar-meta.qmd"
-status = "pending"
+status = "match"
 note = "Phase 7 (navigation chrome): navbar title, subtitle, multiple authors and logo"
 
 [[fixture]]
 path = "contract/c36-dark-mode-toggle.qmd"
-status = "pending"
+status = "match"
 note = "Phase 7 (navigation chrome): multi-page dashboard with light and dark themes gets a color-scheme toggle"
 
 [[fixture]]
@@ -379,8 +379,8 @@ note = "Q2 qmd has no setext headings (a documented difference, docs/guides/auth
 [[fixture]]
 path = "q1/5-sample-layout-scrolling.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "deferred"
+note = "Blocked on bd-1oqqb09a: a block-scalar fig-cap leaks into the knitr label, so the render fails. Phase 3 (layout core): Q1 smoke-all fixture"
 
 [[fixture]]
 path = "q1/5-sample-layout.qmd"
@@ -414,8 +414,8 @@ note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/7-navbar-social-nopages.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
+status = "match"
+note = "Phase 7 (navigation chrome): Q1 smoke-all fixture; nav-buttons in the navbar container, the footnotes appendix a top-level grid item"
 
 [[fixture]]
 path = "q1/7-navbar-social.qmd"
@@ -432,8 +432,8 @@ note = "Q2 qmd has no setext headings (a documented difference, docs/guides/auth
 [[fixture]]
 path = "q1/8-pages.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture"
+status = "match"
+note = "Phase 3 (layout core): Q1 smoke-all fixture; matches since Phase 7 (computed flow bodies on pages keep their fill classes)"
 
 [[fixture]]
 path = "q1/9-bslib.qmd"
@@ -468,7 +468,7 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/9-theme-dark.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 7 (navigation chrome): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -550,8 +550,8 @@ note = "Phase 4 (cards and tabsets): an output-less cell makes no card (Q1 #9796
 
 [[fixture]]
 path = "regressions/color-scheme-toggle-dashboard.qmd"
-status = "pending"
-note = "Phase 7 (navigation chrome): dark-mode color-scheme toggle (Q1 dark-mode smoke)"
+status = "match"
+note = "Phase 7 (navigation chrome): dark-mode color-scheme toggle (Q1 dark-mode smoke, #13463)"
 
 [[fixture]]
 path = "regressions/issue-10340.qmd"
@@ -600,14 +600,14 @@ note = "D5-Q3: orientation by nesting. Under orientation: columns, Quarto 1 lays
 [[fixture]]
 path = "q1-atx/2-layout-cell-attr.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-cell-attr.qmd (setext headings rewritten, nothing else)"
+status = "deferred"
+note = "Blocked on bd-mlxvysee (layout-ncol panels in cards); the dashboard layout matches. Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-cell-attr.qmd (setext headings rewritten, nothing else)"
 
 [[fixture]]
 path = "q1-atx/2-layout-cells-simple.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-cells-simple.qmd (setext headings rewritten, nothing else)"
+status = "deferred"
+note = "Blocked on bd-mlxvysee (layout-ncol panels in cards); the dashboard layout matches. Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-cells-simple.qmd (setext headings rewritten, nothing else)"
 
 [[fixture]]
 path = "q1-atx/2-layout-complex.qmd"
@@ -624,8 +624,8 @@ note = "D5-Q11/13 (showcase= honoured) and D5-Q14 (a ### heading used as a value
 [[fixture]]
 path = "q1-atx/2-layout-height.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-height.qmd (setext headings rewritten, nothing else)"
+status = "deferred"
+note = "Blocked on bd-mlxvysee (layout-ncol panels in cards); the dashboard layout matches. Q1 smoke-all fixture. ATX-heading copy of q1/2-layout-height.qmd (setext headings rewritten, nothing else)"
 
 [[fixture]]
 path = "q1-atx/3-valuebox-knitr.qmd"
@@ -654,17 +654,17 @@ note = "Phase 6: global sidebar matches. ATX-heading copy of q1/6-sidebar-global
 [[fixture]]
 path = "q1-atx/7-navbar-social.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 7 (navigation chrome): Q1 smoke-all fixture. ATX-heading copy of q1/7-navbar-social.qmd (setext headings rewritten, nothing else)"
+status = "deferred"
+note = "Blocked on bd-xaaucvfz (code-copy scaffold on output blocks); the navbar matches (Phase 7). Q1 smoke-all fixture. ATX-heading copy of q1/7-navbar-social.qmd (setext headings rewritten, nothing else)"
 
 [[fixture]]
 path = "q1-atx/7-navbar.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 7 (navigation chrome): Q1 smoke-all fixture. ATX-heading copy of q1/7-navbar.qmd (setext headings rewritten, nothing else)"
+status = "deferred"
+note = "Blocked on bd-xaaucvfz (code-copy scaffold on output blocks); the navbar matches (Phase 7). Also D5-Q16 drops a trailing empty row Q1 keeps. Q1 smoke-all fixture. ATX-heading copy of q1/7-navbar.qmd (setext headings rewritten, nothing else)"
 
 [[fixture]]
 path = "q1-atx/loose-content.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 3 (layout core): Q1 smoke-all fixture. ATX-heading copy of q1/loose-content.qmd (setext headings rewritten, nothing else)"
+status = "deferred"
+note = "Blocked on bd-mlxvysee (layout-ncol panels in cards). Also D5-Q14: the value box heading title shows (Q1 nests it and it vanishes). Q1 smoke-all fixture. ATX-heading copy of q1/loose-content.qmd (setext headings rewritten, nothing else)"

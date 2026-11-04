@@ -512,6 +512,7 @@ website:
           contents:
             - errors/dashboard/Q-27-1.qmd
             - errors/dashboard/Q-27-2.qmd
+            - errors/dashboard/Q-27-3.qmd
 
 format:
   html:

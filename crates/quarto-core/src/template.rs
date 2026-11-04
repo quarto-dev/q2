@@ -457,17 +457,26 @@ $else$
 $endif$
 $if(title)$
 ${_nav-container()}
+$elseif(rendered.dashboard.logo)$
+${_nav-container()}
 $elseif(subtitle)$
 ${_nav-container()}
 $elseif(by-author)$
 ${_nav-container()}
+$endif$
+$if(color-mode-script)$
+<button class="quarto-color-scheme-toggle" type="button" role="switch" aria-checked="false" aria-label="$if(quarto.language.toggle-dark-mode)$$quarto.language.toggle-dark-mode$$else$Toggle dark mode$endif$" onclick="window.quartoToggleColorScheme(); return false;"><i class="bi"></i></button>
 $endif$
 $if(rendered.dashboard.pages)$
 <div id="dashboard-collapse" class="navbar-collapse collapse"><ul class="navbar-nav navbar-nav-scroll me-auto" role="tablist">
 $for(rendered.dashboard.pages)$
 <li class="nav-item" role="presentation"><a id="tab-$it.id$" class="nav-link$if(it.active)$ active$endif$" data-bs-toggle="tab" role="tab" data-bs-target="#$it.id$" data-scrolling="$it.scrolling$" href="#$it.id$" aria-controls="$it.id$" aria-selected="$if(it.active)$true$else$false$endif$"><span class="nav-link-text">$it.text$</span></a></li>
 $endfor$
-</ul></div>
+</ul>
+${_nav-buttons()}
+</div>
+$else$
+${_nav-buttons()}
 $endif$
 </div>
 </nav>
@@ -478,7 +487,21 @@ $endif$
 /// (title, subtitle, authors). Authors come from the normalized
 /// `by-author` list, comma-separated (Q1 #10334). The logo arrives with
 /// Phase 7.
+/// The dashboard\'s `nav-buttons` links (Q1 `processNavButtons`), from
+/// `rendered.dashboard.nav-buttons`: inside the page collapse when there are
+/// pages, else at the end of the navbar container.
+pub const DASHBOARD_NAV_BUTTONS_PARTIAL: &str = r##"$if(rendered.dashboard.nav-buttons)$<div class="quarto-dashboard-links">
+$for(rendered.dashboard.nav-buttons)$
+<a class="quarto-dashboard-link" href="$it.href$"$if(it.rel)$ rel="$it.rel$"$endif$$if(it.title)$ title="$it.title$"$endif$$if(it.target)$ target="$it.target$"$endif$$if(it.aria-label)$ aria-label="$it.aria-label$"$endif$>$if(it.icon)$<i class="bi bi-$it.icon$"></i>$endif$$if(it.text)$<span class="quarto-dashboard-link-text">$it.text$</span>$endif$</a>
+$endfor$
+</div>$endif$
+"##;
+
 pub const DASHBOARD_NAV_CONTAINER_PARTIAL: &str = r##"<div class="navbar-brand-container">
+$if(rendered.dashboard.logo)$
+<a href="#"><img src="$rendered.dashboard.logo.light.path$" alt="$rendered.dashboard.logo.light.alt$" class="navbar-logo light-content d-inline-block"></a>
+<a href="#"><img src="$rendered.dashboard.logo.dark.path$" alt="$rendered.dashboard.logo.dark.alt$" class="navbar-logo dark-content d-inline-block"></a>
+$endif$
 <div class="navbar-title">
 $if(title)$<div class="navbar-title-text"><a href="#">$title$</a></div>$endif$
 $if(subtitle)$<div class="navbar-subtitle">$subtitle$</div>$endif$
@@ -879,6 +902,7 @@ pub fn dashboard_html_partials() -> MemoryResolver {
     for (name, content) in [
         ("title-block", DASHBOARD_TITLE_BLOCK_PARTIAL),
         ("_nav-container", DASHBOARD_NAV_CONTAINER_PARTIAL),
+        ("_nav-buttons", DASHBOARD_NAV_BUTTONS_PARTIAL),
     ] {
         resolver.add(name, content);
         resolver.add(format!("{name}.html"), content);

@@ -435,7 +435,7 @@ fn parse_item_list(cv: Option<&ConfigValue>) -> Vec<NavigationItem> {
 /// halves are each a string or `{path, alt}`. A missing half falls
 /// back to the other; `logo_alt` (the sibling `logo-alt:` key) fills
 /// any variant that lacks its own `alt`.
-fn parse_logo(cv: &ConfigValue, logo_alt: Option<&str>) -> Option<NavbarLogo> {
+pub fn parse_logo(cv: &ConfigValue, logo_alt: Option<&str>) -> Option<NavbarLogo> {
     if cv.as_bool().is_some() {
         // `logo: false` disables; `logo: true` is meaningless — no path.
         return None;
