@@ -50,25 +50,84 @@ pub fn margin_citations(meta: &ConfigValue) -> bool {
         .is_some_and(|s| s == "margin")
 }
 
-/// Translate the `citeproc: true` shorthand into the `"citeproc"` entry of
-/// `meta["filters"]` that [`resolve_filters`] actually reads, so the
-/// boolean has the effect Q1 gives it (run citeproc over the document).
+/// Which citeproc defaults a render applies before filter resolution.
+///
+/// Mirrors Quarto 1's `citeMethod()`
+/// (`src/command/render/filters.ts`), which decides per format whether
+/// citations get citeproc without the user asking for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CiteprocDefaults {
+    /// A `bibliography` or `references` key alone turns citeproc on.
+    /// True for every Q1 format except Typst, whose format registration
+    /// sets `citeproc: false` so Typst's own `#bibliography()` handles
+    /// citations by default.
+    pub from_bibliography: bool,
+    /// `citation-location: margin` hands citation rendering to another
+    /// handler, so the whole-document filter stays out of its way. True
+    /// on the Pandoc-hybrid leg, where Typst's `quarto-post/typst.lua`
+    /// margin handler needs the original `Cite` nodes (see
+    /// [`margin_citations`]).
+    pub margin_handled_elsewhere: bool,
+}
+
+/// Whether `meta` names a bibliography: a non-empty `bibliography` or
+/// `references` value, the keys Q1's `citeMethod()` checks.
+fn has_bibliography(meta: &ConfigValue) -> bool {
+    ["bibliography", "references"].iter().any(|key| {
+        meta.get(key).is_some_and(|v| match v.as_array() {
+            Some(items) => !items.is_empty(),
+            None => v.as_plain_text().is_none_or(|s| !s.is_empty()),
+        })
+    })
+}
+
+/// Whether `meta` picks a LaTeX bibliography engine (`cite-method:
+/// natbib` or `biblatex`), which replaces citeproc in Q1.
+fn has_non_citeproc_cite_method(meta: &ConfigValue) -> bool {
+    meta.get("cite-method")
+        .and_then(|v| v.as_plain_text())
+        .is_some_and(|m| m != "citeproc")
+}
+
+/// Add the `"citeproc"` entry to `meta["filters"]` that
+/// [`resolve_filters`] reads, when the render's citation settings call for
+/// citeproc. Returns `true` when the metadata was changed.
+///
+/// Citeproc is called for, as in Q1's `citeMethod()`, when
+/// - `citeproc: true` is set, or
+/// - `defaults.from_bibliography` holds, `meta` names a bibliography
+///   ([`has_bibliography`]), and no LaTeX bibliography engine is chosen
+///   (GH #1026: before this, an HTML document with `bibliography:` left
+///   every citation as literal `@key`).
+///
+/// `citeproc: false` always wins, as does an explicit `filters` list that
+/// already names `"citeproc"` (its position stays the user's choice). In
+/// margin citation mode, nothing is added when
+/// `defaults.margin_handled_elsewhere` is set.
 ///
 /// The entry is placed after the `"quarto"` sentinel (added if absent) so
 /// it lands in the post-crossref group, as Q1 runs citeproc after
 /// cross-reference resolution: a pre-crossref citeproc would consume
-/// `@fig-x` crossref `Cite` nodes as unresolved citations. Returns `true`
-/// when the metadata was changed. No-op unless `citeproc: true`, when
-/// `"citeproc"` is already listed (the explicit list wins), or in margin
-/// citation mode (see [`margin_citations`]).
-pub fn apply_citeproc_shorthand(meta: &mut ConfigValue) -> bool {
+/// `@fig-x` crossref `Cite` nodes as unresolved citations.
+pub fn apply_citeproc_default(meta: &mut ConfigValue, defaults: CiteprocDefaults) -> bool {
     use quarto_pandoc_types::config_value::ConfigValueKind;
 
-    if meta.get("citeproc").and_then(|v| v.as_bool()) != Some(true) || margin_citations(meta) {
+    let explicit = meta.get("citeproc").and_then(|v| v.as_bool());
+    let wanted = match explicit {
+        Some(enabled) => enabled,
+        None => {
+            defaults.from_bibliography
+                && has_bibliography(meta)
+                && !has_non_citeproc_cite_method(meta)
+        }
+    };
+    if !wanted || (defaults.margin_handled_elsewhere && margin_citations(meta)) {
         return false;
     }
     let si = meta
         .get("citeproc")
+        .or_else(|| meta.get("bibliography"))
+        .or_else(|| meta.get("references"))
         .map(|v| v.source_info.clone())
         .unwrap_or_default();
     let mut items: Vec<ConfigValue> = match meta.get("filters").map(|f| &f.value) {
@@ -566,10 +625,28 @@ mod tests {
             .unwrap_or_default()
     }
 
+    fn cv_false() -> ConfigValue {
+        ConfigValue::new_bool(false, SourceInfo::for_test())
+    }
+
+    /// The defaults an HTML render applies: a bibliography alone turns
+    /// citeproc on, and nothing else owns margin citations.
+    const HTML: CiteprocDefaults = CiteprocDefaults {
+        from_bibliography: true,
+        margin_handled_elsewhere: false,
+    };
+
+    /// The defaults a Typst render applies: Q1 registers Typst with
+    /// `citeproc: false`, and its Lua margin handler owns margin citations.
+    const TYPST: CiteprocDefaults = CiteprocDefaults {
+        from_bibliography: false,
+        margin_handled_elsewhere: true,
+    };
+
     #[test]
-    fn citeproc_shorthand_adds_post_group_citeproc() {
+    fn citeproc_true_adds_post_group_citeproc() {
         let mut meta = cv_map(vec![("citeproc", cv_true())]);
-        assert!(apply_citeproc_shorthand(&mut meta));
+        assert!(apply_citeproc_default(&mut meta, TYPST));
         assert_eq!(filter_names(&meta), vec!["quarto", "citeproc"]);
         let result = resolve(&meta, &[], &TestRuntime::new());
         assert!(result.pre.is_empty());
@@ -577,7 +654,7 @@ mod tests {
     }
 
     #[test]
-    fn citeproc_shorthand_reuses_existing_sentinel_and_keeps_user_filters() {
+    fn citeproc_true_reuses_existing_sentinel_and_keeps_user_filters() {
         let mut meta = cv_map(vec![
             ("citeproc", cv_true()),
             (
@@ -585,7 +662,7 @@ mod tests {
                 cv_array(vec![cv_str("a.lua"), cv_str("quarto"), cv_str("b.lua")]),
             ),
         ]);
-        assert!(apply_citeproc_shorthand(&mut meta));
+        assert!(apply_citeproc_default(&mut meta, TYPST));
         assert_eq!(
             filter_names(&meta),
             vec!["a.lua", "quarto", "b.lua", "citeproc"]
@@ -593,31 +670,110 @@ mod tests {
     }
 
     #[test]
-    fn citeproc_shorthand_is_noop_when_unset_false_listed_or_margin() {
+    fn citeproc_default_is_noop_when_unset_false_listed_or_margin() {
         let mut unset = cv_map(vec![]);
-        assert!(!apply_citeproc_shorthand(&mut unset));
+        assert!(!apply_citeproc_default(&mut unset, HTML));
         assert!(unset.get("filters").is_none());
 
-        let mut off = cv_map(vec![(
-            "citeproc",
-            ConfigValue::new_bool(false, SourceInfo::for_test()),
-        )]);
-        assert!(!apply_citeproc_shorthand(&mut off));
+        let mut off = cv_map(vec![("citeproc", cv_false())]);
+        assert!(!apply_citeproc_default(&mut off, HTML));
         assert!(off.get("filters").is_none());
 
         let mut listed = cv_map(vec![
             ("citeproc", cv_true()),
             ("filters", cv_array(vec![cv_str("citeproc")])),
         ]);
-        assert!(!apply_citeproc_shorthand(&mut listed));
+        assert!(!apply_citeproc_default(&mut listed, HTML));
         assert_eq!(filter_names(&listed), vec!["citeproc"]);
 
         let mut margin = cv_map(vec![
             ("citeproc", cv_true()),
             ("citation-location", cv_str("margin")),
         ]);
-        assert!(!apply_citeproc_shorthand(&mut margin));
+        assert!(!apply_citeproc_default(&mut margin, TYPST));
         assert!(margin.get("filters").is_none());
+    }
+
+    /// GH #1026: Q1's `citeMethod()` runs citeproc whenever a bibliography
+    /// is set, unless `citeproc: false`. Without this, an HTML document
+    /// with `bibliography:` rendered every citation as literal `@key`.
+    #[test]
+    fn bibliography_alone_implies_citeproc() {
+        let mut meta = cv_map(vec![("bibliography", cv_str("refs.bib"))]);
+        assert!(apply_citeproc_default(&mut meta, HTML));
+        assert_eq!(filter_names(&meta), vec!["quarto", "citeproc"]);
+
+        let mut list = cv_map(vec![(
+            "bibliography",
+            cv_array(vec![cv_str("a.bib"), cv_str("b.bib")]),
+        )]);
+        assert!(apply_citeproc_default(&mut list, HTML));
+        assert_eq!(filter_names(&list), vec!["quarto", "citeproc"]);
+    }
+
+    /// Inline `references:` count as a bibliography, as in Q1.
+    #[test]
+    fn references_alone_implies_citeproc() {
+        let mut meta = cv_map(vec![(
+            "references",
+            cv_array(vec![cv_map(vec![("id", cv_str("doe2020"))])]),
+        )]);
+        assert!(apply_citeproc_default(&mut meta, HTML));
+        assert_eq!(filter_names(&meta), vec!["quarto", "citeproc"]);
+    }
+
+    #[test]
+    fn bibliography_does_not_imply_citeproc_when_disabled() {
+        // Explicit opt-out wins over the bibliography.
+        let mut off = cv_map(vec![
+            ("bibliography", cv_str("refs.bib")),
+            ("citeproc", cv_false()),
+        ]);
+        assert!(!apply_citeproc_default(&mut off, HTML));
+        assert!(off.get("filters").is_none());
+
+        // Typst's format default is `citeproc: false`.
+        let mut typst = cv_map(vec![("bibliography", cv_str("refs.bib"))]);
+        assert!(!apply_citeproc_default(&mut typst, TYPST));
+        assert!(typst.get("filters").is_none());
+
+        // An empty bibliography list names no bibliography.
+        let mut empty = cv_map(vec![("bibliography", cv_array(vec![]))]);
+        assert!(!apply_citeproc_default(&mut empty, HTML));
+        assert!(empty.get("filters").is_none());
+    }
+
+    /// A LaTeX bibliography engine (`cite-method: natbib|biblatex`) replaces
+    /// citeproc in Q1, so the bibliography default stands aside for it;
+    /// `cite-method: citeproc` is the default spelled out.
+    #[test]
+    fn non_citeproc_cite_method_suppresses_the_bibliography_default() {
+        for engine in ["natbib", "biblatex"] {
+            let mut meta = cv_map(vec![
+                ("bibliography", cv_str("refs.bib")),
+                ("cite-method", cv_str(engine)),
+            ]);
+            assert!(!apply_citeproc_default(&mut meta, HTML), "{engine}");
+            assert!(meta.get("filters").is_none(), "{engine}");
+        }
+        let mut spelled_out = cv_map(vec![
+            ("bibliography", cv_str("refs.bib")),
+            ("cite-method", cv_str("citeproc")),
+        ]);
+        assert!(apply_citeproc_default(&mut spelled_out, HTML));
+    }
+
+    /// The margin exemption exists for Typst's Lua margin handler. HTML
+    /// has no such handler, so margin mode must not leave its citations
+    /// unresolved.
+    #[test]
+    fn margin_citations_still_get_citeproc_when_nothing_else_owns_them() {
+        let mut meta = cv_map(vec![
+            ("bibliography", cv_str("refs.bib")),
+            ("citation-location", cv_str("margin")),
+        ]);
+        assert!(apply_citeproc_default(&mut meta, HTML));
+        assert_eq!(filter_names(&meta), vec!["quarto", "citeproc"]);
     }
 
     fn meta_with_filters(filters: ConfigValue) -> ConfigValue {

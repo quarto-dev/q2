@@ -1,0 +1,7 @@
+---
+format: html
+bibliography: refs.bib
+filters: [citeproc]
+---
+
+See [@doe2020].
