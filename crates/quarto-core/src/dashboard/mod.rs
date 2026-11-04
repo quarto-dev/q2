@@ -13,8 +13,9 @@
 //!   document ([`structure`]), computes grid templates ([`sizing`]), and
 //!   records the page list for the navbar in `rendered.dashboard.pages`.
 //! - [`DashboardResolveTransform`] lowers the nodes to bslib markup
-//!   ([`resolve`]). The q2 preview excludes it so the React preview can
-//!   render the nodes itself.
+//!   ([`resolve`]). The q2 preview (`q2-dashboard`) runs the same lowering
+//!   and then makes the interactive elements view nodes ([`view`]) that the
+//!   React preview renders.
 
 pub mod inputs;
 pub mod model;
@@ -23,6 +24,7 @@ pub mod resolve;
 pub mod sizing;
 pub mod structure;
 pub mod valuebox;
+pub mod view;
 
 use quarto_pandoc_types::config_value::{ConfigMapEntry, ConfigValue};
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -166,12 +168,20 @@ impl AstTransform for DashboardTransform {
     }
 }
 
-/// Lowers the dashboard nodes to bslib markup (see the module docs).
-pub struct DashboardResolveTransform;
+/// Lowers the dashboard nodes to bslib markup (see the module docs). In
+/// the preview it also makes the view nodes ([`view`]).
+pub struct DashboardResolveTransform {
+    preview: bool,
+}
 
 impl DashboardResolveTransform {
     pub fn new() -> Self {
-        Self
+        Self { preview: false }
+    }
+
+    /// `preview`: lower for the React preview (`q2-dashboard`).
+    pub fn with_preview(preview: bool) -> Self {
+        Self { preview }
     }
 }
 
@@ -195,7 +205,7 @@ impl AstTransform for DashboardResolveTransform {
         if ctx.format.base_format() != "dashboard" {
             return Ok(());
         }
-        let (blocks, top) = resolve::lower_document(std::mem::take(&mut ast.blocks));
+        let (blocks, top) = resolve::lower_document(std::mem::take(&mut ast.blocks), self.preview);
         ast.blocks = blocks;
         for (key, classes) in [
             ("body-classes", top.body_classes),

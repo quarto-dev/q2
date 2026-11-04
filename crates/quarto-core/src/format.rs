@@ -471,6 +471,13 @@ fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static st
         // shell. See claude-notes/plans/2026-06-08-revealjs-presentations.md
         // Phase 1P.
         "q2-slides" => Some(("html", Some("preview"))),
+        // `q2-dashboard` is the preview pseudo-format for `format:
+        // dashboard`. Unlike `q2-slides` its base is the dashboard format
+        // itself: the dashboard transforms, template and theme layers all
+        // key on `base_format() == "dashboard"`. Its profile is
+        // `DashboardPreview` (plan 2026-11-03-dashboard-format-port.md,
+        // Phase 8).
+        "q2-dashboard" => Some(("dashboard", Some("preview"))),
         "q2-debug" => Some(("html", None)),
         "q2-preview" => Some(("html", Some("preview"))),
         // Sandboxed-preview port (bd-jgpz4hfq): same preview pipeline as
@@ -525,6 +532,9 @@ pub enum PipelineProfile {
     RevealjsPreview,
     /// Native dashboard render (`dashboard`, extension-style `*-dashboard`).
     DashboardRender,
+    /// Dashboard preview (`q2-dashboard`): the dashboard lowering runs in
+    /// its preview mode, leaving view nodes for the React preview.
+    DashboardPreview,
     /// A Pandoc-writer output format, carrying its raw format string
     /// (e.g. `"docx"`, `"pptx"`, `"gfm"`).
     Pandoc(String),
@@ -548,6 +558,10 @@ impl PipelineProfile {
             } else {
                 PipelineProfile::RevealjsRender
             };
+        }
+
+        if target_format == "q2-dashboard" {
+            return PipelineProfile::DashboardPreview;
         }
 
         // Builtin pseudo-formats resolve to an HTML base with an optional
@@ -618,7 +632,9 @@ impl PipelineProfile {
 /// passes through unchanged.
 pub fn lua_format_for(target_format: &str) -> &str {
     match target_format {
-        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" | "q2-html-render" => "html",
+        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" | "q2-html-render" | "q2-dashboard" => {
+            "html"
+        }
         "q2-slides" => "revealjs",
         "dashboard" => "html",
         other if parse_format_descriptor(other).base_format == "dashboard" => "html",
@@ -1078,27 +1094,12 @@ impl Format {
             });
         }
 
-        // 2. Try as extension-style: "acm-html" -> base "html", extension "acm"
-        // Note: For pseudo-formats like "q2-slides", parse_format_descriptor returns
-        // base_format="q2-slides" (no known suffix), so the try_from below fails
-        // just like step 1. This is intentional — step 3 handles pseudo-formats.
-        let desc = parse_format_descriptor(format_str);
-        if let Ok(identifier) = FormatIdentifier::try_from(desc.base_format.as_str()) {
-            return Ok(Self {
-                identifier,
-                target_format: format_str.to_string(),
-                extension_name: desc.extension_name,
-                display_name: format_str.to_string(),
-                output_extension: output_extension_for(identifier),
-                native_pipeline: identifier.is_native(),
-                pipeline_kind: None,
-            });
-        }
-
-        // 3. Try as a builtin pseudo-format: "q2-preview" -> base "html"
+        // 2. Try as a builtin pseudo-format: "q2-preview" -> base "html"
         // with `pipeline_kind = Some("preview")`. The (base, kind)
         // pair is the single source of truth; pipeline-dispatching
-        // stages read `pipeline_kind` instead of string-matching.
+        // stages read `pipeline_kind` instead of string-matching. Checked
+        // before the extension-style parse: `q2-dashboard` would otherwise
+        // read as extension `q2` of `dashboard` and lose its kind.
         if let Some((base, pipeline_kind)) = builtin_pseudo_format(format_str) {
             let identifier = FormatIdentifier::try_from(base).unwrap();
             return Ok(Self {
@@ -1109,6 +1110,23 @@ impl Format {
                 output_extension: output_extension_for(identifier),
                 native_pipeline: identifier.is_native(),
                 pipeline_kind,
+            });
+        }
+
+        // 3. Try as extension-style: "acm-html" -> base "html", extension "acm"
+        // Note: For pseudo-formats like "q2-slides", parse_format_descriptor returns
+        // base_format="q2-slides" (no known suffix), so the try_from below fails
+        // just like step 1; step 2 has already handled pseudo-formats.
+        let desc = parse_format_descriptor(format_str);
+        if let Ok(identifier) = FormatIdentifier::try_from(desc.base_format.as_str()) {
+            return Ok(Self {
+                identifier,
+                target_format: format_str.to_string(),
+                extension_name: desc.extension_name,
+                display_name: format_str.to_string(),
+                output_extension: output_extension_for(identifier),
+                native_pipeline: identifier.is_native(),
+                pipeline_kind: None,
             });
         }
 
@@ -1664,6 +1682,8 @@ mod tests {
             "q2-slides",
             "q2-debug",
             "q2-html-render",
+            "dashboard",
+            "q2-dashboard",
         ] {
             let f = Format::from_format_string(fmt).unwrap();
             assert_eq!(
@@ -1950,6 +1970,18 @@ mod tests {
     /// silently running the full reveal-render pipeline for the preview leg.
     /// This asserts the `RevealjsPreview` cell by name AND by distinctness
     /// from `RevealjsRender` — the only surface the two differ on.
+    #[test]
+    fn test_pipeline_profile_q2_dashboard_is_dashboard_preview() {
+        assert_eq!(
+            PipelineProfile::from_format("q2-dashboard"),
+            PipelineProfile::DashboardPreview
+        );
+        let f = Format::from_format_string("q2-dashboard").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Dashboard);
+        assert_eq!(f.pipeline_kind, Some("preview"));
+        assert_eq!(lua_format_for("q2-dashboard"), "html");
+    }
+
     #[test]
     fn test_pipeline_profile_q2_slides_is_revealjs_preview_not_render() {
         assert_ne!(
@@ -2722,6 +2754,7 @@ mod tests {
             ("q2-preview", "html"),
             ("docx", "docx"),
             ("dashboard", "dashboard"),
+            ("q2-dashboard", "dashboard"),
         ] {
             assert_eq!(
                 Format::from_format_string(fmt).unwrap().base_format(),

@@ -1,0 +1,63 @@
+---
+title: Parity Dashboard
+format: dashboard
+_quarto:
+  tests:
+    dashboard:
+      # The live preview (q2-dashboard) renders the same content area as the
+      # render, apart from the scripted controls React draws itself
+      # (DASHBOARD_PARITY_RULES; dashboard plan Phase 8).
+      dom-parity: true
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            "div#quarto-document-content.quarto-dashboard-pages",
+            "div.dashboard-page.tab-pane",
+            "div.bslib-sidebar-layout aside.sidebar",
+            "div.bslib-card[data-full-screen]",
+            "ul.nav-tabs.card-header-tabs",
+            "div.bslib-value-box p.value-box-title",
+          ]
+---
+
+# Overview
+
+## {.sidebar width="220px"}
+
+Sidebar **text**.
+
+## Column
+
+### Row
+
+::: {.valuebox icon="pencil" color="primary"}
+Articles
+
+45
+:::
+
+::: {.card title="Plain card"}
+Card body with *emphasis*.
+:::
+
+### Row {.tabset}
+
+::: {.card title="Tab one"}
+First tab.
+:::
+
+::: {.card title="Tab two"}
+Second tab.
+:::
+
+# Details
+
+## {.toolbar}
+
+Toolbar text.
+
+## Row
+
+::: {.card title="Detail"}
+Details body.
+:::

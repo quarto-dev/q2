@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-7 done 2026-11-03; Phase 8 next
+status: in-progress  # Phases 0-8 done 2026-11-04; Phase 9 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -437,17 +437,27 @@ Done 2026-11-03.
 - [x] Fill ordering for computed flow bodies: Q1 fills pages before `processCards` adds the computed `flow` class, so card bodies on pages keep fill classes while a pageless flow body has none (`c40`). The lowering marks computed flow as `dashboard-flow-pending`, which only the page fill pass ignores, and renames it to `flow` at the end.
 - [x] Corpus: c34–c36, `q1/7-navbar-social-nopages`, `q1/8-pages`, `q1/9-theme-dark`, `regressions/color-scheme-toggle-dashboard` `match`. Deferred on non-dashboard strands, with matching dashboard structure: `acceptance/navigation`, `q1-atx/7-navbar`, `q1-atx/7-navbar-social` (bd-xaaucvfz), `q1-atx/2-layout-*` and `q1-atx/loose-content` (bd-mlxvysee), `q1/5-sample-layout-scrolling` (bd-1oqqb09a).
 
-### Phase 8: React preview (D8)
+### Phase 8: React preview (D8) (done 2026-11-04)
 
-Following the revealjs rule ("every phase from P2 on ships render and preview together"), each of Phases 3–7 should land its React component alongside the render path. This phase is the scaffolding, done first, and the closing parity sweep.
+**Design revised.** The plan was a React mirror of the structure nodes: `DashboardResolveTransform` excluded from the preview, and React components reading `plain_data` to rebuild the bslib markup. By Phase 7 the lowering (`resolve.rs`) had grown many Q1 ordering rules (fill classes per pass, pending flow, title fill, tabset and sidebar numbering, value-box colors), all of which a mirror would have to reimplement and keep in step. Instead:
 
-- [ ] Add the dashboard node types to `custom-node-schema.json`, with `*_PLAIN_DATA_KEYS` and conformance tests.
-- [ ] Add a pseudo-format (for example `q2-dashboard`, by analogy with `q2-slides`) in `builtin_pseudo_format` / `preview_pseudo_format`. `format_class("dashboard") == Preview`, routed by `classifyPreviewMode` to `react`.
-- [ ] `DashboardResolveTransform` goes on `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
-- [ ] React components in `ts-packages/preview-renderer/src/q2-preview/custom/`: `DashboardPage` (navbar tabs, hash state), `DashboardContainer` (reads `grid_template`), `DashboardCard` (expand), `DashboardValueBox`, and `DashboardSidebar` / `DashboardToolbar`.
-- [ ] bslib CSS, plus the subset of bslib behavior React needs (full screen, sidebar collapse) without loading `components.js` into React. Decide this here; it depends on how revealjs handled `reveal.js` in `RevealDeck.tsx`.
-- [ ] Render/preview parity tests per node type (`/preview-render-parity`), plus `parity.integration.test.tsx` coverage for one multi-page fixture.
-- [ ] Playwright on rendered output: hash navigation (#14818, #9411), expand, sidebar collapse, skip link.
+- The preview runs the **same lowering** as the render, in a preview mode (`DashboardResolveTransform::with_preview`). The bslib markup has one source of truth.
+- A final pass, `dashboard/view.rs` `to_views`, turns the elements whose behavior Q1 left to bslib\'s and Bootstrap\'s JavaScript into **view nodes**: `DashboardPageView`, `DashboardSidebarLayout`, `DashboardCardView`, `DashboardTabNav`, `DashboardTabPane`, plus `DashboardParagraph` for a value box\'s classed `<p>`. Each keeps the element\'s attributes exactly as the render writes them, in its `attr`, and its lowered children in slots. Scripts and bslib\'s expand / collapse controls are dropped (React draws its own), and the render\'s split raw tags (`<aside>…</aside>`, `<p class>…</p>`) become structure. Only the tab nav is built in the lowering itself (`lower_card` in preview mode), since its titles cannot be read back from raw HTML.
+- React (`ts-packages/preview-renderer/src/q2-preview/custom/dashboard/`) adds behavior only: the active page and card tab, sidebar collapse (`sidebar-collapsed`, `hidden`, `aria-expanded`), and full screen (`data-full-screen`, the overlay and its Close link, `body.bslib-has-full-screen`, Escape). State classes keep the render\'s class order, so the first paint matches the render.
+- The view nodes are preview-only and never reach a Pandoc writer, so like `ExampleEmbed` they are **not in `custom-node-schema.json`**; the WASM parity harness checks their contract end to end instead.
+
+Done:
+
+- [x] Pseudo-format `q2-dashboard` (base `dashboard`, kind `preview`), `PipelineProfile::DashboardPreview`, `lua_format_for` → `html`. `Format::from_format_string` now checks pseudo-formats before the extension-style parse: `q2-dashboard` otherwise read as extension `q2` of `dashboard` and lost its kind.
+- [x] Routing: `format_class("dashboard") == Preview`, `preview_pseudo_format("dashboard") == "q2-dashboard"`, WASM `map_format_for_preview` / `coerce_format_for_print`, `q2 preview --static` accepts dashboards, `pipelineKindForFormat("q2-dashboard") == "preview"`, hub-client `ReactRenderer` / printable gates. The local `q2 preview` SPA needed nothing (it is format-agnostic).
+- [x] The React shell `DashboardDocument` replaces the registry\'s `Ast` entry (`PreviewRoot`): header, navbar (title, subtitle, authors, logo pair, page tabs, nav-buttons with `|url|` filled), the content area\'s classes, body classes, the skip link. The active page follows the URL hash (Q1 #14818 / #9411) and updates it.
+- [x] bslib and dashboard CSS reach the preview through the compiled theme (the dashboard Sass layer keys on `base_format()`); no static CSS imports.
+- [x] Tests: `view.rs` unit tests, `dashboard_preview.rs` integration test (preview AST view nodes and format-scoped navbar metadata), React component tests (`dashboard.integration.test.tsx`), and the WASM render/preview **DOM parity** harness extended with a dashboard kind (`DASHBOARD_PARITY_RULES`: removes the scripted controls on both sides, canonicalizes `style` declaration formatting) on the new smoke-all fixture `dashboard/preview-parity.qmd` (pages, sidebar, toolbar, value box, tabset card): identical.
+- [x] Playwright (`q2-preview-spa/e2e/dashboard.spec.ts`, Chromium and Firefox): the live preview switches pages and tabs, collapses the sidebar and expands a card; the rendered page (`--static`) opens the page named in the hash, and its tabs, sidebar toggle, card expand / Escape and skip link work with the vendored bslib JS.
+
+**Found:** bslib\'s sidebar toggle ends with a jQuery call for Shiny\'s input binding, and dashboards load no jQuery (Q1 neither), so each toggle logs `$ is not defined` after the toggle has happened. Follow-up bd-tolifxld (the vendored file is byte-identical; a patch is a decision of its own).
+
+**Not in the preview (unchanged from html previews):** the dark-mode toggle (`PreviewDocument` defers dark mode generally). User Lua filters in the preview see the view nodes\' wrapper Divs where the render\'s filters see the bslib Divs.
 
 ### Phase 9: Websites
 

@@ -105,7 +105,7 @@ impl StaticArgs {
     }
 }
 
-/// Formats a static server can usefully show: html and revealjs pages,
+/// Formats a static server can usefully show: html, revealjs and dashboard pages,
 /// and typst's PDF (in the bundled pdf.js viewer, hub-parity Plan 8).
 /// `docx`/`pptx`/`epub` render fine but produce nothing to browse, so
 /// they are refused up front, before any render (plan § CLI). A key that
@@ -116,12 +116,15 @@ fn check_servable_format(key: &str) -> Result<()> {
     };
     if matches!(
         format.identifier,
-        FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Typst
+        FormatIdentifier::Html
+            | FormatIdentifier::Revealjs
+            | FormatIdentifier::Dashboard
+            | FormatIdentifier::Typst
     ) {
         return Ok(());
     }
     anyhow::bail!(
-        "Format '{}' is not supported with --static (only html, revealjs and typst can be served)",
+        "Format '{}' is not supported with --static (only html, revealjs, dashboard and typst can be served)",
         format.identifier
     );
 }
@@ -906,7 +909,13 @@ mod tests {
 
     #[test]
     fn servable_formats_pass_the_gate() {
-        for key in ["html", "revealjs", "typst", "my-extension-format"] {
+        for key in [
+            "html",
+            "revealjs",
+            "dashboard",
+            "typst",
+            "my-extension-format",
+        ] {
             assert!(check_servable_format(key).is_ok(), "{key}");
         }
     }

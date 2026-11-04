@@ -32,6 +32,12 @@ export interface ParityRules {
    * whitespace pass as siblings of the wrapper's neighbours.
    */
   unwrapTags: ReadonlySet<string>;
+  /**
+   * CSS selectors whose matching elements (and subtrees) are removed from
+   * both sides before comparison: controls whose markup differs by design
+   * because React renders its own in place of the render\'s scripted ones.
+   */
+  removeSelectors?: readonly string[];
 }
 
 export const OPAQUE_MARKER = '⟨opaque⟩';
@@ -89,6 +95,29 @@ export const PARITY_RULES: ParityRules = {
 };
 
 /**
+ * Rules for a dashboard (`format: dashboard`, previewed as `q2-dashboard`):
+ * the shared rules plus the controls each side builds its own way. The
+ * render\'s bslib / Bootstrap scripts, bslib\'s `<bslib-tooltip>` expand
+ * control and the sidebar collapse toggle are scripted DOM; the preview
+ * renders React controls (`custom/dashboard/views.tsx`). The tab links\'
+ * `data-toggle` / `data-bs-toggle` hand them to Bootstrap\'s tab plugin in
+ * the render; React switches tabs itself and leaves them off.
+ */
+export const DASHBOARD_PARITY_RULES: ParityRules = {
+  ...PARITY_RULES,
+  stripAttrs: new Set([...PARITY_RULES.stripAttrs, 'data-toggle', 'data-bs-toggle']),
+  removeSelectors: [
+    'script',
+    'bslib-tooltip',
+    '.bslib-full-screen-enter',
+    'button.collapse-toggle',
+  ],
+};
+
+/** The parity root of a dashboard: its content area (no `<main>`). */
+export const DASHBOARD_PARITY_ROOT_SELECTOR = 'div#quarto-document-content';
+
+/**
  * Elements whose adjacency to a text node makes that text node's edge
  * whitespace significant. Whitespace next to anything else (block
  * elements, or nothing) is the writer's pretty-printing and is dropped.
@@ -131,6 +160,19 @@ function normalizeText(node: Node): string {
   return s;
 }
 
+/** `a: 1;b:2` and ` a: 1; b: 2;` both become `a: 1; b: 2`. */
+function canonicalStyle(value: string): string {
+  return value
+    .split(';')
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .map((d) => {
+      const i = d.indexOf(':');
+      return i < 0 ? d : `${d.slice(0, i).trim()}: ${d.slice(i + 1).trim()}`;
+    })
+    .join('; ');
+}
+
 function openTagLine(el: Element, rules: ParityRules): string {
   const attrs: Array<{ name: string; line: string }> = [];
   for (const { name, value } of Array.from(el.attributes)) {
@@ -140,7 +182,16 @@ function openTagLine(el: Element, rules: ParityRules): string {
       );
     }
     if (rules.stripAttrs.has(name)) continue;
-    const v = name === 'class' ? value.replace(/\s+/g, ' ').trim() : value;
+    // `class` whitespace and `style` declaration formatting are not
+    // content: React serializes a style object (`q2-preview/utils.tsx`
+    // `cssStringToObject`) as `prop: value;` while the writer keeps the
+    // author\'s / transform\'s spelling (`display: inline`, a leading space).
+    const v =
+      name === 'class'
+        ? value.replace(/\s+/g, ' ').trim()
+        : name === 'style'
+          ? canonicalStyle(value)
+          : value;
     attrs.push({ name, line: `${name}="${escapeAttr(v)}"` });
   }
   attrs.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -194,6 +245,9 @@ function unwrapBareElements(root: Element, rules: ParityRules): void {
  */
 export function canonicalize(el: Element, rules: ParityRules = PARITY_RULES): string {
   const clone = el.cloneNode(true) as Element;
+  for (const sel of rules.removeSelectors ?? []) {
+    for (const victim of Array.from(clone.querySelectorAll(sel))) victim.remove();
+  }
   unwrapBareElements(clone, rules);
   clone.normalize();
   const out: string[] = [];
@@ -208,10 +262,14 @@ export const PARITY_ROOT_SELECTOR = 'main#quarto-document-content';
  * Locate the parity root inside a document / container. `label` names
  * the side ("render" / "preview") so a missing root is attributable.
  */
-export function extractParityRoot(scope: ParentNode, label: string): Element {
-  const root = scope.querySelector(PARITY_ROOT_SELECTOR);
+export function extractParityRoot(
+  scope: ParentNode,
+  label: string,
+  selector: string = PARITY_ROOT_SELECTOR,
+): Element {
+  const root = scope.querySelector(selector);
   if (!root) {
-    throw new Error(`${label}: no element matches ${PARITY_ROOT_SELECTOR}`);
+    throw new Error(`${label}: no element matches ${selector}`);
   }
   return root;
 }

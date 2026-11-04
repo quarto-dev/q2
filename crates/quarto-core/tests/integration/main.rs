@@ -49,6 +49,7 @@ pub mod custom_node_schema_conformance;
 pub mod custom_project_type;
 pub mod dashboard_format;
 pub mod dashboard_goldens;
+pub mod dashboard_preview;
 pub mod document_profile_pipeline;
 pub mod echo_engine_e2e;
 pub mod editorial_marks_ooxml;

@@ -295,9 +295,13 @@ pub struct TopLevel {
 }
 
 /// Lower every dashboard node under `blocks` (the document's top level) to
-/// bslib markup.
-pub fn lower_document(blocks: Blocks) -> (Blocks, TopLevel) {
-    let mut cx = Lower::default();
+/// bslib markup. `preview`: finish with [`super::view::to_views`] for the
+/// React preview.
+pub fn lower_document(blocks: Blocks, preview: bool) -> (Blocks, TopLevel) {
+    let mut cx = Lower {
+        preview,
+        ..Default::default()
+    };
     let mut top = TopLevel::default();
     let mut lowered_all: Blocks = blocks
         .into_iter()
@@ -343,6 +347,9 @@ pub fn lower_document(blocks: Blocks) -> (Blocks, TopLevel) {
     }
     if mark_top_level_sidebar(&mut lowered_all) {
         add_unique(&mut top.body_classes, "dashboard-sidebar");
+    }
+    if preview {
+        lowered_all = super::view::to_views(lowered_all);
     }
     (lowered_all, top)
 }
@@ -401,6 +408,8 @@ struct Lower {
     cards: usize,
     /// Page sidebars lowered so far (`bslib-sidebar-<n>`).
     sidebars: usize,
+    /// Lowering for the React preview (the tab nav is a view node).
+    preview: bool,
     /// The orientation of the container whose children are being lowered
     /// (`None` inside pages, card bodies and other non-grid content).
     parent: Option<Orientation>,
@@ -848,15 +857,23 @@ fn paragraph_for_value_part(block: Block) -> Vec<Block> {
     ]
 }
 
+/// Each tab\'s title (Q1: a body\'s title, else `Tab <n>`).
+fn tab_titles(bodies: &[super::model::BodyData]) -> Vec<String> {
+    bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| b.title.clone().unwrap_or_else(|| format!("Tab {}", i + 1)))
+        .collect()
+}
+
 /// Q1 `convertToTabsetHeader`: the tab list in a tabset card's header.
 fn tab_nav_html(id: &str, bodies: &[super::model::BodyData]) -> String {
     let mut html = format!(
         r#"<ul class="nav nav-tabs card-header-tabs" role="tablist" data-tabsetid="{id}">"#
     );
-    for (i, body) in bodies.iter().enumerate() {
+    for (i, title) in tab_titles(bodies).iter().enumerate() {
         let n = i + 1;
-        let title = body.title.clone().unwrap_or_else(|| format!("Tab {n}"));
-        let title = html_escape(&title);
+        let title = html_escape(title);
         let (active, selected) = if n == 1 {
             (" active", "true")
         } else {
@@ -971,7 +988,11 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
         }
         if let Some(id) = &tabset_id {
             add_class(&mut header_attr, "bslib-navs-card-title");
-            header_content.push(raw_html(&tab_nav_html(id, &data.bodies)));
+            header_content.push(if cx.preview {
+                super::view::tab_nav(id, &tab_titles(&data.bodies))
+            } else {
+                raw_html(&tab_nav_html(id, &data.bodies))
+            });
         }
         content.push(div(header_attr, header_content));
     }

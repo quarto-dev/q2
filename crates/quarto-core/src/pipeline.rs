@@ -2283,6 +2283,7 @@ pub fn build_transform_pipeline(
     let is_dashboard = matches!(
         pipeline_profile,
         crate::format::PipelineProfile::DashboardRender
+            | crate::format::PipelineProfile::DashboardPreview
     );
     let is_revealjs = matches!(
         pipeline_profile,
@@ -2781,10 +2782,16 @@ pub fn build_transform_pipeline(
     // content transforms, as Q1's dashboard filter runs in quarto-post:
     // every transform above sees an ordinary sectioned document, including
     // the ones whose walkers do not descend into custom-node slots. The
-    // q2 preview will exclude the resolve half (plan D8).
+    // q2 preview runs the same lowering in its preview mode, which leaves
+    // view nodes for the React preview (plan Phase 8).
     if is_dashboard {
         pipeline.push(Box::new(crate::dashboard::DashboardTransform::new()));
-        pipeline.push(Box::new(crate::dashboard::DashboardResolveTransform::new()));
+        pipeline.push(Box::new(
+            crate::dashboard::DashboardResolveTransform::with_preview(matches!(
+                pipeline_profile,
+                crate::format::PipelineProfile::DashboardPreview
+            )),
+        ));
     }
     pipeline.push(Box::new(AttributionRenderTransform::new()));
 
@@ -2813,7 +2820,8 @@ pub fn build_transform_pipeline(
             pipeline.retain_excluding(PANDOC_TRANSFORM_EXCLUDED);
         }
         crate::format::PipelineProfile::HtmlPreview
-        | crate::format::PipelineProfile::RevealjsPreview => {
+        | crate::format::PipelineProfile::RevealjsPreview
+        | crate::format::PipelineProfile::DashboardPreview => {
             pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
         }
         crate::format::PipelineProfile::HtmlRender
@@ -5553,6 +5561,7 @@ mod tests {
             "dashboard",
             "q2-preview",
             "q2-slides",
+            "q2-dashboard",
             "docx",
         ] {
             let runtime = make_test_runtime();
