@@ -45,6 +45,7 @@ website:
     keyboard-shortcut: ["f", "/", "s"]
     show-item-context: false  # tree | parent | root | true | false
     merge-navbar-crumbs: true
+    search-json: false        # true when algolia is configured
 ```
 
 | Option | Default | Effect |
@@ -57,6 +58,7 @@ website:
 | `keyboard-shortcut` | `f`, `/`, `s` | Keys that open the search box when focus is not in a form field. A single key or a list. |
 | `show-item-context` | `false` | Shows where a page sits in the sidebar: `tree` (the full trail; `true` means this), `parent`, or `root`. |
 | `merge-navbar-crumbs` | `true` | Prefixes the trail with the navbar item that leads to the page's sidebar. |
+| `search-json` | `true` when [`algolia`](#algolia) is configured, else `false` | Writes `search.json`, Quarto 1's record array, at the site root. See [Output files](#output-files). |
 
 The navbar and sidebar can each override the placement:
 
@@ -106,9 +108,20 @@ Rendering writes, under the output directory:
 - `site_libs/quarto-search/manifest.json` — the site title, the
   Quarto and Pagefind versions that built the index, its languages,
   and the page count. Other sites read it before federating (below).
-- `search.json` — one record per page and per section, in the shape
-  Quarto 1 produced. It is not used by the search box; it exists for
-  [uploading to Algolia](#algolia) and for tools that read it.
+- `search.json`, only when `search-json` is on (by default, when
+  [Algolia](#algolia) is configured) — one record per page and per
+  section, in the shape Quarto 1 produced. The search box does not use
+  it; it exists for uploading to Algolia and for tools that read it.
+  Set `search-json: true` to get it without Algolia, or
+  `search-json: false` to skip it even with Algolia (for example,
+  when the Algolia index is populated some other way). On a large
+  site the file can be bigger than the whole Pagefind index, and
+  building it takes render time, so leave it off unless something
+  reads it.
+
+When `search.json` is turned off, a copy left by an earlier render is
+removed if it is unchanged since Quarto wrote it. A `search.json` that
+you have edited, or that Quarto did not write, is left in place.
 
 Incremental renders keep the pages they skipped in the index and drop
 sections a page no longer has.
@@ -176,8 +189,10 @@ website:
         text: body
 ```
 
-Quarto still renders `search.json`; upload it to populate the index
-(each record has an `objectID`). A block missing any of the three
+With a complete `algolia` block, Quarto also renders `search.json`;
+upload it to populate the index (each record has an `objectID`). To
+get the file before you have the connection values, set
+`search-json: true`. A block missing any of the three
 required values is reported as [Q-5-40](../../errors/project/Q-5-40.qmd)
 and ignored, so the page keeps the built-in search.
 
@@ -202,8 +217,11 @@ yet, so the Insights scripts are not consent-gated.
   with stemming per language, and only the index chunks a query needs
   are downloaded. The trade-off is typo tolerance: Quarto 1's fuzzy
   matching (at its near-exact threshold) is gone.
-- `search.json` is still written in the same shape, but the search box
-  no longer reads it.
+- `search.json` keeps its shape, but the search box no longer reads
+  it, and it is written only when Algolia is configured. **If something
+  else on your site reads `search.json`** (a custom search page, a
+  script, a deploy step), set `website.search.search-json: true` (or
+  `book.search.search-json: true`) to keep getting it.
 - `limit` defaults to 50 and `collapse-after` to 3, which is what
   Quarto 1's code did (its documentation said 20 and 2).
 - Level-1 sections no longer lose the text between their heading and

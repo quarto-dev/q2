@@ -29,6 +29,9 @@
 //!         weight: 0.5
 //!         bundle: pagefind/ # only for non-q2 sites
 //!     algolia: {…}          # opt-in backend (Phase 4)
+//!     search-json: true     # q2 addition — write Quarto 1's
+//!                           #   `search.json` (default: only when
+//!                           #   `algolia` is fully configured)
 //! ```
 //!
 //! Unlike most website keys, the options are read from `website.search`
@@ -140,6 +143,11 @@ pub struct SearchOptions {
     pub federate: Vec<FederatedSite>,
     /// The Algolia backend, when fully configured.
     pub algolia: Option<AlgoliaOptions>,
+    /// Write Quarto 1's record array to `<output>/search.json`. q2's
+    /// own search box never reads it, so by default it is written only
+    /// for Algolia (whose index it populates); an explicit
+    /// `search-json: true | false` overrides that.
+    pub search_json: bool,
 }
 
 pub const DEFAULT_LIMIT: u32 = 50;
@@ -169,6 +177,7 @@ impl SearchOptions {
             merge_navbar_crumbs: true,
             federate: Vec::new(),
             algolia: None,
+            search_json: false,
         }
     }
 
@@ -233,6 +242,9 @@ pub fn resolve_website_search(
     // `type` defaults by location, so resolve `location` first and
     // only then apply an explicit `type`.
     let mut explicit_type = None;
+    // `search-json` defaults on whether `algolia` resolved, so (like
+    // `type`) apply an explicit value only after the loop.
+    let mut explicit_search_json = None;
     for entry in entries {
         let key = entry.key.as_str();
         let v = &entry.value;
@@ -306,6 +318,10 @@ pub fn resolve_website_search(
                     diagnostics.push(invalid_value(key, "a map of Algolia settings", v));
                 }
             }
+            "search-json" => match v.as_bool() {
+                Some(b) => explicit_search_json = Some(b),
+                None => diagnostics.push(invalid_value(key, "`true` or `false`", v)),
+            },
             // Quarto 1 interface fields nothing ever set; accept
             // silently rather than warn about documented-but-dead keys.
             "panel-placement" | "full-width" | "input-wrapper-width" => {}
@@ -313,6 +329,7 @@ pub fn resolve_website_search(
         }
     }
     opts.kind = explicit_type.unwrap_or_else(|| default_type_for(opts.location));
+    opts.search_json = explicit_search_json.unwrap_or(opts.algolia.is_some());
     Some(opts)
 }
 
@@ -463,7 +480,8 @@ fn unknown_key(key: &str, entry: &quarto_pandoc_types::ConfigMapEntry) -> Diagno
         .problem("The option is ignored.")
         .add_hint(
             "Known options: location, type, limit, collapse-after, copy-button, \
-             keyboard-shortcut, show-item-context, merge-navbar-crumbs, federate, algolia.",
+             keyboard-shortcut, show-item-context, merge-navbar-crumbs, federate, algolia, \
+             search-json.",
         )
         .with_location(entry.key_source.clone())
         .build()
@@ -674,6 +692,56 @@ mod tests {
                 .as_deref(),
             Some("body")
         );
+    }
+
+    const ALGOLIA: &str = "    algolia:\n      index-name: idx\n      application-id: app\n      search-only-api-key: key\n";
+
+    #[test]
+    fn search_json_defaults_off_without_algolia() {
+        let (opts, _) = resolve("website:\n  title: x\n");
+        assert!(!opts.unwrap().search_json);
+        let (opts, _) = resolve("website:\n  search:\n    limit: 5\n");
+        assert!(!opts.unwrap().search_json);
+    }
+
+    #[test]
+    fn search_json_defaults_on_with_complete_algolia() {
+        let (opts, diags) = resolve(&format!("website:\n  search:\n{ALGOLIA}"));
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(opts.unwrap().search_json);
+    }
+
+    #[test]
+    fn search_json_stays_off_for_incomplete_algolia() {
+        let (opts, diags) = resolve("website:\n  search:\n    algolia:\n      index-name: idx\n");
+        assert!(!opts.unwrap().search_json);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-5-40"));
+    }
+
+    #[test]
+    fn explicit_search_json_overrides_default_in_either_key_order() {
+        for yaml in [
+            format!("website:\n  search:\n    search-json: false\n{ALGOLIA}"),
+            format!("website:\n  search:\n{ALGOLIA}    search-json: false\n"),
+        ] {
+            let (opts, diags) = resolve(&yaml);
+            assert!(diags.is_empty(), "{diags:?}");
+            let opts = opts.unwrap();
+            assert!(opts.algolia.is_some());
+            assert!(!opts.search_json, "{yaml}");
+        }
+        let (opts, _) = resolve("website:\n  search:\n    search-json: true\n");
+        assert!(opts.unwrap().search_json);
+    }
+
+    #[test]
+    fn non_bool_search_json_warns_and_uses_default() {
+        let (opts, diags) = resolve(&format!(
+            "website:\n  search:\n    search-json: sometimes\n{ALGOLIA}"
+        ));
+        assert!(opts.unwrap().search_json, "default with algolia");
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-5-39"));
     }
 
     #[test]

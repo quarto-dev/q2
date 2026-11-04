@@ -14,6 +14,11 @@
 //! - Search is **on by default** for website projects, as in Quarto 1;
 //!   `website.search: false` turns everything off (no bundle, no
 //!   `search.json`, no page wiring).
+//! - `_site/search.json` is written only when wanted: by default when
+//!   `website.search.algolia` is fully configured, or as
+//!   `website.search.search-json: true | false` says (bd-cdehspam).
+//!   When it stops being wanted, a file q2 wrote and nobody changed
+//!   since is removed; any other `search.json` is left alone.
 //! - `_site/site_libs/quarto-search/pagefind/`: the Pagefind bundle
 //!   (`pagefind-entry.json`, `pagefind.js`, `wasm.<lang>.pagefind`,
 //!   `*.pf_meta`, `index/*.pf_index`, `fragment/*.pf_fragment`).
@@ -175,6 +180,28 @@ fn search_site(dir: &Path) {
     );
 }
 
+const SEARCH_JSON_ON: &str = "website:\n  title: \"Test Site\"\n  search:\n    search-json: true\n";
+const SITE_TITLE: &str = "website:\n  title: \"Test Site\"\n";
+
+/// Rewrite the fixture's `website:` header (`SITE_TITLE`) to `header`.
+fn set_site_header(dir: &Path, header: &str) {
+    let path = dir.join("_quarto.yml");
+    let yml = read(&path);
+    let current = if yml.contains(SEARCH_JSON_ON) {
+        SEARCH_JSON_ON
+    } else {
+        SITE_TITLE
+    };
+    write(&path, &yml.replacen(current, header, 1));
+}
+
+/// [`search_site`] with `search-json: true`, for tests that read the
+/// records.
+fn records_site(dir: &Path) {
+    search_site(dir);
+    set_site_header(dir, SEARCH_JSON_ON);
+}
+
 fn records(project_dir: &Path) -> Vec<serde_json::Value> {
     read_json(&project_dir.join(SEARCH_JSON))
         .as_array()
@@ -293,7 +320,7 @@ fn website_search_false_disables_everything() {
 
 #[test]
 fn search_json_records_follow_quarto1_shape() {
-    let project_dir = render_project(search_site);
+    let project_dir = render_project(records_site);
     let recs = records(&project_dir);
 
     // Page record: text before the first level-2 section.
@@ -366,7 +393,8 @@ fn merge_navbar_crumbs_false_keeps_sidebar_trail_only() {
             &dir.join("_quarto.yml"),
             &yml.replace(
                 "website:\n  title: \"Test Site\"\n",
-                "website:\n  title: \"Test Site\"\n  search:\n    merge-navbar-crumbs: false\n",
+                "website:\n  title: \"Test Site\"\n  search:\n    merge-navbar-crumbs: false\n\
+                 \x20   search-json: true\n",
             ),
         );
     });
@@ -383,7 +411,7 @@ fn merge_navbar_crumbs_false_keeps_sidebar_trail_only() {
 
 #[test]
 fn search_excludes_drafts_search_false_and_404() {
-    let project_dir = render_project(search_site);
+    let project_dir = render_project(records_site);
     let recs = records(&project_dir);
     let hrefs: Vec<&str> = recs.iter().map(|r| r["href"].as_str().unwrap()).collect();
     for excluded in ["secret.html", "hidden.html", "404.html"] {
@@ -424,7 +452,7 @@ fn search_excludes_drafts_search_false_and_404() {
 
 #[test]
 fn subset_render_keeps_skipped_pages_in_index() {
-    let project_dir = render_project(search_site);
+    let project_dir = render_project(records_site);
     let before = records(&project_dir);
     assert!(record(&before, "index.html#first-section")["text"].is_string());
 
@@ -462,7 +490,7 @@ fn subset_render_keeps_skipped_pages_in_index() {
 
 #[test]
 fn subset_render_drops_sections_the_page_lost() {
-    let project_dir = render_project(search_site);
+    let project_dir = render_project(records_site);
     assert!(
         records(&project_dir)
             .iter()
@@ -620,10 +648,7 @@ fn navbar_search_false_removes_box_but_keeps_index() {
     });
     let html = read(&project_dir.join("_site/index.html"));
     assert_not_contains(&html, "id=\"quarto-search\"", "navbar.search: false");
-    assert!(
-        project_dir.join(SEARCH_JSON).exists(),
-        "index still written"
-    );
+    assert!(project_dir.join(MANIFEST).exists(), "index still written");
 }
 
 #[test]
@@ -677,26 +702,41 @@ fn federate_config_reaches_options_json() {
 // Books
 // ═══════════════════════════════════════════════════════════════════
 
+/// A two-chapter book; `book_extra` is appended under `book:`.
+fn minibook(dir: &Path, book_extra: &str) {
+    write(
+        &dir.join("_quarto.yml"),
+        &format!(
+            "project:\n  type: book\n  output-dir: _site\n\
+             book:\n  title: \"Minibook\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n\
+             {book_extra}"
+        ),
+    );
+    write(
+        &dir.join("index.qmd"),
+        "# Welcome {.unnumbered}\n\nWelcome to the book about marmots.\n",
+    );
+    write(
+        &dir.join("ch1.qmd"),
+        "# Chapter One\n\nMarmots whistle.\n\n## Habitat\n\nAlpine meadows.\n",
+    );
+}
+
+/// `book.search` reaches `website.search` wholesale, so a book's
+/// `search.json` follows the same default as a website's.
+#[test]
+fn book_project_writes_no_search_json_by_default() {
+    let project_dir = render_project(|dir| minibook(dir, ""));
+    assert!(project_dir.join(MANIFEST).exists(), "bundle still built");
+    assert!(!project_dir.join(SEARCH_JSON).exists());
+}
+
 /// Books share the website machinery (`book.search` is copied into
 /// `website.search` by the book pre-render), so a book gets the
 /// bundle, the manifest, and chapter records too.
 #[test]
 fn book_project_gets_a_search_index() {
-    let project_dir = render_project(|dir| {
-        write(
-            &dir.join("_quarto.yml"),
-            "project:\n  type: book\n  output-dir: _site\n\
-             book:\n  title: \"Minibook\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n",
-        );
-        write(
-            &dir.join("index.qmd"),
-            "# Welcome {.unnumbered}\n\nWelcome to the book about marmots.\n",
-        );
-        write(
-            &dir.join("ch1.qmd"),
-            "# Chapter One\n\nMarmots whistle.\n\n## Habitat\n\nAlpine meadows.\n",
-        );
-    });
+    let project_dir = render_project(|dir| minibook(dir, "  search:\n    search-json: true\n"));
     assert!(
         project_dir
             .join(BUNDLE_DIR)
@@ -722,9 +762,9 @@ fn book_project_gets_a_search_index() {
 /// A complete `algolia` block switches the page's backend: the options
 /// JSON carries the Algolia settings (plus `libDir`), the head loads
 /// the Algolia client from the CDN, the Autocomplete preset ships from
-/// the lib dir, and the logo is copied when `show-logo` is on. The
-/// built-in index is still written (`search.json` is what users
-/// upload to Algolia).
+/// the lib dir, and the logo is copied when `show-logo` is on.
+/// `search.json` is written by default (it is what users upload to
+/// Algolia).
 #[test]
 fn algolia_config_wires_client_preset_and_logo() {
     let project_dir = render_project(|dir| {
@@ -809,4 +849,93 @@ fn algolia_misconfigured_falls_back_to_builtin_search() {
             .exists()
     );
     std::mem::forget(temp);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// When search.json is written (bd-cdehspam)
+// ═══════════════════════════════════════════════════════════════════
+
+const ALGOLIA_HEADER: &str = "website:\n  title: \"Test Site\"\n  search:\n    algolia:\n\
+     \x20     index-name: idx\n      application-id: app\n      search-only-api-key: key\n";
+
+#[test]
+fn search_json_absent_by_default_without_algolia() {
+    let project_dir = render_project(search_site);
+    assert!(project_dir.join(MANIFEST).exists(), "bundle still built");
+    assert!(!project_dir.join(SEARCH_JSON).exists());
+}
+
+#[test]
+fn search_json_true_writes_without_algolia() {
+    let project_dir = render_project(records_site);
+    // index (page + 2 sections), guide, intro.
+    let recs = records(&project_dir);
+    assert_eq!(recs.len(), 5, "{recs:?}");
+}
+
+#[test]
+fn search_json_false_suppresses_even_with_algolia() {
+    let project_dir = render_project(|dir| {
+        search_site(dir);
+        set_site_header(dir, &format!("{ALGOLIA_HEADER}    search-json: false\n"));
+    });
+    let opts = options_json(&read(&project_dir.join("_site/index.html")));
+    assert_eq!(opts["algolia"]["index-name"].as_str(), Some("idx"));
+    assert!(!project_dir.join(SEARCH_JSON).exists());
+}
+
+/// Turning `search.json` off removes the file a previous run wrote,
+/// but keeps the bundle and the per-page capture cache.
+#[test]
+fn search_json_removed_when_setting_flips_off() {
+    let project_dir = render_project(records_site);
+    assert!(project_dir.join(SEARCH_JSON).exists());
+
+    set_site_header(&project_dir, SITE_TITLE);
+    assert_clean(&render_in(&project_dir, RenderMode::Full).unwrap());
+    assert!(!project_dir.join(SEARCH_JSON).exists());
+    assert!(project_dir.join(MANIFEST).exists());
+    let cache = project_dir.join(".quarto/search/pages");
+    assert!(
+        std::fs::read_dir(&cache).is_ok_and(|mut d| d.next().is_some()),
+        "capture cache kept"
+    );
+
+    // And back on: written again.
+    set_site_header(&project_dir, SEARCH_JSON_ON);
+    assert_clean(&render_in(&project_dir, RenderMode::Full).unwrap());
+    assert!(project_dir.join(SEARCH_JSON).exists());
+}
+
+/// A `search.json` q2 wrote but someone changed since is not removed.
+#[test]
+fn edited_search_json_survives_flip_off() {
+    let project_dir = render_project(records_site);
+    write(&project_dir.join(SEARCH_JSON), "[\"hand-edited\"]");
+    set_site_header(&project_dir, SITE_TITLE);
+    assert_clean(&render_in(&project_dir, RenderMode::Full).unwrap());
+    assert_eq!(read(&project_dir.join(SEARCH_JSON)), "[\"hand-edited\"]");
+}
+
+/// A `search.json` q2 never wrote is not removed.
+#[test]
+fn foreign_search_json_survives() {
+    let project_dir = render_project(search_site);
+    write(&project_dir.join(SEARCH_JSON), "[]");
+    assert_clean(&render_in(&project_dir, RenderMode::Full).unwrap());
+    assert_eq!(read(&project_dir.join(SEARCH_JSON)), "[]");
+}
+
+/// A site last rendered by the v1 writer (boolean state, no hash) has
+/// its `search.json` removed once when the file is no longer wanted.
+#[test]
+fn v1_state_search_json_is_removed() {
+    let project_dir = render_project(search_site);
+    write(&project_dir.join(SEARCH_JSON), "[]");
+    write(
+        &project_dir.join(".quarto/search/state.json"),
+        "{\"version\":1,\"search_json\":true}",
+    );
+    assert_clean(&render_in(&project_dir, RenderMode::Full).unwrap());
+    assert!(!project_dir.join(SEARCH_JSON).exists());
 }

@@ -27,7 +27,8 @@
 //! - **emit** ([`index_writer`]): `WebsiteProjectType::post_resources`
 //!   feeds the captures to Pagefind and writes the bundle under
 //!   `site_libs/quarto-search/pagefind/`, a `manifest.json` beside it,
-//!   and a Quarto 1-shaped `search.json` at the site root.
+//!   and, when Algolia is configured or `search-json: true` asks for
+//!   it, a Quarto 1-shaped `search.json` at the site root.
 //!
 //! The index is a whole-site, post-render artifact, so the emit half
 //! is native-only; the WASM hub-client preview renders one page at a
