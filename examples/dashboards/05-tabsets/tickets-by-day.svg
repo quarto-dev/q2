@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240" role="img">
+<line x1="30" y1="210" x2="370" y2="210" stroke="#888"/>
+<rect x="37.3" y="107.1" width="34.0" height="102.9" fill="#ff7518"/>
+<text x="54.3" y="226" font-size="12" text-anchor="middle" fill="#555">M</text>
+<rect x="85.9" y="55.7" width="34.0" height="154.3" fill="#ff7518"/>
+<text x="102.9" y="226" font-size="12" text-anchor="middle" fill="#555">T</text>
+<rect x="134.4" y="94.3" width="34.0" height="115.7" fill="#ff7518"/>
+<text x="151.4" y="226" font-size="12" text-anchor="middle" fill="#555">W</text>
+<rect x="183.0" y="30.0" width="34.0" height="180.0" fill="#ff7518"/>
+<text x="200.0" y="226" font-size="12" text-anchor="middle" fill="#555">T</text>
+<rect x="231.6" y="68.6" width="34.0" height="141.4" fill="#ff7518"/>
+<text x="248.6" y="226" font-size="12" text-anchor="middle" fill="#555">F</text>
+<rect x="280.1" y="158.6" width="34.0" height="51.4" fill="#ff7518"/>
+<text x="297.1" y="226" font-size="12" text-anchor="middle" fill="#555">S</text>
+<rect x="328.7" y="171.4" width="34.0" height="38.6" fill="#ff7518"/>
+<text x="345.7" y="226" font-size="12" text-anchor="middle" fill="#555">S</text>
+</svg>

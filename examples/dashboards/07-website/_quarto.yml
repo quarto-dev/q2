@@ -1,0 +1,16 @@
+project:
+  type: website
+
+website:
+  title: "Acme Analytics"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: dashboard.qmd
+        text: Dashboard
+  page-footer: "Acme Analytics · example site"
+
+format:
+  html:
+    theme: cosmo

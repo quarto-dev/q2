@@ -1,0 +1,42 @@
+---
+title: "Navigation Bar"
+subtitle: "Logo, links and dark mode"
+author: "Data Team"
+format:
+  dashboard:
+    logo: images/logo.svg
+    logo-alt: "Example logo"
+    nav-buttons:
+      - linkedin
+      - icon: github
+        href: https://github.com/quarto-dev
+        aria-label: GitHub
+    theme:
+      light: cosmo
+      dark: darkly
+---
+
+# Overview
+
+## Row
+
+::: {.card title="Monthly visits"}
+![](monthly-visits.svg){fig-alt="Line chart of monthly visits."}
+:::
+
+::: {.card title="In the bar above"}
+- The logo and the title, subtitle and author
+- The **Overview** and **About** page tabs
+- LinkedIn and GitHub buttons
+- The dark-mode toggle
+:::
+
+# About
+
+## Row
+
+::: {.card title="About this example"}
+The navigation bar shows the title, subtitle and author, a logo, the page
+tabs, share and link buttons, and a dark-mode toggle (because the theme has a
+light and a dark variant).
+:::
