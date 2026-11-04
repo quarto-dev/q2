@@ -296,6 +296,7 @@ mod tests {
                 ..Default::default()
             },
             title: None,
+            sidebar: Vec::new(),
             header: vec![],
             bodies: vec![vec![]],
             footer: vec![],

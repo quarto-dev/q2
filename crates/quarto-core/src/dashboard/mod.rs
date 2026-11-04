@@ -16,6 +16,7 @@
 //!   ([`resolve`]). The q2 preview excludes it so the React preview can
 //!   render the nodes itself.
 
+pub mod inputs;
 pub mod model;
 pub mod resolve;
 pub mod sizing;
@@ -93,6 +94,10 @@ impl AstTransform for DashboardTransform {
         // dashboards.
         let blocks = pampa::transforms::sectionize_blocks(blocks);
         let (mut blocks, info) = structure::build_layout(blocks, &options);
+        let mut diagnostics = Vec::new();
+        inputs::place_card_inputs(&mut blocks, &mut diagnostics);
+        ctx.diagnostics.extend(diagnostics);
+        inputs::make_panels(&mut blocks);
         sizing::assign_grid_templates(&mut blocks);
         ast.blocks = blocks;
 
@@ -165,7 +170,19 @@ impl AstTransform for DashboardResolveTransform {
         if ctx.format.base_format() != "dashboard" {
             return Ok(());
         }
-        ast.blocks = resolve::lower_document(std::mem::take(&mut ast.blocks));
+        let (blocks, top) = resolve::lower_document(std::mem::take(&mut ast.blocks));
+        ast.blocks = blocks;
+        for (key, classes) in [
+            ("body-classes", top.body_classes),
+            ("content-classes", top.content_classes),
+        ] {
+            if !classes.is_empty() {
+                ast.meta.insert_path(
+                    &["rendered", "dashboard", key],
+                    ConfigValue::new_string(classes.join(" "), generated()),
+                );
+            }
+        }
         Ok(())
     }
 }

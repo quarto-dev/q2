@@ -2329,5 +2329,12 @@
     "message_template": "A `content: valuebox` cell printed something that looks like a Python dict or an R list, but it does not have the expected shape. The printed text is shown as the value.",
     "docs_url": "https://quarto.org/docs/errors/dashboard/Q-27-1",
     "since_version": "99.9.9"
+  },
+  "Q-27-2": {
+    "subsystem": "dashboard",
+    "title": "Card Toolbar or Sidebar Could Not Be Placed",
+    "message_template": "A card toolbar or card sidebar has no card to attach to, so it was left out of the dashboard.",
+    "docs_url": "https://quarto.org/docs/errors/dashboard/Q-27-2",
+    "since_version": "99.9.9"
   }
 }

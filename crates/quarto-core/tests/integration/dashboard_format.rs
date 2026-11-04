@@ -380,3 +380,33 @@ fn unreadable_value_box_output_warns_q_27_1() {
     assert_eq!(text(one(&doc, "p.value-box-title")), "Broken");
     assert_eq!(text(one(&doc, "p.value-box-value")), "{'value': 1");
 }
+
+/// A card toolbar with no card after it, and a card sidebar targeting an id
+/// no card holds, are each a located `Q-27-2` warning; the dashboard still
+/// renders without them (Q1 failed fatally or dropped them silently).
+#[test]
+fn unplaceable_card_inputs_warn_q_27_2() {
+    let temp = tempfile::TempDir::new().unwrap();
+    write(
+        &temp.path().join("doc.qmd"),
+        "---\ntitle: T\n---\n\n## Row\n\n::: {.card title=\"Kept\"}\nBody.\n:::\n\n::: {.card-sidebar target=\"nowhere\"}\nLost sidebar.\n:::\n\n::: {.card-toolbar}\nLost toolbar.\n:::\n",
+    );
+    let options = RenderToFileOptions {
+        quiet: true,
+        ..Default::default()
+    };
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(&temp.path().join("doc.qmd"), "dashboard", &options, runtime)
+        .expect("renders despite the warnings");
+    let q27_2: Vec<_> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("Q-27-2"))
+        .collect();
+    assert_eq!(q27_2.len(), 2, "{:?}", result.render_output.diagnostics);
+    let html = std::fs::read_to_string(&result.output_path).unwrap();
+    assert!(!html.contains("Lost sidebar") && !html.contains("Lost toolbar"));
+    let doc = scraper::Html::parse_document(&html);
+    assert_eq!(text(one(&doc, ".card-title")), "Kept");
+}

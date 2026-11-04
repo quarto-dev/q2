@@ -511,6 +511,7 @@ website:
         - section: "dashboard"
           contents:
             - errors/dashboard/Q-27-1.qmd
+            - errors/dashboard/Q-27-2.qmd
 
 format:
   html:

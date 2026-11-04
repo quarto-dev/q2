@@ -1,0 +1,67 @@
+---
+title: "Card Toolbar or Sidebar Could Not Be Placed"
+description: "A card toolbar or card sidebar has no card to attach to, so it was left out of the dashboard."
+code: Q-27-2
+subsystem: dashboard
+status: stub
+since: "99.9.9"
+categories:
+  - dashboard
+---
+
+# `Q-27-2` — Card Toolbar or Sidebar Could Not Be Placed
+
+> A card toolbar or card sidebar has no card to attach to, so it was left out of the dashboard.
+
+## What this means
+
+In a dashboard, a card toolbar (`.card-toolbar`, or a cell with
+`content: card-toolbar`) or a card sidebar (`.card-sidebar`, or
+`content: card-sidebar`) belongs to a card. By default it attaches to
+the card that comes next:
+
+```markdown
+::: {.card-toolbar}
+Toolbar inputs
+:::
+
+::: {.card title="Results"}
+Card content
+:::
+```
+
+Quarto warns with this code when it cannot find that card. The toolbar
+or sidebar is left out, and the rest of the dashboard renders.
+
+## Why this happens
+
+- It targets the next card (the default), but no card follows it.
+- It targets the previous card (`target-element="previous"` on a
+  toolbar, `target="previous"` on a sidebar), but no card comes before
+  it.
+- Two toolbars (or two sidebars) are both waiting for the next card; the
+  first one is replaced by the second.
+- It names an id with `header-for`, `footer-for` (toolbars) or `target`
+  (sidebars), and no card has that id or contains an element with it.
+
+## How to fix
+
+Put the toolbar or sidebar just before the card it belongs to, or point
+it at the card explicitly:
+
+```markdown
+::: {#results .card title="Results"}
+Card content
+:::
+
+::: {.card-toolbar footer-for="results"}
+Toolbar inputs
+:::
+```
+
+The id can be the card's own id, a cell's id, or the id of something
+inside the card.
+
+## Related
+
+- [`Q-27-1`](Q-27-1.qmd): value box output could not be read.

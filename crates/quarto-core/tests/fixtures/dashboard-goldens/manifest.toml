@@ -141,53 +141,53 @@ note = "D5-Q11/13: showcase-position and its alias showcase are honoured (showca
 
 [[fixture]]
 path = "contract/c24-sidebar-page.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): a level-2 .sidebar heading makes a page sidebar with width"
 
 [[fixture]]
 path = "contract/c25-sidebar-right.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): a sidebar after content goes on the right"
 
 [[fixture]]
 path = "contract/c26-sidebar-global.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): a level-1 .sidebar heading is global across pages"
 
 [[fixture]]
 path = "contract/c27-sidebar-inline.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): a sidebar inside a row (inline)"
 
 [[fixture]]
 path = "contract/c28-toolbar-top.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): a level-2 .toolbar heading makes a page toolbar"
 
 [[fixture]]
 path = "contract/c29-toolbar-bottom-height.qmd"
-status = "pending"
-note = "Phase 6 (sidebars and toolbars): a toolbar after content goes to the bottom; height (Q1 ignores; D5 implements). Expected divergence: D5 Q1: toolbar height implemented"
+status = "divergence"
+note = "Phase 6: a toolbar after content goes to the bottom. D5-Q1: its height is honored (style height), which Q1 ignores"
 
 [[fixture]]
 path = "contract/c30-toolbar-global.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): a level-1 .toolbar heading is global across pages"
 
 [[fixture]]
 path = "contract/c31-card-toolbar.qmd"
-status = "pending"
-note = "Phase 6 (sidebars and toolbars): card toolbars: div and cell forms, next/previous targets, footer, and footer-for an id inside the target card"
+status = "match"
+note = "Phase 6 (sidebars and toolbars): card toolbars: div and cell forms, next/previous targets, footer, and footer-for an id inside the target card; the card title goes inside the header toolbar"
 
 [[fixture]]
 path = "contract/c32-card-sidebar.qmd"
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): card sidebars: next (left), previous (right), width"
 
 [[fixture]]
 path = "contract/c33-content-sidebar-toolbar-cells.qmd"
-status = "match"
-note = "Phase 6 (sidebars and toolbars): content: sidebar / content: toolbar cells (Q1 schema-only; D5 implements). Expected divergence: D5 Q9: content: sidebar/toolbar implemented"
+status = "divergence"
+note = "Phase 6. D5-Q9: content: sidebar / content: toolbar cells make a sidebar / toolbar (Q1 lists them in its schema but ignores them, so its golden shows plain content); a leading content: toolbar cell joins the layout and becomes the top-level toolbar"
 
 [[fixture]]
 path = "contract/c34-nav-buttons.qmd"
@@ -236,9 +236,9 @@ note = "Phase 3 (layout core): common layout: a value-box row then a chart row (
 
 [[fixture]]
 path = "contract/c43-card-toolbar-own-id.qmd"
-status = "pending"
+status = "divergence"
 q1_golden = false
-note = "Phase 6 (sidebars and toolbars): header-for / footer-for naming the target card's or cell's own id. Q1 only resolves ids *inside* a card and fails fatally here (dashboard.lua:732); D5 accepts the own id. Expected divergence: D5: header-for/footer-for accept the target's own id (Q1 is fatal)"
+note = "Phase 6. D5-Q15: header-for / footer-for may name the target card's or cell's own id (Q1 only resolves ids inside a card and fails fatally here, dashboard.lua:732). The card itself carries no id, as in Q1"
 
 [[fixture]]
 path = "q1/0-card-syntax.qmd"
@@ -367,8 +367,8 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/5-inputpanel.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
+status = "deferred"
+note = "Blocked on bd-s45aqu3p (figure.figure / img.figure-img markup) and bd-xaaucvfz (code-copy scaffold on output blocks); the dashboard structure matches. Q1 smoke-all fixture (its old component: inputs syntax is plain content in Q1 too). The fig- cell is a card as in Q1 (Phase 6)"
 
 [[fixture]]
 path = "q1/5-sample-layout-cells.qmd"
@@ -396,7 +396,7 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture"
 [[fixture]]
 path = "q1/6-sidebar-columns.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -408,7 +408,7 @@ note = "Q2 qmd has no setext headings (a documented difference, docs/guides/auth
 [[fixture]]
 path = "q1/6-sidebar.qmd"
 requires = ["knitr"]
-status = "pending"
+status = "match"
 note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture"
 
 [[fixture]]
@@ -444,8 +444,8 @@ note = "Accepted: bslib::value_box() output is raw HTML; Quarto 1's DOM pass dec
 [[fixture]]
 path = "q1/9-no-title.qmd"
 requires = ["knitr"]
-status = "match"
-note = "Phase 2 (page shell): Q1 smoke-all fixture"
+status = "divergence"
+note = "D5-Q16: an empty container is dropped. Q1 means to drop them all but keeps the last (here page 3's) because its AST vault div is appended into it first"
 
 [[fixture]]
 path = "q1/9-page-fill-flow.qmd"
@@ -534,8 +534,8 @@ note = "Phase 4 (cards and tabsets): Q1 smoke-all fixture. Waits on Jupyter cell
 
 [[fixture]]
 path = "regressions/10334.qmd"
-status = "match"
-note = "Phase 7 (navigation chrome): multiple authors in the navbar (Q1 #10334)"
+status = "divergence"
+note = "Navbar title/subtitle/authors match (Q1 #10334). D5-Q16: the trailing empty row is dropped (Q1 keeps it only because its AST vault div lands inside)"
 
 [[fixture]]
 path = "regressions/11150.qmd"
@@ -648,8 +648,8 @@ note = "Blocked on bd-1oqqb09a: a block-scalar fig-cap leaks into the knitr labe
 [[fixture]]
 path = "q1-atx/6-sidebar-global.qmd"
 requires = ["knitr"]
-status = "pending"
-note = "Phase 6 (sidebars and toolbars): Q1 smoke-all fixture. ATX-heading copy of q1/6-sidebar-global.qmd (setext headings rewritten, nothing else)"
+status = "divergence"
+note = "Phase 6: global sidebar matches. ATX-heading copy of q1/6-sidebar-global.qmd (setext headings rewritten, nothing else). Accepted differences: raw bslib::value_box()/card() output is left as the engine wrote it (see q1/9-bslib), and D5-Q16 drops page 2's empty rows"
 
 [[fixture]]
 path = "q1-atx/7-navbar-social.qmd"

@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 pub const PAGE_TYPE: &str = "DashboardPage";
 pub const CONTAINER_TYPE: &str = "DashboardContainer";
 pub const CARD_TYPE: &str = "DashboardCard";
+pub const PANEL_TYPE: &str = "DashboardPanel";
 
 /// How a container lays out its children. `Rows` stacks them vertically
 /// (`grid-template-rows`), `Columns` side by side. Q1's Lua classes
@@ -186,6 +187,74 @@ pub struct CardData {
     /// A tabset card: each body is a tab, titled by `BodyData::title`.
     #[serde(default)]
     pub tabset: bool,
+    /// The id the card's source cell or div carried. Not rendered (Q1
+    /// drops it); card toolbars and sidebars may target it (D5-Q15).
+    #[serde(default)]
+    pub source_id: String,
+    /// A card sidebar (slot `sidebar`), when one was attached.
+    #[serde(default)]
+    pub sidebar: Option<CardSidebarData>,
+}
+
+/// A card sidebar's options (Q1 `card-sidebar.lua`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct CardSidebarData {
+    /// `left` or `right`.
+    pub position: String,
+    #[serde(default)]
+    pub width: Option<String>,
+}
+
+/// Which kind of panel: a page-level sidebar or toolbar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PanelKind {
+    Sidebar,
+    Toolbar,
+}
+
+/// A sidebar or toolbar panel (Q1 `.sidebar-panel` / `.toolbar-panel`):
+/// the panel's own content (slot `panel`) beside the rest of its
+/// container, laid out in a fresh container (slot `content`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PanelData {
+    pub kind: PanelKind,
+    /// Placed after the content (sidebar on the right, toolbar at the
+    /// bottom).
+    #[serde(default)]
+    pub at_end: bool,
+    /// Sidebar `width=`.
+    #[serde(default)]
+    pub width: Option<String>,
+    /// Toolbar `height=` (D5-Q1).
+    #[serde(default)]
+    pub height: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Panel {
+    pub data: PanelData,
+    pub panel: Blocks,
+    pub content: Blocks,
+}
+
+impl Panel {
+    pub fn to_block(self) -> Block {
+        Block::Custom(
+            custom(PANEL_TYPE, &self.data, generated())
+                .with_slot("panel", Slot::Blocks(self.panel))
+                .with_slot("content", Slot::Blocks(self.content)),
+        )
+    }
+
+    pub fn from_custom(node: &CustomNode) -> Option<Self> {
+        (node.type_name == PANEL_TYPE).then_some(())?;
+        Some(Panel {
+            data: data_of(node)?,
+            panel: blocks_slot(node, "panel"),
+            content: blocks_slot(node, "content"),
+        })
+    }
 }
 
 /// A dashboard container (row or column grid).
@@ -207,6 +276,8 @@ pub struct Page {
 pub struct Card {
     pub data: CardData,
     pub title: Option<Inlines>,
+    /// A card sidebar's content (when `data.sidebar` is set).
+    pub sidebar: Blocks,
     /// Extra header content (Q1 `.card-header` children; card toolbars).
     pub header: Blocks,
     /// One block list per entry of `data.bodies`.
@@ -292,6 +363,9 @@ impl Card {
         if !self.footer.is_empty() {
             node.set_slot("footer", Slot::Blocks(self.footer));
         }
+        if !self.sidebar.is_empty() {
+            node.set_slot("sidebar", Slot::Blocks(self.sidebar));
+        }
         Block::Custom(node)
     }
 
@@ -306,6 +380,7 @@ impl Card {
             .map(|i| blocks_slot(node, &format!("body-{i}")))
             .collect();
         Some(Card {
+            sidebar: blocks_slot(node, "sidebar"),
             header: blocks_slot(node, "header"),
             footer: blocks_slot(node, "footer"),
             title,
@@ -362,6 +437,7 @@ mod tests {
                 text: "T".into(),
                 source_info: generated(),
             })]),
+            sidebar: Vec::new(),
             header: Vec::new(),
             bodies: vec![vec![para("one")], vec![para("two")]],
             footer: vec![para("foot")],

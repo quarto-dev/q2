@@ -457,6 +457,7 @@ pub(crate) fn make_card(
             ..Default::default()
         },
         title: options.title.map(|(t, si)| title_inlines(&t, &si)),
+        sidebar: Vec::new(),
         header: resolved.header,
         bodies,
         footer: resolved.footer,
@@ -503,6 +504,15 @@ pub fn build_cards(
         } else if d.attr.2.get("output").is_some_and(|v| v == "asis") {
             d.content = build_cards(d.content, doc, diagnostics);
             out.push(Block::Div(d));
+        } else if is_input_kind(&d.attr, "card-sidebar") {
+            out.push(card_sidebar_marker(d));
+        } else if is_input_kind(&d.attr, "card-toolbar") {
+            out.push(card_toolbar_marker(d));
+        } else if is_content_value(&d.attr, "sidebar") || is_content_value(&d.attr, "toolbar") {
+            // D5-Q9: `content: sidebar` / `content: toolbar` (in Q1's schema
+            // but never implemented) make a sidebar or toolbar like a
+            // `.sidebar` / `.toolbar` heading does.
+            out.push(content_panel_div(d));
         } else if has_class(&d.attr, "card") {
             if is_literal_card(&d) {
                 out.push(literal_card(d, doc));
@@ -511,16 +521,275 @@ pub fn build_cards(
             let (options, classes) = read_card_options(&d.attr, &d.source_info);
             let source = d.source_info.clone();
             match make_card(d.content.clone(), classes, options, doc, source) {
-                Some(card) => out.push(card),
+                Some(card) => out.push(with_source_id(card, &d.attr.0)),
                 None => out.push(Block::Div(d)),
             }
         } else if is_value_box(&d.attr) {
             out.push(make_value_box(d, doc, diagnostics));
+        } else if has_class(&d.attr, "quarto-float")
+            && let Some(cell) = cell_around_float(&mut d)
+        {
+            let id = cell.attr.0.clone();
+            out.extend(
+                cell_to_card(cell, doc)
+                    .into_iter()
+                    .map(|b| with_source_id(b, &id)),
+            );
         } else if has_class(&d.attr, "cell") {
-            out.extend(cell_to_card(d, doc));
+            let id = d.attr.0.clone();
+            out.extend(
+                cell_to_card(d, doc)
+                    .into_iter()
+                    .map(|b| with_source_id(b, &id)),
+            );
         } else {
             d.content = build_cards(d.content, doc, diagnostics);
             out.push(Block::Div(d));
+        }
+    }
+    out
+}
+
+/// A cross-referenced figure cell (`label: fig-…`) arrives with the float
+/// wrapped *around* the cell (`float > figure > … > .cell > outputs`); Q1
+/// sees the cell outermost (`.cell > .cell-output-display > float`). Turn
+/// `float` inside out into that shape so it becomes a card like any cell:
+/// the cell's outputs stay inside the float (unwrapped), anything else
+/// (echoed code) stays in the cell ahead of the float. `None` (and `float`
+/// untouched) when there is no cell inside.
+fn cell_around_float(float: &mut Div) -> Option<Div> {
+    fn take_cell(blocks: &mut Blocks) -> Option<Div> {
+        for i in 0..blocks.len() {
+            match &mut blocks[i] {
+                Block::Div(d) if has_class(&d.attr, "cell") => {
+                    let Block::Div(mut cell) = blocks.remove(i) else {
+                        unreachable!()
+                    };
+                    let (outputs, rest): (Blocks, Blocks) =
+                        std::mem::take(&mut cell.content).into_iter().partition(|b| {
+                            matches!(b, Block::Div(o) if o.attr.1.iter().any(|c| c.starts_with("cell-output")))
+                        });
+                    let unwrapped = outputs.into_iter().flat_map(|b| match b {
+                        Block::Div(o) => o.content,
+                        other => vec![other],
+                    });
+                    blocks.splice(i..i, unwrapped);
+                    cell.content = rest;
+                    return Some(cell);
+                }
+                Block::Div(d) => {
+                    if let Some(c) = take_cell(&mut d.content) {
+                        return Some(c);
+                    }
+                }
+                Block::Figure(f) => {
+                    if let Some(c) = take_cell(&mut f.content) {
+                        return Some(c);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+    let mut cell = take_cell(&mut float.content)?;
+    let float = std::mem::replace(
+        float,
+        Div {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            content: Vec::new(),
+            source_info: float.source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        },
+    );
+    cell.content.push(Block::Div(Div {
+        attr: (
+            String::new(),
+            vec!["cell-output-display".to_string()],
+            LinkedHashMap::new(),
+        ),
+        content: vec![Block::Div(float)],
+        source_info: generated(),
+        attr_source: AttrSourceInfo::empty(),
+    }));
+    Some(cell)
+}
+
+/// A card node with its source id recorded (D5-Q15: card toolbars and
+/// sidebars may target a card's own id).
+fn with_source_id(block: Block, id: &str) -> Block {
+    if id.is_empty() {
+        return block;
+    }
+    match as_dashboard_node(&block, CARD_TYPE).and_then(Card::from_custom) {
+        Some(mut card) => {
+            let source = block.source_info().clone();
+            card.data.source_id = id.to_string();
+            card.to_block(source)
+        }
+        None => block,
+    }
+}
+
+fn is_content_value(attr: &Attr, value: &str) -> bool {
+    ["content", "component"]
+        .iter()
+        .any(|k| attr.2.get(*k).is_some_and(|v| v == value))
+}
+
+/// Q1 `isCardToolbar` / `isCardSidebar`: the class, or `content` /
+/// `component` naming it.
+fn is_input_kind(attr: &Attr, kind: &str) -> bool {
+    has_class(attr, kind) || is_content_value(attr, kind)
+}
+
+/// A single `.cell` child unwraps (Q1 `makeCardToolbar` / `makeCardSidebar`);
+/// so does a cell that is itself the marker (`content: card-toolbar`).
+fn marker_contents(d: Div) -> Blocks {
+    match d.content.as_slice() {
+        [Block::Div(c)] if has_class(&c.attr, "cell") => c.content.clone(),
+        _ => d.content,
+    }
+}
+
+/// Q1 `card_toolbar.readOptions` + `makeCardToolbar`: an unprocessed marker
+/// placed by [`super::inputs`].
+fn card_toolbar_marker(d: Div) -> Block {
+    let a = &d.attr.2;
+    let mut target = a.get("target-element").cloned();
+    let mut position = a.get("target-position").cloned();
+    if let Some(id) = a.get("header-for") {
+        position = Some("header".to_string());
+        target = Some(id.clone());
+    }
+    if let Some(id) = a.get("footer-for") {
+        position = Some("footer".to_string());
+        target = Some(id.clone());
+    }
+    if target.is_none() && position.is_none() {
+        position = Some("header".to_string());
+        target = Some("next".to_string());
+    }
+    let mut attrs = LinkedHashMap::new();
+    if let Some(t) = target {
+        attrs.insert("target-element".to_string(), t);
+    }
+    if let Some(p) = position {
+        attrs.insert("target-position".to_string(), p);
+    }
+    if let Some(t) = a.get("title") {
+        attrs.insert("title".to_string(), t.clone());
+    }
+    let source = d.source_info.clone();
+    let content = if is_content_value(&d.attr, "card-toolbar") {
+        d.content
+    } else {
+        marker_contents(d)
+    };
+    Block::Div(Div {
+        attr: (
+            String::new(),
+            vec![
+                "card-toolbar".to_string(),
+                "card-toolbar-unprocessed".to_string(),
+            ],
+            attrs,
+        ),
+        content,
+        source_info: source,
+        attr_source: AttrSourceInfo::empty(),
+    })
+}
+
+/// Q1 `card_sidebar.readOptions` + `makeCardSidebar`.
+fn card_sidebar_marker(d: Div) -> Block {
+    let a = &d.attr.2;
+    let target = a
+        .get("target")
+        .cloned()
+        .unwrap_or_else(|| "next".to_string());
+    let position = a.get("position").cloned().unwrap_or_else(|| {
+        if target == "previous" {
+            "right"
+        } else {
+            "left"
+        }
+        .to_string()
+    });
+    let mut attrs = LinkedHashMap::new();
+    attrs.insert("data-target".to_string(), target);
+    attrs.insert("position".to_string(), position);
+    if let Some(w) = a.get("width") {
+        attrs.insert("data-width".to_string(), w.clone());
+    }
+    let source = d.source_info.clone();
+    let content = if is_content_value(&d.attr, "card-sidebar") {
+        d.content
+    } else {
+        marker_contents(d)
+    };
+    Block::Div(Div {
+        attr: (
+            String::new(),
+            vec![
+                "card-sidebar".to_string(),
+                "card-sidebar-unprocessed".to_string(),
+            ],
+            attrs,
+        ),
+        content,
+        source_info: source,
+        attr_source: AttrSourceInfo::empty(),
+    })
+}
+
+/// D5-Q9: a `content: sidebar` / `content: toolbar` cell as a sidebar or
+/// toolbar Div (its `width` / `position` / `height` carried over).
+fn content_panel_div(d: Div) -> Block {
+    let kind = if is_content_value(&d.attr, "sidebar") {
+        "sidebar"
+    } else {
+        "toolbar"
+    };
+    let mut attrs = LinkedHashMap::new();
+    for key in ["width", "position", "height"] {
+        if let Some(v) = d.attr.2.get(key) {
+            attrs.insert(key.to_string(), v.clone());
+        }
+    }
+    div(
+        (String::new(), vec![kind.to_string()], attrs),
+        escape_leaf_contents(d.content),
+    )
+}
+
+/// Q1 `escapeLeafNodeContents`: a sidebar's or toolbar's headings become
+/// `Div.h<N>` and its cards give up their body contents. Q1 never offsets
+/// the levels (it reads an undefined variable); q2 demotes them as cards do
+/// (D5-Q4).
+fn escape_leaf_contents(blocks: Blocks) -> Blocks {
+    let offset = min_heading_level(&blocks).map_or(0, |base| 4usize.saturating_sub(base));
+    escape_with(blocks, offset)
+}
+
+fn escape_with(blocks: Blocks, offset: usize) -> Blocks {
+    let mut out = Vec::new();
+    for b in blocks {
+        match b {
+            Block::Header(h) => out.push(header_div(h, offset)),
+            Block::Custom(n) if n.type_name == CARD_TYPE => {
+                if let Some(card) = Card::from_custom(&n) {
+                    out.extend(escape_with(
+                        card.bodies.into_iter().flatten().collect(),
+                        offset,
+                    ));
+                }
+            }
+            Block::Div(mut d) => {
+                d.content = escape_with(d.content, offset);
+                out.push(Block::Div(d));
+            }
+            other => out.push(other),
         }
     }
     out
@@ -755,6 +1024,7 @@ fn literal_card(d: Div, doc: &DashboardOptions) -> Block {
             ..Default::default()
         },
         title: None,
+        sidebar: Vec::new(),
         header,
         bodies,
         footer,
@@ -934,7 +1204,12 @@ pub fn build_layout(blocks: Blocks, doc: &DashboardOptions) -> (Blocks, LayoutIn
     let mut rest = Vec::new();
     let mut seen = false;
     for block in blocks {
-        if seen || is_section(&block) || is_card_node(&block) {
+        // A sidebar or toolbar Div (a D5-Q9 `content: sidebar|toolbar`
+        // cell) is layout, not leading content: it joins the root container
+        // so `inputs::make_panels` can make it a page panel.
+        let panel_div = as_div(&block)
+            .is_some_and(|d| has_class(&d.attr, "sidebar") || has_class(&d.attr, "toolbar"));
+        if seen || is_section(&block) || is_card_node(&block) || panel_div {
             seen = true;
             rest.push(block);
         } else {
@@ -999,9 +1274,10 @@ fn convert_section(
     content.remove(0);
 
     if has_class(&header.attr, "sidebar") || has_class(&header.attr, "toolbar") {
-        // Sidebars and toolbars arrive with Phase 6; until then the
-        // section's content stays in place, without its heading.
-        return vec![div(section.attr, content)];
+        // The heading is dropped and the contents escaped; the section
+        // (with its `sidebar` / `toolbar` class and options) stays for
+        // `inputs::make_panels` to turn its container into a panel.
+        return vec![div(section.attr, escape_leaf_contents(content))];
     }
 
     if header.level == 1 {
@@ -1159,6 +1435,7 @@ fn make_tabset(
             ..Default::default()
         },
         title,
+        sidebar: Vec::new(),
         header: Vec::new(),
         bodies,
         footer,
@@ -1263,6 +1540,61 @@ mod tests {
             .filter_map(|b| as_dashboard_node(b, CONTAINER_TYPE))
             .filter_map(Container::from_custom)
             .collect()
+    }
+
+    /// A `label: fig-…` cell reaches the dashboard pass as a float around
+    /// the cell; it becomes a card whose body holds the float, as in Q1.
+    #[test]
+    fn float_around_a_cell_becomes_a_card() {
+        let doc = DashboardOptions::default();
+        let blocks = build_cards(
+            parse(
+                "::: {#fig-cars .quarto-float .quarto-figure}\n\n::: {.cell title=\"T\"}\n\n```r\nplot(cars)\n```\n\n::: {.cell-output-display}\n\n![](x.png)\n\n:::\n\n:::\n\n:::\n",
+            ),
+            &doc,
+            &mut Vec::new(),
+        );
+        let cards = cards(&blocks);
+        assert_eq!(cards.len(), 1, "{blocks:#?}");
+        let body = &cards[0].bodies[0];
+        let float = body
+            .iter()
+            .find_map(|b| match b {
+                Block::Div(d) if has_class(&d.attr, "cell-output-display") => {
+                    match d.content.first() {
+                        Some(Block::Div(f)) if f.attr.0 == "fig-cars" => Some(f),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+            .expect("cell-output-display > float in the body");
+        // The cell's outputs are unwrapped inside the float; no cell is left.
+        assert!(
+            matches!(
+                float.content.first(),
+                Some(Block::Paragraph(_) | Block::Plain(_) | Block::Figure(_))
+            ),
+            "{float:#?}"
+        );
+        assert!(
+            !float
+                .content
+                .iter()
+                .any(|b| matches!(b, Block::Div(d) if has_class(&d.attr, "cell")))
+        );
+    }
+
+    #[test]
+    fn float_without_a_cell_is_left_alone() {
+        let doc = DashboardOptions::default();
+        let blocks = build_cards(
+            parse("::: {#fig-x .quarto-float}\n\n![](x.png)\n\n:::\n"),
+            &doc,
+            &mut Vec::new(),
+        );
+        assert!(cards(&blocks).is_empty());
+        assert!(matches!(&blocks[0], Block::Div(d) if d.attr.0 == "fig-x"));
     }
 
     fn cards(blocks: &[Block]) -> Vec<Card> {

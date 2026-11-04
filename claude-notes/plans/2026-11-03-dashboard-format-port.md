@@ -2,7 +2,7 @@
 title: 'Port the Quarto 1 dashboard format (bd-dashboard-format-k21hd4vy)'
 date: 2026-11-03
 description: 'Plan for `format: dashboard` in Q2: dashboard CustomNodes built by a sugar transform and lowered to bslib markup by a resolve transform, vendored bslib SCSS/JS, a per-format defaults layer, and a React preview mirror.'
-status: in-progress  # Phases 0-5 done 2026-11-03; Phase 6 next
+status: in-progress  # Phases 0-6 done 2026-11-03; Phase 7 next
 braid:
   strand: bd-dashboard-format-k21hd4vy
 ---
@@ -241,6 +241,7 @@ The goal is "very familiar, straightforward to port", not byte compatibility. Fi
 | Q11/13 | `showcase=` / `showcase-position` are effectively ignored | Implement `showcase-position` (`left-center`, `top-right`, `bottom`), all of which bslib supports. |
 | Q14 | Markdown value-box title nests paragraphs: `<p class="value-box-title"><p>Title</p></p>` (`valuebox.lua:171` takes the title as a `Para`; the TS pass turns its wrapper into a `p`). Browsers close the outer `p` early, so the documented form (`::: {.valuebox}` with the title as the first paragraph) shows an empty title slot and the title as an unstyled paragraph. Found by the Phase 0 goldens (`contract/c20`, `q1/3-valuebox-static`). | Emit the title's inlines inside `p.value-box-title`. |
 | Q15 | `header-for` / `footer-for` only resolve an id *inside* the target card; the card\'s or cell\'s own id is a fatal error (`dashboard.lua:732`). Found while writing `contract/c31`. | Accept the target\'s own id too (`contract/c43`, no Q1 golden). An id that resolves nowhere is a located `Q-*` error. |
+| Q16 | Empty layout containers are meant to be dropped (`dashboard.lua:649`), but Q1 appends its AST vault (a hidden Div) to the document before that pass, so the *last* section\'s container is never empty and survives as an empty grid (`grid-template-rows: ;`). Found in Phase 6 (`q1/9-no-title`, `regressions/10334`, `q1-atx/6-sidebar-global`; confirmed with a probe: one, two or three trailing empty rows always leave exactly one). | Drop every empty container. |
 | Q5 | `attrToCardBodyStyle` copies the card\'s own style (height, max-height) onto every body with the padding, overwriting the body\'s style | Apply the padding alone (c11, `1-card-cell-syntax`). |
 | Q6–Q8, Q10 | Internal no-ops | Nothing to port. |
 
@@ -404,12 +405,24 @@ Most card behavior landed with Phase 3 (titles, bodies, footers, dynamic titles,
 - [x] Corpus: c20, c21, c22, c42 `match`; c23, `q1/3-valuebox-static`, `q1-atx/2-layout-flow-fill` divergences. `q1/3-valuebox-python` and `acceptance/valuebox` wait on D7 (`#| content: valuebox` from Jupyter); `q1-atx/3-valuebox-knitr` is nondeterministic.
 - [x] `$valuebox-bg-*` theme variables come with the vendored `quarto-dashboard.scss` (Phase 2).
 
-### Phase 6: Sidebars and toolbars
+### Phase 6: Sidebars and toolbars (done 2026-11-03)
 
-- [ ] Page, global (level 1) and inline sidebars: position, width, the border flags at page level, collapse.
-- [ ] The same for toolbars, including `height` (Q1) and the bottom position.
-- [ ] Card toolbars and card sidebars, with next, previous, id, header and footer targeting. An unresolved target gets a located `Q-*` error, not Q1's fatal crash without a location.
-- [ ] `content: sidebar` / `content: toolbar` (Q9).
+- [x] New node `DashboardPanel` (`model.rs`: kind sidebar/toolbar, `at_end`, width, height; slots `panel`, `content`). `inputs::make_panels` runs Q1 pass 3\'s `Div` handler: a column container holding a `.sidebar` section (a row container holding a `.toolbar`) becomes a panel, at the end when the container starts with content. Sidebar and toolbar sections keep their Div and options; their headings are demoted (Q4) by `escape_leaf_contents`.
+- [x] Page, global (level 1) and inline sidebars lower to Q1\'s `makeSidebar` markup (`bslib-sidebar-layout`, `main > sidebar-content`, `aside#bslib-sidebar-<n>`, collapse toggle and init script). The parent of a sidebar layout gets `dashboard-sidebar-container`; the first sidebar at the top level or directly in a page has the border flags off. Toolbars lower to `dashboard-toolbar-container > toolbar (+toolbar-bottom) + toolbar-content`. A top-level panel is not a grid item; a top-level toolbar is `toolbar-toplevel`.
+- [x] Top-level classes go through metadata: `lower_document` returns them and the transform writes `rendered.dashboard.body-classes` (`dashboard-sidebar`, `dashboard-toolbar`) and `rendered.dashboard.content-classes` (`dashboard-sidebar-container`), which `DASHBOARD_HTML_TEMPLATE` appends.
+- [x] D5-Q1: a toolbar\'s `height` is a `height` style on the toolbar (the `--bslib-sidebar-height` idea in the table was moot; nothing reads that variable).
+- [x] Fill-class ordering: Q1 builds card titles in its card pass, after the page and body fill passes but before the sidebar and toolbar passes, so `.card-title` gets fill classes only inside sidebars and toolbars. `apply_fill` takes a `titles` flag for that.
+- [x] Card toolbars and card sidebars (`inputs::place_card_inputs`): markers from `.card-toolbar` / `.card-sidebar` divs and `content: card-toolbar|card-sidebar` cells attach to the next card, the previous one, or the card holding an id, numbering cards in one document-order walk. A `previous` toolbar without a position goes to the footer, as in Q1. A toolbar title is prepended to the card title, and the title goes inside the header\'s card toolbar. Card sidebars wrap the bodies (`card-<n>-card-sidebar`) or a tabset\'s tab content (`<tabset-id>-card-sidebar`).
+- [x] D5-Q15: a card\'s or cell\'s own id is a valid target (`with_source_id` records it on the card node).
+- [x] An unplaceable marker (no next or previous card, an id no card holds, or a pending `next` marker displaced by another) is a located warning `Q-27-2` and is dropped (catalog entry, `docs/errors/dashboard/Q-27-2.qmd`, docs sidebar; integration test `unplaceable_card_inputs_warn_q_27_2`).
+- [x] D5-Q9: `content: sidebar` / `content: toolbar` cells make sidebar / toolbar Divs; a leading one joins the layout (it is not leading content), so it becomes a page panel.
+- [x] D5-Q16 (new, above): empty containers are dropped, the last one included.
+- [x] Pages\' parent container gets `tab-content` wherever it is (inside a global sidebar\'s content too), not only at the root.
+- [x] Cross-referenced figure cells (`label: fig-…`): q2\'s float wraps the cell, Q1\'s cell wraps the float. `structure::cell_around_float` turns the float inside out, so the cell becomes a card whose body holds the float, as in Q1.
+- [x] Corpus: c24–c28, c30–c32, `q1/6-sidebar`, `q1/6-sidebar-columns` `match`; c29 (Q1), c33 (Q9), c43 (Q15), `q1/9-no-title` and `regressions/10334` (Q16), and `q1-atx/6-sidebar-global` (raw bslib markup, Q16) divergences. `q1/5-inputpanel` is deferred on bd-s45aqu3p (`figure-img` markup) and bd-xaaucvfz (code-copy scaffold); its dashboard structure matches.
+- [x] Unit tests for placement, targets and panels (`inputs.rs`), for the float-around-cell rewrite (`structure.rs`).
+
+**Noted while testing:** `contract/c31`\'s "previous" toolbar uses `target="previous"`, which Q1 does not read for toolbars (only `target-element`); it attaches to the next card in both Q1 and q2, so the golden is still a fair test of next-targeting. The `previous` path is covered by the unit tests.
 
 ### Phase 7: Navigation chrome
 

@@ -6,7 +6,7 @@ format: dashboard
 
 ## Row
 
-::: {.cell #c43-cell title="C43-CELL"}
+::: {#c43-cell .cell title="C43-CELL"}
 
 ::: {.cell-output-display}
 

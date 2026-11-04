@@ -409,7 +409,7 @@ $endif$
 /// Plan: `claude-notes/plans/2026-11-03-dashboard-format-port.md`, Phase 2.
 pub const DASHBOARD_HTML_TEMPLATE: &str = concat!(
     html_head!(),
-    r#"<body class="$if(scrolling)$quarto-dashboard$else$quarto-dashboard dashboard-fill$endif$ $body-classes$">
+    r#"<body class="$if(scrolling)$quarto-dashboard$else$quarto-dashboard dashboard-fill$endif$ $body-classes$$if(rendered.dashboard.body-classes)$ $rendered.dashboard.body-classes$$endif$">
 $skip-link()$
 $if(color-mode-script)$
 $color-mode-script$
@@ -418,7 +418,7 @@ $title-block()$
 $for(include-before)$
 $include-before$
 $endfor$
-<div class="page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$ $if(rendered.dashboard.pages)$quarto-dashboard-pages$endif$" id="quarto-document-content" tabindex="-1" role="main">
+<div class="page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$ $if(rendered.dashboard.pages)$quarto-dashboard-pages$endif$$if(rendered.dashboard.content-classes)$ $rendered.dashboard.content-classes$$endif$" id="quarto-document-content" tabindex="-1" role="main">
 $body$
 </div>
 $for(include-after)$

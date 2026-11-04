@@ -19,7 +19,10 @@ use quarto_pandoc_types::block::{Block, Blocks, Div, Plain, RawBlock};
 use quarto_pandoc_types::inline::{Inline, Span};
 use quarto_source_map::SourceInfo;
 
-use super::model::{CARD_TYPE, CONTAINER_TYPE, Card, Container, Orientation, PAGE_TYPE, Page};
+use super::model::{
+    CARD_TYPE, CONTAINER_TYPE, Card, Container, Orientation, PAGE_TYPE, PANEL_TYPE, Page, Panel,
+    PanelKind,
+};
 
 /// Q1 `kNeverFillClasses`, plus `card-title`, which Q1 creates only after
 /// its fill passes have run.
@@ -41,7 +44,6 @@ const NEVER_FILL: &[&str] = &[
     "input-panel",
     "toolbar",
     "flow",
-    "card-title",
 ];
 
 /// Q1 `kFillContentElements.classes`: non-`div` elements that still fill.
@@ -148,9 +150,20 @@ fn apply_fill_item(block: &mut Block) {
     }
 }
 
-/// Q1 `recursiveApplyFillClasses`.
+/// Q1 `recursiveApplyFillClasses`, as the passes that run before Q1 builds
+/// card titles see the page (pages, tabs, card bodies): a `.card-title`
+/// (which q2 has already built) is skipped.
 pub fn apply_fill_recursive(block: &mut Block) {
+    apply_fill(block, false);
+}
+
+/// Q1 `recursiveApplyFillClasses`. `titles`: whether card titles exist yet
+/// in Q1's ordering. The sidebar and toolbar passes run after the card
+/// pass, so their card titles get fill classes; earlier passes do not see
+/// titles at all.
+fn apply_fill(block: &mut Block, titles: bool) {
     match block {
+        Block::Div(d) if !titles && has_class(&d.attr, "card-title") => {}
         Block::Div(d) => {
             if !never_fill(&d.attr) {
                 add_class(&mut d.attr, "html-fill-item");
@@ -158,7 +171,7 @@ pub fn apply_fill_recursive(block: &mut Block) {
             }
             if !DONT_RECURSE.iter().any(|c| has_class(&d.attr, c)) {
                 for child in d.content.iter_mut() {
-                    apply_fill_recursive(child);
+                    apply_fill(child, titles);
                 }
             }
         }
@@ -168,12 +181,12 @@ pub fn apply_fill_recursive(block: &mut Block) {
                 add_class(&mut f.attr, "html-fill-container");
             }
             for child in f.content.iter_mut() {
-                apply_fill_recursive(child);
+                apply_fill(child, titles);
             }
         }
         Block::BlockQuote(q) => {
             for child in q.content.iter_mut() {
-                apply_fill_recursive(child);
+                apply_fill(child, titles);
             }
         }
         _ => {}
@@ -229,21 +242,48 @@ fn contain_image(inline: &mut Inline) {
 // Lowering
 // ---------------------------------------------------------------------------
 
+/// Classes the template adds for what the lowering found at the top level
+/// (Q1 `processSidebars` / `processToolbars`).
+#[derive(Debug, Default)]
+pub struct TopLevel {
+    /// For `<body>`: `dashboard-sidebar`, `dashboard-toolbar`.
+    pub body_classes: Vec<String>,
+    /// For the content area: `dashboard-sidebar-container`.
+    pub content_classes: Vec<String>,
+}
+
 /// Lower every dashboard node under `blocks` (the document's top level) to
 /// bslib markup.
-pub fn lower_document(blocks: Blocks) -> Blocks {
-    let has_pages = contains_page(&blocks);
+pub fn lower_document(blocks: Blocks) -> (Blocks, TopLevel) {
     let mut cx = Lower::default();
-    blocks
+    let mut top = TopLevel::default();
+    let mut lowered_all: Blocks = blocks
         .into_iter()
         .map(|block| {
-            let is_root = matches!(&block, Block::Custom(n) if n.type_name == CONTAINER_TYPE);
+            let panel = match &block {
+                Block::Custom(n) if n.type_name == PANEL_TYPE => {
+                    Panel::from_custom(n).map(|p| p.data.kind)
+                }
+                _ => None,
+            };
             let mut lowered = lower(block, &mut cx);
-            if is_root
-                && has_pages
-                && let Block::Div(d) = &mut lowered
-            {
-                add_class(&mut d.attr, "tab-content");
+            // A panel replaces its container after Q1's top-level pass, so
+            // it is not a grid item.
+            if let Some(kind) = panel {
+                match kind {
+                    PanelKind::Sidebar => {
+                        add_unique(&mut top.content_classes, "dashboard-sidebar-container")
+                    }
+                    PanelKind::Toolbar => {
+                        if let Block::Div(d) = &mut lowered
+                            && !top.body_classes.iter().any(|c| c == "dashboard-toolbar")
+                        {
+                            add_class(&mut d.attr, "toolbar-toplevel");
+                            add_unique(&mut top.body_classes, "dashboard-toolbar");
+                        }
+                    }
+                }
+                return lowered;
             }
             // Q1: every element at the content area's top level is a grid
             // item (bar paragraphs and scripts), with the fill-item class.
@@ -255,18 +295,57 @@ pub fn lower_document(blocks: Blocks) -> Blocks {
             apply_fill_item(&mut lowered);
             lowered
         })
-        .collect()
+        .collect();
+    if mark_top_level_sidebar(&mut lowered_all) {
+        add_unique(&mut top.body_classes, "dashboard-sidebar");
+    }
+    (lowered_all, top)
 }
 
-fn contains_page(blocks: &[Block]) -> bool {
-    blocks.iter().any(|b| match b {
-        Block::Custom(n) if n.type_name == PAGE_TYPE => true,
-        Block::Custom(n) => n.slots.values().any(|s| match s {
-            quarto_pandoc_types::custom::Slot::Blocks(b) => contains_page(b),
-            _ => false,
-        }),
-        _ => false,
-    })
+fn add_unique(list: &mut Vec<String>, class: &str) {
+    if !list.iter().any(|c| c == class) {
+        list.push(class.to_string());
+    }
+}
+
+/// Q1: the first sidebar layout that is a direct child of the content area
+/// or of a page has no border (`data-bslib-sidebar-border[-radius]=false`),
+/// and the body gets `dashboard-sidebar`.
+fn mark_top_level_sidebar(blocks: &mut Blocks) -> bool {
+    fn is_layout(b: &Block) -> bool {
+        matches!(b, Block::Div(d) if has_class(&d.attr, "bslib-sidebar-layout"))
+    }
+    fn mark(b: &mut Block) {
+        if let Block::Div(d) = b {
+            d.attr
+                .2
+                .insert("data-bslib-sidebar-border".to_string(), "false".to_string());
+            d.attr.2.insert(
+                "data-bslib-sidebar-border-radius".to_string(),
+                "false".to_string(),
+            );
+        }
+    }
+    fn search(blocks: &mut Blocks, top: bool) -> bool {
+        for b in blocks.iter_mut() {
+            if top && is_layout(b) {
+                mark(b);
+                return true;
+            }
+            if let Block::Div(d) = b {
+                let page = has_class(&d.attr, "dashboard-page");
+                if page && let Some(first) = d.content.iter_mut().find(|c| is_layout(c)) {
+                    mark(first);
+                    return true;
+                }
+                if search(&mut d.content, false) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    search(blocks, true)
 }
 
 /// State threaded through one document's lowering: Q1 numbers tabsets by
@@ -275,6 +354,8 @@ fn contains_page(blocks: &[Block]) -> bool {
 #[derive(Default)]
 struct Lower {
     cards: usize,
+    /// Page sidebars lowered so far (`bslib-sidebar-<n>`).
+    sidebars: usize,
     /// The orientation of the container whose children are being lowered
     /// (`None` inside pages, card bodies and other non-grid content).
     parent: Option<Orientation>,
@@ -282,6 +363,19 @@ struct Lower {
 
 fn lower_all(blocks: Blocks, cx: &mut Lower) -> Blocks {
     blocks.into_iter().map(|b| lower(b, cx)).collect()
+}
+
+/// [`lower_all`] for a grid's or page's children; Q1 gives the parent of a
+/// page sidebar `dashboard-sidebar-container`.
+fn lower_children(blocks: Blocks, cx: &mut Lower, parent: &mut Attr) -> Blocks {
+    let has_sidebar = blocks.iter().any(|b| {
+        matches!(b, Block::Custom(n) if n.type_name == PANEL_TYPE
+            && Panel::from_custom(n).is_some_and(|p| p.data.kind == PanelKind::Sidebar))
+    });
+    if has_sidebar {
+        add_class(parent, "dashboard-sidebar-container");
+    }
+    lower_all(blocks, cx)
 }
 
 fn lower(block: Block, cx: &mut Lower) -> Block {
@@ -301,9 +395,158 @@ fn lower(block: Block, cx: &mut Lower) -> Block {
         CONTAINER_TYPE => Container::from_custom(node).map(|c| lower_container(c, cx)),
         PAGE_TYPE => Page::from_custom(node).map(|p| lower_page(p, cx)),
         CARD_TYPE => Card::from_custom(node).map(|c| lower_card(c, cx)),
+        PANEL_TYPE => Panel::from_custom(node).map(|p| lower_panel(p, cx)),
         _ => None,
     }
     .unwrap_or(block)
+}
+
+const SIDEBAR_TOGGLE: &str = r#"<button class="collapse-toggle" type="button" title="Toggle sidebar" aria-expanded="true" aria-controls="{id}">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="bi bi-chevron-left collapse-icon" style="fill:currentColor;" aria-hidden="true" role="img">
+      <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"></path>
+    </svg>
+</button>
+<script data-bslib-sidebar-init>
+bslib.Sidebar.initCollapsibleAll()
+</script>"#;
+
+/// Q1 `asCssSize`: a bare number is pixels.
+fn css_size(v: &str) -> String {
+    if v.chars().last().is_some_and(|c| c.is_ascii_digit()) {
+        format!("{v}px")
+    } else {
+        v.to_string()
+    }
+}
+
+/// Q1 `makeSidebar` (`format-dashboard-sidebar.ts`): the bslib sidebar
+/// layout around `main` content and an `aside` holding the sidebar Div.
+/// `titles_fill`: whether the fill pass runs after card titles exist.
+fn sidebar_layout(
+    id: &str,
+    main: Blocks,
+    sidebar: Block,
+    at_end: bool,
+    width: Option<&str>,
+    titles_fill: bool,
+) -> Block {
+    let mut attr: Attr = (
+        String::new(),
+        vec![
+            "bslib-sidebar-layout".to_string(),
+            "html-fill-item".to_string(),
+        ],
+        LinkedHashMap::from_iter([
+            ("data-bslib-sidebar-open".to_string(), "desktop".to_string()),
+            ("data-bslib-sidebar-init".to_string(), "true".to_string()),
+        ]),
+    );
+    if at_end {
+        add_class(&mut attr, "sidebar-right");
+    }
+    if let Some(w) = width {
+        attr.2.insert(
+            "style".to_string(),
+            format!(" --bslib-sidebar-width: {}", css_size(w)),
+        );
+    }
+    let main = div(
+        (
+            String::new(),
+            vec!["main".to_string(), "html-fill-container".to_string()],
+            LinkedHashMap::new(),
+        ),
+        main,
+    );
+    let mut layout = div(attr, vec![main]);
+    apply_fill(&mut layout, titles_fill);
+    let mut sidebar = sidebar;
+    if let Block::Div(d) = &mut sidebar {
+        add_class(&mut d.attr, "html-fill-container");
+        add_class(&mut d.attr, "html-fill-item");
+    }
+    let aside = raw_html(&format!(
+        r#"<aside id="{id}" class="sidebar html-fill-container html-fill-item">"#
+    ));
+    if let Block::Div(d) = &mut layout {
+        d.content.push(aside);
+        d.content.push(sidebar);
+        d.content.push(raw_html("</aside>"));
+        d.content
+            .push(raw_html(&SIDEBAR_TOGGLE.replace("{id}", id)));
+    }
+    layout
+}
+
+/// A page sidebar or toolbar (Q1 `processSidebars` / `processToolbars`).
+/// Both run after the card pass, so their fill classes reach card titles.
+fn lower_panel(p: Panel, cx: &mut Lower) -> Block {
+    let parent = cx.parent.take();
+    let content = lower_all(p.content, cx);
+    cx.parent = parent;
+    let panel_div = div(
+        (String::new(), Vec::new(), LinkedHashMap::new()),
+        lower_all(p.panel, cx),
+    );
+    match p.data.kind {
+        PanelKind::Sidebar => {
+            cx.sidebars += 1;
+            let id = format!("bslib-sidebar-{}", cx.sidebars);
+            let main = vec![div(
+                (
+                    String::new(),
+                    vec!["sidebar-content".to_string()],
+                    LinkedHashMap::new(),
+                ),
+                content,
+            )];
+            sidebar_layout(
+                &id,
+                main,
+                panel_div,
+                p.data.at_end,
+                p.data.width.as_deref(),
+                true,
+            )
+        }
+        PanelKind::Toolbar => {
+            let Block::Div(mut toolbar) = panel_div else {
+                unreachable!()
+            };
+            toolbar.attr.1 = vec!["toolbar".to_string(), "html-fill-container".to_string()];
+            if p.data.at_end {
+                add_class(&mut toolbar.attr, "toolbar-bottom");
+            }
+            // D5-Q1: a toolbar's `height` sizes it (Q1 never read it).
+            if let Some(h) = &p.data.height {
+                append_style(&mut toolbar.attr, format!("height: {};", css_size(h)));
+            }
+            let toolbar_content = div(
+                (
+                    String::new(),
+                    vec!["toolbar-content".to_string()],
+                    LinkedHashMap::new(),
+                ),
+                content,
+            );
+            let mut container = div(
+                (
+                    String::new(),
+                    vec![
+                        "html-fill-item".to_string(),
+                        "html-fill-container".to_string(),
+                    ],
+                    LinkedHashMap::new(),
+                ),
+                vec![Block::Div(toolbar), toolbar_content],
+            );
+            apply_fill(&mut container, true);
+            if let Block::Div(d) = &mut container {
+                add_class(&mut d.attr, "dashboard-toolbar-container");
+            }
+            container
+        }
+    }
 }
 
 fn lower_container(c: Container, cx: &mut Lower) -> Block {
@@ -330,8 +573,15 @@ fn lower_container(c: Container, cx: &mut Lower) -> Block {
         ),
     };
     attr.2.insert("style".to_string(), style);
+    // Q1 `processPages`: the pages' parent holds them as tab panes.
+    if c.children
+        .iter()
+        .any(|b| matches!(b, Block::Custom(n) if n.type_name == PAGE_TYPE))
+    {
+        add_class(&mut attr, "tab-content");
+    }
     let parent = cx.parent.replace(c.data.orientation);
-    let children = lower_all(c.children, cx);
+    let children = lower_children(c.children, cx, &mut attr);
     cx.parent = parent;
     div(attr, children)
 }
@@ -397,7 +647,8 @@ fn lower_page(p: Page, cx: &mut Lower) -> Block {
     attr.2
         .insert("aria-labelledby".to_string(), format!("tab-{}", p.data.id));
     let parent = cx.parent.take();
-    let mut page = div(attr, lower_all(p.content, cx));
+    let content = lower_children(p.content, cx, &mut attr);
+    let mut page = div(attr, content);
     cx.parent = parent;
     apply_fill_recursive(&mut page);
     page
@@ -583,6 +834,7 @@ fn html_escape(s: &str) -> String {
 
 fn lower_card(card: Card, cx: &mut Lower) -> Block {
     cx.cards += 1;
+    let card_number = cx.cards;
     // A card's height sizes its row when its parent is a rows grid, and Q1
     // then drops it (`computeRowLayouts` removes `data-height` before the
     // card pass would turn it into a style).
@@ -630,7 +882,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
             vec!["card-header".to_string()],
             LinkedHashMap::new(),
         );
-        let mut header_content = Vec::new();
+        let mut header_content = lower_all(header, cx);
+        let mut title_div = None;
         match title {
             Some(title) if !title.is_empty() => {
                 let span = Inline::Span(Span {
@@ -646,7 +899,7 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                     source_info: generated(),
                     attr_source: AttrSourceInfo::empty(),
                 });
-                header_content.push(div(
+                title_div = Some(div(
                     (
                         String::new(),
                         vec!["card-title".to_string()],
@@ -660,7 +913,17 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
             }
             _ => add_class(&mut header_attr, "dashboard-card-no-title"),
         }
-        header_content.extend(lower_all(header, cx));
+        if let Some(title_div) = title_div {
+            // Q1 `processCards`: the title goes first in the header's card
+            // toolbar when it has one, else first in the header.
+            match header_content.iter_mut().find_map(|b| match b {
+                Block::Div(d) if has_class(&d.attr, "card-toolbar") => Some(d),
+                _ => None,
+            }) {
+                Some(toolbar) => toolbar.content.insert(0, title_div),
+                None => header_content.insert(0, title_div),
+            }
+        }
         if let Some(id) = &tabset_id {
             add_class(&mut header_attr, "bslib-navs-card-title");
             header_content.push(raw_html(&tab_nav_html(id, &data.bodies)));
@@ -668,6 +931,16 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
         content.push(div(header_attr, header_content));
     }
 
+    let card_sidebar = data.sidebar.clone().map(|sb| {
+        let mut panel = lower_all(card.sidebar, cx);
+        let block = if panel.len() == 1 {
+            panel.remove(0)
+        } else {
+            div((String::new(), Vec::new(), LinkedHashMap::new()), panel)
+        };
+        (sb, block)
+    });
+    let mut bodies_out = Vec::new();
     let mut panes = Vec::new();
     for (index, (body_data, body)) in data.bodies.iter().zip(card.bodies).enumerate() {
         let mut body_attr: Attr = (
@@ -713,7 +986,7 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                 if is_valuebox && index == 0 {
                     finish_value_box(&mut attr, &mut body_div);
                 }
-                content.push(body_div);
+                bodies_out.push(body_div);
             }
         }
     }
@@ -727,8 +1000,27 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
             panes,
         );
         apply_fill_recursive(&mut tab_content);
-        content.push(tab_content);
+        match card_sidebar.clone() {
+            // Q1 `convertToTabs`: a card sidebar wraps the tab content, ahead
+            // of the footer.
+            Some((sb, panel)) => content.push(sidebar_layout(
+                &format!("{id}-card-sidebar"),
+                vec![tab_content],
+                panel,
+                sb.position == "right",
+                sb.width.as_deref(),
+                false,
+            )),
+            None => content.push(tab_content),
+        }
     }
+    let bodies_layout = match (&card_sidebar, tabset_id.is_some()) {
+        (Some(_), false) => Some(std::mem::take(&mut bodies_out)),
+        _ => {
+            content.append(&mut bodies_out);
+            None
+        }
+    };
 
     if !card.footer.is_empty() {
         content.push(div(
@@ -738,6 +1030,18 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                 LinkedHashMap::new(),
             ),
             lower_all(card.footer, cx),
+        ));
+    }
+    // Q1 `processCards` appends a (non-tabset) card's sidebar layout, with
+    // the bodies in its main area, after the footer.
+    if let (Some(bodies), Some((sb, panel))) = (bodies_layout, card_sidebar) {
+        content.push(sidebar_layout(
+            &format!("card-{}-card-sidebar", card_number),
+            bodies,
+            panel,
+            sb.position == "right",
+            sb.width.as_deref(),
+            false,
         ));
     }
     if data.expandable {
