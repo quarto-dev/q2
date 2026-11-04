@@ -25,7 +25,11 @@
 //!   only the attributes in [`KEPT_ATTRIBUTES`], sorted, with whitespace
 //!   collapsed; text only for elements with a class in [`TEXT_CLASSES`] (or a
 //!   `nav-link` without a `nav-link-text` child), collapsed and truncated.
-//! - Ids that are UUIDs (knitr's hidden-cell ids) print as `#<uuid>`.
+//! - Ids that are UUIDs print as `#<uuid>`.
+//! - Quarto 1's AST vault (`div#3ade8a4a-fb1d-4a6c-8409-ac45482d5fc9.hidden`,
+//!   `_quarto.ast.vault` in `filters/ast/customnodes.lua`), an internal
+//!   container that lands inside every Q1 dashboard's root grid, is skipped
+//!   with its subtree: Q2 has no counterpart.
 //! - Indentation is two spaces per significant ancestor.
 
 use scraper::{ElementRef, Html, Selector};
@@ -101,6 +105,8 @@ pub const TEXT_CLASSES: &[&str] = &[
 ];
 
 const SKIPPED_TAGS: &[&str] = &["script", "style", "svg", "template", "noscript"];
+/// Quarto 1's `_quarto.ast.vault._uuid`.
+const Q1_AST_VAULT_ID: &str = "3ade8a4a-fb1d-4a6c-8409-ac45482d5fc9";
 const MAX_TEXT: usize = 60;
 
 /// Extract the dashboard skeleton of an HTML page. Returns an empty string for
@@ -117,7 +123,7 @@ pub fn dashboard_skeleton(html: &str) -> String {
 
 fn walk(el: ElementRef<'_>, depth: usize, out: &mut String) {
     let name = el.value().name();
-    if SKIPPED_TAGS.contains(&name) {
+    if SKIPPED_TAGS.contains(&name) || el.value().id() == Some(Q1_AST_VAULT_ID) {
         return;
     }
     let child_depth = if is_significant(el) {
@@ -273,12 +279,20 @@ grid-auto-columns: minmax(0, 1fr);"></div></body>"#,
     #[test]
     fn uuid_ids_are_normalized() {
         let got = sk(
-            r#"<body><div id="3ade8a4a-fb1d-4a6c-8409-ac45482d5fc9" class="hidden"></div><div id="page-1" class="dashboard-page"></div></body>"#,
+            r#"<body><div id="0f1e2d3c-4b5a-6978-8a9b-acbdcedf0123" class="hidden"></div><div id="page-1" class="dashboard-page"></div></body>"#,
         );
         assert_eq!(
             got,
             "body\n  div#<uuid>.hidden\n  div#page-1.dashboard-page\n"
         );
+    }
+
+    #[test]
+    fn q1_ast_vault_is_skipped() {
+        let got = sk(
+            r#"<body><div class="bslib-grid"><div class="card"></div><div id="3ade8a4a-fb1d-4a6c-8409-ac45482d5fc9" class="hidden"><p class="card">x</p></div></div></body>"#,
+        );
+        assert_eq!(got, "body\n  div.bslib-grid\n    div.card\n");
     }
 
     #[test]

@@ -25,14 +25,14 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               div.html-fill-container.html-fill-item.value-box-showcase
               div.value-box-area
                 p.value-box-title "Are Things Good?"
-                p.value-box-value "128"
-        div.bg-primary.bslib-card.bslib-value-box.card.cell.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
+                p.value-box-value "180"
+        div.bg-secondary.bslib-card.bslib-value-box.card.cell.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
           div.card-body.html-fill-container.html-fill-item
             div.html-fill-container.html-fill-item.value-box-grid
               div.html-fill-container.html-fill-item.value-box-showcase
               div.value-box-area
                 p.value-box-title "Really? Are They Good?"
-                p.value-box-value "132"
+                p.value-box-value "58"
         div.bg-secondary.bslib-card.bslib-value-box.card.cell.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
           div.card-body.html-fill-container.html-fill-item
             div.html-fill-container.html-fill-item.value-box-grid
@@ -46,13 +46,13 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
             div.html-fill-container.html-fill-item.value-box-grid
               div.html-fill-container.html-fill-item.value-box-showcase
               div.value-box-area
-                p.value-box-value "864"
+                p.value-box-value "725"
         div.bg-secondary.bslib-card.bslib-value-box.card.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
           div.card-body.html-fill-container.html-fill-item
             div.html-fill-container.html-fill-item.value-box-grid
               div.html-fill-container.html-fill-item.value-box-showcase
               div.value-box-area
-                p.value-box-value "9"
+                p.value-box-value "4"
       div.bslib-grid [style=display: grid; grid-template-columns: minmax(3em, 1fr) minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
         div.bg-secondary.bslib-card.bslib-value-box.card.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
           div.card-body.html-fill-container.html-fill-item
@@ -60,11 +60,10 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               div.html-fill-container.html-fill-item.value-box-showcase
               div.value-box-area
                 p.value-box-title "Number of Times Cats Kick Ass"
-                p.value-box-value "374"
+                p.value-box-value "278"
         div.bg-secondary.bslib-card.bslib-value-box.card.html-fill-container.showcase-top-right.valuebox [data-bslib-card-init=]
           div.card-body.html-fill-container.html-fill-item
             div.html-fill-container.html-fill-item.value-box-grid
               div.html-fill-container.html-fill-item.value-box-showcase
               div.value-box-area
-                p.value-box-value "375"
-        div#<uuid>.hidden
+                p.value-box-value "79"

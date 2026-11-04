@@ -23,7 +23,7 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
         div.card-header
           div.card-title "table and graph in one card"
         div.card-body.html-fill-container.html-fill-item
-          div#3ca4abdd.cell.html-fill-container.html-fill-item.quarto-layout-panel [title=table and graph in one card]
+          div#c6ae912b.cell.html-fill-container.html-fill-item.quarto-layout-panel [title=table and graph in one card]
             div.html-fill-container.html-fill-item.quarto-layout-row
               div.html-fill-container.html-fill-item
               div.html-fill-container.html-fill-item.quarto-layout-cell [style=flex-basis: 50.0%;justify-content: flex-start;]
@@ -31,4 +31,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
                   div#<uuid>.html-fill-container.html-fill-item.plotly-graph-div [style=height:100%; width:100%;]
         bslib-tooltip
           span.badge.bslib-full-screen-enter.rounded-pill
-      div#<uuid>.hidden

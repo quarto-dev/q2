@@ -30,7 +30,6 @@ body.dashboard-fill.dashboard-sidebar.fullcontent.quarto-dashboard.quarto-light
                     div#ojs-cell-4.html-fill-container.html-fill-item
                 bslib-tooltip
                   span.badge.bslib-full-screen-enter.rounded-pill
-              div#<uuid>.hidden.html-fill-container.html-fill-item
       aside#bslib-sidebar-1.html-fill-container.html-fill-item.sidebar
         div.html-fill-container.html-fill-item
           div#cb2.cell-code.hidden.sourceCode

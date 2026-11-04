@@ -6,4 +6,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
           span.navbar-toggler-icon
   div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.html-fill-container.page-layout-custom.quarto-dashboard-content [role=main]
     div.bslib-grid.bslib-grid-item.html-fill-item [style=display: grid; grid-template-rows: ; grid-auto-columns: minmax(0, 1fr);]
-      div#<uuid>.hidden

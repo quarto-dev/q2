@@ -49,4 +49,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               div.html-fill-container.html-fill-item.value-box-showcase
               div.value-box-area
                 p.value-box-value "0.27%."
-        div#<uuid>.hidden

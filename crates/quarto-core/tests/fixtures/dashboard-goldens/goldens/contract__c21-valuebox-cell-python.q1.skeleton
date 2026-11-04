@@ -24,4 +24,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               div.value-box-area
                 p.value-box-title "C21-YAML"
                 p.value-box-value "45"
-        div#<uuid>.hidden

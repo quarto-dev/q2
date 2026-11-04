@@ -15,4 +15,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
         div.card-body.html-fill-container.html-fill-item
           div.cell-output-display.html-fill-container.html-fill-item
             img.img-fluid.quarto-dashboard-img-contain
-      div#<uuid>.hidden

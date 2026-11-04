@@ -28,6 +28,5 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
           div#card-tabset-1-3.html-fill-container.html-fill-item.tab-pane [role=tabpanel]
             div.card-body.html-fill-container.html-fill-item
         div.card-footer
-        div#<uuid>.hidden
         bslib-tooltip
           span.badge.bslib-full-screen-enter.rounded-pill

@@ -24,4 +24,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               div.value-box-area
                 p.value-box-title "C23-BOTTOM"
                 p.value-box-value "2"
-        div#<uuid>.hidden

@@ -10,7 +10,6 @@ body.dashboard-fill.dashboard-toolbar.fullcontent.quarto-dashboard.quarto-light
   div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.html-fill-container.page-layout-custom.quarto-dashboard-content [role=main]
     div.dashboard-toolbar-container.html-fill-container.html-fill-item.toolbar-toplevel
       div.html-fill-container.toolbar.toolbar-bottom
-        div#<uuid>.hidden
       div.html-fill-container.html-fill-item.toolbar-content
         div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, 1fr); grid-auto-columns: minmax(0, 1fr);]
           div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]

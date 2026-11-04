@@ -13,4 +13,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
         div.card-body.html-fill-container.html-fill-item
         bslib-tooltip
           span.badge.bslib-full-screen-enter.rounded-pill
-      div#<uuid>.hidden

@@ -38,4 +38,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
                 p.value-box-value "789"
           bslib-tooltip
             span.badge.bslib-full-screen-enter.rounded-pill
-        div#<uuid>.hidden

@@ -33,4 +33,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
             div.value-box-area
               p.value-box-title "What up trey"
               p.value-box-value "56"
-      div#<uuid>.hidden

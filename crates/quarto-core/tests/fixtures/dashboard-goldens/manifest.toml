@@ -333,13 +333,13 @@ note = "Phase 3 (layout core): Q1 smoke-all fixture"
 path = "q1/3-valuebox-knitr.qmd"
 requires = ["knitr"]
 status = "pending"
-note = "Phase 5 (value boxes): Q1 smoke-all fixture"
+note = "Phase 5 (value boxes): Q1 smoke-all fixture. Not deterministic: value-box values (and so their colors) are random R draws; captures differ run to run, so flipping it needs a seed or a looser comparison"
 
 [[fixture]]
 path = "q1/3-valuebox-python.qmd"
 requires = ["jupyter"]
 status = "pending"
-note = "Phase 5 (value boxes): Q1 smoke-all fixture"
+note = "Phase 5 (value boxes): Q1 smoke-all fixture. Not deterministic: value-box values are random Python draws; captures differ run to run, so flipping it needs a seed or a looser comparison"
 
 [[fixture]]
 path = "q1/3-valuebox-static.qmd"
@@ -541,7 +541,7 @@ note = "Phase 7 (navigation chrome): multiple authors in the navbar (Q1 #10334)"
 path = "regressions/11150.qmd"
 requires = ["jupyter"]
 status = "pending"
-note = "Phase 4 (cards and tabsets): ipynb-shell-interactivity: all shows every top-level output (Q1 #11150; needs bd-uqma6gec)"
+note = "Phase 4 (cards and tabsets): ipynb-shell-interactivity: all shows every top-level output (Q1 #11150; needs bd-uqma6gec). Not deterministic: Jupyter assigns a random id to the layout panel; captures differ run to run, so flipping it needs a seed or a looser comparison"
 
 [[fixture]]
 path = "regressions/9796.qmd"

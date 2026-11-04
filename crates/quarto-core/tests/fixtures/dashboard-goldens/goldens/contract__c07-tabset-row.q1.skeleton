@@ -25,7 +25,6 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               a.active.nav-link [aria-selected=true data-bs-toggle=tab data-value=C07-TAB-A href=#card-tabset-2-1 role=tab] "C07-TAB-A"
             li.nav-item [role=presentation]
               a.nav-link [aria-selected=false data-bs-toggle=tab data-value=C07-TAB-B href=#card-tabset-2-2 role=tab] "C07-TAB-B"
-        div#<uuid>.hidden
         div.html-fill-container.html-fill-item.tab-content [data-tabset-id=card-tabset-2]
           div#card-tabset-2-1.active.html-fill-container.html-fill-item.show.tab-pane [role=tabpanel]
             div.card-body.html-fill-container.html-fill-item

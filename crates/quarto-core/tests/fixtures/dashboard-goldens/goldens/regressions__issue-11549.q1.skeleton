@@ -24,7 +24,6 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
                     a.active.nav-link [aria-selected=true data-bs-toggle=tab data-value=Tabset1 href=#card-tabset-1-1 role=tab] "Tabset1"
                   li.nav-item [role=presentation]
                     a.nav-link [aria-selected=false data-bs-toggle=tab data-value=Tabset2 href=#card-tabset-1-2 role=tab] "Tabset2"
-              div#<uuid>.hidden.html-fill-container.html-fill-item
               div.html-fill-container.html-fill-item.tab-content [data-tabset-id=card-tabset-1]
                 div#card-tabset-1-1.active.html-fill-container.html-fill-item.show.tab-pane [role=tabpanel]
                   div.card-body.html-fill-container.html-fill-item

@@ -11,4 +11,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
   div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.html-fill-container.page-layout-custom.quarto-dashboard-content [role=main]
     div.bslib-grid.bslib-grid-item.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, max-content); grid-auto-columns: minmax(0, 1fr);]
       div.bslib-grid [style=display: grid; grid-template-columns: ; grid-auto-rows: minmax(0, 1fr);]
-        div#<uuid>.hidden

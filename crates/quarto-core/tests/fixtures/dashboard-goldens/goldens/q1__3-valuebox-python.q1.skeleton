@@ -15,7 +15,7 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
             div.html-fill-container.html-fill-item.value-box-showcase
             div.value-box-area
               p.value-box-title "What is happening"
-              p.value-box-value "38"
+              p.value-box-value "52"
       div.bg-secondary.bslib-card.bslib-value-box.card.cell.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
         div.card-body.html-fill-container.html-fill-item
           div.html-fill-container.html-fill-item.value-box-grid
@@ -30,4 +30,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
             div.value-box-area
               p.value-box-title "What is happening"
               p.value-box-value "MSFT"
-      div#<uuid>.hidden

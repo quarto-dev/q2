@@ -63,7 +63,6 @@ body.dashboard-fill.dashboard-sidebar.fullcontent.quarto-dashboard.quarto-light
             div#page-2.dashboard-page.grid-skip.html-fill-container.html-fill-item.tab-pane [aria-labelledby=tab-page-2]
               div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, max-content); grid-auto-columns: minmax(0, 1fr);]
                 div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: ; grid-auto-rows: minmax(0, 1fr);]
-                  div#<uuid>.hidden.html-fill-container.html-fill-item
       aside#bslib-sidebar-1.html-fill-container.html-fill-item.sidebar
         div.html-fill-container.html-fill-item
       button.collapse-toggle [aria-controls=bslib-sidebar-1 title=Toggle sidebar]

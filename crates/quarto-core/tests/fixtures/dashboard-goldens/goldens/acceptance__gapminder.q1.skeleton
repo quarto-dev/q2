@@ -35,4 +35,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
             div.cell-output.cell-output-display.html-fill-container.html-fill-item
               div.html-fill-container.html-fill-item [style=height:525px; width:100%;]
                 div#<uuid>.html-fill-container.html-fill-item.plotly-graph-div [style=height:100%; width:100%;]
-        div#<uuid>.hidden

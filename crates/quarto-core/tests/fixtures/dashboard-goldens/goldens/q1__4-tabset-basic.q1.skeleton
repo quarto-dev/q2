@@ -19,7 +19,6 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               a.nav-link [aria-selected=false data-bs-toggle=tab data-value=MT Cars href=#card-tabset-1-2 role=tab] "MT Cars"
             li.nav-item [role=presentation]
               a.nav-link [aria-selected=false data-bs-toggle=tab data-value=Iris3 href=#card-tabset-1-3 role=tab] "Iris3"
-        div#<uuid>.hidden
         div.html-fill-container.html-fill-item.tab-content [data-tabset-id=card-tabset-1]
           div#card-tabset-1-1.active.html-fill-container.html-fill-item.show.tab-pane [role=tabpanel]
             div.card-body.html-fill-container.html-fill-item

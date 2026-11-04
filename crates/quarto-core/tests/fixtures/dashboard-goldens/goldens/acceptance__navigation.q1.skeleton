@@ -54,4 +54,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
                 span.badge.bslib-full-screen-enter.rounded-pill
       div#data.dashboard-page.grid-skip.html-fill-container.html-fill-item.tab-pane [aria-labelledby=tab-data]
         div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: ; grid-auto-columns: minmax(0, 1fr);]
-          div#<uuid>.hidden.html-fill-container.html-fill-item

@@ -18,4 +18,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               img.img-fluid.quarto-dashboard-img-contain
           bslib-tooltip
             span.badge.bslib-full-screen-enter.rounded-pill
-        div#<uuid>.hidden

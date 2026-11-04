@@ -28,4 +28,3 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
           div.cell-output.cell-output-error.html-fill-container.html-fill-item
         bslib-tooltip
           span.badge.bslib-full-screen-enter.rounded-pill
-      div#<uuid>.hidden

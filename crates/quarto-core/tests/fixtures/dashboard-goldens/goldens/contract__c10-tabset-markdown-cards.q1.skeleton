@@ -16,7 +16,6 @@ body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
               a.active.nav-link [aria-selected=true data-bs-toggle=tab data-value=C10-FIRST href=#card-tabset-1-1 role=tab] "C10-FIRST"
             li.nav-item [role=presentation]
               a.nav-link [aria-selected=false data-bs-toggle=tab data-value=C10-SECOND href=#card-tabset-1-2 role=tab] "C10-SECOND"
-        div#<uuid>.hidden
         div.html-fill-container.html-fill-item.tab-content [data-tabset-id=card-tabset-1]
           div#card-tabset-1-1.active.html-fill-container.html-fill-item.show.tab-pane [role=tabpanel]
             div.card-body.html-fill-container.html-fill-item
