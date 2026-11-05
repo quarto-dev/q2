@@ -69,7 +69,7 @@ fn render_preview(content: &[u8]) -> serde_json::Value {
         &mut ctx,
         runtime,
         None,
-        vec![],
+        vec![].into(),
     ))
     .expect("q2-dashboard preview render");
     serde_json::from_str(&out.ast_json).expect("ast json")
