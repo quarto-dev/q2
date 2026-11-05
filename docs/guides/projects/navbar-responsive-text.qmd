@@ -99,3 +99,9 @@ item's widest text, so screen readers can still name it. An
 - Each variant renders as a `<span class="menu-text">` with
   Bootstrap's `d-*` display classes. These need a Bootstrap theme, so
   `theme: none` shows every variant.
+
+## Example
+
+[`examples/websites/11-responsive-navbar`](https://github.com/quarto-dev/q2/tree/main/examples/websites/11-responsive-navbar)
+is a small site whose navbar uses every pattern on this page. Render
+it and resize the browser window to see the labels change.

@@ -1,0 +1,7 @@
+---
+title: Tutorials and Examples
+---
+
+This page exists to give the navbar one more long label. Its item reads
+"Tutorials" while the expanded navbar is cramped (992px to 1200px) and
+"Tutorials and Examples" otherwise.
