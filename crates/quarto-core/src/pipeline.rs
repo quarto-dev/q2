@@ -1368,6 +1368,8 @@ fn stage_context_from_render_context(
     // `UserFiltersStage::pre()`, never mutated by stages), so it is
     // bridged one-way and not restored.
     stage_ctx.defer_citeproc = ctx.defer_citeproc;
+    // Input-only like `defer_citeproc`: bridged one-way, never restored.
+    stage_ctx.suppress_trace_output = ctx.suppress_trace_output;
     // book-projects P4: the per-chapter seed is likewise input-only for
     // the crossref transforms — bridged one-way, never restored.
     stage_ctx.chapter_seed = ctx.chapter_seed;

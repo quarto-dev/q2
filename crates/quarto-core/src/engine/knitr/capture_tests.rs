@@ -41,7 +41,17 @@ fn execute_with_files(
     capture: bool,
 ) -> (KnitrExecuteResult, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path();
+    let result = execute_in(dir.path(), markdown, files, capture);
+    (result, dir)
+}
+
+/// [`execute_with_files`] in a directory the caller owns, so a second run sees the first run\'s files.
+fn execute_in(
+    path: &std::path::Path,
+    markdown: &str,
+    files: &[(&str, &str)],
+    capture: bool,
+) -> KnitrExecuteResult {
     let qmd = path.join("doc.qmd");
     std::fs::write(&qmd, markdown).unwrap();
     for (name, text) in files {
@@ -60,9 +70,7 @@ fn execute_with_files(
         handled_languages: vec![],
         capture,
     };
-    let result =
-        call_r("execute", &params, path, path, &CallROptions::quiet()).expect("R execution failed");
-    (result, dir)
+    call_r("execute", &params, path, path, &CallROptions::quiet()).expect("R execution failed")
 }
 
 const MIXED: &str = "```{r a}\nx <- 1:3\nx\nmessage('hi')\nwarning('careful')\n```\n\n\
@@ -439,4 +447,35 @@ fn kind(p: &KnitrPiece) -> &'static str {
         KnitrPiece::Asis { .. } => "asis",
         KnitrPiece::Other { .. } => "other",
     }
+}
+
+/// KNR-6 (pre-flip caches): a markdown cache written by an ordinary run (capture off) is not
+/// replayed by a recorded run. The recorded run turns the cache off, so the chunk runs again and
+/// yields pieces; a stale cached string with no marker never reaches the skeleton.
+#[test]
+fn a_cache_written_without_capture_is_not_replayed_by_a_recorded_run() {
+    if !r_available("a_cache_written_without_capture_is_not_replayed_by_a_recorded_run") {
+        return;
+    }
+    // Each run leaves a file behind and prints how many files it found, so a cache hit (no run)
+    // shows as the old count and no new file.
+    let doc = "```{r k}\n#| cache: true\nn <- length(list.files('.', pattern = '^ran_'))\n\
+               file.create(paste0('ran_', n))\nn\n```\n";
+    let dir = tempfile::tempdir().unwrap();
+    let plain = execute_in(dir.path(), doc, &[], false);
+    assert!(plain.pieces.is_empty());
+    assert!(
+        dir.path().join("doc_cache").exists(),
+        "the ordinary run wrote a cache"
+    );
+    assert!(dir.path().join("ran_0").exists());
+
+    let recorded = execute_in(dir.path(), doc, &[], true);
+    assert!(
+        dir.path().join("ran_1").exists(),
+        "the chunk ran again instead of hitting the cache"
+    );
+    assert_eq!(recorded.pieces.len(), 1, "the chunk produced pieces");
+    assert_eq!(recorded.pieces[0].label, "k");
+    assert_eq!(recorded.cache_disabled, ["k"]);
 }

@@ -354,6 +354,22 @@ pub trait ExecutionEngine: Send + Sync {
         Ok(())
     }
 
+    /// Whether this engine replays a recorded capture instead of running anything (KNR-6).
+    /// Default `false`; only `ReplayEngine` overrides it. A registry holding one is
+    /// replaying, and a replaying render never writes a trace
+    /// ([`EngineRegistry::is_replaying`](crate::engine::EngineRegistry::is_replaying)).
+    fn is_replay(&self) -> bool {
+        false
+    }
+
+    /// Whether this engine is a replay of a recorded capture that has not executed yet
+    /// (KNR-6). Default `false`; only `ReplayEngine` overrides it. The engine stage fails
+    /// a render that ends with such an engine, because a replay that ignored its recording
+    /// is a wrong result, not a degraded one.
+    fn is_unused_replay(&self) -> bool {
+        false
+    }
+
     /// Whether this engine currently holds a live backing subprocess.
     ///
     /// Default `false`: built-in engines (markdown / knitr / jupyter) have no

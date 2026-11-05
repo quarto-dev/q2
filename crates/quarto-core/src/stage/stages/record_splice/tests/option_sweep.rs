@@ -364,8 +364,8 @@ const INERT_REASONS: &[(&str, &str)] = &[
         "a departure (KNR-3 slice 7, D8): the presenter ignores `indent`, because knitr sets it \
          from the chunk\'s container indent and the splice already re-applies container prefix \
          and indent; presenting it would double-indent a nested chunk. Live knitr writes it on \
-         the output, so corpus options/indent differs; KNR-6 decides what a header `indent` does \
-         once the skeleton marker\'s indent is known",
+         the output, so corpus options/indent differs. KNR-6 kept it inert (2026-11-05); its plan has an \
+         \"If `indent` is ever needed\" section",
     ),
 ];
 

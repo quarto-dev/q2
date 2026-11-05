@@ -1218,6 +1218,7 @@ mod tests {
         fixture::assert_rich(&text);
     }
 
+    mod layering;
     mod option_sweep;
 
     const MIXED: &str =

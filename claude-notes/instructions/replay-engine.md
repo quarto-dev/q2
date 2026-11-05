@@ -54,7 +54,9 @@ q2 render path/to/doc.qmd
 ```
 
 Quarto writes `path/to/.quarto/trace/<doc-stem>/latest.json.gz`
-(the reader also accepts a plain `latest.json`). When the document
+(the reader also accepts a plain `latest.json`). A render that replays a
+trace (`--replay`, `QUARTO_REPLAY`) writes none, so a document that still
+says `trace: true` cannot overwrite the recording it replays. When the document
 declared a non-markdown engine that actually executed, the trace's
 top-level `engine_captures` array holds one entry per engine that ran,
 in execution order. Each entry carries the engine name, the verbatim
@@ -164,7 +166,7 @@ cost in exchange for byte-faithful reproduction.
 
 | Surface | Effect |
 |---------|--------|
-| `trace: true` in metadata | Records `engine_captures` into the trace. |
+| `trace: true` in metadata | Records `engine_captures` into the trace. Ignored while replaying: a replay never writes a trace. |
 | `q2 render --replay <trace>` | Replays the trace's `engine_captures`. |
 | `QUARTO_REPLAY=<trace>` | Same as `--replay` (CLI flag wins). |
 | `RenderToFileOptions.replay_capture` | Library-level activation. |

@@ -226,6 +226,12 @@ pub fn present_document(
                 );
                 // `replacement` carries the container prefix and indent onto every line; the
                 // rendered text keeps its own trailing newlines, as it always did.
+                // A header `indent` option is deliberately not applied here (KNR-3 slice 7, D8;
+                // KNR-6 kept it inert). If it is ever needed, prefix every line of `text` with the
+                // option's resolved value before calling `replacement`, which then adds the
+                // container prefix and the unit's own indent in front of it. See the plan
+                // `claude-notes/plans/2026-10-30-knr-06-flip-and-consumers.md`, "If `indent` is
+                // ever needed".
                 let trailing = &text[text.trim_end_matches('\n').len()..];
                 let (start, end, placed) = replacement(&units[ui], document_text, &text);
                 let text = format!("{}{trailing}", placed.trim_end_matches('\n'));

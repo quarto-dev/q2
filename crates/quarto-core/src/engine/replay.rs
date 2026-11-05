@@ -77,6 +77,8 @@ const JUPYTER: &str = "jupyter";
 #[derive(Debug, Clone)]
 pub struct ReplayEngine {
     capture: Arc<EngineCapture>,
+    /// Set by the first `execute` call; see [`ExecutionEngine::is_unused_replay`].
+    executed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ReplayEngine {
@@ -86,16 +88,17 @@ impl ReplayEngine {
     /// that happens on each `execute()` call so a malformed capture
     /// surfaces with the actual call's diagnostics.
     pub fn new(capture: EngineCapture) -> Self {
-        Self {
-            capture: Arc::new(capture),
-        }
+        Self::from_arc(Arc::new(capture))
     }
 
     /// Construct from a shared `Arc<EngineCapture>`.
     ///
     /// Useful when the same capture drives multiple registry instances.
     pub fn from_arc(capture: Arc<EngineCapture>) -> Self {
-        Self { capture }
+        Self {
+            capture,
+            executed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
     }
 
     /// The recorded engine's name (e.g. `"jupyter"`, `"knitr"`).
@@ -217,6 +220,8 @@ impl ExecutionEngine for ReplayEngine {
         input: &str,
         ctx: &ExecutionContext,
     ) -> Result<ExecuteResult, ExecutionError> {
+        self.executed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         if input != self.capture.input_qmd {
             return Err(ExecutionError::execution_failed(
                 self.capture.engine_name.clone(),
@@ -243,6 +248,14 @@ impl ExecutionEngine for ReplayEngine {
         } else {
             Ok(stored)
         }
+    }
+
+    fn is_replay(&self) -> bool {
+        true
+    }
+
+    fn is_unused_replay(&self) -> bool {
+        !self.executed.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn can_freeze(&self) -> bool {
