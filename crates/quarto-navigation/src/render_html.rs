@@ -1161,9 +1161,11 @@ fn render_footer_region(
         FooterRegion::Empty => String::new(),
         FooterRegion::Text(cv) => render_text(cv),
         FooterRegion::Items(items) => {
-            // `.footer-items` is the class Quarto 1's SCSS targets for
-            // inline-flex alignment of links within a region.
-            let mut s = String::from("\n      <ul class=\"nav footer-items\">\n");
+            // Quarto 1's class list. `.footer-items` is what the footer SCSS
+            // targets for inline-flex alignment within a region. No `.nav`:
+            // it sets `flex-wrap: wrap`, which splits e.g. a logo and a
+            // copyright line onto separate lines (GH #1066).
+            let mut s = String::from("\n      <ul class=\"footer-items list-unstyled\">\n");
             for item in items {
                 s.push_str(&render_footer_item(item, 8));
             }
@@ -2198,7 +2200,7 @@ mod tests {
     }
 
     #[test]
-    fn footer_items_render_as_nav_list() {
+    fn footer_items_render_as_unstyled_list() {
         let footer = PageFooter {
             right: FooterRegion::Items(vec![
                 NavigationItem {
@@ -2215,7 +2217,10 @@ mod tests {
             ..PageFooter::default()
         };
         let html = page_footer_to_html(&footer);
-        assert!(html.contains("<ul class=\"nav footer-items\">"));
+        assert!(html.contains("<ul class=\"footer-items list-unstyled\">"));
+        // `.nav` sets `flex-wrap: wrap`, which splits a region onto several
+        // lines; Quarto 1 does not use it here (GH #1066).
+        assert!(!html.contains("class=\"nav footer-items"));
         assert!(html.contains("bi-github"));
         assert!(html.contains("href=\"/privacy\""));
         assert!(html.contains(">Privacy</a>"));
