@@ -27,7 +27,7 @@ function DevHarnessLazy({ page }: { page: string }) {
   );
 }
 import Editor from './components/Editor';
-import SimpleAuthDemo from './components/demo/SimpleAuthDemo';
+import DemoGallery from './components/demo/DemoGallery';
 import { notifications } from './strings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import LoadingIndicator from './components/Loading';
@@ -1048,9 +1048,9 @@ function App() {
     );
   }
 
-  // Example page: a standalone counter doc that syncs only while signed in.
-  if (route.type === 'demo' && route.page === 'simple-auth') {
-    return <SimpleAuthDemo />;
+  // Gallery of standalone example pages (#/demo, #/demo/<id>).
+  if (route.type === 'demo') {
+    return <DemoGallery page={route.page} />;
   }
 
   if (AUTH_ENABLED && !auth) {

@@ -189,13 +189,13 @@ export interface DevRoute {
 }
 
 /**
- * Route for example pages shipped in every build (e.g. 'simple-auth').
+ * Route for the gallery of example pages shipped in every build.
  *
- * URL format: #/demo/<page>
+ * URL format: #/demo (gallery) or #/demo/<page> (one demo, e.g. 'simple-auth')
  */
 export interface DemoRoute {
   type: 'demo';
-  page: string;
+  page?: string;
 }
 
 /**
@@ -346,9 +346,12 @@ export function parseHashRoute(hash: string): Route {
     return { type: 'project', projectId };
   }
 
-  // Parse demo route: /demo/<page>. Unlike dev routes these ship everywhere.
-  if (segments[0] === 'demo' && segments[1]) {
-    return { type: 'demo', page: decodeURIComponent(segments[1]) };
+  // Parse demo routes: /demo and /demo/<page>. Unlike dev routes these
+  // ship everywhere.
+  if (segments[0] === 'demo') {
+    return segments[1]
+      ? { type: 'demo', page: decodeURIComponent(segments[1]) }
+      : { type: 'demo' };
   }
 
   // Parse dev route: /dev/<page>. Parsed in development builds and in
@@ -439,7 +442,7 @@ export function buildHashRoute(route: Route): string {
       return `#/dev/${encodeURIComponent(route.page)}`;
 
     case 'demo':
-      return `#/demo/${encodeURIComponent(route.page)}`;
+      return route.page !== undefined ? `#/demo/${encodeURIComponent(route.page)}` : '#/demo';
   }
 }
 

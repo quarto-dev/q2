@@ -1,0 +1,17 @@
+.dg-page {
+  min-height: 100vh;
+  padding: 48px 24px;
+  background: #e5e7eb;
+  color: #374151;
+  font-family: system-ui, sans-serif;
+}
+.dg-page h1 { margin: 0 auto 24px; max-width: 640px; font-size: 24px; }
+.dg-missing { max-width: 640px; margin: 0 auto 16px; color: #b45309; }
+.dg-list { list-style: none; padding: 0; margin: 0 auto; max-width: 640px; }
+.dg-list li { display: flex; align-items: center; gap: 16px; background: #f3f4f6; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+.dg-icon { flex: none; width: 72px; }
+.dg-icon .rt { width: 100%; height: auto; }
+.dg-icon .rt-tower { stroke: #9ca3af; }
+.dg-icon .rt-waves path { stroke: #c4c9d1; }
+.dg-list a { font-weight: 600; color: #1f2937; }
+.dg-list p { margin: 4px 0 0; font-size: 14px; color: #6b7280; }
