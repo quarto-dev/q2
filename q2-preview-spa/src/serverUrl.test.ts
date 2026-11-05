@@ -43,19 +43,68 @@ function sources(dir: string): string[] {
   });
 }
 
+/**
+ * Places in `source` that build a server URL from the page origin
+ * (`loc.host`, `location.origin`) or hand `fetch` / `WebSocket` /
+ * `EventSource` a root-absolute literal or an ALL_CAPS route constant
+ * (`fetch(PDF_ROUTE)`) instead of going through `serverUrl`. Matches across
+ * line breaks; comment lines are skipped.
+ */
+function rootAbsoluteUrls(source: string): { line: number; text: string }[] {
+  const lines = source.split('\n');
+  const code = lines.map((l) => (/^\s*(\/\/|\/?\*)/.test(l) ? '' : l)).join('\n');
+  const patterns = [
+    /\.(?:host|origin)\b/g,
+    /\b(?:fetch|WebSocket|EventSource)\(\s*(?:['"`]\/|[A-Z][A-Z0-9_]*\b)/g,
+  ];
+  return patterns
+    .flatMap((re) => [...code.matchAll(re)])
+    .map((m) => {
+      const line = code.slice(0, m.index).split('\n').length;
+      return { line, text: lines[line - 1].trim() };
+    })
+    .sort((a, b) => a.line - b.line);
+}
+
+describe('rootAbsoluteUrls', () => {
+  it('flags every shape the proxy fix replaced', () => {
+    const offenders = [
+      'const healthUrl = `${loc.protocol}//${loc.host}/health`;',
+      'const u = `${window.location.protocol}//${window.location.host}/health`;',
+      'const u = new URL("/ws", location.origin);',
+      "const resp = await fetch('/api/preview/re-execute', {",
+      'const resp = await fetch(\n  `/api/preview/deps?page=${encodeURIComponent(p)}`,\n);',
+      'const response = await fetch(PDF_ROUTE, {',
+      "const ws = new WebSocket('/ws');",
+      "const es = new EventSource(\n  '/__q2-preview/events',\n);",
+    ];
+    for (const src of offenders) {
+      expect(rootAbsoluteUrls(src), src).not.toEqual([]);
+    }
+  });
+
+  it('accepts URLs resolved through serverUrl', () => {
+    const fine = [
+      "const resp = await fetch(serverUrl('/health'));",
+      'const resp = await fetch(\n  serverUrl(`/api/preview/deps?page=${p}`),\n);',
+      'const response = await fetch(serverUrl(PDF_ROUTE), {',
+      'const resp = await fetch(healthUrl);',
+      "const ws = new WebSocket(serverWsUrl('/ws'));",
+      "// fetch('/health') used to live here",
+    ];
+    for (const src of fine) {
+      expect(rootAbsoluteUrls(src), src).toEqual([]);
+    }
+  });
+});
+
 describe('SPA sources', () => {
   it('build no server URL from the origin or as a root-absolute path', () => {
-    const offenders: string[] = [];
-    for (const file of sources(__dirname)) {
-      readFileSync(file, 'utf8')
-        .split('\n')
-        .forEach((line, i) => {
-          if (/^\s*(\/\/|\*)/.test(line)) return;
-          if (/location\.host\b|fetch\(\s*['"`]\//.test(line)) {
-            offenders.push(`${path.relative(__dirname, file)}:${i + 1}: ${line.trim()}`);
-          }
-        });
-    }
+    const offenders = sources(__dirname).flatMap((file) =>
+      rootAbsoluteUrls(readFileSync(file, 'utf8')).map(
+        ({ line, text }) => `${path.relative(__dirname, file)}:${line}: ${text}`,
+      ),
+    );
     expect(offenders).toEqual([]);
   });
 });

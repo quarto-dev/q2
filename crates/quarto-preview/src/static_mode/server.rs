@@ -493,7 +493,7 @@ fn render_listing(pages: &[String], raw_path: &str) -> String {
 }
 
 /// Percent-encode a `/`-separated relative path segment by segment.
-fn encode_path(rel: &str) -> String {
+pub fn encode_path(rel: &str) -> String {
     rel.split('/')
         .map(|s| utf8_percent_encode(s, PATH_SEGMENT).to_string())
         .collect::<Vec<_>>()

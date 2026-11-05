@@ -21,7 +21,8 @@ pub mod watch_policy;
 pub use embedded_site::{SiteFiles, build_embedded_site_router};
 pub use reload::{ReloadEvent, ReloadHub};
 pub use server::{
-    CLIENT_PATH, EVENTS_PATH, PDFJS_PREFIX, StaticServerConfig, VIEWER_PATH, build_router, serve,
+    CLIENT_PATH, EVENTS_PATH, PDFJS_PREFIX, StaticServerConfig, VIEWER_PATH, build_router,
+    encode_path, serve,
 };
 pub use watch_policy::{
     Action, ContentTracker, WatchContext, classify, is_config_like, is_input_extension,
