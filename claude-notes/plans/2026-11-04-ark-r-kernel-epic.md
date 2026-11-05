@@ -2,7 +2,7 @@
 title: 'Run R via the Ark Jupyter kernel (bd-yt2o2ovt)'
 date: 2026-11-04
 description: 'Retest of every claim in the Ark epic against current main, and a TDD plan for the decided fixes (base64, image diagnostics, kernel resolution) so a Jupyter-engine document naming the ark kernel renders R cells and plots, using an explicit claims entry until the resolver redesign in Epic B.'
-status: spikes-done  # S1-S5 done 2026-11-04, no source changed; split 2026-11-04: the resolver redesign (old D2/D2b, Phase 4) and design review moved to Epic B; no code changed yet
+status: implemented  # phases 0-3, 5 and 6 done 2026-11-04 on the branch (unpushed); only the Windows cross-check and the Phase 1 parity case are open; split 2026-11-04: the resolver redesign (old D2/D2b, Phase 4) and design review moved to Epic B; no code changed yet
 braid:
   strand: bd-yt2o2ovt  # "Epic: run R via the Ark Jupyter kernel in q2"
   priority: P3
@@ -317,7 +317,7 @@ reference_link_diagnostics` is now `pub(crate)` so the test can reach it.
   callers.
 - [x] Wire the resolver into `execute_qmd`, replacing `map_language_to_kernel`
   (keep the table only as the step-3 fallback).
-- [x] Cross-check the Windows build:
+- [ ] (could not run here, see note below) Cross-check the Windows build:
   `cargo clippy -p quarto-core --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
 
 Implementation notes (2026-11-04). The resolver lives in `kernelspec.rs`:
@@ -347,7 +347,7 @@ every cell Jupyter owns runs in that kernel, so an Ark document should contain
 
 ## Phase 5: docs (bd-4nypw3wq)
 
-- [ ] After Phase 3 lands, write a short guide section: running `{r}` cells on
+- [x] After Phase 3 lands, write a short guide section: running `{r}` cells on
   Ark or IRkernel with `jupyter: {kernel: ...}` and the claims entry chosen in
   Spike S1 (`jupyter: {kernel: ark, claims: {r: 1}}`, no `engine:` key; S3
   confirmed the same line works in `_quarto.yml`). Warn that
@@ -357,25 +357,84 @@ every cell Jupyter owns runs in that kernel, so an Ark document should contain
   make the claims line unnecessary. Document in user terms, not resolver
   internals.
 
+Landed in `docs/guides/authoring/engines.qmd`, section "Running R cells on a
+Jupyter kernel" (`#r-on-jupyter`). Before writing the `engine:`-entry and
+`r: 2` spellings I rendered each with real Ark (`engine: [knitr, {jupyter:
+{kernel: ark, claims: {r: 2}}}]`, the `engine:` map form, and a
+`_quarto.yml` project setting reached Jupyter and Ark; `engine: jupyter` plus
+a top-level `jupyter:` claims map ran knitr, as the page warns). The
+embedded `q2 docs` copy is generated and gitignored; refresh it with
+`cargo xtask build-agents-docs` if you want `q2 docs llms` to show the page.
+
+
 ## Phase 6: end-to-end verification (epic done-when)
 
-- [ ] Recreate a working venv (the `~/docs/ark/.venv` interpreter is broken, see
+- [x] Recreate a working venv (the `~/docs/ark/.venv` interpreter is broken, see
   above) and render `~/docs/ark/example.qmd` reduced to the S1 spelling
   (`jupyter: {kernel: ark}` plus the claims entry) through
   `target/debug/q2 render`.
-- [ ] Inspect the HTML: three cell outputs, an `<img>` for the plot, the figure
+- [x] Inspect the HTML: three cell outputs, an `<img>` for the plot, the figure
   file under `example_files/figure-html/`, no warnings, no `.rmarkdown` in the
   log. Record the invocation and output snippet here.
-- [ ] Negative runs: nonexistent kernel errors; corrupt image payload gives the
+- [x] Negative runs: nonexistent kernel errors; corrupt image payload gives the
   new diagnostic and no Q-2-49.
-- [ ] Confirm the bare spellings (`engine: jupyter` + `jupyter: ark`,
+- [x] Confirm the bare spellings (`engine: jupyter` + `jupyter: ark`,
   `jupyter: ark` alone) still render `r` with knitr, unchanged: they are
   Epic B\'s corpus cases C10, C30 and C31 and must remain expected-fail
   there.
-- [ ] Not verified by the epic and left out of scope: other Ark display types,
+- [x] Not verified by the epic and left out of scope: other Ark display types,
   errors, stdin, interrupts.
-- [ ] Reconcile this checklist with what landed, then close the child strands
+- [x] Reconcile this checklist with what landed, then close the child strands
   and the epic with `braid close`.
+
+End-to-end record (2026-11-04; `target/debug/q2` built from this branch after
+Phase 3; scratch venv with `jupyter-client`/`ipykernel` on PATH; kernelspecs
+registered: `ark`, `python3` (venv), plus the machine\'s `julia-1.11`, `ggsql`,
+`sos`; **no `ir` anywhere**). Output was inspected in each case.
+
+Done-when document (`example.qmd` reduced to the S1 spelling):
+
+```yaml
+jupyter:
+  kernel: ark
+  claims:
+    r: 1
+```
+
+```bash
+q2 render example.qmd
+```
+
+Observed: the log is one line (`Rendering single file: ...`), no warning, no
+`.rmarkdown`. The HTML has three cells with `[1] 3`, the `summary()` table
+(`Min. 10.40 ... Max. 33.90`) and `<p><img
+src="example_files/figure-html/cell-3-output-1.png" alt="" class="img-fluid"
+/></p>`; the cell outputs carry `cell-output-display` (Jupyter, not knitr\'s
+`cell-output-stdout`). `example_files/figure-html/cell-3-output-1.png` is a
+real 800 x 600 PNG (`file`). The original `~/docs/ark/example.qmd` spelling
+(`engine:` map plus top-level `jupyter:`) also renders the `<img>`.
+
+Negative and unchanged-behavior runs:
+
+| Document | Result |
+|---|---|
+| `jupyter: {kernel: nosuchkernel, claims: {r: 1}}`, `{r}` cell | exit 1: `Execution failed in jupyter: kernelspec \'nosuchkernel\' not found`, with the searched paths and `available kernels: julia-1.11, ggsql, ark, sos, python3` |
+| `{python}` cell emitting `display({"image/png": "!!!not-base64!!!"}, raw=True)` | exit 0, `Warning [Q-18-4]` at the cell, `1 warning`, **no** Q-2-49 |
+| `engine: jupyter` + `jupyter: ark`, `{r}` | knitr (`processing file: ...rmarkdown`, `cell-output-stdout`), unchanged: corpus C10/C30 stay expected-fail |
+| `jupyter: ark` alone, `{r}` | knitr, unchanged: C31 stays expected-fail |
+| `jupyter: python3`, `{python}` | Jupyter, prints `42`: an explicit kernel that exists still works |
+| `engine: jupyter` + top-level `jupyter: {kernel, claims}` | knitr: the documented dead-claims case (C35) |
+| project `_quarto.yml` `jupyter: {kernel: ark, claims: {r: 1}}`, doc with only `{r}` | Jupyter on Ark |
+| `engine: [knitr, {jupyter: {kernel: ark, claims: {r: 2}}}]` | Jupyter on Ark |
+
+Left out of scope, not verified: other Ark display types, errors, stdin,
+interrupts.
+
+Epic close-out. Delivered by this branch: bd-wzz90981 (Phase 1), bd-pcg42lej
+(Phase 2), bd-9pvolzwl and bd-db68qtuf (Phase 3), bd-4nypw3wq (Phase 5).
+**bd-rorntup4** (promote explicit engines\' Fallback claims, the resolver
+change) is Epic B\'s D2b and is deliberately left open, so the epic strand
+stays open as well (an open child blocks its parent\'s close).
 
 # Ordering and risk
 

@@ -180,6 +180,65 @@ engines:
 With this table, `{python .marimo}` resolves to marimo and a plain `{python}`
 cell does not — it falls through to whichever engine claims Python normally.
 
+## Running R cells on a Jupyter kernel {#r-on-jupyter}
+
+By default `{r}` cells run in knitr. To run them in a Jupyter R kernel
+instead, such as [Ark](https://github.com/posit-dev/ark) or IRkernel, make
+two choices: which kernel, and that Jupyter is the engine that gets `r`.
+One block does both:
+
+```{.yaml filename="document.qmd"}
+jupyter:
+  kernel: ark              # a name from `jupyter kernelspec list`
+  claims:
+    r: 1                   # Jupyter takes r cells, not knitr
+```
+
+The same block works in `_quarto.yml` to switch a whole project. The
+document needs no `engine:` key.
+
+A few things to know:
+
+- **`kernel:` must name an installed kernel.** If it does not, the render
+  stops and lists the kernels Quarto found. Without `kernel:`, Quarto
+  uses a registered kernel whose language is R; if both `ir` and `ark`
+  are installed it picks `ir`, so name the one you want.
+- **Leave `engine: jupyter` out.** With `engine: jupyter` written as a
+  plain name, a top-level `jupyter:` block, `claims` included, is not read,
+  and knitr runs your `{r}` cells without a warning. Use the block above
+  by itself, or put the settings inside the `engine:` entry:
+
+  ```{.yaml filename="document.qmd"}
+  engine:
+    jupyter:
+      kernel: ark
+      claims:
+        r: 1
+  ```
+
+- **If `engine:` also lists knitr, write `r: 2`.** At `r: 1` knitr and
+  Jupyter tie, and the order of the list decides. `r: 2` wins in either
+  order:
+
+  ```{.yaml filename="document.qmd"}
+  engine:
+    - knitr
+    - jupyter:
+        kernel: ark
+        claims:
+          r: 2
+  ```
+
+- **Write `claims` as a number.** Other spellings of the same entry, such
+  as `r: {kind: primary}`, are not honored here yet.
+- **One kernel runs the whole document.** A `claims` table replaces
+  Jupyter's usual one, so this block gives Jupyter only `r`. Keep the
+  document to `{r}` cells, or Jupyter's other languages will not be run
+  by it.
+
+This spelling is how it works today. A later release may make the `claims`
+line unnecessary when you name a kernel.
+
 ## Making a legacy extension resolvable {#backward-compatibility}
 
 This is the payoff the two keys were designed for.
