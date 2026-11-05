@@ -6,6 +6,8 @@
  * SPA sends it on every render call. `--profile` never travels: the browser cannot honor it.
  */
 
+import { serverUrl } from './serverUrl';
+
 /** The viewer's `--to` and `-M`. */
 export interface RenderBlock {
   /** The requested format; wins over the document's and the project's. */
@@ -76,14 +78,14 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  *   instead of rendering a flagged session as plain html.
  */
 export async function fetchPreviewConfig(
-  loc: Pick<Location, 'protocol' | 'host'> = window.location,
+  base: string = document.baseURI,
   { attempts = 3, delayMs = 250 }: FetchPreviewConfigOptions = {},
 ): Promise<PreviewConfig> {
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) await sleep(delayMs * 2 ** (attempt - 1));
     try {
-      const resp = await fetch(`${loc.protocol}//${loc.host}/api/preview/config`);
+      const resp = await fetch(serverUrl('/api/preview/config', base));
       if (resp.status === 404) return { allowEdit: false };
       if (!resp.ok) {
         lastError = new PreviewConfigError(`GET /api/preview/config answered HTTP ${resp.status}`);

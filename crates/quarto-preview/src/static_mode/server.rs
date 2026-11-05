@@ -29,6 +29,10 @@
 //!   pdf.js viewer under [`PDFJS_PREFIX`] (when the server has a
 //!   pdf.js tree); the PDF's bytes stay at their own path, which is
 //!   what the viewer fetches.
+//! - Every URL the server emits (redirects, listing links, the client's
+//!   `data-q2-root`) is relative to the request URL, so the preview
+//!   works behind a proxy that serves it under a stripped path prefix
+//!   (`/p/<token>/`, `/user/<name>/proxy/<port>/`).
 //! - Every HTML or PDF page actually *viewed* (a 200 GET that is not a CORS
 //!   fetch) is reported on `StaticServerConfig::page_requests`, which
 //!   is how lazy code execution learns what the user is looking at
@@ -242,7 +246,7 @@ async fn serve_path(State(state): State<StaticState>, req: Request) -> Response 
         .is_some_and(|v| v.as_bytes() == b"cors");
 
     let Some(segments) = decode_segments(&raw_path) else {
-        return not_found(&state, is_head).await;
+        return not_found(&state, &raw_path, is_head).await;
     };
     if raw_path.starts_with(PDFJS_PREFIX)
         && let Some(tree) = &state.pdfjs
@@ -250,7 +254,7 @@ async fn serve_path(State(state): State<StaticState>, req: Request) -> Response 
         return serve_pdfjs(tree, &segments, is_head);
     }
     if segments.is_empty() {
-        return serve_root(&state, is_head).await;
+        return serve_root(&state, &raw_path, is_head).await;
     }
     let is_navigation = is_document_navigation(req.headers());
     let full = segments
@@ -260,28 +264,45 @@ async fn serve_path(State(state): State<StaticState>, req: Request) -> Response 
     match tokio::fs::metadata(&full).await {
         Ok(meta) if meta.is_dir() => {
             if !raw_path.ends_with('/') {
-                return redirect(StatusCode::MOVED_PERMANENTLY, &format!("{raw_path}/"));
+                return redirect(
+                    StatusCode::MOVED_PERMANENTLY,
+                    &relative_url(&raw_path, &format!("{raw_path}/")),
+                );
             }
             let index = full.join("index.html");
             match tokio::fs::read(&index).await {
                 Ok(bytes) => {
                     state.note_page_view(&index, is_head, is_cors_fetch);
-                    file_response(&index, bytes, StatusCode::OK, is_cors_fetch, is_head)
+                    file_response(
+                        &index,
+                        bytes,
+                        StatusCode::OK,
+                        is_cors_fetch,
+                        is_head,
+                        &raw_path,
+                    )
                 }
-                Err(_) => not_found(&state, is_head).await,
+                Err(_) => not_found(&state, &raw_path, is_head).await,
             }
         }
         Ok(meta) if meta.is_file() => match tokio::fs::read(&full).await {
             Ok(bytes) => {
                 state.note_page_view(&full, is_head, is_cors_fetch);
                 if is_navigation && is_pdf(&full) && state.pdfjs.is_some() {
-                    return redirect(StatusCode::FOUND, &viewer_url(&raw_path));
+                    return redirect(StatusCode::FOUND, &viewer_url(&raw_path, &raw_path));
                 }
-                file_response(&full, bytes, StatusCode::OK, is_cors_fetch, is_head)
+                file_response(
+                    &full,
+                    bytes,
+                    StatusCode::OK,
+                    is_cors_fetch,
+                    is_head,
+                    &raw_path,
+                )
             }
-            Err(_) => not_found(&state, is_head).await,
+            Err(_) => not_found(&state, &raw_path, is_head).await,
         },
-        _ => not_found(&state, is_head).await,
+        _ => not_found(&state, &raw_path, is_head).await,
     }
 }
 
@@ -292,11 +313,30 @@ fn is_document_navigation(headers: &axum::http::HeaderMap) -> bool {
     is("sec-fetch-mode", b"navigate") && is("sec-fetch-dest", b"document")
 }
 
-/// The viewer URL for a PDF at the percent-encoded request path `pdf_path`. No hash parameter:
-/// any `#view=`/`#pagemode=` makes pdf.js forget the page and zoom on reload.
-fn viewer_url(pdf_path: &str) -> String {
-    let file = utf8_percent_encode(pdf_path, QUERY_VALUE);
-    format!("{VIEWER_PATH}?file={file}")
+/// The viewer URL for a PDF at the percent-encoded root-relative path `pdf_path`, relative to
+/// the request path `from`. `file` is relative to the viewer page, which is what pdf.js resolves
+/// it against. No hash parameter: any `#view=`/`#pagemode=` makes pdf.js forget the page and
+/// zoom on reload.
+fn viewer_url(from: &str, pdf_path: &str) -> String {
+    let file = utf8_percent_encode(&relative_url(VIEWER_PATH, pdf_path), QUERY_VALUE).to_string();
+    format!("{}?file={file}", relative_url(from, VIEWER_PATH))
+}
+
+/// The way back to the site root from the page at request path `from`: `./` at the top level,
+/// else one `../` per directory. Counts the raw path's slashes, as the browser does when it
+/// resolves a relative URL against it.
+fn root_prefix(from: &str) -> String {
+    match from.matches('/').count().saturating_sub(1) {
+        0 => "./".to_string(),
+        depth => "../".repeat(depth),
+    }
+}
+
+/// The root-relative URL `to` (`/a/b.html`), relative to the request path `from`. The server
+/// never sees a path-stripping proxy's prefix, so every URL it emits must be relative for the
+/// browser to keep it under that prefix.
+fn relative_url(from: &str, to: &str) -> String {
+    format!("{}{}", root_prefix(from), to.trim_start_matches('/'))
 }
 
 /// `/__q2-preview/pdfjs/...`: a file of the bundled pdf.js tree, with the reload client added
@@ -342,11 +382,11 @@ pub(super) fn decode_segments(raw_path: &str) -> Option<Vec<String>> {
 
 /// `/`: `index.html`, else a redirect to the default file, else a
 /// listing of the rendered pages.
-async fn serve_root(state: &StaticState, is_head: bool) -> Response {
+async fn serve_root(state: &StaticState, raw_path: &str, is_head: bool) -> Response {
     let index = state.root.join("index.html");
     if let Ok(bytes) = tokio::fs::read(&index).await {
         state.note_page_view(&index, is_head, false);
-        return file_response(&index, bytes, StatusCode::OK, false, is_head);
+        return file_response(&index, bytes, StatusCode::OK, false, is_head, raw_path);
     }
     if let Some(default_file) = &state.default_file
         && tokio::fs::metadata(state.root.join(default_file.as_ref()))
@@ -357,17 +397,25 @@ async fn serve_root(state: &StaticState, is_head: bool) -> Response {
         if state.pdfjs.is_some() && is_pdf(Path::new(default_file.as_ref())) {
             // A PDF-only output: straight to the viewer, counting the view (lazy execution).
             state.note_page_view(&state.root.join(default_file.as_ref()), is_head, false);
-            return redirect(StatusCode::FOUND, &viewer_url(&location));
+            return redirect(StatusCode::FOUND, &viewer_url(raw_path, &location));
         }
-        return redirect(StatusCode::FOUND, &location);
+        return redirect(StatusCode::FOUND, &relative_url(raw_path, &location));
     }
     if let Some(text) = state.hub.failure() {
         let html = render_failure(&text);
-        return html_response(inject_client(html.into_bytes()), StatusCode::OK, is_head);
+        return html_response(
+            inject_client(html.into_bytes(), raw_path),
+            StatusCode::OK,
+            is_head,
+        );
     }
     let pages = list_html_pages(&state.root);
-    let html = render_listing(&pages);
-    html_response(inject_client(html.into_bytes()), StatusCode::OK, is_head)
+    let html = render_listing(&pages, raw_path);
+    html_response(
+        inject_client(html.into_bytes(), raw_path),
+        StatusCode::OK,
+        is_head,
+    )
 }
 
 /// Every `.html` under `root` except `404.html`, as `/`-separated
@@ -425,7 +473,7 @@ fn render_failure(text: &str) -> String {
     )
 }
 
-fn render_listing(pages: &[String]) -> String {
+fn render_listing(pages: &[String], raw_path: &str) -> String {
     let mut html = String::from(
         "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\">\
          <title>q2 preview</title></head>\n<body>\n\
@@ -433,7 +481,7 @@ fn render_listing(pages: &[String]) -> String {
          pick a page.</p>\n<ul>\n",
     );
     for page in pages {
-        let href = format!("/{}", encode_path(page));
+        let href = relative_url(raw_path, &encode_path(page));
         html.push_str(&format!(
             "<li><a href=\"{}\">{}</a></li>\n",
             escape_html(&href),
@@ -468,10 +516,17 @@ fn escape_html(s: &str) -> String {
 
 /// The site's `404.html` with the client injected (so a page opened
 /// before it rendered goes live once it exists), else a plain 404.
-async fn not_found(state: &StaticState, is_head: bool) -> Response {
+async fn not_found(state: &StaticState, raw_path: &str, is_head: bool) -> Response {
     let page = state.root.join("404.html");
     if let Ok(bytes) = tokio::fs::read(&page).await {
-        return file_response(&page, bytes, StatusCode::NOT_FOUND, false, is_head);
+        return file_response(
+            &page,
+            bytes,
+            StatusCode::NOT_FOUND,
+            false,
+            is_head,
+            raw_path,
+        );
     }
     plain_not_found(is_head)
 }
@@ -500,21 +555,22 @@ pub(super) fn redirect(status: StatusCode, location: &str) -> Response {
         .unwrap_or_else(|_| StatusCode::NOT_FOUND.into_response())
 }
 
-/// A file from disk with its content type. HTML gets the client
-/// unless the request was a CORS fetch.
+/// A file from disk with its content type, served for the request path
+/// `raw_path`. HTML gets the client unless the request was a CORS fetch.
 fn file_response(
     path: &Path,
     bytes: Vec<u8>,
     status: StatusCode,
     is_cors_fetch: bool,
     is_head: bool,
+    raw_path: &str,
 ) -> Response {
     let mime = mime_guess::from_path(path).first_or_octet_stream();
     if mime.type_() == mime_guess::mime::TEXT && mime.subtype() == mime_guess::mime::HTML {
         let body = if is_cors_fetch {
             bytes
         } else {
-            inject_client(bytes)
+            inject_client(bytes, raw_path)
         };
         return html_response(body, status, is_head);
     }
@@ -566,15 +622,27 @@ fn bytes_response(
     response
 }
 
-/// Splice a `<script src>` for the external client in before the last `</body>`.
+/// Splice a `<script src>` for the external client in before the last `</body>` of the viewer
+/// page, with the same `data-q2-root` the inline copy gets.
 fn inject_client_script_tag(html: Vec<u8>) -> Vec<u8> {
-    splice_before_body_end(html, &format!("<script src=\"{CLIENT_PATH}\"></script>\n"))
+    let src = relative_url(VIEWER_PATH, CLIENT_PATH);
+    let root = root_prefix(VIEWER_PATH);
+    splice_before_body_end(
+        html,
+        &format!("<script src=\"{src}\" data-q2-root=\"{root}\"></script>\n"),
+    )
 }
 
 /// Splice the client script in before the last `</body>` (any case),
-/// or append it when the page has none.
-fn inject_client(html: Vec<u8>) -> Vec<u8> {
-    splice_before_body_end(html, &format!("<script>\n{CLIENT_JS}</script>\n"))
+/// or append it when the page has none. `data-q2-root` tells the client
+/// how to get from the page at request path `raw_path` back to the site
+/// root, so its own requests survive a path-prefix proxy.
+fn inject_client(html: Vec<u8>, raw_path: &str) -> Vec<u8> {
+    let root = root_prefix(raw_path);
+    splice_before_body_end(
+        html,
+        &format!("<script data-q2-root=\"{root}\">\n{CLIENT_JS}</script>\n"),
+    )
 }
 
 fn splice_before_body_end(mut html: Vec<u8>, tag: &str) -> Vec<u8> {
@@ -602,16 +670,33 @@ mod tests {
     fn client_script_never_closes_its_own_tag() {
         assert!(!CLIENT_JS.to_ascii_lowercase().contains("</script"));
         assert!(
-            CLIENT_JS.contains(&format!("\"{EVENTS_PATH}\"")),
+            CLIENT_JS.contains(&format!("\"{}\"", EVENTS_PATH.trim_start_matches('/'))),
             "client must subscribe to EVENTS_PATH exactly"
+        );
+        assert!(
+            CLIENT_JS.contains(&format!("\"{}\"", VIEWER_PATH.trim_start_matches('/'))),
+            "client must recognize VIEWER_PATH exactly"
+        );
+    }
+
+    #[test]
+    fn relative_urls_climb_one_level_per_directory() {
+        assert_eq!(root_prefix("/"), "./");
+        assert_eq!(root_prefix("/a.html"), "./");
+        assert_eq!(root_prefix("/a/"), "../");
+        assert_eq!(root_prefix("/a/b/c.html"), "../../");
+        assert_eq!(relative_url("/sub", "/sub/"), "./sub/");
+        assert_eq!(
+            relative_url("/a/b.pdf", VIEWER_PATH),
+            "../__q2-preview/pdfjs/web/viewer.html"
         );
     }
 
     #[test]
     fn inject_goes_before_the_last_body_tag_of_any_case() {
-        let out = inject_client(b"<html><BODY><p>x</p></BODY></html>".to_vec());
+        let out = inject_client(b"<html><BODY><p>x</p></BODY></html>".to_vec(), "/");
         let s = String::from_utf8(out).unwrap();
-        let script = s.find("<script>").unwrap();
+        let script = s.find("<script").unwrap();
         let body_end = s.find("</BODY>").unwrap();
         assert!(script < body_end);
         assert!(s.ends_with("</BODY></html>"));
@@ -619,9 +704,9 @@ mod tests {
 
     #[test]
     fn inject_appends_when_there_is_no_body_tag() {
-        let out = inject_client(b"<p>fragment</p>".to_vec());
+        let out = inject_client(b"<p>fragment</p>".to_vec(), "/");
         let s = String::from_utf8(out).unwrap();
-        assert!(s.starts_with("<p>fragment</p><script>"));
+        assert!(s.starts_with("<p>fragment</p><script data-q2-root=\"./\">"));
     }
 
     #[test]

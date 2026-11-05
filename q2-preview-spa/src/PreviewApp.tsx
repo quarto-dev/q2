@@ -73,6 +73,7 @@ import { PdfPane } from './components/PdfPane';
 import { nextNavState, readNavIndex, seedNavIndex } from './navIndex';
 import { isTypstPdf } from './pdfPage';
 import { fetchPreviewConfig, wasmRenderOptions, type RenderBlock } from './previewConfig';
+import { serverUrl, serverWsUrl } from './serverUrl';
 import { pickInitialPage } from './pickInitialPage';
 
 /**
@@ -561,9 +562,8 @@ export function computeOverlayInputs(
  * incoming `shareRoute.indexDocId` in App.tsx for the same reason.
  * We normalize here so callers see a single consistent shape.
  */
-async function fetchIndexDocId(loc: Location = window.location): Promise<string> {
-  const healthUrl = `${loc.protocol}//${loc.host}/health`;
-  const resp = await fetch(healthUrl);
+async function fetchIndexDocId(): Promise<string> {
+  const resp = await fetch(serverUrl('/health'));
   if (!resp.ok) {
     throw new Error(`GET /health returned ${resp.status} ${resp.statusText}`);
   }
@@ -581,11 +581,10 @@ async function fetchIndexDocId(loc: Location = window.location): Promise<string>
 /**
  * Derive the websocket URL from the page location. The CLI serves the
  * SPA on the same host:port that hosts the samod ws endpoint, so we
- * just swap the scheme.
+ * just swap the scheme (under any proxy prefix, see `serverUrl.ts`).
  */
-function deriveWsUrl(loc: Location = window.location): string {
-  const wsScheme = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${wsScheme}//${loc.host}/ws`;
+function deriveWsUrl(): string {
+  return serverWsUrl('/ws');
 }
 
 
@@ -881,7 +880,7 @@ export default function PreviewApp() {
         // IndexedDB cache can never hit, and its open would otherwise
         // gate sending the WS join. See
         // claude-notes/research/2026-06-11-firefox-ws-handshake-serialization.md
-        const healthUrl = `${window.location.protocol}//${window.location.host}/health`;
+        const healthUrl = serverUrl('/health');
         const checkHealth = async (): Promise<boolean> => {
           try {
             const resp = await fetch(healthUrl);
@@ -1032,7 +1031,7 @@ export default function PreviewApp() {
     void (async () => {
       try {
         const resp = await fetch(
-          `/api/preview/deps?page=${encodeURIComponent(activePath)}`,
+          serverUrl(`/api/preview/deps?page=${encodeURIComponent(activePath)}`),
         );
         if (cancelled) return;
         if (!resp.ok) {
@@ -1083,7 +1082,7 @@ export default function PreviewApp() {
     void (async () => {
       try {
         const resp = await fetch(
-          `/api/preview/diagnostics?page=${encodeURIComponent(activePath)}`,
+          serverUrl(`/api/preview/diagnostics?page=${encodeURIComponent(activePath)}`),
         );
         if (cancelled) return;
         if (!resp.ok) {

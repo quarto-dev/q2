@@ -14,6 +14,7 @@ import { stripAnsi } from '@quarto/preview-renderer/utils/stripAnsi';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import { installBackButton } from '../pdfBackButton';
 import { pdfMetadata, type RenderBlock } from '../previewConfig';
+import { serverUrl } from '../serverUrl';
 import './PdfPane.css';
 
 export const PDF_ROUTE = '/api/preview/pdf';
@@ -100,7 +101,7 @@ export function PdfPane({ path, contentTick, onBack, render }: PdfPaneProps) {
       setUpdating(true);
       try {
         const snap = vfsReadFile(path);
-        const response = await fetch(PDF_ROUTE, {
+        const response = await fetch(serverUrl(PDF_ROUTE), {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ path, content: snap.success ? snap.content : undefined, metadata: pdfMetadata(renderRef.current) }),
