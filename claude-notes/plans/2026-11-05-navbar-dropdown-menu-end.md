@@ -20,4 +20,4 @@ left items are unchanged.
 
 - [x] Failing unit test for right vs. left menus
 - [x] Thread an `end` flag through `render_navbar_item`
-- [ ] Verify (nextest, clippy, Windows clippy, strict note render)
+- [x] Verify (nextest, clippy, Windows clippy, strict note render)
