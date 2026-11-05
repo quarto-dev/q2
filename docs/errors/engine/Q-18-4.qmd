@@ -1,0 +1,59 @@
+---
+title: "Engine Image Output Could Not Be Used"
+description: "An execution engine returned an image for a code cell, but Quarto could not decode or save it; the render continues without the figure."
+code: Q-18-4
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-4` — Engine Image Output Could Not Be Used
+
+> An execution engine returned an image for a code cell, but Quarto
+> could not decode it or write it to disk; the render continues without
+> the figure.
+
+## What this means
+
+When a code cell draws a plot, the engine hands Quarto the image data.
+Quarto decodes it and saves it as a figure file next to your document
+(in the `<document>_files/figure-html/` folder), then points the page at
+that file.
+
+This warning means that step failed for one image. The page is still
+produced, but that figure is missing: Quarto shows a placeholder
+(`[Image output]`), or the output's plain-text form when the cell
+produced one. The message names the cell and the reason.
+
+## Why this happens
+
+- The kernel sent image data in a form Quarto could not decode. The
+  message says `invalid base64`. This is a bug in how Quarto reads that
+  kernel's output, not a problem in your code.
+- Quarto could not create the figure folder or write the file, for
+  example because of file permissions or a full disk. The message names
+  the path and the operating system's reason.
+
+## How to fix
+
+1. If the message names a path, check that the folder next to your
+   document is writable and that the disk has room, then re-run the
+   render.
+2. If the message says `invalid base64`, check that the plot displays
+   correctly in the kernel itself. If it does, report it at
+   <https://github.com/quarto-dev/q2/issues> with the full warning text
+   and the kernel you used.
+
+Use `--strict` to make this warning stop the render instead of
+producing a page with a missing figure:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-18-2`](Q-18-2.qmd) — another engine output Quarto could not use;
+  the render continues without it.

@@ -1952,6 +1952,13 @@
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-3",
     "since_version": "99.9.9"
   },
+  "Q-18-4": {
+    "subsystem": "engine",
+    "title": "Engine Image Output Could Not Be Used",
+    "message_template": "An execution engine returned an image (a plot or figure) for a code cell, but Quarto could not decode it or write it to disk. The render continues, so the figure is missing from the page; a placeholder, or the output's text form when it has one, stands in for it.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-4",
+    "since_version": "99.9.9"
+  },
   "Q-19-1": {
     "subsystem": "image",
     "title": "Plot Document Not Found",

@@ -107,7 +107,7 @@ mod page_nav_render;
 mod panel_tabset;
 mod panel_tabset_resolve;
 mod proof;
-mod reference_link_diagnostics;
+pub(crate) mod reference_link_diagnostics;
 mod repo_actions_render;
 mod resource_collector;
 mod responsive_image;

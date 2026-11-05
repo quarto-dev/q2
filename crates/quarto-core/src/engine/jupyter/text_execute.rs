@@ -287,6 +287,8 @@ async fn execute_blocks_inner(
     // Figure emission (bd-5t6wvu7m): image outputs are written under
     // `<stem>_files/figure-html/` next to the source document.
     let mut fig = FigureWriter::new(&ctx.source_path);
+    // Warnings raised while formatting (undecodable images, bd-pcg42lej).
+    let mut warnings = Vec::new();
 
     for block in blocks {
         // Append content before this block
@@ -363,6 +365,10 @@ async fn execute_blocks_inner(
             &mut fig,
             visibility,
         ));
+        warnings.extend(image_failure_diagnostics(
+            &fig.take_failures(),
+            &body_source,
+        ));
 
         last_end = block.end;
     }
@@ -374,6 +380,7 @@ async fn execute_blocks_inner(
     // dir-level, mirroring knitr. `q2 render` copies it to the output
     // dir (bd-o8pr) and the preview capture embeds it (bd-qbhp2cvv).
     let mut result = ExecuteResult::new(output);
+    result.warnings = warnings;
     if fig.wrote_any {
         result = result.with_supporting_files(vec![fig.files_dir()]);
     }
@@ -641,6 +648,18 @@ pub(super) struct FigureWriter {
     output_index: usize,
     /// Whether any figure file was successfully written.
     pub(super) wrote_any: bool,
+    /// Image outputs that were dropped (bad payload or I/O failure) since
+    /// the last [`take_failures`](Self::take_failures) (bd-pcg42lej).
+    failures: Vec<ImageFailure>,
+}
+
+/// One image output the writer could not decode or write.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ImageFailure {
+    /// MIME type of the dropped payload (e.g. `image/png`).
+    pub(super) mime: String,
+    /// Human-readable cause (decode error or OS error).
+    pub(super) cause: String,
 }
 
 impl FigureWriter {
@@ -656,6 +675,7 @@ impl FigureWriter {
             cell_index: 0,
             output_index: 0,
             wrote_any: false,
+            failures: Vec::new(),
         }
     }
 
@@ -669,6 +689,18 @@ impl FigureWriter {
     /// supporting-files reporting).
     pub(super) fn files_dir(&self) -> PathBuf {
         self.doc_dir.join(&self.files_dir_name)
+    }
+
+    fn record_failure(&mut self, mime: &str, cause: String) {
+        self.failures.push(ImageFailure {
+            mime: mime.to_string(),
+            cause,
+        });
+    }
+
+    /// Drain the image failures recorded since the last call.
+    pub(super) fn take_failures(&mut self) -> Vec<ImageFailure> {
+        std::mem::take(&mut self.failures)
     }
 
     /// Write one image output. Returns the doc-relative, forward-slash
@@ -700,6 +732,7 @@ impl FigureWriter {
                 Ok(bytes) => bytes,
                 Err(e) => {
                     tracing::warn!(mime, error = %e, "jupyter figure: invalid base64; skipping");
+                    self.record_failure(mime, format!("invalid base64 ({e})"));
                     return None;
                 }
             }
@@ -714,15 +747,34 @@ impl FigureWriter {
         let abs = self.doc_dir.join(&self.files_dir_name).join("figure-html");
         if let Err(e) = std::fs::create_dir_all(&abs) {
             tracing::warn!(dir = %abs.display(), error = %e, "jupyter figure: cannot create figures dir");
+            self.record_failure(mime, format!("cannot create {} ({e})", abs.display()));
             return None;
         }
         if let Err(e) = std::fs::write(abs.join(&file_name), &bytes) {
             tracing::warn!(file = %file_name, error = %e, "jupyter figure: write failed");
+            self.record_failure(mime, format!("cannot write {file_name} ({e})"));
             return None;
         }
         self.wrote_any = true;
         Some(rel)
     }
+}
+
+/// Turn the figure writer's recorded failures into `Q-18-4` warnings
+/// located at the cell whose output produced them (bd-pcg42lej).
+pub(super) fn image_failure_diagnostics(
+    failures: &[ImageFailure],
+    cell: &SourceInfo,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    failures
+        .iter()
+        .map(|f| {
+            let mut diag =
+                crate::engine::diagnostics::dropped_image_diagnostic("jupyter", &f.mime, &f.cause);
+            diag.location = Some(cell.clone());
+            diag
+        })
+        .collect()
 }
 
 /// Format kernel outputs as markdown.
@@ -802,9 +854,10 @@ fn format_outputs(
                     // An image payload we failed to write (bad base64,
                     // I/O error) and no text fallback: keep the
                     // pre-bd-5t6wvu7m placeholder rather than dropping
-                    // the output silently.
+                    // the output silently. The brackets are escaped: a bare
+                    // `[...]` is span syntax and would raise Q-2-49.
                     output.push_str(
-                        "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n",
+                        "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n",
                     );
                 }
             }
@@ -1845,6 +1898,83 @@ print("hello")
         assert!(!md.contains("[Image output]"), "got:\n{md}");
     }
 
+    /// A cell output holding one undecodable `image/png` and nothing else.
+    fn corrupt_png_result() -> KernelExecuteResult {
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!("!!!not-base64!!!"),
+        );
+        ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }])
+    }
+
+    #[test]
+    fn test_image_placeholder_has_no_q_2_49_warning() {
+        // bd-pcg42lej: a bare `[Image output]` parses as an unresolved
+        // span-with-attributes candidate and raised Q-2-49. The escaped
+        // placeholder must parse warning-free.
+        let md = format_outputs(&corrupt_png_result(), &mut test_fig(), true);
+        let mut sink = Vec::<u8>::new();
+        let (doc, _ctx, _warnings) =
+            pampa::readers::qmd::read(md.as_bytes(), false, "t.qmd", &mut sink, true, None)
+                .expect("placeholder markdown must parse");
+        let codes: Vec<_> =
+            crate::transforms::reference_link_diagnostics::collect_diagnostics(&doc)
+                .into_iter()
+                .filter_map(|d| d.code)
+                .collect();
+        assert!(!codes.iter().any(|c| c == "Q-2-49"), "got {codes:?}\n{md}");
+        assert!(md.contains("\\[Image output\\]"), "got:\n{md}");
+    }
+
+    #[test]
+    fn test_failed_image_decode_is_recorded() {
+        let mut fig = test_fig();
+        let _ = format_outputs(&corrupt_png_result(), &mut fig, true);
+        let failures = fig.take_failures();
+        assert_eq!(failures.len(), 1, "got {failures:?}");
+        assert_eq!(failures[0].mime, "image/png");
+        assert!(
+            failures[0].cause.to_lowercase().contains("invalid"),
+            "cause should carry the decode error, got {:?}",
+            failures[0].cause
+        );
+        assert!(fig.take_failures().is_empty(), "take_failures must drain");
+    }
+
+    #[test]
+    fn test_image_failure_with_text_fallback_is_still_recorded() {
+        // The text fallback hides the loss from the page, not from the
+        // author: the dropped figure is still diagnosed.
+        let mut data = std::collections::HashMap::new();
+        data.insert("image/png".to_string(), serde_json::json!("!!!"));
+        data.insert("text/plain".to_string(), serde_json::json!("fallback"));
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+        let mut fig = test_fig();
+        let _ = format_outputs(&result, &mut fig, true);
+        assert_eq!(fig.take_failures().len(), 1);
+    }
+
+    #[test]
+    fn test_image_failure_diagnostics_carry_cell_location() {
+        let failures = vec![ImageFailure {
+            mime: "image/png".into(),
+            cause: "Invalid padding".into(),
+        }];
+        let at = SourceInfo::original(quarto_source_map::FileId(0), 10, 20);
+        let diags = image_failure_diagnostics(&failures, &at);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-18-4"));
+        assert!(diags[0].location.is_some(), "must name the cell");
+        assert!(format!("{:?}", diags[0]).contains("Invalid padding"));
+    }
+
     #[test]
     fn test_format_outputs_image_placeholder_is_display_div() {
         // Until bd-5t6wvu7m lands, image outputs render a placeholder —
@@ -1857,7 +1987,7 @@ print("hello")
         }]);
         assert_eq!(
             format_outputs(&result, &mut test_fig(), true),
-            "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n"
+            "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n"
         );
     }
 

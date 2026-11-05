@@ -113,6 +113,29 @@ pub fn unreadable_include_diagnostic(
         .build()
 }
 
+/// `Q-18-4`: the engine produced an image output (`mime`) that Quarto could
+/// not decode or write (`cause`). The figure is missing from the page, but
+/// the render continues, so this is a warning; `--strict` promotes it. The
+/// caller attaches the cell's source location.
+pub fn dropped_image_diagnostic(engine: &str, mime: &str, cause: &str) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("Engine Image Output Could Not Be Used")
+        .with_code("Q-18-4")
+        .problem(format!(
+            "the `{engine}` engine returned a `{mime}` image for this cell, but it could \
+             not be saved as a figure: {cause}."
+        ))
+        .add_detail(
+            "The figure is missing from the page; a placeholder (or the output's text \
+             form, when it has one) stands in for it.",
+        )
+        .add_hint(format!(
+            "If the plot looks fine in the kernel itself, this is likely a bug in how \
+             Quarto reads that kernel's image output; report it at {ISSUES_URL} with this \
+             message. Use `--strict` to make this stop the render."
+        ))
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +245,14 @@ mod tests {
         assert!(text.contains("include-in-header"), "{text}");
         assert!(text.contains("/tmp/x/header.html"), "{text}");
         assert!(text.contains("No such file"), "{text}");
+    }
+
+    #[test]
+    fn dropped_image_is_a_coded_warning() {
+        let diag = dropped_image_diagnostic("jupyter", "image/png", "Invalid padding");
+        assert_eq!(diag.code.as_deref(), Some("Q-18-4"));
+        assert_eq!(diag.kind, DiagnosticKind::Warning);
+        let text = format!("{diag:?}");
+        assert!(text.contains("image/png") && text.contains("Invalid padding"));
     }
 }

@@ -271,17 +271,36 @@ other Ark display type is involved in the three chunks.
 
 ## Phase 2: image-failure quality (bd-pcg42lej)
 
-- [ ] Test: a cell whose image cannot be decoded renders with **no** Q-2-49
+- [x] Test: a cell whose image cannot be decoded renders with **no** Q-2-49
   warning from the placeholder.
-- [ ] Test: the same render yields a diagnostic naming the cell location and
+- [x] Test: the same render yields a diagnostic naming the cell location and
   the decode error.
-- [ ] Fix 1: escape the placeholder as `\[Image output\]` and update the test at
+- [x] Fix 1: escape the placeholder as `\[Image output\]` and update the test at
   `text_execute.rs:~1813` that pins the old string.
 - [x] Diagnostics channel decided (S4: reuse `ExecuteResult.warnings`).
-- [ ] Add the catalog entry (next free code in the Q-18 family, `Q-18-4`), docs page and
+- [x] Add the catalog entry (next free code in the Q-18 family, `Q-18-4`), docs page and
   sidebar entry in one commit.
-- [ ] Fix 2: emit the diagnostic from `write_image` failures (decode and I/O),
+- [x] Fix 2: emit the diagnostic from `write_image` failures (decode and I/O),
   thread it through `format_outputs` to the stage.
+
+End-to-end record (2026-11-04, `target/debug/q2` from this branch, scratch
+venv on PATH; output inspected). `bad.qmd` is a `{python}` cell running
+`display({"image/png": "!!!not-base64!!!"}, raw=True)`:
+
+```bash
+q2 render bad.qmd            # exit 0
+q2 render --strict bad.qmd   # the warning becomes an error
+```
+
+Observed: `Warning: [Q-18-4] Engine Image Output Could Not Be Used`, pointing
+at `bad.qmd:6:2` (the cell), with the problem text "returned a `image/png`
+image ... invalid base64 (Invalid symbol 33, offset 0.)"; `1 warning`. No
+Q-2-49. The HTML holds a literal `<p>[Image output]</p>`. Under `--strict` the
+same diagnostic is the one error. Unit tests cover the escape (parsed through
+`collect_diagnostics`, which is where Q-2-49 comes from), the recorded
+failure, and the located diagnostic. Side effect: `transforms::
+reference_link_diagnostics` is now `pub(crate)` so the test can reach it.
+
 
 ## Phase 3: kernel resolution (bd-9pvolzwl, bd-db68qtuf)
 
