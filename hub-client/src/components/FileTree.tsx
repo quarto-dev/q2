@@ -8,7 +8,7 @@
  * - Context menu for file operations
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { isImageExtension, normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import {
@@ -87,12 +87,6 @@ export interface FileTreeProps {
   onOpenInNewTab?: (file: FileEntry) => void;
   /** Copy a link to a file to clipboard */
   onCopyLink?: (file: FileEntry) => void;
-  /**
-   * Optional toolbar pinned above the tree (see `FileSidebarToolbar`).
-   * Rendered inside the scroll container so the sticky folder headers
-   * offset below it.
-   */
-  toolbar?: ReactNode;
 }
 
 interface FolderMenuState {
@@ -181,7 +175,6 @@ export default function FileTree({
   onRenameFile,
   onOpenInNewTab,
   onCopyLink,
-  toolbar,
 }: FileTreeProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   // Drag-to-move (sidebar-internal drag of a file row): the folder path
@@ -891,11 +884,13 @@ export default function FileTree({
           tabIndex={tabbablePath === node.path ? 0 : -1}
           data-tree-path={node.path}
           // Expanded folders' headers stay pinned while their contents
-          // scroll. The sidebar (not the file list) is the scroll
-          // container, so they sit below the sticky FILES header and the
-          // sticky toolbar; nested ones stack under their ancestors.
+          // scroll. Sticky elements don't stack on their own, so the host
+          // reports how much it has pinned above the tree in the shared
+          // scroll container via --file-tree-sticky-offset (FileSidebar:
+          // section header + toolbar; a bare tree: nothing). Nested folder
+          // headers stack under their ancestors.
           style={{
-            top: `calc(var(--sidebar-section-header-height, 0px) + var(--sidebar-files-toolbar-height, 0px) + ${depth * FOLDER_ROW_HEIGHT_PX}px)`,
+            top: `calc(var(--file-tree-sticky-offset, 0px) + ${depth * FOLDER_ROW_HEIGHT_PX}px)`,
             zIndex: Math.max(1, FOLDER_HEADER_Z_TOP - depth),
           }}
           onClick={() => {
@@ -928,13 +923,11 @@ export default function FileTree({
   return (
     <div
       ref={sidebarRef}
-      className={`file-sidebar ${toolbar !== undefined ? 'with-toolbar' : ''} ${isDragOver ? 'drag-over' : ''}`}
+      className={`file-sidebar ${isDragOver ? 'drag-over' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {toolbar}
-
       {/* APG treeview: one tab stop via roving tabindex; arrows/Home/End/
           type-ahead navigate, Enter activates, Shift+F10 opens the row's
           context menu. An empty tree carries no widget role — a role with
