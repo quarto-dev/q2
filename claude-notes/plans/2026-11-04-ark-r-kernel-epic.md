@@ -256,14 +256,16 @@ other Ark display type is involved in the three chunks.
 
 ## Phase 1: unpadded base64 (bd-wzz90981)
 
-- [ ] Test: `write_image` given a valid PNG payload with the trailing `=`
+- [x] Test: `write_image` given a valid PNG payload with the trailing `=`
   removed decodes and writes the file (fails today with `Invalid padding`).
-- [ ] Test: payload containing `\r\n`, spaces or tabs between lines decodes.
-- [ ] Fix: `GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::Indifferent)`
+- [x] Test: payload containing `\r\n`, spaces or tabs between lines decodes.
+- [x] Fix: `GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::Indifferent)`
   and strip all ASCII whitespace, not just `\n`.
-- [ ] Check `preview_record.rs:521` and `capture_files.rs:41` for the same strict
+- [x] Check `preview_record.rs:521` and `capture_files.rs:41` for the same strict
   decoder on kernel-derived data; fix only if they decode kernel payloads.
-- [ ] Parity case in `engine_output_parity.rs` is skipped when no R kernel is
+  Checked: both only round-trip q2\'s own padded encoding (and a test decode), so
+  no change.
+- [ ] (skipped: not cheap, Ark is not a CI dependency) Parity case in `engine_output_parity.rs` is skipped when no R kernel is
   present; add only a Python-kernel case if one is cheap (Ark is not a CI
   dependency).
 

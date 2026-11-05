@@ -607,6 +607,14 @@ fn fenced_output_div(classes: &str, text: &str) -> String {
     format!("\n::: {{{classes}}}\n\n{ticks}\n{text}\n{ticks}\n\n:::\n")
 }
 
+/// Standard-alphabet base64 decoder that accepts padded and unpadded
+/// input. Kernels differ: IPython pads, Ark (bd-wzz90981) does not.
+const LENIENT_BASE64: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
+    &base64::alphabet::STANDARD,
+    base64::engine::GeneralPurposeConfig::new()
+        .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
+);
+
 /// Writes figure files for one document run (bd-5t6wvu7m).
 ///
 /// Image outputs (`image/png`, `image/jpeg`, `image/svg+xml`) are
@@ -677,12 +685,18 @@ impl FigureWriter {
         let content = extract_text_content(value);
         // Q1 rule (`mdImageOutput`): SVG payloads that are literal
         // `<svg` markup are written as text; everything else is
-        // base64 (strip the nbformat multiline newlines first).
+        // base64 (strip all ASCII whitespace: nbformat multiline newlines,
+        // CRLF, stray spaces/tabs). Padding is optional: Ark sends
+        // unpadded base64 for `image/png`.
         let bytes: Vec<u8> = if ext == "svg" && content.trim_start().starts_with("<svg") {
             content.into_bytes()
         } else {
             use base64::Engine as _;
-            match base64::engine::general_purpose::STANDARD.decode(content.replace('\n', "")) {
+            let compact: String = content
+                .chars()
+                .filter(|c| !c.is_ascii_whitespace())
+                .collect();
+            match LENIENT_BASE64.decode(compact) {
                 Ok(bytes) => bytes,
                 Err(e) => {
                     tracing::warn!(mime, error = %e, "jupyter figure: invalid base64; skipping");
@@ -1695,6 +1709,39 @@ print("hello")
         );
         assert!(fig.wrote_any);
         assert_eq!(fig.files_dir(), tmp.path().join("pyfig_files"));
+    }
+
+    /// Render one `image/png` payload through `write_image` and return the
+    /// written file's bytes (`None` when the writer rejected the payload).
+    fn png_bytes_written_for(payload: &str) -> Option<Vec<u8>> {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut fig = FigureWriter::new(&tmp.path().join("doc.qmd"));
+        fig.begin_cell();
+        let rel = fig.write_image("image/png", &serde_json::json!(payload))?;
+        Some(std::fs::read(tmp.path().join(rel)).expect("figure file written"))
+    }
+
+    #[test]
+    fn test_unpadded_base64_png_decodes() {
+        // Ark sends `image/png` base64 without trailing `=` padding.
+        let unpadded = PNG_B64_MULTILINE.replace('\n', "");
+        let unpadded = unpadded.trim_end_matches('=');
+        assert_ne!(unpadded.len() % 4, 0, "fixture must be unpadded");
+        let bytes = png_bytes_written_for(unpadded).expect("unpadded payload must decode");
+        assert!(
+            bytes.starts_with(b"\x89PNG\r\n"),
+            "decoded bytes must be a PNG"
+        );
+    }
+
+    #[test]
+    fn test_base64_png_with_crlf_spaces_and_tabs_decodes() {
+        let messy = PNG_B64_MULTILINE.replace('\n', "\r\n  \t");
+        let bytes = png_bytes_written_for(&messy).expect("whitespace must be ignored");
+        assert!(
+            bytes.starts_with(b"\x89PNG\r\n"),
+            "decoded bytes must be a PNG"
+        );
     }
 
     #[test]
