@@ -1,5 +1,8 @@
 [deps]
 QuartoNotebookRunner = "4c0109c6-14e9-4c88-93f0-2b974d3468f4"
 
+[sources]
+QuartoNotebookRunner = {url = "https://github.com/gordonwoodhull/QuartoNotebookRunner.jl", rev = "5e042849af546fdbe13dfac9157fc38c7acbe876"}
+
 [compat]
-QuartoNotebookRunner = "=0.18.2"
+QuartoNotebookRunner = "=0.18.6"

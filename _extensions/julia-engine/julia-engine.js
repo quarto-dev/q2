@@ -59,6 +59,43 @@ ${message}`
   }
 }
 
+// src/record-wire.ts
+var JULIA_HASH_DEFINITION = {
+  id: "julia",
+  version: 1,
+  granularity: "document",
+  presentationCellOptions: [],
+  presentationExecuteKeys: [],
+  documentKeys: [
+    "julia",
+    "format",
+    "fig-width",
+    "fig-height",
+    "fig-format",
+    "fig-dpi"
+  ]
+};
+function qnrRunOptions(options) {
+  const hasUnits = Array.isArray(options.units);
+  return hasUnits ? { ...options, emitUnits: true } : { ...options };
+}
+function buildRecordResult(nb, units) {
+  if (!Array.isArray(units)) {
+    return {};
+  }
+  return {
+    notebook: structuredClone(nb),
+    recordInfo: {
+      version: 1,
+      granularity: "unit",
+      outputKind: "raw",
+      // QNR's index is positional; it never sees core's unit ids.
+      alignment: "positional",
+      hashDefinition: JULIA_HASH_DEFINITION
+    }
+  };
+}
+
 // src/constants.ts
 var kJuliaEngine = "julia";
 var kExecuteDaemon = "daemon";
@@ -347,7 +384,7 @@ var juliaEngineDiscovery = {
         };
         const juliaExecOptions = {
           oneShot: !executeDaemon,
-          ...execOptions
+          ...qnrRunOptions(execOptions)
         };
         const nb = await executeJulia(juliaExecOptions);
         if (!nb) {
@@ -368,6 +405,10 @@ var juliaEngineDiscovery = {
           const ipynbPath = stem + ".ipynb";
           writeFileSync(ipynbPath, JSON.stringify(nb, null, 2));
         }
+        const record = buildRecordResult(
+          nb,
+          options.units
+        );
         const result = await quarto.jupyter.toMarkdown(
           nb,
           {
@@ -426,7 +467,8 @@ var juliaEngineDiscovery = {
           includes,
           engineDependencies,
           preserve: result.htmlPreserve,
-          postProcess: result.htmlPreserve && Object.keys(result.htmlPreserve).length > 0
+          postProcess: result.htmlPreserve && Object.keys(result.htmlPreserve).length > 0,
+          ...record
         };
       },
       target: (file, _quiet, markdown) => {
