@@ -60,6 +60,7 @@ website:
             - guides/projects/listings.qmd
             - guides/projects/listing-templates.qmd
             - guides/projects/navbar-logo.qmd
+            - guides/projects/navbar-responsive-text.qmd
             - guides/projects/header-scrolling.qmd
             - guides/projects/announcement.qmd
             - guides/projects/breadcrumbs.qmd
@@ -317,6 +318,7 @@ website:
             - errors/navigation/Q-13-15.qmd
             - errors/navigation/Q-13-16.qmd
             - errors/navigation/Q-13-17.qmd
+            - errors/navigation/Q-13-18.qmd
         - section: "template"
           contents:
             - errors/template/Q-10-1.qmd

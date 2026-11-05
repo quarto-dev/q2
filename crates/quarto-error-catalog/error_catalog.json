@@ -1910,6 +1910,13 @@
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-17",
     "since_version": "99.9.9"
   },
+  "Q-13-18": {
+    "subsystem": "navigation",
+    "title": "Unknown breakpoint in navbar item text",
+    "message_template": "A navbar item's breakpoint-keyed `text:` map has a key that is not a Bootstrap breakpoint name (`xs`, `sm`, `md`, `lg`, `xl`, `xxl`), or has no breakpoint keys at all. Text under an unknown key is never shown.",
+    "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-18",
+    "since_version": "99.9.9"
+  },
   "Q-14-6": {
     "subsystem": "theme",
     "title": "Theme SCSS compilation failed",

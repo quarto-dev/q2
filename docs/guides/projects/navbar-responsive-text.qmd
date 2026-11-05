@@ -1,0 +1,101 @@
+---
+title: Responsive navbar text
+---
+
+## Overview
+
+A navbar item's `text:` can change with the width of the browser
+window. Wide screens can show a full label, and narrower screens can
+show a short one so that the item doesn't wrap onto a second line.
+
+Give `text:` a map whose keys are breakpoint names instead of a single
+string:
+
+```yaml
+website:
+  navbar:
+    left:
+      - href: reference/index.qmd
+        text:
+          lg: API
+          xxl: API Reference
+```
+
+This item shows "API" up to 1400px wide and "API Reference" at 1400px
+and wider.
+
+## Breakpoints
+
+The keys are Bootstrap's breakpoint names:
+
+| key | applies from |
+|---|---|
+| `xs` | 0 |
+| `sm` | 576px |
+| `md` | 768px |
+| `lg` | 992px |
+| `xl` | 1200px |
+| `xxl` | 1400px |
+
+Each variant applies from its breakpoint up to the next key in the
+map. The lowest key also covers every narrower width, so the item
+always has text and you don't need to write `xs`. In the example
+above, "API" is also shown below 992px.
+
+These are the same names that `collapse-below:` uses. If a theme
+changes Bootstrap's `$grid-breakpoints` values, the text variants
+follow the new widths.
+
+## Full text in the collapsed menu
+
+Below `collapse-below` (`lg` by default), the navbar collapses into a
+menu that opens from a toggle button. In that menu, items are stacked
+vertically and have room for their full labels. The text variants follow
+the window width, not the navbar's state, so give the collapsed range
+its own key:
+
+```yaml
+website:
+  navbar:
+    collapse-below: lg
+    left:
+      - href: docs/index.qmd
+        text:
+          xs: Documentation   # collapsed menu, below 992px
+          lg: Docs            # expanded but narrow, 992px to 1200px
+          xl: Documentation   # 1200px and wider
+```
+
+## Icon-only items
+
+An empty string shows no text in its range. Combined with `icon:`,
+this makes an item icon-only on narrower screens:
+
+```yaml
+website:
+  navbar:
+    right:
+      - icon: github
+        href: https://github.com/example/project
+        text:
+          xs: GitHub
+          lg: ""
+          xxl: GitHub
+```
+
+When some range shows no text, the link gets an `aria-label` with the
+item's widest text, so screen readers can still name it. An
+`aria-label:` that you write yourself takes precedence.
+
+## Details
+
+- Each variant is markdown, like an ordinary `text:` string.
+- Variants work on `left` and `right` items, on dropdown menu
+  toggles, and on items inside a dropdown `menu:`.
+- Responsive text is a navbar feature. Sidebar and page-footer items
+  with a map-valued `text:` show only the widest variant.
+- A key that isn't a breakpoint name is ignored with a
+  [`Q-13-18`](../../errors/navigation/Q-13-18.qmd) warning.
+- Each variant renders as a `<span class="menu-text">` with
+  Bootstrap's `d-*` display classes. These need a Bootstrap theme, so
+  `theme: none` shows every variant.

@@ -672,6 +672,17 @@ pub fn rewrite_item_text(
     surface: &NavSurface<'_>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
+    // Breakpoint variants (bd-navbar-responsive-text-am98rw95) are what
+    // the navbar displays, and `text` is a copy of one of them. Rewrite
+    // the variants, then re-derive `text`, so each target is resolved
+    // (and any Q-13-2 reported) once.
+    if !item.text_variants.is_empty() {
+        for (_, cv) in item.text_variants.iter_mut() {
+            rewrite_config_text(cv, resolver, index, surface, diagnostics);
+        }
+        item.refresh_canonical_text();
+        return;
+    }
     if let Some(cv) = item.text.as_mut() {
         rewrite_config_text(cv, resolver, index, surface, diagnostics);
     }
