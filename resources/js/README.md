@@ -9,6 +9,24 @@ detects a triggering condition and registers a `js:<feature>` artifact —
 see `crates/quarto-core/src/stage/stages/bootstrap_js.rs` for the
 prototype.
 
+## `anchor/`
+
+AnchorJS — the hover link on headings, figures and tables
+(bd-5kf2dnw4, GH #1058).
+
+- **`anchor.min.js`** — AnchorJS v5.0.0, MIT, © Bryan Braun.
+  Byte-identical to the copy Quarto 1 vendors at
+  `src/resources/formats/html/anchor/anchor.min.js` (upstream:
+  <https://www.bryanbraun.com/anchorjs/>). Size: 5,888 bytes.
+
+Shipped by `AnchorSectionsTransform`
+(`crates/quarto-core/src/transforms/anchor_sections.rs`) as the
+`js:anchor` artifact on every Bootstrap-themed HTML page unless
+`anchor-sections: false`. The same transform adds the `anchored` class the
+script keys on; the `.anchorjs-link` rules live in
+`resources/scss/bootstrap/_bootstrap-rules.scss`. Render-only: the
+hub-client preview does not load it.
+
 ## `bootstrap/`
 
 Bootstrap 5 JS runtime, used when a Bootstrap-backed theme is active.

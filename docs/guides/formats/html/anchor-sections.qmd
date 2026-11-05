@@ -1,0 +1,35 @@
+---
+title: Section Anchor Links
+---
+
+## Overview
+
+In HTML pages that use a Bootstrap theme (the default), hovering over a
+section heading shows a link icon next to it. Click it to jump to that
+section, or copy its address to share a link to it.
+
+The icon is added to headings from level 2 to level 6, to numbered figures
+(`#fig-…`) and to numbered tables (`#tbl-…`). The page title is not
+included.
+
+## Turning it off
+
+Set `anchor-sections` to `false`, for one document or for the whole project:
+
+``` yaml
+format:
+  html:
+    anchor-sections: false
+```
+
+To leave a single heading out, give it the `no-anchor` class:
+
+``` markdown
+## Internal notes {.no-anchor}
+```
+
+## Differences from Quarto 1
+
+- Pages that don't use a Bootstrap theme (`theme: none` or `minimal: true`)
+  get no anchor links yet.
+- `q2 preview` does not show them yet; `q2 render` does.

@@ -2728,6 +2728,13 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(
         crate::transforms::ComponentsResolveTransform::new(),
     ));
+    // bd-5kf2dnw4 (GH #1058): mark headings, figures and tables with
+    // `anchored` and ship AnchorJS for the hover link (Q1 `anchor-sections`).
+    // After `appendix-structure` (its headings already carry the class and
+    // must not get it twice) and `crossref-render` (the figure/table
+    // wrappers must exist). `HtmlRender` + Bootstrap `html` only;
+    // excluded from q2-preview.
+    pipeline.push(Box::new(crate::transforms::AnchorSectionsTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
     // bd-3qych45b: render hephaestus plot documents (`![](plot.hep)`)
     // to SVG artifacts under `figure-html/` and point the image at
@@ -2943,6 +2950,11 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // `2026-10-13-react-components.md` D8, sibling strand); until then
     // the preview shows the no-script content, which is the contract.
     "components-resolve",
+    // `anchor-sections` ships AnchorJS as a `js:*` artifact plus an
+    // after-body init; the preview has no `ApplyTemplateStage` and renders
+    // headings through React. Render-only by decision (bd-5kf2dnw4); a
+    // preview story is a follow-up.
+    "anchor-sections",
 ];
 
 /// Names of transforms in [`build_transform_pipeline`] that a Pandoc-writer
@@ -2979,6 +2991,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "code-block-render",
     "table-bootstrap-class",
     "components-resolve",
+    "anchor-sections",
     // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
     // analog.
     "title-block",
@@ -3243,6 +3256,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // block (bd-react-components-a8flgldm). Pure HTML presentation; the
     // transform also self-gates on `PipelineProfile::HtmlRender`.
     ("components-resolve", Bucket::B4),
+    // Heading/figure/table hover anchors: `anchored` class + AnchorJS
+    // (bd-5kf2dnw4). HTML-only presentation.
+    ("anchor-sections", Bucket::B4),
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact —
     // an HTML-only presentation decision (sibling of `responsive-image`,
     // which it runs immediately before). No Pandoc-writer analog exists yet.
@@ -6784,6 +6800,7 @@ mod tests {
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "components-resolve",
+                "anchor-sections",
                 "resource-collector",
                 "hephaestus-render",
                 "table-bootstrap-class",
@@ -6883,6 +6900,7 @@ mod tests {
                 "code-block-render",
                 "editorial-marks-ooxml",
                 "components-resolve",
+                "anchor-sections",
                 "resource-collector",
                 "hephaestus-render",
                 "table-bootstrap-class",

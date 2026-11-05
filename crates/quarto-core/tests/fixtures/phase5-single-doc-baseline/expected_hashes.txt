@@ -477,5 +477,9 @@
 # `_bootstrap-rules.scss` (the dashboard navbar's toggle is a `<button>`).
 # Verified the only delta is that rule: removing it from the new styles.css
 # reproduces the previous hash (38dd4794…) exactly. doc.html hash unchanged.
-doc.html 8bc5f1b52f07aa842a9420d2d08a24243e851ca7f18e3d55a089e5d1ffe84f59
-doc_files/styles.css 61ac809155bf6fab4e4ec43afdb12e15faeda615bfc6523358c3e5462fac21b5
+#
+# Re-captured 2026-11-05 (bd-5kf2dnw4): doc.html gained the `anchored` class on
+# body headings plus the AnchorJS script tag and init; doc_files/styles.css
+# gained the `.anchorjs-link` rules ported from Q1.
+doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
+doc_files/styles.css 9fc3c3c9b9dad52af04d8629e19f51d255feaa21f76b48d7e79b5da218b8ff43

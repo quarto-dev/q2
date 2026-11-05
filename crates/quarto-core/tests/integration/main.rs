@@ -1,6 +1,7 @@
 //! quarto-core integration test binary.
 //! See bd-xvdop / claude-notes/plans/2026-05-28-integration-test-consolidation.md.
 
+pub mod anchor_sections_pipeline;
 pub mod artifact_scoping_pipeline;
 pub mod attribution_baseline_snapshot;
 pub mod attribution_chain_resolution;

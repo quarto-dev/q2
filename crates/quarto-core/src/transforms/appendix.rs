@@ -287,13 +287,12 @@ fn title_inlines(title: &str, source_info: &SourceInfo) -> Vec<Inline> {
 /// does not enter the TOC — and the classes `anchored quarto-appendix-heading`.
 ///
 /// `quarto-appendix-heading` drives real styling that q2 already ships
-/// (`resources/scss/bootstrap/_bootstrap-rules.scss`). `anchored` is inert
-/// here: in Quarto 1 it is a selector hook AnchorJS reads to inject heading
-/// anchor links, and q2 ships neither that runtime nor any rule matching the
-/// class. It is emitted anyway so the appendix is already correct when
-/// heading anchors land — see bd-5kf2dnw4, which must skip headings that
-/// already carry the class (pushing onto a `Vec<String>` is not idempotent
-/// the way Quarto 1's `classList.add` is).
+/// (`resources/scss/bootstrap/_bootstrap-rules.scss`). `anchored` is the
+/// selector hook AnchorJS reads to inject the hover anchor link; it is built
+/// in here, as in Quarto 1, because these headings are synthesized after the
+/// document-wide pass would otherwise see them. `AnchorSectionsTransform`
+/// runs later and skips headings that already carry the class (pushing onto
+/// a `Vec<String>` is not idempotent the way Quarto 1's `classList.add` is).
 fn appendix_heading(meta: &ConfigValue, term_key: &str, english: &str) -> Block {
     let source_info = SourceInfo::generated(By::appendix());
     Block::Header(Header {
