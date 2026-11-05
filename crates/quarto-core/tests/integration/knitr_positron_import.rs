@@ -330,3 +330,63 @@ fn an_imported_output_with_only_an_unknown_mime_presents_nothing_for_it() {
     assert!(!md.contains("zzz-unknown"), "{md}");
     assert!(md.contains("kept"), "{md}");
 }
+
+/// KNR-5 5C K-S2 check, off unless `KS2_ARK` (a Positron cache file) and `KS2_QMD` (its document)
+/// are set: imports a real Ark-written cache into every knitr-owned `{r}` unit of the document and
+/// presents the result as HTML, printing the markdown and the unit-by-unit import outcome.
+#[test]
+fn a_real_ark_cache_presents_through_the_knitr_layer() {
+    let (Some(ark), Some(qmd)) = (std::env::var_os("KS2_ARK"), std::env::var_os("KS2_QMD")) else {
+        return;
+    };
+    let doc = std::fs::read_to_string(qmd).unwrap();
+    let (units, texts) = staged(&doc);
+    let import = import_positron_cache(&std::fs::read(ark).unwrap()).unwrap();
+    let def = HashDefinition::conservative(KNITR_ENGINE);
+    let mut b = RecordBuilder::new(KNITR_ENGINE, &def, &units, &texts).unwrap();
+    for (i, u) in units.iter().enumerate() {
+        let hash = &texts.0[i].content_hash;
+        let found = import.outputs_for(hash, 0, KNITR_ENGINE, u.lang(), false);
+        eprintln!(
+            "KS2 unit {i} lang={} hash={hash} imported={}",
+            u.lang(),
+            found.is_some()
+        );
+        let outputs = found.map(|f| f.outputs().to_vec()).unwrap_or_default();
+        b.push(
+            i,
+            UnitResult {
+                outputs,
+                execution_count: None,
+                kernel: None,
+            },
+        )
+        .unwrap();
+    }
+    let cells = b.finish(EngineEntryInput::default()).unwrap().cells;
+    let tmp = TempDir::new().unwrap();
+    let mut fig = FsFigureSink::new(&tmp.path().join("doc.qmd"));
+    let out = present_document(
+        &cells,
+        &doc,
+        &units,
+        None,
+        InlineTarget::from_format("html"),
+        "html",
+        None,
+        &mut fig,
+    )
+    .unwrap();
+    for e in std::fs::read_dir(tmp.path().join("doc_files/figure-html")).unwrap() {
+        let e = e.unwrap();
+        eprintln!(
+            "KS2 wrote {:?} ({} bytes)",
+            e.file_name(),
+            e.metadata().unwrap().len()
+        );
+    }
+    eprintln!(
+        "KS2 files_written={:?}\n----- markdown -----\n{}",
+        out.files_written, out.markdown
+    );
+}

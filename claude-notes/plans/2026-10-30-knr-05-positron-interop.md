@@ -168,9 +168,11 @@ Equal-to-what-the-other-would-produce is not required.
   The second figure mode and the knitr layer needed no code: an imported unit has no
   `quarto_resolved_options`, so `present_document` takes the unit through the same path as a Jupyter cell,
   and the shared presenter already writes inline image data through the sink.
-- [ ] Shared fixtures with EXR-16 S1 (conformance) extended with an R cell and a labeled chunk. Not done: the
-  existing cases already cover `{r}` (`two_cells`), and adding cases means regenerating the Positron-side
-  expectations in Gordon\'s fork; left with Phase 5C.
+- [x] Shared fixtures with EXR-16 S1 (conformance) extended with an R cell and a labeled chunk. `{r}` (`two_cells`)
+  and a brace-labeled R chunk (`brace_label_r`) were already covered; 2026-11-05 added `r_label_comment` (an R cell
+  with a `#| label:` line). Observed on Positron `f854bb8e66` (vitest on `spike/q2-s1-conformance`): the hash agrees
+  and Positron reads the cell as unlabeled, a divergence note like the one on `label_comment`. Both sides pass (q2 7 of 7,
+  Positron 18 of 18).
 - Call site: nothing outside tests calls `import_positron_cache` yet. Production use (a `q2 render` or
   `q2 preview` that reads a Positron cache for R cells) needs the EXR-14 consumer path and a choice of where
   the cache path comes from; it is not part of this plan\'s exit criteria, which check the importer and the
@@ -204,17 +206,29 @@ Equal-to-what-the-other-would-produce is not required.
 Everything except the fork spikes is done (commits `448d97508`, `7a9060c99` and the close-out on
 `knr-5-positron-interop`). What remains is Gordon\'s fork time, to be run with the next agent:
 
-- [ ] **Exit criterion K-S1, re-run on the final record.** Dump the two records with
+- [x] **Exit criterion K-S1, re-run on the final record** (2026-11-04, vitest level on `spike/q2-knr5-positron-knitr`, commit after `5d26bc3be5`; not a real IDE session: both dumped records load via `loadCache` (2 cells each, file kept), a hand-placed copy is consumed by hash-scan, and outputs survive `flushCache`: structured gives stream, stream, execute_result with image/png; fallback keeps `text/x-quarto-markdown`). Original text: Dump the two records with
   `KNR5_DUMP_RECORDS=<dir> cargo nextest run -p quarto-core knitr_positron_import::a_` (needs R and
   knitr; writes `structured.ipynb` and `fallback.ipynb`), copy each by hand (never move) into the fork\'s
   `quarto-inline-outputs` directory for a matching document, and check the file loads, outputs present,
   and it survives a Positron rewrite. I4 already observed this on an earlier record; the KNR-3 keys are
   unchanged since, so a pass is expected.
-- [ ] **Exit criterion K-S2, the cases I4 did not observe:** a data frame, a warning, and `q2 render` /
+- [x] **Exit criterion K-S2, the cases I4 did not observe** (observed in-process 2026-11-04; the real-binary half is handed to the records-in-use epic and is NOT done here): a data frame, a warning, and `q2 render` /
   `q2 preview` through the real binary with an Ark cache. For the binary run, note that no production code
-  calls `import_positron_cache` yet (see "Call site" above), so the agent has to decide the call site first;
-  that decision is a design question for Gordon, not an ordinary choice.
-- [ ] Optional: add `{r}` and labeled-chunk cases to the conformance fixtures (the open 5B item).
+  calls `import_positron_cache` yet (see "Call site" above). Settled 2026-11-04 (Gordon): the call site is the
+  records-in-use epic's `--records` option, not something KNR-5 builds (RIU-3 makes the importer a record source,
+  RIU-4 adds `--records`; RIU-4 currently covers `q2 preview` and `q2 provide-hub`, not `q2 render`). The
+  real-binary half of K-S2 therefore waits on RIU-3/4; the reviewer `records-in-use-review-2` was told which
+  responsibilities this hands over. The Ark cache comes from running `~/docs/inline-output/ks2-ark.qmd` in
+  Positron (plot, data frame, warning, message, error, labeled plot).
+- K-S2 observed 2026-11-04 on a real Ark cache (`ks2-ark.qmd`, imported through the knitr presenter by the env-gated test
+  `a_real_ark_cache_presents_through_the_knitr_layer`, `KS2_ARK=<cache> KS2_QMD=<qmd>`): data frame, warning (stderr),
+  message plus print (stdout), error, and plots all present; ANSI is stripped. Found (bd-wzz90981): Ark writes the
+  plot of `plot(cars)` as base64 without `=` padding, which the strict decoder rejects, so that plot presents as
+  `[Image output]` (the 6th cell's plot, with padding, presents). Tracked as bd-wzz90981 and owned by the Ark epic
+  (agent ark-impl-3); KNR-5 deliberately does not fix it, and the K-S2 plot case passes once that lands. Still open:
+  the error block repeats the message (evalue plus traceback), `ename` is empty, and a `#| label:` chunk gets no `id` because
+  Positron records `unlabeled`. Not yet done through the real binary (waits on RIU-3/4).
+- [x] Optional: add `{r}` and labeled-chunk cases to the conformance fixtures (the open 5B item; done, see 5B).
 - Known presenter limits from I4 that the spikes may want to revisit: ANSI escapes and an empty `ename` in
   Ark errors, messages arriving on stdout, and image width/height metadata ignored.
 - Gate results on this branch: `cargo clippy -p quarto-core --all-targets -- -D warnings` clean;
