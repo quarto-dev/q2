@@ -2732,8 +2732,8 @@ pub fn build_transform_pipeline(
     // `anchored` and ship AnchorJS for the hover link (Q1 `anchor-sections`).
     // After `appendix-structure` (its headings already carry the class and
     // must not get it twice) and `crossref-render` (the figure/table
-    // wrappers must exist). `HtmlRender` + Bootstrap `html` only;
-    // excluded from q2-preview.
+    // wrappers must exist). Bootstrap HTML render + preview; only the render
+    // ships the script (the preview needs the class for DOM parity).
     pipeline.push(Box::new(crate::transforms::AnchorSectionsTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
     // bd-3qych45b: render hephaestus plot documents (`![](plot.hep)`)
@@ -2950,11 +2950,6 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     // `2026-10-13-react-components.md` D8, sibling strand); until then
     // the preview shows the no-script content, which is the contract.
     "components-resolve",
-    // `anchor-sections` ships AnchorJS as a `js:*` artifact plus an
-    // after-body init; the preview has no `ApplyTemplateStage` and renders
-    // headings through React. Render-only by decision (bd-5kf2dnw4); a
-    // preview story is a follow-up.
-    "anchor-sections",
 ];
 
 /// Names of transforms in [`build_transform_pipeline`] that a Pandoc-writer
@@ -7273,6 +7268,7 @@ mod tests {
                 "example-embed-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "anchor-sections",
                 "resource-collector",
                 "table-bootstrap-class",
                 "responsive-image",

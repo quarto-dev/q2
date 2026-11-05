@@ -52,17 +52,17 @@
 //!
 //! ## Scope
 //!
-//! `PipelineProfile::HtmlRender` and the `html` format only. The preview
-//! renders the AST through React and excludes this transform; revealjs has
-//! its own heading chrome; a theme-less page is the unsupported unthemed
-//! path above.
+//! Bootstrap-themed `HtmlRender` and `HtmlPreview` pipelines. Both get the
+//! `anchored` class (the preview's `<main>` DOM must match the render's);
+//! only the render ships the script and init. Revealjs has its own heading
+//! chrome; a theme-less page is the unsupported unthemed path above.
 
 use quarto_pandoc_types::block::{Block, Blocks};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
 use crate::artifact::{Artifact, ArtifactScope};
-use crate::format::{FormatIdentifier, PipelineProfile, is_minimal_html};
+use crate::format::{PipelineProfile, is_minimal_html};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::append_with_sentinel;
@@ -134,28 +134,33 @@ impl AstTransform for AnchorSectionsTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        if ctx.pipeline_profile != PipelineProfile::HtmlRender
-            || ctx.format.identifier != FormatIdentifier::Html
-            || is_minimal_html(&ast.meta)
-            || !anchors_enabled(&ast.meta)
-        {
+        let render = ctx.pipeline_profile == PipelineProfile::HtmlRender;
+        let preview = ctx.pipeline_profile == PipelineProfile::HtmlPreview;
+        if !(render || preview) || is_minimal_html(&ast.meta) || !anchors_enabled(&ast.meta) {
             return Ok(());
         }
 
         mark_blocks(&mut ast.blocks);
 
-        ctx.artifacts.store(
-            ANCHOR_KEY,
-            Artifact::from_bytes(ANCHOR_JS.to_vec(), "text/javascript")
-                .with_path(ANCHOR_REL_PATH)
-                .with_scope(ArtifactScope::Project),
-        );
-        append_with_sentinel(
-            &mut ast.meta,
-            "after-body",
-            INIT_SENTINEL,
-            INIT_SCRIPT.to_string(),
-        );
+        // The runtime is render-only: the preview has no `ApplyTemplateStage`
+        // to turn the artifact into a `<script>`, and renders through React.
+        // It still gets the class, so the preview's `<main>` DOM matches the
+        // render's (the smoke-all parity tests compare them); the hover
+        // link itself is bd-c0erkhqk.
+        if render {
+            ctx.artifacts.store(
+                ANCHOR_KEY,
+                Artifact::from_bytes(ANCHOR_JS.to_vec(), "text/javascript")
+                    .with_path(ANCHOR_REL_PATH)
+                    .with_scope(ArtifactScope::Project),
+            );
+            append_with_sentinel(
+                &mut ast.meta,
+                "after-body",
+                INIT_SENTINEL,
+                INIT_SCRIPT.to_string(),
+            );
+        }
         Ok(())
     }
 }
@@ -407,6 +412,29 @@ mod tests {
         };
         run(&mut ast, Format::html()).await;
         assert_eq!(classes(&ast.blocks[1]), ["anchored"]);
+    }
+
+    /// The preview gets the class (DOM parity with the render) but no
+    /// runtime and no init.
+    #[tokio::test]
+    async fn preview_marks_classes_but_ships_nothing() {
+        let mut ast = Pandoc {
+            meta: meta(vec![]),
+            blocks: sample_blocks(),
+        };
+        let project = project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let binaries = BinaryDependencies::new();
+        let format = Format::html();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.pipeline_profile = PipelineProfile::HtmlPreview;
+        AnchorSectionsTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(classes(&ast.blocks[1]), ["anchored"]);
+        assert_eq!(ctx.artifacts.keys().count(), 0);
+        assert!(after_body(&ast.meta).is_empty());
     }
 
     #[tokio::test]
