@@ -12,12 +12,14 @@
 //! - Find kernels by name or language
 //! - Resolve the kernel to use for a document based on metadata
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use quarto_pandoc_types::ConfigValue;
 use runtimelib::KernelspecDir;
 
 use super::error::{JupyterError, Result};
+use crate::engine::ts_protocol::TsMetadataValue;
 
 /// Information about a resolved Jupyter kernel.
 #[derive(Debug, Clone)]
@@ -78,100 +80,87 @@ pub async fn find_kernelspec(name: &str) -> Result<ResolvedKernel> {
         .map_err(JupyterError::from)
 }
 
-/// Find the first kernelspec that supports a given language.
+/// The kernel name a document asked for explicitly, if any (D1 step 1).
 ///
-/// # Arguments
-///
-/// * `language` - The language name (e.g., "python", "julia", "r")
-///
-/// # Returns
-///
-/// The first matching kernel, or an error if none found.
-///
-/// # Note
-///
-/// Part of kernel resolution API. Will be used when Jupyter engine integration
-/// is complete. Has unit tests in this module.
-#[allow(dead_code)]
-pub async fn find_kernelspec_for_language(language: &str) -> Result<ResolvedKernel> {
-    let specs = runtimelib::list_kernelspecs().await;
-    let language_lower = language.to_lowercase();
-
-    specs
-        .into_iter()
-        .find(|ks| ks.kernelspec.language.to_lowercase() == language_lower)
-        .map(ResolvedKernel::from)
-        .ok_or_else(|| JupyterError::NoKernelForLanguage {
-            language: language.to_string(),
-        })
+/// Checked in order, first hit wins:
+/// 1. `engine_config` — the jupyter engine's own config. The resolver strips
+///    `claims` and keeps `kernel`, so this holds `{kernel: X}` for
+///    `engine: {jupyter: {kernel: X}}` and for the no-`engine:` shorthand
+///    `jupyter: {kernel: X, claims: ...}`. A bare string is accepted too.
+/// 2. The merged `jupyter` metadata key, string form (`jupyter: X`) or map
+///    form (`jupyter: {kernel: X}`). This is the only place the kernel
+///    lives when `engine: {jupyter: {claims: ...}}` is paired with a
+///    top-level `jupyter:` key.
+pub(super) fn explicit_kernel_name(
+    engine_config: Option<&ConfigValue>,
+    metadata: &HashMap<String, TsMetadataValue>,
+) -> Option<String> {
+    if let Some(cfg) = engine_config {
+        if let Some(name) = cfg.get("kernel").and_then(|k| k.as_plain_text()) {
+            return Some(name);
+        }
+        if cfg.get("kernel").is_none()
+            && let Some(name) = cfg.as_plain_text()
+        {
+            return Some(name);
+        }
+    }
+    match metadata.get("jupyter")? {
+        TsMetadataValue::String(name) => Some(name.clone()),
+        TsMetadataValue::Map(map) => match map.get("kernel") {
+            Some(TsMetadataValue::String(name)) => Some(name.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
-/// Resolve the kernel to use for a document.
+/// Pick a registered kernel for `language` (D1 step 2).
 ///
-/// Resolution order:
-/// 1. Explicit kernel name in metadata (`jupyter: python3` or `jupyter.kernel: python3`)
-/// 2. First kernel matching the primary language of executable code blocks
-///
-/// # Arguments
-///
-/// * `metadata` - Document metadata (YAML frontmatter)
-/// * `primary_language` - The primary language detected from code blocks (optional)
-///
-/// # Returns
-///
-/// The resolved kernel, or an error if none could be determined.
-///
-/// # Note
-///
-/// Entry point for kernel resolution. Will be used when Jupyter engine integration
-/// is complete. Has unit tests in this module.
-#[allow(dead_code)]
-pub async fn resolve_kernel(
-    metadata: &ConfigValue,
-    primary_language: Option<&str>,
-) -> Result<ResolvedKernel> {
-    // 1. Check for explicit kernel in metadata
-    if let Some(kernel_name) = extract_kernel_from_metadata(metadata) {
-        return find_kernelspec(&kernel_name).await;
-    }
-
-    // 2. Try to find kernel for the primary language
-    if let Some(language) = primary_language {
-        return find_kernelspec_for_language(language).await;
-    }
-
-    // 3. Default to Python
-    find_kernelspec_for_language("python").await
+/// Candidates are the kernelspecs whose `language` matches
+/// case-insensitively. When one of them is named `default_name` (the old
+/// hardcoded table's choice, e.g. `python3`, `ir`) it wins, so a machine
+/// that already worked keeps the same kernel; otherwise the first match
+/// in name order, so the choice is deterministic.
+pub(super) fn kernel_for_language<'a>(
+    language: &str,
+    default_name: &str,
+    available: &'a [ResolvedKernel],
+) -> Option<&'a ResolvedKernel> {
+    let language = language.to_lowercase();
+    let mut matching: Vec<&ResolvedKernel> = available
+        .iter()
+        .filter(|k| k.language.to_lowercase() == language)
+        .collect();
+    matching.sort_by(|a, b| a.name.cmp(&b.name));
+    matching
+        .iter()
+        .find(|k| k.name == default_name)
+        .or_else(|| matching.first())
+        .copied()
 }
 
-/// Extract kernel name from document metadata.
+/// Resolve the kernelspec name to launch for a document (design D1).
 ///
-/// Supports these formats:
-/// ```yaml
-/// jupyter: python3
-/// ```
-/// or:
-/// ```yaml
-/// jupyter:
-///   kernel: python3
-/// ```
-#[allow(dead_code)]
-fn extract_kernel_from_metadata(metadata: &ConfigValue) -> Option<String> {
-    let jupyter = metadata.get("jupyter")?;
-
-    // Simple string format: `jupyter: python3`
-    if let Some(s) = jupyter.as_str() {
-        return Some(s.to_string());
+/// 1. `explicit` names a kernel: it must be registered, else the
+///    [`JupyterError::KernelspecNotFound`] error (searched paths plus the
+///    available kernels) is returned. It is a hard error, never a silent
+///    fall-through to another kernel.
+/// 2. Otherwise a registered kernel whose language matches `language`
+///    ([`kernel_for_language`]).
+/// 3. Otherwise `default_name`, so behavior only widens and the existing
+///    not-found error for a missing default is unchanged.
+pub(super) async fn resolve_kernel_name(
+    explicit: Option<&str>,
+    language: &str,
+    default_name: &str,
+) -> Result<String> {
+    if let Some(name) = explicit {
+        return find_kernelspec(name).await.map(|k| k.name);
     }
-
-    // Map format: `jupyter: { kernel: python3 }`
-    if let Some(kernel) = jupyter.get("kernel")
-        && let Some(s) = kernel.as_str()
-    {
-        return Some(s.to_string());
-    }
-
-    None
+    let available = list_kernelspecs().await;
+    Ok(kernel_for_language(language, default_name, &available)
+        .map_or_else(|| default_name.to_string(), |k| k.name.clone()))
 }
 
 /// Check if a language is typically executed via Jupyter.
@@ -204,29 +193,148 @@ mod tests {
         ConfigValue::new_map(map_entries, SourceInfo::for_test())
     }
 
+    fn fake_kernel(name: &str, language: &str) -> ResolvedKernel {
+        ResolvedKernel {
+            name: name.to_string(),
+            display_name: name.to_string(),
+            language: language.to_string(),
+            path: PathBuf::from(format!("/fake/kernels/{name}")),
+            spec: serde_json::from_value(serde_json::json!({
+                "kernel_name": name,
+                "path": format!("/fake/kernels/{name}"),
+                "kernelspec": {
+                    "argv": [],
+                    "display_name": name,
+                    "language": language,
+                },
+            }))
+            .expect("fake kernelspec dir"),
+        }
+    }
+
+    fn ts_meta(entries: Vec<(&str, TsMetadataValue)>) -> HashMap<String, TsMetadataValue> {
+        entries
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect()
+    }
+
+    fn ts_str(s: &str) -> TsMetadataValue {
+        TsMetadataValue::String(s.to_string())
+    }
+
     #[test]
-    fn test_extract_kernel_simple_string() {
-        let meta = map_config(vec![("jupyter", string_config("python3"))]);
+    fn explicit_name_from_engine_config_map() {
+        // `engine: {jupyter: {kernel: ark}}` and the no-`engine:` shorthand.
+        let cfg = map_config(vec![("kernel", string_config("ark"))]);
         assert_eq!(
-            extract_kernel_from_metadata(&meta),
-            Some("python3".to_string())
+            explicit_kernel_name(Some(&cfg), &HashMap::new()),
+            Some("ark".to_string())
         );
     }
 
     #[test]
-    fn test_extract_kernel_nested_map() {
-        let jupyter_config = map_config(vec![("kernel", string_config("julia-1.9"))]);
-        let meta = map_config(vec![("jupyter", jupyter_config)]);
+    fn explicit_name_from_metadata_string_and_map() {
+        let s = ts_meta(vec![("jupyter", ts_str("julia-1.9"))]);
         assert_eq!(
-            extract_kernel_from_metadata(&meta),
+            explicit_kernel_name(None, &s),
             Some("julia-1.9".to_string())
         );
+        let m = ts_meta(vec![(
+            "jupyter",
+            TsMetadataValue::Map(HashMap::from([("kernel".to_string(), ts_str("ark"))])),
+        )]);
+        assert_eq!(explicit_kernel_name(None, &m), Some("ark".to_string()));
     }
 
     #[test]
-    fn test_extract_kernel_not_present() {
-        let meta = map_config(vec![("title", string_config("My Document"))]);
-        assert_eq!(extract_kernel_from_metadata(&meta), None);
+    fn explicit_name_engine_config_wins_over_metadata() {
+        let cfg = map_config(vec![("kernel", string_config("ark"))]);
+        let m = ts_meta(vec![("jupyter", ts_str("python3"))]);
+        assert_eq!(
+            explicit_kernel_name(Some(&cfg), &m),
+            Some("ark".to_string())
+        );
+    }
+
+    #[test]
+    fn explicit_name_falls_through_empty_engine_config_to_metadata() {
+        // `engine: {jupyter: {claims: ...}}` + top-level `jupyter: {kernel}`:
+        // the resolver strips `claims`, leaving an empty config map.
+        let empty = map_config(vec![]);
+        let m = ts_meta(vec![(
+            "jupyter",
+            TsMetadataValue::Map(HashMap::from([("kernel".to_string(), ts_str("ark"))])),
+        )]);
+        assert_eq!(
+            explicit_kernel_name(Some(&empty), &m),
+            Some("ark".to_string())
+        );
+    }
+
+    #[test]
+    fn explicit_name_absent() {
+        assert_eq!(explicit_kernel_name(None, &HashMap::new()), None);
+        let m = ts_meta(vec![("title", ts_str("x"))]);
+        assert_eq!(explicit_kernel_name(None, &m), None);
+        // A jupyter map without `kernel` (claims only) names nothing.
+        let claims_only = ts_meta(vec![(
+            "jupyter",
+            TsMetadataValue::Map(HashMap::from([(
+                "claims".to_string(),
+                TsMetadataValue::Map(HashMap::new()),
+            )])),
+        )]);
+        assert_eq!(explicit_kernel_name(None, &claims_only), None);
+    }
+
+    #[test]
+    fn language_lookup_finds_kernel_under_a_non_default_name() {
+        // The Ark case: language "R" registered as `ark`, no `ir`.
+        let specs = vec![fake_kernel("python3", "python"), fake_kernel("ark", "R")];
+        let k = kernel_for_language("r", "ir", &specs).expect("ark matches R");
+        assert_eq!(k.name, "ark");
+    }
+
+    #[test]
+    fn language_lookup_prefers_the_default_name() {
+        // Both registered: keep today's choice (`ir`), regardless of order.
+        let specs = vec![fake_kernel("ark", "R"), fake_kernel("ir", "R")];
+        assert_eq!(kernel_for_language("R", "ir", &specs).unwrap().name, "ir");
+    }
+
+    #[test]
+    fn language_lookup_is_deterministic_without_a_default() {
+        let specs = vec![fake_kernel("zeta", "R"), fake_kernel("ark", "R")];
+        assert_eq!(kernel_for_language("r", "ir", &specs).unwrap().name, "ark");
+    }
+
+    #[test]
+    fn language_lookup_misses() {
+        let specs = vec![fake_kernel("python3", "python")];
+        assert!(kernel_for_language("r", "ir", &specs).is_none());
+    }
+
+    #[tokio::test]
+    async fn unknown_explicit_kernel_is_a_hard_error_listing_available() {
+        let err = resolve_kernel_name(Some("no-such-kernel-q2-test"), "python", "python3")
+            .await
+            .expect_err("unknown explicit kernel must fail");
+        assert!(
+            matches!(err, JupyterError::KernelspecNotFound { ref name, .. } if name == "no-such-kernel-q2-test"),
+            "got {err:?}"
+        );
+        assert!(err.to_string().contains("available kernels"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn no_match_falls_back_to_the_default_name() {
+        // A language no kernel registers: the old table's name comes back
+        // unchanged, so the existing not-found error path still fires later.
+        let name = resolve_kernel_name(None, "zzz-no-such-language", "zzz-default")
+            .await
+            .unwrap();
+        assert_eq!(name, "zzz-default");
     }
 
     #[test]

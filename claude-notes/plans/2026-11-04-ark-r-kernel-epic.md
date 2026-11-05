@@ -304,21 +304,40 @@ reference_link_diagnostics` is now `pub(crate)` so the test can reach it.
 
 ## Phase 3: kernel resolution (bd-9pvolzwl, bd-db68qtuf)
 
-- [ ] Tests for D1 in `kernelspec.rs`/`text_execute.rs` using a fake
+- [x] Tests for D1 in `kernelspec.rs`/`text_execute.rs` using a fake
   kernelspec directory (no real kernel needed): explicit name wins over
   language; `jupyter: X`, `jupyter: {kernel: X}` and
   `engine: {jupyter: {kernel: X}}` all select X; unknown explicit name errors
   and lists available kernels; language lookup finds a kernel registered under
   a non-default name (the `ark` case); no match falls back to the old name table.
-- [ ] Integration test (`tests/integration/`): `jupyter: nosuchkernel` on a
+- [x] Integration test (`tests/integration/`): `jupyter: nosuchkernel` on a
   `{python}` document fails the render (skips when no Python kernel).
-- [ ] Rewrite `extract_kernel_from_metadata` to read `ctx.engine_config`
+- [x] Rewrite `extract_kernel_from_metadata` to read `ctx.engine_config`
   first, then the lowered `jupyter` metadata key (string or map form), per S2; remove the `#[allow(dead_code)]` markers as the helpers get
   callers.
-- [ ] Wire the resolver into `execute_qmd`, replacing `map_language_to_kernel`
+- [x] Wire the resolver into `execute_qmd`, replacing `map_language_to_kernel`
   (keep the table only as the step-3 fallback).
-- [ ] Cross-check the Windows build:
+- [x] Cross-check the Windows build:
   `cargo clippy -p quarto-core --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
+
+Implementation notes (2026-11-04). The resolver lives in `kernelspec.rs`:
+`explicit_kernel_name` (engine config first, then the lowered `jupyter` key,
+string or map), `kernel_for_language` (language match; a spec named like the
+old table\'s choice wins, so a machine with both `ir` and `ark` keeps `ir`;
+otherwise first by name), and `resolve_kernel_name` (explicit must exist,
+else language, else the table name). `execute_blocks_inner` calls it before
+`get_or_start_session`. `find_kernelspec_for_language`, `resolve_kernel` and
+`extract_kernel_from_metadata` were replaced rather than revived: the old
+language lookup used `runtimelib::list_kernelspecs`, which misses
+venv-installed kernels; the new one uses the augmented list.
+The integration test (`jupyter_kernel_selection.rs`) drives
+`render_to_file`, the entry `q2 render` uses; it was red first (the render
+succeeded and ran `python3` despite `jupyter: nosuchkernel`).
+
+Windows cross-clippy could **not** be run: `aws-lc-sys` fails to build its C
+code for `x86_64-pc-windows-msvc` on this macOS host (no target headers), the
+known caveat in `.claude/rules/cross-platform.md`. The change adds no
+`cfg` gates or platform APIs; a Windows user can run the native check.
 
 R1 (error when an owned cell\'s language does not match the explicit kernel)
 and R2 (the `kernelspec` spelling) are **not** part of this phase; they are in

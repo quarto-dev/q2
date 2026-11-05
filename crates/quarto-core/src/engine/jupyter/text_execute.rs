@@ -21,6 +21,7 @@ use quarto_source_map::SourceInfo;
 use super::daemon::daemon;
 use super::error::JupyterError;
 use super::execute::{CellOutput, ExecuteResult as KernelExecuteResult, ExecuteStatus};
+use super::kernelspec::{explicit_kernel_name, resolve_kernel_name};
 use super::session::SessionKey;
 use crate::cell_options::{merge_cell_over_scope, options_to_config, partition_cell_options};
 use crate::engine::context::{ExecuteResult, ExecutionContext};
@@ -72,9 +73,6 @@ pub fn execute_qmd(
         return Ok(ExecuteResult::new(input));
     }
 
-    // Determine the kernel from the first *executable* (owned) cell.
-    let kernel_name = map_language_to_kernel(&executable[0].language);
-
     // bd-hxhnnlzs: hold a kernel scope for the duration of this engine
     // run. If no outer scope (render invocation, preview server) is
     // open, the kernels spawned below are shut down when this guard
@@ -87,12 +85,15 @@ pub fn execute_qmd(
 
     // Execute via async runtime. `execute_blocks_async` takes the full
     // `ExecutionContext` (main's #412 figure-emission threads it through).
-    let result = execute_blocks_async(input, &executable, &kernel_name, ctx);
+    let result = execute_blocks_async(input, &executable, ctx);
 
     result.map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))
 }
 
 /// Map a language name to a Jupyter kernel name.
+///
+/// Only the last-resort default now: [`resolve_kernel_name`] prefers an
+/// explicit kernel or a registered kernel whose language matches.
 fn map_language_to_kernel(language: &str) -> String {
     match language.to_lowercase().as_str() {
         "python" | "python3" | "py" => "python3".to_string(),
@@ -247,7 +248,6 @@ fn is_executable_language(language: &str) -> bool {
 fn execute_blocks_async(
     input: &str,
     blocks: &[CodeBlock],
-    kernel_name: &str,
     ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
     // Drive the execution on the shared engine runtime — NOT a
@@ -255,17 +255,32 @@ fn execute_blocks_async(
     // Child) are tokio resources bound to the runtime that created
     // them; a per-call runtime made every cross-call session reuse
     // fail with "Tokio context ... is being shutdown" (bd-hxhnnlzs).
-    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, blocks, kernel_name, ctx))
+    super::daemon::engine_runtime().block_on(execute_blocks_inner(input, blocks, ctx))
 }
 
 /// Inner async function that does the actual execution.
 async fn execute_blocks_inner(
     input: &str,
     blocks: &[CodeBlock],
-    kernel_name: &str,
     ctx: &ExecutionContext,
 ) -> JupyterResult<ExecuteResult> {
     let daemon = daemon();
+
+    // Pick the kernel (design D1, bd-9pvolzwl / bd-db68qtuf): an explicit
+    // name from the document wins, an unknown one is a hard error; with no
+    // name, a registered kernel whose language matches the first
+    // *executable* (owned) cell (this is how `ark` is found for `{r}`);
+    // else the old hardcoded table's name. One kernel per document, as in
+    // Q1: an explicit kernel runs every cell Jupyter owns.
+    let language = &blocks[0].language;
+    let explicit = explicit_kernel_name(ctx.engine_config.as_ref(), &ctx.metadata);
+    let kernel_name = resolve_kernel_name(
+        explicit.as_deref(),
+        language,
+        &map_language_to_kernel(language),
+    )
+    .await?;
+    let kernel_name = kernel_name.as_str();
 
     // Start or get existing kernel session
     let key: SessionKey = daemon
