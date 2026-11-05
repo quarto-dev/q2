@@ -11,6 +11,7 @@ import { Repo, isValidAutomergeUrl, type DocHandle } from '@automerge/automerge-
 import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import RadioTower from './RadioTower';
+import DemoFrame from './DemoFrame';
 import './SimpleAuthDemo.css';
 
 // The hub that serves this page (e.g. local prod at http://127.0.0.1:8080).
@@ -182,6 +183,7 @@ export default function SimpleAuthDemo() {
     : connected ? 'Connected to sync server' : 'Connecting…';
 
   return (
+    <DemoFrame>
     <div className="sad-page">
       <RadioTower lit={lit} />
       <div className="sad-count">{count}</div>
@@ -197,5 +199,6 @@ export default function SimpleAuthDemo() {
         ? <SignInButton />
         : <button type="button" className="sad-signout" onClick={() => void signOut().then(() => setIdentity(null))}>Sign out</button>}
     </div>
+    </DemoFrame>
   );
 }

@@ -1,71 +1,22 @@
 .sad-page {
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: #e5e7eb;
   color: #4b5563;
-  font-family: system-ui, sans-serif;
 }
 
-.sad-page .rt-tower {
-  stroke: #9ca3af;
-}
+.sad-page .rt-tower { stroke: #9ca3af; }
+.sad-page .rt-waves path { stroke: #c4c9d1; transition: stroke 0.5s ease-out; }
+.sad-page .rt.lit .rt-waves path { stroke: #84cc16; transition-duration: 0.1s; }
 
-.sad-page .rt-waves path {
-  stroke: #c4c9d1;
-  transition: stroke 0.5s ease-out;
-}
+.sad-count { font-size: 40px; font-weight: 600; color: #374151; }
+.sad-status { font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.sad-signout { background: none; border: none; color: #6b7280; text-decoration: underline; cursor: pointer; font: inherit; }
 
-.sad-page .rt.lit .rt-waves path {
-  stroke: #84cc16;
-  transition-duration: 0.1s;
-}
-
-.sad-count {
-  font-size: 40px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.sad-status {
-  font-size: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.sad-signout {
-  background: none;
-  border: none;
-  color: #6b7280;
-  text-decoration: underline;
-  cursor: pointer;
-  font: inherit;
-}
-
-.sad-dot {
-  transition: background 0.5s ease-out;
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 6px;
-  vertical-align: middle;
-}
-
-.sad-dot.ok {
-  background: #16a34a;
-}
-
-.sad-dot.stale {
-  background: #f59e0b;
-}
-
-.sad-dot.lit {
-  background: #84cc16;
-  transition-duration: 0.1s;
-}
+.sad-dot { transition: background 0.5s ease-out; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.sad-dot.ok { background: #16a34a; }
+.sad-dot.stale { background: #f59e0b; }
+.sad-dot.lit { background: #86efac; transition-duration: 0.1s; }

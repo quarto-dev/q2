@@ -5,6 +5,7 @@
 
 import type { ComponentType, ReactNode } from 'react';
 import SimpleAuthDemo from './SimpleAuthDemo';
+import MonacoDemo from './MonacoDemo';
 import RadioTower from './RadioTower';
 import './DemoGallery.css';
 
@@ -21,6 +22,12 @@ const DEMOS: Record<string, Demo> = {
     description: 'A local Automerge counter that syncs to the hub only while signed in.',
     icon: <RadioTower lit={false} />,
     Component: SimpleAuthDemo,
+  },
+  monaco: {
+    title: 'Monaco editor',
+    description: 'The hub-client Monaco editor on an Automerge text doc, synced through a public server.',
+    icon: <span className="dg-glyph">✎</span>,
+    Component: MonacoDemo,
   },
 };
 
