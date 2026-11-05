@@ -272,6 +272,9 @@ impl ExecutionEngine for KnitrEngine {
         let capture_plan =
             target_route::plan_capture(ctx.want_record, !ctx.units.is_empty(), &ctx.format);
 
+        // KNR-6: a captured run gets a nonce, so R returns markers for the units Rust presents.
+        let nonce = capture_plan.capture.then(super::skeleton::new_nonce);
+
         // Step 6: Build execute params
         let params = KnitrExecuteParams {
             input: ctx.source_path.clone(),
@@ -288,6 +291,7 @@ impl ExecutionEngine for KnitrEngine {
             // this set with languages owned by other engines.
             handled_languages: ctx.handled_languages.clone(),
             capture: capture_plan.capture,
+            nonce: nonce.clone(),
         };
 
         // Step 7: Build call options
@@ -388,6 +392,53 @@ impl ExecutionEngine for KnitrEngine {
             }),
             &mut execute_result,
         );
+
+        // Step 13 (KNR-6): present the record over the skeleton. R returned a marker where
+        // each unit Rust presents belongs; whatever the presenter cannot fill is filled from
+        // the markdown R shipped for it, so the render never fails here.
+        if let Some(nonce) = nonce {
+            let shipped = super::skeleton::Shipped {
+                chunks: result
+                    .chunks
+                    .iter()
+                    .map(|c| (c.id.as_str(), c.markdown.as_str()))
+                    .collect(),
+                spans: result
+                    .spans
+                    .iter()
+                    .map(|s| (s.id.as_str(), s.markdown.as_str()))
+                    .collect(),
+            };
+            let units = super::units::units_for_engine(&ctx.units, engine_input);
+            let mut fig = crate::presenter::figures::FsFigureSink::new(&ctx.source_path);
+            let presented = super::skeleton::present_skeleton(
+                &execute_result.markdown,
+                &nonce,
+                execute_result.record.as_ref(),
+                &units,
+                ctx.execute_scope.as_ref(),
+                &ctx.format,
+                &shipped,
+                &mut fig,
+            );
+            if presented.fallbacks.total() > 0 {
+                tracing::debug!(fallbacks = ?presented.fallbacks, "knitr units rendered from shipped markdown");
+            }
+            execute_result.warnings.extend(presented.notes.iter().map(|note| {
+                crate::engine::diagnostics::note_diagnostic(note, &presented.ranged_units, ctx)
+            }));
+            for file in presented.files_written {
+                if !execute_result.supporting_files.contains(&file) {
+                    execute_result.supporting_files.push(file);
+                }
+            }
+            execute_result.skeleton = Some(super::context::Skeleton {
+                text: presented.skeleton,
+                nonce,
+                fallbacks: presented.fallbacks,
+            });
+            execute_result.markdown = presented.markdown;
+        }
         Ok(execute_result)
     }
 

@@ -70,6 +70,7 @@ pub mod preview_record;
 mod registry;
 mod replay;
 pub mod resolution;
+pub mod skeleton;
 mod traits;
 pub mod ts_protocol;
 pub mod units;
@@ -200,7 +201,7 @@ pub const HANDLED_LANGUAGES: &[&str] = &["ojs", "mermaid", "dot"];
 pub const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
 
 // Re-export public types
-pub use context::{CellOption, CellOptionsMap, ExecuteResult, ExecutionContext};
+pub use context::{CellOption, CellOptionsMap, ExecuteResult, ExecutionContext, Skeleton};
 pub use detection::{
     DetectedEngine, EngineSequence, detect_engine, detect_engine_sequence, detect_engines,
 };

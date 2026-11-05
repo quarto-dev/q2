@@ -300,6 +300,12 @@ capture_child_record <- function(options, markdown) {
   invisible()
 }
 
+# The marker knitr's skeleton holds where a unit belongs: `<!-- q2:<nonce>:<unit id> -->`
+# (engine/knitr/skeleton.rs reads it). Only a marker with this run's nonce counts.
+capture_marker <- function(id) {
+  paste0("<!-- q2:", quarto_capture$nonce, ":", id, " -->")
+}
+
 capture_chunk_hook <- function(prev) {
   function(x, options) {
     out <- prev(x, options)
@@ -358,6 +364,20 @@ capture_chunk_hook <- function(prev) {
       record$hook_override <- quarto_capture$hook_override
     }
     quarto_capture$records[[length(quarto_capture$records) + 1L]] <- record
+    # KNR-6: with a nonce, a chunk Rust may present returns a marker line instead of its
+    # markdown (the markdown still travels in `chunks`, keyed by unit id, hooks.R). The same
+    # trailing newline as the hook's own output keeps the skeleton's line structure, so Rust
+    # can swap the finished markdown back in for a chunk it cannot present. A chunk whose hook
+    # is overridden, that is not R, or that carries no unit id keeps its real markdown.
+    id <- options[["quarto-unit-id"]]
+    if (
+      !is.null(quarto_capture$nonce) &&
+        !is.null(id) &&
+        capture_is_r_engine(options) &&
+        is.null(quarto_capture$hook_override)
+    ) {
+      return(paste0(options[["indent"]], capture_marker(id), "\n"))
+    }
     out
   }
 }
@@ -408,7 +428,8 @@ capture_known_options <- function(format_opts_chunk = list()) {
 # Return `knitr` (the options list execute() builds) with the capture wrappers
 # installed. Also turns knitr's cache off for the recording run (S4): an
 # unconditional copy of the hook execute.R installs for `cache: false`.
-capture_install <- function(knitr) {
+capture_install <- function(knitr, nonce = NULL) {
+  quarto_capture$nonce <- nonce
   quarto_capture$records <- list()
   quarto_capture$slot <- NULL
   quarto_capture$ordinal <- 0L

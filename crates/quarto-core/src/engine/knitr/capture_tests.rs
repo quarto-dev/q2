@@ -69,6 +69,7 @@ fn execute_in(
         resource_dir: KNITR_RESOURCES.path().unwrap().to_path_buf(),
         handled_languages: vec![],
         capture,
+        nonce: None,
     };
     call_r("execute", &params, path, path, &CallROptions::quiet()).expect("R execution failed")
 }

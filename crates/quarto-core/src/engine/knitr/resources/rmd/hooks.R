@@ -96,6 +96,8 @@ quarto_span_records$pending_piece <- NULL
 # only turned into a piece then (the live path is untouched).
 quarto_span_records$piece_fn <- NULL
 quarto_span_records$installed <- NULL
+# KNR-6: set by execute() on a captured run; a brace span then returns a marker (capture.R).
+quarto_span_records$nonce <- NULL
 
 # An inline value as a captured piece. Only a chunk's auto-printed widget carries knitr's
 # `knit_asis_htmlwidget` class, so a widget in a span (`I(knit_print(w))`) is recognized by
@@ -146,7 +148,13 @@ quarto_ensure_inline_hook <- function() {
   }
   installed <- function(x) {
     text <- paste(current(x), collapse = "")
+    id <- quarto_span_records$pending
     quarto_record_span(text)
+    # KNR-6: a brace span (the only kind with an id) returns a marker; the finished text
+    # travels in `spans`. A classic span stays substituted by knitr.
+    if (!is.null(quarto_span_records$nonce) && !is.null(id)) {
+      return(paste0("<!-- q2:", quarto_span_records$nonce, ":", id, " -->"))
+    }
     text
   }
   quarto_span_records$installed <- installed
@@ -193,6 +201,7 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
   quarto_span_records$pending_piece <- NULL
   quarto_span_records$piece_fn <- NULL
   quarto_span_records$installed <- NULL
+  quarto_span_records$nonce <- NULL
   knit_hooks[["evaluate.inline"]] <- quarto_evaluate_inline_hook(
     knitr::knit_hooks$get("evaluate.inline")
   )

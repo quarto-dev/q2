@@ -17,7 +17,8 @@ execute <- function(
   resourceDir,
   handledLanguages,
   markdown,
-  capture = FALSE
+  capture = FALSE,
+  nonce = NULL
 ) {
   # calculate knit_root_dir (before we setwd below)
   knit_root_dir <- if (!is.null(cwd)) {
@@ -120,7 +121,9 @@ execute <- function(
   # KNR-1: record evaluate() pieces per chunk when the engine call asks for it
   if (isTRUE(capture)) {
     source(file.path(resourceDir, "rmd", "capture.R"), local = TRUE)
-    knitr <- capture_install(knitr)
+    knitr <- capture_install(knitr, nonce)
+    # KNR-6: brace spans return the same kind of marker the chunk hook does (hooks.R)
+    quarto_span_records$nonce <- nonce
     # KNR-4: an inline span's knit_asis or image value travels as a piece too (hooks.R)
     quarto_span_records$piece_fn <- capture_piece
   }

@@ -262,7 +262,8 @@
       params$resourceDir,
       params$handledLanguages,
       params$markdown,
-      isTRUE(params$capture)
+      isTRUE(params$capture),
+      params$nonce
     )
   } else if (request$action == "dependencies") {
     result <- dependencies(

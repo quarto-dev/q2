@@ -668,6 +668,7 @@ impl TsEngine {
             // Set by `execute` through `ts_record::attach_record`, which needs
             // the context's units; the mapping here never builds a record.
             record: None,
+            skeleton: None,
         })
     }
 }

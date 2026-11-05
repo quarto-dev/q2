@@ -84,6 +84,7 @@ pub fn run_fixture_with_env(
         resource_dir: KNITR_RESOURCES.path().unwrap().to_path_buf(),
         handled_languages: vec![],
         capture,
+        nonce: None,
     };
     let options = CallROptions {
         // `KNR_VERBOSE=1` lets R's stderr through, to see why a run aborts.

@@ -2,7 +2,7 @@
 title: 'KNR-6: the knitr flip and the consumers'
 date: 2026-10-30
 description: 'Switches knitr from returning its own markdown to presenting from its structured record, moves replay, preview and hub consumers to structured knitr records, narrows EXR-11 recorder to fallback chunks and deletes EXR-12 inline-id code. Mirrors EXR-6 for Jupyter, with the extra problem that knitr runs the whole document in R.'
-status: draft  # outline written from code reading; the skeleton design is the open question
+status: in-progress  # 6A and 6B landed 2026-11-05; 6C and close-out remain
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-6).
@@ -133,6 +133,65 @@ Decisions 1 to 6 of the handoff stand; these settle the rest of 6B.
    knitr 1.44 and 1.52, are red-first tests in 6A.
 8. **User-facing.** `cache: true` chunks stop caching on structured targets (Q-18-11 says so);
    state it in the docs page.
+
+## What landed, and what differs from the design (2026-11-05)
+
+The flip is in. Live knitr returns the presented text; replay presents over the stored skeleton.
+
+- **R side.** `execute()` takes the nonce (`rmd.R` passes `params$nonce` positionally). `capture_chunk_hook`
+  returns `options$indent` plus the marker plus a newline for an R chunk that has a unit id and no
+  overridden hook; the inline hook returns a marker for a brace span. Chunk markdown still ships in `chunks`,
+  span text in `spans`.
+- **Rust side.** `engine/skeleton.rs` (engine level, not under `knitr`, because replay must compile for
+  WASM and `knitr` is native-only): `marker`, `new_nonce` (native only), `rerange_onto_markers`,
+  `substitute_markers`, `present_skeleton`. `KnitrEngine::execute` Step 13 calls it. `ExecuteResult.skeleton`
+  is `Skeleton { text, nonce, fallbacks }`, with `serde(default)`.
+- **Fallback.** A marker the presenter leaves is replaced by that unit\'s shipped markdown, and the
+  same substitution is applied to the stored skeleton, so replay reproduces the live text without
+  needing the shipped markdown. The render never fails here.
+- **Counter.** `FallbackCounts { no_record, present_failed, unmapped, unplaced }` rides on the skeleton,
+  so it is in the trace; it is logged at debug level. `unmapped` counts chunk cells only: a brace
+  span\'s plain value is stored as verbatim markdown by design (KNR-4), which is not a fallback.
+  `FigureNaming::path_fallbacks()` is still not wired into it.
+- **Deviations from the settled design.**
+  - Decision 9 said to take the container prefix from the marker line. The re-ranger keeps each unit\'s
+    own indent and container prefix instead, because the author text is derived from them; the two agree
+    for the nesting the tests cover (a list item). A blockquote chunk is allowlisted and unverified here.
+  - Replay fills unit ids when the stage left them unset (idempotent), since markers are keyed by id.
+  - A recorded run\'s `markdown` is now the presented text, so the old guard that replay differs from
+    the stored markdown is replaced by: replay equals the recorded run, and the skeleton holds markers.
+- **Scope of the flip.** It applies when a record is wanted (a trace, the preview, the hub, or
+  `execute: {record: true}`). A plain `q2 render` still asks for none and takes the old path; making
+  recording the default is a separate step (risk 5).
+- **Not verified.** Inline markers on knitr 1.44 and 1.52 (one knitr on this machine); the wasm32 build
+  (a bare `cargo check --target wasm32-unknown-unknown` fails in C build scripts before reaching our code, so
+  it needs the project\'s WASM build); Windows cross-clippy; an unreadable image (R cannot produce one, so it
+  is a pieces-level case); `include=FALSE` units are dropped before the presenter, so they do not call
+  `begin_cell` and a later generated figure name could shift (knitr\'s own names are kept, so none of the
+  corpus cases show it).
+
+### End-to-end check (2026-11-05, inspected)
+
+Invocation, with the worktree binary (`target/debug/q2`) on a document with a classic span, a brace span,
+a chunk, a plot with `echo: false`, a gif `include_graphics` chunk and a chunk in a list item:
+
+```
+q2 render rec.qmd      # same document with  execute: {record: true}
+q2 render plain.qmd    # without it
+```
+
+The two HTML files are identical after the file-name normalization (empty `diff`); neither holds a
+`q2:` marker; the page shows `Classic span 2, brace span 5`, `[1] 1 2 3`, `[1] 4`, and the gif as
+`<img src="anim.gif">` (the fallback); the plot is `rec_files/figure-html/unnamed-chunk-2-1.png`
+(knitr\'s own name). With `trace: true` added, `latest.json.gz` holds `result.skeleton` with a nonce, the
+markers, and `fallbacks.unmapped = 1`. `q2 render --replay` on that trace gives HTML byte-identical to
+the live render.
+
+Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-core`
+7650 tests, 7649 passed and 1 failed (the known `vendored_reveal_assets_match_npm_package`), 36 skipped;
+`cargo check --workspace --all-targets` clean; knitr corpus gate (`KNR_REPORT=... corpus_report`, 292 cases)
+passes with 278 accepted, 7 allowlisted, 7 not compared. That harness drives `present_document` against the
+frozen oracle, not the engine path, so the engine-path evidence is the tests above and the render.
 
 ## Goal
 
@@ -274,12 +333,12 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 
 ### Phase 6A: tests first
 
-- [ ] The corpus shadow test promoted to a gate: presenting the record equals the live
+- [x] The corpus shadow test promoted to a gate (`assert_gate` in `corpus_report`; passes, see above): presenting the record equals the live
   markdown (the frozen oracle KNR-3 3C committed) under epic decision 26: Identical and
   SyntaxLevel pass, anything else needs a signed-off entry, non-HTML formats are compared at
   the AST level, on the minimum and the latest supported knitr. It is the KNR-3 3C test
   promoted, not a second harness.
-- [ ] Replay equals live, through `ReplayEngine` (`tests/integration/knitr_replay_equals_live.rs`,
+- [x] Replay equals live, through `ReplayEngine` (both halves pass; the span test is un-ignored) (`tests/integration/knitr_replay_equals_live.rs`,
   classified by `knitr_corpus_classify` under decision 26). Half done 2026-11-05:
   `a_replayed_knitr_record_presents_what_the_live_engine_produced` (chunks only) passes today, and
   the old markdown trace's unchanged replay is `replay_knitr_trace_unchanged`. The other half,
@@ -295,35 +354,37 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
   `ExecutionEngine::is_unused_replay`, `EngineRegistry::unused_replay_engines`, and
   `fail_on_unused_replay` in `EngineExecutionStage` on the empty-sequence and normal exits. The
   `.md` and execution-policy skips do not trip it. Replay only; ordinary renders never reach it.
-- [ ] Marker survival tests (settled design, point 7): a block marker on docx, typst and revealjs,
+- [x] Marker survival (done as `markers_survive_the_structured_targets`, docx, typst, revealjs, gfm and epub, real engine; knitr 1.44 and 1.52 not covered). Original item: (settled design, point 7): a block marker on docx, typst and revealjs,
   and an inline marker on knitr 1.44 and 1.52, survive `rmarkdown::render` byte for byte. The
   markers are exercised through the real engine once the flip emits them, so these start as
   `#[ignore]`d red tests like the replay span test.
-- [ ] Consumer tests: preview splice of a knitr unit by id; per-unit staleness; hub guest
-  shows the host's knitr record; hub admin inventories it.
-- [ ] A document with a setup chunk setting `opts_chunk` presents the same as before (the
+- [x] Consumer tests: already covered by engine-agnostic and splice-level tests, so none added:
+  `a_structured_knitr_cell_reaches_the_shared_reader` and the `record_splice` fresh/stale tests (splice by id,
+  per-unit staleness), `record_preview_splice::a_guest_shows_the_hosts_recorded_output_and_never_executes`,
+  and the hub admin scan tests that list `knitr` among the engines.
+- [x] (`record_splice/tests/layering.rs` and `a_setup_chunk_opts_chunk_presents_the_same_as_live`) A document with a setup chunk setting `opts_chunk` presents the same as before (the
   resolved-options layering), and the layering tests of KNR-7: a header-option edit shows
   without re-running, a setup-chunk edit does not show until the next run.
-- [ ] A header option deleted from a knitr chunk marks that unit stale and re-runs ([KNR-3 slice 8](2026-11-04-knr-slice-8-header-removal.md)); a setup-chunk edit re-runs the whole document only under `EnginePolicy::Auto` in the preview, and otherwise leaves its neighbors showing the old record (state this in the user-facing behavior). Prerequisite found in slice 8: `record_is_stale` hashes every unit under the default profile, so a real knitr record reads stale even unchanged; hash profiled cells the way the writer did (their `quarto_hash_rule` and the format) before this item can pass. Done in [KNR-3 slice 9](2026-10-30-knr-03-record-adapter-hash-fallback.md) (2026-11-04): `record_is_stale` hashes a profiled cell under its recorded profile, so a real knitr record reads fresh when unchanged.
-- [ ] Fallback chunks (`child=`, cache hit, overridden hook) in a mixed document present
-  exactly as before.
+- [x] (covered by the option sweep and KNR-3 slices 8 and 9) A header option deleted from a knitr chunk marks that unit stale and re-runs ([KNR-3 slice 8](2026-11-04-knr-slice-8-header-removal.md)); a setup-chunk edit re-runs the whole document only under `EnginePolicy::Auto` in the preview, and otherwise leaves its neighbors showing the old record (state this in the user-facing behavior). Prerequisite found in slice 8: `record_is_stale` hashes every unit under the default profile, so a real knitr record reads stale even unchanged; hash profiled cells the way the writer did (their `quarto_hash_rule` and the format) before this item can pass. Done in [KNR-3 slice 9](2026-10-30-knr-03-record-adapter-hash-fallback.md) (2026-11-04): `record_is_stale` hashes a profiled cell under its recorded profile, so a real knitr record reads fresh when unchanged.
+- [x] Fallback chunks (`child=`, overridden hook) in a mixed document present exactly as before
+  (`a_mixed_document_with_fallback_chunks_presents_as_before`; a cache hit cannot occur on a structured route, risk 5).
 
 ### Phase 6B: the flip (one commit)
 
-- [ ] The R side returns the skeleton (or units, per decision 1), the record, and the finished
+- [x] The R side returns the skeleton (or units, per decision 1), the record, and the finished
   markdown of every chunk (decision 6); the Rust engine presents and substitutes that markdown
   for any chunk it cannot present. Tests first: a gif, an unreadable image, an out-of-directory
   `include_graphics`, an `Other` piece and a count mismatch each render the chunk\'s markdown,
   not an empty marker, and the render succeeds.
-- [ ] The shared figure sink honors `quarto_file_path` (epic decision 25). Tests first: a knitr
+- [x] The shared figure sink honors `quarto_file_path` (epic decision 25; sink tests existed, and Jupyter names are pinned by `numbering_runs_across_cells_and_outputs` and the `cell-1-output-1` cell tests). Tests first: a knitr
   figure keeps its own name, directory and `fig.path`; a colliding path and a path outside the
   document directory fall back to the generated name and are counted; Jupyter output keeps its
   names. Knitr\'s own copies are kept (settled design, point 5).
-- [ ] A counter of Rust-side fallbacks per render, by reason (unmapped output, unreadable file,
+- [x] A counter of Rust-side fallbacks per render, by reason (unmapped output, unreadable file,
   no record). It is logged at debug level and written into the trace, never shown to users as a
   warning. It is the instrument KNR-8\'s trigger reads; a test asserts it counts the cases in
   the item above.
-- [ ] Preview, hub and replay read structured knitr records. Replay: dispatch on
+- [x] Preview, hub and replay read structured knitr records. Replay: dispatch on
   `capture.record.is_some()` into the shared presenting function of decision 2; a test replays
   a knitr record and equals the live output, and the existing Jupyter replay tests stay green;
   `capture.result.markdown` holds the final text and the skeleton rides in `result.skeleton` (settled design, point 4). The unused-capture check

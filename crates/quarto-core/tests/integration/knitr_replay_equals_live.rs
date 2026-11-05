@@ -7,8 +7,10 @@
 
 use std::path::PathBuf;
 
+use quarto_core::engine::skeleton::{Shipped, present_skeleton};
 use quarto_core::engine::units::scan_units;
 use quarto_core::engine::{ExecutionContext, ExecutionEngine, KnitrEngine, ReplayEngine};
+use quarto_core::presenter::figures::FsFigureSink;
 use quarto_core::record::{AuthorTexts, coalesce, fill_ids};
 
 use super::knitr_corpus_classify::{Class, classify};
@@ -22,13 +24,22 @@ const CHUNKS: &str = "Before.\n\n```{r a}\nx <- 1:3\nx\n```\n\nMiddle.\n\n\
 const WITH_SPAN: &str = "Before.\n\n```{r a}\nx <- 1:3\nx\n```\n\nAfter `r 1 + 1` inline.\n";
 
 fn context(doc: &str, dir: &std::path::Path, want_record: bool) -> ExecutionContext {
+    context_for(doc, dir, want_record, "html")
+}
+
+fn context_for(
+    doc: &str,
+    dir: &std::path::Path,
+    want_record: bool,
+    format: &str,
+) -> ExecutionContext {
     let mut units = scan_units(doc);
     let texts = AuthorTexts::from_scanned(&units);
     let mut ctx = ExecutionContext::new(
         dir.to_path_buf(),
         PathBuf::from(dir),
         dir.join("doc.qmd"),
-        "html",
+        format,
     )
     .with_owned_languages(vec!["r".to_string(), "bash".to_string()])
     .with_quiet(true);
@@ -85,9 +96,23 @@ fn assert_replay_equals_live(doc: &str) {
         .execute(doc, &context(doc, rec_dir.path(), false))
         .expect("replay");
 
-    assert_ne!(
+    // The recorded run presented its record over a skeleton and stored both; replay presents
+    // that skeleton again and reproduces the recorded text exactly.
+    let skeleton = recorded
+        .skeleton
+        .as_ref()
+        .expect("a recorded run keeps its skeleton");
+    assert!(
+        skeleton
+            .text
+            .contains(&format!("<!-- q2:{}:", skeleton.nonce))
+            || !recorded.markdown.contains("::: {.cell"),
+        "the skeleton holds this run's markers:\n{}",
+        skeleton.text
+    );
+    assert_eq!(
         replayed.markdown, recorded.markdown,
-        "replay must present the record, not return the stored markdown"
+        "replay must reproduce the recorded run"
     );
     let class = classify(
         &normalize(&live.markdown, live_dir.path()),
@@ -168,7 +193,6 @@ fn a_replayed_knitr_record_presents_what_the_live_engine_produced() {
 /// markers) and `capture.result.markdown` holds it, and replay presents over that. The flip
 /// commit removes this `ignore`.
 #[test]
-#[ignore = "KNR-6 flip: replay needs the skeleton for classic spans"]
 fn a_replayed_knitr_record_keeps_classic_span_values() {
     assert_replay_equals_live(WITH_SPAN);
 }
@@ -241,3 +265,119 @@ fn an_include_graphics_outside_the_document_directory_renders() {
 
 // The unreadable-image case is Rust-side only (R has read the file by then), so it is pinned at
 // the pieces level in Phase 6B, not here.
+
+/// The per-render fallback counter (KNR-6 6B): a chunk the adapter cannot map is counted as
+/// `unmapped`, and a document of presentable chunks counts nothing.
+#[test]
+fn the_fallback_counter_counts_an_unmapped_chunk_and_nothing_else() {
+    if !r_available() {
+        return;
+    }
+    let gif = "Before.\n\n```{r}\nknitr::include_graphics('anim.gif')\n```\n";
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("anim.gif"), "GIF89a").unwrap();
+    std::fs::write(dir.path().join("doc.qmd"), gif).unwrap();
+    let ctx = context(gif, dir.path(), true);
+    let counted = KnitrEngine::new()
+        .execute(gif, &ctx)
+        .unwrap()
+        .skeleton
+        .expect("a skeleton")
+        .fallbacks;
+    assert_eq!((counted.unmapped, counted.total()), (1, 1), "{counted:?}");
+
+    let (_, _, plain) = record_capture(CHUNKS);
+    let counted = plain.skeleton.expect("a skeleton").fallbacks;
+    assert_eq!(counted.total(), 0, "{counted:?}");
+}
+
+/// Risk 4: a chunk that presents never reads its shipped markdown. Present the recorded
+/// skeleton with a poisoned shipped text for every unit; none of it may appear.
+#[test]
+fn a_presented_chunk_never_reads_its_shipped_markdown() {
+    if !r_available() {
+        return;
+    }
+    let (_, dir, recorded) = record_capture(CHUNKS);
+    let skeleton = recorded.skeleton.as_ref().expect("a skeleton");
+    let ctx = context(CHUNKS, dir.path(), true);
+    let poison = "POISON-SHIPPED-MARKDOWN";
+    let ids: Vec<String> = ctx
+        .units
+        .iter()
+        .filter_map(|u| match u {
+            quarto_core::engine::units::Unit::Cell(c) => c.id.as_ref().map(|i| i.0.clone()),
+            quarto_core::engine::units::Unit::Inline(i) => i.id.as_ref().map(|i| i.0.clone()),
+        })
+        .collect();
+    assert!(!ids.is_empty());
+    let shipped = Shipped {
+        chunks: ids.iter().map(|i| (i.as_str(), poison)).collect(),
+        spans: Default::default(),
+    };
+    let mut fig = FsFigureSink::new(&ctx.source_path);
+    let presented = present_skeleton(
+        &skeleton.text,
+        &skeleton.nonce,
+        recorded.record.as_ref(),
+        &ctx.units,
+        None,
+        "html",
+        &shipped,
+        &mut fig,
+    );
+    assert!(
+        !presented.markdown.contains(poison),
+        "a presented chunk read its shipped markdown:\n{}",
+        presented.markdown
+    );
+    assert_eq!(presented.fallbacks.total(), 0);
+}
+
+/// Marker survival (KNR-6 settled design, point 7): a block marker and a brace-span marker
+/// survive `rmarkdown::render` for the structured non-HTML targets, so every one is consumed
+/// by the presenter and nothing falls back. (Inline markers on knitr 1.44 and 1.52 are not
+/// covered here: the machine has one knitr.)
+#[test]
+fn markers_survive_the_structured_targets() {
+    if !r_available() {
+        return;
+    }
+    let doc = "Before.\n\n```{r}\nx <- 1:3\nx\n```\n\nA `{r} 1 + 1` b.\n\n\
+- item\n\n  ```{r}\n  2 + 2\n  ```\n";
+    for format in ["docx", "typst", "revealjs", "gfm", "epub"] {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("doc.qmd"), doc).unwrap();
+        let ctx = context_for(doc, dir.path(), true, format);
+        let run = KnitrEngine::new()
+            .execute(doc, &ctx)
+            .unwrap_or_else(|e| panic!("{format}: {e:?}"));
+        let skeleton = run
+            .skeleton
+            .as_ref()
+            .unwrap_or_else(|| panic!("{format}: no skeleton"));
+        let opener = format!("<!-- q2:{}:", skeleton.nonce);
+        assert_eq!(
+            skeleton.text.matches(&opener).count(),
+            3,
+            "{format}: all three markers must reach the skeleton:\n{}",
+            skeleton.text
+        );
+        assert!(
+            !run.markdown.contains("<!-- q2:"),
+            "{format}: a marker was left in the output:\n{}",
+            run.markdown
+        );
+        assert_eq!(
+            skeleton.fallbacks.total(),
+            0,
+            "{format}: {:?}",
+            skeleton.fallbacks
+        );
+        assert!(
+            run.markdown.contains("[1] 1 2 3") && run.markdown.contains("[1] 4"),
+            "{format}:\n{}",
+            run.markdown
+        );
+    }
+}

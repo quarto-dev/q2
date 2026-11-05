@@ -59,6 +59,7 @@ use quarto_trace::EngineCapture;
 use super::LanguageClaim;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
+use super::skeleton::{Shipped, present_skeleton};
 use super::traits::ExecutionEngine;
 use super::units::units_for_engine;
 use crate::presenter::document::present_document;
@@ -139,30 +140,76 @@ impl ReplayEngine {
             fill_ids(&mut units, &texts).map_err(|e| fail(format!("replay: {e}")))?;
         }
         let mut fig = FsFigureSink::new(&ctx.source_path);
-        let presented = present_document(
-            &record.cells,
-            input,
-            &units,
-            ctx.execute_scope.as_ref(),
-            InlineTarget::from_format(&ctx.format),
-            &ctx.format,
-            record.metadata.quarto_engines.first(),
-            &mut fig,
-        )
-        .map_err(|e| {
-            fail(format!(
-                "replay: presenting the recorded execution failed: {e}"
-            ))
-        })?;
+        // A whole-document engine (knitr) recorded a skeleton: present over it, not over the
+        // input text, so the spans and chunks its own run substituted are already in place.
+        let (markdown, files_written, notes, note_units) = if let Some(skeleton) = stored.skeleton.as_ref() {
+            // The markers are keyed by unit id, so every unit needs one (a stage that did not
+            // want a record leaves them unset; filling is idempotent).
+            let mut units = units.clone();
+            let has_id = |u: &crate::engine::units::Unit| match u {
+                crate::engine::units::Unit::Cell(c) => c.id.is_some(),
+                crate::engine::units::Unit::Inline(i) => i.id.is_some(),
+            };
+            if !units.iter().all(has_id) {
+                let texts = AuthorTexts::from_scanned(&units);
+                fill_ids(&mut units, &texts).map_err(|e| fail(format!("replay: {e}")))?;
+            }
+            let engine_record = record
+                .metadata
+                .quarto_engines
+                .first()
+                .map(|engine| EngineRecord {
+                    engine: engine.clone(),
+                    cells: record.cells.clone(),
+                });
+            // Markers the live run could not fill were already filled in `skeleton.text`.
+            let presented = present_skeleton(
+                &skeleton.text,
+                &skeleton.nonce,
+                engine_record.as_ref(),
+                &units,
+                ctx.execute_scope.as_ref(),
+                &ctx.format,
+                &Shipped::default(),
+                &mut fig,
+            );
+            (
+                presented.markdown,
+                presented.files_written,
+                presented.notes,
+                presented.ranged_units,
+            )
+        } else {
+            let presented = present_document(
+                &record.cells,
+                input,
+                &units,
+                ctx.execute_scope.as_ref(),
+                InlineTarget::from_format(&ctx.format),
+                &ctx.format,
+                record.metadata.quarto_engines.first(),
+                &mut fig,
+            )
+            .map_err(|e| {
+                fail(format!(
+                    "replay: presenting the recorded execution failed: {e}"
+                ))
+            })?;
+            (
+                presented.markdown,
+                presented.files_written,
+                presented.notes,
+                units.clone(),
+            )
+        };
 
         let mut result = stored;
-        result.markdown = presented.markdown;
-        result.supporting_files = presented.files_written;
+        result.markdown = markdown;
+        result.supporting_files = files_written;
         result.warnings.extend(
-            presented
-                .notes
+            notes
                 .iter()
-                .map(|note| crate::engine::diagnostics::note_diagnostic(note, &units, ctx)),
+                .map(|note| crate::engine::diagnostics::note_diagnostic(note, &note_units, ctx)),
         );
         result.record = record
             .metadata

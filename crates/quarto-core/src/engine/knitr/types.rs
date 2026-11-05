@@ -94,6 +94,12 @@ pub struct KnitrExecuteParams {
     /// turns knitr's cache off for the run.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub capture: bool,
+
+    /// KNR-6: this run's marker nonce (see `skeleton.rs`). When set, a chunk or brace span
+    /// Rust may present is returned as `<!-- q2:<nonce>:<unit-id> -->` instead of its markdown.
+    /// Omitted when off, so existing requests are unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
 }
 
 /// Result from the knitr execute action.
@@ -474,6 +480,7 @@ mod tests {
                 .map(|s| s.to_string())
                 .collect(),
             capture: false,
+            nonce: None,
         };
 
         let json = serde_json::to_string(&params).unwrap();
@@ -810,6 +817,7 @@ mod tests {
             resource_dir: PathBuf::from("/resources"),
             handled_languages: vec![],
             capture: false,
+            nonce: None,
         };
 
         let request = KnitrRequest::new(
