@@ -6,6 +6,7 @@
 import type { ComponentType, ReactNode } from 'react';
 import SimpleAuthDemo from './SimpleAuthDemo';
 import MonacoDemo from './MonacoDemo';
+import PreviewDemo from './PreviewDemo';
 import RadioTower from './RadioTower';
 import './DemoGallery.css';
 
@@ -28,6 +29,12 @@ const DEMOS: Record<string, Demo> = {
     description: 'The hub-client Monaco editor on an Automerge text doc, synced through a public server.',
     icon: <span className="dg-glyph">✎</span>,
     Component: MonacoDemo,
+  },
+  preview: {
+    title: 'Preview',
+    description: 'Read-only preview of the same project file, rendered by the hub preview pipeline.',
+    icon: <span className="dg-glyph">◎</span>,
+    Component: PreviewDemo,
   },
 };
 
