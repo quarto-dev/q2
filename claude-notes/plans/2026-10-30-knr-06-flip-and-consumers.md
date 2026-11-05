@@ -187,11 +187,36 @@ The two HTML files are identical after the file-name normalization (empty `diff`
 markers, and `fallbacks.unmapped = 1`. `q2 render --replay` on that trace gives HTML byte-identical to
 the live render.
 
-Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-core`
-7650 tests, 7649 passed and 1 failed (the known `vendored_reveal_assets_match_npm_package`), 36 skipped;
-`cargo check --workspace --all-targets` clean; knitr corpus gate (`KNR_REPORT=... corpus_report`, 292 cases)
-passes with 278 accepted, 7 allowlisted, 7 not compared. That harness drives `present_document` against the
-frozen oracle, not the engine path, so the engine-path evidence is the tests above and the render.
+Gates (2026-11-05, after the sql fix below): `cargo clippy -p quarto-core --all-targets -- -D warnings` clean;
+`cargo nextest run -p quarto-core` 7652 tests, 7651 passed and 1 failed (the known
+`vendored_reveal_assets_match_npm_package`), 36 skipped; `cargo check --workspace --all-targets` clean;
+the wasm32 type-check of `crates/wasm-quarto-hub-client` passes. That harness drives the recorded path
+through `knitr_corpus_record`, not the stored-skeleton replay, so the engine-path evidence is the tests
+above and the render.
+
+### Corpus gate with `gifski` and `RSQLite` installed (2026-11-05)
+
+The first 292-case run (278 accepted, 7 allowlisted, 7 not compared) had no `gifski` or `RSQLite`. With both
+installed the two animated-figure cases are accepted and `s5/01_odd_chunks` runs: **280 accepted, 8
+allowlisted, 4 not compared** (the four knitr aborts), gate **PASS**, frozen oracle 285 plus the three new
+cases (the two animate cases and `s5/01_odd_chunks`, frozen in this commit range).
+
+- **Found and fixed: a recorded run lost a sql chunk\'s `#|` options.** The unit-id line was inserted with the
+  language\'s own comment prefix (`--|` for sql) ahead of the author\'s `#|` lines. knitr reads option lines under
+  one prefix and stops at the first line that uses another, so `connection` never reached the sql engine and
+  the run aborted. It predates the flip (the same failure at `284cb19b6`) and a plain render was never
+  affected. The id line now takes the prefix of the author\'s first option line. Tests:
+  `the_id_line_uses_the_prefix_of_the_authors_option_lines` (unit) and
+  `a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live` (engine, skips without `DBI` and `RSQLite`);
+  the second failed with the production error before the fix. The corpus harness now owns `sql`, as the
+  engine\'s claims do.
+- **Allowlisted: the `listeng` chunk.** The fixture defines a custom knitr engine. knitr runs it and so does
+  Quarto 1 (its knitr engine claims only `r`, but knitr gets the whole file). A plain and a recorded
+  `q2 render` of the same document in the worktree binary are identical and run it. `knitr_claims` claims no
+  custom language, so the cell is unowned, and the corpus harness presents an unowned cell as the author\'s
+  text, a raw fence. That harness presents through `present_document`, not the skeleton path, so the
+  difference is the harness\'s. `s5/01_odd_chunks` is allowlisted with that reason (Gordon, 2026-11-05). Not
+  checked: how the preview splice and the hub treat an unowned cell that an engine ran anyway.
 
 ## Goal
 
@@ -394,7 +419,11 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
 
 ### Phase 6C: deletions (separate commits, each green)
 
-- [ ] (Narrowed, settled design point 6: the `.QuartoInlineId` hand-off and the span fallback
+- [x] **Outcome 2026-11-05: nothing is unreferenced, so nothing was deleted.** The EXR-11 markdown-unit
+  writer (`chunk_records::build`, the `None` arm of `attach_records`) is still the record writer for a
+  fallback-route document (LaTeX and uncovered targets run with capture off, so `captured` is `None`); the hand-off
+  and span records stay by design. Re-check when KNR-8 narrows the chunk hook. Original item, kept for the record:
+  (Narrowed, settled design point 6: the `.QuartoInlineId` hand-off and the span fallback
   records stay until KNR-8.) EXR-11\'s code that records
   every chunk **as a markdown unit in the record** goes, since KNR-3\'s adapter has written
   structured units since its Phase 3B; its per-chunk markdown **on the result stays** (decision
@@ -402,7 +431,7 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
   List the deletions explicitly at that point, from what is unreferenced: `engine/knitr/chunk_record_tests.rs`
   for the removed code, and any helper nothing calls once the flip has landed. `insert_unit_ids`,
   `SpanPlan::new`, `quarto_span_records` and `quarto_flush_span_records` stay while the hand-off does.
-- [ ] Record in this epic that the knitr engine now migrates through the record (EXR-17
+- [ ] (Left for Gordon: it edits the epic; the outcome is in "What landed" above.) Record in this epic that the knitr engine now migrates through the record (EXR-17
   trigger item 1); EXR-17 itself is not edited.
 - [x] The `quarto-unit-id` option hand-off for structured chunks is **kept** (markers need it);
   settled 2026-11-05.

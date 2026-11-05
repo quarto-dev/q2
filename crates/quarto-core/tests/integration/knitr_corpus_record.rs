@@ -42,7 +42,7 @@ fn live_markdown(f: &Fixture, format: &str) -> Result<(String, tempfile::TempDir
         doc_path,
         format,
     )
-    .with_owned_languages(vec!["r".to_string(), "bash".to_string()])
+    .with_owned_languages(vec!["r".to_string(), "bash".to_string(), "sql".to_string()])
     .with_units(units)
     .with_quiet(std::env::var_os("KNR_VERBOSE").is_none());
     let result = quarto_core::engine::ExecutionEngine::execute(&KnitrEngine::new(), &f.text, &ctx)
@@ -78,7 +78,7 @@ pub fn run_through_record(f: &Fixture, format: &str) -> Result<RecordRun, String
         doc_path.clone(),
         format,
     )
-    .with_owned_languages(vec!["r".to_string(), "bash".to_string()])
+    .with_owned_languages(vec!["r".to_string(), "bash".to_string(), "sql".to_string()])
     .with_units(units.clone())
     .with_author_texts(texts)
     .with_want_record(true)

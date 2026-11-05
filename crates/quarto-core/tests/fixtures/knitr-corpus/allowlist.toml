@@ -46,3 +46,8 @@ reason = "live knitr indents the whole cell by the option's value (two spaces); 
 name = "options/indent/yaml/00_empty"
 class = "blocker"
 reason = "live knitr indents the whole cell by the option's value (two spaces); the presenter ignores `indent`, because knitr sets it from the chunk's container indent and the splice re-applies container prefix and indent, so presenting it would double-indent a nested chunk (KNR-3 slice 7, D8: Gordon, 2026-11-03). KNR-6 decides what a header `indent` does once the skeleton marker's indent is known; `indent` is undocumented and unused in docs/ and the smoke tests"
+
+[[entry]]
+name = "s5/01_odd_chunks"
+class = "blocker"
+reason = "the fixture's `listeng` chunk uses a custom knitr engine defined in a setup chunk. knitr runs it, and so does the product (a plain and a recorded `q2 render` of the same document are identical, and Quarto 1 runs it too), but `knitr_claims` claims no custom language, so the cell is unowned and this harness presents an unowned cell as the author's text, a raw fence. The harness presents through `present_document`, not the engine's skeleton path, so the difference is the harness's, not the product's (Gordon, 2026-11-05). Needs `RSQLite`; the case was unavailable until it was installed"

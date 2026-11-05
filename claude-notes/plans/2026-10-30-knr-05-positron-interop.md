@@ -2,7 +2,7 @@
 title: 'KNR-5: Positron interop for knitr records'
 date: 2026-10-30
 description: 'Makes a q2 knitr record valid to present in Positron and lets q2 import a Positron cache for R cells into knitr-owned units, by widening the EXR-16 importer gate, presenting imported outputs through the knitr layer, and extending the Positron fork spikes.'
-status: in-progress  # 2026-11-04: q2 side done (gate, presenter, record and hash tests); the Phase 5C exit criteria on real Positron are pending Gordon's fork time
+status: complete  # 2026-11-05: q2 side done; K-S1 re-run on the final record; K-S2 observed on a real Ark cache. The real-binary half of K-S2 (q2 render and preview) is handed to records-in-use RIU-3/4, and the unpadded-base64 plot to bd-wzz90981 (Ark epic)
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-5).

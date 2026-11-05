@@ -73,14 +73,29 @@ pub(super) fn insert_unit_ids(text: &str, ctx: &ExecutionContext) -> (String, Ve
             continue;
         };
         let syntax = crate::cell_options::comment_syntax_for(&cell.lang);
+        // knitr reads option lines under one comment prefix and stops at the first line that uses
+        // another. It accepts `#|` in any chunk, so an author's `#|` lines in a `{sql}` chunk
+        // (whose scanner prefix is `--`) must not be split from the options by a `--|` line.
+        let first_line = text[cell.start + opener_len + 1..]
+            .lines()
+            .next()
+            .unwrap_or("")
+            .strip_prefix(cell.container_prefix.as_str())
+            .unwrap_or("")
+            .trim_start_matches(' ');
+        let (prefix, suffix) = if first_line.starts_with("#|") {
+            ("#", None)
+        } else {
+            (syntax.prefix, syntax.suffix)
+        };
         // A quoted scalar keeps an id that looks like a number or a keyword a string.
         let line = format!(
             "{}{}{}| {UNIT_ID_OPTION}: {}{}\n",
             cell.container_prefix,
             " ".repeat(cell.indent),
-            syntax.prefix,
+            prefix,
             Value::String(id.to_string()),
-            syntax.suffix.unwrap_or(""),
+            suffix.unwrap_or(""),
         );
         edits.push((cell.start + opener_len + 1, line));
         ids.push(id.to_string());
@@ -322,6 +337,36 @@ y = 2
         )
         .with_want_record(true);
         assert_eq!(insert_unit_ids(DOC, &bare), (DOC.to_string(), vec![]));
+    }
+
+    /// knitr reads a chunk's option lines under one comment prefix and stops at the first line
+    /// that uses another. A `{sql}` chunk whose author wrote `#|` lines (knitr accepts them, though
+    /// Quarto's scanner reads `--|`) must therefore get its id line in the author's prefix, or the
+    /// author's options fall out of the block and `connection` never reaches the engine.
+    #[test]
+    fn the_id_line_uses_the_prefix_of_the_authors_option_lines() {
+        let doc = "```{sql}\n#| connection: con\nSELECT 1\n```\n\n\
+                   ```{sql}\n--| connection: con\nSELECT 2\n```\n\n\
+                   ```{sql}\nSELECT 3\n```\n";
+        let c = ctx(doc, &["sql"], true);
+        let (text, ids) = insert_unit_ids(doc, &c);
+        assert_eq!(ids.len(), 3, "{text}");
+        let line = |i: usize, prefix: &str| format!("{prefix}| quarto-unit-id: \"{}\"\n", ids[i]);
+        assert!(
+            text.contains(&format!("```{{sql}}\n{}#| connection: con\n", line(0, "#"))),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "```{{sql}}\n{}--| connection: con\n",
+                line(1, "--")
+            )),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("```{{sql}}\n{}SELECT 3\n", line(2, "--"))),
+            "{text}"
+        );
     }
 
     #[test]

@@ -456,10 +456,10 @@ version branches at `patch.R:6`, `:152` and `:300` (`hooks.R` has none; its 1.44
 
 ## Plans and DAG
 
-**Status (2026-11-03).** KNR-1 and the interlude are complete. KNR-2 is closed (its remainder is
-KNR-2b). KNR-3 is next, after the replay claim fix (bd-js24dold); then KNR-4, KNR-2b and KNR-6,
-with KNR-5 in parallel after KNR-3. KNR-7 follows KNR-6; KNR-8 waits on its trigger. The parent
-epic is complete but not yet merged to main, so this work stays on top of it until it is.
+**Status (2026-11-05).** KNR-1 to KNR-6 are complete on `knr-2-presenter`, KNR-5 included; the
+one open KNR-5 item is the real-binary half of K-S2, which waits on RIU-3/4. KNR-7 is next. KNR-8
+waits on its trigger. The parent epic is complete but not yet merged to main, so this work stays on
+top of it until it is, and nothing here is on main yet.
 
 | ID | Plan | Sessions (guesses) | Notes |
 |---|---|---|---|
@@ -468,8 +468,8 @@ epic is complete but not yet merged to main, so this work stays on top of it unt
 | KNR-3 | [Record adapter, hash profiles, fallback units, cache and `child=`](2026-10-30-knr-03-record-adapter-hash-fallback.md) | 3-4 | KNR-1 S1 to S5, S8 and S9 answered its option, cache, `child=` and hook decisions; decision 8 (the format in the record) settled 2026-11-01: the exception is accepted |
 | KNR-4 | [Inline expressions as recorded values](2026-10-30-knr-04-inline-typed-values.md) | 2 | replaces EXR-12\'s mechanism; mechanism answered by S1 and S9 |
 | KNR-2b | [knitr presenter layer, remainder](2026-11-02-knr-02b-presenter-remainder.md) | 1-2 | split from KNR-2 on 2026-11-02; sequenced after KNR-4. The options and fences that need KNR-3\'s record fields, the hold wiring, the shared figure sink, and the corpus bar of zero blockers on the minimum and latest knitr |
-| KNR-5 | [Positron interop for knitr](2026-10-30-knr-05-positron-interop.md) | 2-3 | widens EXR-16\'s importer gate; spikes in the Positron fork |
-| KNR-6 | [The knitr flip and the consumers](2026-10-30-knr-06-flip-and-consumers.md) | 3-4 | skeleton design settled: markers (S7 verdict) |
+| KNR-5 | [Positron interop for knitr](2026-10-30-knr-05-positron-interop.md) | 2-3 | Complete 2026-11-05: widens EXR-16\'s importer gate; spikes in the Positron fork. The real-binary half of K-S2 (`q2 render` and `q2 preview` with an Ark cache) is handed to RIU-3/4 |
+| KNR-6 | [The knitr flip and the consumers](2026-10-30-knr-06-flip-and-consumers.md) | 3-4 | Done 2026-11-05: markers emitted by R, `engine/skeleton.rs`, replay over the stored skeleton, the fallback counter. It applies only when a record is wanted (trace, preview, hub, `execute: {record: true}`); a plain render takes the old path. 6C deleted nothing, because the markdown-unit writer is still the record writer for fallback-route documents. Corpus gate with `gifski` and `RSQLite` installed: 280 accepted, 8 allowlisted, 4 not compared (the knitr aborts); a recorded sql chunk with `#|` options is fixed |
 | KNR-7 | [Docs and end-to-end](2026-10-30-knr-07-docs-e2e.md) | 1-2 | written as the others land |
 | KNR-8 | [Fallback removal (trigger-gated)](2026-10-30-knr-08-fallback-removal.md) | 1-2, plus whatever time passes before the trigger holds | deferred by design (decision 24); not part of this epic\'s exit; mirrors EXR-17 |
 

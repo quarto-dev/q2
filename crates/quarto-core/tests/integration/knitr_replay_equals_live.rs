@@ -41,7 +41,7 @@ fn context_for(
         dir.join("doc.qmd"),
         format,
     )
-    .with_owned_languages(vec!["r".to_string(), "bash".to_string()])
+    .with_owned_languages(vec!["r".to_string(), "bash".to_string(), "sql".to_string()])
     .with_quiet(true);
     if want_record {
         fill_ids(&mut units, &texts).unwrap();
@@ -245,6 +245,43 @@ fn a_gif_renders_through_the_shipped_markdown() {
         "Before.\n\n```{r}\nknitr::include_graphics('anim.gif')\n```\n\nAfter.\n",
         &[("anim.gif", "GIF89a")],
         &["anim.gif"],
+    );
+}
+
+/// Whether `Rscript` can load each named package.
+fn r_has(packages: &[&str]) -> bool {
+    let list = packages
+        .iter()
+        .map(|p| format!("'{p}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    std::process::Command::new("Rscript")
+        .args([
+            "-e",
+            &format!(
+                "for (p in c({list})) if (!requireNamespace(p, quietly = TRUE)) quit(status = 1)"
+            ),
+        ])
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// A `{sql}` chunk with `#|` options: knitr reads those, but Quarto's scanner reads `--|` for
+/// SQL. The unit-id line sent to knitr has to use the author\'s prefix, or `connection` is cut
+/// off from the options and the recorded run aborts (found by the corpus case
+/// `s5/01_odd_chunks`; it failed the same way before the flip).
+#[test]
+fn a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live() {
+    if !r_has(&["DBI", "RSQLite"]) {
+        return;
+    }
+    assert_recorded_run_equals_live(
+        "```{r}\n#| include: false\n\
+         con <- DBI::dbConnect(RSQLite::SQLite(), ':memory:')\n\
+         DBI::dbWriteTable(con, 't', data.frame(a = 1:2, b = c('x', 'y')))\n```\n\n\
+         ```{sql}\n#| connection: con\nSELECT * FROM t\n```\n",
+        &[],
+        &["knitsql-table"],
     );
 }
 
