@@ -2,7 +2,7 @@
 title: 'Write search.json only when Algolia is configured (bd-cdehspam)'
 date: 2026-11-04
 description: 'Stop writing the Quarto 1-shaped search.json by default; write it only with a complete Algolia config or an explicit website.search.search-json override, and skip record extraction when it is not needed.'
-status: in-progress
+status: done
 braid:
   strand: bd-cdehspam
 ---
@@ -203,7 +203,8 @@ The plan has no open questions left.
   site no longer writes `search.json`.
 - [x] Windows cross-clippy attempted. It can't build `aws-lc-sys` from
   macOS; the change has no platform-specific code.
-- [ ] PR, CI.
+- [x] PR #1056: CI green at `488051bd7`, merged 2026-11-04 as
+  `16aaff7a`. Strand closed.
 
 ## Risks / tradeoffs (draft)
 
