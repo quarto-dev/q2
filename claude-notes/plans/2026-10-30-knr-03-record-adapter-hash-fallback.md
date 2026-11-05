@@ -673,10 +673,10 @@ code once nothing reads it, and keeps the chunk hook (see KNR-6).
   *Reconciled 2026-11-03 against the tree: adapter tests `the_document_hash_follows_the_structured_cells` and the rehash round trip.*
   *Reconciled 2026-11-03 against the tree: `fill_ids_names_both_lengths_and_fills_nothing_on_a_mismatch`, `a_unit_with_no_captured_chunk_is_a_count_mismatch`.*
   *Reconciled 2026-11-03 against the tree: `execute_result_with_chunks_field_deserializes_records` and the `cacheDisabled`/`hook_override` defaults.*
-  *Reconciled 2026-11-03: open. No test builds an EXR-11-era record; the version-mismatch rejection is covered by the reader only.*
-  *Reconciled 2026-11-03: open. Only the corpus generator (`generate_sweep`) exists, not the assert-hash-or-output-changes test.*
-  *Reconciled 2026-11-03: stream, error, display_data and flat option keys are covered; the neutral `knit_meta` manifest and the four-widget test are open, waiting on WGT-2\'s schema (slice 2 note).*
-  *Reconciled 2026-11-03: open as a dedicated test. The reader rejects invalid structure and every read-back in slices 3 and 4 goes through it, but nothing runs EXR-4\'s validator over each produced record.*
+  *Reconciled 2026-11-04: done in slice 3 (`exr11_record` in `record_splice.rs`). Finding: the record reads fresh, not stale, because the splice judges a record by the declaration it stores (version 1); the pass-through presenter still shows it. The 2026-11-03 "open" note was stale.*
+  *Reconciled 2026-11-04: done in slice 6 (`record_splice/tests/option_sweep.rs`, 96 options) and extended in slice 7. The 2026-11-03 "open" note was stale.*
+  *Reconciled 2026-11-04: stream, error, display_data and flat option keys are covered. The `knit_meta` manifest and the four-widget test are not KNR-3\'s: Gordon settled on 2026-11-03 that the widget epic (WGT-2) owns the conversion, and KNR-6 holds the flip for widget documents until it lands.*
+  *Reconciled 2026-11-04: done on demand, not as a cargo test. `KNR_DUMP_RECORDS=<dir>` plus `scripts/exr-record/nbformat_facts.py` accepted all 214 corpus records (slice 3), and KNR-5 ran it on a structured and a fallback record. Not wired into CI because it needs `uv` and Python.*
 
 - [x] Slice 7, the slice 6 gaps ([plan](2026-11-03-presenter-generic-cell-options.md)): the shared
   presenter reads 16 of the 17 options of "Slice 6 notes" (each a `Gap` row of the sweep that flips

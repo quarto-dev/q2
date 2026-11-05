@@ -2,7 +2,7 @@
 title: 'KNR-5: Positron interop for knitr records'
 date: 2026-10-30
 description: 'Makes a q2 knitr record valid to present in Positron and lets q2 import a Positron cache for R cells into knitr-owned units, by widening the EXR-16 importer gate, presenting imported outputs through the knitr layer, and extending the Positron fork spikes.'
-status: draft  # revised 2026-11-01 after interlude I4 (K-S1 and K-S2 observed); EXR-16 is now complete; the wiring waits for KNR-3
+status: in-progress  # 2026-11-04: q2 side done (gate, presenter, record and hash tests); the Phase 5C exit criteria on real Positron are pending Gordon's fork time
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-5).
@@ -146,31 +146,46 @@ Equal-to-what-the-other-would-produce is not required.
 
 ### Phase 5A: q2 side, tests first
 
-- [ ] Importer tests over a real Positron-shaped file: an R cell with `stream`, `execute_result`
-  (`text/plain`, `text/html`), `display_data` (`image/png`), and an error fills a knitr-owned
-  `{r}` unit; the same file does nothing for a unit owned by another engine or for a fallback
-  unit.
-- [ ] Presenter tests: imported outputs present through the knitr layer using current document
-  options; image outputs write through the figure sink; unknown mimes are skipped with a notice.
-- [ ] A q2 knitr record carries `quarto_output_anchors`, `quarto_output_kinds`,
-  `quarto_output_kinds` on its cells, `known_options` on its `quarto_engines` entry, and
-  `quarto_markdown_passthrough` on `knit_asis` output (KNR-3).
-  Positron must read the record without them mattering; interlude I4 (K-S1) checks this, and
-  this item is the test of its result.
-- [ ] Round-trip: a q2 knitr record passes the nbformat validator (EXR-4 / EXR-16 Phase A) and
-  the Positron-shaped checks (`nbformat`, `cells`, `metadata.quarto_cache_version: 1`, each code
-  cell has `outputs`).
-- [ ] Hash agreement tests: a labeled chunk (record `quarto_content_hash` equals the SHA-1
-  vector for the author\'s text, not the re-injected text); a chunk with a `#| label:` line,
-  which Positron cannot see (parent decision 39: matching is by hash, and the label segment
-  of the id may differ); a chunk in a blockquote, a list and a four-backtick fence, where
-  Positron\'s parser has no nesting rule and its indices differ; and CRLF input.
+- [x] Importer tests (`record::positron_import::tests`): a knitr-owned `{r}` unit admits Positron outputs
+  with the exact token `r` only; other owners and fallback units get nothing
+  (`knitr_owns_r_and_only_the_exact_token_r_passes_the_gate`, `the_language_gate_runs_on_the_q2_side`).
+  An integration test over a Positron-shaped R cell (stream, `execute_result` `text/plain`, `image/png`,
+  error) is `knitr_positron_import::an_ark_cache_fills_a_knitr_owned_r_unit_and_presents`.
+- [x] Presenter tests (`integration/knitr_positron_import.rs`): imported outputs present through the
+  presenter using the current document options (`echo: false` hides the code), the plot goes through the
+  figure sink as `cell-1-output-<m>`, and an unknown mime shows nothing while the other outputs remain.
+- [x] A real knitr record carries the KNR-3 keys and Positron reads the shape without them mattering
+  (`a_structured_knitr_record_is_valid_to_present_in_positron`; K-S1 observed the real Positron side).
+- [x] Round-trip: structured (`html`) and fallback (`pdf`) records pass `scripts/exr-record/nbformat_facts.py`
+  (`valid=True warnings=[]`, run on dumps via `KNR5_DUMP_RECORDS=<dir>`) and the Positron loader checks.
+- [x] Hash agreement: a labeled chunk and a `#| label:` chunk record the scanner\'s hash of the author\'s text,
+  and CRLF input does too. The blockquote, list and four-backtick cases are covered by the shared
+  `positron_conformance` fixtures (the hash rule does not depend on the language), so no R-specific copy was added.
 
 ### Phase 5B: implementation
 
-- [ ] Widen the importer gate; add the second figure mode; wire the knitr layer to imported
-  outputs.
-- [ ] Shared fixtures with EXR-16 S1 (conformance) extended with an R cell and a labeled chunk.
+- [x] Widen the importer gate (`outputs_for` takes `fallback: bool`; owner `knitr` with token `r` is admitted).
+  The second figure mode and the knitr layer needed no code: an imported unit has no
+  `quarto_resolved_options`, so `present_document` takes the unit through the same path as a Jupyter cell,
+  and the shared presenter already writes inline image data through the sink.
+- [ ] Shared fixtures with EXR-16 S1 (conformance) extended with an R cell and a labeled chunk. Not done: the
+  existing cases already cover `{r}` (`two_cells`), and adding cases means regenerating the Positron-side
+  expectations in Gordon\'s fork; left with Phase 5C.
+- Call site: nothing outside tests calls `import_positron_cache` yet. Production use (a `q2 render` or
+  `q2 preview` that reads a Positron cache for R cells) needs the EXR-14 consumer path and a choice of where
+  the cache path comes from; it is not part of this plan\'s exit criteria, which check the importer and the
+  presenter.
+
+#### Decisions made in this plan
+
+1. Gate: `owner == jupyter && plain language` or `owner == knitr && lang == "r"`, and never a fallback unit.
+2. Unknown mimes are skipped by the presenter (as for Jupyter cells); no extra notice.
+3. Imported plots use the sink-generated name; q2\'s own records keep inline `image/png` (the structured test
+   asserts it), so Positron can show them.
+4. `execution_count` stays `null` in q2 records (K-S1: Positron loads and rewrites them regardless).
+5. `{r}` through a Jupyter kernel (ark, IRkernel) already interoperates under EXR-16\'s gate; use it when
+   Positron-written output must be refreshed from the kernel. knitr-owned `{r}` is display-only import.
+   User docs for this are KNR-6/7\'s.
 
 ### Phase 5C: Positron spikes (in Gordon's fork; follow EXR-16's ground rules)
 
@@ -183,6 +198,30 @@ Equal-to-what-the-other-would-produce is not required.
   file, import into a knitr-owned unit, present through the knitr layer in `q2 render` and
   `q2 preview`. Observe plots, data frames, warnings and errors.
 - [x] Findings note and the vitest cases on the spike branches (`spike/q2-knr5-positron-knitr`, `spike/knr-i4`). Nothing was sent to anyone.
+
+### Handoff for Phase 5C (2026-11-04)
+
+Everything except the fork spikes is done (commits `448d97508`, `7a9060c99` and the close-out on
+`knr-5-positron-interop`). What remains is Gordon\'s fork time, to be run with the next agent:
+
+- [ ] **Exit criterion K-S1, re-run on the final record.** Dump the two records with
+  `KNR5_DUMP_RECORDS=<dir> cargo nextest run -p quarto-core knitr_positron_import::a_` (needs R and
+  knitr; writes `structured.ipynb` and `fallback.ipynb`), copy each by hand (never move) into the fork\'s
+  `quarto-inline-outputs` directory for a matching document, and check the file loads, outputs present,
+  and it survives a Positron rewrite. I4 already observed this on an earlier record; the KNR-3 keys are
+  unchanged since, so a pass is expected.
+- [ ] **Exit criterion K-S2, the cases I4 did not observe:** a data frame, a warning, and `q2 render` /
+  `q2 preview` through the real binary with an Ark cache. For the binary run, note that no production code
+  calls `import_positron_cache` yet (see "Call site" above), so the agent has to decide the call site first;
+  that decision is a design question for Gordon, not an ordinary choice.
+- [ ] Optional: add `{r}` and labeled-chunk cases to the conformance fixtures (the open 5B item).
+- Known presenter limits from I4 that the spikes may want to revisit: ANSI escapes and an empty `ename` in
+  Ark errors, messages arriving on stdout, and image width/height metadata ignored.
+- Gate results on this branch: `cargo clippy -p quarto-core --all-targets -- -D warnings` clean;
+  `cargo nextest run -p quarto-core --no-fail-fast`: 7591 passed, 2 failed, 36 skipped. Both failures
+  predate this work and touch nothing it changed: `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package`
+  (this worktree\'s `node_modules/reveal.js` differs from the vendored `reset.css`) and
+  `julia_engine_e2e::j7_failed_run_does_not_leak_worker` (300 s timeout in the Julia worker test).
 
 ## Exit criteria
 

@@ -130,6 +130,7 @@ pub mod knitr_html_dependency;
 pub mod knitr_inline_expressions;
 pub mod knitr_inline_records;
 pub mod knitr_label_reinject;
+pub mod knitr_positron_import;
 pub mod language_catalog;
 pub mod language_pipeline;
 pub mod language_resolve;
