@@ -76,6 +76,7 @@ website:
             - guides/hub/unix-socket.qmd
             - guides/extensions/ts-engines-node.qmd
             - guides/publishing/index.qmd
+            - guides/formats/html/anchor-sections.qmd
             - guides/formats/html/external-links.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd

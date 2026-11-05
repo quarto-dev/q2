@@ -576,6 +576,19 @@ last_reviewed = "2026-10-21"
 notes = "Byte-identical to Quarto 1's copy."
 
 [[asset]]
+id = "anchorjs"
+title = "AnchorJS"
+paths = ["resources/js/anchor"]
+policy = "track"
+version = "5.0.0"
+version_sources = [{ kind = "file-contains", file = "resources/js/anchor/anchor.min.js" }]
+upstream = { kind = "npm", package = "anchor-js" }
+procedure = "resources/js/README.md"
+license = "MIT"
+last_reviewed = "2026-11-05"
+notes = "Byte-identical to Quarto 1's copy (bd-5kf2dnw4). Hover heading links; consumes the `.anchored` class."
+
+[[asset]]
 id = "react"
 title = "React / ReactDOM ES modules for quarto.component"
 paths = ["resources/js/react"]
