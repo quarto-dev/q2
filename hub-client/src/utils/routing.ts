@@ -189,9 +189,19 @@ export interface DevRoute {
 }
 
 /**
+ * Route for example pages shipped in every build (e.g. 'simple-auth').
+ *
+ * URL format: #/demo/<page>
+ */
+export interface DemoRoute {
+  type: 'demo';
+  page: string;
+}
+
+/**
  * Union of all possible routes.
  */
-export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | JoinCollectionRoute | DevRoute;
+export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute | LinkProjectSetRoute | JoinCollectionRoute | DevRoute | DemoRoute;
 
 // ============================================================================
 // URL Parsing
@@ -336,6 +346,11 @@ export function parseHashRoute(hash: string): Route {
     return { type: 'project', projectId };
   }
 
+  // Parse demo route: /demo/<page>. Unlike dev routes these ship everywhere.
+  if (segments[0] === 'demo' && segments[1]) {
+    return { type: 'demo', page: decodeURIComponent(segments[1]) };
+  }
+
   // Parse dev route: /dev/<page>. Parsed in development builds and in
   // VITE_E2E=1 test builds — the Playwright harness suite runs against a
   // production bundle served by `vite preview`, so DEV is false there and
@@ -422,6 +437,9 @@ export function buildHashRoute(route: Route): string {
 
     case 'dev':
       return `#/dev/${encodeURIComponent(route.page)}`;
+
+    case 'demo':
+      return `#/demo/${encodeURIComponent(route.page)}`;
   }
 }
 
@@ -591,6 +609,9 @@ export function routesEqual(a: Route, b: Route): boolean {
 
     case 'dev':
       return a.page === (b as DevRoute).page;
+
+    case 'demo':
+      return a.page === (b as DemoRoute).page;
   }
 }
 

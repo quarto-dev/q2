@@ -27,6 +27,7 @@ function DevHarnessLazy({ page }: { page: string }) {
   );
 }
 import Editor from './components/Editor';
+import SimpleAuthDemo from './components/demo/SimpleAuthDemo';
 import { notifications } from './strings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import LoadingIndicator from './components/Loading';
@@ -1045,6 +1046,11 @@ function App() {
         <LoadingIndicator />
       </div>
     );
+  }
+
+  // Example page: a standalone counter doc that syncs only while signed in.
+  if (route.type === 'demo' && route.page === 'simple-auth') {
+    return <SimpleAuthDemo />;
   }
 
   if (AUTH_ENABLED && !auth) {
