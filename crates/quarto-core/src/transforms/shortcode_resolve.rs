@@ -1236,6 +1236,7 @@ impl AstTransform for ShortcodeResolveTransform {
                 ctx.document,
                 ctx.output_path(),
                 self.env_snapshot.clone(),
+                ctx.format.base_format(),
             );
             match pampa::lua::LuaShortcodeEngine::new_with(
                 &self.target_format,

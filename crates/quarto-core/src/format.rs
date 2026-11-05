@@ -35,6 +35,10 @@ pub enum FormatIdentifier {
     Typst,
     /// RevealJS slides (native Rust pipeline)
     Revealjs,
+    /// Dashboard (native Rust pipeline): Bootstrap HTML laid out as bslib
+    /// pages, rows/columns and cards. Q1 `format-dashboard.ts`; plan
+    /// `claude-notes/plans/2026-11-03-dashboard-format-port.md`.
+    Dashboard,
     /// GitHub-flavored Markdown
     Gfm,
     /// CommonMark
@@ -168,6 +172,7 @@ impl FormatIdentifier {
             FormatIdentifier::Epub => "epub",
             FormatIdentifier::Typst => "typst",
             FormatIdentifier::Revealjs => "revealjs",
+            FormatIdentifier::Dashboard => "dashboard",
             FormatIdentifier::Gfm => "gfm",
             FormatIdentifier::CommonMark => "commonmark",
             FormatIdentifier::Odt => "odt",
@@ -229,7 +234,10 @@ impl FormatIdentifier {
 
     /// Check if this format uses the native Rust pipeline
     pub fn is_native(&self) -> bool {
-        matches!(self, FormatIdentifier::Html | FormatIdentifier::Revealjs)
+        matches!(
+            self,
+            FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Dashboard
+        )
     }
 
     /// Check if this format renders through the pandoc-hybrid path
@@ -347,14 +355,20 @@ impl FormatIdentifier {
 
     /// Check if this is an HTML-based format
     pub fn is_html_based(&self) -> bool {
-        matches!(self, FormatIdentifier::Html | FormatIdentifier::Revealjs)
+        matches!(
+            self,
+            FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Dashboard
+        )
     }
 
     /// Check if this format produces multiple output files (e.g., HTML website chapters)
     pub fn is_multi_file(&self) -> bool {
         // HTML is multi-file in project context (each chapter gets a file)
         // PDF, DOCX, EPUB are single-file
-        matches!(self, FormatIdentifier::Html | FormatIdentifier::Revealjs)
+        matches!(
+            self,
+            FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Dashboard
+        )
     }
 }
 
@@ -376,6 +390,7 @@ impl TryFrom<&str> for FormatIdentifier {
             "epub" => Ok(FormatIdentifier::Epub),
             "typst" => Ok(FormatIdentifier::Typst),
             "revealjs" => Ok(FormatIdentifier::Revealjs),
+            "dashboard" => Ok(FormatIdentifier::Dashboard),
             "gfm" => Ok(FormatIdentifier::Gfm),
             "commonmark" => Ok(FormatIdentifier::CommonMark),
             "odt" => Ok(FormatIdentifier::Odt),
@@ -456,6 +471,13 @@ fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static st
         // shell. See claude-notes/plans/2026-06-08-revealjs-presentations.md
         // Phase 1P.
         "q2-slides" => Some(("html", Some("preview"))),
+        // `q2-dashboard` is the preview pseudo-format for `format:
+        // dashboard`. Unlike `q2-slides` its base is the dashboard format
+        // itself: the dashboard transforms, template and theme layers all
+        // key on `base_format() == "dashboard"`. Its profile is
+        // `DashboardPreview` (plan 2026-11-03-dashboard-format-port.md,
+        // Phase 8).
+        "q2-dashboard" => Some(("dashboard", Some("preview"))),
         "q2-debug" => Some(("html", None)),
         "q2-preview" => Some(("html", Some("preview"))),
         // Sandboxed-preview port (bd-jgpz4hfq): same preview pipeline as
@@ -508,6 +530,11 @@ pub enum PipelineProfile {
     RevealjsRender,
     /// Revealjs preview (`q2-slides`).
     RevealjsPreview,
+    /// Native dashboard render (`dashboard`, extension-style `*-dashboard`).
+    DashboardRender,
+    /// Dashboard preview (`q2-dashboard`): the dashboard lowering runs in
+    /// its preview mode, leaving view nodes for the React preview.
+    DashboardPreview,
     /// A Pandoc-writer output format, carrying its raw format string
     /// (e.g. `"docx"`, `"pptx"`, `"gfm"`).
     Pandoc(String),
@@ -533,6 +560,10 @@ impl PipelineProfile {
             };
         }
 
+        if target_format == "q2-dashboard" {
+            return PipelineProfile::DashboardPreview;
+        }
+
         // Builtin pseudo-formats resolve to an HTML base with an optional
         // "preview" pipeline_kind (q2-preview, q2-debug, q2-sandboxed-preview).
         if let Some((_, pipeline_kind)) = builtin_pseudo_format(target_format) {
@@ -548,6 +579,7 @@ impl PipelineProfile {
             return match identifier {
                 FormatIdentifier::Html => PipelineProfile::HtmlRender,
                 FormatIdentifier::Revealjs => PipelineProfile::RevealjsRender,
+                FormatIdentifier::Dashboard => PipelineProfile::DashboardRender,
                 _ => PipelineProfile::Pandoc(target_format.to_string()),
             };
         }
@@ -558,6 +590,7 @@ impl PipelineProfile {
             return match identifier {
                 FormatIdentifier::Html => PipelineProfile::HtmlRender,
                 FormatIdentifier::Revealjs => PipelineProfile::RevealjsRender,
+                FormatIdentifier::Dashboard => PipelineProfile::DashboardRender,
                 _ => PipelineProfile::Pandoc(desc.base_format),
             };
         }
@@ -590,12 +623,21 @@ impl PipelineProfile {
 ///   intentionally differs from [`builtin_pseudo_format`], which reports the
 ///   *output writer* base `html`).
 ///
-/// Any non-pseudo `target_format` (`html`, `revealjs`, `latex`, …) passes
-/// through unchanged.
+/// - `dashboard` and extension-style `*-dashboard` → `html`: Q1 writes a
+///   dashboard with pandoc's `html` writer, so its filters see
+///   `FORMAT == "html"` (`is_format("dashboard")` answers from the base
+///   format, [`Format::base_format`]).
+///
+/// Any other non-pseudo `target_format` (`html`, `revealjs`, `latex`, …)
+/// passes through unchanged.
 pub fn lua_format_for(target_format: &str) -> &str {
     match target_format {
-        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" | "q2-html-render" => "html",
+        "q2-preview" | "q2-debug" | "q2-sandboxed-preview" | "q2-html-render" | "q2-dashboard" => {
+            "html"
+        }
         "q2-slides" => "revealjs",
+        "dashboard" => "html",
+        other if parse_format_descriptor(other).base_format == "dashboard" => "html",
         other => other,
     }
 }
@@ -679,6 +721,7 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Epub => "epub",
         FormatIdentifier::Typst => "pdf",
         FormatIdentifier::Revealjs => "html",
+        FormatIdentifier::Dashboard => "html",
         FormatIdentifier::Gfm => "md",
         FormatIdentifier::CommonMark => "md",
         // Long-tail Phase 2 (Tier A) — Q1 `createFormat` extension choices.
@@ -1005,6 +1048,24 @@ impl Format {
     pub fn lua_format(&self) -> &str {
         if is_revealjs_target(&self.target_format) {
             "revealjs"
+        } else if self.identifier == FormatIdentifier::Dashboard {
+            // Q1 writes dashboards with pandoc's `html` writer.
+            "html"
+        } else {
+            self.identifier.as_str()
+        }
+    }
+
+    /// The base format, as Q1 reports it in `format-identifier.base-format`
+    /// (`_format.lua`'s `isDashboardOutput`, knitr's `is_dashboard_output`):
+    /// the identifier for real and extension-style formats (`acm-html` →
+    /// `html`, `acme-dashboard` → `dashboard`), and the emulated format for
+    /// preview pseudo-formats (`q2-slides` → `revealjs`). It differs from
+    /// [`Self::lua_format`] only where the writer differs from the format:
+    /// a dashboard's writer is `html`, its base format `dashboard`.
+    pub fn base_format(&self) -> &str {
+        if is_revealjs_target(&self.target_format) {
+            "revealjs"
         } else {
             self.identifier.as_str()
         }
@@ -1033,27 +1094,12 @@ impl Format {
             });
         }
 
-        // 2. Try as extension-style: "acm-html" -> base "html", extension "acm"
-        // Note: For pseudo-formats like "q2-slides", parse_format_descriptor returns
-        // base_format="q2-slides" (no known suffix), so the try_from below fails
-        // just like step 1. This is intentional — step 3 handles pseudo-formats.
-        let desc = parse_format_descriptor(format_str);
-        if let Ok(identifier) = FormatIdentifier::try_from(desc.base_format.as_str()) {
-            return Ok(Self {
-                identifier,
-                target_format: format_str.to_string(),
-                extension_name: desc.extension_name,
-                display_name: format_str.to_string(),
-                output_extension: output_extension_for(identifier),
-                native_pipeline: identifier.is_native(),
-                pipeline_kind: None,
-            });
-        }
-
-        // 3. Try as a builtin pseudo-format: "q2-preview" -> base "html"
+        // 2. Try as a builtin pseudo-format: "q2-preview" -> base "html"
         // with `pipeline_kind = Some("preview")`. The (base, kind)
         // pair is the single source of truth; pipeline-dispatching
-        // stages read `pipeline_kind` instead of string-matching.
+        // stages read `pipeline_kind` instead of string-matching. Checked
+        // before the extension-style parse: `q2-dashboard` would otherwise
+        // read as extension `q2` of `dashboard` and lose its kind.
         if let Some((base, pipeline_kind)) = builtin_pseudo_format(format_str) {
             let identifier = FormatIdentifier::try_from(base).unwrap();
             return Ok(Self {
@@ -1064,6 +1110,23 @@ impl Format {
                 output_extension: output_extension_for(identifier),
                 native_pipeline: identifier.is_native(),
                 pipeline_kind,
+            });
+        }
+
+        // 3. Try as extension-style: "acm-html" -> base "html", extension "acm"
+        // Note: For pseudo-formats like "q2-slides", parse_format_descriptor returns
+        // base_format="q2-slides" (no known suffix), so the try_from below fails
+        // just like step 1; step 2 has already handled pseudo-formats.
+        let desc = parse_format_descriptor(format_str);
+        if let Ok(identifier) = FormatIdentifier::try_from(desc.base_format.as_str()) {
+            return Ok(Self {
+                identifier,
+                target_format: format_str.to_string(),
+                extension_name: desc.extension_name,
+                display_name: format_str.to_string(),
+                output_extension: output_extension_for(identifier),
+                native_pipeline: identifier.is_native(),
+                pipeline_kind: None,
             });
         }
 
@@ -1619,6 +1682,8 @@ mod tests {
             "q2-slides",
             "q2-debug",
             "q2-html-render",
+            "dashboard",
+            "q2-dashboard",
         ] {
             let f = Format::from_format_string(fmt).unwrap();
             assert_eq!(
@@ -1905,6 +1970,18 @@ mod tests {
     /// silently running the full reveal-render pipeline for the preview leg.
     /// This asserts the `RevealjsPreview` cell by name AND by distinctness
     /// from `RevealjsRender` — the only surface the two differ on.
+    #[test]
+    fn test_pipeline_profile_q2_dashboard_is_dashboard_preview() {
+        assert_eq!(
+            PipelineProfile::from_format("q2-dashboard"),
+            PipelineProfile::DashboardPreview
+        );
+        let f = Format::from_format_string("q2-dashboard").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Dashboard);
+        assert_eq!(f.pipeline_kind, Some("preview"));
+        assert_eq!(lua_format_for("q2-dashboard"), "html");
+    }
+
     #[test]
     fn test_pipeline_profile_q2_slides_is_revealjs_preview_not_render() {
         assert_ne!(
@@ -2598,6 +2675,91 @@ mod tests {
             assert_eq!(
                 defaults.output_divs, None,
                 "{name} must not override output-divs"
+            );
+        }
+    }
+
+    // --- format: dashboard (bd-dashboard-format-k21hd4vy, Phase 1) --------
+
+    #[test]
+    fn test_dashboard_identifier() {
+        let id = FormatIdentifier::try_from("dashboard").unwrap();
+        assert_eq!(id, FormatIdentifier::Dashboard);
+        assert_eq!(id.as_str(), "dashboard");
+        assert!(
+            id.is_native(),
+            "dashboards render through the native HTML pipeline"
+        );
+        assert!(id.is_html_based());
+        assert!(id.is_multi_file());
+        assert!(!id.is_pandoc_hybrid());
+    }
+
+    #[test]
+    fn test_dashboard_format_string() {
+        let f = Format::from_format_string("dashboard").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Dashboard);
+        assert_eq!(f.output_extension, "html");
+        assert!(f.native_pipeline);
+        assert!(f.is_html());
+    }
+
+    /// `foo-dashboard` extension formats resolve to the dashboard base, as
+    /// Q1's `isHtmlDashboardOutput` (`src/config/format.ts:92`) matches
+    /// `*-dashboard`.
+    #[test]
+    fn test_dashboard_extension_format_string() {
+        let f = Format::from_format_string("acme-dashboard").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Dashboard);
+        assert_eq!(f.extension_name.as_deref(), Some("acme"));
+        assert_eq!(f.output_extension, "html");
+    }
+
+    #[test]
+    fn test_dashboard_pipeline_profile() {
+        assert_eq!(
+            PipelineProfile::from_format("dashboard"),
+            PipelineProfile::DashboardRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("acme-dashboard"),
+            PipelineProfile::DashboardRender
+        );
+    }
+
+    /// Q1 writes dashboards with pandoc's `html` writer, so Lua sees
+    /// `FORMAT == "html"` and HTML-gated filters and shortcodes still fire;
+    /// `is_format("dashboard")` answers from the base format instead
+    /// ([`Format::base_format`]).
+    #[test]
+    fn test_dashboard_lua_format_is_html() {
+        for fmt in ["dashboard", "acme-dashboard"] {
+            let f = Format::from_format_string(fmt).unwrap();
+            assert_eq!(f.lua_format(), "html", "{fmt}");
+            assert_eq!(lua_format_for(fmt), "html", "{fmt}");
+            assert_eq!(f.base_format(), "dashboard", "{fmt}");
+        }
+    }
+
+    /// The base format Q1 reports as `format-identifier.base-format`: the
+    /// identifier for real and extension formats, the emulated format for
+    /// preview pseudo-formats.
+    #[test]
+    fn test_base_format() {
+        for (fmt, base) in [
+            ("html", "html"),
+            ("acm-html", "html"),
+            ("revealjs", "revealjs"),
+            ("q2-slides", "revealjs"),
+            ("q2-preview", "html"),
+            ("docx", "docx"),
+            ("dashboard", "dashboard"),
+            ("q2-dashboard", "dashboard"),
+        ] {
+            assert_eq!(
+                Format::from_format_string(fmt).unwrap().base_format(),
+                base,
+                "{fmt}"
             );
         }
     }

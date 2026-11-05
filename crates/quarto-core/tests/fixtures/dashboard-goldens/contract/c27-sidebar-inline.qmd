@@ -1,0 +1,35 @@
+---
+# contract: a sidebar inside a row (inline)
+title: "C27 Inline Sidebar"
+format: dashboard
+---
+
+## Row
+
+### {.sidebar}
+
+C27-SIDEBAR text.
+
+### Column
+
+::: {.cell title="C27-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Row
+
+::: {.cell title="C27-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

@@ -71,6 +71,18 @@ const UNSUPPORTED_FIELDS: &[&str] = &["meta", "links", "resources", "servicework
 /// Public: quarto-core's conditional-content transform reuses this for
 /// `when-format` / `unless-format` (bd-fu16z22k) so Lua's
 /// `quarto.doc.is_format` and the attribute syntax can never disagree.
+/// [`is_format_match`], also true when `query` names the base format
+/// (Q1's `format-identifier.base-format`, e.g. `"dashboard"` while `FORMAT`
+/// is `"html"`). Shared by `quarto.doc.is_format` and `when-format` so they
+/// agree.
+pub fn is_format_match_with_base(format: &str, base_format: Option<&str>, query: &str) -> bool {
+    is_format_match(format, query) || base_format.is_some_and(|base| base == query)
+}
+
+/// Lua registry key holding the host's base format (see
+/// [`crate::lua_options::HostContext::base_format`]).
+pub(crate) const BASE_FORMAT_REGISTRY_KEY: &str = "quarto.base_format";
+
 pub fn is_format_match(format: &str, query: &str) -> bool {
     // Exact match
     if format == query {
@@ -199,7 +211,8 @@ pub fn register_quarto_doc(lua: &Lua) -> Result<()> {
     // quarto.doc.is_format(fmt) — alias-based format matching
     let is_format_fn = lua.create_function(|lua, fmt: String| {
         let format: String = lua.globals().get("FORMAT")?;
-        Ok(is_format_match(&format, &fmt))
+        let base: Option<String> = lua.named_registry_value(BASE_FORMAT_REGISTRY_KEY)?;
+        Ok(is_format_match_with_base(&format, base.as_deref(), &fmt))
     })?;
     doc.set("is_format", is_format_fn.clone())?;
     doc.set("isFormat", is_format_fn)?;
@@ -528,6 +541,32 @@ mod tests {
     // =====================================================================
     // is_format tests
     // =====================================================================
+
+    #[test]
+    fn test_is_format_match_with_base() {
+        assert!(is_format_match_with_base(
+            "html",
+            Some("dashboard"),
+            "dashboard"
+        ));
+        assert!(is_format_match_with_base("html", Some("dashboard"), "html"));
+        assert!(is_format_match_with_base(
+            "html",
+            Some("dashboard"),
+            "html:js"
+        ));
+        assert!(!is_format_match_with_base(
+            "html",
+            Some("dashboard"),
+            "revealjs"
+        ));
+        assert!(!is_format_match_with_base("html", None, "dashboard"));
+        assert!(!is_format_match_with_base(
+            "html",
+            Some("html"),
+            "dashboard"
+        ));
+    }
 
     #[test]
     fn test_is_format_exact_match() {

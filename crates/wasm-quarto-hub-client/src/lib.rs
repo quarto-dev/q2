@@ -23,16 +23,16 @@ use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::project::drafts::RenderAudience;
 use quarto_core::project::render_scripts::RenderHost;
 use quarto_core::{
-    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
-    QuartoError, RenderContext, RenderOptions, ResourceResolverContext, render_qmd_to_html,
-    render_qmd_to_preview_ast,
+    render_qmd_to_html, render_qmd_to_preview_ast, BinaryDependencies, DocumentInfo, Format,
+    HtmlRenderConfig, ProjectConfig, ProjectContext, QuartoError, RenderContext, RenderOptions,
+    ResourceResolverContext,
 };
 use quarto_error_reporting::{
-    DiagnosticMessage, JsonDiagnostic, JsonPass1Failure, diagnostic_to_json, with_source_file,
+    diagnostic_to_json, with_source_file, DiagnosticMessage, JsonDiagnostic, JsonPass1Failure,
 };
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{
-    BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX, ThemeConfig, ThemeContext, compile_theme_css,
+    compile_theme_css, ThemeConfig, ThemeContext, BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX,
 };
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
@@ -100,7 +100,7 @@ fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
 
 /// Populate the VFS with built-in extensions from the embedded directory.
 fn populate_builtin_extensions(runtime: &WasmRuntime) {
-    use include_dir::{Dir, include_dir};
+    use include_dir::{include_dir, Dir};
 
     static EXTENSIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../resources/extensions");
 
@@ -118,7 +118,7 @@ fn populate_builtin_extensions(runtime: &WasmRuntime) {
 /// `builtin_extension_subtree_roots` reads on this target — keep the two in
 /// sync when adding a subtree.
 fn populate_extension_subtrees(runtime: &WasmRuntime) {
-    use include_dir::{Dir, include_dir};
+    use include_dir::{include_dir, Dir};
 
     // orange-book (quarto_core::extension::EXTENSION_SUBTREE_NAMES[0])
     static ORANGE_BOOK_SUBTREE_DIR: Dir = include_dir!(
@@ -761,6 +761,9 @@ fn map_format_for_preview(format_str: &str) -> &str {
         // pipeline_kind (so the response carries `ast_json`), but the reveal
         // slide tree is built and the SPA renders it with a reveal shell.
         "revealjs" => "q2-slides",
+        // `format: dashboard` previews as `q2-dashboard`: the dashboard
+        // lowering in its preview mode, rendered by the React preview.
+        "dashboard" => "q2-dashboard",
         other => other,
     }
 }
@@ -780,6 +783,7 @@ fn coerce_format_for_print(format_str: &str) -> &str {
     match format_str {
         "q2-preview" | "q2-debug" | "q2-sandboxed-preview" | "q2-html-render" => "html",
         "q2-slides" => "revealjs",
+        "q2-dashboard" => "dashboard",
         other => other,
     }
 }
@@ -2719,7 +2723,7 @@ async fn render_project_active_page_to_response(
     // entry that created it (FR12); this function never wraps.
     runtime_arc: Arc<dyn SystemRuntime>,
 ) -> String {
-    use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
+    use quarto_core::project::orchestrator::{project_type_for, ProjectPipeline, RenderMode};
     use quarto_core::project::pass2_renderer::{
         Pass2Payload, RenderToHtmlRenderer, RenderToPreviewAstRenderer,
     };
@@ -2940,7 +2944,7 @@ async fn render_project_active_page_to_response(
     let source_name = active_path.to_string_lossy();
     let untransformed_ast_json = ast_json.as_ref().and_then(|_| {
         use pampa::wasm_entry_points::qmd_to_pandoc;
-        use pampa::writers::json::{JsonConfig, write_with_config};
+        use pampa::writers::json::{write_with_config, JsonConfig};
         let (ast, context) = qmd_to_pandoc(content).ok()?;
         let ast_ctx = pampa::pandoc::ASTContext {
             filenames: vec![source_name.to_string()],
@@ -3115,8 +3119,8 @@ pub fn get_builtin_template(name: &str) -> String {
 // with quarto-doctemplate (pure Rust — no JS bridge involved).
 
 use quarto_project_create::{
-    CreateFromChoiceOptions, ScaffoldedFile, Surface, choices_for, choices_grouped_by_path,
-    create_project_from_choice,
+    choices_for, choices_grouped_by_path, create_project_from_choice, CreateFromChoiceOptions,
+    ScaffoldedFile, Surface,
 };
 
 /// A project choice for JSON serialization.
@@ -3322,8 +3326,8 @@ pub fn create_project(choice_id: &str, title: &str) -> String {
 // native and WASM targets.
 
 use quarto_lsp_core::{
-    Document, DocumentAnalysisJson, QMD_TOKEN_LEGEND, SemanticToken, analyze_document,
-    get_semantic_tokens,
+    analyze_document, get_semantic_tokens, Document, DocumentAnalysisJson, SemanticToken,
+    QMD_TOKEN_LEGEND,
 };
 
 /// Response for LSP analyze_document().
@@ -3960,7 +3964,7 @@ struct AstResponse {
 #[wasm_bindgen]
 pub fn parse_qmd_content(content: &str) -> String {
     use pampa::wasm_entry_points::qmd_to_pandoc;
-    use pampa::writers::json::{JsonConfig, write_with_config};
+    use pampa::writers::json::{write_with_config, JsonConfig};
 
     match qmd_to_pandoc(content.as_bytes()) {
         Ok((pandoc, context)) => {

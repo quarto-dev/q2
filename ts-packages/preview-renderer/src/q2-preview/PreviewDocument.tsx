@@ -40,7 +40,7 @@ import { suggestMainColumn } from './mainColumn';
  * decides which class to emit. The Rust helper has the same shape and
  * the same TODO.
  */
-function appendColorModeClass(structural: string): string {
+export function appendColorModeClass(structural: string): string {
     const LIGHT = 'quarto-light';
     const already = structural
         .split(/\s+/)

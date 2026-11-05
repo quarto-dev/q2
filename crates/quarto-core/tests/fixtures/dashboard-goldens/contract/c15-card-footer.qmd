@@ -1,0 +1,21 @@
+---
+# contract: a blockquote or .card-footer div becomes the card footer
+title: "C15 Footer"
+format: dashboard
+---
+
+## Row
+
+::: {.card title="C15-BQ"}
+Body text.
+
+> C15-FOOTER-BQ
+:::
+
+::: {.card title="C15-DIV"}
+Body text.
+
+::: {.card-footer}
+C15-FOOTER-DIV
+:::
+:::

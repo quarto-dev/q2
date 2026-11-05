@@ -88,12 +88,6 @@ pub fn assemble_theme_scss(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<(String, Vec<PathBuf>), SassError> {
-    use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
-        load_title_block_layer,
-    };
-
     // Process theme specs into layers
     let result = process_theme_specs(&config.themes, context)?;
 
@@ -101,37 +95,51 @@ pub fn assemble_theme_scss(
     // (like TS Quarto's order for built-in user layers), then any theme
     // layers from the config. User themes can override any `.hl-*` or
     // title-block rule by declaring the same selector in a later layer.
-    let highlight_layer =
-        load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
-    let embed_example_layer = load_embed_example_layer()?;
-    let copy_code_layer = load_copy_code_layer()?;
-    let equation_number_layer = load_equation_number_layer()?;
-    let link_external_layer = load_link_external_layer()?;
-    let listing_layer = load_listing_layer()?;
-    let search_layer = load_search_layer()?;
-    let mut user_layers = Vec::new();
-    // `title-block-style: plain|none` drops the title-block layer
-    // (bd-gx9cic8z P6); all other built-in layers are unconditional.
-    if config.title_block_layer {
-        user_layers.push(load_title_block_layer()?);
-    }
-    user_layers.extend([
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-        equation_number_layer,
-        link_external_layer,
-        listing_layer,
-        search_layer,
-    ]);
+    let mut user_layers = builtin_user_layers(config)?;
     user_layers.extend(result.layers);
 
     // Assemble SCSS
-    let scss = assemble_with_user_layers(&user_layers)?;
+    let scss = crate::bundle::assemble_with_user_layers_opts(&user_layers, config.dashboard_layer)?;
 
     let load_paths = theme_load_paths(result.load_paths, context);
 
     Ok((scss, load_paths))
+}
+
+/// The built-in user layers, in Q1's order, before any theme layers:
+/// the dashboard layer when `config.dashboard_layer` (Q1 unshifts it,
+/// `format-dashboard.ts:186`), the title block (unless dropped by
+/// `title-block-style: plain|none`, bd-gx9cic8z P6), the highlight
+/// palette, then the always-on embed-example, copy-code,
+/// equation-number, link-external, listing and search layers.
+///
+/// The single list every assembly path (themed, doc-vars, default; native
+/// and WASM) builds from.
+fn builtin_user_layers(config: &ThemeConfig) -> Result<Vec<crate::SassLayer>, SassError> {
+    use crate::bundle::{
+        load_copy_code_layer, load_dashboard_layer, load_embed_example_layer,
+        load_equation_number_layer, load_highlight_layer, load_link_external_layer,
+        load_listing_layer, load_search_layer, load_title_block_layer,
+    };
+    let mut layers = Vec::new();
+    if config.dashboard_layer {
+        layers.push(load_dashboard_layer()?);
+    }
+    if config.title_block_layer {
+        layers.push(load_title_block_layer()?);
+    }
+    layers.extend([
+        load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?,
+        load_embed_example_layer()?,
+        load_copy_code_layer()?,
+        load_equation_number_layer()?,
+        load_link_external_layer()?,
+    ]);
+    if config.listing_layer {
+        layers.push(load_listing_layer()?);
+    }
+    layers.push(load_search_layer()?);
+    Ok(layers)
 }
 
 /// Compile CSS from theme configuration.
@@ -226,11 +234,6 @@ pub fn compile_with_doc_vars(
     context: &ThemeContext<'_>,
     doc_vars: &crate::SassLayer,
 ) -> Result<SassOutput, SassError> {
-    use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
-        load_title_block_layer,
-    };
     use crate::themes::process_theme_specs;
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
@@ -248,7 +251,7 @@ pub fn compile_with_doc_vars(
         // `highlight-style:` (bd-0pic6 phase B) needs a direct
         // assembly so its palette layer composes (and so the OnceLock
         // cache never holds a non-default palette).
-        if config.title_block_layer && config.highlight_style.is_none() {
+        if config.title_block_layer && config.highlight_style.is_none() && !config.dashboard_layer {
             return compile_default_css(context.runtime(), config.minified).map(|css| SassOutput {
                 css,
                 loaded_files: Vec::new(),
@@ -261,27 +264,7 @@ pub fn compile_with_doc_vars(
     // matching `compile_default_css` and `assemble_theme_scss`, then any
     // theme layers, then doc_vars LAST so it lands at the top of the
     // merged-defaults section and wins the `!default` race.
-    let highlight_layer =
-        load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
-    let embed_example_layer = load_embed_example_layer()?;
-    let copy_code_layer = load_copy_code_layer()?;
-    let equation_number_layer = load_equation_number_layer()?;
-    let link_external_layer = load_link_external_layer()?;
-    let listing_layer = load_listing_layer()?;
-    let search_layer = load_search_layer()?;
-    let mut user_layers = Vec::new();
-    if config.title_block_layer {
-        user_layers.push(load_title_block_layer()?);
-    }
-    user_layers.extend([
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-        equation_number_layer,
-        link_external_layer,
-        listing_layer,
-        search_layer,
-    ]);
+    let mut user_layers = builtin_user_layers(config)?;
 
     let mut theme_dirs = Vec::new();
     if config.has_themes() {
@@ -293,7 +276,7 @@ pub fn compile_with_doc_vars(
 
     user_layers.push(doc_vars.clone());
 
-    let scss = crate::assemble_with_user_layers(&user_layers)?;
+    let scss = crate::bundle::assemble_with_user_layers_opts(&user_layers, config.dashboard_layer)?;
     let resources = all_resources();
     compile_scss_with_embedded(
         context.runtime(),
@@ -394,11 +377,6 @@ pub fn compile_default_css(
     runtime: &dyn SystemRuntime,
     minified: bool,
 ) -> Result<String, SassError> {
-    use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
-        load_title_block_layer,
-    };
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     // Return cached version if available (only for minified)
@@ -408,27 +386,11 @@ pub fn compile_default_css(
 
     // Load built-in user layers: title block styling + default syntax-
     // highlight colors. Both ship with Quarto and are always included.
-    let title_block_layer = load_title_block_layer()?;
-    let highlight_layer = load_highlight_layer(None)?;
-    let embed_example_layer = load_embed_example_layer()?;
-    let copy_code_layer = load_copy_code_layer()?;
-    let equation_number_layer = load_equation_number_layer()?;
-    let link_external_layer = load_link_external_layer()?;
-    let listing_layer = load_listing_layer()?;
-    let search_layer = load_search_layer()?;
+    let user_layers = builtin_user_layers(&ThemeConfig::default_bootstrap())?;
 
     // Assemble SCSS: Bootstrap + Quarto + title block + highlight +
     // embed-example + copy-code + listing defaults
-    let scss = assemble_with_user_layers(&[
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-        equation_number_layer,
-        link_external_layer,
-        listing_layer,
-        search_layer,
-    ])?;
+    let scss = assemble_with_user_layers(&user_layers)?;
 
     // Get load paths and resources
     let load_paths = default_load_paths();
@@ -547,11 +509,6 @@ pub async fn compile_with_doc_vars(
     context: &ThemeContext<'_>,
     doc_vars: &crate::SassLayer,
 ) -> Result<SassOutput, SassError> {
-    use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
-        load_title_block_layer,
-    };
     use crate::themes::process_theme_specs;
 
     // Same fast-path rule as the native variant: the shared default
@@ -563,7 +520,7 @@ pub async fn compile_with_doc_vars(
         }
         // See the native variant: a `highlight-style:` needs a direct
         // assembly so its palette layer composes.
-        if config.title_block_layer && config.highlight_style.is_none() {
+        if config.title_block_layer && config.highlight_style.is_none() && !config.dashboard_layer {
             return compile_default_css(context.runtime(), config.minified)
                 .await
                 .map(|css| SassOutput {
@@ -573,27 +530,7 @@ pub async fn compile_with_doc_vars(
         }
     }
 
-    let highlight_layer =
-        load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
-    let embed_example_layer = load_embed_example_layer()?;
-    let copy_code_layer = load_copy_code_layer()?;
-    let equation_number_layer = load_equation_number_layer()?;
-    let link_external_layer = load_link_external_layer()?;
-    let listing_layer = load_listing_layer()?;
-    let search_layer = load_search_layer()?;
-    let mut user_layers = Vec::new();
-    if config.title_block_layer {
-        user_layers.push(load_title_block_layer()?);
-    }
-    user_layers.extend([
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-        equation_number_layer,
-        link_external_layer,
-        listing_layer,
-        search_layer,
-    ]);
+    let mut user_layers = builtin_user_layers(config)?;
 
     let mut theme_dirs = Vec::new();
     if config.has_themes() {
@@ -605,7 +542,7 @@ pub async fn compile_with_doc_vars(
 
     user_layers.push(doc_vars.clone());
 
-    let scss = crate::assemble_with_user_layers(&user_layers)?;
+    let scss = crate::bundle::assemble_with_user_layers_opts(&user_layers, config.dashboard_layer)?;
 
     context
         .runtime()
@@ -660,12 +597,6 @@ pub async fn compile_default_css(
     runtime: &dyn SystemRuntime,
     minified: bool,
 ) -> Result<String, SassError> {
-    use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
-        load_highlight_layer, load_link_external_layer, load_listing_layer, load_search_layer,
-        load_title_block_layer,
-    };
-
     // Return cached version if available (only for minified, matching
     // native). Minified is always true in practice for hub-client.
     if minified {
@@ -680,27 +611,11 @@ pub async fn compile_default_css(
     // highlight layer, documents without an explicit `theme:` frontmatter
     // entry would render code blocks with `hl-*` span classes but no
     // associated colors.
-    let title_block_layer = load_title_block_layer()?;
-    let highlight_layer = load_highlight_layer(None)?;
-    let embed_example_layer = load_embed_example_layer()?;
-    let copy_code_layer = load_copy_code_layer()?;
-    let equation_number_layer = load_equation_number_layer()?;
-    let link_external_layer = load_link_external_layer()?;
-    let listing_layer = load_listing_layer()?;
-    let search_layer = load_search_layer()?;
+    let user_layers = builtin_user_layers(&ThemeConfig::default_bootstrap())?;
 
     // Assemble SCSS: Bootstrap + Quarto + title block + highlight +
     // embed-example + copy-code + listing defaults
-    let scss = assemble_with_user_layers(&[
-        title_block_layer,
-        highlight_layer,
-        embed_example_layer,
-        copy_code_layer,
-        equation_number_layer,
-        link_external_layer,
-        listing_layer,
-        search_layer,
-    ])?;
+    let scss = assemble_with_user_layers(&user_layers)?;
 
     // Get load paths (these point to VFS paths populated by wasm-quarto-hub-client)
     let load_paths = default_load_paths();
@@ -1425,6 +1340,46 @@ mod tests {
         // Should be Bootstrap CSS
         assert!(css.contains(".btn"));
         assert!(css.contains(".container"));
+    }
+
+    /// A dashboard bundle (`dashboard_layer`) compiles bslib's components,
+    /// htmltools' fill rules and the dashboard layer; a plain HTML bundle
+    /// has none of them (dashboard plan D4). Covers the no-theme path,
+    /// which bypasses the shared default bundle.
+    #[test]
+    fn test_dashboard_layer_compiles_bslib_and_dashboard_rules() {
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let mut config = ThemeConfig::default_bootstrap();
+        config.dashboard_layer = true;
+        let css = compile_with_doc_vars(&config, &context, &crate::SassLayer::default())
+            .unwrap()
+            .css;
+        assert!(css.contains(".bslib-value-box"), "bslib value_box");
+        assert!(css.contains(".html-fill-container"), "htmltools fill");
+        assert!(css.contains(".quarto-dashboard"), "dashboard layer");
+
+        let plain = compile_with_doc_vars(
+            &ThemeConfig::default_bootstrap(),
+            &context,
+            &crate::SassLayer::default(),
+        )
+        .unwrap()
+        .css;
+        assert!(!plain.contains(".bslib-value-box"));
+        assert!(!plain.contains(".quarto-dashboard"));
+    }
+
+    /// The themed path carries the dashboard layer too.
+    #[test]
+    fn test_dashboard_layer_with_a_bootswatch_theme() {
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
+        let mut config = ThemeConfig::new(vec![ThemeSpec::parse("cosmo").unwrap()], true);
+        config.dashboard_layer = true;
+        let css = compile_theme_css(&config, &context).unwrap().css;
+        assert!(css.contains(".bslib-value-box"));
+        assert!(css.contains(".quarto-dashboard"));
     }
 
     #[test]

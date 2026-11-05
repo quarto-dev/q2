@@ -1,0 +1,54 @@
+body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
+  header#quarto-dashboard-header
+    nav.navbar.navbar-expand-md.slim [data-bs-theme=dark]
+      div.container-fluid.navbar-container
+        button.navbar-toggler [aria-controls=dashboard-collapse aria-label=Toggle navigation data-bs-target=#dashboard-collapse data-bs-toggle=collapse]
+          span.navbar-toggler-icon
+        div.navbar-brand-container
+          div.navbar-title
+            div.navbar-title-text "Worldwide Development"
+            div.navbar-author "Gapminder Analytics"
+        div#dashboard-collapse.collapse.navbar-collapse
+          ul.me-auto.navbar-nav.navbar-nav-scroll [role=tablist]
+            li.nav-item [role=presentation]
+              a#tab-indicators.active.nav-link [aria-controls=indicators aria-selected=true data-bs-target=#indicators data-bs-toggle=tab data-scrolling=false href=#indicators role=tab]
+                span.nav-link-text "Indicators"
+            li.nav-item [role=presentation]
+              a#tab-data.nav-link [aria-controls=data aria-selected=false data-bs-target=#data data-bs-toggle=tab data-scrolling=false href=#data role=tab]
+                span.nav-link-text "Data"
+  div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.html-fill-container.page-layout-custom.quarto-dashboard-content.quarto-dashboard-pages [role=main]
+    div.bslib-grid.bslib-grid-item.html-fill-item.tab-content [style=display: grid; grid-template-rows: minmax(3em, 1fr); grid-auto-columns: minmax(0, 1fr);]
+      div#indicators.active.dashboard-page.html-fill-container.html-fill-item.show.tab-pane [aria-labelledby=tab-indicators]
+        div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, 60fr) minmax(3em, 40fr); grid-auto-columns: minmax(0, 1fr);]
+          div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+            div.bslib-card.card.cell.html-fill-container.html-fill-item [data-bslib-card-init= data-full-screen=false]
+              div.card-header
+                div.card-title "GDP and Life Expectancy"
+              div.card-body.html-fill-container.html-fill-item
+                div.cell-output.cell-output-display.html-fill-container.html-fill-item
+                  img.img-fluid.quarto-dashboard-img-contain
+              bslib-tooltip
+                span.badge.bslib-full-screen-enter.rounded-pill
+          div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: minmax(3em, 1fr) minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+            div.bslib-card.card.cell.html-fill-container.html-fill-item [data-bslib-card-init= data-full-screen=false]
+              div.card-header
+                div.card-title "Population"
+              div.card-body.html-fill-container.html-fill-item
+                div.cell-output.cell-output-display.html-fill-container.html-fill-item
+                  img.img-fluid.quarto-dashboard-img-contain
+              bslib-tooltip
+                span.badge.bslib-full-screen-enter.rounded-pill
+            div.bslib-card.card.cell.html-fill-container.html-fill-item [data-bslib-card-init= data-full-screen=false]
+              div.card-header
+                div.card-title "Life Expectancy"
+              div.card-body.html-fill-container.html-fill-item
+                div.cell-output.cell-output-display.html-fill-container.html-fill-item
+                  img.img-fluid.quarto-dashboard-img-contain
+              bslib-tooltip
+                span.badge.bslib-full-screen-enter.rounded-pill
+      div#data.dashboard-page.grid-skip.html-fill-container.html-fill-item.tab-pane [aria-labelledby=tab-data]
+        div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, max-content); grid-auto-columns: minmax(0, 1fr);]
+          div.bslib-card.card.html-fill-container.html-fill-item [data-bslib-card-init= data-full-screen=false]
+            div.card-body.html-fill-container.html-fill-item
+            bslib-tooltip
+              span.badge.bslib-full-screen-enter.rounded-pill

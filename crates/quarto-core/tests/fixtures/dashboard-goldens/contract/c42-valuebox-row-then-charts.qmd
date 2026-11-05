@@ -1,0 +1,41 @@
+---
+# contract: common layout: a value-box row then a chart row (value-box rows flow)
+title: "C42 Common"
+format: dashboard
+---
+
+## Row
+
+::: {.valuebox icon="pencil" color="primary"}
+C42-VB1
+
+1
+:::
+
+::: {.valuebox icon="chat" color="info"}
+C42-VB2
+
+2
+:::
+
+## Row
+
+::: {.cell title="C42-CHART-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C42-CHART-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

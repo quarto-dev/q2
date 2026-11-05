@@ -287,6 +287,7 @@ impl PipelineStage for ApplyTemplateStage {
                     &metadata,
                     &memory,
                     &mut rendered.source_context,
+                    ctx.format.base_format() == "dashboard",
                 )
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
 
@@ -334,9 +335,12 @@ impl PipelineStage for ApplyTemplateStage {
             }
             None => {
                 // No custom template, no partials: select built-in template based on format
-                let minimal = crate::format::is_minimal_html(&metadata);
-                let compiled = template::select_template(minimal)
-                    .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+                let compiled = if ctx.format.base_format() == "dashboard" {
+                    template::dashboard_html_template()
+                } else {
+                    template::select_template(crate::format::is_minimal_html(&metadata))
+                }
+                .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
                 template::render_with_compiled_template(
                     &compiled,
                     &rendered.content,

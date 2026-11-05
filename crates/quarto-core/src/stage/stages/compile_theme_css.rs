@@ -537,6 +537,16 @@ fn cache_key(
         b"tb0"
     });
 
+    // Dashboards compile extra layers (bslib + quarto-dashboard.scss).
+    // Hashed only when set, so every non-dashboard key is unchanged.
+    if theme_config.dashboard_layer {
+        hasher.update(b"db1");
+    }
+    // Hashed only when cleared, for the same reason.
+    if !theme_config.listing_layer {
+        hasher.update(b"nl1");
+    }
+
     let hash = hasher.finalize();
     Ok(hex::encode(hash))
 }
@@ -692,7 +702,7 @@ impl PipelineStage for CompileThemeCssStage {
         // resolution failures without a config path), we fall back
         // to the legacy stage-error path so the message still lands
         // even without a span.
-        let theme_config = match ThemeConfig::from_config_value(&doc.ast.meta) {
+        let mut theme_config = match ThemeConfig::from_config_value(&doc.ast.meta) {
             Ok(c) => c,
             Err(e) => {
                 let pe = crate::theme_diagnostic::sass_error_to_parse_error(
@@ -702,6 +712,16 @@ impl PipelineStage for CompileThemeCssStage {
                 return Err(PipelineError::Structured(pe));
             }
         };
+
+        // Dashboards add bslib's component SCSS and the dashboard Sass
+        // layer (dashboard plan D4). Keyed on the base format, not the
+        // identifier, so a dashboard preview pseudo-format can map onto it.
+        theme_config.dashboard_layer = ctx.format.base_format() == "dashboard";
+        // Q1 compiles the listing bundle into website pages only; a
+        // standalone dashboard without it keeps Bootstrap's light card
+        // headers (the listing layer's `$card-cap-bg` default is darker).
+        theme_config.listing_layer = !theme_config.dashboard_layer
+            || ctx.project.config.project_kind == crate::project::ProjectKind::Website;
 
         // `theme: pandoc` (Quarto 1's Bootstrap-free page) is not
         // implemented: quarto-sass drops the entry, so the page gets
@@ -970,6 +990,8 @@ async fn variant_css(
         && doc_vars.is_empty()
         && variant_config.title_block_layer
         && variant_config.highlight_style.is_none()
+        && !variant_config.dashboard_layer
+        && variant_config.listing_layer
     {
         // Try the runtime cache first (cross-session persistence). The
         // default bundle loads nothing through the runtime, so its

@@ -1,0 +1,37 @@
+---
+# contract: content: sidebar / content: toolbar cells (Q1 schema-only; D5 implements)
+title: "C33 Content Cells"
+format: dashboard
+---
+
+::: {.cell content="toolbar"}
+
+::: {.cell-output-display}
+
+C33-TOOLBAR
+
+:::
+
+:::
+
+## Row
+
+::: {.cell title="C33-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell content="sidebar"}
+
+::: {.cell-output-display}
+
+C33-SIDEBAR
+
+:::
+
+:::

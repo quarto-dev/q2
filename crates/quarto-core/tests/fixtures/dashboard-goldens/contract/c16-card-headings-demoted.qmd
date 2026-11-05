@@ -1,0 +1,17 @@
+---
+# contract: headings inside a card are demoted to h4-or-lower divs
+title: "C16 Headings"
+format: dashboard
+---
+
+## Row
+
+::: {.card title="C16-CARD"}
+### C16-H3 heading
+
+Text.
+
+#### C16-H4 heading
+
+More.
+:::

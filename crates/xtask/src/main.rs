@@ -13,6 +13,7 @@
 //! - `braid-snapshot`: Write a backup-only `braid export` to `.braid/snapshot.jsonl`
 //! - `pandoc-check`: Check local pandoc against the pampa oracle tests
 //! - `render-corpus-diff`: Dev-only byte-identity corpus capture/diff harness
+//! - `capture-dashboard-goldens`: Dev-only capture of Quarto 1 dashboard skeletons for the dashboard corpus
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
 //! - `ts-test`: Regenerate, build, and test a tree-sitter grammar with a per-checkout grammar cache
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
@@ -38,6 +39,7 @@ mod build_hub_mcp_bundle;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
 mod build_ts_bundle;
+mod capture_dashboard_goldens;
 mod capture_import_recordings;
 mod capture_pandoc_goldens;
 mod capture_pandoc_recordings;
@@ -344,6 +346,25 @@ enum Command {
     /// result as a committed insta snapshot. Never invoked from `cargo
     /// xtask verify` or CI.
     CapturePandocGoldens {},
+
+    /// Dev-only capture of Quarto 1 dashboard skeletons for the dashboard
+    /// compatibility corpus (`crates/quarto-core/tests/fixtures/dashboard-goldens/`,
+    /// plan `2026-11-03-dashboard-format-port.md`, Phase 0).
+    ///
+    /// Renders each manifest fixture with `q1_golden = true` using a Quarto 1
+    /// `quarto`, extracts its dashboard skeleton with `quarto-output-extract`,
+    /// and writes `goldens/<name>.q1.skeleton` plus `goldens/q1-provenance.txt`.
+    /// Fixtures need R and Python where they say so; a fixture that fails to
+    /// render is reported, not fatal. Never invoked from `cargo xtask verify`
+    /// or CI.
+    CaptureDashboardGoldens {
+        /// The Quarto 1 binary to render with.
+        #[arg(long, default_value = "quarto")]
+        quarto: String,
+        /// Only capture fixtures whose manifest path contains this substring.
+        #[arg(long)]
+        only: Option<String>,
+    },
 
     /// Dev-only capture of the exact inputs of real native pandoc runs
     /// (pandoc.wasm epic, phase R0): renders each recording fixture to docx,
@@ -675,6 +696,9 @@ fn main() -> Result<()> {
         }
         Command::PandocCheck {} => pandoc_check::run(),
         Command::CapturePandocGoldens {} => capture_pandoc_goldens::run(),
+        Command::CaptureDashboardGoldens { quarto, only } => {
+            capture_dashboard_goldens::run(&capture_dashboard_goldens::Options { quarto, only })
+        }
         Command::CapturePandocRecordings {} => capture_pandoc_recordings::run(),
         Command::CaptureImportRecordings { action } => {
             capture_import_recordings::run(matches!(action, Some(CaptureImportAction::Generate)))

@@ -1,0 +1,12 @@
+body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
+  header#quarto-dashboard-header
+    nav.navbar.navbar-expand-md.slim [data-bs-theme=dark]
+      div.container-fluid.navbar-container
+        button.hidden.navbar-toggler [aria-controls=dashboard-collapse aria-label=Toggle navigation data-bs-target=#dashboard-collapse data-bs-toggle=collapse]
+          span.navbar-toggler-icon
+        div.navbar-brand-container
+          div.navbar-title
+            div.navbar-title-text "Test Dashboard"
+            div.navbar-author "John Doe, Jane Doe"
+  div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.html-fill-container.page-layout-custom.quarto-dashboard-content [role=main]
+    div.bslib-grid.bslib-grid-item.html-fill-item [style=display: grid; grid-template-rows: ; grid-auto-columns: minmax(0, 1fr);]

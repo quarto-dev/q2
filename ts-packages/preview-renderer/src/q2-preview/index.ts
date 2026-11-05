@@ -1,6 +1,8 @@
 export { Block, Inline } from './dispatchers';
 export { PreviewDocument } from './PreviewDocument';
 export { previewRegistry } from './registry';
+// The dashboard page shell (`format: dashboard` previews as `q2-dashboard`).
+export { DashboardDocument } from './custom/dashboard/DashboardDocument';
 export { PreviewContext, type PreviewContextValue } from './PreviewContext';
 export { usePreviewEdit } from './usePreviewEdit';
 export { useBlockEditHover } from './useBlockEditHover';

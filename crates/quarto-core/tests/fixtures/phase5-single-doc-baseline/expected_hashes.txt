@@ -470,5 +470,12 @@
 # banner SCSS was ported from Q1's `quarto-nav.scss` into
 # `_bootstrap-rules.scss`. doc.html hash unchanged: a single doc with no
 # `website.announcement` emits no banner.
+#
+# Re-captured 2026-11-04 (bd-dashboard-format-k21hd4vy): doc_files/styles.css
+# hash updated because Q1's `button.quarto-color-scheme-toggle { background:
+# transparent; border: none; padding: 0; cursor: pointer }` was ported into
+# `_bootstrap-rules.scss` (the dashboard navbar's toggle is a `<button>`).
+# Verified the only delta is that rule: removing it from the new styles.css
+# reproduces the previous hash (38dd4794…) exactly. doc.html hash unchanged.
 doc.html 8bc5f1b52f07aa842a9420d2d08a24243e851ca7f18e3d55a089e5d1ffe84f59
-doc_files/styles.css 38dd479491382865a74d4ff36a421a5455bb5cfe506cfc36df3bc1fb754f4694
+doc_files/styles.css 61ac809155bf6fab4e4ec43afdb12e15faeda615bfc6523358c3e5462fac21b5

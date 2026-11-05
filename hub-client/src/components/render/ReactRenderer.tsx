@@ -218,7 +218,8 @@ function ReactRenderer({
       format !== 'q2-debug' &&
       format !== 'q2-preview' &&
       format !== 'revealjs' &&
-      format !== 'q2-sandboxed-preview'
+      format !== 'q2-sandboxed-preview' &&
+      format !== 'q2-dashboard'
     ) {
       return '';
     }
@@ -338,7 +339,9 @@ function ReactRenderer({
   // legacy hand-rolled `RevealjsSlideAst` deck that hardcoded reveal's
   // stock `white.css`. `ReactPreview.doRender` feeds this branch the
   // themed preview AST (from `renderPageForPreview`) + `themeFingerprint`.
-  if (format === 'q2-preview' || format === 'revealjs') {
+  // `q2-dashboard` (format: dashboard) renders in the same tree; PreviewRoot
+  // swaps in the dashboard shell.
+  if (format === 'q2-preview' || format === 'revealjs' || format === 'q2-dashboard') {
     return (
       <ErrorBoundary>
         <div style={{

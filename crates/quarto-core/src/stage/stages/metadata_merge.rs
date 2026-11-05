@@ -97,6 +97,29 @@ fn prepare_layer(
     }
 }
 
+/// The `theme` the layers give an html page, flattened and path-marked as
+/// for an html render (so a theme `.scss` path resolves the same way).
+///
+/// Q1 forwards the merged `format.html.theme` to a website\'s dashboard
+/// pages, overriding even a theme the page sets for itself (its
+/// `format.dashboard.theme` alone wins). q2 forwards it only when the
+/// dashboard metadata has no `theme` at all (dashboard plan D5).
+fn site_html_theme(
+    collected: &[MetadataLayer],
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Option<ConfigValue> {
+    let html = crate::format::FormatIdentifier::Html.as_str();
+    let prepared: Vec<ConfigValue> = collected
+        .iter()
+        .map(|layer| prepare_layer(layer, html, project_dir, runtime).0)
+        .collect();
+    let merged = MergedConfig::new(prepared.iter().collect())
+        .materialize()
+        .ok()?;
+    merged.get("theme").cloned()
+}
+
 /// Merge project, directory, document, and runtime metadata.
 ///
 /// This stage takes a `DocumentAst` and replaces `doc.ast.meta` with the
@@ -337,6 +360,22 @@ impl PipelineStage for MetadataMergeStage {
         }
         // Note: If materialization fails (shouldn't happen with well-formed configs),
         // we silently continue with the original document metadata.
+
+        // A dashboard page in a website takes the site's html theme when it
+        // sets none itself (Q1 `format-dashboard.ts` forwards
+        // `format.html.theme`; dashboard plan Phase 9).
+        if base_format == crate::format::FormatIdentifier::Dashboard.as_str()
+            && ctx.project.config.project_kind == crate::project::ProjectKind::Website
+            && doc.ast.meta.get("theme").is_none()
+            && let Some(theme) = site_html_theme(&collected, &ctx.project.dir, ctx.runtime.as_ref())
+            && let ConfigValueKind::Map(ref mut entries) = doc.ast.meta.value
+        {
+            entries.push(ConfigMapEntry {
+                key: "theme".to_string(),
+                key_source: SourceInfo::generated(By::programmatic_config()),
+                value: theme,
+            });
+        }
 
         // Inject resolved format name into merged metadata.
         // The Format struct doesn't cross the WASM serialization boundary,

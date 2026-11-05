@@ -400,7 +400,9 @@ impl PipelineStage for EngineExecutionStage {
         // execute_timeout above), for TS engines' `TsFormatInfo.metadata`.
         // Do NOT re-merge metadata here — `doc_ast.ast.meta` is already the
         // merged map (MetadataMergeStage ran upstream).
-        let document_metadata = crate::project::document_metadata_to_ts_map(&doc_ast.ast.meta);
+        // bd-cymkcyaf: the per-format `execute` defaults are folded in
+        // here too, since TS engines read `execute:` from this map.
+        let document_metadata = ts_document_metadata(&doc_ast.ast.meta, ctx.format.identifier);
 
         // Step 2: Resolve each engine in the sequence to an implementation
         // (with fallback), dropping markdown — it's a no-op, so a markdown
@@ -992,6 +994,30 @@ fn format_execute_defaults(
         // `createHtmlPresentationFormat`) — pptx-shaped code defaults:
         // fig 9.5×6.5 (inches) with echo/warning off, since a slide deck
         // shows neither source nor warnings.
+        // Q1 `createHtmlPresentationFormat("RevealJS", 10, 5)`
+        // (`src/format/reveal/format-reveal.ts:142`): echo and warnings
+        // off, like the other slide formats (bd-cymkcyaf).
+        FormatIdentifier::Revealjs => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("10".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("5".to_string())),
+            ("echo", yaml_rust2::Yaml::Boolean(false)),
+            ("warning", yaml_rust2::Yaml::Boolean(false)),
+        ]),
+        // Q1 `dashboardFormat()` (`src/format/dashboard/format-dashboard.ts:74`):
+        // `htmlFormat(8, 5)` plus echo/warnings off, every top-level
+        // expression shown, and plotly loading its JS from the page
+        // rather than a CDN. Dashboard plan D3.
+        FormatIdentifier::Dashboard => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("8".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("5".to_string())),
+            ("echo", yaml_rust2::Yaml::Boolean(false)),
+            ("warning", yaml_rust2::Yaml::Boolean(false)),
+            (
+                "ipynb-shell-interactivity",
+                yaml_rust2::Yaml::String("all".to_string()),
+            ),
+            ("plotly-connected", yaml_rust2::Yaml::Boolean(false)),
+        ]),
         FormatIdentifier::S5
         | FormatIdentifier::Dzslides
         | FormatIdentifier::Slidy
@@ -1011,6 +1037,44 @@ fn format_execute_defaults(
 /// no defaults for this format **and** no document scope, preserving the
 /// pre-Task-5 behavior exactly (a bare `ast.meta.get("execute").cloned()`)
 /// for every non-docx/pptx format.
+/// The metadata map sent to TS engines (`TsFormatInfo.metadata`): the
+/// merged document metadata, lowered, with its `execute` entry replaced by
+/// the format-merged scope ([`merge_execute_scope`]).
+///
+/// TS engines (julia, marimo) read `execute:` from this map
+/// (`metadataAsFormat` on the Node host), never from
+/// `ExecutionContext.execute_scope`, so without the overlay the per-format
+/// defaults reach knitr and Jupyter but not them (bd-cymkcyaf). A format
+/// with no defaults leaves the map as lowered.
+fn ts_document_metadata(
+    meta: &quarto_pandoc_types::ConfigValue,
+    format: FormatIdentifier,
+) -> std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue> {
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+
+    let mut map = crate::project::document_metadata_to_ts_map(meta);
+    if format_execute_defaults(format).is_none() {
+        return map;
+    }
+    if let Some(scope) = merge_execute_scope(format, meta.get("execute").cloned()) {
+        let source = quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
+        let wrapper = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "execute".to_string(),
+                key_source: source.clone(),
+                value: scope,
+            }],
+            source,
+        );
+        if let Some(lowered) =
+            crate::project::document_metadata_to_ts_map(&wrapper).remove("execute")
+        {
+            map.insert("execute".to_string(), lowered);
+        }
+    }
+    map
+}
+
 fn merge_execute_scope(
     base_format: FormatIdentifier,
     document_scope: Option<quarto_pandoc_types::ConfigValue>,
@@ -3419,6 +3483,99 @@ mod tests {
             None,
             "typst must have no format-level execute defaults"
         );
+    }
+
+    /// The HTML presentation family and dashboards (Q1
+    /// `createHtmlPresentationFormat` and `dashboardFormat`): echo and
+    /// warnings off, with each format's figure size. bd-cymkcyaf /
+    /// dashboard plan D3.
+    #[test]
+    fn test_html_family_execute_defaults() {
+        assert_eq!(
+            format_execute_defaults(FormatIdentifier::Revealjs),
+            Some(vec![
+                ("fig-width", yaml_rust2::Yaml::Real("10".to_string())),
+                ("fig-height", yaml_rust2::Yaml::Real("5".to_string())),
+                ("echo", yaml_rust2::Yaml::Boolean(false)),
+                ("warning", yaml_rust2::Yaml::Boolean(false)),
+            ])
+        );
+        assert_eq!(
+            format_execute_defaults(FormatIdentifier::Dashboard),
+            Some(vec![
+                ("fig-width", yaml_rust2::Yaml::Real("8".to_string())),
+                ("fig-height", yaml_rust2::Yaml::Real("5".to_string())),
+                ("echo", yaml_rust2::Yaml::Boolean(false)),
+                ("warning", yaml_rust2::Yaml::Boolean(false)),
+                (
+                    "ipynb-shell-interactivity",
+                    yaml_rust2::Yaml::String("all".to_string())
+                ),
+                ("plotly-connected", yaml_rust2::Yaml::Boolean(false)),
+            ])
+        );
+    }
+
+    fn meta_from_yaml(yaml: &str) -> quarto_pandoc_types::ConfigValue {
+        let parsed = quarto_yaml::parse(yaml).unwrap();
+        let mut diagnostics = pampa::utils::diagnostic_collector::DiagnosticCollector::new();
+        pampa::pandoc::yaml_to_config_value(
+            parsed,
+            quarto_config::InterpretationContext::DocumentMetadata,
+            &mut diagnostics,
+        )
+    }
+
+    fn ts_execute(
+        map: &std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue>,
+    ) -> std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue> {
+        match map.get("execute") {
+            Some(crate::engine::ts_protocol::TsMetadataValue::Map(m)) => m.clone(),
+            other => panic!("expected an execute map, got {other:?}"),
+        }
+    }
+
+    /// bd-cymkcyaf: TS engines (julia, marimo) read `execute:` from the
+    /// metadata map, not from `ExecutionContext.execute_scope`, so the
+    /// per-format defaults must be folded into that map too.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_ts_document_metadata_carries_format_execute_defaults() {
+        use crate::engine::ts_protocol::TsMetadataValue;
+        let meta = meta_from_yaml("title: T\n");
+        let map = ts_document_metadata(&meta, FormatIdentifier::Dashboard);
+        let execute = ts_execute(&map);
+        assert_eq!(execute.get("echo"), Some(&TsMetadataValue::Bool(false)));
+        assert_eq!(execute.get("warning"), Some(&TsMetadataValue::Bool(false)));
+        assert_eq!(
+            execute.get("ipynb-shell-interactivity"),
+            Some(&TsMetadataValue::String("all".to_string()))
+        );
+        assert_eq!(
+            map.get("title"),
+            Some(&TsMetadataValue::String("T".to_string()))
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_ts_document_metadata_document_execute_wins() {
+        use crate::engine::ts_protocol::TsMetadataValue;
+        let meta = meta_from_yaml("execute:\n  echo: true\n");
+        let execute = ts_execute(&ts_document_metadata(&meta, FormatIdentifier::Revealjs));
+        assert_eq!(execute.get("echo"), Some(&TsMetadataValue::Bool(true)));
+        assert_eq!(execute.get("warning"), Some(&TsMetadataValue::Bool(false)));
+    }
+
+    /// A format with no defaults leaves the map exactly as lowered: no
+    /// synthetic `execute` key appears.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn test_ts_document_metadata_html_unchanged() {
+        let meta = meta_from_yaml("title: T\n");
+        let map = ts_document_metadata(&meta, FormatIdentifier::Html);
+        assert!(!map.contains_key("execute"), "{map:?}");
+        assert_eq!(map, crate::project::document_metadata_to_ts_map(&meta));
     }
 
     /// Long-tail Phase 2: the Tier A family matrix. The wordprocessor trio

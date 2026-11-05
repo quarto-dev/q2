@@ -96,6 +96,17 @@ pub struct ThemeConfig {
     /// is dropped.
     pub title_block_layer: bool,
 
+    /// Include the dashboard Sass layer and bslib's component SCSS
+    /// (dashboard plan D4). `false` by default; set by the render
+    /// pipeline for `format: dashboard`, never from document metadata.
+    pub dashboard_layer: bool,
+
+    /// Include the listing Sass layer (`quarto-listing.scss`). `true` by
+    /// default; the render pipeline clears it for a dashboard outside a
+    /// website, as Q1 compiles the listing bundle only into website pages
+    /// (its `$card-cap-bg` default would otherwise darken every card).
+    pub listing_layer: bool,
+
     /// Unresolved reference to a `_brand.yml` (path or inline block),
     /// or `None` if no brand was configured.
     ///
@@ -238,6 +249,8 @@ impl ThemeConfig {
             minified,
             suppress_bootstrap: false,
             title_block_layer: true,
+            dashboard_layer: false,
+            listing_layer: true,
             brand_ref: None,
             dark: None,
             highlight_style: None,
@@ -256,6 +269,8 @@ impl ThemeConfig {
             minified: true,
             suppress_bootstrap: false,
             title_block_layer: true,
+            dashboard_layer: false,
+            listing_layer: true,
             brand_ref: None,
             dark: None,
             highlight_style: None,
@@ -452,6 +467,8 @@ impl ThemeConfig {
                 minified: true,
                 suppress_bootstrap: true,
                 title_block_layer: true,
+                dashboard_layer: false,
+                listing_layer: true,
                 brand_ref: None,
                 dark: None,
                 highlight_style: None,
@@ -469,6 +486,8 @@ impl ThemeConfig {
             minified: true,
             suppress_bootstrap: false,
             title_block_layer: true,
+            dashboard_layer: false,
+            listing_layer: true,
             brand_ref: None,
             dark: None,
             highlight_style: None,
@@ -576,6 +595,8 @@ impl ThemeConfig {
             minified: self.minified,
             suppress_bootstrap: d.suppress_bootstrap,
             title_block_layer: self.title_block_layer,
+            dashboard_layer: self.dashboard_layer,
+            listing_layer: self.listing_layer,
             brand_ref: d.brand_ref.clone(),
             dark: None,
             highlight_style: d.highlight_style.clone(),

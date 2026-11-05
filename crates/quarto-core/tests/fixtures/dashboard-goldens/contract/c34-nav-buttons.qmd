@@ -1,0 +1,22 @@
+---
+# contract: nav-buttons aliases and custom nav items
+title: "C34 Nav Buttons"
+format:
+  dashboard:
+    nav-buttons:
+      - linkedin
+      - twitter
+      - icon: gitlab
+        href: https://gitlab.com/
+        text: C34-GITLAB
+---
+
+::: {.cell title="C34-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

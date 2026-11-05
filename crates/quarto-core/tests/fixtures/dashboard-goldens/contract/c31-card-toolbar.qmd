@@ -1,0 +1,65 @@
+---
+# contract: card toolbars: div and cell forms, next/previous targets, footer, and footer-for an id inside the target card
+title: "C31 Card Toolbar"
+format: dashboard
+---
+
+## Row
+
+::: {.card-toolbar}
+C31-NEXT-TOOLBAR
+:::
+
+::: {.cell title="C31-TARGET-NEXT"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C31-TARGET-PREV"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.card-toolbar target="previous"}
+C31-PREV-TOOLBAR
+:::
+
+## Row
+
+::: {.cell content="card-toolbar"}
+
+::: {.cell-output-display}
+
+C31-CELL-TOOLBAR
+
+:::
+
+:::
+
+::: {.cell title="C31-CELL-TARGET"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.card-toolbar footer-for="c31-byid"}
+C31-FOOTER-TOOLBAR
+:::
+
+::: {.card title="C31-BYID"}
+[By id]{#c31-byid}, an id inside the card.
+:::

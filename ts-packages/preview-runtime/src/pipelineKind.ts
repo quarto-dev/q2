@@ -33,6 +33,10 @@ export function pipelineKindForFormat(format: string): PipelineKind | undefined 
     // `builtin_pseudo_format` in crates/quarto-core/src/format.rs.
     case 'q2-sandboxed-preview':
       return 'preview';
+    // `format: dashboard` previews as `q2-dashboard` (base format
+    // `dashboard`, kind `preview`; dashboard plan Phase 8).
+    case 'q2-dashboard':
+      return 'preview';
     default:
       return undefined;
   }

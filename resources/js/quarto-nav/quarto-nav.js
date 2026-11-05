@@ -21,8 +21,9 @@
  * Deliberate deviations from Q1 (each because q2 lacks the consumer;
  * revisit when porting the corresponding feature):
  * - no `.headroom-target` selector — q2 has no sidebar-rollup toggle;
- * - no `footerOffset()` / `dashboardOffset()` — no fixed footer or
- *   dashboard header exists in q2;
+ * - no `dashboardOffset()`: Q1 adds the dashboard header\'s height on
+ *   top of the site header that already contains it (double-counted);
+ * - `footerOffset()` only on dashboard pages (see `updateDocumentOffset`);
  * - no `quarto-hrChanged` CustomEvent — no consumer.
  *
  * The announcement bar (`#quarto-announcement`,
@@ -90,10 +91,18 @@
       }
     });
 
-    // Keep the page at least viewport-height below the header.
+    // Keep the page at least viewport-height below the header. On a
+    // dashboard page (a fill layout) the footer is subtracted too, as in
+    // Q1, so it stays on screen below the dashboard instead of being
+    // pushed past the fold (dashboard plan Phase 9). Other pages keep the
+    // header-only offset (bd-f19dbajh).
     const mainContainer = window.document.querySelector(".quarto-container");
     if (mainContainer) {
-      mainContainer.style.minHeight = "calc(100vh - " + topOffset + "px)";
+      const footerEl = window.document.body.classList.contains("quarto-dashboard")
+        ? window.document.querySelector("footer.footer")
+        : null;
+      const offset = topOffset + (footerEl ? footerEl.clientHeight : 0);
+      mainContainer.style.minHeight = "calc(100vh - " + offset + "px)";
     }
 
     // Anchor-jump compensation: a `section:target` pseudo-spacer the

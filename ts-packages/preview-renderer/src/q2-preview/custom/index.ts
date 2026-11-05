@@ -25,3 +25,13 @@ export { Equation } from './Equation';
 export { CrossrefResolvedRef } from './CrossrefResolvedRef';
 export { Fallback } from './Fallback';
 export { PreviewTitleBlock } from './PreviewTitleBlock';
+// Dashboard view nodes (`crates/quarto-core/src/dashboard/view.rs`):
+// preview-only, so not in custom-node-schema.json (like ExampleEmbed).
+export {
+    DashboardPageView,
+    DashboardCardView,
+    DashboardTabNav,
+    DashboardTabPane,
+    DashboardSidebarLayout,
+    DashboardParagraph,
+} from './dashboard/views';

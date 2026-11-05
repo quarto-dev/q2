@@ -1,0 +1,41 @@
+---
+# contract: tabs holding several cards via a deeper heading level
+title: "C08 Tabset Multi"
+format: dashboard
+---
+
+## Row {.tabset}
+
+### Plots
+
+::: {.cell title="C08-P1"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C08-P2"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+### Data
+
+::: {.cell title="C08-D1"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

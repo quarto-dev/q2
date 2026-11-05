@@ -1,0 +1,67 @@
+---
+# contract: alternating orientation at each heading level; px, %, and unsized mix
+title: "C03 Nested"
+format: dashboard
+---
+
+## Row {height=300px}
+
+::: {.cell title="C03-R1"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Row
+
+### Column {width=25%}
+
+::: {.cell title="C03-C1"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+### Column
+
+#### Row {height=40%}
+
+::: {.cell title="C03-RR1"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+#### Row
+
+::: {.cell title="C03-RR2"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C03-RR3"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

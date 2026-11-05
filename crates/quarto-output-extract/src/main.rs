@@ -9,7 +9,8 @@
 //! Formats, chosen by extension: `.docx` and `.pptx` (semantic extraction: text,
 //! styles, math, media names, no timestamps), `.epub` (UUIDs, timestamps and zip
 //! metadata normalized; embedded bytes hashed; see `epub`), and `.typ` (compared
-//! verbatim; typst source is deterministic). Consumed by the pandoc-wasm host
+//! verbatim; typst source is deterministic), and `.html` (the dashboard skeleton;
+//! see `dashboard`). Consumed by the pandoc-wasm host
 //! gates H0 and H3.
 
 use std::path::Path;
@@ -23,6 +24,11 @@ fn extract(path: &Path) -> Result<String, String> {
         "pptx" => quarto_output_extract::extract_pptx(&bytes).map(|e| e.to_string()),
         "epub" => quarto_output_extract::epub::extract_epub(&bytes).map(|e| e.to_string()),
         "typ" => return String::from_utf8(bytes).map_err(|e| format!("{}: {e}", path.display())),
+        "html" => {
+            return String::from_utf8(bytes)
+                .map(|html| quarto_output_extract::dashboard::dashboard_skeleton(&html))
+                .map_err(|e| format!("{}: {e}", path.display()));
+        }
         other => {
             return Err(format!(
                 "{}: unsupported extension `{other}`",

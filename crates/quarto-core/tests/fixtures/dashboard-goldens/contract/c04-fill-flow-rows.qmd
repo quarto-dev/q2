@@ -1,0 +1,35 @@
+---
+# contract: explicit .fill / .flow on row headings (Q1 ignores these for grid sizing; D5 fixes)
+title: "C04 Fill Flow"
+format: dashboard
+---
+
+## Row {.flow}
+
+::: {.cell title="C04-FLOW"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Row {.fill}
+
+::: {.card title="C04-MD"}
+Short markdown text C04-TEXT.
+:::
+
+## Row
+
+::: {.cell title="C04-DEFAULT"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

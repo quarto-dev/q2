@@ -1,0 +1,37 @@
+---
+# contract: cell options arrive as cell div attributes: title, padding, expandable; classes flow/expandable
+title: "C12 Cell Options"
+format: dashboard
+---
+
+## Row
+
+::: {.cell title="C12-PAD" padding="0px"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C12-NOEXP" expandable="false"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell .flow title="C12-FLOW"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

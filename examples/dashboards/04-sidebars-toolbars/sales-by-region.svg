@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240" role="img">
+<line x1="30" y1="210" x2="370" y2="210" stroke="#888"/>
+<rect x="42.8" y="30.0" width="59.5" height="180.0" fill="#2780e3"/>
+<text x="72.5" y="226" font-size="12" text-anchor="middle" fill="#555">North</text>
+<rect x="127.8" y="77.1" width="59.5" height="132.9" fill="#2780e3"/>
+<text x="157.5" y="226" font-size="12" text-anchor="middle" fill="#555">South</text>
+<rect x="212.8" y="94.3" width="59.5" height="115.7" fill="#2780e3"/>
+<text x="242.5" y="226" font-size="12" text-anchor="middle" fill="#555">East</text>
+<rect x="297.8" y="132.9" width="59.5" height="77.1" fill="#2780e3"/>
+<text x="327.5" y="226" font-size="12" text-anchor="middle" fill="#555">West</text>
+</svg>

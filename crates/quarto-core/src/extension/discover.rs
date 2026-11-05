@@ -267,6 +267,7 @@ const KNOWN_BASE_FORMATS: &[&str] = &[
     "epub",
     "typst",
     "revealjs",
+    "dashboard",
     "gfm",
     "commonmark",
     // Long-tail Phase 2 (Tier A)

@@ -27,12 +27,18 @@ import { fileURLToPath } from 'url';
 import { JSDOM } from 'jsdom';
 import { render, cleanup } from '@testing-library/react';
 import { Ast } from '@quarto/preview-renderer/framework';
-import { previewRegistry } from '@quarto/preview-renderer';
+import { DashboardDocument, previewRegistry } from '@quarto/preview-renderer';
 import {
   extractParityRoot,
   compareParity,
   ParityRuleViolation,
+  PARITY_ROOT_SELECTOR,
+  PARITY_RULES,
+  DASHBOARD_PARITY_ROOT_SELECTOR,
+  DASHBOARD_PARITY_RULES,
+  type ParityRules,
 } from '@quarto/preview-renderer/test-utils/domParity';
+import type { FormatRegistry } from '@quarto/preview-renderer/framework';
 import {
   SMOKE_ALL_DIR,
   loadSmokeWasm,
@@ -64,8 +70,25 @@ interface Sides {
   previewMain: Element;
 }
 
+/**
+ * What a fixture opts in as (`_quarto.tests.<format>.dom-parity: true`):
+ * an html page compares `<main>`; a dashboard (previewed as `q2-dashboard`)
+ * mounts the dashboard shell and compares its content area under the
+ * dashboard rules (dashboard plan Phase 8).
+ */
+type Kind = 'html' | 'dashboard';
+
+const KIND: Record<Kind, { root: string; rules: ParityRules; registry: FormatRegistry }> = {
+  html: { root: PARITY_ROOT_SELECTOR, rules: PARITY_RULES, registry: previewRegistry },
+  dashboard: {
+    root: DASHBOARD_PARITY_ROOT_SELECTOR,
+    rules: DASHBOARD_PARITY_RULES,
+    registry: { ...previewRegistry, Ast: DashboardDocument } as FormatRegistry,
+  },
+};
+
 /** Render one fixture both ways and return the two parity roots. */
-async function renderBothSides(testFile: string): Promise<Sides> {
+async function renderBothSides(testFile: string, kind: Kind = 'html'): Promise<Sides> {
   const { vfsPath, projectFiles } = await populateVfs(wasm, testFile);
   const grammars = await buildUserGrammarsHandle(wasm, projectFiles);
 
@@ -92,12 +115,12 @@ async function renderBothSides(testFile: string): Promise<Sides> {
       currentFilePath={vfsPath}
       onNavigateToDocument={() => {}}
       setAst={() => {}}
-      registry={previewRegistry}
+      registry={KIND[kind].registry}
     />,
   );
   return {
-    renderMain: extractParityRoot(renderDoc, 'render'),
-    previewMain: extractParityRoot(container, 'preview'),
+    renderMain: extractParityRoot(renderDoc, 'render', KIND[kind].root),
+    previewMain: extractParityRoot(container, 'preview', KIND[kind].root),
   };
 }
 
@@ -124,13 +147,14 @@ function diffText(expected: string, actual: string): string {
   }
 }
 
-async function optedInFixtures(): Promise<string[]> {
+async function optedInFixtures(): Promise<Array<{ file: string; kind: Kind }>> {
   const files = await discoverTestFiles(SMOKE_ALL_DIR);
-  const out: string[] = [];
+  const out: Array<{ file: string; kind: Kind }> = [];
   for (const f of files) {
     const block = readTestsBlock(readFrontmatter(await readFile(f, 'utf-8')));
     if (!block || shouldSkip(block.run)) continue;
-    if (block.formats['html']?.['dom-parity'] === true) out.push(f);
+    if (block.formats['html']?.['dom-parity'] === true) out.push({ file: f, kind: 'html' });
+    else if (block.formats['dashboard']?.['dom-parity'] === true) out.push({ file: f, kind: 'dashboard' });
   }
   return out;
 }
@@ -144,25 +168,25 @@ describe('smoke-all preview <-> render DOM parity', () => {
     const failures: string[] = [];
     let compared = 0;
 
-    for (const testFile of fixtures) {
+    for (const { file: testFile, kind } of fixtures) {
       const relPath = relative(SMOKE_ALL_DIR, testFile);
       if (smokeFilter && !relPath.includes(smokeFilter)) continue;
       wasm.vfs_clear();
       cleanup();
       const started = performance.now();
       try {
-        const { renderMain, previewMain } = await renderBothSides(testFile);
-        const result = compareParity(renderMain, previewMain);
+        const { renderMain, previewMain } = await renderBothSides(testFile, kind);
+        const result = compareParity(renderMain, previewMain, KIND[kind].rules);
         compared++;
         if (!result.equal) {
           const dir = await writeArtifacts(relPath, result.render, result.preview);
           failures.push(
-            `${relPath} [html]: parity mismatch (artifacts: ${dir})\n${diffText(result.render, result.preview)}`,
+            `${relPath} [${kind}]: parity mismatch (artifacts: ${dir})\n${diffText(result.render, result.preview)}`,
           );
         }
       } catch (e) {
-        const kind = e instanceof ParityRuleViolation ? 'rule violation' : 'error';
-        failures.push(`${relPath} [html]: ${kind}: ${(e as Error).message}`);
+        const what = e instanceof ParityRuleViolation ? 'rule violation' : 'error';
+        failures.push(`${relPath} [${kind}]: ${what}: ${(e as Error).message}`);
       }
       console.log(`  parity ${relPath}: ${Math.round(performance.now() - started)} ms`);
     }
@@ -173,9 +197,9 @@ describe('smoke-all preview <-> render DOM parity', () => {
   });
 
   it('reports an injected divergence (harness self-check)', async () => {
-    const [first] = await optedInFixtures();
-    expect(first, 'needs one opted-in fixture').toBeDefined();
-    const { renderMain, previewMain } = await renderBothSides(first);
+    const first = (await optedInFixtures()).find((f) => f.kind === 'html')?.file;
+    expect(first, 'needs one opted-in html fixture').toBeDefined();
+    const { renderMain, previewMain } = await renderBothSides(first!);
     expect(compareParity(renderMain, previewMain).equal).toBe(true);
 
     // Inject: add a class to the first element on the preview side.

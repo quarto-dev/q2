@@ -173,7 +173,8 @@ impl PipelineStage for AstTransformsStage {
                 crate::format::PipelineProfile::from_format(&ctx.format.target_format);
             jit_pipeline = match &pipeline_profile {
                 crate::format::PipelineProfile::HtmlPreview
-                | crate::format::PipelineProfile::RevealjsPreview => {
+                | crate::format::PipelineProfile::RevealjsPreview
+                | crate::format::PipelineProfile::DashboardPreview => {
                     build_q2_preview_transform_pipeline(
                         shortcode_paths,
                         ctx.extensions.clone(),

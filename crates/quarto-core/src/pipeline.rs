@@ -397,6 +397,10 @@ pub fn build_html_pipeline_stages_with_options(
     // tabsets). Same WASM-exclusion reasoning as the two above.
     #[cfg(not(target_arch = "wasm32"))]
     stages.push(Box::new(crate::stage::stages::TabsetsJsStage::new()));
+    // Dashboard runtime scripts (quarto-dashboard.js, bslib components);
+    // a no-op for every other format. Same WASM-exclusion reasoning.
+    #[cfg(not(target_arch = "wasm32"))]
+    stages.push(Box::new(crate::stage::stages::DashboardJsStage::new()));
     // Attribution-generate runs *before* user filters so the
     // `quarto.attribution.*` Lua host binding sees a populated
     // sidecar in both `pre` and `post` filter passes. No-op when
@@ -613,6 +617,7 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
     "bootstrap-js",
     "clipboard-js",
     "tabsets-js",
+    "dashboard-js",
     "code-highlight",
     "math-js",
     // `html-math-method` is an HTML option; MathMlStage is a no-op for
@@ -2282,6 +2287,11 @@ pub fn build_transform_pipeline(
     // Family axis, from the single derivation point (`PipelineProfile`):
     // true for `RevealjsRender` (native render) and `RevealjsPreview`
     // (`q2-slides`).
+    let is_dashboard = matches!(
+        pipeline_profile,
+        crate::format::PipelineProfile::DashboardRender
+            | crate::format::PipelineProfile::DashboardPreview
+    );
     let is_revealjs = matches!(
         pipeline_profile,
         crate::format::PipelineProfile::RevealjsRender
@@ -2408,7 +2418,12 @@ pub fn build_transform_pipeline(
         // net shape after its DOM postprocessor).
         pipeline.push(Box::new(BookCoverImageTransform::new()));
         pipeline.push(Box::new(TitleBlockTransform::new()));
-        pipeline.push(Box::new(SectionizeTransform::new()));
+        // Dashboards sectionize inside `DashboardTransform`, after cards
+        // are built (Q1's order: a `.card` div that opens with a heading
+        // must not merge into a section first).
+        if !is_dashboard {
+            pipeline.push(Box::new(SectionizeTransform::new()));
+        }
     }
     pipeline.push(Box::new(FootnotesTransform::new()));
     // Immediately after: the HTML-chrome half consuming the `Inline::Note`s
@@ -2779,6 +2794,22 @@ pub fn build_transform_pipeline(
     // future finalization stage that mutates `SourceInfo` is
     // automatically covered without having to remember to insert it
     // before attribution-render.
+    // Dashboards (bd-dashboard-format-k21hd4vy): build the page / row /
+    // column / card structure, then lower it to bslib markup. Last of the
+    // content transforms, as Q1's dashboard filter runs in quarto-post:
+    // every transform above sees an ordinary sectioned document, including
+    // the ones whose walkers do not descend into custom-node slots. The
+    // q2 preview runs the same lowering in its preview mode, which leaves
+    // view nodes for the React preview (plan Phase 8).
+    if is_dashboard {
+        pipeline.push(Box::new(crate::dashboard::DashboardTransform::new()));
+        pipeline.push(Box::new(
+            crate::dashboard::DashboardResolveTransform::with_preview(matches!(
+                pipeline_profile,
+                crate::format::PipelineProfile::DashboardPreview
+            )),
+        ));
+    }
     pipeline.push(Box::new(AttributionRenderTransform::new()));
 
     // After attribution-render: auto-inject the default viewer
@@ -2795,7 +2826,8 @@ pub fn build_transform_pipeline(
     // Format-profile exclude-list application: the same `retain_excluding`
     // seam used by `build_q2_preview_transform_pipeline`, applied here so
     // `build_transform_pipeline` itself is total over `PipelineProfile` —
-    // `HtmlRender`/`RevealjsRender` (native renders) keep every transform;
+    // `HtmlRender`/`RevealjsRender`/`DashboardRender` (native renders) keep
+    // every transform;
     // `HtmlPreview`/`RevealjsPreview` drop `Q2_PREVIEW_TRANSFORM_EXCLUDED`;
     // `Pandoc(_)` (docx, pptx, gfm, …) drops `PANDOC_TRANSFORM_EXCLUDED`,
     // since a Pandoc writer has no HTML chrome/decoration to consume those
@@ -2805,11 +2837,13 @@ pub fn build_transform_pipeline(
             pipeline.retain_excluding(PANDOC_TRANSFORM_EXCLUDED);
         }
         crate::format::PipelineProfile::HtmlPreview
-        | crate::format::PipelineProfile::RevealjsPreview => {
+        | crate::format::PipelineProfile::RevealjsPreview
+        | crate::format::PipelineProfile::DashboardPreview => {
             pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
         }
         crate::format::PipelineProfile::HtmlRender
-        | crate::format::PipelineProfile::RevealjsRender => {}
+        | crate::format::PipelineProfile::RevealjsRender
+        | crate::format::PipelineProfile::DashboardRender => {}
     }
 
     pipeline
@@ -3818,8 +3852,9 @@ mod tests {
         // MathMlStage after the post filters (bd-vlhi2zkj, bd-3evfzwal),
         // plus LmdDesugarStage before the engine and LmdExecuteStage before
         // the user pre-filters (bd-lmd-exploration-jqv2nbl4), plus
-        // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4): 31.
-        assert_eq!(stages.len(), 31);
+        // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
+        // (bd-dashboard-format-k21hd4vy): 32.
+        assert_eq!(stages.len(), 32);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -3862,40 +3897,43 @@ mod tests {
         // grouped-tabset sync module whenever Bootstrap does — same
         // gate as bootstrap-js, so it sits in the same JS block.
         assert_eq!(stages[16].name(), "tabsets-js");
+        // DashboardJsStage ships the dashboard runtime scripts; a no-op for
+        // every other format (bd-dashboard-format-k21hd4vy).
+        assert_eq!(stages[17].name(), "dashboard-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[17].name(), "attribution-generate");
+        assert_eq!(stages[18].name(), "attribution-generate");
         // Listings resolve before the lmd cells and the user pre-filters
         // so both see `meta.listings.<id>` (bd-2oqen84t).
-        assert_eq!(stages[18].name(), "listing-resolve");
+        assert_eq!(stages[19].name(), "listing-resolve");
         // lmd exploration spike 2: cells run after the engine, before user
         // pre-filters.
-        assert_eq!(stages[19].name(), "lmd-execute");
-        assert_eq!(stages[20].name(), "user-filters-pre");
-        assert_eq!(stages[21].name(), "ast-transforms");
-        assert_eq!(stages[22].name(), "user-filters-post");
+        assert_eq!(stages[20].name(), "lmd-execute");
+        assert_eq!(stages[21].name(), "user-filters-pre");
+        assert_eq!(stages[22].name(), "ast-transforms");
+        assert_eq!(stages[23].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[23].name(), "resource-report");
+        assert_eq!(stages[24].name(), "resource-report");
         // Equation-number encoding (bd-vlhi2zkj) must follow
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
-        assert_eq!(stages[24].name(), "equation-number");
+        assert_eq!(stages[25].name(), "equation-number");
         // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
         // converts carries no `\tag`) and precedes math-js (which loads
         // MathJax only for what this stage left as TeX).
-        assert_eq!(stages[25].name(), "math-ml");
-        assert_eq!(stages[26].name(), "code-highlight");
+        assert_eq!(stages[26].name(), "math-ml");
+        assert_eq!(stages[27].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[27].name(), "math-js");
-        assert_eq!(stages[28].name(), "render-html-body");
+        assert_eq!(stages[28].name(), "math-js");
+        assert_eq!(stages[29].name(), "render-html-body");
         // Website search capture (bd-eip0naf4): records the rendered
         // body before the template wraps it.
-        assert_eq!(stages[29].name(), "search-capture");
-        assert_eq!(stages[30].name(), "apply-template");
+        assert_eq!(stages[30].name(), "search-capture");
+        assert_eq!(stages[31].name(), "apply-template");
     }
 
     #[test]
@@ -3905,8 +3943,9 @@ mod tests {
         // LanguageResolveStage and TabsetsJsStage (main), plus
         // EquationNumberStage and MathMlStage, plus LmdDesugarStage and
         // LmdExecuteStage, plus ListingResolveStage (bd-2oqen84t), plus
-        // SearchCaptureStage (bd-eip0naf4) → 31 stages.
-        assert_eq!(pipeline.len(), 31);
+        // SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
+        // (bd-dashboard-format-k21hd4vy) → 32 stages.
+        assert_eq!(pipeline.len(), 32);
     }
 
     #[test]
@@ -5583,7 +5622,15 @@ mod tests {
         // RevealjsRender, HtmlPreview, RevealjsPreview, Pandoc(_). Add new
         // format strings here as they land; the invariant then covers them
         // automatically.
-        for format in ["html", "revealjs", "q2-preview", "q2-slides", "docx"] {
+        for format in [
+            "html",
+            "revealjs",
+            "dashboard",
+            "q2-preview",
+            "q2-slides",
+            "q2-dashboard",
+            "docx",
+        ] {
             let runtime = make_test_runtime();
             let pipeline = build_transform_pipeline(
                 vec![],

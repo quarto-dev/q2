@@ -56,6 +56,24 @@ Minimal `format: revealjs` decks, one per authoring feature, under
 with a single `slides.qmd`. They back the reveal.js documentation page
 (`docs/presentations/revealjs/index.qmd`).
 
+## Dashboard examples
+
+Minimal `format: dashboard` projects, one per feature, under
+[`dashboards/`](dashboards/). Each is a `type: default` project with a single
+`dashboard.qmd` (07 is a website). They are engine-free: charts are small SVG
+files and tables are markdown, so they render without R or Python. They back
+the dashboard documentation page (`docs/dashboards/index.qmd`).
+
+| Example | Demonstrates |
+|---|---|
+| [`dashboards/01-basic-layout`](dashboards/01-basic-layout/) | Rows and columns from headings, `height` / `width`, `.card` divs |
+| [`dashboards/02-pages`](dashboards/02-pages/) | Level-1 headings as pages, a page with its own `orientation` |
+| [`dashboards/03-value-boxes`](dashboards/03-value-boxes/) | `.valuebox` divs with icons, theme and custom colors, `showcase-position` |
+| [`dashboards/04-sidebars-toolbars`](dashboards/04-sidebars-toolbars/) | A collapsible page sidebar with a `width`, a page toolbar |
+| [`dashboards/05-tabsets`](dashboards/05-tabsets/) | A `.tabset` column, a `.card-toolbar` in a card's header |
+| [`dashboards/06-navigation`](dashboards/06-navigation/) | Navbar title block, `logo`, `nav-buttons`, light/dark themes with a toggle |
+| [`dashboards/07-website`](dashboards/07-website/) | A dashboard page inside a website: site navbar, footer and theme |
+
 ## Plot examples
 
 Hephaestus plot documents (`.hep`) rendered at render time
