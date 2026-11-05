@@ -26,8 +26,9 @@ use quarto_pandoc_types::inline::{Inline, Inlines};
 use quarto_source_map::{By, SourceInfo};
 
 use crate::announcement::Announcement;
+use crate::breakpoint::{Breakpoint, range_classes};
 use crate::footer::{FooterBorder, FooterRegion, PageFooter};
-use crate::item::NavigationItem;
+use crate::item::{NavigationItem, is_blank_text};
 use crate::navbar::{LogoVariant, Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
 use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
@@ -868,18 +869,21 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
 
     // Dropdown submenu: item has a menu and (typically) no direct href.
     if !item.menu.is_empty() {
-        let label = item
-            .text
+        let text = navbar_text(item);
+        let label = text
             .as_ref()
-            .map(render_text)
+            .map(|t| t.html.clone())
             .or_else(|| item.icon.as_deref().map(render_icon))
+            .unwrap_or_default();
+        let aria = navbar_aria_fallback(item, text.as_ref())
+            .map(|a| format!(" {}", a))
             .unwrap_or_default();
         let mut out = String::new();
         out.push_str(&format!("{}<li class=\"nav-item dropdown\">\n", pad));
         out.push_str(&format!(
             "{}  <a class=\"nav-link dropdown-toggle\" href=\"#\" role=\"button\" \
-             data-bs-toggle=\"dropdown\" aria-expanded=\"false\">{}</a>\n",
-            pad, label
+             data-bs-toggle=\"dropdown\" aria-expanded=\"false\"{}>{}</a>\n",
+            pad, aria, label
         ));
         out.push_str(&format!("{}  <ul class=\"dropdown-menu\">\n", pad));
         for sub in &item.menu {
@@ -891,8 +895,8 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
     }
 
     // Plain link.
-    let mut anchor_attrs = link_attrs(item);
-    let label = render_item_label(item);
+    let mut anchor_attrs = navbar_link_attrs(item);
+    let label = render_navbar_label(item);
 
     let href = item.href.as_deref().unwrap_or("#");
     let class = if item.active {
@@ -913,8 +917,8 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
 
 fn render_dropdown_item(item: &NavigationItem, indent: usize) -> String {
     let pad = " ".repeat(indent);
-    let mut attrs = link_attrs(item);
-    let label = render_item_label(item);
+    let mut attrs = navbar_link_attrs(item);
+    let label = render_navbar_label(item);
     let href = item.href.as_deref().unwrap_or("#");
     let class = if item.active {
         "class=\"dropdown-item active\""
@@ -924,6 +928,108 @@ fn render_dropdown_item(item: &NavigationItem, indent: usize) -> String {
     attrs.insert(0, format!("href=\"{}\"", escape_attr(href)));
     attrs.insert(1, class.to_string());
     format!("{}<li><a {}>{}</a></li>\n", pad, attrs.join(" "), label)
+}
+
+/// A navbar item's rendered text, plus whether some viewport range
+/// shows no text at all (a blank variant).
+struct NavbarText {
+    html: String,
+    has_blank_range: bool,
+}
+
+/// Render a navbar item's text. Scalar text renders as today. With
+/// breakpoint variants (bd-navbar-responsive-text-am98rw95), each
+/// distinct run of variants becomes a `<span class="menu-text">`
+/// carrying Bootstrap display utilities that show it only within its
+/// breakpoint range; the lowest variant also covers every narrower
+/// width. Blank ranges emit no span. Adjacent variants that render
+/// identically merge, and a single remaining run renders exactly like
+/// scalar text. `None` when there is no text to show.
+fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
+    if item.text_variants.is_empty() {
+        return item.text.as_ref().map(|cv| NavbarText {
+            html: render_text(cv),
+            has_blank_range: false,
+        });
+    }
+
+    // (start breakpoint, html); blank variants render as "".
+    let mut runs: Vec<(Breakpoint, String)> = Vec::new();
+    for (bp, cv) in &item.text_variants {
+        let html = if is_blank_text(cv) {
+            String::new()
+        } else {
+            render_text(cv)
+        };
+        if runs.last().is_some_and(|(_, prev)| *prev == html) {
+            continue;
+        }
+        runs.push((*bp, html));
+    }
+
+    let has_blank_range = runs.iter().any(|(_, html)| html.is_empty());
+    if runs.len() == 1 {
+        let html = runs.pop().map(|(_, html)| html).unwrap_or_default();
+        return (!html.is_empty()).then_some(NavbarText {
+            html,
+            has_blank_range: false,
+        });
+    }
+
+    let mut html = String::new();
+    for (i, (bp, run_html)) in runs.iter().enumerate() {
+        if run_html.is_empty() {
+            continue;
+        }
+        let from = if i == 0 { Breakpoint::Xs } else { *bp };
+        let until = runs.get(i + 1).map(|(next, _)| *next);
+        let mut classes = vec!["menu-text".to_string()];
+        classes.extend(range_classes(from, until));
+        html.push_str(&format!(
+            "<span class=\"{}\">{}</span>",
+            classes.join(" "),
+            run_html
+        ));
+    }
+    Some(NavbarText {
+        html,
+        has_blank_range,
+    })
+}
+
+/// `aria-label` to add when some viewport range shows no text and the
+/// author gave none: the canonical (widest) text, so the link keeps an
+/// accessible name at every width. Hidden variants are `display: none`
+/// and therefore already absent from the accessibility tree.
+fn navbar_aria_fallback(item: &NavigationItem, text: Option<&NavbarText>) -> Option<String> {
+    if item.aria_label.is_some() || !text.is_some_and(|t| t.has_blank_range) {
+        return None;
+    }
+    let label = item.text.as_ref()?.as_plain_text()?;
+    let label = label.trim();
+    (!label.is_empty()).then(|| format!("aria-label=\"{}\"", escape_attr(label)))
+}
+
+/// [`link_attrs`] plus the navbar's responsive-text `aria-label`
+/// fallback.
+fn navbar_link_attrs(item: &NavigationItem) -> Vec<String> {
+    let mut attrs = link_attrs(item);
+    if let Some(aria) = navbar_aria_fallback(item, navbar_text(item).as_ref()) {
+        attrs.insert(0, aria);
+    }
+    attrs
+}
+
+/// Icon plus text for a navbar link or dropdown entry.
+fn render_navbar_label(item: &NavigationItem) -> String {
+    let mut parts = Vec::new();
+    if let Some(ref icon) = item.icon {
+        parts.push(render_icon(icon));
+    }
+    if let Some(text) = navbar_text(item) {
+        parts.push(text.html);
+    }
+    parts.join(" ")
 }
 
 fn render_item_label(item: &NavigationItem) -> String {
@@ -1498,9 +1604,10 @@ fn theme_for_background(bg: Option<&str>) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::footer::PageFooter;
+    use crate::footer::{FooterRegion, PageFooter};
     use crate::item::NavigationItem;
     use crate::navbar::{CollapseBelow, LogoVariant, Navbar, NavbarLogo, TogglePosition};
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_pandoc_types::inline::{Inline, Str, Strong};
     use quarto_source_map::SourceInfo;
@@ -2032,6 +2139,166 @@ mod tests {
             let html = navbar_to_html(&navbar, None, "./");
             assert!(!html.contains("quarto-search"), "{search:?}: {html}");
         }
+    }
+
+    // bd-navbar-responsive-text-am98rw95 — breakpoint-keyed text.
+
+    /// A navbar item parsed from `text: {k: v, …}`, so the tests exercise
+    /// the same parse → canonical-text path as real config.
+    fn responsive_item(href: Option<&str>, variants: &[(&str, &str)]) -> NavigationItem {
+        let info = SourceInfo::for_test();
+        let text = ConfigValue::new_map(
+            variants
+                .iter()
+                .map(|(k, v)| ConfigMapEntry {
+                    key: k.to_string(),
+                    key_source: info.clone(),
+                    value: s(v),
+                })
+                .collect(),
+            info.clone(),
+        );
+        let mut entries = vec![ConfigMapEntry {
+            key: "text".to_string(),
+            key_source: info.clone(),
+            value: text,
+        }];
+        if let Some(href) = href {
+            entries.push(ConfigMapEntry {
+                key: "href".to_string(),
+                key_source: info.clone(),
+                value: s(href),
+            });
+        }
+        NavigationItem::from_config_value(&ConfigValue::new_map(entries, info)).unwrap()
+    }
+
+    fn render_left(item: NavigationItem) -> String {
+        let navbar = Navbar {
+            left: vec![item],
+            ..Navbar::with_defaults()
+        };
+        navbar_to_html(&navbar, None, "./")
+    }
+
+    #[test]
+    fn navbar_responsive_text_emits_one_span_per_range() {
+        let html = render_left(responsive_item(
+            Some("docs.html"),
+            &[
+                ("xs", "Documentation"),
+                ("lg", "Docs"),
+                ("xl", "Documentation"),
+            ],
+        ));
+        assert!(
+            html.contains(
+                "<a href=\"docs.html\" class=\"nav-link\">\
+                 <span class=\"menu-text d-lg-none\">Documentation</span>\
+                 <span class=\"menu-text d-none d-lg-inline d-xl-none\">Docs</span>\
+                 <span class=\"menu-text d-none d-xl-inline\">Documentation</span></a>"
+            ),
+            "{html}"
+        );
+        // No blank range, so no synthesized aria-label on the link.
+        assert!(!html.contains("aria-label=\"Documentation\""), "{html}");
+    }
+
+    #[test]
+    fn navbar_responsive_lowest_variant_covers_narrow_widths() {
+        let html = render_left(responsive_item(
+            Some("ref.html"),
+            &[("lg", "API"), ("xxl", "API Reference")],
+        ));
+        assert!(
+            html.contains("<span class=\"menu-text d-xxl-none\">API</span>"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<span class=\"menu-text d-none d-xxl-inline\">API Reference</span>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_responsive_single_run_renders_like_scalar_text() {
+        let responsive = render_left(responsive_item(
+            Some("a.html"),
+            &[("md", "About"), ("xl", "About")],
+        ));
+        let scalar = render_left(NavigationItem {
+            href: Some("a.html".to_string()),
+            text: Some(s("About")),
+            ..NavigationItem::default()
+        });
+        assert_eq!(responsive, scalar);
+    }
+
+    #[test]
+    fn navbar_responsive_blank_range_omits_span_and_adds_aria_label() {
+        let mut item = responsive_item(
+            Some("https://github.com/"),
+            &[("xs", "GitHub"), ("lg", ""), ("xxl", "GitHub")],
+        );
+        item.icon = Some("github".to_string());
+        let html = render_left(item);
+        assert!(
+            html.contains(
+                "<a href=\"https://github.com/\" class=\"nav-link\" aria-label=\"GitHub\">\
+                 <i class=\"bi bi-github\"></i> \
+                 <span class=\"menu-text d-lg-none\">GitHub</span>\
+                 <span class=\"menu-text d-none d-xxl-inline\">GitHub</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_responsive_authored_aria_label_wins() {
+        let mut item = responsive_item(Some("g.html"), &[("xs", "GitHub"), ("lg", "")]);
+        item.aria_label = Some("Source code".to_string());
+        let html = render_left(item);
+        assert!(html.contains("aria-label=\"Source code\""), "{html}");
+        assert!(!html.contains("aria-label=\"GitHub\""), "{html}");
+    }
+
+    #[test]
+    fn navbar_responsive_dropdown_toggle_and_menu_items() {
+        let mut parent = responsive_item(None, &[("xs", "Resources"), ("lg", "")]);
+        parent.icon = Some("book".to_string());
+        parent.menu = vec![responsive_item(
+            Some("guide.html"),
+            &[("xs", "Guide"), ("xl", "User Guide")],
+        )];
+        let html = render_left(parent);
+        assert!(
+            html.contains(
+                "data-bs-toggle=\"dropdown\" aria-expanded=\"false\" aria-label=\"Resources\">\
+                 <span class=\"menu-text d-lg-none\">Resources</span></a>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "class=\"dropdown-item\"><span class=\"menu-text d-xl-none\">Guide</span>\
+                 <span class=\"menu-text d-none d-xl-inline\">User Guide</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn footer_items_render_canonical_text_only() {
+        let footer = PageFooter {
+            center: FooterRegion::Items(vec![responsive_item(
+                Some("docs.html"),
+                &[("xs", "Docs"), ("xl", "Documentation")],
+            )]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert!(html.contains(">Documentation</a>"), "{html}");
+        assert!(!html.contains("menu-text"), "{html}");
     }
 
     #[test]

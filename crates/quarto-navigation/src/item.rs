@@ -20,8 +20,11 @@
 //! `as_plain_text()` or walk the inlines themselves.
 
 use quarto_pandoc_types::ConfigMapEntry;
-use quarto_pandoc_types::config_value::ConfigValue;
+use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
 use quarto_source_map::{By, SourceInfo};
+use yaml_rust2::Yaml;
+
+use crate::breakpoint::Breakpoint;
 
 /// A single navigation item — a link, an icon button, or a submenu.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -44,7 +47,25 @@ pub struct NavigationItem {
 
     /// Display text. Preserved as `ConfigValue` so markdown inlines from
     /// document metadata survive without being flattened.
+    ///
+    /// When the author wrote breakpoint-keyed text (`text: {lg: Docs,
+    /// xl: Documentation}`), this holds the *canonical* text: the
+    /// widest non-blank variant. Consumers that need a single label
+    /// (enrichment, search breadcrumbs, sidebars, footers) read it and
+    /// never see the map. Only the navbar renderer reads
+    /// [`text_variants`](Self::text_variants).
     pub text: Option<ConfigValue>,
+
+    /// Breakpoint-keyed text variants (bd-navbar-responsive-text-am98rw95),
+    /// sorted ascending by breakpoint, at most one per breakpoint.
+    /// Empty when `text:` was a scalar or absent. Each variant applies
+    /// from its breakpoint up to the next one; the lowest also covers
+    /// every narrower width. A blank variant (`""`) means "no text in
+    /// this range" (the icon-only idiom).
+    ///
+    /// Round-trips through `to_config_value` as the authored map, and
+    /// `text` is re-derived from it on every parse.
+    pub text_variants: Vec<(Breakpoint, ConfigValue)>,
 
     /// Bootstrap icon name (e.g. `github`, `bluesky`).
     pub icon: Option<String>,
@@ -162,7 +183,13 @@ impl NavigationItem {
                 |(s, info)| (Some(s), info),
             );
 
-        let text = cv.get("text").cloned();
+        let (text, text_variants) = match cv.get("text") {
+            Some(t) if t.is_map() => {
+                let variants = parse_text_variants(t);
+                (canonical_text(&variants).cloned(), variants)
+            }
+            other => (other.cloned(), Vec::new()),
+        };
         let icon = cv.get("icon").and_then(|v| v.as_plain_text());
         let aria_label = cv.get("aria-label").and_then(|v| v.as_plain_text());
         let rel = cv.get("rel").and_then(|v| v.as_plain_text());
@@ -201,6 +228,7 @@ impl NavigationItem {
             href,
             href_source,
             text,
+            text_variants,
             icon,
             aria_label,
             rel,
@@ -211,6 +239,15 @@ impl NavigationItem {
             // bare scalar to fall back to.
             bare_text: None,
         })
+    }
+
+    /// Re-derive [`text`](Self::text) from
+    /// [`text_variants`](Self::text_variants) after the variants were
+    /// edited in place (e.g. link rewriting). No-op for scalar text.
+    pub fn refresh_canonical_text(&mut self) {
+        if !self.text_variants.is_empty() {
+            self.text = canonical_text(&self.text_variants).cloned();
+        }
     }
 
     /// Serialise back to a `ConfigValue` map suitable for storing at
@@ -232,7 +269,22 @@ impl NavigationItem {
                 value: ConfigValue::new_string(href, self.href_source.clone()),
             });
         }
-        if let Some(ref text) = self.text {
+        if !self.text_variants.is_empty() {
+            let variant_entries = self
+                .text_variants
+                .iter()
+                .map(|(bp, value)| ConfigMapEntry {
+                    key: bp.as_str().to_string(),
+                    key_source: source_info.clone(),
+                    value: value.clone(),
+                })
+                .collect();
+            entries.push(ConfigMapEntry {
+                key: "text".to_string(),
+                key_source: source_info.clone(),
+                value: ConfigValue::new_map(variant_entries, source_info.clone()),
+            });
+        } else if let Some(ref text) = self.text {
             entries.push(ConfigMapEntry {
                 key: "text".to_string(),
                 key_source: source_info.clone(),
@@ -290,6 +342,99 @@ impl NavigationItem {
         }
 
         ConfigValue::new_map(entries, source_info)
+    }
+}
+
+/// Read a map-valued `text:` into breakpoint variants. Unknown keys are
+/// skipped here (the generate transform warns about them via
+/// [`responsive_text_warnings`]); a repeated key keeps its last value,
+/// matching YAML-map override semantics.
+fn parse_text_variants(map: &ConfigValue) -> Vec<(Breakpoint, ConfigValue)> {
+    let mut variants: Vec<(Breakpoint, ConfigValue)> = Vec::new();
+    for entry in map.as_map_entries().unwrap_or_default() {
+        let Some(bp) = Breakpoint::from_str(&entry.key) else {
+            continue;
+        };
+        variants.retain(|(existing, _)| *existing != bp);
+        variants.push((bp, entry.value.clone()));
+    }
+    variants.sort_by_key(|(bp, _)| *bp);
+    variants
+}
+
+/// The widest non-blank variant, or `None` when every variant is blank.
+fn canonical_text(variants: &[(Breakpoint, ConfigValue)]) -> Option<&ConfigValue> {
+    variants
+        .iter()
+        .rev()
+        .map(|(_, v)| v)
+        .find(|v| !is_blank_text(v))
+}
+
+/// Whether a text value renders as nothing: null, an empty/whitespace
+/// string, or empty parsed markdown. Decided by kind rather than by
+/// plain-text extraction, so an image-only label (plain text `""`) is
+/// *not* blank.
+pub fn is_blank_text(cv: &ConfigValue) -> bool {
+    match &cv.value {
+        ConfigValueKind::Scalar {
+            yaml: Yaml::Null, ..
+        } => true,
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => s.trim().is_empty(),
+        ConfigValueKind::PandocInlines(inlines) => inlines.is_empty(),
+        ConfigValueKind::PandocBlocks(blocks) => blocks.is_empty(),
+        _ => false,
+    }
+}
+
+/// A problem with an authored breakpoint-keyed `text:` map.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResponsiveTextWarning {
+    /// A key that is not a breakpoint name. Its text is ignored.
+    UnknownBreakpoint { key: String, location: SourceInfo },
+    /// A `text:` map with no breakpoint keys at all, so the item has
+    /// no authored text.
+    NoBreakpoints { location: SourceInfo },
+}
+
+/// Check every map-valued `text:` in a list of *authored* navigation
+/// items (and their nested `menu:` items). Run on the raw config, not
+/// on parsed [`NavigationItem`]s, because parsing drops the unknown
+/// keys and their source locations.
+pub fn responsive_text_warnings(items: &ConfigValue) -> Vec<ResponsiveTextWarning> {
+    let mut warnings = Vec::new();
+    collect_text_warnings(items, &mut warnings);
+    warnings
+}
+
+fn collect_text_warnings(items: &ConfigValue, warnings: &mut Vec<ResponsiveTextWarning>) {
+    for item in items.as_array().unwrap_or_default() {
+        if let Some(text) = item.get("text")
+            && let Some(entries) = text.as_map_entries()
+        {
+            let mut any_known = false;
+            for entry in entries {
+                if Breakpoint::from_str(&entry.key).is_some() {
+                    any_known = true;
+                } else {
+                    warnings.push(ResponsiveTextWarning::UnknownBreakpoint {
+                        key: entry.key.clone(),
+                        location: entry.key_source.clone(),
+                    });
+                }
+            }
+            if !any_known {
+                warnings.push(ResponsiveTextWarning::NoBreakpoints {
+                    location: text.source_info.clone(),
+                });
+            }
+        }
+        if let Some(menu) = item.get("menu") {
+            collect_text_warnings(menu, warnings);
+        }
     }
 }
 
@@ -481,5 +626,148 @@ mod tests {
         assert_eq!(reparsed.menu.len(), 2);
         assert_eq!(reparsed.menu[0].href, original.menu[0].href);
         assert_eq!(reparsed.menu[1].href, original.menu[1].href);
+    }
+
+    // bd-navbar-responsive-text-am98rw95 — breakpoint-keyed `text:`.
+
+    fn text_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        map(vec![("href", s("docs.qmd")), ("text", map(entries))])
+    }
+
+    fn variant_keys(item: &NavigationItem) -> Vec<&'static str> {
+        item.text_variants
+            .iter()
+            .map(|(bp, _)| bp.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn text_map_parses_sorted_variants_and_canonical_text() {
+        let item = NavigationItem::from_config_value(&text_map(vec![
+            ("xl", s("Documentation")),
+            ("lg", s("Docs")),
+        ]))
+        .unwrap();
+        assert_eq!(variant_keys(&item), vec!["lg", "xl"]);
+        // Canonical text is the widest variant.
+        assert_eq!(
+            item.text.unwrap().as_plain_text().as_deref(),
+            Some("Documentation")
+        );
+    }
+
+    #[test]
+    fn text_map_canonical_skips_blank_widest_variant() {
+        let item =
+            NavigationItem::from_config_value(&text_map(vec![("xs", s("GitHub")), ("lg", s(""))]))
+                .unwrap();
+        assert_eq!(
+            item.text.unwrap().as_plain_text().as_deref(),
+            Some("GitHub")
+        );
+    }
+
+    #[test]
+    fn text_map_all_blank_has_no_canonical_text() {
+        let item =
+            NavigationItem::from_config_value(&text_map(vec![("xs", s("")), ("lg", s("  "))]))
+                .unwrap();
+        assert!(item.text.is_none());
+        assert_eq!(item.text_variants.len(), 2);
+    }
+
+    #[test]
+    fn text_map_ignores_unknown_keys() {
+        let item =
+            NavigationItem::from_config_value(&text_map(vec![("md2", s("X")), ("md", s("Y"))]))
+                .unwrap();
+        assert_eq!(variant_keys(&item), vec!["md"]);
+        let none = NavigationItem::from_config_value(&text_map(vec![("wide", s("X"))])).unwrap();
+        assert!(none.text.is_none());
+        assert!(none.text_variants.is_empty());
+    }
+
+    #[test]
+    fn text_map_repeated_key_keeps_last_value() {
+        let item =
+            NavigationItem::from_config_value(&text_map(vec![("lg", s("A")), ("lg", s("B"))]))
+                .unwrap();
+        assert_eq!(item.text_variants.len(), 1);
+        assert_eq!(
+            item.text_variants[0].1.as_plain_text().as_deref(),
+            Some("B")
+        );
+    }
+
+    #[test]
+    fn scalar_text_has_no_variants() {
+        let item = NavigationItem::from_config_value(&map(vec![("text", s("About"))])).unwrap();
+        assert!(item.text_variants.is_empty());
+    }
+
+    #[test]
+    fn roundtrip_preserves_text_variants() {
+        let original = NavigationItem::from_config_value(&text_map(vec![
+            ("xs", s("Documentation")),
+            ("lg", s("Docs")),
+            ("xl", s("Documentation")),
+        ]))
+        .unwrap();
+        let cv = original.to_config_value();
+        assert!(cv.get("text").unwrap().is_map());
+        let reparsed = NavigationItem::from_config_value(&cv).unwrap();
+        assert_eq!(variant_keys(&reparsed), vec!["xs", "lg", "xl"]);
+        assert_eq!(
+            reparsed.text.unwrap().as_plain_text().as_deref(),
+            Some("Documentation")
+        );
+    }
+
+    #[test]
+    fn blank_text_is_decided_by_kind() {
+        assert!(is_blank_text(&s("")));
+        assert!(is_blank_text(&s(" ")));
+        assert!(is_blank_text(&ConfigValue::null(SourceInfo::for_test())));
+        assert!(is_blank_text(&ConfigValue::new_inlines(
+            vec![],
+            SourceInfo::for_test()
+        )));
+        assert!(!is_blank_text(&s("Docs")));
+    }
+
+    #[test]
+    fn warnings_flag_unknown_keys_and_keyless_maps_including_menus() {
+        let nested = map(vec![
+            ("text", s("Parent")),
+            (
+                "menu",
+                ConfigValue::new_array(
+                    vec![text_map(vec![("wide", s("X"))])],
+                    SourceInfo::for_test(),
+                ),
+            ),
+        ]);
+        let items = ConfigValue::new_array(
+            vec![
+                text_map(vec![("md2", s("X")), ("lg", s("Y"))]),
+                map(vec![("text", s("Plain"))]),
+                nested,
+            ],
+            SourceInfo::for_test(),
+        );
+        let warnings = responsive_text_warnings(&items);
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert!(matches!(
+            &warnings[0],
+            ResponsiveTextWarning::UnknownBreakpoint { key, .. } if key == "md2"
+        ));
+        assert!(matches!(
+            &warnings[1],
+            ResponsiveTextWarning::UnknownBreakpoint { key, .. } if key == "wide"
+        ));
+        assert!(matches!(
+            &warnings[2],
+            ResponsiveTextWarning::NoBreakpoints { .. }
+        ));
     }
 }

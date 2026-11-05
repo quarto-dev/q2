@@ -48,6 +48,7 @@ Examples that exercise the website-projects feature surface
 | [`websites/08-hub-preview`](websites/08-hub-preview/) | Hub-client live preview against a website project (manual browser recipe) |
 | [`websites/09-interactive-listing`](websites/09-interactive-listing/) | A `type: metadata` listing, an `{lmd}` cell that writes the page from its items, and a TypeScript React component that filters the posts by tag (bd-react-components-a8flgldm) |
 | [`websites/10-federated-search`](websites/10-federated-search/) | One search box over three websites: an umbrella site whose `website.search.federate` list pulls in two product sites, all rendered into one served tree |
+| [`websites/11-responsive-navbar`](websites/11-responsive-navbar/) | Navbar item `text:` keyed by breakpoint: full labels on wide screens and in the collapsed menu, short ones where the expanded bar is cramped, icon-only ranges |
 
 ## Presentation examples
 

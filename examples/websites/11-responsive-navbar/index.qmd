@@ -1,0 +1,45 @@
+---
+title: Home
+---
+
+This example shows **responsive navbar text**: each item in the navbar
+above can show different text at different window widths. Resize the
+browser window and watch the labels change.
+
+A navbar item's `text:` is usually a string. Here, most items give a
+map from breakpoint names to text instead:
+
+```yaml
+- href: guide/index.qmd
+  text:
+    xs: Getting Started   # collapsed menu, below 992px
+    lg: Start             # expanded but cramped, 992px to 1200px
+    xl: Getting Started   # 1200px and wider
+```
+
+Each variant applies from its breakpoint up to the next key in the
+map. The breakpoints are Bootstrap's:
+
+| key | applies from |
+|---|---|
+| `xs` | 0 |
+| `sm` | 576px |
+| `md` | 768px |
+| `lg` | 992px |
+| `xl` | 1200px |
+| `xxl` | 1400px |
+
+## What each width shows
+
+| window width | navbar |
+|---|---|
+| below 992px | collapsed menu: Getting Started, Configuration Guide, Tutorials and Examples, Release Notes, API, Community Resources, GitHub |
+| 992px to 1200px | Start, Config, Tutorials, Releases, API, Community, GitHub icon only |
+| 1200px to 1400px | Getting Started, Configuration Guide, Tutorials and Examples, Release Notes, API, Community, GitHub icon only |
+| 1400px and wider | Getting Started, Configuration Guide, Tutorials and Examples, Release Notes, API Reference, Community, GitHub |
+
+The short variants matter between 992px and 1200px. At 1000px, the
+full labels don't fit on one line and the navbar items wrap; the short
+labels fit with room to spare.
+
+See the [guide](guide/index.qmd) for the rules in detail.

@@ -1,0 +1,20 @@
+---
+title: Getting Started
+---
+
+The rules for breakpoint-keyed `text:`:
+
+- The keys are `xs`, `sm`, `md`, `lg`, `xl` and `xxl`.
+- Each variant applies from its breakpoint up to the next key.
+- The lowest key also covers every narrower width, so `xs` is
+  optional. The "API" item in the navbar has only `lg` and `xxl`.
+- An empty string shows no text in its range. With `icon:`, this
+  gives an icon-only item, like the GitHub link.
+- Each variant is markdown, like an ordinary `text:` string.
+
+The variants follow the window width, not the navbar's state. To give
+the collapsed menu (below `collapse-below`) its own text, add an `xs`
+key, as the "Getting Started" item does.
+
+The [configuration page](configuration.qmd) covers what happens with a
+mistyped key.

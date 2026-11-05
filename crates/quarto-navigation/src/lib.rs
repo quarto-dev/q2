@@ -20,6 +20,7 @@
 //! `quarto-core` crate owns the AST transforms that call into this crate.
 
 pub mod announcement;
+pub mod breakpoint;
 pub mod footer;
 pub mod item;
 pub mod navbar;
@@ -31,8 +32,9 @@ pub mod sidebar;
 pub use announcement::{
     Announcement, AnnouncementPosition, AnnouncementType, AnnouncementWarning, resolve_announcement,
 };
+pub use breakpoint::Breakpoint;
 pub use footer::{FooterBorder, FooterRegion, PageFooter, resolve_page_footer};
-pub use item::{BareScalar, NavigationItem};
+pub use item::{BareScalar, NavigationItem, ResponsiveTextWarning, responsive_text_warnings};
 pub use navbar::{
     CollapseBelow, LogoVariant, Navbar, NavbarLogo, NavbarTitle, TogglePosition, resolve_navbar,
 };

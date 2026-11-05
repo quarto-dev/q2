@@ -29,7 +29,12 @@
 //! - `navbar` absent or `navbar: true`.
 //! - `navigation.navbar` already populated (user override).
 
-use quarto_navigation::{NavigationItem, resolve_navbar};
+use quarto_config::resolve_website_value;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
+use quarto_navigation::{
+    Breakpoint, NavigationItem, ResponsiveTextWarning, resolve_navbar, responsive_text_warnings,
+};
+use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
@@ -79,6 +84,13 @@ impl AstTransform for NavbarGenerateTransform {
         let Some(mut navbar) = resolve_navbar(&ast.meta) else {
             return Ok(());
         };
+
+        // Breakpoint-keyed `text:` maps (bd-navbar-responsive-text-am98rw95):
+        // checked on the authored config, because parsing drops unknown
+        // keys together with their source locations.
+        for diagnostic in responsive_text_diagnostics(&ast.meta) {
+            ctx.diagnostics.push(diagnostic);
+        }
 
         // Dark-mode toggle: emitted whenever the format has a dark
         // theme variant (bd-0pic6 A4). Derived from the THEME config,
@@ -166,6 +178,50 @@ impl AstTransform for NavbarGenerateTransform {
 
         Ok(())
     }
+}
+
+/// `Q-13-18` warnings for the navbar's breakpoint-keyed `text:` maps.
+fn responsive_text_diagnostics(meta: &ConfigValue) -> Vec<DiagnosticMessage> {
+    let Some(navbar_cv) = resolve_website_value(meta, "navbar") else {
+        return Vec::new();
+    };
+    let valid = Breakpoint::ALL
+        .iter()
+        .map(|bp| format!("`{}`", bp.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    ["left", "right"]
+        .into_iter()
+        .filter_map(|side| navbar_cv.get(side))
+        .flat_map(responsive_text_warnings)
+        .map(|warning| match warning {
+            ResponsiveTextWarning::UnknownBreakpoint { key, location } => {
+                DiagnosticMessageBuilder::warning("Unknown breakpoint in navbar item text")
+                    .with_code("Q-13-18")
+                    .problem(format!(
+                        "`{key}` is not a breakpoint name, so the text given for it is never \
+                         shown."
+                    ))
+                    .add_hint(format!("The breakpoint names are {valid}."))
+                    .with_location(location)
+                    .build()
+            }
+            ResponsiveTextWarning::NoBreakpoints { location } => {
+                DiagnosticMessageBuilder::warning("Unknown breakpoint in navbar item text")
+                    .with_code("Q-13-18")
+                    .problem(
+                        "This navbar item's `text:` is a map, but none of its keys is a \
+                         breakpoint name, so it has no text of its own.",
+                    )
+                    .add_hint(format!(
+                        "Key each text variant by a breakpoint name ({valid}), or give \
+                         `text:` a single string."
+                    ))
+                    .with_location(location)
+                    .build()
+            }
+        })
+        .collect()
 }
 
 /// Walk navbar items (including nested dropdown `menu` children) and
@@ -282,6 +338,102 @@ mod tests {
             .await
             .unwrap();
         ast.meta
+    }
+
+    // bd-navbar-responsive-text-am98rw95 — breakpoint-keyed text.
+
+    /// Run the transform on `meta` and return its diagnostics' codes and
+    /// problem text, plus the stored navbar.
+    async fn run_collecting_diagnostics(meta: ConfigValue) -> (Vec<String>, ConfigValue) {
+        let mut ast = Pandoc {
+            meta,
+            blocks: vec![],
+        };
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        NavbarGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let diags = ctx
+            .diagnostics
+            .iter()
+            .map(|d| format!("{} {}", d.code.clone().unwrap_or_default(), d.to_text(None)))
+            .collect();
+        (diags, ast.meta)
+    }
+
+    #[tokio::test]
+    async fn responsive_text_variants_survive_generate() {
+        let item = config_map(vec![
+            ("href", str_value("docs.qmd")),
+            (
+                "text",
+                config_map(vec![
+                    ("lg", str_value("Docs")),
+                    ("xl", str_value("Documentation")),
+                ]),
+            ),
+        ]);
+        let meta = config_map(vec![(
+            "website",
+            config_map(vec![(
+                "navbar",
+                config_map(vec![("left", array_value(vec![item]))]),
+            )]),
+        )]);
+        let (diags, out) = run_collecting_diagnostics(meta).await;
+        assert!(diags.is_empty(), "{diags:?}");
+        let stored = out.get_path(&["navigation", "navbar", "left"]).unwrap();
+        let text = stored.as_array().unwrap()[0].get("text").unwrap();
+        assert_eq!(
+            text.get("lg").and_then(|v| v.as_plain_text()).as_deref(),
+            Some("Docs")
+        );
+        assert_eq!(
+            text.get("xl").and_then(|v| v.as_plain_text()).as_deref(),
+            Some("Documentation")
+        );
+    }
+
+    #[tokio::test]
+    async fn responsive_text_unknown_keys_warn_q_13_18() {
+        let typo = config_map(vec![
+            ("href", str_value("a.qmd")),
+            (
+                "text",
+                config_map(vec![("md2", str_value("A")), ("lg", str_value("B"))]),
+            ),
+        ]);
+        let keyless = config_map(vec![
+            ("text", str_value("Menu")),
+            (
+                "menu",
+                array_value(vec![config_map(vec![
+                    ("href", str_value("b.qmd")),
+                    ("text", config_map(vec![("en", str_value("B"))])),
+                ])]),
+            ),
+        ]);
+        let meta = config_map(vec![(
+            "navbar",
+            config_map(vec![
+                ("left", array_value(vec![typo])),
+                ("right", array_value(vec![keyless])),
+            ]),
+        )]);
+        let (diags, _) = run_collecting_diagnostics(meta).await;
+        assert_eq!(diags.len(), 3, "{diags:#?}");
+        assert!(
+            diags.iter().all(|d| d.starts_with("Q-13-18 ")),
+            "{diags:#?}"
+        );
+        assert!(diags[0].contains("`md2`"), "{}", diags[0]);
+        assert!(diags[1].contains("`en`"), "{}", diags[1]);
+        assert!(diags[2].contains("none of its keys"), "{}", diags[2]);
     }
 
     // --- Existing Phase 2 tests (preserved; Phase 3 doesn't touch

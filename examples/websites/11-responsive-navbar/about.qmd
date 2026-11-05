@@ -1,0 +1,8 @@
+---
+title: About this project
+---
+
+This page is inside the "Community" dropdown. Its menu entry reads
+"About" below 1200px and "About this project" at 1200px and wider.
+Text variants work inside dropdown menus too, although a dropdown's
+width does not grow with the window.

@@ -1,0 +1,7 @@
+---
+title: API Reference
+---
+
+This page is linked from the navbar as "API" below 1400px and as
+"API Reference" at 1400px and wider. The item's `text:` has only `lg`
+and `xxl` keys; `lg` also covers the collapsed menu.

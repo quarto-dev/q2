@@ -164,6 +164,19 @@ const MARKDOWN_CONFIG_PATHS: &[&[&str]] = &[
     &["announcement", "content"],
 ];
 
+/// Navbar item `text:` paths whose value may also be a breakpoint-keyed
+/// map (bd-navbar-responsive-text-am98rw95). Each map variant gets
+/// markdown semantics: the walk appends every breakpoint name to these
+/// patterns. Scoped to the navbar, the only renderer that shows the
+/// variants; a pattern segment is a literal key, so a non-breakpoint key
+/// in the map is never parsed.
+const RESPONSIVE_TEXT_PATHS: &[&[&str]] = &[
+    &["website", "navbar", "left", "**", "text"],
+    &["website", "navbar", "right", "**", "text"],
+    &["navbar", "left", "**", "text"],
+    &["navbar", "right", "**", "text"],
+];
+
 /// AST transform: apply [`MARKDOWN_CONFIG_PATHS`] to merged metadata.
 pub struct ConfigMarkdownTransform;
 
@@ -210,6 +223,13 @@ pub fn apply_markdown_config_paths(
     };
     for pattern in MARKDOWN_CONFIG_PATHS {
         apply_pattern(meta, pattern, 0, &mut walk);
+    }
+    for base in RESPONSIVE_TEXT_PATHS {
+        for bp in quarto_navigation::Breakpoint::ALL {
+            let mut pattern = base.to_vec();
+            pattern.push(bp.as_str());
+            apply_pattern(meta, &pattern, 0, &mut walk);
+        }
     }
 }
 
@@ -543,6 +563,78 @@ mod tests {
 
     /// Navbar item `text:` becomes inlines — at the top level and
     /// inside a nested `menu:` (decision 2: the whole item-text slice).
+    /// bd-navbar-responsive-text-am98rw95 — every breakpoint variant of a
+    /// map-valued navbar `text:` is markdown, at the top level and inside
+    /// a nested `menu:`; non-breakpoint keys stay literal.
+    #[test]
+    fn navbar_responsive_text_variants_parse() {
+        let submenu = map(vec![
+            ("text", map(vec![("xs", s("*a*")), ("xl", s("*b*"))])),
+            ("href", s("s.qmd")),
+        ]);
+        let item = map(vec![
+            (
+                "text",
+                map(vec![("lg", s("**Docs**")), ("wide", s("*kept*"))]),
+            ),
+            ("menu", arr(vec![submenu])),
+        ]);
+        let mut meta = map(vec![("navbar", map(vec![("right", arr(vec![item]))]))]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+
+        let right = meta
+            .get_path(&["navbar", "right"])
+            .unwrap()
+            .as_array()
+            .unwrap();
+        let text = right[0].get("text").unwrap();
+        assert!(matches!(
+            &text.get("lg").unwrap().value,
+            ConfigValueKind::PandocInlines(_)
+        ));
+        assert!(matches!(
+            &text.get("wide").unwrap().value,
+            ConfigValueKind::Scalar { .. }
+        ));
+        let sub_text = right[0].get("menu").unwrap().as_array().unwrap()[0]
+            .get("text")
+            .unwrap();
+        for key in ["xs", "xl"] {
+            assert!(
+                matches!(
+                    &sub_text.get(key).unwrap().value,
+                    ConfigValueKind::PandocInlines(_)
+                ),
+                "menu variant {key}: {:?}",
+                sub_text.get(key).unwrap().value
+            );
+        }
+    }
+
+    /// An empty variant (the icon-only idiom) still reads as blank after
+    /// markdown parsing.
+    #[test]
+    fn navbar_responsive_empty_variant_stays_blank() {
+        let item = map(vec![("text", map(vec![("lg", s(""))]))]);
+        let mut meta = map(vec![("navbar", map(vec![("left", arr(vec![item]))]))]);
+        let mut diags = Vec::new();
+        apply_markdown_config_paths(&mut meta, &mut diags);
+        let lg = meta
+            .get_path(&["navbar", "left"])
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .get_path(&["text", "lg"])
+            .unwrap()
+            .clone();
+        assert!(
+            quarto_navigation::item::is_blank_text(&lg),
+            "{:?}",
+            lg.value
+        );
+    }
+
     #[test]
     fn navbar_item_text_parses_including_nested_menu() {
         let submenu = map(vec![("text", s("Sub &copy; *emph*")), ("href", s("s.qmd"))]);

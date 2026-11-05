@@ -1,0 +1,55 @@
+---
+title: "Unknown breakpoint in navbar item text"
+description: "A navbar item's breakpoint-keyed text: map has a key that is not a breakpoint name, or no breakpoint keys at all."
+code: Q-13-18
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+  - websites
+---
+
+# `Q-13-18` — Unknown breakpoint in navbar item text
+
+> A navbar item's `text:` is a map, and one of its keys is not a
+> breakpoint name. The text under that key is never shown.
+
+## What this means
+
+A navbar item can give its `text:` as a map from breakpoint names
+to labels, to show
+[different text at different window widths](../../guides/projects/navbar-responsive-text.qmd):
+
+```yaml
+website:
+  navbar:
+    left:
+      - href: reference/index.qmd
+        text:
+          lg: API
+          xxl: API Reference
+```
+
+The keys must be Bootstrap breakpoint names: `xs`, `sm`, `md`, `lg`,
+`xl`, `xxl`. Quarto ignores any other key and reports it with this
+warning. If no key in the map is a breakpoint name, the item has no
+text of its own, and the warning points at the whole map.
+
+## Why this happens
+
+- **A typo or a different spelling**, such as `md2`, `large`, `XL`,
+  or `2xl`. Keys are lowercase and match the list above exactly.
+- **A pixel width** such as `800px`. Use the breakpoint whose range
+  contains it instead (`md` covers 768px up to 992px).
+- **A map meant for something else**, such as `text: {en: …, fr: …}`.
+  Navbar text is not keyed by language.
+
+## How to fix
+
+Rename the key to one of the breakpoint names, or give `text:` a
+single string.
+
+## Related
+
+- [Responsive navbar text](../../guides/projects/navbar-responsive-text.qmd)
