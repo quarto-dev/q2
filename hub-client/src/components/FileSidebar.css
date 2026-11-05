@@ -1,7 +1,8 @@
 .file-sidebar {
   /* Toolbar height (8px padding × 2 + 28px buttons + 1px border), fixed
-     so the sticky folder headers can offset themselves below it. */
-  --sidebar-files-toolbar-height: 45px;
+     so the sticky folder headers can offset themselves below it. Zero
+     when FileTree is rendered without its toolbar slot. */
+  --sidebar-files-toolbar-height: 0px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -11,6 +12,10 @@
      the sidebar column is the scroll container, and a clipping ancestor
      would become the scrollport for the sticky folder headers below,
      which would then never pin. */
+}
+
+.file-sidebar.with-toolbar {
+  --sidebar-files-toolbar-height: 45px;
 }
 
 .file-sidebar.drag-over {

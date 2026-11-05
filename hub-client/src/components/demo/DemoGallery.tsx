@@ -7,7 +7,9 @@ import type { ComponentType, ReactNode } from 'react';
 import SimpleAuthDemo from './SimpleAuthDemo';
 import MonacoDemo from './MonacoDemo';
 import PreviewDemo from './PreviewDemo';
+import ProjectDemo from './ProjectDemo';
 import RadioTower from './RadioTower';
+import { QuartoFolderIcon } from '../icons';
 import './DemoGallery.css';
 
 interface Demo {
@@ -35,6 +37,12 @@ const DEMOS: Record<string, Demo> = {
     description: 'Read-only preview of the same project file, rendered by the hub preview pipeline.',
     icon: <span className="dg-glyph">◎</span>,
     Component: PreviewDemo,
+  },
+  project: {
+    title: 'Project',
+    description: 'The hub-client file sidebar listing the same project, live from its index doc.',
+    icon: <span className="dg-glyph"><QuartoFolderIcon size={40} /></span>,
+    Component: ProjectDemo,
   },
 };
 
