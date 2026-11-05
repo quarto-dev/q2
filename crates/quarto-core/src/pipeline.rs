@@ -89,7 +89,7 @@ use crate::transforms::{
     EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
     FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
     FootnotesResolveTransform, FootnotesTransform, LinkExternalTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    BraceDiagramCellDiagnosticsTransform, ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
     MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
     PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
@@ -2321,6 +2321,10 @@ pub fn build_transform_pipeline(
     // before any sugaring rewrites spans, so it still sees the document
     // essentially as the author wrote it.
     pipeline.push(Box::new(ReferenceLinkDiagnosticsTransform::new()));
+    // GH #1067: warn on Quarto 1 `{mermaid}` / `{dot}` cells (Q-2-58), which
+    // otherwise render silently as code blocks. Read-only; runs after engine
+    // execution, so cells an engine claimed are already gone.
+    pipeline.push(Box::new(BraceDiagramCellDiagnosticsTransform::new()));
     // The callout's resolve half runs in the CROSSREF PHASE below, not
     // here: a crossref callout's title shows its number ("Note 1"), which
     // `CrossrefIndexTransform` assigns (GH #1020, bd-h14a4m83).
@@ -3122,6 +3126,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // predicate, so a docx render warns about `[label][ref]` exactly as an
     // HTML one does.
     ("reference-link-diagnostics", Bucket::B1),
+    ("brace-diagram-cell-diagnostics", Bucket::B1),
     // Sugar halves only. Each `*-resolve` sibling is B4 (see below).
     ("callout", Bucket::B1),
     ("panel-tabset", Bucket::B1),
@@ -6734,6 +6739,7 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
@@ -6832,6 +6838,7 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
                 "panel-tabset",
                 "panel-tabset-resolve",
@@ -7022,6 +7029,7 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
                 "panel-tabset",
                 "config-markdown",
@@ -7214,6 +7222,7 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
                 "config-markdown",
                 "shortcode-resolve",
