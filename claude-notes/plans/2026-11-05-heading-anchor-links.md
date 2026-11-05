@@ -62,16 +62,18 @@ Confirmed by grep at `3fb2f41b7`:
 - **Phase 2 — Emit `anchored`.** New Finalization transform after `AppendixStructureTransform`, scoped to the main-content region; idempotent.
 - **Phase 3 — Runtime.** Vendor `anchor.min.js` (+ `vendored.toml`, `resources/js/README.md`), register a `js:` artifact stage following `bootstrap_js.rs`, and emit the small init snippet with the icon option.
 - **Phase 4 — CSS.** Port `_quarto-rules.scss:147-177` rules for `.anchorjs-link` into the Bootstrap and non-Bootstrap bundles; update bd-q36vnfdp's catalog.
-- **Phase 5 — Preview parity.** Decide whether `q2 preview` (hub-client iframe) gets the runtime; see question 3.
+- **Phase 5 — Preview parity.** Out of scope (decision 3); file a follow-up strand.
 - **Phase 6 — Docs.** Document `anchor-sections` in the user docs and changelog.
 
-## Open design questions for the user
+## Design decisions (settled 2026-11-05)
 
-1. **Runtime: vendor AnchorJS or implement natively?** Vendoring the 5.9 KB MIT file is byte-for-byte Q1 behavior (same DOM: `a.anchorjs-link` with `aria-label`, same `data-anchorjs-icon`, same CSS), and it matches the headroom/bootstrap precedent. A native hover link would drop a script but would have to re-derive AnchorJS's DOM and accessibility details. I recommend vendoring, since the goal is parity.
-2. **Config surface: full `anchor-sections` (including the string-icon form) or just the boolean?** Q1 accepts a custom glyph via the same key. Recommend porting both; the string form is a few lines.
-3. **`q2 preview`: include in this change?** The preview iframe re-renders its body from the AST without reloading, so AnchorJS would need re-running after each update (Q1 has no such concern). Options: ship render-only now and file a preview-parity strand, or handle preview here. Recommend render-only first.
-4. **Scope of targets.** Port Q1's full selector list (h2–h6, `.quarto-figure[id]`, `div[id^=tbl-]`) in one go, or headings only for now? Figures/tables need the absolute-positioned CSS and q2's float/xref emitters to produce the same classes/ids — worth verifying per-target before claiming parity.
-5. **Non-Bootstrap themes.** Q1 scopes the content container to `main` for Bootstrap and `body` otherwise. Is the non-Bootstrap (`theme: none`) path in scope, or do we only support the default Bootstrap case initially?
+1. **Runtime:** vendor `anchor.min.js` (Q1 byte parity).
+2. **Option:** full `anchor-sections`, boolean and string-icon forms.
+3. **Preview:** render-only. File a follow-up preview-parity strand when implementation starts.
+4. **Targets:** all of Q1's selectors (h2–h6, `.quarto-figure[id]`, `div[id^=tbl-]`). Verify q2's figure/table emitters produce the ids and classes the selectors need.
+5. **Themes:** Bootstrap path only (container is `main`). Non-Bootstrap is out of scope for now; record that as a known gap.
+
+Status: awaiting the explicit go-ahead to implement.
 
 ## Risks / tradeoffs (draft)
 
