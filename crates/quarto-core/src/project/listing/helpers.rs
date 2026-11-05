@@ -328,7 +328,10 @@ fn html_escape_text(s: &str) -> String {
 /// Semantics, all Q1-observable and kept exactly:
 /// - A string of *fewer* than `max` chars is returned unchanged. A
 ///   string of exactly `max` chars IS truncated (Q1's `trimLength`
-///   compares with strict `<`).
+///   compares with strict `<`). That holds for explicit
+///   descriptions; the first-paragraph readers (preview and feed)
+///   keep exactly-`max` text whole before calling here, matching
+///   Q1's `truncateNode` (GH #1068).
 /// - Truncation takes the first `max` chars, drops one more (Q1's
 ///   `trimAtSpace` shortens before searching), cuts at the last
 ///   `' '` when its index is > 0 (a space at index 0 is not a
