@@ -2200,8 +2200,9 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// but emit different HTML.
 ///
 /// 9. `TocGenerateTransform` - Generate TOC from headers (if `toc: true`)
-/// 10. `NavbarGenerateTransform` - Resolve `navbar:` YAML into `navigation.navbar`
-/// 11. `SidebarGenerateTransform` - Resolve `website.sidebar:` into `navigation.sidebar`
+/// 10. `SidebarGenerateTransform` - Resolve `website.sidebar:` into `navigation.sidebar`
+/// 11. `NavbarGenerateTransform` - Resolve `navbar:` YAML into `navigation.navbar`
+///     (after the sidebar: it marks the page's section active, GH #1064)
 /// 12. `FooterGenerateTransform` - Resolve `page-footer:` YAML into `navigation.footer`
 /// 13. `TocRenderTransform` - Render TOC to HTML for template insertion
 /// 13a. `RepoActionsRenderTransform` - Render repository action links
@@ -2500,8 +2501,11 @@ pub fn build_transform_pipeline(
     // TocGenerate must run after SectionizeTransform so section IDs are
     // available; navbar/footer generates only read top-level metadata.
     pipeline.push(Box::new(TocGenerateTransform::new()));
-    pipeline.push(Box::new(NavbarGenerateTransform::new()));
+    // NavbarGenerate runs after SidebarGenerate: on pages the navbar
+    // doesn't link to, it marks the item for the page's sidebar section
+    // active, reading the resolved `navigation.sidebar` (GH #1064).
     pipeline.push(Box::new(SidebarGenerateTransform::new()));
+    pipeline.push(Box::new(NavbarGenerateTransform::new()));
     // PageNavGenerate must run after SidebarGenerate so it reads the
     // resolved `navigation.sidebar` for the current page.
     pipeline.push(Box::new(PageNavGenerateTransform::new()));
@@ -3210,8 +3214,8 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // new Navigation transform cannot land unexcluded — but it can still
     // land unclassified here, which is what the totality test catches.
     ("toc-generate", Bucket::B4),
-    ("navbar-generate", Bucket::B4),
     ("sidebar-generate", Bucket::B4),
+    ("navbar-generate", Bucket::B4),
     ("page-nav-generate", Bucket::B4),
     ("footer-generate", Bucket::B4),
     ("announcement-generate", Bucket::B4),
@@ -6761,8 +6765,8 @@ mod tests {
                 "crossref-resolve",
                 "callout-resolve",
                 "toc-generate",
-                "navbar-generate",
                 "sidebar-generate",
+                "navbar-generate",
                 "page-nav-generate",
                 "footer-generate",
                 "announcement-generate",
@@ -6860,8 +6864,8 @@ mod tests {
                 "crossref-resolve",
                 "callout-resolve",
                 "toc-generate",
-                "navbar-generate",
                 "sidebar-generate",
+                "navbar-generate",
                 "page-nav-generate",
                 "footer-generate",
                 "announcement-generate",
@@ -7237,8 +7241,8 @@ mod tests {
                 "crossref-index",
                 "crossref-resolve",
                 "toc-generate",
-                "navbar-generate",
                 "sidebar-generate",
+                "navbar-generate",
                 "page-nav-generate",
                 "footer-generate",
                 "announcement-generate",

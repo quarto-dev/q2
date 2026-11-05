@@ -22,6 +22,8 @@
 //!   into dropdown `menu` children. Matches the sidebar convention
 //!   from Phase 2: Generate is format-agnostic; hrefs stay as source
 //!   paths; the HTML-aware rewrite happens in `NavbarRenderTransform`.
+//!   When nothing matches, falls back to the first top-level item whose
+//!   href is in the page's resolved `navigation.sidebar` (GH #1064).
 //!
 //! ## Skip conditions
 //!
@@ -32,7 +34,8 @@
 use quarto_config::resolve_website_value;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_navigation::{
-    Breakpoint, NavigationItem, ResponsiveTextWarning, resolve_navbar, responsive_text_warnings,
+    Breakpoint, NavigationItem, ResponsiveTextWarning, Sidebar, resolve_navbar,
+    responsive_text_warnings,
 };
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -41,7 +44,9 @@ use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::is_feature_disabled;
-use crate::transforms::navigation_active::{mark_active, page_relative_source};
+use crate::transforms::navigation_active::{
+    mark_active, mark_active_for_section, page_relative_source, sidebar_hrefs,
+};
 use crate::transforms::navigation_drafts::prune_unlinkable_items;
 use crate::transforms::navigation_enrich::enrich_navigation_items;
 use crate::transforms::navigation_href::resolve_metadata_path;
@@ -169,8 +174,22 @@ impl AstTransform for NavbarGenerateTransform {
             enrich_navigation_items(&mut navbar.left, index);
             enrich_navigation_items(&mut navbar.right, index);
             let page_source = page_relative_source(ctx);
-            mark_active(&mut navbar.left, &page_source);
-            mark_active(&mut navbar.right, &page_source);
+            let left_hit = mark_active(&mut navbar.left, &page_source);
+            let right_hit = mark_active(&mut navbar.right, &page_source);
+            // GH #1064 — on a page the navbar doesn't link to, mark the
+            // item for its sidebar section instead. Reads the sidebar
+            // `SidebarGenerateTransform` resolved for this page, which
+            // is why that transform runs first (see `pipeline.rs`).
+            if !left_hit
+                && !right_hit
+                && let Some(sidebar_cv) = ast.meta.get_path(&["navigation", "sidebar"])
+            {
+                let section_hrefs = sidebar_hrefs(&Sidebar::from_config_value(sidebar_cv));
+                mark_active_for_section(
+                    &mut [&mut navbar.left[..], &mut navbar.right[..]],
+                    &section_hrefs,
+                );
+            }
         }
 
         ast.meta

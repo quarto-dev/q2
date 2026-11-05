@@ -906,8 +906,10 @@ fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> 
     let label = render_navbar_label(item);
 
     let href = item.href.as_deref().unwrap_or("#");
+    // Q1 parity: the active link also carries `aria-current="page"`
+    // (GH #1064).
     let class = if item.active {
-        "class=\"nav-link active\""
+        "class=\"nav-link active\" aria-current=\"page\""
     } else {
         "class=\"nav-link\""
     };
@@ -2778,8 +2780,8 @@ mod tests {
         };
         let html = navbar_to_html(&navbar, None, "./");
         assert!(
-            html.contains("class=\"nav-link active\""),
-            "expected nav-link active class; got: {}",
+            html.contains("class=\"nav-link active\" aria-current=\"page\""),
+            "expected nav-link active class and aria-current; got: {}",
             html
         );
     }
@@ -2803,6 +2805,7 @@ mod tests {
             "inactive item should not carry active class; got: {}",
             html
         );
+        assert!(!html.contains("aria-current"));
     }
 
     /// Phase 3 test 11 — active propagates into dropdown leaves:
