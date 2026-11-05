@@ -172,7 +172,7 @@ pub struct KnitrExecuteResult {
 
 /// A brace-spelling inline expression recorded by the `evaluate.inline` and `inline`
 /// hooks (EXR-12).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KnitrSpanRecord {
     /// The unit id the span carried in its `.QuartoInlineId` statement.
@@ -181,6 +181,13 @@ pub struct KnitrSpanRecord {
     /// The markdown knitr inserted for the span: empty for a value knitr inserts
     /// nothing for (`invisible`, a zero-length vector).
     pub markdown: String,
+
+    /// The value as a captured piece when knitr read it as `knit_asis` or image paths (an
+    /// `I(...)`-wrapped htmlwidget or `include_graphics()`): the same wire shape as a chunk
+    /// piece, so the record can hold the mime knitr produced, not only the flattened text
+    /// (KNR-4 decision 6). Absent for a plain value.
+    #[serde(default)]
+    pub piece: Option<KnitrPiece>,
 }
 
 /// A chunk's captured pieces (KNR-1 S2 wire shape).

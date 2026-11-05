@@ -190,7 +190,7 @@ fn build(
         builder.push(
             index,
             UnitResult {
-                outputs: vec![span_output(span, &ctx.format)],
+                outputs: vec![span_output(span, &ctx.format, &|_| None)],
                 ..Default::default()
             },
         )?;
@@ -531,6 +531,7 @@ y = 2
         KnitrSpanRecord {
             id: id.to_string(),
             markdown: markdown.to_string(),
+            piece: None,
         }
     }
 

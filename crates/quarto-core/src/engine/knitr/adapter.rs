@@ -160,7 +160,7 @@ pub(super) fn build_structured(
             .push(
                 by_id[span.id.as_str()],
                 UnitResult {
-                    outputs: vec![span_output(span, &ctx.format)],
+                    outputs: vec![span_output(span, &ctx.format, captured.read_file)],
                     ..Default::default()
                 },
             )

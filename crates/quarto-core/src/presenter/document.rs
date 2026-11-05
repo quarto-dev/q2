@@ -41,8 +41,8 @@ use crate::cell_options::partition_cell_options;
 use crate::engine::units::{InlineUnit, Unit};
 use crate::record::EngineEntry;
 use crate::record::{
-    RecordCell, UnitKind, content_hash, replacement, scanned_author_text, span_content_hash,
-    stored_markdown,
+    RecordCell, UnitKind, content_hash, placed_replacement, replacement, scanned_author_text,
+    span_content_hash, stored_markdown,
 };
 
 /// What presenting a document produced.
@@ -145,7 +145,7 @@ pub fn present_document(
                 });
                 continue;
             }
-            let (start, end, text) = replacement(&units[ui], document_text, &markdown);
+            let (start, end, text) = placed_replacement(cell, &units[ui], document_text, &markdown);
             if matches!(units[ui], Unit::Cell(_)) {
                 // A fallback cell keeps its figure number, as a presented one does.
                 fig.begin_cell();
@@ -936,6 +936,20 @@ print(1)
         let text = "Value `{r} 1 + 1` here.\n";
         let out = present_in(text, &[(0, markdown_unit("2\n", "html"))], "html");
         assert_eq!(out.markdown, "Value 2 here.\n");
+    }
+
+    #[test]
+    fn a_verbatim_inline_unit_keeps_its_trailing_newlines() {
+        // knitr\'s `include_graphics` in a span inserts a block with its own blank lines; the
+        // record marks such a value verbatim, so the fence is not glued to the text after it.
+        let text = "Icon `{r} 1 + 1` here.\n";
+        let unit = vec![json!({
+            "output_type": "display_data",
+            "data": {"text/x-quarto-markdown": "::: {.x}\nA\n:::\n\n"},
+            "metadata": {"quarto_format": "html", "quarto_verbatim": true}
+        })];
+        let out = present_in(text, &[(0, unit)], "html");
+        assert_eq!(out.markdown, "Icon ::: {.x}\nA\n:::\n\n here.\n");
     }
 
     #[test]

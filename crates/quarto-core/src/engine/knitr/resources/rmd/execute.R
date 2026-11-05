@@ -121,6 +121,8 @@ execute <- function(
   if (isTRUE(capture)) {
     source(file.path(resourceDir, "rmd", "capture.R"), local = TRUE)
     knitr <- capture_install(knitr)
+    # KNR-4: an inline span's knit_asis or image value travels as a piece too (hooks.R)
+    quarto_span_records$piece_fn <- capture_piece
   }
 
   # Apply patches to current R environments (like modifying function in packages' namespace)

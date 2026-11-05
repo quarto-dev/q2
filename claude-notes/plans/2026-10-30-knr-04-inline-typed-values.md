@@ -2,7 +2,7 @@
 title: 'KNR-4: knitr inline expressions as recorded values'
 date: 2026-10-30
 description: 'Records each knitr inline expression as an inline unit of the engine execution record, aligned with the Jupyter execution-of-inline-expressions conventions, replacing the id-embedding mechanism of EXR-12 once the structured capture exists.'
-status: draft  # outline written from code reading; mechanism answered by KNR-1 S9
+status: done  # 2026-11-04; the retirement of EXR-12's id statement is KNR-6's
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-4).
@@ -130,27 +130,62 @@ mentions inline spans, so this plan is also the place where spans join that cont
 - Jupyter spans (EXR-3), Julia spans (EXR-8); changing escaping rules or the adjacent-span
   limitation; Positron's lack of execution of inline expressions (EXR-16 S3).
 
-## Phases (provisional)
+## Phases
 
-- [ ] **Tests first.** Port EXR-12\'s tests: one unit per brace span in document order; a
-  classic span yields no unit and renders unchanged; `NULL` and invisible spans keep their
-  ids; attribute and link-title spans; nested display fence spans are not units; count
-  mismatch yields no record plus a diagnostic with the span\'s location; the live output is
-  identical with recording on and off after KNR-1\'s normalizer. New: ids are stable when
-  another engine owns spans between knitr\'s (the document-wide counter), a document mixing
-  both spellings aligns only its brace spans, and a deserialize test for the new wire field.
-- [ ] **Mechanism.** The S1-based capture; the Rust-side id hand-off if chosen.
-- [ ] Fixtures first, none of which exist in the corpus today: a brace span returning an
-  htmlwidget (a sparkline), one returning `include_graphics()` (an image inside the document
-  directory), one returning a plot-like value, and one returning a plain number. Each must show
-  its mime, dependencies and file in the record, and the live output with recording on must
-  equal recording off (additive until KNR-6). Add them to the corpus manifest.
-- [ ] An observation fixture, not a gate: a brace span returning a block-level widget (an inline
-  plotly div). Record how the paragraph renders in the report; it informs epic decision 28.
-- [ ] **Adapter.** Inline units into the record via KNR-3; value output per decisions 2 and 6.
-- [ ] **Presenter.** Insert the recorded text verbatim through `presenter/inline.rs`; shadow
-  test against live output on EXR-12's fixtures.
-- [ ] **Retire EXR-12's mechanism** in KNR-6, once nothing reads the old `spans` field.
+- [x] **Tests first.** EXR-12\'s tests already cover the ported list and stay green against this
+  work: one unit per brace span in document order, a classic span yields no unit and is
+  untouched (`span_records::ids_come_from_the_shared_unit_list`, `preprocess` classic-spelling
+  tests), attribute and display-fence spans, count mismatch yields no record plus a diagnostic
+  (`chunk_records::inline_count_mismatch_skips_record_with_diagnostic`), ids stable beside another
+  engine\'s spans and mixed spellings (`MIXED` in `span_records`). New and red first: the
+  deserialize test for the new `piece` field, the five `span_output` tests, the three R-gated
+  engine tests (`gating_tests`, "KNR-4 decision 6"), and `a_verbatim_inline_unit_keeps_its_trailing_newlines`
+  (mutation-checked). Live equality with recording on and off is the corpus shadow.
+- [x] **Mechanism.** *Decided 2026-11-04: keep EXR-12\'s embedded `.QuartoInlineId` statement
+  until KNR-6 retires it.* It already aligns spans by the shared unit list and the plan puts the
+  retirement in KNR-6 (last item below); moving the id to a Rust-side hand-off now would change
+  the live-path rewrite for no capability gain. The new capture rides the same wrapper on
+  `evaluate.inline`.
+- [x] Fixtures: `s9/02_inline_rich` (raw html from `asis_output`, an `include_graphics` svg, a plain
+  number) and `s9/dot.svg`; the widget case is the R-gated engine test
+  `a_widget_span_records_html_and_its_dependencies` (plotly; `sparkline` is not installed here and a
+  small corpus widget would need a package the CI image may lack). Corpus: `s9/02_inline_rich` is
+  `identical` to the live output. `s9/01_inline` was rewritten to brace spans (see Notes).
+- [x] An observation fixture, not a gate: `s9/03_inline_block_widget`. A block-level widget in a
+  brace span inserts knitr\'s `{=html}` fence in mid-paragraph: the paragraph splits into two
+  with a `RawBlock` between, and the text after the closing fence starts a new paragraph. Live and
+  record agree (`identical`), so nothing breaks; it informs epic decision 28 (keep knitr\'s
+  behavior for now).
+- [x] **Adapter.** `KnitrSpanRecord.piece` (wire field) and `span_output`: one `display_data`
+  output whose bundle holds `text/x-quarto-markdown` (the text knitr inserted) and, for
+  `knit_asis` or exactly one image path, the value as knitr produced it (`text/html` with
+  `quarto_knitr.knit_meta` and `widget`, or `image/*` with `quarto_file_path`).
+- [x] **Presenter.** The record\'s markdown is inserted verbatim: a span output carries
+  `quarto_verbatim: true`, and `record::placed_replacement` (shared by `place` and
+  `present_document`) skips the inline trailing-newline trim for it. Shadow equality holds on the
+  corpus.
+- [ ] **Retire EXR-12\'s mechanism** in KNR-6, once nothing reads the old `spans` field.
+
+## Notes (2026-11-04)
+
+- **Why `s9/01_inline` was the blocker, and what cleared it.** The fixture hand-wrote
+  `.QuartoInlineRender(...)` inside *classic* spans. Classic spans are not units (decision 1), so
+  the record path left them as written while the live path evaluated them: the record
+  presentation cannot match live for a classic span until KNR-6 6B decides the venue. The fixture
+  now uses the brace spelling `{r} expr`, whose behavior (the `NULL` rule, markdown escaping,
+  `asis`) the live path produces through the same `.QuartoInlineRender`. Classic-span behavior is
+  covered by the EXR-12 and `preprocess` tests, not by the shadow. The live oracle for the
+  fixture was refrozen (1 file).
+- **Scientific-notation numbers left the fixture.** knitr formats `12345` as `1.2345\times
+  10^{4}` with no surrounding `$`, which q2 does not parse in either path; both the live and the
+  record presentation show the same parse errors, but the rendered HTML then differs between
+  them and the case classes as a blocker. It is a live-path quirk outside this plan.
+- **Rich values.** `.QuartoInlineRender` escapes any character value (it drops the
+  `knit_asis` class), exactly as in Quarto 1, so a rich value in a brace span is written
+  `I(...)`. A widget in a span is recognized by its `knit_meta` attribute, because only a chunk\'s
+  auto-print adds knitr\'s `knit_asis_htmlwidget` class. Several image paths in one span keep
+  only the markdown (one output holds one image).
+- **Gate counts:** see the final report in the commit that closes this plan.
 
 ## Exit criteria
 

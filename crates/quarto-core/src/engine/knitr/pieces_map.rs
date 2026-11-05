@@ -156,6 +156,28 @@ pub fn pieces_to_cell_anchored(
     ))
 }
 
+/// The one output an inline span\'s value maps to (KNR-4 decision 6), or `None` when the piece
+/// has no single output the record can hold: anything but `knit_asis` text or exactly one image
+/// path, or an image that cannot be read. The caller keeps the span\'s markdown either way.
+pub fn span_piece_output(
+    piece: &KnitrPiece,
+    read_file: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Option<CellOutput> {
+    match piece {
+        KnitrPiece::Asis {
+            text,
+            mime,
+            widget,
+            knit_meta,
+        } => Some(asis(text, mime, *widget, knit_meta.as_deref())),
+        KnitrPiece::ImagePaths { paths, .. } => match paths.as_slice() {
+            [path] => image(path, read_file),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 fn stream(name: &str, text: &str) -> CellOutput {
     CellOutput::Stream {
         name: name.to_string(),

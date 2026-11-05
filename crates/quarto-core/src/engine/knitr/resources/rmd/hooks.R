@@ -91,16 +91,41 @@ chunk_figure_files <- function(options) {
 quarto_span_records <- new.env()
 quarto_span_records$records <- list()
 quarto_span_records$pending <- NULL
+quarto_span_records$pending_piece <- NULL
+# Set by execute() to capture.R's capture_piece when the call is captured; a span value is
+# only turned into a piece then (the live path is untouched).
+quarto_span_records$piece_fn <- NULL
 quarto_span_records$installed <- NULL
+
+# An inline value as a captured piece. Only a chunk's auto-printed widget carries knitr's
+# `knit_asis_htmlwidget` class, so a widget in a span (`I(knit_print(w))`) is recognized by
+# what makes it one: a `knit_meta` attribute holding its dependencies. Such a value is a
+# widget piece, which maps to `text/html` with the dependencies attached.
+quarto_span_piece <- function(res) {
+  piece <- quarto_span_records$piece_fn(res)
+  meta <- attr(res, "knit_meta")
+  if (identical(piece$class, "asis") && length(meta) > 0) {
+    piece$widget <- TRUE
+    piece$mime <- "text/html"
+    piece$knit_meta <- as.character(jsonlite::serializeJSON(meta))
+  }
+  piece
+}
 
 quarto_record_span <- function(markdown) {
   id <- quarto_span_records$pending
   if (is.null(id)) {
     return(invisible(NULL))
   }
+  record <- list(id = id, markdown = markdown)
+  # KNR-4: a value knitr reads as knit_asis or image paths also travels as a piece, so the
+  # record keeps its mime, dependencies and file (see capture_piece in capture.R).
+  if (!is.null(quarto_span_records$pending_piece) && nzchar(markdown)) {
+    record$piece <- quarto_span_records$pending_piece
+  }
   quarto_span_records$pending <- NULL
-  quarto_span_records$records[[length(quarto_span_records$records) + 1]] <-
-    list(id = id, markdown = markdown)
+  quarto_span_records$pending_piece <- NULL
+  quarto_span_records$records[[length(quarto_span_records$records) + 1]] <- record
   invisible(NULL)
 }
 
@@ -145,7 +170,15 @@ quarto_evaluate_inline_hook <- function(base) {
     if (length(m) == 2) {
       quarto_span_records$pending <- m[2]
     }
-    base(code, envir)
+    res <- base(code, envir)
+    if (
+      length(m) == 2 &&
+        is.function(quarto_span_records$piece_fn) &&
+        inherits(res, c("knit_asis", "knit_image_paths"))
+    ) {
+      quarto_span_records$pending_piece <- quarto_span_piece(res)
+    }
+    res
   }
   attr(hook, "quarto_base") <- base
   hook
@@ -157,6 +190,8 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
   quarto_chunk_records$records <- list()
   quarto_span_records$records <- list()
   quarto_span_records$pending <- NULL
+  quarto_span_records$pending_piece <- NULL
+  quarto_span_records$piece_fn <- NULL
   quarto_span_records$installed <- NULL
   knit_hooks[["evaluate.inline"]] <- quarto_evaluate_inline_hook(
     knitr::knit_hooks$get("evaluate.inline")

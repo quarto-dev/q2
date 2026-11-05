@@ -324,3 +324,89 @@ fn a_figure_in_a_project_subdirectory_is_found_and_stays_structured() {
         record.cells[0].outputs
     );
 }
+
+// === KNR-4 decision 6: an inline span\'s value keeps the mime knitr produced ===
+
+const SVG: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>";
+
+/// The single output of the span unit whose position among the spans is `n`.
+fn span_output_at(result: &ExecuteResult, n: usize) -> serde_json::Value {
+    let record = result.record.as_ref().expect("a record");
+    let spans: Vec<_> = record
+        .cells
+        .iter()
+        .filter(|c| c.metadata.quarto_cell_id.ends_with("-inline"))
+        .collect();
+    assert_eq!(spans[n].outputs.len(), 1, "{:?}", spans[n].outputs);
+    spans[n].outputs[0].clone()
+}
+
+#[test]
+fn an_asis_html_span_records_text_html_and_the_inserted_markdown() {
+    if !r_available("an_asis_html_span_records_text_html_and_the_inserted_markdown") {
+        return;
+    }
+    let doc = "```{r}\n1\n```\n\nValue `{r} I(knitr::asis_output(\"<b>x</b>\"))` and `{r} 1+1`.\n";
+    let (result, _dir) = run_doc(doc, "html", true);
+    let rich = span_output_at(&result, 0);
+    assert_eq!(rich["data"]["text/html"], "<b>x</b>");
+    assert_eq!(rich["data"][QUARTO_MARKDOWN_MIME], "<b>x</b>");
+    // A plain value stays markdown only.
+    let plain = span_output_at(&result, 1);
+    assert_eq!(plain["data"].as_object().unwrap().len(), 1);
+    assert_eq!(plain["data"][QUARTO_MARKDOWN_MIME], "2");
+}
+
+#[test]
+fn an_include_graphics_span_records_the_image_and_its_path() {
+    if !r_available("an_include_graphics_span_records_the_image_and_its_path") {
+        return;
+    }
+    let doc = "```{r}\n1\n```\n\nIcon `{r} I(knitr::include_graphics(\"dot.svg\"))`.\n";
+    let (result, _dir) = run_doc_with_files(doc, &[("dot.svg", SVG)], "html", true);
+    let out = span_output_at(&result, 0);
+    assert!(
+        out["data"]["image/svg+xml"]
+            .as_str()
+            .unwrap()
+            .contains("<svg"),
+        "{out}"
+    );
+    assert_eq!(out["metadata"]["quarto_file_path"], "dot.svg");
+    assert!(
+        out["data"][QUARTO_MARKDOWN_MIME]
+            .as_str()
+            .unwrap()
+            .contains("dot.svg")
+    );
+}
+
+#[test]
+fn a_widget_span_records_html_and_its_dependencies() {
+    if !r_available("a_widget_span_records_html_and_its_dependencies") {
+        return;
+    }
+    let has_plotly = Command::new("Rscript")
+        .args([
+            "-e",
+            "quit(status = !requireNamespace('plotly', quietly = TRUE))",
+        ])
+        .status()
+        .is_ok_and(|s| s.success());
+    if !has_plotly {
+        eprintln!("SKIP: plotly not available: a_widget_span_records_html_and_its_dependencies");
+        return;
+    }
+    let doc =
+        "```{r}\n1\n```\n\nChart `{r} I(knitr::knit_print(plotly::plot_ly(x = 1, y = 1)))`.\n";
+    let (result, _dir) = run_doc(doc, "html", true);
+    let out = span_output_at(&result, 0);
+    assert!(
+        out["data"]["text/html"].as_str().unwrap().contains("<div"),
+        "{out}"
+    );
+    assert!(
+        out["metadata"]["quarto_knitr"]["knit_meta"].is_string(),
+        "{out}"
+    );
+}

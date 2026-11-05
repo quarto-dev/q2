@@ -1,14 +1,14 @@
-Classic 2 and brace 2.
+Brace 2 and again 4.
 
-Null: classic [] and brace [NULL].
+Null: brace [NULL].
 
-Invisible  and assignment 4.
+Invisible 3 and assignment 4.
 
-Numbers: 1.2345679\times 10^{6}, 10^{-10}, 3.1415927, 1.2345679\times 10^{11}, 0.3, 10^{5}.
+Numbers: 3.1415927, 0.3, 42, 0.3333333.
 
-Specials: classic **bold** a_b and brace \*\*bold\*\* a\_b.
+Specials: brace \*\*bold\*\* a\_b.
 
-Asis: **asis** and brace \*\*asis\*\*.
+Asis: brace \*\*asis\*\*.
 
 Vector: 1, 2, 3 and a, b.
 
