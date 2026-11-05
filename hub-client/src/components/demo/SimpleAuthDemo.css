@@ -8,11 +8,13 @@
   color: #4b5563;
 }
 
-.sad-page .rt-tower { stroke: #9ca3af; }
+.sad-page .rt-tower, .sad-page .sd-doc { stroke: #9ca3af; }
 .sad-page .rt-waves path { stroke: #c4c9d1; transition: stroke 0.5s ease-out; }
-.sad-page .rt.lit .rt-waves path { stroke: #84cc16; transition-duration: 0.1s; }
+.sad-page .rt-waves.lit path { stroke: #84cc16; transition-duration: 0.1s; }
 
-.sad-count { font-size: 40px; font-weight: 600; color: #374151; }
+.sad-page .sd-count { font-size: 28px; font-weight: 600; fill: #374151; transition: fill 0.5s ease-out; }
+.sad-page .sd-count.lit { fill: #84cc16; transition-duration: 0.1s; }
+.sad-page .sd-label { font-size: 14px; fill: #6b7280; }
 .sad-status { font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .sad-signout { background: none; border: none; color: #6b7280; text-decoration: underline; cursor: pointer; font: inherit; }
 

@@ -1,16 +1,17 @@
 /**
  * #/demo/simple-auth — a standalone example page. A counter document lives
  * in IndexedDB and only reaches the sync server while signed in. Each time
- * the server reports that it holds our latest heads, the radio tower lights
- * up. Auth is handled here directly against the hub's HTTP endpoints.
+ * the counter changes, the document's waves light up; each time the server
+ * reports that it holds our latest heads, the tower's waves light up. Auth is
+ * handled here directly against the hub's HTTP endpoints.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { Repo, isValidAutomergeUrl, type DocHandle } from '@automerge/automerge-repo';
 import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
-import RadioTower from './RadioTower';
+import SyncDiagram from './SyncDiagram';
 import DemoFrame from './DemoFrame';
 import './SimpleAuthDemo.css';
 
@@ -117,13 +118,25 @@ function SignInButton() {
 
 // ── Page ────────────────────────────────────────────────────────────────
 
+/** A boolean that stays true for a moment after each call to the trigger. */
+function useFlash(): [boolean, () => void] {
+  const [lit, setLit] = useState(false);
+  useEffect(() => {
+    if (!lit) return;
+    const timer = setTimeout(() => setLit(false), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [lit]);
+  return [lit, useCallback(() => setLit(true), [])];
+}
+
 export default function SimpleAuthDemo() {
   const [identity, setIdentity] = useState<string | null>(null);
   const [count, setCount] = useState(0);
   const [connected, setConnected] = useState(false);
   const [lastAck, setLastAck] = useState(() => loadTime(LAST_ACK_KEY));
   const [lastChange, setLastChange] = useState(() => loadTime(LAST_CHANGE_KEY) ?? 0);
-  const [lit, setLit] = useState(false);
+  const [docLit, flashDoc] = useFlash();
+  const [ackLit, flashAck] = useFlash();
 
   useEffect(() => {
     void fetchIdentity().then(setIdentity).catch(() => setIdentity(null));
@@ -133,13 +146,6 @@ export default function SimpleAuthDemo() {
   useEffect(() => {
     setNetworkEnabled(identity !== null);
   }, [identity]);
-
-  // Waves stay lit for a moment after each acknowledgement.
-  useEffect(() => {
-    if (!lit) return;
-    const timer = setTimeout(() => setLit(false), FLASH_MS);
-    return () => clearTimeout(timer);
-  }, [lit]);
 
   useEffect(() => {
     const net = getRepo().networkSubsystem;
@@ -153,7 +159,7 @@ export default function SimpleAuthDemo() {
     const onChange = ({ doc }: { doc?: CounterDoc }) => setCount(doc?.count ?? 0);
     const onRemoteHeads = ({ timestamp }: { timestamp: number }) => {
       setLastAck(saveTime(LAST_ACK_KEY, timestamp));
-      setLit(true);
+      flashAck();
     };
 
     docPromise ??= openDoc();
@@ -165,6 +171,7 @@ export default function SimpleAuthDemo() {
       timer = setInterval(() => {
         h.change((d) => { d.count += 1; });
         setLastChange(saveTime(LAST_CHANGE_KEY, Date.now()));
+        flashDoc();
       }, TICK_MS);
     });
 
@@ -175,7 +182,7 @@ export default function SimpleAuthDemo() {
       net.off('peer', onPeer);
       net.off('peer-disconnected', onPeerGone);
     };
-  }, []);
+  }, [flashAck, flashDoc]);
 
   const upToDate = lastAck !== null && lastAck >= lastChange;
   const mode = identity === null
@@ -185,13 +192,12 @@ export default function SimpleAuthDemo() {
   return (
     <DemoFrame>
     <div className="sad-page">
-      <RadioTower lit={lit} />
-      <div className="sad-count">{count}</div>
+      <SyncDiagram count={count} docLit={docLit} ackLit={ackLit} />
       <div className="sad-status">
         {identity !== null && <span>Signed in as {identity}</span>}
         <span>{mode}</span>
         <span>
-          <span className={`sad-dot ${lit ? 'lit' : upToDate ? 'ok' : 'stale'}`} />
+          <span className={`sad-dot ${ackLit ? 'lit' : upToDate ? 'ok' : 'stale'}`} />
           {lastAck !== null ? `Last synced ${new Date(lastAck).toLocaleTimeString()}` : 'Never synced'}
         </span>
       </div>
