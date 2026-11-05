@@ -274,8 +274,9 @@ fn parent_href_string(href: &str) -> String {
 /// Q1's `truncateText(s, n, "space")`, appending `…`. `0` disables
 /// truncation. When truncation actually fires, the result is plain
 /// text (HTML tags stripped) — see module-level limitations. The
-/// fits-check uses strict `<` for Q1 parity (an exactly-`max`-char
-/// text is truncated); the cut itself is
+/// fits-check keeps text of at most `max` visible chars whole, as
+/// Q1's `truncateNode` does for the feed's `firstPara` (GH #1068);
+/// the cut itself is
 /// [`crate::project::listing::helpers::truncate_text_at_space`],
 /// shared with the display-side readers.
 fn maybe_truncate_visible(html: &str, max: usize) -> String {
@@ -283,7 +284,7 @@ fn maybe_truncate_visible(html: &str, max: usize) -> String {
         return html.to_string();
     }
     let visible = visible_text(html);
-    if visible.chars().count() < max {
+    if visible.chars().count() <= max {
         return html.to_string();
     }
     crate::project::listing::helpers::truncate_text_at_space(&visible, max)
@@ -393,6 +394,19 @@ mod tests {
         let html = r#"<html><body><main class="content"><p>Hello <em>there</em>, world of examples</p></main></body></html>"#;
         let out = extract_first_para_html(html, 18).expect("para found");
         assert_eq!(out, "Hello there…");
+    }
+
+    // GH #1068: Q1's feed `firstPara` comes from the same
+    // `truncateNode` as the listing preview, which keeps text of
+    // exactly `max` visible chars whole (markup included).
+    #[test]
+    fn extract_first_para_html_exactly_max_kept_whole() {
+        let html =
+            r#"<html><body><main class="content"><p>abc <em>def</em></p></main></body></html>"#;
+        let out = extract_first_para_html(html, 7);
+        assert_eq!(out.as_deref(), Some("abc <em>def</em>"));
+        let out = extract_first_para_html(html, 6);
+        assert_eq!(out.as_deref(), Some("abc…"));
     }
 
     #[test]
