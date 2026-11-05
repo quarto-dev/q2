@@ -50,7 +50,7 @@ use quarto_preview::config::{
 use quarto_preview::render_flags::native_runtime_for;
 use quarto_preview::static_mode::{
     Action, ContentTracker, ReloadEvent, ReloadHub, StaticServerConfig, WatchContext, build_router,
-    classify, is_config_like, is_input_extension, serve,
+    classify, encode_path, is_config_like, is_input_extension, serve,
 };
 use quarto_system_runtime::SystemRuntime;
 use tracing::{debug, info, warn};
@@ -314,17 +314,27 @@ impl LastRender {
 /// The URL path of `input`'s output, relative to the served root
 /// (`/posts/foo.html`), when this render produced one.
 fn output_url_for(report: &RenderReport, input: &Path) -> Option<String> {
+    output_of(report, input).and_then(|output| output_url(&report.output_dir, &output))
+}
+
+/// The output this render wrote for `input`, if any.
+fn output_of(report: &RenderReport, input: &Path) -> Option<PathBuf> {
     report
         .outputs()
         .into_iter()
         .find(|(i, _)| i == input)
-        .and_then(|(_, output)| output_rel(report, &output))
-        .map(|rel| format!("/{rel}"))
+        .map(|(_, output)| output)
+}
+
+/// The URL path of `output` under `output_dir`, percent-encoded so a `#`
+/// or `?` in a file name stays part of the path (`/posts/C%23.html`).
+fn output_url(output_dir: &Path, output: &Path) -> Option<String> {
+    output_rel(output_dir, output).map(|rel| format!("/{}", encode_path(&rel)))
 }
 
 /// `output` relative to the served root, with forward slashes.
-fn output_rel(report: &RenderReport, output: &Path) -> Option<String> {
-    let rel = output.strip_prefix(&report.output_dir).ok()?;
+fn output_rel(output_dir: &Path, output: &Path) -> Option<String> {
+    let rel = output.strip_prefix(output_dir).ok()?;
     Some(
         rel.components()
             .map(|c| c.as_os_str().to_string_lossy().into_owned())
@@ -537,14 +547,14 @@ async fn run(args: StaticArgs) -> Result<()> {
     // was named, else the root (which serves index.html or, failing
     // that, redirects to the first rendered page).
     let requested_page = if path.is_file() {
-        output_url_for(&report, &path).map(|url| url.trim_start_matches('/').to_string())
+        output_of(&report, &path).and_then(|output| output_rel(&report.output_dir, &output))
     } else {
         None
     };
     let first_output = report
         .outputs()
         .first()
-        .and_then(|(_, o)| output_rel(&report, o));
+        .and_then(|(_, o)| output_rel(&report.output_dir, o));
     let default_file = requested_page.clone().or(first_output);
     let hub = ReloadHub::new();
     record_failure(&hub, &report);
@@ -563,7 +573,8 @@ async fn run(args: StaticArgs) -> Result<()> {
         requested_page
             .as_deref()
             .filter(|p| *p != "index.html")
-            .unwrap_or("")
+            .map(encode_path)
+            .unwrap_or_default()
     );
     info!(%url, "starting q2 preview --static server");
     println!();
@@ -905,6 +916,20 @@ mod tests {
             profile: profile.iter().map(|s| s.to_string()).collect(),
             ..RenderArgs::default()
         }
+    }
+
+    #[test]
+    fn output_urls_are_percent_encoded() {
+        let dir = Path::new("/site");
+        assert_eq!(
+            output_url(dir, &dir.join("posts").join("C#-notes?.html")).as_deref(),
+            Some("/posts/C%23-notes%3F.html")
+        );
+        assert_eq!(
+            output_url(dir, &dir.join("my page.html")).as_deref(),
+            Some("/my%20page.html")
+        );
+        assert_eq!(output_url(dir, Path::new("/elsewhere/a.html")), None);
     }
 
     #[test]

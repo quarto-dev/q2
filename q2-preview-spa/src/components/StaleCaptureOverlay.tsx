@@ -22,6 +22,7 @@
  */
 
 import { useState } from 'react';
+import { serverUrl } from '../serverUrl';
 
 interface StaleCaptureOverlayProps {
   /** Project-relative path of the active page. */
@@ -56,7 +57,7 @@ export function StaleCaptureOverlay({
     setPostError(null);
     setIsPosting(true);
     try {
-      const resp = await fetch('/api/preview/re-execute', {
+      const resp = await fetch(serverUrl('/api/preview/re-execute'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ path: activePath }),

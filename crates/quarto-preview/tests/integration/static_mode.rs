@@ -17,6 +17,8 @@
 //! - HEAD answers with the GET headers and no body.
 //! - `/__q2-preview/events` is an SSE stream that delivers events sent
 //!   after subscription and never replays earlier ones.
+//! - Every URL the server emits (redirects, listing links, the client's
+//!   `data-q2-root`) stays under a path-stripping proxy's prefix.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -25,9 +27,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{HeaderMap, Method, Request, StatusCode};
 use http_body_util::BodyExt;
-use quarto_preview::static_mode::{
-    EVENTS_PATH, ReloadEvent, ReloadHub, StaticServerConfig, build_router,
-};
+use quarto_preview::static_mode::{ReloadEvent, ReloadHub, StaticServerConfig, build_router};
 use tower::ServiceExt;
 
 const INDEX: &str = "<!DOCTYPE html>\n<html><head><title>Home</title></head>\n<body>\n<p>Welcome home.</p>\n</body>\n</html>\n";
@@ -144,7 +144,7 @@ async fn root_shows_the_render_failure_when_nothing_was_rendered() {
     assert!(page.contains("The render failed"), "{page}");
     assert!(page.contains("broken &lt;chapter&gt;"), "escaped: {page}");
     assert!(!page.contains("has no <code>index.html</code>"), "{page}");
-    assert!(page.contains(EVENTS_PATH), "client injected: {page}");
+    assert!(page.contains("data-q2-root="), "client injected: {page}");
 
     hub.set_failure(None);
     let (_, _, body) = get(&app, "/").await;
@@ -168,8 +168,9 @@ async fn root_serves_index_html_with_client_injected_before_body_end() {
         "original content kept: {html}"
     );
     let script_at = html
-        .find("EventSource(\"/__q2-preview/events\")")
-        .expect("client script names the SSE endpoint");
+        .find("<script data-q2-root=\"./\">")
+        .expect("client script carries the way back to the site root");
+    assert!(html.contains("EventSource("), "client opens the SSE stream");
     let body_end = html.rfind("</body>").expect("</body> still present");
     assert!(
         script_at < body_end,
@@ -190,7 +191,7 @@ async fn root_without_index_redirects_to_the_default_file() {
     let (app, _hub) = router(root, Some("doc.html"));
     let (status, headers, _) = get(&app, "/").await;
     assert_eq!(status, StatusCode::FOUND);
-    assert_eq!(header_str(&headers, "location"), "/doc.html");
+    assert_eq!(header_str(&headers, "location"), "./doc.html");
     assert_eq!(header_str(&headers, "cache-control"), "no-store, max-age=0");
 }
 
@@ -210,11 +211,11 @@ async fn root_without_index_or_default_lists_the_rendered_pages() {
     );
     let html = text(&body);
     assert!(
-        html.contains("href=\"/about.html\""),
+        html.contains("href=\"./about.html\""),
         "lists top-level page: {html}"
     );
     assert!(
-        html.contains("href=\"/posts/one.html\""),
+        html.contains("href=\"./posts/one.html\""),
         "lists nested page: {html}"
     );
     assert!(
@@ -222,7 +223,7 @@ async fn root_without_index_or_default_lists_the_rendered_pages() {
         "non-HTML files are not listed: {html}"
     );
     assert!(
-        html.contains("EventSource(\"/__q2-preview/events\")"),
+        html.contains("<script data-q2-root=\"./\">"),
         "listing is live too"
     );
 }
@@ -233,7 +234,7 @@ async fn directory_without_trailing_slash_redirects_then_serves_its_index() {
     let (app, _hub) = router(full_site(&temp), None);
     let (status, headers, _) = get(&app, "/sub").await;
     assert_eq!(status, StatusCode::MOVED_PERMANENTLY);
-    assert_eq!(header_str(&headers, "location"), "/sub/");
+    assert_eq!(header_str(&headers, "location"), "./sub/");
 
     let (status, _, body) = get(&app, "/sub/").await;
     assert_eq!(status, StatusCode::OK);
@@ -631,7 +632,7 @@ async fn pdf_navigation_redirects_to_the_viewer_without_a_hash() {
     let location = header_str(&headers, "location");
     assert_eq!(
         location,
-        "/__q2-preview/pdfjs/web/viewer.html?file=/my%20doc.pdf"
+        "./__q2-preview/pdfjs/web/viewer.html?file=../../../my%20doc.pdf"
     );
     assert!(!location.contains('#'), "a hash resets page and zoom");
     assert_eq!(
@@ -675,7 +676,7 @@ async fn root_of_a_pdf_only_output_goes_straight_to_the_viewer() {
     assert_eq!(status, StatusCode::FOUND);
     assert_eq!(
         header_str(&headers, "location"),
-        "/__q2-preview/pdfjs/web/viewer.html?file=/my%20doc.pdf"
+        "./__q2-preview/pdfjs/web/viewer.html?file=../../../my%20doc.pdf"
     );
     assert_eq!(rx.try_recv().unwrap(), root.join("my doc.pdf"));
 }
@@ -714,7 +715,8 @@ async fn the_viewer_page_gets_the_external_reload_client() {
     assert_eq!(status, StatusCode::OK);
     assert!(header_str(&headers, "content-type").starts_with("text/html"));
     let html = text(&body);
-    let tag = "<script src=\"/__q2-preview/client.js\"></script>";
+    let tag =
+        "<script src=\"../../../__q2-preview/client.js\" data-q2-root=\"../../../\"></script>";
     assert!(html.find(tag).unwrap() < html.find("</body>").unwrap());
     assert!(
         !html.contains("EventSource"),
@@ -728,12 +730,12 @@ async fn the_viewer_page_gets_the_external_reload_client() {
         "application/javascript"
     );
     let js = text(&js);
-    assert!(js.contains("/__q2-preview/events"));
+    assert!(js.contains("\"__q2-preview/events\""));
     assert!(
         !js.contains("setAttribute(\"style\""),
         "the viewer's style-src blocks setAttribute(\"style\"); use the CSSOM"
     );
-    assert!(js.contains("/__q2-preview/pdfjs/web/viewer.html"));
+    assert!(js.contains("\"__q2-preview/pdfjs/web/viewer.html\""));
 }
 
 #[tokio::test]
@@ -743,4 +745,134 @@ async fn pdfjs_paths_traversal_is_refused() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _, _) = get(&app, "/__q2-preview/pdfjs/%2e%2e/about.html").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ── behind a path-prefix proxy ───────────────────────────────────────
+//
+// A proxy serves the preview at `https://host/p/abc123/...` and strips
+// the prefix before forwarding, so the server never sees it. Every URL
+// the server emits must therefore be relative, so the browser resolves
+// it under the prefix (plan
+// `claude-notes/plans/2026-11-05-q2-preview-proxy-base-path.md`).
+
+const PREFIX: &str = "https://host/p/abc123";
+
+/// Resolve `href` the way a browser would on the page the proxy served
+/// for `request_path`, and return the path the proxy would forward
+/// (the prefix stripped). Panics when the URL escapes the prefix.
+fn forwarded_path(request_path: &str, href: &str) -> String {
+    let page = url::Url::parse(&format!("{PREFIX}{request_path}")).unwrap();
+    let resolved = page.join(href).unwrap();
+    let path = resolved.path();
+    let rest = path
+        .strip_prefix("/p/abc123")
+        .unwrap_or_else(|| panic!("{href} on {request_path} escapes the prefix: {resolved}"));
+    match resolved.query() {
+        Some(q) => format!("{rest}?{q}"),
+        None => rest.to_string(),
+    }
+}
+
+/// The `data-q2-root` attribute of the injected reload client.
+fn injected_root(html: &str) -> &str {
+    let at = html
+        .find("data-q2-root=\"")
+        .unwrap_or_else(|| panic!("no data-q2-root in {html}"))
+        + "data-q2-root=\"".len();
+    let end = html[at..].find('"').unwrap();
+    &html[at..at + end]
+}
+
+#[tokio::test]
+async fn injected_client_knows_the_way_back_to_the_site_root() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let root = full_site(&temp);
+    write(&root.join("a/b/deep.html"), ABOUT.as_bytes());
+    let (app, _hub) = router(root, None);
+    for (path, want) in [
+        ("/", "./"),
+        ("/about.html", "./"),
+        ("/sub/", "../"),
+        ("/a/b/deep.html", "../../"),
+        ("/x/y/missing.html", "../../"),
+    ] {
+        let (_, _, body) = get(&app, path).await;
+        let html = text(&body);
+        let got = injected_root(&html);
+        assert_eq!(got, want, "{path}");
+        assert_eq!(forwarded_path(path, got), "/", "{path}");
+    }
+}
+
+#[tokio::test]
+async fn every_redirect_stays_under_the_proxy_prefix() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let root = full_site(&temp);
+    write(&root.join("a/sub/index.html"), SUB_INDEX.as_bytes());
+    let (app, _hub) = router(root, None);
+    for (path, want) in [("/sub", "/sub/"), ("/a/sub", "/a/sub/")] {
+        let (status, headers, _) = get(&app, path).await;
+        assert_eq!(status, StatusCode::MOVED_PERMANENTLY, "{path}");
+        let location = header_str(&headers, "location");
+        assert_eq!(forwarded_path(path, location), want, "{path}");
+    }
+
+    let temp = tempfile::TempDir::new().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    write(&root.join("doc.html"), ABOUT.as_bytes());
+    let (app, _hub) = router(root, Some("doc.html"));
+    let (_, headers, _) = get(&app, "/").await;
+    assert_eq!(
+        forwarded_path("/", header_str(&headers, "location")),
+        "/doc.html"
+    );
+}
+
+#[tokio::test]
+async fn pdf_viewer_redirects_and_file_parameter_stay_under_the_prefix() {
+    let (app, _rx, root, _t) = pdf_router(None, Some(fake_pdfjs()));
+    write(&root.join("ch/two.pdf"), PDF_BYTES);
+    for (path, pdf) in [
+        ("/my%20doc.pdf", "/my%20doc.pdf"),
+        ("/ch/two.pdf", "/ch/two.pdf"),
+    ] {
+        let (status, headers, _) = request(&app, Method::GET, path, &NAVIGATE).await;
+        assert_eq!(status, StatusCode::FOUND, "{path}");
+        let location = header_str(&headers, "location");
+        let viewer = forwarded_path(path, location);
+        let (viewer_path, query) = viewer.split_once("?file=").expect("file parameter");
+        assert_eq!(viewer_path, "/__q2-preview/pdfjs/web/viewer.html", "{path}");
+        // pdf.js resolves `file` against the viewer page's URL.
+        let file = percent_encoding::percent_decode_str(query)
+            .decode_utf8()
+            .unwrap();
+        assert_eq!(
+            forwarded_path(viewer_path, &file).replace(' ', "%20"),
+            pdf,
+            "{path}"
+        );
+    }
+
+    // The viewer's script tag and root resolve to the client and the site root.
+    let (_, _, body) = get(&app, "/__q2-preview/pdfjs/web/viewer.html").await;
+    let html = text(&body);
+    let viewer = "/__q2-preview/pdfjs/web/viewer.html";
+    assert_eq!(forwarded_path(viewer, injected_root(&html)), "/");
+    assert_eq!(
+        forwarded_path(viewer, "../../../__q2-preview/client.js"),
+        "/__q2-preview/client.js"
+    );
+}
+
+#[tokio::test]
+async fn listing_links_stay_under_the_prefix() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    write(&root.join("posts/one.html"), ABOUT.as_bytes());
+    let (app, _hub) = router(root, None);
+    let (_, _, body) = get(&app, "/").await;
+    let html = text(&body);
+    let at = html.find("<a href=\"").unwrap() + "<a href=\"".len();
+    let href = &html[at..at + html[at..].find('"').unwrap()];
+    assert_eq!(forwarded_path("/", href), "/posts/one.html");
 }

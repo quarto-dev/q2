@@ -29,9 +29,9 @@ pub enum ReloadEvent {
         warnings: usize,
         text: String,
     },
-    /// Outputs changed on disk. With a `target` (a root-relative URL
-    /// such as `/posts/foo.html`) the client navigates there; without
-    /// one it reloads in place.
+    /// Outputs changed on disk. With a `target` (a root-relative,
+    /// percent-encoded URL such as `/posts/foo.html`) the client
+    /// navigates there; without one it reloads in place.
     Reload { target: Option<String> },
 }
 

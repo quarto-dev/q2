@@ -54,7 +54,8 @@ describe('StaleCaptureOverlay', () => {
     });
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('/api/preview/re-execute');
+    // Resolved against the page, so it survives a path-prefix proxy.
+    expect(new URL(String(url)).pathname).toBe('/api/preview/re-execute');
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
     expect(body).toEqual({ path: 'posts/post1.qmd' });
