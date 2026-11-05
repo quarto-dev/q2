@@ -137,7 +137,7 @@ pub fn navbar_to_html(
     if !navbar.left.is_empty() {
         html.push_str("      <ul class=\"navbar-nav me-auto\">\n");
         for item in &navbar.left {
-            html.push_str(&render_navbar_item(item, 4));
+            html.push_str(&render_navbar_item(item, 4, false));
         }
         html.push_str("      </ul>\n");
     } else {
@@ -148,7 +148,7 @@ pub fn navbar_to_html(
     if !navbar.right.is_empty() {
         html.push_str("      <ul class=\"navbar-nav ms-auto\">\n");
         for item in &navbar.right {
-            html.push_str(&render_navbar_item(item, 4));
+            html.push_str(&render_navbar_item(item, 4, true));
         }
         html.push_str("      </ul>\n");
     }
@@ -863,7 +863,9 @@ fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str)
     ))
 }
 
-fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
+/// `align_end` adds Bootstrap's `dropdown-menu-end` to dropdown menus, as Q1
+/// does for the right navbar section, so they don't overflow the page edge.
+fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> String {
     let pad = " ".repeat(indent);
 
     // Dropdown submenu: item has a menu and (typically) no direct href.
@@ -881,7 +883,12 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
              data-bs-toggle=\"dropdown\" aria-expanded=\"false\">{}</a>\n",
             pad, label
         ));
-        out.push_str(&format!("{}  <ul class=\"dropdown-menu\">\n", pad));
+        let menu_class = if align_end {
+            "dropdown-menu dropdown-menu-end"
+        } else {
+            "dropdown-menu"
+        };
+        out.push_str(&format!("{}  <ul class=\"{}\">\n", pad, menu_class));
         for sub in &item.menu {
             out.push_str(&render_dropdown_item(sub, indent + 4));
         }
@@ -1981,6 +1988,34 @@ mod tests {
         assert!(html.contains("dropdown-item"));
         assert!(html.contains("href=\"start.qmd\""));
         assert!(html.contains("Getting Started"));
+    }
+
+    #[test]
+    fn navbar_right_dropdown_menu_is_end_aligned() {
+        let menu_item = |text: &str| NavigationItem {
+            text: Some(s(text)),
+            menu: vec![NavigationItem {
+                href: Some("a.qmd".to_string()),
+                text: Some(s("A")),
+                ..NavigationItem::default()
+            }],
+            ..NavigationItem::default()
+        };
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            left: vec![menu_item("Docs")],
+            right: vec![menu_item("Help")],
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert_eq!(
+            html.matches("<ul class=\"dropdown-menu dropdown-menu-end\">")
+                .count(),
+            1
+        );
+        assert_eq!(html.matches("<ul class=\"dropdown-menu\">").count(), 1);
+        let end = html.find("dropdown-menu-end").unwrap();
+        assert!(end > html.find("navbar-nav ms-auto").unwrap());
     }
 
     #[test]
