@@ -368,14 +368,48 @@ fn corpus_report() {
     let env = env_from_process();
     let records = parallel(jobs.len(), |i| run_case(&jobs[i].0, &jobs[i].1, &env));
     std::fs::write(&path, serde_json::to_string_pretty(&records).unwrap()).unwrap();
-    // The gate verdict (epic decision 26) is reported, not asserted: the cases that wait on
-    // KNR-3's `known_options` and KNR-4's inline capture are still outside the allowlist, so
-    // the assertion lands in KNR-2b, Phase 2bC.
     let allowlist = Allowlist::load(&corpus_dir()).unwrap();
     let gate = evaluate(&records, &allowlist);
     let frozen = freeze_or_compare(&records);
     let summary = format!("{}\n{}\n{frozen}", summarize(&records), gate.render());
     std::fs::write(format!("{path}.summary.txt"), summary).unwrap();
+    // The flip gate (epic decision 26), asserted after the report is written so a failing run
+    // still leaves the files to read.
+    assert_gate(&gate);
+}
+
+/// Fail on a gate that does not pass: a difference with no allowlist entry, or an entry gone
+/// stale. KNR-6 Phase 6A promotes this one harness.
+fn assert_gate(gate: &super::knitr_corpus_gate::Gate) {
+    assert!(
+        gate.passes(),
+        "the knitr corpus gate failed:\n{}",
+        gate.render()
+    );
+}
+
+#[test]
+#[should_panic(expected = "the knitr corpus gate failed")]
+fn a_failed_gate_fails_the_report() {
+    let rec = |name: &str, class: &str| CaseRecord {
+        name: name.into(),
+        group: "g".into(),
+        format: "html".into(),
+        result: CaseResult::Compared {
+            class: class.into(),
+            multi_group: false,
+            diff: None,
+            q1: None,
+        },
+        oracle: None,
+    };
+    let gate = evaluate(&[rec("x/1", "blocker")], &Allowlist::parse("").unwrap());
+    assert_gate(&gate);
+}
+
+#[test]
+fn a_passing_gate_is_not_an_error() {
+    assert_gate(&super::knitr_corpus_gate::Gate::default());
 }
 
 #[test]

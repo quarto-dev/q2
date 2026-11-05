@@ -35,7 +35,26 @@ pub trait FigureSink {
     /// Write one image output. Returns the doc-relative, forward-slash path to emit in
     /// markdown, or `None` when the payload is malformed or the write fails (the caller
     /// falls back — fail-soft, matching the engine's other output paths).
-    fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String>;
+    fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String> {
+        self.write_image_at(mime, value, None)
+    }
+
+    /// [`write_image`](Self::write_image) for an output whose producer named a file
+    /// (`metadata.quarto_file_path`, epic decision 25). The file goes at `preferred` when that
+    /// is a document-relative path inside the document directory and no other output of this
+    /// document has claimed it; otherwise the sink uses its generated name and counts the
+    /// fallback ([`path_fallbacks`](Self::path_fallbacks)).
+    fn write_image_at(
+        &mut self,
+        mime: &str,
+        value: &serde_json::Value,
+        preferred: Option<&str>,
+    ) -> Option<String>;
+
+    /// How many outputs named a path that could not be honored.
+    fn path_fallbacks(&self) -> usize {
+        0
+    }
 
     /// Image outputs that could not be used since the last call (malformed payload or a
     /// failed write), drained. The presenter reports each as a diagnostic; the output
@@ -118,6 +137,23 @@ pub struct FigureNaming {
     output_index: usize,
     /// Failures not yet drained by `take_failures`.
     failures: Vec<FigureFailure>,
+    /// Document-relative paths already handed out, so a producer path never overwrites
+    /// another output's file.
+    claimed: std::collections::HashSet<String>,
+    /// Outputs whose producer path was refused.
+    fallbacks: usize,
+}
+
+/// Whether `path` is a document-relative, forward-slash path that stays inside the
+/// document directory.
+fn is_inside_document(path: &str) -> bool {
+    !path.is_empty()
+        && !path.contains('\\')
+        && !path.starts_with('/')
+        && !path.contains(':')
+        && path
+            .split('/')
+            .all(|c| !c.is_empty() && c != "." && c != "..")
 }
 
 impl FigureNaming {
@@ -131,6 +167,8 @@ impl FigureNaming {
             cell_index: 0,
             output_index: 0,
             failures: Vec::new(),
+            claimed: Default::default(),
+            fallbacks: 0,
         }
     }
 
@@ -145,6 +183,29 @@ impl FigureNaming {
     /// Drain the recorded failures.
     pub fn take_failures(&mut self) -> Vec<FigureFailure> {
         std::mem::take(&mut self.failures)
+    }
+
+    /// Outputs whose producer path was refused.
+    pub fn path_fallbacks(&self) -> usize {
+        self.fallbacks
+    }
+
+    /// Claim the next output slot and return the document-relative path to write: the
+    /// producer's `preferred` path when it is inside the document and unclaimed, else the
+    /// generated one. The slot is claimed either way, so generated numbers do not depend on
+    /// which outputs named a path.
+    pub fn claim(&mut self, ext: &str, preferred: Option<&str>) -> String {
+        let (_, generated) = self.next_file(ext);
+        let rel = match preferred {
+            Some(p) if is_inside_document(p) && !self.claimed.contains(p) => p.to_string(),
+            Some(_) => {
+                self.fallbacks += 1;
+                generated
+            }
+            None => generated,
+        };
+        self.claimed.insert(rel.clone());
+        rel
     }
 
     pub fn begin_cell(&mut self) {
@@ -193,7 +254,12 @@ impl FigureSink for FsFigureSink {
         self.naming.begin_cell();
     }
 
-    fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String> {
+    fn write_image_at(
+        &mut self,
+        mime: &str,
+        value: &serde_json::Value,
+        preferred: Option<&str>,
+    ) -> Option<String> {
         let (ext, bytes) = match decode_image_checked(mime, value) {
             Ok(decoded) => decoded,
             Err(reason) => {
@@ -201,25 +267,28 @@ impl FigureSink for FsFigureSink {
                 return None;
             }
         };
-        let (file_name, rel) = self.naming.next_file(ext);
-        let abs = self
-            .doc_dir
-            .join(self.naming.files_dir_name())
-            .join("figure-html");
-        if let Err(e) = std::fs::create_dir_all(&abs) {
-            tracing::warn!(dir = %abs.display(), error = %e, "jupyter figure: cannot create figures dir");
+        let rel = self.naming.claim(ext, preferred);
+        let abs = self.doc_dir.join(&rel);
+        if let Some(dir) = abs.parent()
+            && let Err(e) = std::fs::create_dir_all(dir)
+        {
+            tracing::warn!(dir = %dir.display(), error = %e, "jupyter figure: cannot create figures dir");
             self.naming
-                .record_failure(mime, format!("cannot create `{}`: {e}", abs.display()));
+                .record_failure(mime, format!("cannot create `{}`: {e}", dir.display()));
             return None;
         }
-        if let Err(e) = std::fs::write(abs.join(&file_name), &bytes) {
-            tracing::warn!(file = %file_name, error = %e, "jupyter figure: write failed");
+        if let Err(e) = std::fs::write(&abs, &bytes) {
+            tracing::warn!(file = %rel, error = %e, "jupyter figure: write failed");
             self.naming
-                .record_failure(mime, format!("cannot write `{file_name}`: {e}"));
+                .record_failure(mime, format!("cannot write `{rel}`: {e}"));
             return None;
         }
         self.wrote_any = true;
         Some(rel)
+    }
+
+    fn path_fallbacks(&self) -> usize {
+        self.naming.path_fallbacks()
     }
 
     fn take_failures(&mut self) -> Vec<FigureFailure> {
@@ -262,7 +331,12 @@ impl FigureSink for RuntimeFigureSink {
         self.naming.begin_cell();
     }
 
-    fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String> {
+    fn write_image_at(
+        &mut self,
+        mime: &str,
+        value: &serde_json::Value,
+        preferred: Option<&str>,
+    ) -> Option<String> {
         let (ext, bytes) = match decode_image_checked(mime, value) {
             Ok(decoded) => decoded,
             Err(reason) => {
@@ -270,25 +344,28 @@ impl FigureSink for RuntimeFigureSink {
                 return None;
             }
         };
-        let (file_name, rel) = self.naming.next_file(ext);
-        let abs = self
-            .doc_dir
-            .join(self.naming.files_dir_name())
-            .join("figure-html");
-        if let Err(e) = self.runtime.dir_create(&abs, true) {
-            tracing::warn!(dir = %abs.display(), error = %e, "jupyter figure: cannot create figures dir");
+        let rel = self.naming.claim(ext, preferred);
+        let abs = self.doc_dir.join(&rel);
+        if let Some(dir) = abs.parent()
+            && let Err(e) = self.runtime.dir_create(dir, true)
+        {
+            tracing::warn!(dir = %dir.display(), error = %e, "jupyter figure: cannot create figures dir");
             self.naming
-                .record_failure(mime, format!("cannot create `{}`: {e}", abs.display()));
+                .record_failure(mime, format!("cannot create `{}`: {e}", dir.display()));
             return None;
         }
-        if let Err(e) = self.runtime.file_write(&abs.join(&file_name), &bytes) {
-            tracing::warn!(file = %file_name, error = %e, "jupyter figure: write failed");
+        if let Err(e) = self.runtime.file_write(&abs, &bytes) {
+            tracing::warn!(file = %rel, error = %e, "jupyter figure: write failed");
             self.naming
-                .record_failure(mime, format!("cannot write `{file_name}`: {e}"));
+                .record_failure(mime, format!("cannot write `{rel}`: {e}"));
             return None;
         }
         self.wrote_any = true;
         Some(rel)
+    }
+
+    fn path_fallbacks(&self) -> usize {
+        self.naming.path_fallbacks()
     }
 
     fn take_failures(&mut self) -> Vec<FigureFailure> {
@@ -332,9 +409,14 @@ mod tests {
         fn begin_cell(&mut self) {
             self.naming.begin_cell();
         }
-        fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String> {
+        fn write_image_at(
+            &mut self,
+            mime: &str,
+            value: &serde_json::Value,
+            preferred: Option<&str>,
+        ) -> Option<String> {
             let (ext, bytes) = decode_image(mime, value)?;
-            let (_, rel) = self.naming.next_file(ext);
+            let rel = self.naming.claim(ext, preferred);
             if self.fail_writes {
                 return None;
             }
@@ -502,6 +584,85 @@ mod tests {
     }
 
     // ── RuntimeFigureSink: every write goes through the SystemRuntime ──
+
+    // ── The producer's own path (`metadata.quarto_file_path`, epic decision 25) ──
+
+    #[test]
+    fn fs_sink_writes_at_the_producers_path_inside_the_document_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut sink = FsFigureSink::new(&dir.path().join("report.qmd"));
+        sink.begin_cell();
+        let rel = sink
+            .write_image_at("image/png", &json!(PNG), Some("figs/unnamed-chunk-1-1.png"))
+            .unwrap();
+        assert_eq!(rel, "figs/unnamed-chunk-1-1.png");
+        assert!(dir.path().join("figs/unnamed-chunk-1-1.png").is_file());
+        assert_eq!(sink.path_fallbacks(), 0);
+        // The generated name still counts the slot, so later outputs keep their numbers.
+        let next = sink.write_image("image/png", &json!(PNG)).unwrap();
+        assert_eq!(next, "report_files/figure-html/cell-1-output-2.png");
+    }
+
+    #[test]
+    fn a_colliding_path_falls_back_to_the_generated_name_and_is_counted() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut sink = FsFigureSink::new(&dir.path().join("report.qmd"));
+        sink.begin_cell();
+        let first = sink.write_image_at("image/png", &json!(PNG), Some("a.png"));
+        let second = sink.write_image_at("image/png", &json!(PNG), Some("a.png"));
+        assert_eq!(first.as_deref(), Some("a.png"));
+        assert_eq!(
+            second.as_deref(),
+            Some("report_files/figure-html/cell-1-output-2.png")
+        );
+        assert_eq!(sink.path_fallbacks(), 1);
+    }
+
+    #[test]
+    fn a_path_outside_the_document_directory_falls_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut sink = FsFigureSink::new(&dir.path().join("report.qmd"));
+        sink.begin_cell();
+        for (n, bad) in [
+            "../x.png",
+            "/abs/x.png",
+            "a/../../x.png",
+            "a\\b.png",
+            "",
+            "C:/x.png",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let rel = sink
+                .write_image_at("image/png", &json!(PNG), Some(bad))
+                .unwrap();
+            assert_eq!(
+                rel,
+                format!("report_files/figure-html/cell-1-output-{}.png", n + 1),
+                "{bad}"
+            );
+        }
+        assert_eq!(sink.path_fallbacks(), 6);
+        assert!(!dir.path().parent().unwrap().join("x.png").exists());
+    }
+
+    #[test]
+    fn runtime_sink_honors_the_producers_path_through_the_runtime() {
+        let runtime = Arc::new(RecordingRuntime::default());
+        let mut sink = RuntimeFigureSink::new(runtime.clone(), Path::new("/doc/report.qmd"));
+        sink.begin_cell();
+        let rel = sink.write_image_at("image/png", &json!(PNG), Some("figs/a.png"));
+        assert_eq!(rel.as_deref(), Some("figs/a.png"));
+        let (_, png) = decode_image("image/png", &json!(PNG)).unwrap();
+        assert_eq!(
+            *runtime.calls.lock().unwrap(),
+            [
+                Call::DirCreate(Path::new("/doc/figs").to_path_buf(), true),
+                Call::FileWrite(Path::new("/doc/figs/a.png").to_path_buf(), png),
+            ]
+        );
+    }
 
     use crate::presenter::recording_runtime::{Call, RecordingRuntime};
 

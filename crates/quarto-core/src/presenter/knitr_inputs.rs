@@ -23,7 +23,10 @@ use serde_json::Value;
 
 use crate::record::{EngineEntry, RecordCell};
 
-use super::cell::{HoldMode, apply_holds, is_plot_output, render_cell_interleaved};
+use super::cell::{
+    HoldMode, apply_holds, before_code_anchors, is_included_graphic, is_plot_output,
+    render_cell_interleaved,
+};
 use super::figures::FigureSink;
 use super::options::{CellOptions, OutputKind, config_to_json};
 use super::output::{CellOutput, CellResult};
@@ -68,14 +71,26 @@ pub fn present_knitr_cell(
     let echoed = echoed_code(cell);
     let code = echoed.as_deref().unwrap_or(code);
     let known = engine.and_then(|e| e.known_options.as_deref());
-    let merged = layer_options(recorded, header, known);
+    let mut merged = layer_options(recorded, header, known);
 
     let mut result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
+    synthesize_layout(
+        &mut merged,
+        result.outputs.iter().filter(|o| is_plot_output(o)).count(),
+    );
     let mut kinds = output_kinds(cell);
     let mut anchors = usize_array(cell.metadata.extra.get(OUTPUT_ANCHORS_KEY));
     let starts = usize_array(cell.metadata.extra.get(EXPRESSION_STARTS_KEY)).unwrap_or_default();
 
-    // Holds run at present time over the capture-order anchors (epic decision 21).
+    // `fig.beforecode` then the holds, as knitr orders them; both run at present time over the
+    // capture-order anchors (epic decision 21).
+    if merged.get("fig.beforecode").and_then(Value::as_bool) == Some(true)
+        && let Some(a) = anchors
+            .as_deref()
+            .filter(|a| a.len() == result.outputs.len())
+    {
+        anchors = Some(before_code_anchors(&result.outputs, a));
+    }
     let is = |key: &str, want: &str| merged.get(key).and_then(Value::as_str) == Some(want);
     let hold = HoldMode {
         plots: is("fig.show", "hold"),
@@ -114,7 +129,14 @@ pub fn present_knitr_cell(
         anchors = Some(new_anchors);
     }
 
+    // The plots knitr\'s plot hook writes: `include_graphics` images and asis output are not.
+    let plots = result
+        .outputs
+        .iter()
+        .filter(|o| is_plot_output(o) && !is_included_graphic(o))
+        .count();
     let options = CellOptions::from_knitr_known(&merged, known)
+        .with_figure_count(plots)
         .with_output_kinds(kinds)
         .with_original_chunk(original.0, original.1);
     Some(render_cell_interleaved(
@@ -201,6 +223,69 @@ fn layer_options(
     // Step 3 (D2): knitr\'s sentinels, after the overlay.
     super::options::drop_knitr_sentinels(&mut merged);
     Value::Object(merged)
+}
+
+/// hooks.R's layout synthesis (lines 485-531): `fig.sep` builds `layout` from the figure count
+/// and `out.width` (a non-empty separator ends a row), else `fig.ncol` sets `layout-ncol`, and
+/// `fig.valign` sets `layout-valign` unless it is `"default"`. `fig.sep` and `fig.ncol` are
+/// consumed (knitr options, never forwarded); `fig.valign` stays, see below. `fig_num` is the number of plots the
+/// cell shows; with none, there is nothing to lay out.
+fn synthesize_layout(merged: &mut Value, fig_num: usize) {
+    let Some(map) = merged.as_object_mut() else {
+        return;
+    };
+    let mut take = |dotted: &str, dashed: &str| {
+        let a = map.remove(dotted);
+        let b = map.remove(dashed);
+        b.or(a).filter(|v| !v.is_null())
+    };
+    let sep = take("fig.sep", "fig-sep");
+    let ncol = take("fig.ncol", "fig-ncol");
+    // Not consumed: knitr does not know `fig.valign`, so live knitr also forwards it as an
+    // unknown attribute beside `layout-valign` (the corpus oracle shows both).
+    let valign = ["fig-valign", "fig.valign"]
+        .into_iter()
+        .find_map(|k| map.get(k).filter(|v| !v.is_null()).cloned());
+    if let Some(sep) = sep {
+        if fig_num > 0 {
+            let recycle = |v: &Value| -> Vec<Value> {
+                match v {
+                    Value::Array(a) if !a.is_empty() => a.clone(),
+                    Value::Array(_) => vec![],
+                    other => vec![other.clone()],
+                }
+            };
+            let seps = recycle(&sep);
+            let widths = map
+                .get("out-width")
+                .or_else(|| map.get("out.width"))
+                .map(recycle)
+                .filter(|w| !w.is_empty())
+                .unwrap_or_else(|| vec![Value::from(1)]);
+            let mut layout: Vec<Value> = Vec::new();
+            let mut row: Vec<Value> = Vec::new();
+            for i in 0..fig_num {
+                row.push(widths[i % widths.len()].clone());
+                let ends_row = match seps.get(i % seps.len().max(1)) {
+                    Some(Value::String(s)) => !s.is_empty(),
+                    Some(_) => true,
+                    None => false,
+                };
+                if ends_row {
+                    layout.push(Value::Array(std::mem::take(&mut row)));
+                }
+            }
+            if !row.is_empty() {
+                layout.push(Value::Array(row));
+            }
+            map.insert("layout".to_string(), Value::Array(layout));
+        }
+    } else if let Some(ncol) = ncol {
+        map.insert("layout-ncol".to_string(), ncol);
+    }
+    if let Some(v) = valign.filter(|v| v.as_str() != Some("default")) {
+        map.insert("layout-valign".to_string(), v);
+    }
 }
 
 /// `quarto_output_kinds`: `"message"`, `"warning"` or null per output; empty when absent.
@@ -746,6 +831,117 @@ mod tests {
         );
         let md = present("a\nb\n", &c, None, None).unwrap();
         assert!(md.contains("> a\n> b"), "{md}");
+    }
+
+    fn plot() -> Value {
+        json!({"output_type": "display_data",
+               "data": {"image/png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="},
+               "metadata": {}})
+    }
+
+    /// A cell of `n` plots under `options`, presented to markdown.
+    fn present_plots(n: usize, options: Value) -> String {
+        let c = cell(
+            "plot(1)\n",
+            (0..n).map(|_| plot()).collect(),
+            vec![
+                (RESOLVED_OPTIONS_KEY, options),
+                (OUTPUT_ANCHORS_KEY, json!(vec![1; n])),
+            ],
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        present_knitr_cell("r", "plot(1)\n", &c, None, None, ("r", ""), &mut fig).unwrap()
+    }
+
+    #[test]
+    fn a_figure_label_is_the_id_of_a_single_plots_image() {
+        // hooks.R `knitr_plot_hook`: the label goes in the image's attributes.
+        let md = present_plots(1, json!({"label": "fig-one", "fig.cap": "One"}));
+        assert!(md.contains("![One](") && md.contains("){#fig-one}"), "{md}");
+    }
+
+    #[test]
+    fn several_plots_number_the_figure_label() {
+        // Cell hook: with more than one figure the placeholder becomes `label-<i>`.
+        let md = present_plots(2, json!({"label": "fig-two", "fig.cap": "Two"}));
+        assert!(md.contains("){#fig-two-1}"), "{md}");
+        assert!(md.contains("){#fig-two-2}"), "{md}");
+        assert!(!md.contains("{#fig-two}"), "{md}");
+        assert!(!md.contains("#fig-two .cell"), "{md}");
+    }
+
+    #[test]
+    fn the_label_moves_to_the_cell_div_with_both_fig_cap_and_fig_subcap() {
+        let md = present_plots(
+            2,
+            json!({"label": "fig-pair", "fig.cap": "Both", "fig.subcap": ["First", "Second"]}),
+        );
+        assert!(md.contains("::: {#fig-pair .cell}"), "{md}");
+        assert!(
+            md.contains("![First](") && md.contains("){#fig-pair-1}"),
+            "{md}"
+        );
+        assert!(
+            md.contains("![Second](") && md.contains("){#fig-pair-2}"),
+            "{md}"
+        );
+        // The cell caption closes the cell div, after the outputs.
+        assert!(md.trim_end().ends_with("\nBoth\n:::"), "{md}");
+    }
+
+    #[test]
+    fn a_figure_label_adds_the_id_before_the_other_image_attributes() {
+        let md = present_plots(
+            1,
+            json!({"label": "fig-one", "fig.cap": "One", "fig.align": "center"}),
+        );
+        assert!(md.contains("){#fig-one fig-align='center'}"), "{md}");
+    }
+
+    #[test]
+    fn fig_sep_synthesizes_a_layout_from_the_figure_count() {
+        // hooks.R: fig.sep is recycled over the figures; a non-empty separator ends a row.
+        let md = present_plots(3, json!({"fig.sep": ["", "\n"]}));
+        assert!(md.contains("layout=\"[[1,1],[1]]\""), "{md}");
+        assert!(!md.contains("fig.sep") && !md.contains("fig-sep"), "{md}");
+    }
+
+    #[test]
+    fn fig_sep_uses_out_width_per_figure() {
+        let md = present_plots(2, json!({"fig.sep": ["", "\n"], "out.width": [0.4, 0.6]}));
+        assert!(md.contains("layout=\"[[0.4,0.6]]\""), "{md}");
+    }
+
+    #[test]
+    fn fig_ncol_becomes_layout_ncol() {
+        let md = present_plots(2, json!({"fig.ncol": 2}));
+        assert!(md.contains("layout-ncol=\"2\""), "{md}");
+        assert!(!md.contains("fig.ncol") && !md.contains("fig-ncol"), "{md}");
+    }
+
+    #[test]
+    fn fig_sep_wins_over_fig_ncol() {
+        let md = present_plots(2, json!({"fig.sep": ["", "\n"], "fig.ncol": 2}));
+        assert!(md.contains("layout=\"[[1,1]]\""), "{md}");
+        assert!(!md.contains("layout-ncol"), "{md}");
+    }
+
+    #[test]
+    fn fig_valign_becomes_layout_valign_unless_default() {
+        let md = present_plots(1, json!({"fig.valign": "top"}));
+        assert!(md.contains("layout-valign=\"top\""), "{md}");
+        // The unknown-attribute forward beside it is the corpus's (`options/fig.valign/*`):
+        // it needs the record's `known_options`, which this hand-built cell has none of.
+        let md = present_plots(1, json!({"fig.valign": "default"}));
+        assert!(!md.contains("layout-valign"), "{md}");
+    }
+
+    #[test]
+    fn dashed_spellings_of_the_layout_options_work_too() {
+        let md = present_plots(2, json!({"fig-ncol": 2, "fig-valign": "bottom"}));
+        assert!(md.contains("layout-ncol=\"2\""), "{md}");
+        assert!(md.contains("layout-valign=\"bottom\""), "{md}");
     }
 
     #[test]

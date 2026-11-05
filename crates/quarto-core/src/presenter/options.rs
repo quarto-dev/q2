@@ -264,6 +264,10 @@ pub struct CellOptions {
     unknown: Vec<(String, String)>,
     /// A `fig-` label: the id of a figure\'s output div.
     figure_label: Option<String>,
+    /// How many plots the cell shows through knitr\'s plot hook, when the knitr presenter knows
+    /// (a figure label becomes `label` or `label-<i>` on the image, hooks.R). `None` for engines
+    /// whose label is the crossref layer\'s.
+    figure_count: Option<usize>,
     /// A `tbl-` label: the cell\'s id (hooks.R lets only table labels through).
     table_label: Option<String>,
     /// A knitr cell: printed text keeps its trailing spaces (only the final newlines go).
@@ -485,6 +489,7 @@ impl CellOptions {
             results: first("results"),
             keep_trailing_space: false,
             unknown: Vec::new(),
+            figure_count: None,
             figure_label: first("label")
                 .filter(|l| l.trim_start_matches('#').starts_with("fig-"))
                 .map(|l| l.trim_start_matches('#').to_string()),
@@ -544,11 +549,63 @@ impl CellOptions {
             .map_or_else(String::new, |l| format!("#{l} "))
     }
 
-    /// `#tbl-label ` ahead of `.cell`, or nothing.
+    /// Say how many plots the cell shows (the knitr presenter\'s figure ids need it).
+    pub fn with_figure_count(mut self, count: usize) -> Self {
+        self.figure_count = Some(count);
+        self
+    }
+
+    /// Whether the label moves to the cell div: hooks.R keeps a cell label only when both
+    /// `fig.cap` and `fig.subcap` are set (the figures then carry `label-<i>`).
+    fn label_on_cell(&self) -> bool {
+        self.figure_count.is_some()
+            && self.figure_label.is_some()
+            && !self.fig_cap.is_empty()
+            && !self.fig_subcap.is_empty()
+    }
+
+    /// `#tbl-label ` (or the figure label, see [`Self::label_on_cell`]) ahead of `.cell`, or
+    /// nothing.
     pub fn cell_div_id(&self) -> String {
-        self.table_label
-            .as_ref()
-            .map_or_else(String::new, |l| format!("#{l} "))
+        let label = if self.label_on_cell() {
+            self.figure_label.as_ref()
+        } else {
+            self.table_label.as_ref()
+        };
+        label.map_or_else(String::new, |l| format!("#{l} "))
+    }
+
+    /// The caption that closes the cell div (hooks.R `cell.cap`): `fig.cap`, when the label is
+    /// on the cell. Already framed by its blank lines.
+    pub fn cell_caption(&self) -> String {
+        if self.label_on_cell() {
+            format!("\n{}\n", self.fig_cap[0])
+        } else {
+            String::new()
+        }
+    }
+
+    /// `#label` for the `index`th plot\'s image (from 0): the label itself for one plot,
+    /// `label-<i>` for several (hooks.R). Only when the figure count is known.
+    fn plot_image_id(&self, index: usize) -> Option<String> {
+        let n = self.figure_count?;
+        let label = self.figure_label.as_ref()?;
+        Some(if n > 1 {
+            format!("#{label}-{}", index + 1)
+        } else {
+            format!("#{label}")
+        })
+    }
+
+    /// [`Self::image_attrs_with`] for a plot written by knitr\'s plot hook: the figure id
+    /// leads the attributes.
+    pub fn plot_image_attrs(
+        &self,
+        index: usize,
+        width: Option<String>,
+        height: Option<String>,
+    ) -> String {
+        self.attrs_with_id(self.plot_image_id(index), index, width, height)
     }
 
     /// The alt text of the `index`th figure (from 0) of the cell: the subcaptions win over the
@@ -602,8 +659,18 @@ impl CellOptions {
         width: Option<String>,
         height: Option<String>,
     ) -> String {
+        self.attrs_with_id(None, index, width, height)
+    }
+
+    fn attrs_with_id(
+        &self,
+        id: Option<String>,
+        index: usize,
+        width: Option<String>,
+        height: Option<String>,
+    ) -> String {
         let quoted = |value: &str| value.replace('\'', "\\'");
-        let mut attrs = Vec::new();
+        let mut attrs: Vec<String> = id.into_iter().collect();
         for (name, list) in [
             ("fig-align", &self.fig_align),
             ("fig-env", &self.fig_env),

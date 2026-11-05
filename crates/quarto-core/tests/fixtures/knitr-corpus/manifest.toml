@@ -150,6 +150,30 @@ body_ref = "plot_body"
 
 [[sweep]]
 group = "options"
+option = "fig.beforecode"
+values = ["TRUE", "FALSE"]
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.ncol"
+values = ["2"]
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.sep"
+values = ['c("", "\n")', '"\n"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.valign"
+values = ['"top"', '"default"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
 option = "fig.width"
 values = ["4", "8"]
 body_ref = "plot_body"
@@ -559,6 +583,51 @@ formats = ["html", "typst", "docx", "gfm", "revealjs", "epub"]
 text = '''
 ```{r}
 knitr::asis_output("**bold from asis_output**")
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "fig_label_cap_subcap"
+text = '''
+```{r fig-pair, fig.cap="Both figures", fig.subcap=c("First", "Second")}
+set.seed(1)
+plot(1:3)
+plot(3:1)
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "fig_label_cap_one"
+text = '''
+```{r fig-one, fig.cap="One figure"}
+set.seed(1)
+plot(1:3)
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "fig_label_cap_two"
+text = '''
+```{r fig-two, fig.cap="Two figures"}
+set.seed(1)
+plot(1:3)
+plot(3:1)
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "knit_asis_backticks"
+text = '''
+```{r asis_ticks}
+knitr::asis_output("<div>\n```\nfenced inside html\n```\n</div>")
+```
+
+```{r asis_four}
+knitr::asis_output("<div>\n````\nfour\n````\n</div>")
 ```
 '''
 

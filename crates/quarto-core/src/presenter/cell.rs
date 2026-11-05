@@ -384,6 +384,12 @@ fn widget_output(o: &CellOutput) -> bool {
         if metadata["quarto_knitr"]["widget"] == true)
 }
 
+/// Whether `o` is an `include_graphics` image (see [`included_graphic`]), which knitr writes
+/// without its plot hook.
+pub(crate) fn is_included_graphic(o: &CellOutput) -> bool {
+    matches!(o, CellOutput::DisplayData { metadata, .. } if included_graphic(metadata).is_some())
+}
+
 pub(crate) fn is_plot_output(o: &CellOutput) -> bool {
     matches!(o, CellOutput::DisplayData { data, .. }
         if ["image/svg+xml", "image/png", "image/jpeg"].iter().any(|m| data.contains_key(*m)))
@@ -393,9 +399,10 @@ pub(crate) fn is_plot_output(o: &CellOutput) -> bool {
 fn wrap_cell(options: &CellOptions, body: &str) -> String {
     if options.needs_cell_div() {
         format!(
-            "::: {{{}.cell{}}}\n\n{body}\n:::\n",
+            "::: {{{}.cell{}}}\n\n{body}\n{}:::\n",
             options.cell_div_id(),
-            options.cell_div_attrs()
+            options.cell_div_attrs(),
+            options.cell_caption()
         )
     } else {
         format!("\n{body}")
@@ -624,6 +631,21 @@ pub fn apply_holds(
         kept_anchors.push(total);
     }
     (kept, kept_anchors)
+}
+
+/// `fig.beforecode = TRUE` (knitr `fig_before_code`, block.R): a plot that comes after the
+/// first code moves to just before the source it followed. Source between two outputs is one
+/// run (knitr merges adjacent source), so the plot's new anchor is where its run began: the
+/// anchor of the output before it, or 0. Outputs keep their order; only anchors change. A plot
+/// anchored at 0 (before any code) stays. Run before [`apply_holds`], as knitr does.
+pub fn before_code_anchors(outputs: &[CellOutput], anchors: &[usize]) -> Vec<usize> {
+    let mut moved = anchors.to_vec();
+    for (i, o) in outputs.iter().enumerate() {
+        if is_plot_output(o) && anchors.get(i).is_some_and(|a| *a > 0) {
+            moved[i] = if i == 0 { 0 } else { anchors[i - 1] };
+        }
+    }
+    moved
 }
 
 /// Reconstruct the echoed source fence for an executed cell.
@@ -867,9 +889,16 @@ fn format_outputs_with(
                     let md = options.link_image(*figures, format!("![{alt}]({path}){attrs}"));
                     push_figure(&mut output, options, *figures, &md);
                     *figures += 1;
-                } else if let Some(rel_path) =
-                    image_entry.and_then(|(mime, value)| fig.write_image(mime, value))
-                {
+                } else if let Some(rel_path) = image_entry.and_then(|(mime, value)| {
+                    let preferred = match cell_output {
+                        CellOutput::DisplayData { metadata, .. }
+                        | CellOutput::ExecuteResult { metadata, .. } => {
+                            metadata.get("quarto_file_path").and_then(|p| p.as_str())
+                        }
+                        _ => None,
+                    };
+                    fig.write_image_at(mime, value, preferred)
+                }) {
                     // Figure divs carry ONLY `cell-output-display` — no
                     // generic `cell-output` — matching q2-knitr's
                     // vendored figure hook (hooks.R:627) so the
@@ -887,7 +916,7 @@ fn format_outputs_with(
                         }
                         _ => (None, None),
                     };
-                    let attrs = options.image_attrs_with(*figures, width, height);
+                    let attrs = options.plot_image_attrs(*figures, width, height);
                     let md = options.link_image(*figures, format!("![{alt}]({rel_path}){attrs}"));
                     push_figure(&mut output, options, *figures, &md);
                     *figures += 1;
@@ -1858,6 +1887,20 @@ mod interleave_tests {
     }
 
     #[test]
+    fn before_code_moves_each_plot_to_the_start_of_its_source_run() {
+        // [src 0-1][p1][src 1-2][p2] -> [p1][src 0-1][p2][src 1-2]
+        let outs = vec![png(), png()];
+        assert_eq!(before_code_anchors(&outs, &[1, 2]), vec![0, 1]);
+    }
+
+    #[test]
+    fn before_code_leaves_a_plot_before_any_code_and_other_outputs() {
+        let outs = vec![png(), stream("1"), png()];
+        // The first plot is at 0; the text stays; the last plot goes to the text's anchor.
+        assert_eq!(before_code_anchors(&outs, &[0, 2, 3]), vec![0, 2, 2]);
+    }
+
+    #[test]
     fn no_hold_changes_nothing() {
         let (outs, anchors) =
             apply_holds(vec![stream("1"), png()], &[1, 2], 2, HoldMode::default());
@@ -1910,6 +1953,40 @@ mod option_tests {
             &mut fig,
             CellVisibility::VISIBLE,
         )
+    }
+
+    #[test]
+    fn a_plot_with_a_producer_path_is_written_there() {
+        // Epic decision 25: a knitr plot keeps knitr's own file name; the presenter writes
+        // the bytes at `quarto_file_path` instead of a generated `cell-<n>-output-<m>` name.
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        ));
+        let md = render_cell_with(
+            "r",
+            "x\n",
+            &result(vec![CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({"quarto_file_path":
+                    "doc_files/figure-html/unnamed-chunk-1-1.png"}),
+            }]),
+            &CellOptions::default(),
+            &mut fig,
+            CellVisibility::VISIBLE,
+        );
+        assert!(
+            md.contains("![](doc_files/figure-html/unnamed-chunk-1-1.png)"),
+            "{md}"
+        );
+        assert!(
+            dir.path()
+                .join("doc_files/figure-html/unnamed-chunk-1-1.png")
+                .is_file()
+        );
     }
 
     #[test]
