@@ -851,3 +851,64 @@ fn pipeline_navbar_responsive_text_renders_ranges_per_page() {
     let footer = root_html.split("nav-footer").nth(1).unwrap_or_default();
     assert!(!footer.contains("menu-text"), "footer must not get spans");
 }
+
+// === GH #1064 =============================================================
+
+/// GH #1064 — a navbar item is also active on every page of the
+/// sidebar that links to it, so readers see which section they are in
+/// (Q1 parity). The page's own navbar link still wins on pages the
+/// navbar links to directly, and only one item goes active.
+#[test]
+fn pipeline_navbar_active_for_pages_in_sidebar_section() {
+    let (project_dir, _outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  title: Example\n  navbar:\n    left:\n\
+             \x20     - text: Home\n        href: index.qmd\n\
+             \x20     - text: Guide\n        href: guide/index.qmd\n\
+             \x20 sidebar:\n    - title: Guide\n      contents:\n\
+             \x20       - guide/index.qmd\n        - guide/install.qmd\n",
+        );
+        write(
+            &project_dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nWelcome.\n",
+        );
+        std::fs::create_dir_all(project_dir.join("guide")).unwrap();
+        write(
+            &project_dir.join("guide/index.qmd"),
+            "---\ntitle: Guide\n---\n\nThe guide.\n",
+        );
+        write(
+            &project_dir.join("guide/install.qmd"),
+            "---\ntitle: Install\n---\n\nHow to install.\n",
+        );
+    });
+
+    let site = project_dir.join("_site");
+    let install_html = read(&site.join("guide").join("install.html"));
+    let guide_html = read(&site.join("guide").join("index.html"));
+    let index_html = read(&site.join("index.html"));
+
+    let active = "class=\"nav-link active\" aria-current=\"page\"";
+    assert!(
+        install_html.contains(&format!("href=\"index.html\" {active}")),
+        "Guide should be active on guide/install.html; got: {}",
+        &install_html[..install_html.len().min(3000)]
+    );
+    assert!(guide_html.contains(&format!("href=\"index.html\" {active}")));
+    assert!(index_html.contains(&format!("href=\"index.html\" {active}")));
+    for (name, html) in [
+        ("guide/install.html", &install_html),
+        ("guide/index.html", &guide_html),
+        ("index.html", &index_html),
+    ] {
+        assert_eq!(
+            html.matches("class=\"nav-link active\"").count(),
+            1,
+            "expected exactly one active nav-link on {name}"
+        );
+    }
+    // Home is the active one on index.html, not Guide.
+    assert!(index_html.contains("href=\"guide/index.html\" class=\"nav-link\""));
+}
