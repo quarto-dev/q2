@@ -141,7 +141,8 @@
     }
   }
 
-  // Kept as one literal (server.rs pins it against EVENTS_PATH).
+  // Kept as one literal so the served HTML names its endpoint verbatim
+  // (server.rs pins it against EVENTS_PATH).
   var source = new EventSource(siteUrl("__q2-preview/events").href);
   var wasOpen = false;
 

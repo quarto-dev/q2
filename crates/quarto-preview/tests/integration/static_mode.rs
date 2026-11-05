@@ -17,6 +17,8 @@
 //! - HEAD answers with the GET headers and no body.
 //! - `/__q2-preview/events` is an SSE stream that delivers events sent
 //!   after subscription and never replays earlier ones.
+//! - Every URL the server emits (redirects, listing links, the client's
+//!   `data-q2-root`) stays under a path-stripping proxy's prefix.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

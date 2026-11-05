@@ -5,7 +5,7 @@ description: 'Make the live viewer and `--static` preview work when a proxy serv
 status: in-progress
 ---
 
-**Branch:** `preview-proxy-base-path` (based on `main` @ `a177a07a4`)
+**Branch:** `preview-proxy-base-path`, pushed as `seeM:feature/preview-proxy-base-path` (based on `main` @ `a177a07a4`)
 
 ## Overview
 
@@ -121,7 +121,13 @@ the slash form, so it is not handled here.
 
 - [x] `cargo nextest run -p quarto-preview`, clippy, `npm run test` and
   the build for `q2-preview-spa`.
+- \[\~\] Windows cross-check
+  (`cargo clippy -p quarto-preview --all-targets --target x86_64-pc-windows-msvc`):
+  can't run from macOS, since `ring` and `aws-lc-sys` compile C for the target. The
+  change adds no platform-specific code.
 - [x] Rebuild the WASM and SPA embed chain and `q2`.
+- [x] Document it for users: a "Behind a proxy" section in
+  `docs/guides/projects/preview.qmd`.
 - [x] End to end: a small path-stripping proxy at `/p/abc123/` in front
   of both modes; page renders, edits re-render, and every request in the
   network panel stays under the prefix. Record the invocation and
