@@ -1,0 +1,201 @@
+---
+title: Lightbox Figures
+lightbox: true
+---
+
+## Overview
+
+A lightbox lets a reader click an image to see a larger version of it on
+top of the page, with its caption. Images can also be grouped into a
+gallery, so the reader can page through them without going back to the
+document. Quarto uses the [GLightbox](https://biati-digital.github.io/glightbox/)
+library for this in HTML pages.
+
+This page uses `lightbox: true`, so the image below opens in a lightbox
+when you click it:
+
+![An elephant](../../authoring/elephant.png){width=50%}
+
+## Enabling lightbox
+
+To give every image in a document the lightbox treatment, set `lightbox`
+to `true` (or `auto`, which means the same) in the front matter, or under
+`format: html:`, or in `_quarto.yml` for the whole project:
+
+``` yaml
+---
+title: Simple Lightbox Example
+lightbox: true
+---
+
+![A Lovely Image](mv-1.jpg)
+```
+
+In this automatic mode, Quarto picks every figure and every image that
+sits alone in its own paragraph. Images that appear inline, within a line
+of text, are left alone.
+
+### Applying lightbox to specific images
+
+To give the treatment to selected images only, leave `lightbox` unset and
+add the `lightbox` class to those images. There is no need to set anything
+in the front matter:
+
+``` markdown
+![A Lovely Image](mv-1.jpg){.lightbox}
+
+![Another Lovely Image](mv-2.jpg)
+```
+
+Here the first image gets a lightbox and the second does not. The class
+also works on inline images, which automatic mode skips.
+
+## Disabling lightbox
+
+To turn lightbox off for a whole document, even for images that carry the
+`lightbox` class:
+
+``` yaml
+---
+lightbox: false
+---
+```
+
+### Disabling lightbox for specific images
+
+In automatic mode, give an image the `nolightbox` class to leave it out:
+
+``` markdown
+---
+lightbox: auto
+---
+
+![A Lovely Image](mv-1.jpg)
+
+![Another Lovely Image](mv-2.jpg){.nolightbox}
+```
+
+Images that are already links, like `[![A ferry](ferry.png)](https://example.com)`,
+never get a lightbox: clicking them follows the link.
+
+## Galleries
+
+Give images the same `group` attribute to put them in one gallery. When
+the reader opens one of them, they can page through the others:
+
+``` markdown
+![A Lovely Image](mv-1.jpg){group="my-gallery"}
+
+![Another Lovely Image](mv-2.jpg){group="my-gallery"}
+
+![The Last Lovely Image](mv-3.jpg){group="my-gallery"}
+```
+
+Without a `group`, each image is a gallery of its own.
+
+## Options
+
+Instead of `true`, `lightbox` can be a set of options:
+
+| Option          | Description |
+|-----------------|-------------|
+| `match`         | Set to `auto` to give every image the lightbox treatment. If you leave it out, only images with the `lightbox` class get it. |
+| `effect`        | The effect used to open and close the lightbox: `fade`, `zoom` or `none`. Defaults to `zoom`. |
+| `desc-position` | Where the title and description go: `top`, `bottom`, `left` or `right`. Defaults to `bottom`. |
+| `loop`          | Whether paging past the last image of a gallery goes back to the first. Defaults to `false`. |
+| `css-class`     | A class name for the lightbox, for targeting it with your own CSS. It replaces GLightbox's own skin class. |
+
+A complete example:
+
+``` yaml
+---
+title: Complete Lightbox Example
+lightbox:
+  match: auto
+  effect: fade
+  desc-position: right
+  loop: false
+  css-class: "my-css-class"
+---
+```
+
+An invalid value produces a warning and the option's default is used.
+
+## Per-image attributes
+
+These attributes can be set on individual images:
+
+| Attribute       | Description |
+|-----------------|-------------|
+| `group`         | The gallery the image belongs to. |
+| `description`   | Text shown below the title in the lightbox. It is Markdown, so it can contain emphasis, links and so on. |
+| `desc-position` | Where this image's title and description go: `top`, `bottom`, `left` or `right`. |
+| `title`         | The title shown in the lightbox, instead of the caption. |
+
+For example:
+
+``` markdown
+![Beach in Chilmark](mv-0.jpg){description="Some of the best beaches on the island. _Credit:_ [Unsplash](https://unsplash.com)" desc-position="left"}
+```
+
+The title shown in the lightbox is the image's caption. For a figure you
+can cross-reference, it includes the figure number, as in "Figure 1:
+A Lovely Image". An image without a caption uses its alt text.
+
+## Using lightbox with computational cells
+
+Plots produced by code cells are figures, so in automatic mode they get the
+lightbox treatment like any other figure, including the figure number when
+they have a label:
+
+```` markdown
+---
+lightbox: auto
+---
+
+```{r}
+#| label: fig-basic
+#| fig-cap: Simple demo R plot
+plot(1:10, rnorm(10))
+```
+````
+
+A cell can also pass options through its `lightbox` option. Use `false` to
+leave the cell's plots out, or a set of attributes to apply to them. When a
+cell makes several plots, give a list to set a different value for each:
+
+```` markdown
+```{r}
+#| fig-cap:
+#|   - Caption for first plot
+#|   - Caption for second plot
+#| lightbox:
+#|   group: cars
+#|   description:
+#|     - This is the description for the first graph
+#|     - This is the description for the second graph
+plot(mtcars)
+plot(cars)
+```
+````
+
+## The `quarto-ext/lightbox` extension
+
+Lightbox used to be provided by the `quarto-ext/lightbox` extension. It is
+now built in, so a document that still lists that extension under
+`filters` gets a warning, the entry is ignored, and the built-in lightbox
+is used. Remove the entry and the extension's `_extensions/quarto-ext/lightbox/`
+folder.
+
+## Differences from Quarto 1
+
+- Lightbox works in HTML documents and websites. Reveal.js presentations
+  and dashboards don't support it yet.
+- `q2 preview` doesn't open the lightbox. The images still show, and
+  clicking them does nothing. `q2 render` gives the full behaviour.
+- The cell `lightbox` option works with the knitr engine. With the
+  Jupyter engine it is not passed on yet.
+- Subfigures (`fig-subcap`) are not supported yet, so the subfigures of a
+  figure don't form a gallery of their own yet.
+- An invalid option value is a warning, not an error, and `loop` is
+  documented with the default it has always had, `false`.
