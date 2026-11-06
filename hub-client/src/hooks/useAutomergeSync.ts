@@ -55,13 +55,19 @@ interface UseAutomergeSyncOptions {
    *  When non-null, Monaco is bound to the branch doc (branchService)
    *  instead of the synced main doc. */
   activeBranchId?: string | null;
+  /**
+   * Called synchronously with every `content` update (the hook's own and
+   * `setContent` calls), in the same batch as the state change. Lets a
+   * parent that mirrors `content` stay one commit ahead of an effect.
+   */
+  onContentChange?: (content: string) => void;
 }
 
 interface UseAutomergeSyncResult {
   /** Current content string for preview rendering */
   content: string;
   /** Direct setter — used by file-switching and replay code */
-  setContent: React.Dispatch<React.SetStateAction<string>>;
+  setContent: (content: string) => void;
   /** True while applying remote edits to Monaco (prevents echo).
    *  Also used by replay code when applying replay edits. */
   applyingRemoteRef: React.MutableRefObject<boolean>;
@@ -80,8 +86,17 @@ export function useAutomergeSync({
   replayActiveRef,
   replayIsActive,
   activeBranchId = null,
+  onContentChange,
 }: UseAutomergeSyncOptions): UseAutomergeSyncResult {
-  const [content, setContent] = useState<string>('');
+  const [content, setContentState] = useState<string>('');
+  const onContentChangeRef = useRef(onContentChange);
+  useEffect(() => {
+    onContentChangeRef.current = onContentChange;
+  });
+  const setContent = useCallback((next: string) => {
+    setContentState(next);
+    onContentChangeRef.current?.(next);
+  }, []);
   const applyingRemoteRef = useRef(false);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
@@ -210,7 +225,7 @@ export function useAutomergeSync({
       // old file catch up from source rather than from a stale diff.
       pendingRemoteContentRef.current = null;
     };
-  }, [currentFile, replayIsActive]);
+  }, [currentFile, replayIsActive, setContent]);
 
   // ── Reconciliation on mount / file switch / editor mount ─────────────
   //
@@ -274,7 +289,7 @@ export function useAutomergeSync({
     perfSegment('effect.automerge-reconcile.vfs', readT1, vfsT1);
     perfSegment('effect.automerge-reconcile.monaco', vfsT1, monacoT1);
     perfSegment('effect.automerge-reconcile', fxT0);
-  }, [currentFile, fileContents, replayIsActive, editorMountGen, activeBranchId]);
+  }, [currentFile, fileContents, replayIsActive, editorMountGen, activeBranchId, setContent]);
 
   // ── Monaco → Automerge ───────────────────────────────────────────────
   //
@@ -298,7 +313,7 @@ export function useAutomergeSync({
         onContentOperations(currentFileRef.current.path, event.changes);
       }
     }
-  }, [onContentOperations]);
+  }, [onContentOperations, setContent]);
 
   // ── AST rewrite ────────────────────────────────────────────────────────
   //
@@ -339,7 +354,7 @@ export function useAutomergeSync({
         applyingRemoteRef.current = false;
       }
     }
-  }, [currentFile, onContentOperations]);
+  }, [currentFile, onContentOperations, setContent]);
 
   return {
     content,

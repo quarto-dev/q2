@@ -29,7 +29,7 @@ const DEMOS: Record<string, Demo> = {
   },
   monaco: {
     title: 'Monaco editor',
-    description: 'The hub-client Monaco editor on an Automerge text doc, synced through a public server.',
+    description: 'The hub-client document editor on a project file: Automerge sync, remote cursors, qmd highlighting, outline and folding, Cmd+B, link and image paste.',
     icon: <span className="dg-glyph">✎</span>,
     Component: MonacoDemo,
   },
