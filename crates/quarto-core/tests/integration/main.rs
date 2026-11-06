@@ -77,6 +77,7 @@ pub mod heading_id_after_expansion;
 pub mod headroom_pipeline;
 pub mod hephaestus_render;
 pub mod html_citations;
+pub mod html_text;
 pub mod idempotence;
 pub mod import_finish;
 pub mod import_media;

@@ -73,5 +73,15 @@
     "name": "rust",
     "class": "rust",
     "source": "/// Greets.\nfn greet(name: &str) -> String {\n    format!(\"hi, {name}\")\n}\n"
+  },
+  {
+    "name": "qmd",
+    "class": "qmd",
+    "source": "---\ntitle: \"Report\"\n---\n\n## Results\n\nSome **bold**, _em_ and a [link](https://example.com) {{< meta title >}}.\n\n```{python}\n#| echo: false\nprint(\"hello\")\n```\n"
+  },
+  {
+    "name": "qmd_markdown_alias",
+    "class": "markdown",
+    "source": "# Heading\n\n- item with `code`\n"
   }
 ]
