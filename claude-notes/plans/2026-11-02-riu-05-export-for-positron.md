@@ -91,52 +91,58 @@ construct Positron cannot display. Each is reported in the skipped list with a r
 
 ## Phase A: tests first
 
-- [ ] Fixtures, checked in as files so no kernel is needed at test time: the S1 `basic.qmd`
+- [x] Fixtures, checked in as files so no kernel is needed at test time: the S1 `basic.qmd`
+      **Done (2026-11-06):** `crates/quarto-core/tests/fixtures/records-export/` holds `basic`, `dup`, `julia-plot` and `julia-error` (each `.ipynb` record beside its `.qmd`), rendered with `target/debug/q2`. The expected exports are asserted in the tests, not stored as files.
       (`crates/quarto-preview/tests/fixtures/records-in-use/basic.qmd`) and the S1 `julia.qmd`
       records, each rendered once with `execute: {record: true}` in the front matter. **`dup.qmd`
       does not exist in that directory** (S7 made it in a scratchpad): create it (two identical cells
       and a labeled cell), render it the same way, and check in the record, not the page. Add a Julia
       plot record and a Julia record with an error cell (spike J's documents). Keep the expected
       export beside each.
-- [ ] One test per transform step: array join, object serialization, string passthrough, metadata
+- [x] One test per transform step: array join, object serialization, string passthrough, metadata
       reduction, `outputs` always present, version stamp, source passthrough, `last_updated` taken
       from the argument.
-- [ ] One test per representation rule: the PDF is dropped; PNG wins over SVG; an `img`-only data-URI
+- [x] One test per representation rule: the PDF is dropped; PNG wins over SVG; an `img`-only data-URI
       `text/html` is dropped; a table's `text/html` stays; a Plotly-shaped bundle (a script-bearing
       `text/html` plus a PNG) keeps both. Assert the reason is reported.
-- [ ] One test per skip class (inline unit, non-Jupyter-non-Julia engine, extension language, rendered
+- [x] One test per skip class (inline unit, non-Jupyter-non-Julia engine, extension language, rendered
+      Partial and complete duplicate groups, `julia`-owned cells and an untagged cell (engine from ownership) are covered too. The "owner table admitting only `jupyter` exports 0" regression is not a test: the owner table is a constant, so there is nothing to switch.
       markdown, partial duplicate group), asserting the reason and that the other cells still
       export. S7 results to reproduce: `basic` exports 4 cells and skips 1 (`inline unit`); `dup`
       exports 3. Spike J results: the five-unit Julia record exports 4 and skips the span; with the
       owner table admitting only `jupyter` it exports 0 (the J4 behavior, kept as a regression).
-- [ ] A round trip through the `positron_loader` mirror in `positron_conformance.rs`: the export is
+- [x] A round trip through the `positron_loader` mirror in `positron_conformance.rs`: the export is
       accepted, and the mirror yields the outputs the record held. Where S7 (the real window) and
       the mirror disagree, the mirror is wrong; fix it in the same change and say so.
-- [ ] A negative test: an export the mirror would delete (for example missing `outputs`) cannot be
+- [x] A negative test: an export the mirror would delete (for example missing `outputs`) cannot be
       produced. Build the bad case by mutating the output, not the function.
-- [ ] The inverse check with RIU-3: export then import (`record_from_positron`, with the real
+- [x] The inverse check with RIU-3: export then import (`record_from_positron`, with the real
+      **Partial:** the import gate in this tree admits only `jupyter` and `knitr`; its `julia` widening is RIU-3's, so the Julia round trip passes owner `"jupyter"` as a stand-in. Re-point it at `"julia"` when RIU-3 lands.
       registry's owner) gives back the same outputs for the cells that exported, for a Python and a
       Julia document (spike J's `riu_s8_check` did this by hand: 4 of 4).
-- [ ] A test with an output whose data is an array of lines (the untested class), asserting the
+- [x] A test with an output whose data is an array of lines (the untested class), asserting the
       joined string.
 
 ## Phase B: code
 
-- [ ] `export_for_positron(&Record, &ExportOptions) -> Result<ExportedCache, ExportError>` where
+- [x] `export_for_positron(&Record, &ExportOptions) -> Result<ExportedCache, ExportError>` where
+      `record/positron_export.rs`, re-exported from `record`.
       `ExportOptions` carries the source string and `last_updated`. `ExportedCache` holds the bytes
       and the list of skipped units and dropped representations, each with a reason. No file writes,
       no environment or clock reads.
-- [ ] **`ExportError`**, with causes defined by checks the function makes on a record that
+- [x] **`ExportError`**, with causes defined by checks the function makes on a record that
       `read_record` accepted: `MissingContentHash` (a cell that cannot be matched because its
       `quarto_content_hash` is empty) and `MalformedOutput` (an output that is not an object, or an
       `outputs` field that is not an array). Each names the cell id. (The spike had no failing path.)
       No exportable cells is **not** an `ExportError`: the function returns an empty cache and the
       subcommand turns that into its own exit code.
-- [ ] Nothing else reimplements this function; the subcommand (Phase B2) is a thin wrapper.
-- [ ] Place it next to `positron_import.rs`, target-neutral so a WASM caller is possible later; do
+- [x] Nothing else reimplements this function; the subcommand (Phase B2) is a thin wrapper.
+- [x] Place it next to `positron_import.rs`, target-neutral so a WASM caller is possible later; do
       not add a WASM export in this plan.
 
 ## Phase B2: `q2 record export-positron`
+
+**Not started (2026-11-06).** It needs RIU-4's `--records` parsing, which this branch does not have. The function and its tests (Phases A and B) are complete and the subcommand is a thin wrapper over them.
 
 Only what the Positron commands need; nothing speculative. Epic decision 13.
 
@@ -190,11 +196,12 @@ then `export PATH=$SCRATCH/venv/bin:$PATH`. A Julia document needs `julia` (1.12
 a plot needs Plots in the document's Julia project (add it with `JULIA_PKG_OFFLINE=true julia
 --project=. -e 'import Pkg; Pkg.add("Plots")'`).
 
-- [ ] `cargo clippy -p quarto-core -p quarto --all-targets -- -D warnings`
-- [ ] The Windows cross-check (the subcommand takes paths and writes a file):
+- [x] `cargo clippy -p quarto-core -p quarto --all-targets -- -D warnings`
+      Run for `quarto-core` only (the `quarto` subcommand is not built): clean on the host.
+- [ ] The Windows cross-check **not run**: `cargo clippy --target x86_64-pc-windows-msvc` cannot build `aws-lc-sys` from macOS (the caveat in `.claude/rules/cross-platform.md`). The new tests build their one path with `Path::join`; a Windows user should run the native clippy. (the subcommand takes paths and writes a file):
       `cargo clippy -p quarto-core -p quarto --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
 - [ ] `cargo nextest run -p quarto-core -p quarto`
-- [ ] **Needs Gordon at the Positron dev build** (the S7 method; the push command is the S5 spike or
+- [ ] **NOT RUN (needs Gordon at the Positron dev build)** (the S7 method; the push command is the S5 spike or
       RIU-6 command 2): push an exported file for (a) a document with an array-valued output, and (b) the
       Julia plot document, and confirm the plot shows **once**, with no base64 text. The Julia plot
       document and its old, unfiltered export are in `~/docs/inline-output/` (`s8-julia.qmd`,

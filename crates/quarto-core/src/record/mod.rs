@@ -22,6 +22,7 @@ mod location;
 mod matching;
 mod overlay;
 mod place;
+mod positron_export;
 mod positron_import;
 mod reader;
 mod sources;
@@ -49,6 +50,10 @@ pub use matching::{
 pub use overlay::{overlay_difference, rehash_record};
 pub use place::{PlaceNote, Placed, QUARTO_MARKDOWN_MIME, VERBATIM_KEY, place};
 pub(crate) use place::{placed_replacement, replacement, stored_markdown};
+pub use positron_export::{
+    DropReason, DroppedRepresentation, ExportError, ExportOptions, ExportedCache, SkipReason,
+    SkippedUnit, export_for_positron,
+};
 pub use positron_import::{
     DisplayOnlyOutputs, ImportError, JUPYTER_ENGINE, KNITR_ENGINE, POSITRON_CACHE_VERSION,
     PositronImport, Provenance, import_positron_cache,

@@ -1,0 +1,31 @@
+---
+title: Records basic
+jupyter: python3
+execute:
+  record: true
+---
+
+Prose paragraph one.
+
+```{python}
+print("hello from text cell")
+```
+
+```{python}
+import matplotlib
+import matplotlib.pyplot as plt
+plt.plot([1, 2, 3], [1, 4, 9])
+plt.show()
+```
+
+```{python}
+import pandas as pd
+pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+```
+
+```{python}
+#| error: true
+raise ValueError("boom")
+```
+
+The inline value is `{python} 6 * 7`.
