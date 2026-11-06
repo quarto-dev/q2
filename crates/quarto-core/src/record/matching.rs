@@ -48,6 +48,19 @@ pub const HEADER_KEYS_KEY: &str = "quarto_header_keys";
 pub const OUTPUT_FORMAT_OPTION: &str = "quarto-output-format";
 
 impl UnitKey {
+    /// The key of a unit no engine owns, or whose options did not hash: it matches a record cell
+    /// by content hash only (empty execution hash, no profiles, no header keys). The splice and
+    /// the imported-record staleness rule both build it, so they cannot disagree.
+    pub fn content_only(kind: UnitKind, content_hash: &str) -> Self {
+        Self {
+            kind,
+            exec_hash: String::new(),
+            content_hash: content_hash.to_string(),
+            alt_exec_hashes: Vec::new(),
+            header_keys: None,
+        }
+    }
+
     /// Hash a unit's author text the way the record writer does (`RecordBuilder::push`):
     /// a cell is partitioned into options and code, a span is its expression with no options.
     pub fn from_author_text(

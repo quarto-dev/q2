@@ -290,6 +290,35 @@ pub struct SourceInputs {
     /// The pre-sugaring snapshot of the same run: the author's text of each braced block, so
     /// the staleness check hashes units the way the record writer did (EXR-15).
     pub sugared_blocks: Vec<crate::record::SugaredBlock>,
+    /// Language to owning engine, from the engine registry's resolution of the document.
+    /// `None` unless the caller asked for it ([`SourceInputsOptions::ownership`]): only the
+    /// Positron import needs it (the language gate), so every other caller pays nothing.
+    pub ownership: Option<std::collections::BTreeMap<String, String>>,
+}
+
+impl SourceInputs {
+    /// The engine that owns `lang`, case-insensitively; empty when nobody does (or when
+    /// ownership was not requested), which no gate admits.
+    pub fn owner_of(&self, lang: &str) -> String {
+        let Some(map) = &self.ownership else {
+            return String::new();
+        };
+        map.get(lang)
+            .or_else(|| map.get(&lang.to_ascii_lowercase()))
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
+/// What [`compute_source_inputs_with`] adds to the default run.
+#[derive(Default, Clone)]
+pub struct SourceInputsOptions {
+    /// Also resolve the document's engines and return the language ownership map.
+    pub ownership: bool,
+    /// Replace the project's engine registry for the resolution (tests; the preview and the
+    /// provider pass `None` and use the project's discovered registry, which is what a real
+    /// run uses). It reaches the resolution through `StageContext::registry`.
+    pub registry: Option<Arc<crate::engine::EngineRegistry>>,
 }
 
 /// [`compute_input_qmd`] plus the merged metadata, from one pre-engine run.
@@ -301,6 +330,17 @@ pub async fn compute_source_inputs(
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
 ) -> Result<SourceInputs, PipelineError> {
+    compute_source_inputs_with(path, project, runtime, SourceInputsOptions::default()).await
+}
+
+/// [`compute_source_inputs`] with options (RIU-3a): the language ownership map and a registry
+/// override.
+pub async fn compute_source_inputs_with(
+    path: &std::path::Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+    options: SourceInputsOptions,
+) -> Result<SourceInputs, PipelineError> {
     let content = runtime
         .file_read(path)
         .map_err(|e| PipelineError::other(format!("Failed to read {}: {}", path.display(), e)))?;
@@ -311,6 +351,9 @@ pub async fn compute_source_inputs(
     })?;
 
     let mut ctx = StageContext::new(runtime, format, project.clone(), document)?;
+    if let Some(registry) = options.registry {
+        ctx.registry = registry;
+    }
 
     let stages = build_pre_engine_pipeline_stages();
     let pipeline = Pipeline::new(stages).expect("pre-engine pipeline stages should be compatible");
@@ -333,6 +376,22 @@ pub async fn compute_source_inputs(
         _ => std::collections::BTreeMap::new(),
     };
 
+    // The owner of each language, resolved on the parsed document before it is masked, exactly
+    // as `EngineExecutionStage` resolves it. Resolution may load extension engines but never
+    // runs a cell.
+    let ownership = options.ownership.then(|| {
+        crate::engine::resolve_engines_for_document(
+            &doc_ast.ast.meta,
+            &doc_ast.ast,
+            &ctx.registry,
+            ctx.claimed_engine_name.as_deref(),
+            Some(crate::engine::DOCUMENT_OWN_FILE_ID),
+        )
+        .ownership
+        .into_iter()
+        .collect()
+    });
+
     // nested-cell-masking (spec § "The engine capture — asymmetric, by
     // necessity" / `compute_input_qmd`'s three-consumer table): these bytes
     // must match what `EngineExecutionStage` hands the engine as
@@ -351,6 +410,7 @@ pub async fn compute_source_inputs(
         input_qmd: buf,
         metadata,
         sugared_blocks: std::mem::take(&mut ctx.sugared_blocks),
+        ownership,
     })
 }
 

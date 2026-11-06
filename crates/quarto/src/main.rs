@@ -301,6 +301,21 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = PreviewUiArg::Viewer)]
         ui: PreviewUiArg,
 
+        /// Where the preview gets a document's execution record, in
+        /// priority order: `cache`, `q2`, `positron`, `engine`, or a
+        /// directory of Positron-format cache files. Comma-separated
+        /// or repeated; the first source that has a record wins, and
+        /// code runs only if `engine` is listed. Default:
+        /// `cache,q2,engine`.
+        ///
+        /// `positron` reads the outputs Positron's inline output cache
+        /// holds, with no kernel; a directory path (`/abs/dir`,
+        /// `./dir`, `~/dir`) reads Positron-format files from there.
+        /// This option does not yet check that a directory exists, or
+        /// conflict with `--join`, `--static` or `--no-project`.
+        #[arg(long, value_delimiter = ',', value_name = "SOURCES")]
+        records: Vec<quarto_core::record::RecordSource>,
+
         /// Print the embedded SPA asset manifest hashes and exit.
         /// Release CI compares these across the per-platform builds —
         /// a mismatch silently disables live-share local asset serving
@@ -1320,6 +1335,50 @@ mod cli_parse_tests {
     }
 
     #[test]
+    fn preview_records_parses_a_comma_list_and_a_repeated_flag_in_order() {
+        use quarto_core::record::RecordSource as S;
+        let records = |args: &[&str]| {
+            let Commands::Preview { records, .. } = parse_preview(args) else {
+                unreachable!()
+            };
+            records
+        };
+        assert_eq!(
+            records(&["preview"]),
+            Vec::<S>::new(),
+            "absent: the default applies later"
+        );
+        assert_eq!(
+            records(&["preview", "--records", "positron,engine"]),
+            vec![S::Positron, S::Engine]
+        );
+        assert_eq!(
+            records(&[
+                "preview",
+                "--records",
+                "positron",
+                "--records",
+                "/abs/caches"
+            ]),
+            vec![S::Positron, S::Dir("/abs/caches".into())]
+        );
+        assert_eq!(
+            records(&["preview", "--records", "/only/a/dir"]),
+            vec![S::Dir("/only/a/dir".into())],
+            "a lone directory leaves `engine` out of the list"
+        );
+    }
+
+    #[test]
+    fn preview_records_rejects_an_unknown_entry_naming_the_choices() {
+        let err = match try_parse(&["preview", "--records", "positron,bogus"]) {
+            Ok(_) => panic!("an unknown entry must be refused"),
+            Err(e) => e.to_string(),
+        };
+        assert!(err.contains("bogus") && err.contains("positron"), "{err}");
+    }
+
+    #[test]
     fn preview_share_flag_parses() {
         let Commands::Preview { share, .. } = parse_preview(&["preview", "--share"]) else {
             unreachable!()
@@ -1802,6 +1861,7 @@ fn main() -> Result<()> {
             allow_edit,
             share,
             ui,
+            records,
             print_asset_manifest_hashes,
             join,
             static_mode,
@@ -1861,6 +1921,7 @@ fn main() -> Result<()> {
                     allow_edit,
                     share,
                     ui,
+                    records,
                     to,
                     metadata,
                     profile,

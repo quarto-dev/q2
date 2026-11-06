@@ -52,6 +52,43 @@ impl RecordSource {
     }
 }
 
+/// Why a `--records` entry was not understood.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "unknown record source `{0}`: use one of `cache`, `q2`, `positron`, `engine`, or a directory \
+     path (starting with `/`, `./`, `../` or `~`, or containing a path separator)"
+)]
+pub struct ParseSourceError(pub String);
+
+/// The three classification rules of `--records` (RIU-3a, kept by RIU-4): a known name, else a
+/// path-like entry is a directory, else an error. No validation (the directory need not exist
+/// here), no defaults and no conflicts; RIU-4 adds those.
+impl std::str::FromStr for RecordSource {
+    type Err = ParseSourceError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "cache" => Ok(RecordSource::Cache),
+            "q2" => Ok(RecordSource::Q2),
+            "positron" => Ok(RecordSource::Positron),
+            "engine" => Ok(RecordSource::Engine),
+            _ if is_path_like(s) => Ok(RecordSource::Dir(PathBuf::from(s))),
+            _ => Err(ParseSourceError(s.to_string())),
+        }
+    }
+}
+
+fn is_path_like(s: &str) -> bool {
+    !s.is_empty()
+        && (s.starts_with('/')
+            || s.starts_with("./")
+            || s.starts_with("../")
+            || s.starts_with('~')
+            || s.contains('/')
+            || s.contains('\\')
+            || std::path::Path::new(s).is_absolute())
+}
+
 /// An ordered list of [`RecordSource`]s. Position is priority.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordSources(Vec<RecordSource>);
@@ -130,9 +167,48 @@ pub trait RecordLookup {
     async fn run_engine(&self, inputs: &SourceInputs) -> Result<EngineResult, EngineError>;
 }
 
+/// What the `positron` and directory sources need to find and convert a document's cache
+/// (RIU-3a). The caller must also have asked `compute_source_inputs_with` for the ownership map.
+#[derive(Debug, Clone, Copy)]
+pub struct ImportContext<'a> {
+    /// The document's absolute path, which the locator turns into a `file://` URI.
+    pub abs_path: &'a std::path::Path,
+    /// The project-relative path recorded as the record's `quarto_source`.
+    pub source: Option<&'a str>,
+    /// Replaces the host's default Positron directories for the `positron` source (a test or
+    /// an explicit override; a `Dir` source always names its own directory).
+    pub positron_dir: Option<&'a std::path::Path>,
+}
+
+/// A lookup for a caller that wants only the imported sources (`positron`, a directory): the
+/// cache sources have nothing and the engine is refused. `provide-hub` publishes an imported
+/// record through the shared walk with this, so no engine is reachable from that path and the
+/// consent gate (which only guards `run_and_store`) is never involved.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ImportedOnly;
+
+#[async_trait(?Send)]
+impl RecordLookup for ImportedOnly {
+    async fn lookup(
+        &self,
+        _source: &RecordSource,
+        _inputs: &SourceInputs,
+    ) -> Result<Option<CaptureRun>, LookupError> {
+        Ok(None)
+    }
+
+    async fn run_engine(&self, _inputs: &SourceInputs) -> Result<EngineResult, EngineError> {
+        Err(EngineError::Failed(
+            "this path publishes imported records only and never runs an engine".into(),
+        ))
+    }
+}
+
 /// What the walk needs besides the list and the lookup.
 #[derive(Debug, Clone, Copy)]
 pub struct WalkContext<'a> {
+    /// `None` makes the imported sources unavailable ("no document path").
+    pub import: Option<ImportContext<'a>>,
     pub list: &'a RecordSources,
     /// Whether the policy lets the engine run (`preview.engine` is not `off`). The policy type
     /// lives in `quarto-preview`, which this crate cannot name, so the caller passes the answer.
@@ -228,6 +304,62 @@ fn judge(
     })
 }
 
+/// The `positron` and directory sources: locate the document's cache file, import it and
+/// convert it. A file that cannot be used, or two that fit equally, is `Unavailable` with the
+/// reason, never an error: the walk goes on to the next source.
+#[cfg(not(target_arch = "wasm32"))]
+fn import_arm(
+    ctx: &WalkContext<'_>,
+    source: &RecordSource,
+    inputs: &SourceInputs,
+) -> Result<CaptureRun, OutcomeKind> {
+    use crate::positron_cache::{HostEnv, HostOs, LocateError, default_directories, locate_cache};
+
+    let Some(import) = ctx.import else {
+        return Err(OutcomeKind::Unavailable(
+            "no document path to look up".into(),
+        ));
+    };
+    if inputs.ownership.is_none() {
+        // A caller bug, not a condition of the document: with no owners no unit would take an
+        // output and the source would silently look empty.
+        return Err(OutcomeKind::Failed(
+            "internal error: the source inputs carry no engine ownership".into(),
+        ));
+    }
+    let directories: Vec<PathBuf> = match (source, import.positron_dir) {
+        (RecordSource::Dir(dir), _) => vec![dir.clone()],
+        (_, Some(dir)) => vec![dir.to_path_buf()],
+        _ => default_directories(HostOs::current(), &HostEnv::from_process()),
+    };
+    let (_, authors) = super::positron_record::scan_inputs(inputs);
+    let hashes: Vec<String> = authors.0.iter().map(|a| a.content_hash.clone()).collect();
+    match locate_cache(&directories, import.abs_path, &hashes, HostOs::current()) {
+        Ok(located) => Ok(CaptureRun {
+            captures: Vec::new(),
+            record: Some(super::import_record_source(
+                &located.import,
+                inputs,
+                import.source.map(str::to_string),
+            )),
+        }),
+        Err(LocateError::NotFound) => Err(OutcomeKind::Nothing),
+        Err(e) => Err(OutcomeKind::Unavailable(e.to_string())),
+    }
+}
+
+/// The WASM client has no Positron cache to read.
+#[cfg(target_arch = "wasm32")]
+fn import_arm(
+    _ctx: &WalkContext<'_>,
+    _source: &RecordSource,
+    _inputs: &SourceInputs,
+) -> Result<CaptureRun, OutcomeKind> {
+    Err(OutcomeKind::Unavailable(
+        "the Positron cache is not readable here".into(),
+    ))
+}
+
 /// Walk `ctx.list` in order and return the first record a source supplies.
 ///
 /// The engine is called only when it is in the list and `ctx.engine_enabled`; a lookup or
@@ -275,9 +407,22 @@ pub async fn resolve_records(
                     }
                 }
             }
-            // RIU-3a supplies these arms; until then they have nothing, and the caller's
-            // lookup is never asked about them.
-            RecordSource::Positron | RecordSource::Dir(_) => OutcomeKind::Nothing,
+            // Shared code, no trait method: nothing here depends on who is asking.
+            RecordSource::Positron | RecordSource::Dir(_) => {
+                match import_arm(ctx, source, inputs).and_then(|run| judge(ctx, source, run)) {
+                    Ok(chosen) => {
+                        outcomes.push(SourceOutcome {
+                            source: source.clone(),
+                            kind: OutcomeKind::Supplied,
+                        });
+                        return Resolution {
+                            chosen: Some(chosen),
+                            outcomes,
+                        };
+                    }
+                    Err(kind) => kind,
+                }
+            }
             RecordSource::Cache | RecordSource::Q2 => match lookup.lookup(source, inputs).await {
                 Ok(Some(run)) => match judge(ctx, source, run) {
                     Ok(chosen) => {
@@ -325,6 +470,7 @@ mod tests {
             input_qmd: b"x".to_vec(),
             metadata: Default::default(),
             sugared_blocks: Vec::new(),
+            ownership: None,
         }
     }
 
@@ -420,6 +566,7 @@ mod tests {
             list,
             engine_enabled,
             record_gate: gate,
+            import: None,
         };
         resolve_records(&ctx, &inputs(), fake).await
     }
@@ -672,5 +819,209 @@ mod tests {
         assert!(r.chosen.is_none());
         assert!(fake.asked.borrow().is_empty());
         assert_eq!(kinds(&r).len(), 3, "two sources and the absent engine");
+    }
+
+    #[test]
+    fn record_source_entries_classify_by_name_then_path_then_error() {
+        use std::str::FromStr;
+        for (text, want) in [
+            ("cache", RecordSource::Cache),
+            ("q2", RecordSource::Q2),
+            ("positron", RecordSource::Positron),
+            ("engine", RecordSource::Engine),
+            ("/abs/dir", RecordSource::Dir("/abs/dir".into())),
+            ("./rel", RecordSource::Dir("./rel".into())),
+            ("../up", RecordSource::Dir("../up".into())),
+            ("~/caches", RecordSource::Dir("~/caches".into())),
+            ("a/b", RecordSource::Dir("a/b".into())),
+            (r"C:\caches", RecordSource::Dir(r"C:\caches".into())),
+        ] {
+            assert_eq!(RecordSource::from_str(text).unwrap(), want, "{text}");
+        }
+        for bad in ["bogus", "", "Positron", "caches"] {
+            let err = RecordSource::from_str(bad).unwrap_err();
+            assert!(
+                err.to_string().contains("positron"),
+                "the message names the choices: {err}"
+            );
+        }
+    }
+
+    // The Positron and directory arms (RIU-3a) -------------------------------------------
+
+    #[cfg(not(target_arch = "wasm32"))]
+    mod imported {
+        use super::*;
+        use crate::record::content_hash;
+
+        const DOC_URI: &str = "file:///virtual/doc.qmd";
+
+        fn import_inputs() -> SourceInputs {
+            SourceInputs {
+                input_qmd: b"```{python}\nx = 1\n```\n".to_vec(),
+                ownership: Some([("python".to_string(), "jupyter".to_string())].into()),
+                ..Default::default()
+            }
+        }
+
+        /// A cache directory holding one Positron-format file for `x = 1`, under an arbitrary
+        /// name (so the `quarto_source` tier finds it).
+        fn cache_dir() -> tempfile::TempDir {
+            let dir = tempfile::tempdir().unwrap();
+            let file = serde_json::json!({
+                "nbformat": 4, "nbformat_minor": 5,
+                "metadata": {"quarto_source": DOC_URI, "quarto_cache_version": 1},
+                "cells": [{
+                    "cell_type": "code", "execution_count": null,
+                    "metadata": {"quarto_content_hash": content_hash("x = 1")},
+                    "outputs": [{"output_type": "stream", "name": "stdout", "text": ["hi\n"]}],
+                    "source": []
+                }]
+            });
+            std::fs::write(dir.path().join("any-name.ipynb"), file.to_string()).unwrap();
+            dir
+        }
+
+        async fn walk_imported(
+            list: &RecordSources,
+            dir_override: Option<&std::path::Path>,
+            gate: bool,
+            fake: &Fake,
+            inputs: &SourceInputs,
+        ) -> Resolution {
+            let ctx = WalkContext {
+                list,
+                engine_enabled: true,
+                record_gate: gate,
+                import: Some(ImportContext {
+                    abs_path: std::path::Path::new("/virtual/doc.qmd"),
+                    source: Some("doc.qmd"),
+                    positron_dir: dir_override,
+                }),
+            };
+            resolve_records(&ctx, inputs, fake).await
+        }
+
+        #[tokio::test]
+        async fn a_directory_source_supplies_an_imported_record_without_asking_the_lookup() {
+            let dir = cache_dir();
+            let list = RecordSources::new(vec![RecordSource::Dir(dir.path().to_path_buf())]);
+            let fake = Fake::new();
+            let r = walk_imported(&list, None, true, &fake, &import_inputs()).await;
+            let Some(Chosen::Run { source, run }) = &r.chosen else {
+                panic!("expected a run: {:?}", r.outcomes)
+            };
+            assert_eq!(source, &RecordSource::Dir(dir.path().to_path_buf()));
+            assert!(run.captures.is_empty(), "an import has no legacy form");
+            let record = run.record.as_ref().unwrap();
+            assert_eq!(record.cells.len(), 1);
+            assert_eq!(record.metadata.quarto_source.as_deref(), Some("doc.qmd"));
+            assert!(fake.asked.borrow().is_empty() && *fake.engine_calls.borrow() == 0);
+        }
+
+        #[tokio::test]
+        async fn the_positron_source_reads_the_directory_override_and_beats_the_engine() {
+            let dir = cache_dir();
+            let list = RecordSources::new(vec![RecordSource::Positron, RecordSource::Engine]);
+            let fake = Fake::new();
+            let r = walk_imported(&list, Some(dir.path()), true, &fake, &import_inputs()).await;
+            assert!(matches!(
+                r.chosen,
+                Some(Chosen::Run {
+                    source: RecordSource::Positron,
+                    ..
+                })
+            ));
+            assert_eq!(*fake.engine_calls.borrow(), 0, "no kernel is started");
+        }
+
+        #[tokio::test]
+        async fn a_document_the_cache_does_not_cover_falls_through_to_the_engine() {
+            let dir = tempfile::tempdir().unwrap();
+            let list = RecordSources::new(vec![RecordSource::Positron, RecordSource::Engine]);
+            let fake = Fake::new();
+            let r = walk_imported(&list, Some(dir.path()), true, &fake, &import_inputs()).await;
+            assert!(matches!(
+                r.chosen,
+                Some(Chosen::Run {
+                    source: RecordSource::Engine,
+                    ..
+                })
+            ));
+            assert_eq!(
+                kinds(&r),
+                vec![
+                    ("positron".to_string(), OutcomeKind::Nothing),
+                    ("engine".to_string(), OutcomeKind::Supplied)
+                ]
+            );
+        }
+
+        #[tokio::test]
+        async fn a_cache_whose_cells_match_no_unit_is_nothing() {
+            let dir = cache_dir();
+            let inputs = SourceInputs {
+                input_qmd: b"```{python}\ny = 2\n```\n".to_vec(),
+                ..import_inputs()
+            };
+            let list = RecordSources::new(vec![RecordSource::Dir(dir.path().to_path_buf())]);
+            let r = walk_imported(&list, None, true, &Fake::new(), &inputs).await;
+            assert!(r.chosen.is_none());
+            assert_eq!(r.outcomes[0].kind, OutcomeKind::Nothing);
+        }
+
+        #[tokio::test]
+        async fn an_unusable_cache_is_unavailable_with_the_reason_not_an_error() {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(
+                dir.path().join("any-name.ipynb"),
+                serde_json::json!({
+                    "nbformat": 4, "metadata": {"quarto_source": DOC_URI, "quarto_cache_version": 2},
+                    "cells": []
+                })
+                .to_string(),
+            )
+            .unwrap();
+            let list = RecordSources::new(vec![RecordSource::Dir(dir.path().to_path_buf())]);
+            let r = walk_imported(&list, None, true, &Fake::new(), &import_inputs()).await;
+            assert!(r.chosen.is_none());
+            let OutcomeKind::Unavailable(why) = &r.outcomes[0].kind else {
+                panic!("{:?}", r.outcomes)
+            };
+            assert!(why.contains("version"), "{why}");
+            assert!(
+                r.first_failure().is_none(),
+                "a bad cache is not the document's error"
+            );
+        }
+
+        #[tokio::test]
+        async fn with_the_writer_gate_off_an_import_is_refused_naming_the_variable() {
+            let dir = cache_dir();
+            let list = RecordSources::new(vec![RecordSource::Dir(dir.path().to_path_buf())]);
+            let r = walk_imported(&list, None, false, &Fake::new(), &import_inputs()).await;
+            assert!(r.chosen.is_none());
+            assert!(r.refusal().unwrap().contains("QUARTO_ENGINE_RECORD_WRITE"));
+        }
+
+        #[tokio::test]
+        async fn without_ownership_the_walk_reports_an_internal_failure_not_an_empty_cache() {
+            let dir = cache_dir();
+            let inputs = SourceInputs {
+                ownership: None,
+                ..import_inputs()
+            };
+            let list = RecordSources::new(vec![RecordSource::Dir(dir.path().to_path_buf())]);
+            let r = walk_imported(&list, None, true, &Fake::new(), &inputs).await;
+            assert!(r.first_failure().unwrap().contains("ownership"));
+        }
+
+        #[tokio::test]
+        async fn without_a_document_path_the_imported_sources_are_unavailable() {
+            let dir = cache_dir();
+            let list = RecordSources::new(vec![RecordSource::Dir(dir.path().to_path_buf())]);
+            let r = walk(&list, true, true, &Fake::new()).await;
+            assert!(matches!(r.outcomes[0].kind, OutcomeKind::Unavailable(_)));
+        }
     }
 }

@@ -39,11 +39,15 @@ use std::time::Duration;
 use futures::StreamExt;
 use quarto_core::engine::EngineRegistry;
 use quarto_core::engine::preview_record::{
-    CaptureRun, SourceInputs, compute_input_qmd, compute_source_inputs, record_capture_run,
+    CaptureRun, SourceInputs, SourceInputsOptions, compute_input_qmd, compute_source_inputs,
+    compute_source_inputs_with, record_capture_run,
 };
 use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::project::ProjectContext;
-use quarto_core::record::{overlay_difference, rehash_record};
+use quarto_core::record::{
+    Chosen, ImportContext, ImportedOnly, RecordSource, RecordSources, WalkContext,
+    imported_record_is_stale, overlay_difference, rehash_record, resolve_records,
+};
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use samod::Repo;
@@ -387,6 +391,115 @@ impl Provider {
             .map_err(|e| format!("failed to update sidecar: {e}"))?;
 
         Ok(ExecOutcome::Executed(new_doc_id))
+    }
+
+    /// Publish a record a non-engine source supplies (`positron` or a directory of Positron
+    /// caches), through the shared source walk and the RIU-2 publish seam (RIU-3a Phase D).
+    ///
+    /// Consent gates **engine** code only, and only `run_and_store` consults it; this path never
+    /// calls an engine (the walk is given [`ImportedOnly`], which refuses one), so it needs no
+    /// consent and works with `AlwaysReject`. `record_gate` is the writer gate, an argument so a
+    /// test needs no environment: with it off the seam refuses (an imported record has no legacy
+    /// form) and the error names `QUARTO_ENGINE_RECORD_WRITE`. Nothing is written then.
+    ///
+    /// The document is materialized to a temp path, so the locator's URI-hash name can never
+    /// match here: only a directory source or the content-hash tier finds a cache.
+    ///
+    /// Not here (RIU-4): the call from `execute_document` and the start-up validation.
+    pub async fn publish_record_source(
+        &self,
+        rel_path: &str,
+        source: &RecordSource,
+        record_gate: bool,
+    ) -> Result<ExecOutcome, String> {
+        if !matches!(source, RecordSource::Positron | RecordSource::Dir(_)) {
+            return Err(format!(
+                "`{}` is not an imported record source",
+                source.label()
+            ));
+        }
+        if !self.index.has_file(rel_path) {
+            return Err(format!("path '{rel_path}' is not in the project index"));
+        }
+        if !is_safe_relative(rel_path) {
+            return Err(format!("refusing to publish unsafe path '{rel_path}'"));
+        }
+
+        let tmp =
+            tempfile::tempdir().map_err(|e| format!("creating a materialization temp dir: {e}"))?;
+        crate::materialize::materialize_project(&self.repo, &self.index, tmp.path())
+            .await
+            .map_err(|e| format!("materializing the project: {e}"))?;
+        let root = tmp
+            .path()
+            .canonicalize()
+            .map_err(|e| format!("canonicalizing the materialization temp dir: {e}"))?;
+        let abs_path = root.join(rel_path);
+        let plain: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let project = ProjectContext::discover(&abs_path, plain.as_ref())
+            .map_err(|e| format!("project discovery failed: {e}"))?;
+        let inputs = compute_source_inputs_with(
+            &abs_path,
+            &project,
+            plain,
+            SourceInputsOptions {
+                ownership: true,
+                registry: self.registry.clone(),
+            },
+        )
+        .await
+        .map_err(|e| format!("computing the source inputs failed: {e}"))?;
+
+        let list = RecordSources::new(vec![source.clone()]);
+        let walk = WalkContext {
+            list: &list,
+            engine_enabled: false,
+            record_gate,
+            import: Some(ImportContext {
+                abs_path: &abs_path,
+                source: Some(rel_path),
+                positron_dir: None,
+            }),
+        };
+        let resolution = resolve_records(&walk, &inputs, &ImportedOnly).await;
+        let run = match resolution.chosen {
+            Some(Chosen::Run { run, .. }) => run,
+            _ => {
+                if let Some(why) = resolution.refusal() {
+                    return Err(why.to_string());
+                }
+                let why = resolution
+                    .outcomes
+                    .iter()
+                    .map(|o| format!("{}: {:?}", o.source.label(), o.kind))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                return Err(format!("no record to publish from {why}"));
+            }
+        };
+
+        let stale = run.record.as_ref().is_some_and(|r| {
+            imported_record_is_stale(
+                r,
+                &String::from_utf8_lossy(&inputs.input_qmd),
+                &inputs.sugared_blocks,
+            )
+        });
+        let (doc_id, _) = write_capture_doc(&self.repo, rel_path, &run, record_gate)
+            .await
+            .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
+        self.index
+            .set_capture(
+                rel_path,
+                &CaptureRef {
+                    capture_doc_id: doc_id.clone(),
+                    staleness: Some(stale),
+                    state: Some(CaptureState::Idle),
+                    last_error: None,
+                },
+            )
+            .map_err(|e| format!("failed to update sidecar: {e}"))?;
+        Ok(ExecOutcome::Executed(doc_id))
     }
 
     /// Execute one document once, off the reactor. The engine work and the

@@ -24,7 +24,10 @@
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::{CaptureRun, compute_input_qmd, compute_source_inputs};
+use quarto_core::engine::preview_record::{
+    CaptureRun, SourceInputsOptions, compute_input_qmd, compute_source_inputs,
+    compute_source_inputs_with,
+};
 use quarto_core::pandoc_request::captures::{CapturePayload, parse_capture_payload};
 use quarto_core::project::ProjectContext;
 use quarto_core::record::{Record, record_is_stale};
@@ -179,9 +182,24 @@ async fn record_one(
     // RIU-2: walk the ordered record sources (cache, the `.quarto` copy, the engine) and publish
     // whichever supplies first. The pre-engine pipeline runs once, here; the cache key and the
     // staleness check both derive from its result.
-    let inputs = compute_source_inputs(abs_path, &project, runtime.clone())
-        .await
-        .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+    // Only the Positron import needs the language ownership map (its gate); ask for it only then.
+    let wants_import = cfg.sources.iter().any(|s| {
+        matches!(
+            s,
+            quarto_core::record::RecordSource::Positron | quarto_core::record::RecordSource::Dir(_)
+        )
+    });
+    let inputs = compute_source_inputs_with(
+        abs_path,
+        &project,
+        runtime.clone(),
+        SourceInputsOptions {
+            ownership: wants_import,
+            registry: None,
+        },
+    )
+    .await
+    .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
     let lookup = crate::record_lookup::PreviewLookup {
         abs_path,
         project: &project,
@@ -190,6 +208,11 @@ async fn record_one(
         cache_dir: &cfg.cache_dir,
     };
     let walk_ctx = quarto_core::record::WalkContext {
+        import: wants_import.then_some(quarto_core::record::ImportContext {
+            abs_path,
+            source: Some(rel_path),
+            positron_dir: None,
+        }),
         list: &cfg.sources,
         engine_enabled: cfg.policy != EnginePolicy::Off,
         record_gate: cfg.record_gate,
@@ -280,16 +303,37 @@ fn source_staleness(
     use quarto_core::record::RecordSource;
     match source {
         RecordSource::Cache | RecordSource::Engine => false,
-        RecordSource::Q2 => run.record.as_ref().is_some_and(|record| {
-            record_is_stale(
-                record,
-                &String::from_utf8_lossy(&inputs.input_qmd),
-                &inputs.sugared_blocks,
-                &inputs.metadata,
-            )
-            .unwrap_or(true)
-        }),
-        RecordSource::Positron | RecordSource::Dir(_) => false,
+        RecordSource::Q2 | RecordSource::Positron | RecordSource::Dir(_) => {
+            run.record.as_ref().is_some_and(|record| {
+                record_staleness(
+                    record,
+                    &String::from_utf8_lossy(&inputs.input_qmd),
+                    &inputs.sugared_blocks,
+                    &inputs.metadata,
+                )
+                .unwrap_or(true)
+            })
+        }
+    }
+}
+
+/// The one staleness answer for a record, for the publish and for every file change, so the two
+/// cannot disagree. An imported record (Positron marker, no engines) skips only the
+/// engine-hash comparison and reports staleness by orphaned cells (epic decision 5 of
+/// 2026-11-05); any other record, including a hand-edited copy that carries the marker **and**
+/// engines, takes `record_is_stale`.
+fn record_staleness(
+    record: &Record,
+    input_qmd: &str,
+    sugared: &[quarto_core::record::SugaredBlock],
+    metadata: &std::collections::BTreeMap<String, serde_json::Value>,
+) -> Result<bool, quarto_core::record::HashError> {
+    if quarto_core::record::is_imported_record(record) {
+        Ok(quarto_core::record::imported_record_is_stale(
+            record, input_qmd, sugared,
+        ))
+    } else {
+        record_is_stale(record, input_qmd, sugared, metadata)
     }
 }
 
@@ -393,7 +437,7 @@ pub async fn recompute_staleness(
                 .await
                 .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
             let input_qmd = String::from_utf8_lossy(&source.input_qmd);
-            match record_is_stale(
+            match record_staleness(
                 &record,
                 &input_qmd,
                 &source.sugared_blocks,
@@ -2718,5 +2762,281 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
+    }
+
+    // ── RIU-3a: an imported Positron record through record_one and recompute_staleness ─────
+
+    use quarto_core::record::{RecordSource, RecordSources, content_hash};
+
+    /// A Positron-format cache directory for the document at `abs`, one cell per code string.
+    fn positron_dir_for(abs: &std::path::Path, codes: &[&str]) -> TempDir {
+        let dir = TempDir::with_prefix("riu3a-positron-").unwrap();
+        let cells: Vec<serde_json::Value> = codes
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "cell_type": "code", "execution_count": null,
+                    "metadata": {"quarto_content_hash": content_hash(c)},
+                    "outputs": [{"output_type": "stream", "name": "stdout", "text": [format!("out of {c}\n")]}],
+                    "source": []
+                })
+            })
+            .collect();
+        let uri = quarto_core::positron_cache::vscode_file_uri(
+            &abs.to_string_lossy(),
+            quarto_core::positron_cache::HostOs::current(),
+        );
+        std::fs::write(
+            dir.path().join("cache.ipynb"),
+            serde_json::json!({
+                "nbformat": 4, "nbformat_minor": 5,
+                "metadata": {"quarto_source": uri, "quarto_cache_version": 1},
+                "cells": cells
+            })
+            .to_string(),
+        )
+        .unwrap();
+        dir
+    }
+
+    fn import_cfg(dir: &TempDir) -> ReExecuteConfig {
+        let mut cfg =
+            ReExecuteConfig::new(EnginePolicy::Manual, cache_dir_for_test()).with_gate(true);
+        cfg.sources = RecordSources::new(vec![RecordSource::Dir(dir.path().to_path_buf())]);
+        cfg
+    }
+
+    const IMPORT_DOC: &str =
+        "---\ntitle: T\n---\n\n```{python}\nx = 1\n```\n\n```{python}\ny = 2\n```\n";
+
+    async fn publish_imported(
+        doc: &str,
+        cached: &[&str],
+    ) -> (
+        TempDir,
+        TempDir,
+        Arc<HubContext>,
+        Arc<dyn SystemRuntime>,
+        ReExecuteConfig,
+    ) {
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", doc)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let dir = positron_dir_for(&abs, cached);
+        let cfg = import_cfg(&dir);
+        let wrote = record_one(&abs, "doc.qmd", &ctx, &runtime, None, &cfg)
+            .await
+            .unwrap();
+        assert!(
+            wrote,
+            "the imported record is published with no engine and no registry"
+        );
+        (tmp, dir, ctx, runtime, cfg)
+    }
+
+    fn staleness(ctx: &Arc<HubContext>) -> Option<bool> {
+        ctx.index().get_capture("doc.qmd").unwrap().staleness
+    }
+
+    async fn recompute(
+        ctx: &Arc<HubContext>,
+        runtime: &Arc<dyn SystemRuntime>,
+        cfg: &ReExecuteConfig,
+    ) -> bool {
+        recompute_staleness(ctx.clone(), runtime.clone(), "doc.qmd", None, cfg)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_unedited_imported_page_is_published_fresh_and_stays_quiet() {
+        let (_tmp, _dir, ctx, runtime, cfg) =
+            publish_imported(IMPORT_DOC, &["x = 1", "y = 2"]).await;
+        assert_eq!(staleness(&ctx), Some(false));
+        assert!(
+            !recompute(&ctx, &runtime, &cfg).await,
+            "same answer as the publish"
+        );
+        assert_eq!(staleness(&ctx), Some(false));
+    }
+
+    #[tokio::test]
+    async fn a_page_with_units_the_cache_does_not_cover_stays_quiet() {
+        let (_tmp, _dir, ctx, runtime, cfg) = publish_imported(IMPORT_DOC, &["x = 1"]).await;
+        assert_eq!(staleness(&ctx), Some(false));
+        assert!(!recompute(&ctx, &runtime, &cfg).await);
+    }
+
+    #[tokio::test]
+    async fn a_chunk_the_gate_refuses_does_not_flag_the_page() {
+        let doc = "---\ntitle: T\n---\n\n```{python}\nx = 1\n```\n\n```{ojs}\nz = 3\n```\n";
+        let (_tmp, _dir, ctx, runtime, cfg) = publish_imported(doc, &["x = 1", "z = 3"]).await;
+        assert_eq!(
+            staleness(&ctx),
+            Some(false),
+            "the refused chunk's cache cell is claimed"
+        );
+        assert!(!recompute(&ctx, &runtime, &cfg).await);
+    }
+
+    #[tokio::test]
+    async fn a_cache_older_than_the_document_is_flagged_at_boot() {
+        // The cache has an output for code the document no longer has.
+        let (_tmp, _dir, ctx, _runtime, _cfg) =
+            publish_imported(IMPORT_DOC, &["x = 1", "y = 2", "old = 0"]).await;
+        assert_eq!(staleness(&ctx), Some(true));
+    }
+
+    #[tokio::test]
+    async fn editing_a_cell_flips_the_page_and_reverting_clears_it() {
+        let (tmp, _dir, ctx, runtime, cfg) =
+            publish_imported(IMPORT_DOC, &["x = 1", "y = 2"]).await;
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            IMPORT_DOC.replace("y = 2", "y = 3"),
+        )
+        .unwrap();
+        assert!(recompute(&ctx, &runtime, &cfg).await, "an edit flips it");
+        assert_eq!(staleness(&ctx), Some(true));
+        std::fs::write(tmp.path().join("doc.qmd"), IMPORT_DOC).unwrap();
+        assert!(
+            recompute(&ctx, &runtime, &cfg).await,
+            "reverting flips it back"
+        );
+        assert_eq!(staleness(&ctx), Some(false));
+    }
+
+    #[tokio::test]
+    async fn deleting_a_cell_flags_the_page() {
+        let (tmp, _dir, ctx, runtime, cfg) =
+            publish_imported(IMPORT_DOC, &["x = 1", "y = 2"]).await;
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            "---\ntitle: T\n---\n\n```{python}\nx = 1\n```\n",
+        )
+        .unwrap();
+        assert!(recompute(&ctx, &runtime, &cfg).await);
+        assert_eq!(staleness(&ctx), Some(true));
+    }
+
+    #[tokio::test]
+    async fn a_prose_edit_does_not_flag_an_imported_page() {
+        let (tmp, _dir, ctx, runtime, cfg) =
+            publish_imported(IMPORT_DOC, &["x = 1", "y = 2"]).await;
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            IMPORT_DOC.replace("title: T", "title: Other"),
+        )
+        .unwrap();
+        assert!(!recompute(&ctx, &runtime, &cfg).await);
+        assert_eq!(staleness(&ctx), Some(false));
+    }
+
+    /// The guard picks on the marker **and** the engine list: a hand-edited copy carrying both
+    /// takes the normal `record_is_stale` path.
+    #[test]
+    fn a_marker_with_engines_takes_the_normal_staleness_path() {
+        let doc = "```{python}\nx = 1\n```\n";
+        let (units, authors) = {
+            let mut u = quarto_core::engine::units::scan_units(doc);
+            let a = quarto_core::record::AuthorTexts::from_scanned(&u);
+            quarto_core::record::fill_ids(&mut u, &a).unwrap();
+            (u, a)
+        };
+        let file = serde_json::json!({"nbformat": 4, "nbformat_minor": 5,
+            "metadata": {"quarto_cache_version": 1},
+            "cells": [{"cell_type": "code", "metadata": {"quarto_content_hash": content_hash("x = 1")},
+                       "outputs": [], "source": []}]});
+        let import =
+            quarto_core::record::import_positron_cache(file.to_string().as_bytes()).unwrap();
+        let mut record =
+            quarto_core::record::record_from_positron(&import, &units, &authors, None, &|_| {
+                "jupyter".into()
+            });
+        let meta = Default::default();
+        assert!(
+            !record_staleness(&record, doc, &[], &meta).unwrap(),
+            "imported: matches"
+        );
+
+        // The same record with an engine entry whose document hash cannot match.
+        record.metadata.quarto_engines.push(
+            serde_json::from_value(serde_json::json!({
+                "name": "jupyter", "can_freeze": true, "document_hash": "not-the-hash",
+                "owned_languages": ["python"],
+                "hash_definition": quarto_core::record::HashDefinition::conservative("jupyter")
+            }))
+            .unwrap(),
+        );
+        assert!(
+            record_staleness(&record, doc, &[], &meta).unwrap(),
+            "with an engine it is compared by `record_is_stale`, whose hash differs"
+        );
+    }
+
+    /// A `jupyter` engine that claims `python` and fails if it is ever run: the stand-in for a
+    /// machine with no usable Jupyter runtime. It counts how often it was asked.
+    struct UnstartableJupyter(Arc<std::sync::atomic::AtomicUsize>);
+    impl ExecutionEngine for UnstartableJupyter {
+        fn name(&self) -> &str {
+            "jupyter"
+        }
+        fn execute(
+            &self,
+            _input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<ExecuteResult, ExecutionError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(ExecutionError::Other("no Jupyter runtime".into()))
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == "python" {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    /// RIU-6 Phase 0 observation 4: with a source ahead of `engine` that supplies, the engine is
+    /// never asked, so a machine with no Jupyter runtime gets no `Q-PREVIEW-CAP-1` (which the
+    /// eager driver emits exactly when `record_one` fails). The control: when the source has
+    /// nothing, the engine runs, fails, and `record_one` reports it.
+    #[tokio::test]
+    async fn a_covering_positron_source_ahead_of_engine_keeps_cap_1_from_appearing() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut reg = EngineRegistry::empty();
+        reg.register(Arc::new(UnstartableJupyter(calls.clone())));
+        let reg = Arc::new(reg);
+
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", IMPORT_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let covering = positron_dir_for(&abs, &["x = 1", "y = 2"]);
+        let mut cfg = import_cfg(&covering);
+        cfg.sources = RecordSources::new(vec![
+            RecordSource::Dir(covering.path().to_path_buf()),
+            RecordSource::Engine,
+        ]);
+        let wrote = record_one(&abs, "doc.qmd", &ctx, &runtime, Some(reg.clone()), &cfg)
+            .await
+            .expect("the cache supplies, so the failing engine is never reached");
+        assert!(wrote);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        // Control: a directory with nothing for this document falls through to the engine.
+        ctx.index().remove_capture("doc.qmd").ok();
+        let empty = TempDir::with_prefix("riu3a-empty-").unwrap();
+        cfg.sources = RecordSources::new(vec![
+            RecordSource::Dir(empty.path().to_path_buf()),
+            RecordSource::Engine,
+        ]);
+        let err = record_one(&abs, "doc.qmd", &ctx, &runtime, Some(reg), &cfg)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, RecordError::RecordFailed(_)), "{err:?}");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }
