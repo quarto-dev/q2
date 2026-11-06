@@ -1,10 +1,12 @@
 /**
- * A quarto hub text document held in memory by a repo connected to the
- * local hub. Which document: the id wired into the "docid" port if that
- * holds one, else the id typed into the node, else the project's `a.qmd`
- * resolved through the index doc, the way the Monaco demo does. The doc
- * goes out on the "doc" port; if a store is wired into "storage", a
- * snapshot of the doc is loaded from and saved to it.
+ * A quarto hub text document held in memory by a repo of its own,
+ * connected to the server wired into "server" (without one it is offline:
+ * a stored snapshot still loads, but nothing syncs). Which document: the
+ * id wired into the "docid" port if that holds one, else the id typed into
+ * the node, else the project's `a.qmd` resolved through the index doc,
+ * which needs the server. The doc goes out on the "doc" port; if a store
+ * is wired into "storage", a snapshot of the doc is loaded from and saved
+ * to it.
  */
 
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
@@ -14,27 +16,32 @@ import { Repo, type AnyDocumentId, type DocHandle } from '@automerge/automerge-r
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import type { IndexDocument, TextDocumentContent } from '@quarto/quarto-automerge-schema';
 import AutomergeLogo from './AutomergeLogo';
-import { useInput, useOutput, type DocPort, type DocStore, type IdStore } from './ports';
+import { useInput, useOutput, type DocPort, type DocStore, type IdStore, type ServerPort } from './ports';
 
-const SYNC_SERVER_URL = 'ws://127.0.0.1:8080/ws';
 const INDEX_DOC_ID = 'automerge:2t9ZYdN85oy3ubaoEUrJB6rcpEYc' as AnyDocumentId;
 const FILE_PATH = 'a.qmd';
 
-// One in-memory repo for the page's lifetime (survives React's dev double-mount).
-let repo: Repo | undefined;
-let projectIdPromise: Promise<string> | undefined;
+// One in-memory repo per server for the page's lifetime (survives React's
+// dev double-mount); the key '' is the offline repo with no network.
+const repos = new Map<string, Repo>();
+const projectIdPromises = new Map<string, Promise<string>>();
 
-function getRepo(): Repo {
-  repo ??= new Repo({ network: [new BrowserWebSocketClientAdapter(SYNC_SERVER_URL)] });
+function getRepo(url: string | null): Repo {
+  const key = url ?? '';
+  let repo = repos.get(key);
+  if (repo === undefined) {
+    repo = new Repo({ network: url === null ? [] : [new BrowserWebSocketClientAdapter(url)] });
+    repos.set(key, repo);
+  }
   return repo;
 }
 
 const bareId = (id: string) => id.replace(/^automerge:/, '');
 const asUrl = (id: string) => `automerge:${bareId(id)}` as AnyDocumentId;
 
-/** The id of the project file, through the project's index doc. */
-async function resolveProjectFile(): Promise<string> {
-  const index = await getRepo().find<IndexDocument>(INDEX_DOC_ID);
+/** The id of the project file, through the project's index doc on `url`. */
+async function resolveProjectFile(url: string): Promise<string> {
+  const index = await getRepo(url).find<IndexDocument>(INDEX_DOC_ID);
   const docId = index.doc()?.files[FILE_PATH];
   if (docId === undefined) throw new Error(`${FILE_PATH} is not in the project`);
   return bareId(docId);
@@ -66,6 +73,8 @@ function IdBox({ id, onCommit }: { id: string | null; onCommit: (id: string) => 
 }
 
 export default function AutomergeNode() {
+  const server = useInput<ServerPort>('server');
+  const url = server?.url ?? null;
   const idStore = useInput<IdStore>('docid');
   const store = useInput<DocStore>('storage');
   // The id chosen here (typed, or resolved from the project).
@@ -81,23 +90,32 @@ export default function AutomergeNode() {
   const handle = current?.handle ?? null;
   const error = resolveError ?? current?.error ?? null;
 
-  // Nothing remembered anywhere: start from the project's file.
+  // Nothing remembered anywhere: start from the project's file, which
+  // takes the server (the index doc lives there).
   useEffect(() => {
-    if (localId !== null) return;
-    projectIdPromise ??= resolveProjectFile();
-    void projectIdPromise.then(setLocalId).catch((err: unknown) => setResolveError(String(err)));
-  }, [localId]);
+    if (localId !== null || url === null) return;
+    let promise = projectIdPromises.get(url);
+    if (promise === undefined) {
+      promise = resolveProjectFile(url);
+      projectIdPromises.set(url, promise);
+    }
+    let cancelled = false;
+    void promise
+      .then((id) => { if (!cancelled) setLocalId(id); })
+      .catch((err: unknown) => { if (!cancelled) setResolveError(String(err)); });
+    return () => { cancelled = true; };
+  }, [localId, url]);
 
   // A wired-in slot that holds nothing yet learns the current id.
   useEffect(() => {
     if (idStore !== null && idStore.id === null && localId !== null) idStore.set(localId);
   }, [idStore, localId]);
 
-  // Open whichever doc the id names.
+  // Open whichever doc the id names, on whichever repo the server gives.
   useEffect(() => {
     if (docId === null) return;
     let cancelled = false;
-    void getRepo().find<TextDocumentContent>(asUrl(docId))
+    void getRepo(url).find<TextDocumentContent>(asUrl(docId))
       .then((h) => {
         if (cancelled) return;
         setOpened({ id: docId, handle: h, error: null });
@@ -106,12 +124,14 @@ export default function AutomergeNode() {
       .catch((err: unknown) => {
         if (cancelled) return;
         const message = String(err).includes('unavailable')
-          ? `${docId} is not on the hub — enter another id, or clear the localStorage node to fall back to ${FILE_PATH}`
+          ? url === null
+            ? `${docId} is not in the attached storage, and no server is connected to fetch it from`
+            : `${docId} is not on the hub — enter another id, or clear the localStorage node to fall back to ${FILE_PATH}`
           : String(err);
         setOpened({ id: docId, handle: null, error: message });
       });
     return () => { cancelled = true; };
-  }, [docId]);
+  }, [docId, url]);
 
   // Follow the handle so the port always carries the current doc.
   useEffect(() => {
@@ -149,13 +169,18 @@ export default function AutomergeNode() {
     idStore?.set(id);
   };
 
-  const status = error ?? (docId === null || handle === null ? 'connecting…' : null);
+  const status = error ?? (
+    docId === null
+      ? (url === null ? 'no server connected — enter a doc id, or wire a server' : 'connecting…')
+      : handle === null ? 'connecting…' : url === null ? 'offline' : null
+  );
 
   return (
     <div className="cd-node cd-automerge">
       <AutomergeLogo />
       <IdBox id={docId} onCommit={onCommitId} />
       {status !== null && <div className="cd-meta">{status}</div>}
+      <Handle type="target" position={Position.Top} id="server" title="server" />
       <Handle type="target" position={Position.Left} id="docid" title="doc id" />
       <Handle type="source" position={Position.Right} id="doc" title="doc" />
       <Handle type="target" position={Position.Bottom} id="storage" title="storage" />

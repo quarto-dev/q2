@@ -11,13 +11,30 @@
   color: #374151;
   font-family: system-ui, sans-serif;
 }
-.df-bar { display: flex; gap: 16px; align-items: center; font-size: 14px; max-width: 800px; width: 100%; }
-.df-bar a { color: #1f2937; }
-.df-info { font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.df-card {
-  width: 100%;
+
+.df-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 14px;
   max-width: 800px;
-  height: 70vh;
+  width: 100%;
+}
+
+.df-bar a {
+  color: #1f2937;
+}
+
+.df-info {
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.df-card {
+  width: 1000px;
+  height: 90vh;
   background: #ffffff;
   border-radius: 12px;
   box-sizing: border-box;

@@ -8,8 +8,8 @@
  * - the `qmd` grammar and quarto-{light,dark} themes,
  * - the outline / folding / semantic-token providers (`useIntelligenceProviders`),
  * - Cmd/Ctrl+B bold toggling, link-on-paste and image-on-paste,
- * - diagnostics markers: the host's (`markers`, the render pipeline's in
- *   Editor.tsx) or, without them, the LSP's own analysis of the document,
+ * - diagnostics markers: the host's (`markers`, the preview's in Editor.tsx)
+ *   or, without them, the render pipeline's own run over the document,
  * - replay read-only mode, local branches,
  * - gutter compaction when narrow and the backward-selection typing fix.
  *
@@ -39,8 +39,8 @@ import { createBinaryFile, type EditorContentChange } from '@quarto/preview-runt
 import { useAutomergeSync } from '../hooks/useAutomergeSync';
 import { usePresence } from '../hooks/usePresence';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
-import { useIntelligence } from '../hooks/useIntelligence';
-import { lspDiagnosticsToMarkers } from '../utils/diagnosticToMonaco';
+import { useRenderDiagnostics } from '../hooks/useRenderDiagnostics';
+import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import type { PresenceState } from '../services/presenceService';
 import { processFileForUpload, FILE_SIZE_LIMITS } from '../services/resourceService';
 import { classifyPastePayload, createPasteImageHandler } from './fileUpload';
@@ -48,6 +48,7 @@ import { registerQmdLanguage } from './quartoTheme';
 import { linkFromPaste } from '../utils/pasteLink';
 import { toggleWrap } from '../utils/markdownToggle';
 import { getLanguageForFile } from '../utils/monacoLanguage';
+import { QMD_EDITOR_OPTIONS } from '../utils/monacoEditorOptions';
 
 export interface DocumentEditorHandle {
   /** The mounted Monaco instance; null before mount and while no file is open. */
@@ -75,8 +76,9 @@ export interface DocumentEditorProps {
   theme?: 'light' | 'dark';
   /**
    * Diagnostics markers (owner `quarto`) to underline. When omitted the
-   * editor analyses the document with the LSP (quarto-lsp-core) on every
-   * content change and shows those diagnostics instead.
+   * editor renders the document through the project pipeline on every
+   * content change and shows the render's diagnostics instead — the same
+   * set the preview reports.
    */
   markers?: Monaco.editor.IMarkerData[];
   /** Read-only mode (replay). Default: false. */
@@ -89,6 +91,12 @@ export interface DocumentEditorProps {
   activeBranchId?: string | null;
   /** Broadcast and render collaborative cursors. Default: true. */
   presenceEnabled?: boolean;
+  /**
+   * Register the outline / folding / semantic-token providers and run the
+   * LSP diagnostics. Default: true. Off when a host supplies these itself
+   * (the canvas demo's LSP node).
+   */
+  intelligenceEnabled?: boolean;
   /**
    * Status of the preview WASM module: a `loading → ready` transition
    * re-tokenises once. Default: `ready` (the providers initialise the
@@ -106,38 +114,6 @@ export interface DocumentEditorProps {
    */
   onMount?: (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
 }
-
-// Stable options object — defined at module level so @monaco-editor/react
-// never sees a new reference and skips its internal updateOptions() effect.
-const editorOptions = {
-  minimap: { enabled: false },
-  fontSize: 14,
-  lineNumbers: 'on' as const,
-  // Size the number column near the document's actual digit count
-  // instead of Monaco's default 5-char reserve; the extra char over the
-  // digits acts as left padding (numbers are right-aligned).
-  lineNumbersMinChars: 4,
-  wordWrap: 'on' as const,
-  padding: { top: 16 },
-  scrollBeyondLastLine: false,
-  // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
-  // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
-  pasteAs: { enabled: false },
-  fixedOverflowWidgets: true,
-  // Prefer showing hover below the line — prevents diagnostic popups near
-  // the top of the editor from overlapping the navbar.
-  hover: { above: false },
-  quickSuggestions: false,
-  suggestOnTriggerCharacters: false,
-  wordBasedSuggestions: 'off' as const,
-  acceptSuggestionOnEnter: 'off' as const,
-  acceptSuggestionOnCommitCharacter: false,
-  suggest: { showWords: false, showSnippets: false },
-  inlineSuggest: { enabled: false },
-  // Enable the semantic-tokens layer (the quarto-{light,dark} themes also set
-  // `semanticHighlighting: true`; setting both is the reliable combination).
-  'semanticHighlighting.enabled': true as const,
-};
 
 const NEVER_REPLAYING: RefObject<boolean> = { current: false };
 
@@ -250,6 +226,7 @@ const DocumentEditor = forwardRef<DocumentEditorHandle, DocumentEditorProps>(fun
     replayIsActive = false,
     activeBranchId = null,
     presenceEnabled = true,
+    intelligenceEnabled = true,
     wasmStatus = 'ready',
     onContentChange,
     onPresenceChange,
@@ -332,22 +309,15 @@ const DocumentEditor = forwardRef<DocumentEditorHandle, DocumentEditorProps>(fun
     editorRef.current?.updateOptions({ readOnly, domReadOnly: readOnly });
   }, [readOnly]);
 
-  // Own diagnostics from the LSP, used when the host supplies no markers.
-  // The analysis reads the VFS, which the sync keeps current, so a content
-  // change is the trigger (debounced in the hook).
-  const ownDiagnostics = markers === undefined;
-  const { diagnostics: lspDiagnostics, refresh: refreshDiagnostics } = useIntelligence({
-    path: ownDiagnostics ? (file?.path ?? null) : null,
-    enableSymbols: false,
-    enableDiagnostics: true,
-  });
-  useEffect(() => {
-    if (ownDiagnostics) refreshDiagnostics();
-  }, [content, ownDiagnostics, refreshDiagnostics]);
-  const lspMarkers = useMemo(() => lspDiagnosticsToMarkers(lspDiagnostics).markers, [lspDiagnostics]);
+  // Own diagnostics from the render pipeline, used when the host supplies
+  // no markers. The render reads the VFS, which the sync keeps current, so
+  // a content change is the trigger (debounced in the hook).
+  const ownDiagnostics = markers === undefined && intelligenceEnabled;
+  const renderDiagnostics = useRenderDiagnostics(file?.path ?? null, content, ownDiagnostics);
+  const ownMarkers = useMemo(() => diagnosticsToMarkers(renderDiagnostics).markers, [renderDiagnostics]);
 
   // Diagnostics markers.
-  const effectiveMarkers = markers ?? lspMarkers;
+  const effectiveMarkers = markers ?? ownMarkers;
   useEffect(() => {
     const model = editorRef.current?.getModel();
     if (!model || !monacoRef.current) return;
@@ -453,7 +423,7 @@ const DocumentEditor = forwardRef<DocumentEditorHandle, DocumentEditorProps>(fun
 
     // Register intelligence providers (symbols, folding, semantic tokens).
     // The getter uses a ref so it always returns the current file path.
-    registerIntelligenceProvidersOnMount(monaco);
+    if (intelligenceEnabled) registerIntelligenceProvidersOnMount(monaco);
 
     // Workaround: normalize backward (RTL) selections to forward (LTR) on
     // any printable keyDown. On some platforms the browser's input pipeline
@@ -509,7 +479,7 @@ const DocumentEditor = forwardRef<DocumentEditorHandle, DocumentEditorProps>(fun
       beforeMount={handleBeforeMount}
       onChange={handleEditorChange}
       onMount={handleEditorMount}
-      options={editorOptions}
+      options={QMD_EDITOR_OPTIONS}
     />
   );
 });
