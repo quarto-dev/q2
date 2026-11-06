@@ -29,7 +29,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-11-02
 
-- [`c4ed2e584`](https://github.com/quarto-dev/q2/commits/c4ed2e584): The preview can now show code output from a Jupyter run recorded by q2 (including Jupyter inline expressions such as `{python} 1+1`), alongside the previous capture format
+- [`58f7f99f8`](https://github.com/quarto-dev/q2/commits/58f7f99f8): The preview can now show code output from a Jupyter run recorded by q2 (including Jupyter inline expressions such as `{python} 1+1`), alongside the previous capture format
 
 ### 2026-10-30
 
