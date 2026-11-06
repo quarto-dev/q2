@@ -14,7 +14,9 @@
  * wired into "language"; without it the file opens as plain text.
  *
  * The editor's built-in presence, intelligence and diagnostics are off:
- * those are nodes of their own.
+ * those are nodes of their own. Diagnostics arrive on "diagnostics" (from
+ * the preview, as in the app) and are underlined when they are for the
+ * file being edited.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,7 +26,8 @@ import { next as A } from '@automerge/automerge';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { TextDocumentContent } from '@quarto/quarto-automerge-schema';
 import DocumentEditor, { type DocumentSource } from '../../DocumentEditor';
-import { useInput, useOutput, type DocPort, type EditorPort, type FilePort, type LanguagePort } from './ports';
+import { diagnosticsToMarkers } from '../../../utils/diagnosticToMonaco';
+import { useInput, useOutput, type DiagnosticsPort, type DocPort, type EditorPort, type FilePort, type LanguagePort } from './ports';
 
 const bareId = (id: string) => id.replace(/^automerge:/, '');
 
@@ -60,11 +63,17 @@ interface BoundEditorProps {
   port: DocPort<TextDocumentContent>;
   file: FileEntry;
   language: LanguagePort | null;
+  diagnostics: DiagnosticsPort | null;
   onEditor: (editor: EditorPort | undefined) => void;
 }
 
-function BoundEditor({ port, file, language, onEditor }: BoundEditorProps) {
+function BoundEditor({ port, file, language, diagnostics, onEditor }: BoundEditorProps) {
   const source = useDocSource(port);
+  // Only diagnostics reported for this file; none wired → no underlines.
+  const markers = useMemo(
+    () => (diagnostics !== null && diagnostics.path === file.path ? diagnosticsToMarkers(diagnostics.diagnostics).markers : NO_MARKERS),
+    [diagnostics, file.path],
+  );
   // The reconciliation trigger: a new map whenever the doc's text changes.
   const fileContents = useMemo(() => new Map([[file.path, port.doc.text]]), [file.path, port.doc.text]);
   const onMount = useCallback(
@@ -78,7 +87,7 @@ function BoundEditor({ port, file, language, onEditor }: BoundEditorProps) {
       source={source}
       theme={language?.theme ?? 'none'}
       languageId={language?.languageId ?? 'plaintext'}
-      markers={NO_MARKERS}
+      markers={markers}
       presenceEnabled={false}
       intelligenceEnabled={false}
       onMount={onMount}
@@ -90,6 +99,7 @@ export default function MonacoNode() {
   const port = useInput<DocPort<TextDocumentContent>>('doc');
   const pathInput = useInput<string>('path');
   const language = useInput<LanguagePort>('language');
+  const diagnostics = useInput<DiagnosticsPort>('diagnostics');
   // The live Monaco instance; republished whenever the editor is recreated.
   const [editorPort, setEditorPort] = useState<EditorPort | undefined>(undefined);
   useOutput('editor', port === null ? undefined : editorPort);
@@ -119,12 +129,13 @@ export default function MonacoNode() {
       <div className="cd-editor nodrag nowheel nokey">
         {port === null || file === null
           ? <div className="cd-empty">No doc connected to edit</div>
-          : <BoundEditor port={port} file={file} language={language} onEditor={setEditorPort} />}
+          : <BoundEditor port={port} file={file} language={language} diagnostics={diagnostics} onEditor={setEditorPort} />}
       </div>
       <Handle type="target" position={Position.Left} id="doc" title="doc" style={{ top: '35%' }} />
       <Handle type="target" position={Position.Left} id="path" title="path" style={{ top: '65%' }} />
-      <Handle type="source" position={Position.Right} id="editor" title="editor" style={{ top: '35%' }} />
-      <Handle type="target" position={Position.Right} id="language" title="language" style={{ top: '65%' }} />
+      <Handle type="source" position={Position.Right} id="editor" title="editor" style={{ top: '25%' }} />
+      <Handle type="target" position={Position.Right} id="language" title="language" style={{ top: '50%' }} />
+      <Handle type="target" position={Position.Right} id="diagnostics" title="diagnostics" style={{ top: '75%' }} />
       <Handle type="source" position={Position.Bottom} id="file" title="file" />
     </div>
   );

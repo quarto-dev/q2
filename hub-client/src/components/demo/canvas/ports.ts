@@ -15,6 +15,7 @@ import type { Doc } from '@automerge/automerge';
 import type { NetworkAdapter, StorageAdapterInterface } from '@automerge/automerge-repo';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
+import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 
 export interface Ports {
   values: Map<string, unknown>;
@@ -136,6 +137,15 @@ export interface IdentityPort {
 export interface LanguagePort {
   languageId: string;
   theme: 'light' | 'dark';
+}
+
+/**
+ * What the preview node offers on its "diagnostics" port: what the render
+ * reported for the file at `path`, for the editor to underline.
+ */
+export interface DiagnosticsPort {
+  path: string;
+  diagnostics: Diagnostic[];
 }
 
 /** What a node offers on an id port ("docid", "projectid"): a remembered or picked id. */

@@ -17,7 +17,12 @@ export const FILE_PATH = 'a.qmd';
 // double-mount: two overlapping `connect` calls on the runtime's single
 // sync client clobber each other. Left connected on unmount; the next
 // `connect` (ours or App's) disconnects first anyway.
-let load: { key: string; promise: Promise<FileEntry[]>; settled: boolean } | undefined;
+let load: { key: string; promise: Promise<FileEntry[]>; settled: boolean; networkAdapter: NetworkAdapter | null } | undefined;
+
+/** The adapter the current connection was made with (attached to its repo by `connect`), if a caller supplied one. */
+export function getConnectedAdapter(): NetworkAdapter | null {
+  return load?.networkAdapter ?? null;
+}
 
 /**
  * Connect the runtime to the project on `url`. With `takeAdapter` the
@@ -38,8 +43,9 @@ export function loadProject(
   // Reuse the load for this server while it is in flight or still connected.
   if (load !== undefined && load.key === loadKey && (!load.settled || isConnected())) return load.promise;
   // A different server or adapter, or the client went away: the new connect replaces it.
-  const options = { peerTimeoutMs: 30000, networkAdapter: takeAdapter?.(), storageAdapter };
-  const current = { key: loadKey, settled: false, promise: connect(url, indexDocId, undefined, undefined, undefined, options) };
+  const networkAdapter = takeAdapter?.() ?? null;
+  const options = { peerTimeoutMs: 30000, networkAdapter: networkAdapter ?? undefined, storageAdapter };
+  const current = { key: loadKey, settled: false, networkAdapter, promise: connect(url, indexDocId, undefined, undefined, undefined, options) };
   current.promise.finally(() => { current.settled = true; }).catch(() => {});
   load = current;
   return current.promise;

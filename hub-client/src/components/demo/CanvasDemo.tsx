@@ -35,7 +35,7 @@ import FileExplorerNode from './canvas/FileExplorerNode';
 import MonacoNode from './canvas/MonacoNode';
 import PresenceNode from './canvas/PresenceNode';
 import LspNode from './canvas/LspNode';
-import RenderNode from './canvas/RenderNode';
+import PreviewNode from './canvas/PreviewNode';
 import StringNode from './canvas/StringNode';
 import WebSocketAdapterNode from './canvas/WebSocketAdapterNode';
 import HubProjectNode from './canvas/HubProjectNode';
@@ -55,7 +55,7 @@ const NODE_TYPES = {
   monaco: MonacoNode,
   presence: PresenceNode,
   lsp: LspNode,
-  render: RenderNode,
+  preview: PreviewNode,
   string: StringNode,
   wsadapter: WebSocketAdapterNode,
   hubproject: HubProjectNode,
@@ -75,7 +75,6 @@ const INITIAL_NODES: Node[] = [
   { id: 'server', type: 'string', position: { x: -1500, y: -120 }, data: { label: 'Server URL', value: SYNC_SERVER_URL }, deletable: false },
   { id: 'ls', type: 'localstorage', position: { x: -1500, y: 300 }, data: {}, deletable: false },
   // column B: the adapters
-  { id: 'ws-doc', type: 'wsadapter', position: { x: -1150, y: -460 }, data: {}, deletable: false },
   { id: 'ws-hub', type: 'wsadapter', position: { x: -1150, y: -120 }, data: {}, deletable: false },
   { id: 'idb', type: 'indexeddb', position: { x: -1150, y: 460 }, data: {}, deletable: false },
   { id: 'wasm', type: 'wasm', position: { x: -1150, y: 900 }, data: {}, deletable: false },
@@ -95,18 +94,16 @@ const INITIAL_NODES: Node[] = [
   { id: 'rawpreview', type: 'rawpreview', position: { x: 520, y: 600 }, data: {}, deletable: false, style: { width: 460, height: 380 } },
   // column G: what attaches to the editor
   { id: 'language', type: 'language', position: { x: 1080, y: -260 }, data: {}, deletable: false },
-  { id: 'lsp', type: 'lsp', position: { x: 1080, y: 260 }, data: {}, deletable: false },
-  { id: 'render', type: 'render', position: { x: 1080, y: 420 }, data: {}, deletable: false },
+  { id: 'lsp', type: 'lsp', position: { x: 1080, y: -80 }, data: {}, deletable: false },
+  { id: 'preview', type: 'preview', position: { x: 1080, y: 100 }, data: {}, deletable: false, style: { width: 460, height: 420 } },
 ];
 
 const INITIAL_EDGES: Edge[] = [
-  { id: 'server-ws-doc', source: 'server', sourceHandle: 'string', target: 'ws-doc', targetHandle: 'server' },
   { id: 'server-ws-hub', source: 'server', sourceHandle: 'string', target: 'ws-hub', targetHandle: 'server' },
-  { id: 'ws-doc-doc', source: 'ws-doc', sourceHandle: 'adapter', target: 'doc', targetHandle: 'adapter' },
   { id: 'ws-hub-hub', source: 'ws-hub', sourceHandle: 'adapter', target: 'hub', targetHandle: 'adapter' },
   { id: 'ls-hub', source: 'ls', sourceHandle: 'projectid', target: 'hub', targetHandle: 'projectid' },
   { id: 'idb-hub', source: 'idb', sourceHandle: 'idb', target: 'hub', targetHandle: 'idb' },
-  { id: 'idb-doc', source: 'idb', sourceHandle: 'idb', target: 'doc', targetHandle: 'idb' },
+  { id: 'hub-doc', source: 'hub', sourceHandle: 'project', target: 'doc', targetHandle: 'project' },
   { id: 'hub-explorer', source: 'hub', sourceHandle: 'project', target: 'explorer', targetHandle: 'project' },
   { id: 'hub-vfs', source: 'hub', sourceHandle: 'project', target: 'vfs', targetHandle: 'project' },
   { id: 'wasm-vfs', source: 'wasm', sourceHandle: 'wasm', target: 'vfs', targetHandle: 'wasm' },
@@ -114,18 +111,21 @@ const INITIAL_EDGES: Edge[] = [
   { id: 'explorer-doc', source: 'explorer', sourceHandle: 'docid', target: 'doc', targetHandle: 'docid' },
   { id: 'explorer-filename', source: 'explorer', sourceHandle: 'path', target: 'filename', targetHandle: 'string' },
   { id: 'filename-editor', source: 'filename', sourceHandle: 'string', target: 'editor', targetHandle: 'path' },
+  { id: 'filename-preview', source: 'filename', sourceHandle: 'string', target: 'preview', targetHandle: 'path' },
   { id: 'editor-vfs', source: 'editor', sourceHandle: 'file', target: 'vfs', targetHandle: 'file' },
   { id: 'doc-view', source: 'doc', sourceHandle: 'doc', target: 'view', targetHandle: 'doc' },
   { id: 'doc-editor', source: 'doc', sourceHandle: 'doc', target: 'editor', targetHandle: 'doc' },
   { id: 'doc-rawpreview', source: 'doc', sourceHandle: 'doc', target: 'rawpreview', targetHandle: 'doc' },
   { id: 'vfs-lsp', source: 'vfs', sourceHandle: 'vfs', target: 'lsp', targetHandle: 'vfs' },
-  { id: 'vfs-render', source: 'vfs', sourceHandle: 'vfs', target: 'render', targetHandle: 'vfs' },
+  { id: 'vfs-preview', source: 'vfs', sourceHandle: 'vfs', target: 'preview', targetHandle: 'vfs' },
+  { id: 'hub-preview', source: 'hub', sourceHandle: 'project', target: 'preview', targetHandle: 'project' },
   { id: 'wasm-rawpreview', source: 'wasm', sourceHandle: 'wasm', target: 'rawpreview', targetHandle: 'wasm' },
   { id: 'user-presence', source: 'user', sourceHandle: 'identity', target: 'presence', targetHandle: 'identity' },
   { id: 'language-editor', source: 'language', sourceHandle: 'language', target: 'editor', targetHandle: 'language' },
   { id: 'editor-presence', source: 'editor', sourceHandle: 'editor', target: 'presence', targetHandle: 'editor' },
   { id: 'editor-lsp', source: 'editor', sourceHandle: 'editor', target: 'lsp', targetHandle: 'editor' },
-  { id: 'editor-render', source: 'editor', sourceHandle: 'editor', target: 'render', targetHandle: 'editor' },
+  { id: 'doc-preview', source: 'doc', sourceHandle: 'doc', target: 'preview', targetHandle: 'doc' },
+  { id: 'preview-editor', source: 'preview', sourceHandle: 'diagnostics', target: 'editor', targetHandle: 'diagnostics' },
 ];
 
 const FIT_VIEW = { padding: 0.1 };
