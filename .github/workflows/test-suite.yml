@@ -237,6 +237,11 @@ jobs:
       # per-user so list_kernelspecs() sees it.
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          # Pinned so setup-uv downloads this release directly instead of
+          # querying the GitHub API for "latest" on every run (a connect
+          # timeout there failed a macOS job). Also keeps CI reproducible.
+          version: "0.13.7"
 
       - name: Set up Jupyter kernel and widget packages
         shell: bash
