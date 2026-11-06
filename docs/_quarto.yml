@@ -57,6 +57,7 @@ website:
             - guides/projects/preview.qmd
             - guides/projects/render-options.qmd
             - guides/projects/paths.qmd
+            - guides/projects/directory-metadata.qmd
             - guides/projects/listings.qmd
             - guides/projects/listing-templates.qmd
             - guides/projects/navbar-logo.qmd
