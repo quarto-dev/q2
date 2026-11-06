@@ -497,4 +497,27 @@ mod tests {
         assert!(!stale(&rec, &doc, &m));
         assert!(stale(&rec, &doc.replace("y <- 2", "y <- 3"), &m));
     }
+
+    /// RIU-4: staleness reads the format a record was **recorded** for, never the format of the
+    /// page serving it, so a `q2` record written by a docx render is not stale in an HTML
+    /// preview because of its format (`record_is_stale` takes no page format at all).
+    /// This pins staleness only; whether docx-shaped knitr output presents correctly in HTML is
+    /// not decided here.
+    #[test]
+    fn a_docx_recorded_profiled_record_is_fresh_for_an_unchanged_document() {
+        let m = BTreeMap::new();
+        let mut rec = profiled_record(PROFILED, &m);
+        let def = profiled_def();
+        for cell in &mut rec.cells {
+            cell.metadata
+                .extra
+                .insert(OUTPUT_FORMAT_OPTION.into(), json!("docx"));
+            cell.metadata.quarto_exec_hash =
+                crate::record::recompute_cell_hash(&def, cell).unwrap();
+        }
+        crate::record::rehash_record(&mut rec, &m).unwrap();
+        assert_eq!(recorded_format(&rec).as_deref(), Some("docx"));
+        assert!(!stale(&rec, PROFILED, &m), "format alone is not an edit");
+        assert!(stale(&rec, &PROFILED.replace("plot(1)", "plot(2)"), &m));
+    }
 }

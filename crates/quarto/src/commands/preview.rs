@@ -150,6 +150,34 @@ fn resolve_render_flags(
     Ok(flags)
 }
 
+/// The `--records` list for `q2 preview`: the default when absent, and every directory source
+/// checked once. Called before anything is printed or bound, so a bad path fails at the start.
+fn resolve_record_sources(
+    records: Vec<quarto_core::record::RecordSource>,
+) -> Result<quarto_core::record::RecordSources> {
+    use quarto_core::record::RecordSources;
+    if records.is_empty() {
+        return Ok(RecordSources::preview_default());
+    }
+    RecordSources::new(records)
+        .validate_directories()
+        .map_err(|e| anyhow::anyhow!(e))
+}
+
+/// Warn when `engine` is listed under `preview.engine: off`: the engine will not run (the
+/// guard itself lives in the preview crate).
+fn warn_engine_under_off(list: &quarto_core::record::RecordSources, policy: EnginePolicy) {
+    if policy == EnginePolicy::Off && list.contains_engine() {
+        tracing::warn!(
+            "`engine` is in --records but `preview.engine` is `off`: the engine will not run"
+        );
+        eprintln!(
+            "warning: `engine` is in --records but `preview.engine` is `off`; \
+             the engine will not run"
+        );
+    }
+}
+
 pub fn execute(args: PreviewArgs) -> Result<()> {
     // Multi-threaded runtime for the same reasons quarto hub uses
     // one: samod, websockets, file watching, periodic sync.
@@ -233,6 +261,8 @@ async fn run(args: PreviewArgs) -> Result<()> {
             resolved.single_file,
         )
     };
+
+    let record_sources = resolve_record_sources(args.records.clone())?;
 
     // F8: `--to`, `-M` and `--profile`. A malformed `-M` fails here, before
     // any port is probed or server started; an unservable format is refused
@@ -340,6 +370,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         None => EnginePolicy::Manual,
     };
     info!(?engine_policy, "resolved preview engine policy");
+    warn_engine_under_off(&record_sources, engine_policy);
 
     // bd-kjrpya2d (part 2): resolve the `.html` files made visible by
     // `project.resources:` so the hub carries them into the VFS source
@@ -367,11 +398,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // passthrough engine via the integration-test surface.
         engine_registry: None,
         engine_policy,
-        record_sources: if args.records.is_empty() {
-            quarto_core::record::RecordSources::preview_default()
-        } else {
-            quarto_core::record::RecordSources::new(args.records)
-        },
+        record_sources,
         resource_html_files,
         // Phase C.7: derive the capture cache dir from `data_dir`
         // (per-session; tracked as a follow-up for per-project reuse).
@@ -1193,6 +1220,32 @@ pub(crate) fn pick_editor_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn records_default_to_cache_q2_engine() {
+        let got = resolve_record_sources(Vec::new()).unwrap();
+        assert_eq!(got, quarto_core::record::RecordSources::preview_default());
+    }
+
+    #[test]
+    fn records_missing_directory_is_a_startup_error() {
+        use quarto_core::record::RecordSource as S;
+        let dir = tempfile::tempdir().unwrap();
+        let err =
+            resolve_record_sources(vec![S::Dir(dir.path().join("nope")), S::Engine]).unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "{err}");
+    }
+
+    #[test]
+    fn records_with_engine_under_off_still_resolve() {
+        use quarto_core::record::RecordSource as S;
+        let got = resolve_record_sources(vec![S::Cache, S::Engine]).unwrap();
+        warn_engine_under_off(&got, EnginePolicy::Off);
+        assert!(
+            got.contains_engine(),
+            "the list is kept as given; the guard refuses to run"
+        );
+    }
 
     #[test]
     fn validate_explicit_port_ok_for_zero() {

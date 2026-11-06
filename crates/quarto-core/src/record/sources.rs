@@ -53,12 +53,30 @@ impl RecordSource {
 }
 
 /// Why a `--records` entry was not understood.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error(
-    "unknown record source `{0}`: use one of `cache`, `q2`, `positron`, `engine`, or a directory \
-     path (starting with `/`, `./`, `../` or `~`, or containing a path separator)"
-)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseSourceError(pub String);
+
+impl std::fmt::Display for ParseSourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return write!(
+                f,
+                "empty record source: use one of `cache`, `q2`, `positron`, `engine`, or a \
+                 directory path"
+            );
+        }
+        write!(
+            f,
+            "unknown record source `{0}`: use one of `cache`, `q2`, `positron`, `engine`, or a \
+             directory path (starting with `/`, `./`, `../` or `~`, or containing a path \
+             separator; write `./{0}` for a directory named `{0}`). A path containing a comma \
+             cannot be given, because a comma separates entries",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for ParseSourceError {}
 
 /// The three classification rules of `--records` (RIU-3a, kept by RIU-4): a known name, else a
 /// path-like entry is a directory, else an error. No validation (the directory need not exist
@@ -124,6 +142,64 @@ impl RecordSources {
     pub fn contains_engine(&self) -> bool {
         self.0.contains(&RecordSource::Engine)
     }
+}
+
+/// Start-up checks on a parsed list (native only: they touch the filesystem).
+#[cfg(not(target_arch = "wasm32"))]
+impl RecordSources {
+    /// Check every directory source once, at command start: expand a leading `~` to the home
+    /// directory and require an existing directory. A relative path is left as given and so
+    /// resolves against the working directory of the command. The parser never does this
+    /// (it classifies by text alone).
+    pub fn validate_directories(self) -> Result<Self, String> {
+        let mut out = Vec::with_capacity(self.0.len());
+        for source in self.0 {
+            out.push(match source {
+                RecordSource::Dir(p) => RecordSource::Dir(check_directory(p)?),
+                other => other,
+            });
+        }
+        Ok(Self(out))
+    }
+
+    /// `provide-hub` has no preview cache directory, so `cache` is a start-up error there.
+    pub fn reject_cache(&self, command: &str) -> Result<(), String> {
+        if self.0.contains(&RecordSource::Cache) {
+            return Err(format!(
+                "`--records cache` is not available for `{command}`: it has no preview cache \
+                 directory. Use `q2`, `positron`, a directory path, or `engine`"
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn check_directory(path: PathBuf) -> Result<PathBuf, String> {
+    let text = path.to_string_lossy().into_owned();
+    let expanded = match text.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+            let home = dirs::home_dir().ok_or_else(|| {
+                format!("record source `{text}`: no home directory to expand `~`")
+            })?;
+            home.join(rest.trim_start_matches(['/', '\\']))
+        }
+        _ => path,
+    };
+    if !expanded.exists() {
+        return Err(format!(
+            "record source `{}` does not exist (a relative path is resolved against the \
+             working directory)",
+            expanded.display()
+        ));
+    }
+    if !expanded.is_dir() {
+        return Err(format!(
+            "record source `{}` is a file, not a directory",
+            expanded.display()
+        ));
+    }
+    Ok(expanded)
 }
 
 /// A lookup failed in a way the walk reports and steps past.
@@ -819,6 +895,88 @@ mod tests {
         assert!(r.chosen.is_none());
         assert!(fake.asked.borrow().is_empty());
         assert_eq!(kinds(&r).len(), 3, "two sources and the absent engine");
+    }
+
+    #[test]
+    fn record_source_error_lists_names_and_suggests_a_dot_slash_directory() {
+        use std::str::FromStr;
+        let err = RecordSource::from_str("postiron").unwrap_err().to_string();
+        for name in ["cache", "q2", "positron", "engine"] {
+            assert!(err.contains(name), "names the valid choices: {err}");
+        }
+        assert!(err.contains("./postiron"), "suggests ./name: {err}");
+        assert!(
+            err.contains("comma"),
+            "says a comma path cannot be given: {err}"
+        );
+        let empty = RecordSource::from_str("").unwrap_err().to_string();
+        assert!(
+            empty.contains("empty"),
+            "an empty entry is called empty: {empty}"
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn directory_sources_are_checked_once_at_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f.ipynb");
+        std::fs::write(&file, "{}").unwrap();
+        let list = |p: &std::path::Path| RecordSources::new(vec![RecordSource::Dir(p.into())]);
+
+        let ok = list(dir.path()).validate_directories().unwrap();
+        assert_eq!(ok, list(dir.path()));
+
+        let missing = dir.path().join("nope");
+        let err = list(&missing).validate_directories().unwrap_err();
+        assert!(
+            err.contains("does not exist") && err.contains("nope"),
+            "{err}"
+        );
+
+        let err = list(&file).validate_directories().unwrap_err();
+        assert!(err.contains("is a file"), "{err}");
+
+        // Non-directory sources pass untouched.
+        let named = RecordSources::new(vec![RecordSource::Positron, RecordSource::Engine]);
+        assert_eq!(named.clone().validate_directories().unwrap(), named);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn a_leading_tilde_expands_to_the_home_directory() {
+        let Some(home) = dirs::home_dir() else { return };
+        let got = RecordSources::new(vec![RecordSource::Dir("~".into())])
+            .validate_directories()
+            .unwrap();
+        assert_eq!(got.as_slice(), [RecordSource::Dir(home)]);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn cache_is_rejected_for_provide_hub_only_when_listed() {
+        let with = RecordSources::new(vec![RecordSource::Cache, RecordSource::Engine]);
+        let err = with.reject_cache("q2 provide-hub").unwrap_err();
+        assert!(
+            err.contains("cache") && err.contains("provide-hub"),
+            "{err}"
+        );
+        RecordSources::provider_default()
+            .reject_cache("q2 provide-hub")
+            .unwrap();
+    }
+
+    #[test]
+    fn record_source_name_beats_a_same_named_directory_until_dot_slash() {
+        use std::str::FromStr;
+        assert_eq!(
+            RecordSource::from_str("cache").unwrap(),
+            RecordSource::Cache
+        );
+        assert_eq!(
+            RecordSource::from_str("./cache").unwrap(),
+            RecordSource::Dir("./cache".into())
+        );
     }
 
     #[test]

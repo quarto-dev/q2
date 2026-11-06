@@ -36,6 +36,7 @@ use std::str::FromStr as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use async_trait::async_trait;
 use futures::StreamExt;
 use quarto_core::engine::EngineRegistry;
 use quarto_core::engine::preview_record::{
@@ -45,8 +46,9 @@ use quarto_core::engine::preview_record::{
 use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::project::ProjectContext;
 use quarto_core::record::{
-    Chosen, ImportContext, ImportedOnly, RecordSource, RecordSources, WalkContext,
-    imported_record_is_stale, overlay_difference, rehash_record, resolve_records,
+    Chosen, EngineError, EngineResult, ImportContext, ImportedOnly, LookupError, RecordLookup,
+    RecordSource, RecordSources, WalkContext, execution_record_path, imported_record_is_stale,
+    overlay_difference, read_record, rehash_record, resolve_records,
 };
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -98,6 +100,10 @@ pub struct Provider {
     /// sees, so a `-M` that changes how code runs (`execute:eval:false`,
     /// `jupyter:python3`) reaches the engine. `None` adds nothing.
     overlay: Option<Arc<RenderOverlay>>,
+    /// `--records` (RIU-4). Exactly `engine` (the default) keeps the pre-RIU path: no walk.
+    record_sources: RecordSources,
+    /// The writer gate, read once at construction (`QUARTO_ENGINE_RECORD_WRITE`).
+    record_gate: bool,
 }
 
 impl Provider {
@@ -122,6 +128,34 @@ impl Provider {
         registry: Option<Arc<EngineRegistry>>,
         overlay: Option<Arc<RenderOverlay>>,
     ) -> Arc<Self> {
+        Self::new_with_records(
+            repo,
+            index,
+            self_actor_id,
+            consent,
+            registry,
+            overlay,
+            RecordSources::provider_default(),
+            quarto_core::engine::capture_files::record_writing_enabled(
+                quarto_core::engine::capture_files::WriterSurface::Provider,
+            ),
+        )
+    }
+
+    /// [`Provider::new_with_overlay`] with the `--records` list and the writer gate (RIU-4).
+    /// With the list exactly `engine` this is the pre-RIU provider. With any other list,
+    /// `execute_document` walks it, and `engine` absent means this provider never runs code.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_records(
+        repo: Repo,
+        index: IndexDocument,
+        self_actor_id: impl Into<String>,
+        consent: Arc<dyn ConsentGate>,
+        registry: Option<Arc<EngineRegistry>>,
+        overlay: Option<Arc<RenderOverlay>>,
+        record_sources: RecordSources,
+        record_gate: bool,
+    ) -> Arc<Self> {
         let probe = registry.clone().unwrap_or_default();
         let engines = available_engines(&probe);
         Arc::new(Self {
@@ -133,6 +167,8 @@ impl Provider {
             registry,
             in_flight: Mutex::new(HashSet::new()),
             overlay,
+            record_sources,
+            record_gate,
         })
     }
 
@@ -244,7 +280,13 @@ impl Provider {
             return Err(format!("refusing to execute unsafe path '{rel_path}'"));
         }
 
-        let result = self.run_and_store(rel_path).await;
+        // The default list (`engine` alone) is the pre-RIU path with no walk and no source
+        // inputs. Any other list walks its sources; the engine is reached only through the walk.
+        let result = if self.record_sources == RecordSources::provider_default() {
+            self.run_and_store(rel_path).await
+        } else {
+            self.execute_with_sources(rel_path).await
+        };
 
         // Only flip status once we know a run was actually attempted (consent
         // granted). A rejected request touches nothing.
@@ -425,6 +467,56 @@ impl Provider {
             return Err(format!("refusing to publish unsafe path '{rel_path}'"));
         }
 
+        let list = RecordSources::new(vec![source.clone()]);
+        match self
+            .walk_and_publish(rel_path, &list, record_gate, &|_, _| Box::new(ImportedOnly))
+            .await?
+        {
+            Some(done) => Ok(done),
+            None => Err("internal error: an imported-only walk reported an engine run".into()),
+        }
+    }
+
+    /// `execute_document` for a non-default list: walk the sources, publishing what one supplies.
+    /// `engine` is reachable only through [`ProviderLookup::run_engine`], which goes through the
+    /// consent-gated `run_and_store`.
+    async fn execute_with_sources(&self, rel_path: &str) -> Result<ExecOutcome, String> {
+        let declined = std::cell::Cell::new(false);
+        let engine_outcome = std::cell::RefCell::new(None);
+        let make = |project_dir: &Path, abs_path: &Path| -> Box<dyn RecordLookup + '_> {
+            Box::new(ProviderLookup {
+                provider: self,
+                rel_path,
+                project_dir: project_dir.to_path_buf(),
+                abs_path: abs_path.to_path_buf(),
+                declined: &declined,
+                engine_outcome: &engine_outcome,
+            })
+        };
+        let result = self
+            .walk_and_publish(rel_path, &self.record_sources, self.record_gate, &make)
+            .await;
+        if declined.get() {
+            return Ok(ExecOutcome::Rejected);
+        }
+        match result? {
+            Some(done) => Ok(done),
+            None => engine_outcome.into_inner().ok_or_else(|| {
+                "internal error: the engine published but reported no outcome".into()
+            }),
+        }
+    }
+
+    /// Materialize the project, compute the source inputs once, walk `list` with the lookup
+    /// `make` builds, and publish the chosen run through the shared seam. A walk that chose the
+    /// engine returns the outcome `run_and_store` already wrote (reported by the lookup).
+    async fn walk_and_publish<'l>(
+        &self,
+        rel_path: &str,
+        list: &RecordSources,
+        record_gate: bool,
+        make: &dyn Fn(&Path, &Path) -> Box<dyn RecordLookup + 'l>,
+    ) -> Result<Option<ExecOutcome>, String> {
         let tmp =
             tempfile::tempdir().map_err(|e| format!("creating a materialization temp dir: {e}"))?;
         crate::materialize::materialize_project(&self.repo, &self.index, tmp.path())
@@ -450,10 +542,9 @@ impl Provider {
         .await
         .map_err(|e| format!("computing the source inputs failed: {e}"))?;
 
-        let list = RecordSources::new(vec![source.clone()]);
         let walk = WalkContext {
-            list: &list,
-            engine_enabled: false,
+            list,
+            engine_enabled: list.contains_engine(),
             record_gate,
             import: Some(ImportContext {
                 abs_path: &abs_path,
@@ -461,10 +552,16 @@ impl Provider {
                 positron_dir: None,
             }),
         };
-        let resolution = resolve_records(&walk, &inputs, &ImportedOnly).await;
+        let resolution =
+            resolve_records(&walk, &inputs, make(&project.dir, &abs_path).as_ref()).await;
         let run = match resolution.chosen {
             Some(Chosen::Run { run, .. }) => run,
-            _ => {
+            // The lookup already published the engine's run and holds its outcome.
+            Some(Chosen::EnginePublished) => return Ok(None),
+            None => {
+                if let Some(failure) = resolution.first_failure() {
+                    return Err(failure.to_string());
+                }
                 if let Some(why) = resolution.refusal() {
                     return Err(why.to_string());
                 }
@@ -499,7 +596,12 @@ impl Provider {
                 },
             )
             .map_err(|e| format!("failed to update sidecar: {e}"))?;
-        Ok(ExecOutcome::Executed(doc_id))
+        Ok(Some(ExecOutcome::Executed(doc_id)))
+    }
+
+    /// Whether `engine` is in this provider's `--records` list.
+    fn engine_listed(&self) -> bool {
+        self.record_sources.contains_engine()
     }
 
     /// Execute one document once, off the reactor. The engine work and the
@@ -683,6 +785,74 @@ async fn write_capture_doc(
             }
         })
         .map(|doc_id| (doc_id, encoded.engines_without_record))
+}
+
+/// The provider's [`RecordLookup`] (RIU-4): what `q2` and `engine` mean when `provide-hub`
+/// is the one asking. `cache` has nothing (a start-up error for this command); `q2` reads the
+/// `.quarto` copy from the materialized project (nearly always empty); `engine` is
+/// `run_and_store`, consent gate included, which publishes as it runs.
+struct ProviderLookup<'a> {
+    provider: &'a Provider,
+    rel_path: &'a str,
+    /// The materialized project and document, for the `q2` copy's path.
+    project_dir: PathBuf,
+    abs_path: PathBuf,
+    /// Set when the operator declined at the consent gate.
+    declined: &'a std::cell::Cell<bool>,
+    /// What `run_and_store` returned when it published.
+    engine_outcome: &'a std::cell::RefCell<Option<ExecOutcome>>,
+}
+
+#[async_trait(?Send)]
+impl RecordLookup for ProviderLookup<'_> {
+    async fn lookup(
+        &self,
+        source: &RecordSource,
+        _inputs: &SourceInputs,
+    ) -> Result<Option<CaptureRun>, LookupError> {
+        match source {
+            RecordSource::Q2 => {
+                let path = execution_record_path(&self.project_dir, &self.abs_path);
+                let text = match std::fs::read_to_string(&path) {
+                    Ok(t) => t,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                    Err(e) => {
+                        return Err(LookupError::Unreadable(format!(
+                            "reading {}: {e}",
+                            path.display()
+                        )));
+                    }
+                };
+                let record = read_record(&text).map_err(|e| {
+                    LookupError::Unreadable(format!("{} is not a record: {e}", path.display()))
+                })?;
+                Ok(Some(CaptureRun {
+                    captures: Vec::new(),
+                    record: Some(record),
+                }))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    async fn run_engine(&self, _inputs: &SourceInputs) -> Result<EngineResult, EngineError> {
+        if !self.provider.engine_listed() {
+            return Err(EngineError::Failed(
+                "`engine` is not in --records, so this provider does not run code".into(),
+            ));
+        }
+        match self.provider.run_and_store(self.rel_path).await {
+            Ok(ExecOutcome::Rejected) => {
+                self.declined.set(true);
+                Err(EngineError::Failed("the operator declined".into()))
+            }
+            Ok(done) => {
+                *self.engine_outcome.borrow_mut() = Some(done);
+                Ok(EngineResult::Published)
+            }
+            Err(e) => Err(EngineError::Failed(e)),
+        }
+    }
 }
 
 #[cfg(test)]

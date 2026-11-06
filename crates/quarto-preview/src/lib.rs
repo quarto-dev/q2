@@ -530,6 +530,7 @@ where
             config.host.clone(),
             config.port,
             config.allow_edit,
+            config::engine_can_run(config.engine_policy, &config.record_sources),
             share_ready_rx,
             |banner| println!("\n{banner}\n"),
         ))

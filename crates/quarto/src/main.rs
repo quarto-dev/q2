@@ -304,7 +304,8 @@ enum Commands {
 
         /// Share this preview session over an end-to-end encrypted
         /// peer-to-peer tunnel (via iroh). Prints a join string;
-        /// anyone who has it can VIEW the project and RE-RUN its code
+        /// anyone who has it can VIEW the project and, if `engine` is in
+        /// --records and `preview.engine` is not `off`, RE-RUN its code
         /// on this machine (and EDIT the files if --allow-edit is also
         /// set), so treat the string like a password.
         #[arg(long)]
@@ -336,9 +337,15 @@ enum Commands {
         /// `positron` reads the outputs Positron's inline output cache
         /// holds, with no kernel; a directory path (`/abs/dir`,
         /// `./dir`, `~/dir`) reads Positron-format files from there.
-        /// This option does not yet check that a directory exists, or
-        /// conflict with `--join`, `--static` or `--no-project`.
-        #[arg(long, value_delimiter = ',', value_name = "SOURCES")]
+        /// A directory must exist (a relative path resolves against the
+        /// working directory). Conflicts with `--join`, `--static` and
+        /// `--no-project`.
+        #[arg(
+            long,
+            value_delimiter = ',',
+            value_name = "SOURCES",
+            conflicts_with_all = ["join", "static_mode", "no_project"]
+        )]
         records: Vec<quarto_core::record::RecordSource>,
 
         /// Print the embedded SPA asset manifest hashes and exit.
@@ -776,6 +783,21 @@ enum Commands {
         /// and `_brand.yml`, so profile files never reach this machine).
         #[arg(short = 'M', long)]
         metadata: Vec<String>,
+
+        /// Where a document's execution record comes from, in priority
+        /// order: `q2`, `positron`, `engine`, or a directory of
+        /// Positron-format cache files (`cache` is not available here).
+        /// Comma-separated or repeated; the first source that has a record
+        /// wins. Default: `engine`, a fresh consent-gated run. Without
+        /// `engine` in the list this provider never runs code.
+        ///
+        /// A non-engine source publishes the host's own outputs to every
+        /// viewer of the hub document without a consent prompt. A `q2` or
+        /// Positron record is published only with
+        /// QUARTO_ENGINE_RECORD_WRITE=1 until the hosted hub can read it.
+        /// A relative directory path resolves against the working directory.
+        #[arg(long, value_delimiter = ',', value_name = "SOURCES")]
+        records: Vec<quarto_core::record::RecordSource>,
     },
 
     /// Start collaborative hub server for real-time editing.
@@ -1540,6 +1562,48 @@ mod cli_parse_tests {
         }
     }
 
+    /// `--records` conflicts with `--join` (no local documents), `--static` (no
+    /// interactive re-execute path) and `--no-project`.
+    #[test]
+    fn preview_records_conflicts_with_join_static_and_no_project() {
+        for other in [
+            &["--join", "x"][..],
+            &["--static"][..],
+            &["--no-project"][..],
+        ] {
+            let mut args = vec!["preview", "--records", "positron"];
+            args.extend_from_slice(other);
+            assert_join_conflict(&args);
+        }
+    }
+
+    #[test]
+    fn provide_hub_records_parses_and_defaults_to_absent() {
+        use quarto_core::record::RecordSource as S;
+        let records = |args: &[&str]| {
+            let Commands::ProvideHub { records, .. } = try_parse(args).expect("parses").command
+            else {
+                panic!("expected provide-hub")
+            };
+            records
+        };
+        assert_eq!(
+            records(&["provide-hub", "id", "--file", "a.qmd"]),
+            Vec::<S>::new()
+        );
+        assert_eq!(
+            records(&[
+                "provide-hub",
+                "id",
+                "--file",
+                "a.qmd",
+                "--records",
+                "positron,engine"
+            ]),
+            vec![S::Positron, S::Engine]
+        );
+    }
+
     /// `--no-watch` and `--no-navigate` keep their `requires = "static_mode"`.
     #[test]
     fn preview_no_watch_and_no_navigate_still_require_static() {
@@ -2109,6 +2173,7 @@ fn run() -> Result<()> {
             dangerously_accept_requests,
             token,
             metadata,
+            records,
         } => commands::provide_hub::execute(commands::provide_hub::ProvideHubArgs {
             project,
             file,
@@ -2117,6 +2182,7 @@ fn run() -> Result<()> {
             dangerously_accept_requests,
             token,
             metadata,
+            records,
         }),
 
         Commands::Hub {

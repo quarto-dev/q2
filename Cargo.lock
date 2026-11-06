@@ -7322,6 +7322,7 @@ dependencies = [
 name = "quarto-hub-provider"
 version = "0.44.0"
 dependencies = [
+ "async-trait",
  "automerge",
  "ciborium",
  "flate2",

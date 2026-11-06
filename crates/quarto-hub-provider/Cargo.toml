@@ -37,6 +37,7 @@ quarto-trace = { workspace = true }
 ciborium = "0.2"
 # Per-run project materialization into a fresh temp dir from the VFS.
 tempfile = "3"
+async-trait.workspace = true
 # Drive the async capture write-back on a blocking worker (mirrors
 # quarto-preview/re_execute.rs: engine execution must not block the reactor).
 pollster = { workspace = true }
