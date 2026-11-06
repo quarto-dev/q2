@@ -144,56 +144,90 @@ fn isolate_julia_project() -> Option<TempDir> {
     Some(tmp)
 }
 
-/// Snapshot of the SHARED (non-isolated) julia transport file's
-/// existence + mtime, taken before a live run so the caller can prove
-/// "the shared transport was untouched during the run" after — the
-/// PC3 acceptance criterion for the isolation fix. Resolves the shared
-/// path from `real_home` (the ambient `HOME`, captured BEFORE this
-/// process overrides it) so the check targets the user's actual
-/// `~/Library/Caches/quarto/julia/julia_transport.txt`, never the
-/// isolated one.
+/// Proof that an isolated run never joined the SHARED julia server.
+///
+/// The shared transport file is `~/Library/Caches/quarto/julia/julia_transport.txt`
+/// under the REAL `HOME` (captured before this process overrides it). Other
+/// processes legitimately create, rewrite, and remove that file at any time:
+/// another session's Julia test, a real `q2 preview`, a server idle timeout.
+/// So the old "existence + mtime unchanged across the run" check flaked whenever
+/// anything else touched the file during the run's several minutes. What an
+/// isolated run can actually promise is narrower and stable: the server IT
+/// started is not the server the shared file names. That is the property
+/// asserted here, by pid.
 struct SharedTransportSentinel {
     path: PathBuf,
-    existed_before: bool,
-    mtime_before: Option<std::time::SystemTime>,
 }
 
 impl SharedTransportSentinel {
     fn capture(real_home: &Path) -> Self {
-        let path = real_home
-            .join("Library")
-            .join("Caches")
-            .join("quarto")
-            .join("julia")
-            .join("julia_transport.txt");
-        let meta = std::fs::metadata(&path).ok();
         Self {
-            existed_before: meta.is_some(),
-            mtime_before: meta.and_then(|m| m.modified().ok()),
-            path,
+            path: real_home
+                .join("Library")
+                .join("Caches")
+                .join("quarto")
+                .join("julia")
+                .join("julia_transport.txt"),
         }
     }
 
-    /// Panics with a diagnostic if the shared transport file's
-    /// existence or mtime changed since `capture`.
-    fn assert_untouched(&self) {
-        let meta = std::fs::metadata(&self.path).ok();
-        let existed_after = meta.is_some();
-        let mtime_after = meta.and_then(|m| m.modified().ok());
-        assert_eq!(
-            self.existed_before, existed_after,
-            "shared transport file {:?} existence changed during the run \
-             (before: {}, after: {}) — isolation leaked onto the shared server",
-            self.path, self.existed_before, existed_after
-        );
-        if self.existed_before {
-            assert_eq!(
-                self.mtime_before, mtime_after,
-                "shared transport file {:?} mtime changed during the run \
+    /// Panics if the shared transport file names `isolated_pid` — i.e. the
+    /// isolated run's server registered itself in (or was reached through) the
+    /// shared file. A missing or unparsable shared file passes: it names no
+    /// server at all.
+    fn assert_not_isolated_server(&self, isolated_pid: i32) {
+        if let Some(shared_pid) = transport_pid(&self.path) {
+            assert_ne!(
+                shared_pid, isolated_pid,
+                "shared transport file {:?} names the isolated server (pid {}) \
                  — isolation leaked onto the shared server",
-                self.path
+                self.path, isolated_pid
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod sentinel_tests {
+    use super::*;
+
+    fn write_transport(dir: &Path, pid: i32) -> PathBuf {
+        let path = dir.join("Library/Caches/quarto/julia/julia_transport.txt");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            format!("{{\"port\": 1, \"pid\": {pid}, \"key\": \"k\"}}\n"),
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn sentinel_passes_when_shared_file_is_absent() {
+        let home = TempDir::new().unwrap();
+        SharedTransportSentinel::capture(home.path()).assert_not_isolated_server(4242);
+    }
+
+    #[test]
+    fn sentinel_passes_when_another_process_rewrites_the_shared_file() {
+        // The flake: the file is created, replaced, and removed by unrelated
+        // Julia runs while an isolated run is in flight. None of that is a leak.
+        let home = TempDir::new().unwrap();
+        let sentinel = SharedTransportSentinel::capture(home.path());
+        let path = write_transport(home.path(), 1111);
+        sentinel.assert_not_isolated_server(4242);
+        write_transport(home.path(), 2222);
+        sentinel.assert_not_isolated_server(4242);
+        std::fs::remove_file(path).unwrap();
+        sentinel.assert_not_isolated_server(4242);
+    }
+
+    #[test]
+    #[should_panic(expected = "isolation leaked onto the shared server")]
+    fn sentinel_fails_when_shared_file_names_the_isolated_server() {
+        let home = TempDir::new().unwrap();
+        write_transport(home.path(), 4242);
+        SharedTransportSentinel::capture(home.path()).assert_not_isolated_server(4242);
     }
 }
 
@@ -1027,8 +1061,8 @@ impl TargetCapture {
 // into a per-test temp dir and re-points `QUARTO_JULIA_PROJECT` at the copy, so
 // the detached server's `--project=` flag never names the shared, real directory
 // (the depot named by `JULIA_DEPOT_PATH` stays shared — no re-instantiation).
-// `SharedTransportSentinel` proves the shared `julia_transport.txt` is untouched
-// across the run (existence + mtime, captured from the REAL `HOME` before the
+// `SharedTransportSentinel` proves the shared `julia_transport.txt` never names this
+// run's isolated server (pid comparison; the REAL `HOME` is captured before the
 // override). Gated behind `QUARTO_PC4A_LIVE=1` AND `#[ignore]` so it never runs —
 // nor touches any julia server — by accident. Unix only (cleanup uses process
 // groups). Run it explicitly:
@@ -1232,10 +1266,11 @@ fn pc4a_abandoned_worker_close_busy() {
          (proves forceclose recovery ran the cell, not an inert listing); markdown:\n{markdown}"
     );
 
-    // P3 acceptance: the shared, real transport file was never touched by
-    // this run's (isolated) QNR servers.
-    if let Some(sentinel) = &shared_sentinel {
-        sentinel.assert_untouched();
+    // P3 acceptance: the shared, real transport file never names this run's
+    // (isolated) QNR server. Read the pid now, while the isolated transport
+    // file still exists; a missing pid leaves nothing to compare.
+    if let (Some(sentinel), Some(pid)) = (&shared_sentinel, transport_pid(&transport)) {
+        sentinel.assert_not_isolated_server(pid);
     }
 }
 
@@ -1354,7 +1389,8 @@ fn j7_failed_run_does_not_leak_worker() {
         return;
     };
 
-    // Proves at the end that the isolation never touched the user's real server.
+    // Proves at the end that the isolated server is not the one the user's real
+    // transport file names.
     let shared_sentinel = SharedTransportSentinel::capture(&real_home);
 
     let home = TempDir::new().unwrap();
@@ -1433,7 +1469,7 @@ fn j7_failed_run_does_not_leak_worker() {
         server_pid
     );
 
-    shared_sentinel.assert_untouched();
+    shared_sentinel.assert_not_isolated_server(server_pid);
 }
 
 // ── J8: the record row (EXR-8 B5) ─────────────────────────────────────────────
