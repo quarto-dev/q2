@@ -673,3 +673,142 @@ async fn publishing_an_imported_record_needs_no_consent_and_runs_no_engine() {
     );
     provider.stop().await;
 }
+
+/// Join a fresh hub holding `doc.qmd` = `text`; returns the provider's repo and index plus the
+/// server's index (to read sidecars back).
+async fn join_with_doc(text: &str) -> (Repo, IndexDocument, IndexDocument) {
+    let (server_repo, ws_url) = spawn_server().await;
+    let file_id = create_text_doc(&server_repo, text).await;
+    let (server_index, index_id) = IndexDocument::create(&server_repo).await.unwrap();
+    server_index.add_file("doc.qmd", &file_id).unwrap();
+    let (repo, index) = join(
+        JoinConfig {
+            server_ws_url: ws_url,
+            index_doc_id: index_id,
+            connect_timeout: Duration::from_secs(10),
+        },
+        Arc::new(StaticTokenSource::new("test-token")),
+    )
+    .await
+    .expect("provider joins");
+    // Keep the server repo alive for the test's duration.
+    std::mem::forget(server_repo);
+    (repo, index, server_index)
+}
+
+fn records_provider(
+    repo: Repo,
+    index: IndexDocument,
+    consent: Arc<dyn quarto_hub_provider::ConsentGate>,
+    registry: EngineRegistry,
+    sources: Vec<quarto_core::record::RecordSource>,
+) -> Arc<Provider> {
+    Provider::new_with_records(
+        repo,
+        index,
+        "provider-actor",
+        consent,
+        Some(Arc::new(registry)),
+        None,
+        quarto_core::record::RecordSources::new(sources),
+        true,
+    )
+}
+
+/// RIU-4: `execute_document` with `--records <dir>` (no `engine`) publishes the imported record
+/// through the walk without consent and never runs the engine.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn execute_document_with_an_imported_source_publishes_without_consent_or_engine() {
+    use quarto_core::record::RecordSource;
+    let (repo, index, server_index) = join_with_doc(PYTHON_QMD).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let cache = positron_cache_dir();
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysReject),
+        registry,
+        vec![RecordSource::Dir(cache.path().to_path_buf())],
+    );
+    let outcome = provider.execute_document("doc.qmd").await.unwrap();
+    let ExecOutcome::Executed(doc_id) = outcome else {
+        panic!("expected the imported record to be published")
+    };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        if let Some(cap) = server_index.get_capture("doc.qmd") {
+            assert_eq!(cap.capture_doc_id, doc_id);
+            assert_eq!(cap.staleness, Some(false));
+            break;
+        }
+        assert!(Instant::now() < deadline, "the sidecar never synced");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    provider.stop().await;
+}
+
+/// RIU-4: with `engine` absent and nothing supplying a record, the request fails and the
+/// engine (which panics if run) is never reached.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn without_engine_in_the_list_nothing_runs_when_no_source_supplies() {
+    use quarto_core::record::RecordSource;
+    let (repo, index, server_index) = join_with_doc(PYTHON_QMD).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let empty = tempfile::tempdir().unwrap();
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysAccept),
+        registry,
+        vec![RecordSource::Dir(empty.path().to_path_buf())],
+    );
+    assert!(provider.execute_document("doc.qmd").await.is_err());
+    assert!(server_index.get_capture("doc.qmd").is_none());
+    provider.stop().await;
+}
+
+/// RIU-4: with `engine` listed after a source that has nothing, the engine step still goes
+/// through the consent gate: a rejecting gate yields `Rejected` and writes nothing; an
+/// accepting one runs and publishes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn engine_after_an_empty_source_still_goes_through_consent() {
+    use quarto_core::record::RecordSource;
+    let empty = tempfile::tempdir().unwrap();
+    let sources = || {
+        vec![
+            RecordSource::Dir(empty.path().to_path_buf()),
+            RecordSource::Engine,
+        ]
+    };
+
+    let (repo, index, server_index) = join_with_doc(PASSTHROUGH_QMD).await;
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysReject),
+        passthrough_registry(),
+        sources(),
+    );
+    assert_eq!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Rejected
+    );
+    assert!(server_index.get_capture("doc.qmd").is_none());
+    provider.stop().await;
+
+    let (repo, index, _server_index) = join_with_doc(PASSTHROUGH_QMD).await;
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysAccept),
+        passthrough_registry(),
+        sources(),
+    );
+    assert!(matches!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Executed(_)
+    ));
+    provider.stop().await;
+}

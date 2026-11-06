@@ -227,6 +227,17 @@ async fn record_one(
             // A refusal that nothing else overrode stands, naming the variable; an engine
             // error is the document's error. Otherwise nothing supplied (a prose-only
             // document, or sources that hold nothing): not an error.
+            // Say on the page why each source passed (RIU-4); silent for prose-only documents,
+            // and when a source failed (that failure is the page's one diagnostic).
+            if resolution.first_failure().is_none()
+                && let Some(diag) = quarto_core::engine::diagnostics::no_record_source_diagnostic(
+                    &resolution.outcomes,
+                    !inputs.sugared_blocks.is_empty(),
+                )
+                && let Some(sink) = crate::diagnostics::current_sink()
+            {
+                sink.emit(rel_path, diag);
+            }
             if let Some(why) = resolution.refusal() {
                 return Err(RecordError::Refused(why.to_string()));
             }
@@ -1448,6 +1459,113 @@ mod tests {
         );
     }
 
+    /// Write a `q2` record of `doc` (built by the recording stub engine) for `abs`.
+    async fn write_q2_record_of(
+        abs: &std::path::Path,
+        runtime: &Arc<dyn SystemRuntime>,
+    ) -> ProjectContext {
+        let project = ProjectContext::discover(abs, runtime.as_ref()).unwrap();
+        let run = quarto_core::engine::preview_record::record_capture_run(
+            abs,
+            &project,
+            runtime.clone(),
+            Some(recording_registry(false)),
+        )
+        .await
+        .unwrap();
+        let file = quarto_core::record::execution_record_path(&project.dir, abs);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(
+            &file,
+            quarto_core::record::write_record(&run.record.unwrap()).unwrap(),
+        )
+        .unwrap();
+        project
+    }
+
+    /// RIU-4: a `q2` record written for the current document is published fresh; one written for
+    /// an older document (a code cell since edited) is published stale.
+    #[tokio::test]
+    async fn a_q2_record_is_fresh_for_the_current_document_and_stale_for_an_older_one() {
+        use quarto_core::record::RecordSource;
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", RECORD_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        write_q2_record_of(&abs, &runtime).await;
+        let cfg = cfg_for(
+            &cache_dir_for_test(),
+            EnginePolicy::Manual,
+            vec![RecordSource::Q2],
+            true,
+        );
+
+        assert!(
+            record_one(&abs, "doc.qmd", &ctx, &runtime, None, &cfg)
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false),
+            "the record matches the document"
+        );
+
+        std::fs::write(&abs, RECORD_DOC.replace("\nx\n", "\ny\n")).unwrap();
+        assert!(
+            record_one(&abs, "doc.qmd", &ctx, &runtime, None, &cfg)
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(true),
+            "the record is of an older document"
+        );
+    }
+
+    /// RIU-4: sources are read at boot and not again. After the `q2` record is published, a file
+    /// change recomputes staleness from the capture doc even when the source file is gone or
+    /// replaced with garbage, and a fresh source reading would have failed.
+    #[tokio::test]
+    async fn a_file_change_does_not_consult_the_source_list() {
+        use quarto_core::record::RecordSource;
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", RECORD_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let project = write_q2_record_of(&abs, &runtime).await;
+        let cfg = cfg_for(
+            &cache_dir_for_test(),
+            EnginePolicy::Manual,
+            vec![RecordSource::Q2],
+            true,
+        );
+        record_one(&abs, "doc.qmd", &ctx, &runtime, None, &cfg)
+            .await
+            .unwrap();
+        assert_eq!(
+            ctx.index().get_capture("doc.qmd").unwrap().staleness,
+            Some(false)
+        );
+
+        // The source goes bad, and the document changes.
+        let file = quarto_core::record::execution_record_path(&project.dir, &abs);
+        std::fs::write(&file, "not json").unwrap();
+        std::fs::write(&abs, RECORD_DOC.replace("\nx\n", "\ny\n")).unwrap();
+
+        recompute_staleness(ctx.clone(), runtime.clone(), "doc.qmd", None, &cfg)
+            .await
+            .unwrap();
+        let entry = ctx.index().get_capture("doc.qmd").unwrap();
+        assert_eq!(
+            entry.staleness,
+            Some(true),
+            "judged from the published capture"
+        );
+        assert!(
+            entry.last_error.is_none(),
+            "the broken source was never read: {:?}",
+            entry.last_error
+        );
+    }
+
     /// An unreadable `.quarto` file is skipped and the next source is tried.
     #[tokio::test]
     async fn an_unreadable_q2_file_is_skipped_and_the_next_source_is_tried() {
@@ -1530,6 +1648,35 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 1);
+        assert!(ctx.index().has_capture("doc.qmd"));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// RIU-4: `--records cache,positron,engine` under `preview.engine: off`: the engine stays
+    /// listed but never runs, and the cached record still shows.
+    #[tokio::test]
+    async fn off_with_engine_listed_shows_the_cached_record_and_never_runs_the_engine() {
+        use quarto_core::record::RecordSource;
+        let (tmp, ctx, runtime) = build_ctx_with_files(&[("doc.qmd", WALK_DOC)]).await;
+        let abs = tmp.path().join("doc.qmd");
+        let cache_dir = cache_dir_for_test();
+        seed_cache(&abs, &runtime, &cache_dir, basic_record()).await;
+        let (registry, calls) = counting_registry();
+        let cfg = cfg_for(
+            &cache_dir,
+            EnginePolicy::Off,
+            vec![
+                RecordSource::Cache,
+                RecordSource::Positron,
+                RecordSource::Engine,
+            ],
+            true,
+        );
+        assert!(
+            record_one(&abs, "doc.qmd", &ctx, &runtime, Some(registry), &cfg)
+                .await
+                .unwrap()
+        );
         assert!(ctx.index().has_capture("doc.qmd"));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
     }

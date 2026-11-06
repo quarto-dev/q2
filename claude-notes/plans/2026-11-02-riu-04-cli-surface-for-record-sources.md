@@ -2,7 +2,7 @@
 title: 'RIU-4: CLI surface for record sources'
 date: 2026-11-02
 description: 'Harden the --records option on q2 preview and q2 provide-hub (RIU-3a added a minimal version): validation, per-command defaults, the provide-hub rules and conflicts, the provider implementation of the resolver trait and its wiring into the request path, the staleness check of a q2 record when chosen, the diagnostics built from RIU-2 outcomes, and the documentation. The never-execute guard itself is RIU-2 (claim_and_spawn). The q2 record export-positron subcommand lives in RIU-5.'
-status: ready  # nothing started; written from RIU-0 S1 B8 and S6, checked against the tree on 2026-11-03; the option name and default list are settled; revised after the fourth review (the guard moved to RIU-2, the flag split with RIU-3a)
+status: in-progress  # started 2026-11-06 on feature/riu-4-cli-record-sources (parser, validation, provider wiring, banner, no-source diagnostic, docs done; see the progress note); earlier: nothing started; written from RIU-0 S1 B8 and S6, checked against the tree on 2026-11-03; the option name and default list are settled; revised after the fourth review (the guard moved to RIU-2, the flag split with RIU-3a)
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -126,7 +126,7 @@ From the epic's "Decisions recorded 2026-11-05", with the answers to the fourth 
       which also owns the `cache` start-up error beside `validate_mode` (so it is not a parser test). A
       directory-source check at start is a named validator called from both commands. The provider's
       `quarto-hub-provider/Cargo.toml` gains `async-trait.workspace = true`.
-- [ ] **What runs before consent (checked 2026-11-05, settled: nothing new).** The `SourceInputs` for a
+- [x] **What runs before consent (checked 2026-11-05, settled: nothing new).** The `SourceInputs` for a
       request come from `compute_source_inputs`, which runs the pre-engine pipeline (Lua filters, shortcodes,
       includes) on the project materialized from hub files. That pipeline **already runs before consent
       today**: `write_review_file` (`execute.rs:441-472`) calls `compute_input_qmd` at `:448`, which is
@@ -135,6 +135,23 @@ From the epic's "Decisions recorded 2026-11-05", with the answers to the fourth 
       no cell or engine code runs. What does change, and the docs say so: a `provide-hub` with a Positron
       source publishes the host's own Positron outputs to every viewer of the hub document without a
       prompt, so the host chooses that deliberately by naming the source.
+
+## Progress note (2026-11-06)
+
+Landed on `feature/riu-4-cli-record-sources`: parser errors (`./name` suggestion, comma note, empty
+entry); `RecordSources::validate_directories` (expands `~`, checks existence) and `reject_cache`;
+`--records` on `provide-hub` and the conflicts with `--join`/`--static`/`--no-project` on `preview`;
+start-up validation on both commands (before anything binds or prints); the provider's `ProviderLookup`
+and `execute_with_sources` (the `engine`-only list still calls `run_and_store` with no walk);
+`Provider::new_with_records` (the old constructors delegate, so existing callers and tests are
+unchanged: a deviation from "constructors gain the gate parameter"); the share banner's
+`can_rerun` argument; `no_record_source_diagnostic` emitted from `record_one`; the docs.
+
+Not done yet: the preview-side tests that need the full server (`off` plus `--records cache,positron,engine`;
+the `--share` guest test through the real flag; a file change not consulting the list; `q2` stale vs fresh
+and the knitr-format pin), the docs embed refresh, the browser checks, the Windows cross-clippy, and the
+workspace-level verification. The `Re-execute` guard through an imported page and the per-case EXR-16 sweep
+are RIU-3a leftovers.
 
 ## Phase A: tests first
 
@@ -149,7 +166,7 @@ From the epic's "Decisions recorded 2026-11-05", with the answers to the fourth 
       absent `engine` means `run_engine` is never called.
 - [ ] `preview.engine: off` plus `--records cache,positron,engine` does not run the engine and
       does show a cached record (depends on RIU-2 Phase E), and logs the warning about `engine`.
-- [ ] The re-execute guard tests (the POST under `off`, the POST with `engine` absent, the automatic
+- [x] The re-execute guard tests (the POST under `off`, the POST with `engine` absent, the automatic
       path, `manual` and `auto` with `engine` present, two handlers with different configs) are RIU-2's
       (Phase B3). Here, only the `--share` guest test above, through the real flag.
 - [ ] A unit test of the "no source supplies" diagnostic text from a hand-built outcome list: the
@@ -174,22 +191,22 @@ From the epic's "Decisions recorded 2026-11-05", with the answers to the fourth 
       takes the gate.
 - [ ] A test that a file change runs `recompute_staleness` only and does not consult the source
       list (a source fake that fails if called after boot).
-- [ ] A test that `q2 provide-hub` with no `--records` resolves to `engine` only, and `q2 preview`
+- [x] A test that `q2 provide-hub` with no `--records` resolves to `engine` only, and `q2 preview`
       to `cache,q2,engine`.
 
 ## Phase B: wiring
 
-- [ ] `--records` as a clap option (`value_delimiter = ','`, `Append`, a per-entry `value_parser`
+- [x] `--records` as a clap option (`value_delimiter = ','`, `Append`, a per-entry `value_parser`
       following the classification above; spike 4's parse test passed for a repeated flag, a Windows
       drive path and an unknown name) on the `Commands::Preview` variant
       (`crates/quarto/src/main.rs:214`) and `Commands::ProvideHub` (`:688`), through `PreviewArgs`
       (`commands/preview.rs:28`), `ProvideHubArgs` (`commands/provide_hub.rs:31`) and `PreviewConfig`
       (`lib.rs:231`).
-- [ ] The parser produces RIU-2's list type; the default is defined in one place.
+- [x] The parser produces RIU-2's list type; the default is defined in one place.
 - [ ] The provider's `RecordLookup` implementation, the call from `execute_document`, the `Provider`
       constructor parameter, the `cache` start-up error in `provide_hub::run` and the directory validator (see
       the decisions).
-- [ ] The `q2` source's staleness check, the diagnostic from outcomes, and the three conflicts.
+- [x] The `q2` source's staleness check, the diagnostic from outcomes, and the three conflicts.
 
 ## Phase C: the export subcommand is not here
 
@@ -203,14 +220,14 @@ Ownership, so no page has two final authors: RIU-1 rewrites the `record: true` p
 the editor-UI and share notes; this plan writes the final text of the option, the per-command defaults and
 the limits, and revises RIU-3's text for the hardened flag.
 
-- [ ] `docs/guides/authoring/execution-records.qmd`: the `--records` option, usage and not internals. Say
+- [x] `docs/guides/authoring/execution-records.qmd`: the `--records` option, usage and not internals. Say
       that `preview.engine: off` means no cell or engine code runs (no code cell, inline expression or engine
       process) while the document's filters, shortcodes and the project pre-render scripts still do, that sources are read at start and not again when a file changes, and the persisted `--data-dir`
       and "Clear results" limits above.
-- [ ] `docs/guides/projects/preview.qmd`: the "Sharing" section (it says guests can run renders and
+- [x] `docs/guides/projects/preview.qmd`: the "Sharing" section (it says guests can run renders and
       downloads but not re-run code) must say that a guest can re-execute only if `engine` is in `--records`
       and the policy is not `off`; the "Code execution" and `preview.engine: off` text gets the same caveats.
-- [ ] The share banner and help text (`share.rs:109-115` and `main.rs:274` say a guest can "RE-RUN" code)
+- [x] The share banner and help text (`share.rs:109-115` and `main.rs:274` say a guest can "RE-RUN" code)
       are false when `engine` is absent; make them say so.
 - [ ] `q2 preview --help` and `q2 provide-hub --help` text, including the per-command defaults, that a
       relative directory path resolves against the working directory, and that `provide-hub` with a

@@ -57,7 +57,31 @@ impl ReExecuteConfig {
     /// Whether any engine run may start: the policy is not `off` **and** `engine` is in the
     /// source list. The one question `claim_and_spawn` asks before it claims a slot.
     pub fn allows_engine(&self) -> bool {
-        self.policy != EnginePolicy::Off && self.sources.contains_engine()
+        engine_can_run(self.policy, &self.sources)
+    }
+}
+
+/// The one rule for "may an engine run": the policy is not `off` and `engine` is in the
+/// source list. The re-execute guard and the `--share` banner's "guests can re-run" claim both
+/// ask it, so a guest is told what the guard will actually allow.
+pub fn engine_can_run(policy: EnginePolicy, sources: &quarto_core::record::RecordSources) -> bool {
+    policy != EnginePolicy::Off && sources.contains_engine()
+}
+
+#[cfg(test)]
+mod engine_can_run_tests {
+    use super::*;
+    use quarto_core::record::{RecordSource, RecordSources};
+
+    #[test]
+    fn needs_both_a_policy_that_is_not_off_and_engine_in_the_list() {
+        let with = RecordSources::new(vec![RecordSource::Cache, RecordSource::Engine]);
+        let without = RecordSources::new(vec![RecordSource::Cache, RecordSource::Positron]);
+        assert!(engine_can_run(EnginePolicy::Manual, &with));
+        assert!(engine_can_run(EnginePolicy::Auto, &with));
+        assert!(!engine_can_run(EnginePolicy::Off, &with));
+        assert!(!engine_can_run(EnginePolicy::Manual, &without));
+        assert!(!engine_can_run(EnginePolicy::Auto, &without));
     }
 }
 

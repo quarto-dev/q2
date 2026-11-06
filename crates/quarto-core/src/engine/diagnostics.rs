@@ -292,6 +292,40 @@ pub fn engines_without_record_diagnostic(
     .build()
 }
 
+/// The warning a page shows when no `--records` source supplied a record for a document that
+/// has code cells (RIU-4), built from the walk's outcomes: one detail line per source, so the
+/// reader sees why each one was passed over. `None` (silence) for a prose-only document and
+/// when a source did supply.
+pub fn no_record_source_diagnostic(
+    outcomes: &[crate::record::SourceOutcome],
+    has_code_cells: bool,
+) -> Option<DiagnosticMessage> {
+    use crate::record::OutcomeKind;
+    if !has_code_cells
+        || outcomes.is_empty()
+        || outcomes.iter().any(|o| o.kind == OutcomeKind::Supplied)
+    {
+        return None;
+    }
+    let mut b = DiagnosticMessageBuilder::warning("No execution record for this document").problem(
+        "None of the record sources named by `--records` supplied one, so no outputs are shown.",
+    );
+    for o in outcomes {
+        let what = match &o.kind {
+            OutcomeKind::Supplied => unreachable!("checked above"),
+            OutcomeKind::Nothing => "nothing for this document".to_string(),
+            OutcomeKind::Refused(why) => format!("refused: {why}"),
+            OutcomeKind::Unavailable(why) => format!("not available: {why}"),
+            OutcomeKind::Failed(why) => format!("failed: {why}"),
+        };
+        b = b.add_detail(format!("{}: {what}", o.source.label()));
+    }
+    Some(
+        b.add_hint("Add `engine` to `--records` (and leave `preview.engine` on) to run the code.")
+            .build(),
+    )
+}
+
 /// The one-line form of [`engines_without_record_diagnostic`] for `provide-hub`, which has
 /// no page to attach a diagnostic to.
 pub fn engines_without_record_line(doc: &str, without_records: &[String]) -> String {
@@ -529,6 +563,47 @@ mod tests {
     use crate::engine::ExecutionError;
     use quarto_error_reporting::DiagnosticKind;
     use std::path::PathBuf;
+
+    // ── RIU-4: the "no source supplies" diagnostic ──────────────────────
+
+    fn outcome(
+        source: crate::record::RecordSource,
+        kind: crate::record::OutcomeKind,
+    ) -> crate::record::SourceOutcome {
+        crate::record::SourceOutcome { source, kind }
+    }
+
+    #[test]
+    fn no_source_diagnostic_lists_each_source_and_names_the_gate_variable() {
+        use crate::record::{OutcomeKind as K, RecordSource as S};
+        let outcomes = vec![
+            outcome(S::Cache, K::Nothing),
+            outcome(
+                S::Q2,
+                K::Refused("set QUARTO_ENGINE_RECORD_WRITE=1 to publish".into()),
+            ),
+            outcome(
+                S::Engine,
+                K::Unavailable("`engine` is not in --records".into()),
+            ),
+        ];
+        let text = no_record_source_diagnostic(&outcomes, true)
+            .expect("a document with code and no record is reported")
+            .to_text(None);
+        assert!(text.contains("cache: nothing"), "{text}");
+        assert!(text.contains("QUARTO_ENGINE_RECORD_WRITE"), "{text}");
+        assert!(text.contains("engine: not available"), "{text}");
+    }
+
+    #[test]
+    fn no_source_diagnostic_is_silent_for_prose_or_when_a_source_supplied() {
+        use crate::record::{OutcomeKind as K, RecordSource as S};
+        let none = vec![outcome(S::Cache, K::Nothing)];
+        assert!(no_record_source_diagnostic(&none, false).is_none());
+        let supplied = vec![outcome(S::Cache, K::Nothing), outcome(S::Q2, K::Supplied)];
+        assert!(no_record_source_diagnostic(&supplied, true).is_none());
+        assert!(no_record_source_diagnostic(&[], true).is_none());
+    }
 
     // ── T6 (bd-gy2ozix3): the malformed-result diagnostic ──────────────
 

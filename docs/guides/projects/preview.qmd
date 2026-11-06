@@ -143,7 +143,10 @@ With `--share`, anyone holding the join string can ask the host to run
 renders, downloads and imports: those requests use the host's `pandoc`
 and `typst` and read the host's project, and an import uploads the file
 to the host (up to 25 MB), where it is converted by a sandboxed `pandoc`.
-Treat the join string like a password, as the `--share` help says.
+A guest can also re-run the document's code, but only when `engine` is in
+`--records` and `preview.engine` is not `off` (see
+[Execution records](../authoring/execution-records.qmd)). Treat the join
+string like a password, as the `--share` help says.
 
 ## Static preview
 
@@ -217,7 +220,11 @@ preview:
   engine: off
 ```
 
-This is the same key the default preview uses.
+This is the same key the default preview uses. With it, no cell or engine code
+runs, and re-run requests from the editor or from a shared guest are refused; a
+`--records` source such as `cache` or `positron` can still supply saved
+outputs. The document's filters and shortcodes, and the project's pre-render
+scripts, still run.
 
 ### Defaults in `_quarto.yml`
 

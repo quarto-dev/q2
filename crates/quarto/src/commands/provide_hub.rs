@@ -51,6 +51,8 @@ pub struct ProvideHubArgs {
     pub token: Option<String>,
     /// `-M/--metadata` arguments, unparsed, as `q2 render -M` (F8-D9).
     pub metadata: Vec<String>,
+    /// `--records`, in order; empty means the provider default (`engine`).
+    pub records: Vec<quarto_core::record::RecordSource>,
 }
 
 const DEFAULT_SERVER_WS: &str = "wss://quarto-hub.com/ws";
@@ -98,6 +100,8 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     // Validate mode/args before connecting so mistakes fail fast. A
     // malformed `-M` fails here, before any network.
     validate_mode(args.watch, &args.file)?;
+    // Resolved and checked before any network, like `validate_mode`.
+    let record_sources = resolve_record_sources(args.records)?;
     let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&args.metadata)
         .map_err(|e| anyhow::anyhow!(e))?;
 
@@ -140,7 +144,18 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     // The beacon's actorId is the samod peer id (stable for this process);
     // Phase 5 swaps in the per-project actor id from /auth/actor.
     let self_actor_id = repo.peer_id().to_string();
-    let provider = Provider::new_with_overlay(repo, index, self_actor_id, consent, None, overlay);
+    let provider = Provider::new_with_records(
+        repo,
+        index,
+        self_actor_id,
+        consent,
+        None,
+        overlay,
+        record_sources,
+        quarto_core::engine::capture_files::record_writing_enabled(
+            quarto_core::engine::capture_files::WriterSurface::Provider,
+        ),
+    );
 
     if args.watch {
         run_watch(&provider).await;
@@ -161,6 +176,21 @@ fn validate_mode(watch: bool, file: &Option<String>) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// The `--records` list for this command: the default when absent, `cache` refused (this
+/// command has no cache directory), and every directory source checked once.
+fn resolve_record_sources(
+    records: Vec<quarto_core::record::RecordSource>,
+) -> Result<quarto_core::record::RecordSources> {
+    use quarto_core::record::RecordSources;
+    if records.is_empty() {
+        return Ok(RecordSources::provider_default());
+    }
+    let list = RecordSources::new(records);
+    list.reject_cache("q2 provide-hub")
+        .map_err(|e| anyhow::anyhow!(e))?;
+    list.validate_directories().map_err(|e| anyhow::anyhow!(e))
 }
 
 /// The consent gate to use, decided purely from flags + TTY state (no I/O, so
@@ -262,6 +292,7 @@ mod tests {
             watch: false,
             dangerously_accept_requests: true,
             token: Some("t".to_string()),
+            records: Vec::new(),
             metadata: metadata.iter().map(|s| s.to_string()).collect(),
         }
     }
@@ -340,5 +371,26 @@ mod tests {
                 allow_accept_all: true
             }
         );
+    }
+
+    #[test]
+    fn records_default_to_engine_only() {
+        let got = resolve_record_sources(Vec::new()).unwrap();
+        assert_eq!(got, quarto_core::record::RecordSources::provider_default());
+    }
+
+    #[test]
+    fn records_cache_is_a_startup_error_here() {
+        use quarto_core::record::RecordSource as S;
+        let err = resolve_record_sources(vec![S::Cache, S::Engine]).unwrap_err();
+        assert!(err.to_string().contains("provide-hub"), "{err}");
+    }
+
+    #[test]
+    fn records_missing_directory_is_a_startup_error() {
+        use quarto_core::record::RecordSource as S;
+        let dir = tempfile::tempdir().unwrap();
+        let err = resolve_record_sources(vec![S::Dir(dir.path().join("nope"))]).unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "{err}");
     }
 }
