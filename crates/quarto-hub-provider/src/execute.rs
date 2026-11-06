@@ -354,14 +354,27 @@ impl Provider {
             run = overlay_free_run(run, &source, overlay)?;
         }
 
-        let new_doc_id = write_capture_doc(
+        let (new_doc_id, without_record) = write_capture_doc(
             &self.repo,
             rel_path,
             &run,
-            quarto_core::engine::capture_files::record_writing_enabled(),
+            quarto_core::engine::capture_files::record_writing_enabled(
+                quarto_core::engine::capture_files::WriterSurface::Provider,
+            ),
         )
         .await
         .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
+        if !without_record.is_empty() {
+            // The decision is made when the payload is written, so the note comes after
+            // the run, once per document (Q-18-15, RIU-1).
+            eprintln!(
+                "{}",
+                quarto_core::engine::diagnostics::engines_without_record_line(
+                    rel_path,
+                    &without_record
+                )
+            );
+        }
 
         let updated = CaptureRef {
             capture_doc_id: new_doc_id.clone(),
@@ -521,18 +534,20 @@ pub fn overlay_free_run(
     Ok(run)
 }
 
-/// Encode the run (a record doc when the writer gate is on and the run has a
-/// record, else a legacy capture doc) and store it as a binary automerge doc.
+/// Encode the run (a record doc when the writer gate is on, which for `provide-hub` is
+/// off by default until the hosted hub reads records, and the run has a record, else a
+/// legacy capture doc) and store it as a binary automerge doc.
 /// Mirror of `quarto-preview`'s `write_capture_doc`; both go through
 /// `encode_for_publish` (serialize + gzip + 10MB size warning, bd-qbhp2cvv)
 /// and `create_engine_payload_document`, behind the one gate
-/// `record_writing_enabled` (EXR-13b; the caller passes the gate).
+/// `record_writing_enabled` (EXR-13b; the caller passes the gate). Returns the new doc's
+/// id and the engines that build no record, when that is why the legacy form was chosen.
 async fn write_capture_doc(
     repo: &Repo,
     rel_path: &str,
     run: &CaptureRun,
     record_gate: bool,
-) -> Result<String, ProviderError> {
+) -> Result<(String, Vec<String>), ProviderError> {
     use quarto_core::engine::capture_files::{PublishError, encode_for_publish};
     let encoded = encode_for_publish(&run.captures, run.record.as_ref(), record_gate).map_err(
         |e| match e {
@@ -554,11 +569,38 @@ async fn write_capture_doc(
                 ProviderError::Repo("samod repo stopped".into())
             }
         })
+        .map(|doc_id| (doc_id, encoded.engines_without_record))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RIU-1: with the gate on, a capture from an engine outside the record keeps the
+    /// document legacy and is reported to the caller, which prints the one-line note.
+    #[tokio::test]
+    async fn recordless_engine_is_reported_by_the_writer() {
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let in_record = record.metadata.quarto_engines[0].name.clone();
+        let capture = |e: &str| -> quarto_trace::EngineCapture {
+            serde_json::from_value(serde_json::json!({
+                "engine_name": e, "input_qmd": "x", "result": {}
+            }))
+            .unwrap()
+        };
+        let run = CaptureRun {
+            captures: vec![capture(&in_record), capture("echo")],
+            record: Some(record),
+        };
+        let repo = Repo::build_tokio().load().await;
+        let (_, without) = write_capture_doc(&repo, "doc.qmd", &run, true)
+            .await
+            .unwrap();
+        assert_eq!(without, vec!["echo".to_string()]);
+    }
 
     /// EXR-13b writer gate: gate off writes a legacy capture doc even when the run
     /// has a record; gate on writes a record doc.
@@ -579,7 +621,7 @@ mod tests {
             record: Some(record),
         };
         let repo = Repo::build_tokio().load().await;
-        let id = write_capture_doc(&repo, "doc.qmd", &run, gate)
+        let (id, _) = write_capture_doc(&repo, "doc.qmd", &run, gate)
             .await
             .unwrap();
         let handle = repo
@@ -659,7 +701,7 @@ mod tests {
             record: Some(record.clone()),
         };
         let repo = Repo::build_tokio().load().await;
-        let id = write_capture_doc(&repo, "doc.qmd", &run, true)
+        let (id, _) = write_capture_doc(&repo, "doc.qmd", &run, true)
             .await
             .unwrap();
         let handle = repo.find(id.parse().unwrap()).await.unwrap().unwrap();

@@ -21,6 +21,8 @@ function itself needs neither and can be built and tested first.
 > (`spike/riu-s8-julia`, commit `2fbd63449`, never merged) adds the `julia` engine to its keep rule
 > and an `riu_s8_check` example. Port them, do not cherry-pick them.
 
+**Lanes:** before starting a phase or landing work, read the epic's [lanes, landing and the ready board](2026-11-02-records-in-use-epic.md#lanes-landing-and-the-ready-board): lane branches, rebase and landing rules, and the board of which phases may start.
+
 ## Overview
 
 The reverse of RIU-3: q2 has a record, and Positron needs a file it accepts. Positron deletes

@@ -30,6 +30,7 @@ use quarto_core::record::{
     EngineEntryInput, Record, RecordBuilder, UnitResult, content_hash, read_record,
     read_record_value, write_record,
 };
+use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
 use quarto_core::stage::JsonTraceObserver;
 use quarto_core::stage::stages::{
     ENGINE_CAPTURE_KIND, ENGINE_CAPTURE_RECORD_KIND, ENGINE_RECORD_KIND,
@@ -685,4 +686,88 @@ fn plain_render_writes_no_record_file() {
     run_engine_stage(&input, AuxRecorder::arc(true), Some(registry(&[engine]))).unwrap();
 
     assert!(!tmp.path().join(".quarto").exists());
+}
+
+/// Render `input` to HTML through the real entry point `q2 render` uses, with `engine` as
+/// the only engine. Returns the result so a test can read the diagnostics.
+fn render_through_render_document_to_file(
+    input: &Path,
+    engine: Arc<StubRecordEngine>,
+) -> quarto_core::error::Result<quarto_core::render_to_file::RenderToFileResult> {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let project = ProjectContext::discover(input, runtime.as_ref()).unwrap();
+    let options = RenderToFileOptions {
+        engine_registry_override: Some(registry(&[engine])),
+        ..Default::default()
+    };
+    render_document_to_file(
+        input,
+        "html",
+        &options,
+        Some(&project),
+        runtime.clone(),
+        None,
+        None,
+        None,
+    )
+}
+
+/// RIU-1: a plain `q2 render` of a document with no `record: true` creates no records
+/// directory, even though the writer gate now defaults on for the preview.
+#[test]
+fn plain_render_to_file_creates_no_execution_records_directory() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", true);
+
+    render_through_render_document_to_file(&input, engine).expect("the render succeeds");
+
+    assert!(
+        !tmp.path()
+            .join(".quarto")
+            .join("execution-records")
+            .exists(),
+        "a plain render must not create .quarto/execution-records"
+    );
+}
+
+/// RIU-1 (epic decision 10): the copy under `.quarto/execution-records/` is optional, so a
+/// location that cannot be written warns and the render still succeeds.
+#[test]
+fn an_unwritable_record_location_warns_and_the_render_succeeds() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), RECORD_TRUE);
+    // `.quarto/execution-records` is a regular file, which fails the write on every
+    // platform with no permission bits. (A file at `.quarto` itself fails earlier, in
+    // "Failed to create .quarto directory", with or without `record: true`.)
+    std::fs::create_dir_all(tmp.path().join(".quarto")).unwrap();
+    std::fs::write(
+        tmp.path().join(".quarto").join("execution-records"),
+        b"in the way",
+    )
+    .unwrap();
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", true);
+
+    let result = render_through_render_document_to_file(&input, engine)
+        .expect("a failed optional record copy must not fail the render");
+
+    assert!(result.output_path.exists(), "the HTML is written");
+    let warnings: Vec<String> = result
+        .render_output
+        .diagnostics
+        .iter()
+        .filter(|d| d.kind == quarto_error_reporting::DiagnosticKind::Warning)
+        .map(|d| d.to_text(None))
+        .collect();
+    assert!(
+        warnings.iter().any(|w| w.contains("execution record")
+            && w.contains(
+                &tmp.path()
+                    .join(".quarto")
+                    .join("execution-records")
+                    .display()
+                    .to_string()
+            )),
+        "a warning names the record location: {warnings:?}"
+    );
 }

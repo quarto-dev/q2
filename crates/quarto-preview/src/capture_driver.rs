@@ -451,8 +451,11 @@ pub async fn recompute_staleness(
 }
 
 /// Encode and store a capture run as a samod binary doc: a record doc when the
-/// writer gate (`record_writing_enabled`) is on and the run has a record, else
-/// the legacy `EngineCapture` array (bd-5yff4: one per engine). Returns the new
+/// writer gate (`record_writing_enabled`, on by default for the preview) is on, the
+/// run has a record, and every engine that ran is in it; else the legacy
+/// `EngineCapture` array (bd-5yff4: one per engine), with `Q-18-15` when an engine
+/// that builds no record is why. The gate decides only this hub payload: the local
+/// cache writes its record file whatever the gate says. Returns the new
 /// doc's stringified DocumentId for the sidecar `captureDocId` field. Shared by
 /// the eager driver and the re-execute handler (EXR-13b).
 ///
@@ -469,7 +472,9 @@ pub async fn write_capture_doc(
         ctx,
         rel_path,
         run,
-        quarto_core::engine::capture_files::record_writing_enabled(),
+        quarto_core::engine::capture_files::record_writing_enabled(
+            quarto_core::engine::capture_files::WriterSurface::Preview,
+        ),
     )
     .await
 }
@@ -489,6 +494,8 @@ pub async fn write_capture_doc_gated(
         },
     )?;
 
+    report_engines_without_record(rel_path, run, &encoded.engines_without_record);
+
     let meta = quarto_hub::resource::CaptureDocMeta {
         source_path: rel_path.to_string(),
         engines: encoded.engines,
@@ -506,6 +513,42 @@ pub async fn write_capture_doc_gated(
         }
         quarto_hub::resource::PublishDocError::RepoStopped => RecordError::RepoStopped,
     })
+}
+
+/// Tell the page about a document stored in the legacy format because an engine in it
+/// builds no execution record (`Q-18-15`, RIU-1). Called once per capture run, from the
+/// one writer both the eager driver and re-execute go through, so a re-run replaces the
+/// earlier diagnostic instead of stacking a second one. With nothing to report it still
+/// drops a stale one: the edit that removed the record-less engine clears the warning.
+fn report_engines_without_record(rel_path: &str, run: &CaptureRun, without: &[String]) {
+    const CODE: &str = "Q-18-15";
+    let Some(sink) = diagnostics::current_sink() else {
+        return;
+    };
+    let mut kept = sink.get_for_page(rel_path);
+    let before = kept.len();
+    kept.retain(|d| d.code.as_deref() != Some(CODE));
+    if kept.len() != before {
+        sink.replace_page(rel_path, kept);
+    }
+    if without.is_empty() {
+        return;
+    }
+    let with: Vec<String> = run
+        .record
+        .as_ref()
+        .map(|r| {
+            r.metadata
+                .quarto_engines
+                .iter()
+                .map(|e| e.name.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    sink.emit(
+        rel_path,
+        quarto_core::engine::diagnostics::engines_without_record_diagnostic(&with, without),
+    );
 }
 
 /// Errors the driver can surface. Each variant is a short message
@@ -625,6 +668,98 @@ mod tests {
                 .unwrap_or_default();
             (mime, kind)
         })
+    }
+
+    /// A run whose record is the `basic` fixture's and whose captures come from the
+    /// given engines (RIU-1 record-less-engine rule).
+    fn run_with_captures(engines: &[&str]) -> CaptureRun {
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let captures = engines
+            .iter()
+            .map(|e| {
+                serde_json::from_value(serde_json::json!({
+                    "engine_name": e, "input_qmd": "x", "result": {}
+                }))
+                .unwrap()
+            })
+            .collect();
+        CaptureRun {
+            captures,
+            record: Some(record),
+        }
+    }
+
+    async fn fresh_ctx() -> (TempDir, Arc<HubContext>) {
+        let temp = TempDir::new().unwrap();
+        let storage = StorageManager::new_standalone(temp.path()).unwrap();
+        let ctx = Arc::new(
+            HubContext::new(storage, HubConfig::default())
+                .await
+                .unwrap(),
+        );
+        (temp, ctx)
+    }
+
+    /// RIU-1: a document with an engine outside the record is stored whole in the legacy
+    /// format, and the page gets exactly one `Q-18-15` warning per capture run, even when
+    /// the run is written twice (a re-execute replaces it).
+    #[tokio::test]
+    async fn recordless_engine_stores_legacy_and_warns_once_per_page() {
+        let (_t, ctx) = fresh_ctx().await;
+        let sink = Arc::new(diagnostics::DiagnosticSink::new());
+        diagnostics::set_sink(sink.clone());
+        let record_engine = run_with_captures(&[])
+            .record
+            .unwrap()
+            .metadata
+            .quarto_engines[0]
+            .name
+            .clone();
+        let run = run_with_captures(&[&record_engine, "echo"]);
+
+        for _ in 0..2 {
+            let id = write_capture_doc_gated(&ctx, "doc.qmd", &run, true)
+                .await
+                .unwrap();
+            let payload = read_capture_from_doc(&ctx, &id).await.unwrap();
+            assert_eq!(
+                payload.into_captures().len(),
+                2,
+                "both engines' captures are stored in the legacy array"
+            );
+        }
+
+        let diags = sink.get_for_page("doc.qmd");
+        assert_eq!(diags.len(), 1, "one warning, not stacked: {diags:?}");
+        assert_eq!(diags[0].code.as_deref(), Some("Q-18-15"));
+        let text = diags[0].to_text(None);
+        assert!(text.contains("\"echo\""), "{text}");
+        assert!(text.contains(&record_engine), "{text}");
+    }
+
+    /// RIU-1: with every capture's engine in the record there is nothing to say.
+    #[tokio::test]
+    async fn no_warning_when_every_engine_is_in_the_record() {
+        let (_t, ctx) = fresh_ctx().await;
+        let sink = Arc::new(diagnostics::DiagnosticSink::new());
+        diagnostics::set_sink(sink.clone());
+        let record_engine = run_with_captures(&[])
+            .record
+            .unwrap()
+            .metadata
+            .quarto_engines[0]
+            .name
+            .clone();
+        let run = run_with_captures(&[&record_engine]);
+
+        write_capture_doc_gated(&ctx, "doc.qmd", &run, true)
+            .await
+            .unwrap();
+
+        assert!(sink.get_for_page("doc.qmd").is_empty());
     }
 
     #[tokio::test]

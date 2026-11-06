@@ -26,6 +26,8 @@ has its own exit criterion (see Exit criteria) and can be met without the other.
 > (`spike/riu-s9-provenance`, commit `4c8fbb8e0`, never merged) holds the stamp and its tests. Port
 > them, do not cherry-pick the branches (S4 is stacked on the S2 spike).
 
+**Lanes:** before starting a phase or landing work, read the epic's [lanes, landing and the ready board](2026-11-02-records-in-use-epic.md#lanes-landing-and-the-ready-board): lane branches, rebase and landing rules, and the board of which phases may start.
+
 ## Overview
 
 `import_positron_cache` takes bytes and returns a `PositronImport`; nothing calls it. This plan

@@ -18,6 +18,8 @@ implementation and its wiring into `execute_document`, the diagnostics and the d
 
 > **For implementers:** tests first, through the real argument parser.
 
+**Lanes:** before starting a phase or landing work, read the epic's [lanes, landing and the ready board](2026-11-02-records-in-use-epic.md#lanes-landing-and-the-ready-board): lane branches, rebase and landing rules, and the board of which phases may start.
+
 ## Overview
 
 Records can now come from several places. The user needs to say which, in what order, without a

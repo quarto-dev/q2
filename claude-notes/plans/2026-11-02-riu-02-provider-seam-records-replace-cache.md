@@ -418,19 +418,50 @@ document needs a venv (epic, "Verification environment"; set `SCRATCH` to a scra
 then `export PATH="$SCRATCH/venv/bin:$PATH"`.
 
 - [x] `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub -p quarto-hub-provider --all-targets -- -D warnings` (`quarto` builds the production `PreviewConfig` literal, `commands/preview.rs:354`)
-- [ ] The Windows cross-check (the cache tests use temp directories and file names):
-      `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub -p quarto-hub-provider --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
-- [ ] `cargo nextest run -p quarto -p quarto-core -p quarto-preview -p quarto-hub -p quarto-hub-provider`
+- [x] The Windows check moved to the epic close-out: the "Windows testing" bullet in the epic's Exit criteria
+      already lists RIU-2's part (the cache tests with temp directories and file names). It needs a native
+      Windows run, because `--target x86_64-pc-windows-msvc` cannot build from macOS (`aws-lc-sys`).
+- [x] `cargo nextest run -p quarto -p quarto-core -p quarto-preview -p quarto-hub -p quarto-hub-provider`
 - [x] Because this touches `quarto-core`, which the WASM client depends on, recommend
       `cargo xtask verify` to Gordon; he decides. Also run `npm run build:wasm`, since
       `Record::describes_something()` is in a module the WASM compiles.
-- [ ] Real binary, **needs a browser (Playwright on the preview iframe) and a Jupyter venv**, with
+- [x] Real binary, **needs a browser (Playwright on the preview iframe) and a Jupyter venv**, with
       the preview rebuild chain from `AGENTS.md` (`npm run build:wasm`,
       `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`): `q2 preview` on the S1
       `basic.qmd` fixture (`crates/quarto-preview/tests/fixtures/records-in-use/basic.qmd`) with
       the gate on, as S2 did (first open: one kernel, `captures/` holds the record file and the legacy
       file; restart on the same `--data-dir`: no kernel; cache copied into a fresh `--data-dir`: no
       kernel, every output shown; code edit: banner and Re-execute). State what a person did not see.
+
+**Phase F observations (2026-11-06, merged tip `82908eaba`, macOS).** Run with `target/debug/q2` rebuilt through
+the full chain (`npm run build:wasm`, `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`), a uv
+venv with ipykernel, matplotlib and pandas first on `PATH`, and a `sitecustomize.py` on `PYTHONPATH` that
+appends a line to a log whenever a process was started as `ipykernel_launcher` (read from
+`sys.orig_argv`). Every server was started as
+`QUARTO_ENGINE_RECORD_WRITE=1 q2 preview --no-browser --port N --data-dir D proj/basic.qmd`, with
+`basic.qmd` copied from the S1 fixture, and driven by Playwright Chromium reading the page text in every frame.
+
+- First open, fresh data dir: the page showed the text output, the DataFrame, the `ValueError`
+  traceback and the inline value 42. The kernel log had 1 line. `captures/` held one `.bin` and one
+  `.record.bin`.
+- Restart on the same data dir: the same text, and the kernel log stayed at 1 line.
+- Fresh data dir holding only a copy of `captures/`: the same text (7 expected fragments found), and the
+  kernel log stayed at 1 line.
+- Edit of a code cell while the server ran: the page showed "Code has changed since the last capture."
+  and a Re-execute button, and the kernel log stayed at 1. Clicking Re-execute showed the new output and
+  removed the banner; the kernel log went to 2 and `captures/` gained a second pair of files.
+
+Not seen: the plot image itself (the screenshots were taken but only the text was compared), a share
+guest, `preview.engine: off` or `manual` configured in `_quarto.yml` through the real binary (those are
+covered by handler and driver tests only), Windows. The Windows cross-clippy cannot build from macOS
+(`aws-lc-sys` needs a C toolchain for the target), so a Windows user should run the native check.
+
+Merged-tip gate: clippy for the five crates passed; nextest for the five crates ran 9598 tests, 9597
+passed and 1 failed. The failure, `julia_engine_e2e::j7_failed_run_does_not_leak_worker`, also fails alone:
+the shared `~/Library/Caches/quarto/julia/julia_transport.txt` that it guards was absent after the run,
+while two Julia servers started days earlier were still running on that cache. It passed in an earlier run
+and nothing in this plan touches the Julia server, so it is environmental and not attributed to RIU-2.
+`dashboard_goldens` also failed in the earlier core-only run and is tracked by another session.
 
 ## Exit criteria
 
