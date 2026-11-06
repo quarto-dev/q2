@@ -33,7 +33,7 @@ pub struct ProjectFiles {
     /// All text files discovered inside `_extensions/` directories (paths relative to project root)
     pub extension_files: Vec<PathBuf>,
 
-    /// Other text source files (currently `.tsx`, paths relative to project root)
+    /// Other text source files (currently `.tsx` and stylesheets, paths relative to project root)
     pub source_files: Vec<PathBuf>,
 
     /// Resources-scoped `.html` files — e.g. embedded example decks
@@ -143,6 +143,19 @@ impl ProjectFiles {
                 if ext == Some("tsx") {
                     if let Ok(relative) = path.strip_prefix(project_root) {
                         debug!(?relative, "Discovered .tsx source file");
+                        files.source_files.push(relative.to_path_buf());
+                    }
+                    continue;
+                }
+
+                // Check for stylesheets (`.css`, `.scss`): `theme:` files
+                // and the partials they import, which the browser render
+                // compiles from the VFS.
+                if ext.is_some_and(|e| {
+                    e.eq_ignore_ascii_case("css") || e.eq_ignore_ascii_case("scss")
+                }) {
+                    if let Ok(relative) = path.strip_prefix(project_root) {
+                        debug!(?relative, "Discovered stylesheet source file");
                         files.source_files.push(relative.to_path_buf());
                     }
                     continue;
@@ -676,6 +689,48 @@ mod tests {
 
         // .ts is silently dropped (only .tsx is included)
         assert!(!files.source_files.contains(&PathBuf::from("util.ts")));
+    }
+
+    /// A project-level theme stylesheet (`.css` or `.scss` in `theme:`)
+    /// must reach the preview VFS, or the browser
+    /// render fails with Q-14-4 "Theme file not found". Partials it
+    /// `@import`s must come along too.
+    #[test]
+    fn test_discover_theme_files() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::write(
+            temp.path().join("custom.scss"),
+            "/*-- scss:defaults --*/\n$body-bg: #abcdef !default;\n",
+        )
+        .unwrap();
+        fs::create_dir(temp.path().join("styles")).unwrap();
+        fs::write(temp.path().join("styles/_vars.scss"), "$x: 1;\n").unwrap();
+        fs::write(temp.path().join("UPPER.SCSS"), "$y: 2;\n").unwrap();
+        fs::write(
+            temp.path().join("custom.css"),
+            "/*-- scss:rules --*/\nbody { color: red; }\n",
+        )
+        .unwrap();
+        fs::write(temp.path().join("styles/UPPER.CSS"), "a {}\n").unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        let text: Vec<_> = files.text_files().collect();
+        for rel in [
+            "custom.scss",
+            "styles/_vars.scss",
+            "UPPER.SCSS",
+            "custom.css",
+            "styles/UPPER.CSS",
+        ] {
+            assert!(
+                text.contains(&&PathBuf::from(rel)),
+                "{rel} must be synced as text"
+            );
+        }
+        assert!(files.binary_files.is_empty());
     }
 
     /// bd-tnm3k: `q2 preview` on a single `.qmd` file with no

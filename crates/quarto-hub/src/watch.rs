@@ -301,14 +301,15 @@ fn is_preview_relevant(path: &Path) -> bool {
     }
 
     // Extension-based match for media, custom React components, and
-    // project-level CSS. SCSS / SASS / LESS are deliberately omitted —
-    // preview-pipeline support for editing them is unverified; track
-    // as a follow-up if user demand surfaces. (Phase D.3, bd-kw93.9.)
+    // project-level stylesheets (`.css`, `.scss`: `theme:` files and
+    // their partials, which the WASM compiles from the VFS). SASS / LESS
+    // are deliberately omitted — Quarto themes don't use them.
+    // (Phase D.3, bd-kw93.9.)
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let lower = ext.to_ascii_lowercase();
         return matches!(
             lower.as_str(),
-            "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "tsx" | "css"
+            "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "tsx" | "css" | "scss"
         );
     }
 
@@ -401,6 +402,11 @@ mod tests {
         assert!(f.accepts(Path::new("styles.css")));
         assert!(f.accepts(Path::new("_extensions/foo/foo.css")));
         assert!(f.accepts(Path::new("THEME.CSS")));
+
+        // Theme stylesheets and their partials (`.css` is covered above).
+        assert!(f.accepts(Path::new("custom.scss")));
+        assert!(f.accepts(Path::new("styles/_vars.scss")));
+        assert!(f.accepts(Path::new("THEME.SCSS")));
     }
 
     #[test]
