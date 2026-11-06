@@ -404,7 +404,7 @@ between the fences).
   message, but Q-2-35 had two emitters: the list-table warning (`pampa/src/pandoc/desugar.rs`,
   the catalog title, `docs/errors/markdown/Q-2-35.qmd` and the `lmd/desugar` snapshot) and the
   indented-code error (the grammar scanner, via the error corpus). Decided with Gordon,
-  2026-10-31: the indented-code error moved to a new code, **Q-2-58** (corpus entry renamed,
+  2026-10-31: the indented-code error moved to a new code, first Q-2-58, then **Q-2-59** (renumbered 2026-11-06 when rebasing onto main, which had taken Q-2-58 for the Quarto 1 brace-diagram-cell warning) (corpus entry renamed,
   `_autogen-table.json` regenerated with `build_error_table.ts`, catalog entry and docs page
   added, references updated). Q-2-35 now means only an invalid list-table structure.
 - Exit: no scanner behavior change except the documented language-class change
@@ -649,7 +649,7 @@ between the fences).
   unchanged in this epic; the divergence list records each difference with its
   strand: list-nested cells (bd-9j6z311f, q1 runs them), attribute-tail cells
   (bd-rh4cce9e), capitalized `{Python}` (bd-7gvl455a, q2 runs it, q1 does not). A
-  fence indented four spaces (Q-2-58) and knitr-style options in the braces (Q-2-36)
+  fence indented four spaces (Q-2-59) and knitr-style options in the braces (Q-2-36)
   are deliberate q2 parse errors. Phase 0 still pins the current behavior; the writer
   indents list-nested fences (verified by running `pampa -t qmd`), which explains
   bd-9j6z311f.

@@ -273,7 +273,7 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     difference with its strand: list-nested cells run in q1 and not in q2
     (bd-9j6z311f), attribute-tail cells such as `{python .foo}` (bd-rh4cce9e),
     capitalized `{Python}` runs in q2 and not q1 (bd-7gvl455a). A fence indented four
-    spaces (Q-2-58) and knitr-style options in the braces (Q-2-36) are deliberate q2
+    spaces (Q-2-59) and knitr-style options in the braces (Q-2-36) are deliberate q2
     parse errors where q1 runs the cell. Plan: EXR-2.
     **Amended 2026-10-31 (Gordon): two executor misparses are fixed, in EXR-2 Phase 4,
     not emulated.** The unchanged-executor rule covers cells the executor *chooses* not
