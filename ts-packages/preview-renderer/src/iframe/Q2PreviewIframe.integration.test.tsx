@@ -1,12 +1,14 @@
 /**
- * Parent-side theme three-way + blob-URL lifecycle test (Plan 2A
- * §"Test plan" — "Theme three-way posting + blob-URL lifecycle test").
+ * Parent-side theme three-way posting test (Plan 2A §"Test plan" —
+ * "Theme three-way posting + blob-URL lifecycle test"; the theme now
+ * travels as CSS text, so the blob-URL lifecycle moved into the iframe).
  *
  * Mounts `<Q2PreviewIframe>`, mocks `vfsReadFile` to return predictable
  * bytes per fingerprint, and spies on `URL.createObjectURL` /
  * `URL.revokeObjectURL`. Drives `IFRAME_READY` by dispatching synthetic
  * messages on `window`, then walks each fingerprint transition and
- * asserts (a) the post payload and (b) the URL lifecycle.
+ * asserts (a) the post payload and (b) the URL lifecycle (asset
+ * manifest only).
  */
 
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -188,79 +190,60 @@ function themePosts(postMessage: ReturnType<typeof vi.fn>) {
         .filter((m) => m?.type === 'UPDATE_THEME');
 }
 
-describe('Q2PreviewIframe theme blob-URL lifecycle', () => {
-    test('full three-way + revocation walk', () => {
+describe('Q2PreviewIframe theme transport', () => {
+    // The theme travels as CSS text, not a parent-minted blob URL: a
+    // `blob:` URL only loads in the origin that minted it, and when the
+    // host frames the preview with `sandbox="allow-scripts"` (no
+    // `allow-same-origin`) the nested q2-preview frame has a different
+    // opaque origin from this component. The iframe mints its own URL.
+    test('full three-way walk posts CSS text and mints no parent blob URL', () => {
         // Start undefined → no theme posts.
         const harness = renderWithFingerprint(undefined);
         expect(themePosts(harness.postMessage)).toHaveLength(0);
 
-        // 1. fingerprint='abc' (mock returns 'A') → one mint, one post.
+        // 1. fingerprint='abc' (mock returns 'A') → one post with the text.
         mockBytes = 'A';
         act(() => harness.rerender('abc'));
         let posts = themePosts(harness.postMessage);
         expect(posts).toHaveLength(1);
-        expect(posts[0]).toMatchObject({
-            cssUrl: 'blob:mock:1',
-            fingerprint: 'abc',
-        });
-        expect(createUrlSpy).toHaveBeenCalledTimes(1);
-        expect(revokeUrlSpy).toHaveBeenCalledTimes(0);
+        expect(posts[0]).toEqual({ type: 'UPDATE_THEME', cssText: 'A', fingerprint: 'abc' });
 
         // 2. fingerprint='abc' again → no new post (dedup).
         act(() => harness.rerender('abc'));
         posts = themePosts(harness.postMessage);
         expect(posts).toHaveLength(1);
-        expect(createUrlSpy).toHaveBeenCalledTimes(1);
-        expect(revokeUrlSpy).toHaveBeenCalledTimes(0);
 
-        // 3. fingerprint='def' (mock returns 'B') → revoke 'abc' URL,
-        //    mint new, one post.
+        // 3. fingerprint='def' (mock returns 'B') → one post with the new text.
         mockBytes = 'B';
         act(() => harness.rerender('def'));
         posts = themePosts(harness.postMessage);
         expect(posts).toHaveLength(2);
-        expect(posts[1]).toMatchObject({
-            cssUrl: 'blob:mock:2',
-            fingerprint: 'def',
-        });
-        expect(createUrlSpy).toHaveBeenCalledTimes(2);
-        expect(revokeUrlSpy).toHaveBeenCalledWith('blob:mock:1');
+        expect(posts[1]).toEqual({ type: 'UPDATE_THEME', cssText: 'B', fingerprint: 'def' });
 
-        // 4. fingerprint=null → revoke 'def' URL, post explicit clear,
-        //    no new mint.
+        // 4. fingerprint=null → explicit clear.
         act(() => harness.rerender(null));
         posts = themePosts(harness.postMessage);
         expect(posts).toHaveLength(3);
-        expect(posts[2]).toMatchObject({ cssUrl: null, fingerprint: null });
-        expect(createUrlSpy).toHaveBeenCalledTimes(2);
-        expect(revokeUrlSpy).toHaveBeenCalledWith('blob:mock:2');
+        expect(posts[2]).toEqual({ type: 'UPDATE_THEME', cssText: null, fingerprint: null });
 
-        // 5. fingerprint=undefined → no post, no mint, no revoke.
-        const postsBefore = posts.length;
-        const createCallsBefore = createUrlSpy.mock.calls.length;
-        const revokeCallsBefore = revokeUrlSpy.mock.calls.length;
+        // 5. fingerprint=undefined → no post.
         act(() => harness.rerender(undefined));
         posts = themePosts(harness.postMessage);
-        expect(posts).toHaveLength(postsBefore);
-        expect(createUrlSpy.mock.calls.length).toBe(createCallsBefore);
-        expect(revokeUrlSpy.mock.calls.length).toBe(revokeCallsBefore);
+        expect(posts).toHaveLength(3);
 
-        // 6. fingerprint='ghi' (mock returns 'C') → mint, post; no
-        //    revoke (last URL was already revoked at step 4).
-        mockBytes = 'C';
+        // 6. fingerprint='ghi' but the VFS read fails → post a clear for
+        //    that fingerprint, as before.
+        mockBytes = null;
         act(() => harness.rerender('ghi'));
         posts = themePosts(harness.postMessage);
-        expect(posts).toHaveLength(postsBefore + 1);
-        expect(posts[posts.length - 1]).toMatchObject({
-            cssUrl: 'blob:mock:3',
-            fingerprint: 'ghi',
-        });
-        expect(createUrlSpy).toHaveBeenCalledTimes(3);
-        expect(revokeUrlSpy.mock.calls.length).toBe(revokeCallsBefore);
+        expect(posts).toHaveLength(4);
+        expect(posts[3]).toEqual({ type: 'UPDATE_THEME', cssText: null, fingerprint: 'ghi' });
 
-        // 7. Unmount → revoke the outstanding 'ghi' URL.
         harness.unmount();
-        expect(revokeUrlSpy).toHaveBeenCalledWith('blob:mock:3');
+
+        // The AST has no images, so no blob URL was minted or revoked at all.
+        expect(createUrlSpy).not.toHaveBeenCalled();
+        expect(revokeUrlSpy).not.toHaveBeenCalled();
     });
 
     test('UPDATE_AST payload contains assetManifest derived from the AST', () => {
@@ -364,37 +347,6 @@ describe('Q2PreviewIframe theme blob-URL lifecycle', () => {
         expect(url).toMatch(/^blob:/);
         expect(revokeUrlSpy).not.toHaveBeenCalledWith(url);
         utils.unmount();
-    });
-
-    test('IFRAME_READY revokes outstanding URL', () => {
-        // Defensive contract from the plan: on `IFRAME_READY` the
-        // wrapper revokes any outstanding blob URL it holds, since a
-        // fresh iframe no longer references it. In the real flow this
-        // path runs on the first `IFRAME_READY` of a fresh component
-        // mount (refs init undefined/null, so the revoke is a no-op).
-        // The test simulates a synthetic second `IFRAME_READY` to
-        // exercise the revocation branch.
-        mockBytes = 'A';
-        const harness = renderWithFingerprint('abc');
-        expect(themePosts(harness.postMessage)).toHaveLength(1);
-        expect(createUrlSpy).toHaveBeenCalledTimes(1);
-
-        const iframe = document.querySelector('iframe');
-        const cw = iframe!.contentWindow!;
-        act(() => {
-            window.dispatchEvent(
-                new MessageEvent('message', {
-                    data: { type: 'IFRAME_READY' },
-                    source: cw,
-                }),
-            );
-        });
-        expect(revokeUrlSpy).toHaveBeenCalledWith('blob:mock:1');
-        // Unmount cleanup should now be a no-op on the URL we already
-        // revoked (the ref was cleared on IFRAME_READY).
-        const revokesBefore = revokeUrlSpy.mock.calls.length;
-        harness.unmount();
-        expect(revokeUrlSpy.mock.calls.length).toBe(revokesBefore);
     });
 });
 

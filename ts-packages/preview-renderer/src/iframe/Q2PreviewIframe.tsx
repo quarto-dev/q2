@@ -26,10 +26,10 @@ interface Q2PreviewIframeProps {
   customComponentsCode?: Record<string, string>;
   /**
    * Three-way theme fingerprint (Plan 2A item 11).
-   *  - `string`: render produced a theme. Read VFS bytes, mint a blob
-   *    URL, post `{ cssUrl, fingerprint }`.
+   *  - `string`: render produced a theme. Read the VFS text, post
+   *    `{ cssText, fingerprint }`.
    *  - `null`: render succeeded with no theme intended. Post
-   *    `{ cssUrl: null, fingerprint: null }` so the iframe drops its
+   *    `{ cssText: null, fingerprint: null }` so the iframe drops its
    *    `<link data-q2-theme>` element.
    *  - `undefined`: render failed or pre-first-render. **Skip the post
    *    entirely** so the iframe keeps its last-good styling — a
@@ -166,19 +166,19 @@ interface Q2PreviewIframeProps {
  * Wrapper component that renders q2-preview's `<Ast>` in a sandboxed
  * iframe. Parallel to `Q2DebugIframe` with two additions:
  *
- *  1. Blob-URL theme transport. The iframe is sandboxed and does not
+ *  1. Theme transport. The iframe is sandboxed and does not
  *     initialize WASM, so it cannot call `vfsReadFile` directly. The
- *     parent (this component) reads the compiled theme CSS bytes,
- *     wraps them in a `Blob`, mints a blob URL via
- *     `URL.createObjectURL`, and posts the URL string to the iframe
- *     in an `UPDATE_THEME` message. Iframe consumes the URL via
- *     `<link rel="stylesheet" href={cssUrl}>`. No bytes ever ride on
- *     the postMessage channel.
+ *     parent (this component) reads the compiled theme CSS text and
+ *     posts it to the iframe in an `UPDATE_THEME` message. The iframe
+ *     mints its own blob URL from the text and consumes it via
+ *     `<link rel="stylesheet" data-q2-theme>`. The parent must not mint
+ *     the URL: a `blob:` URL only loads in the origin that minted it,
+ *     and when the host frames this page with `sandbox="allow-scripts"`
+ *     (no `allow-same-origin`) the iframe ends up with
+ *     a different opaque origin from this component.
  *
- *  2. Blob-URL revocation lifecycle. Three triggers: (a) replacement
- *     when the fingerprint changes and a new URL is minted, (b)
- *     `IFRAME_READY` (a fresh iframe means any prior URL we held is
- *     no longer referenced), (c) iframe unmount.
+ *  2. Asset manifest. Image bytes are still read here and handed over
+ *     as parent-minted blob URLs; see `buildAssetManifest`.
  */
 export function Q2PreviewIframe({
   astJson,
@@ -276,12 +276,10 @@ export function Q2PreviewIframe({
     };
   }, [iframeReady, onScroll, onClickAtLine]);
 
-  // Track the last fingerprint we posted and the current outstanding
-  // blob URL so we can dedupe re-sends and revoke replaced URLs.
+  // Track the last fingerprint we posted so we can dedupe re-sends.
   const lastSentThemeFingerprintRef = useRef<string | null | undefined>(
     undefined,
   );
-  const currentThemeBlobUrlRef = useRef<string | null>(null);
 
   // Asset-manifest cache. Owned by this component for the iframe's
   // lifetime; entries are revoked individually as image content
@@ -296,16 +294,12 @@ export function Q2PreviewIframe({
   // re-runs the walker against the now-empty cache.
   const [assetCacheEpoch, setAssetCacheEpoch] = useState(0);
 
-  // Cleanup any outstanding blob URL on unmount. Drains both the theme
-  // URL and the asset cache.
+  // Cleanup any outstanding blob URLs on unmount by draining the asset
+  // cache.
   useEffect(() => {
     const assetCache = assetCacheRef.current;
     setAssetCacheEpoch((n) => n + 1);
     return () => {
-      if (currentThemeBlobUrlRef.current) {
-        URL.revokeObjectURL(currentThemeBlobUrlRef.current);
-        currentThemeBlobUrlRef.current = null;
-      }
       for (const entry of assetCache.values()) {
         URL.revokeObjectURL(entry.url);
       }
@@ -329,14 +323,9 @@ export function Q2PreviewIframe({
       // In production, verify event.origin for security
       if (event.data.type === 'IFRAME_READY') {
         setIframeReady(true);
-        // Iframe restart — invalidate dedup state. Any prior blob URL
-        // we held is no longer referenced by the new iframe; revoke it.
+        // Iframe restart — invalidate dedup state.
         lastSentThemeFingerprintRef.current = undefined;
         lastSentSlideRef.current = undefined;
-        if (currentThemeBlobUrlRef.current) {
-          URL.revokeObjectURL(currentThemeBlobUrlRef.current);
-          currentThemeBlobUrlRef.current = null;
-        }
       } else if (event.data.type === 'NAVIGATE_TO_DOCUMENT') {
         onNavigateToDocument?.(event.data.path, event.data.anchor);
       } else if (event.data.type === 'SET_AST') {
@@ -461,33 +450,22 @@ export function Q2PreviewIframe({
   // Three-way semantics:
   //   - undefined ⇒ skip post entirely; last-good CSS persists.
   //   - null      ⇒ post explicit clear; iframe drops its <link>.
-  //   - string    ⇒ read VFS bytes, mint blob URL, post URL.
+  //   - string    ⇒ read VFS text, post it.
   useEffect(() => {
     if (!iframeReady || !iframeRef.current?.contentWindow) return;
     if (themeFingerprint === undefined) return;
     if (lastSentThemeFingerprintRef.current === themeFingerprint) return;
 
-    // Replace the prior blob URL (if any). The iframe is about to
-    // swap its <link href>; the browser internally retains the old
-    // bytes during the transition, so revocation immediately after
-    // posting is safe.
-    if (currentThemeBlobUrlRef.current) {
-      URL.revokeObjectURL(currentThemeBlobUrlRef.current);
-      currentThemeBlobUrlRef.current = null;
-    }
-
-    let cssUrl: string | null = null;
+    let cssText: string | null = null;
     if (themeFingerprint !== null) {
       const result = vfsReadFile(DEFAULT_CSS_ARTIFACT_PATH);
       if (result.success && result.content) {
-        const blob = new Blob([result.content], { type: 'text/css' });
-        cssUrl = URL.createObjectURL(blob);
-        currentThemeBlobUrlRef.current = cssUrl;
+        cssText = result.content;
       }
     }
 
     iframeRef.current.contentWindow.postMessage(
-      { type: 'UPDATE_THEME', cssUrl, fingerprint: themeFingerprint },
+      { type: 'UPDATE_THEME', cssText, fingerprint: themeFingerprint },
       '*',
     );
     lastSentThemeFingerprintRef.current = themeFingerprint;

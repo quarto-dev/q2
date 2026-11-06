@@ -147,7 +147,7 @@ interface PreviewAppState {
    * the iframe"; `null` means "clear the theme"; `undefined` means
    * "we have no opinion yet — keep the iframe's last-good theme".
    * Initialized as `undefined` so the pre-first-render iframe doesn't
-   * receive an unintended `UPDATE_THEME { cssUrl: null }`.
+   * receive an unintended `UPDATE_THEME { cssText: null }`.
    */
   themeFingerprint: string | null | undefined;
   /**
