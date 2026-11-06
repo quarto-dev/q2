@@ -1,0 +1,7 @@
+1. The output:
+
+   ```
+   Authentication provider: ldap
+
+   GUID  USERNAME
+   ```
