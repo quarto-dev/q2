@@ -73,7 +73,7 @@ So "Quarto 1's set" is: skylighting's syntax names and extension globs for the s
 
 ## Outcome / recommended next step
 
-Filed **bd-jxzjn4bs**. Recommended fix shape:
+Filed **bd-jxzjn4bs**. The fix landed on this branch following steps 1 to 3 below; see `claude-notes/plans/2026-11-06-sourcecode-wrapper-known-languages.md`. The language-ordering point in step 3 became its own strand, bd-hodntkwd. Recommended fix shape:
 
 1. **Known-language table in `quarto-highlight`.** Add a static, generated list of the class names and file extensions that skylighting (Pandoc 3.10) resolves, plus `k`, `q`, `r`, `markdown`, `scss`, with case-insensitive lookup (e.g. `pub fn is_pandoc_known_language(class: &str) -> bool`). Generate it once from the skylighting-core syntax XMLs at the version Pandoc 3.10 pins (names from `name`/file stem, extensions from the `extensions` attribute), and record the source version in a comment. Probing `quarto pandoc` is a cross-check, not the source.
 2. **Mark known-but-ungrammared blocks in the annotate step.** In `annotate_attr` (block path only), when no grammar resolves but some class is a known language, record that. The least invasive encoding is to write an *empty* span list into `data-hl-spans`, so no new attribute is needed. Keep "filter-authored annotations win".

@@ -16,6 +16,7 @@ pub mod captures;
 pub mod encoding;
 pub mod error;
 mod langs;
+mod pandoc_languages;
 pub mod provider;
 pub mod registry;
 
@@ -27,6 +28,7 @@ pub use captures::flatten_spans;
 
 pub use encoding::{HighlightSpan, SPANS_ATTR_KEY};
 pub use error::HighlightError;
+pub use pandoc_languages::is_pandoc_known_language;
 pub use provider::UserGrammarProvider;
 
 #[cfg(not(target_arch = "wasm32"))]

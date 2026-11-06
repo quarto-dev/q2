@@ -3614,6 +3614,54 @@ mod tests {
     }
 
     #[test]
+    fn test_render_wraps_code_blocks_like_quarto1() {
+        // GH #1079: Quarto 1 wraps every block whose language Pandoc
+        // knows in `div.sourceCode` (the theme paints the code-block box
+        // there), even without colors. Blocks in other languages, output
+        // blocks and language-less blocks stay a bare `<pre>`.
+        let content = b"---\ntitle: Test\n---\n\n\
+            ```ini\n[Widget]\nEnabled = true\n```\n\n\
+            ```default\n/opt/widget/bin/widget\n```\n\n\
+            ```conf\nkey = value\n```\n\n\
+            ```text\nplain\n```\n\n\
+            ```{.cell-output .cell-output-stdout}\n[1] 2\n```\n\n\
+            ```\nno language\n```\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+        let html = &output.html;
+
+        for lang in ["ini", "default", "conf"] {
+            assert!(
+                html.contains(&format!("<pre class=\"sourceCode {lang}\"")),
+                "`{lang}` block should be pre.sourceCode inside div.sourceCode; got:\n{html}",
+            );
+        }
+        assert_eq!(
+            html.matches("<div class=\"sourceCode").count(),
+            3,
+            "only the ini/default/conf blocks get the wrapper; got:\n{html}",
+        );
+        for bare in [
+            "<pre class=\"text",
+            "<pre class=\"cell-output cell-output-stdout",
+        ] {
+            assert!(html.contains(bare), "expected bare `{bare}`; got:\n{html}");
+        }
+        assert!(!html.contains("data-hl-spans="), "got:\n{html}");
+    }
+
+    #[test]
     fn test_render_with_meta_shortcode() {
         let content = b"---\ntitle: My Document Title\nauthor: Jane Doe\n---\n\nThe title is {{< meta title >}} by {{< meta author >}}.";
 
