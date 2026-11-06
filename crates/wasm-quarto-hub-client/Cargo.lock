@@ -4373,7 +4373,6 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_yaml 0.9.34+deprecated",
- "sha1",
  "sha2 0.11.0",
  "smallvec",
  "tempfile",
