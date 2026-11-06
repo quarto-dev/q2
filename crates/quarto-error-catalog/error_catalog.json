@@ -394,7 +394,7 @@
   "Q-2-33": {
     "subsystem": "markdown",
     "title": "Spaces in Link Targets",
-    "message_template": "Link targets cannot contain spaces. Replace spaces with %20.",
+    "message_template": "Link targets cannot contain spaces. Replace spaces with %20, or wrap the target in angle brackets: [text](<my file.png>).",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-33",
     "since_version": "99.9.9"
   },
@@ -1663,6 +1663,13 @@
     "title": "Quarto 1 diagram cell is not run",
     "message_template": "Quarto 2 does not run `{mermaid}` or `{dot}` cells, so the block renders as a code block, not a diagram. For Mermaid, drop the braces and write a plain `mermaid` fence.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-58",
+    "since_version": "99.9.9"
+  },
+  "Q-2-59": {
+    "subsystem": "markdown",
+    "title": "Text after angle-bracket link destination",
+    "message_template": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-59",
     "since_version": "99.9.9"
   },
   "Q-5-27": {

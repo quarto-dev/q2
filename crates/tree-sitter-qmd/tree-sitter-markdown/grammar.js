@@ -445,10 +445,32 @@ module.exports = grammar({
         target: $ => seq(
             /[ \t]*[\]][(]/, 
             optional($._inline_whitespace),
-            alias(repeat(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
+            choice(
+                field('angle_bracket_url', alias($._angle_bracket_url, $.url)),
+                alias(repeat(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
+            ),
             optional(seq($._inline_whitespace, alias($._commonmark_double_quote_string, $.title))),
             ')'
         ),
+
+        // bd-angle-link-dest-qkqkegqo: CommonMark's pointy-bracket link
+        // destination, `[x](<a path with spaces.png>)`. Following CommonMark
+        // (stricter than Pandoc): no line ending and no unescaped `<` or `>`
+        // inside the brackets; backslash escapes are allowed.
+        //
+        // This is deliberately ONE lexical token, not seq('<', ..., '>'). The
+        // lexer prefers the longest match, so `<a b.png>` lexes as this token,
+        // while an unclosed `[x](<foo)` cannot match it and falls back to the
+        // char-by-char bare URL above (unchanged behaviour). A grammar-level
+        // '<' literal would win ties against the bare-URL regex and turn such
+        // inputs into errors. Shortcodes are not recognized inside the
+        // brackets. The node keeps the `url` name (so highlight queries and
+        // other `(target (url))` consumers are unaffected); the
+        // `angle_bracket_url` field is how pampa tells the two forms apart
+        // (tree-sitter renames an always-aliased token, so its grammar_name()
+        // is just "url"). pampa strips the brackets, decodes escapes and
+        // percent-encodes (Pandoc's escapeURI).
+        _angle_bracket_url: $ => token(prec(1, seq('<', /([^<>\\\n\r]|\\.)*/, '>'))),
 
         pandoc_math: $ => seq(
             '$',

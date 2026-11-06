@@ -220,6 +220,7 @@ website:
             - errors/markdown/Q-2-56.qmd
             - errors/markdown/Q-2-57.qmd
             - errors/markdown/Q-2-58.qmd
+            - errors/markdown/Q-2-59.qmd
         - section: "writer"
           contents:
             - errors/writer/Q-3-1.qmd

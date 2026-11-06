@@ -1,6 +1,6 @@
 ---
 title: "Spaces in Link Targets"
-description: "A link or image URL contains a literal space; URLs must encode spaces as `%20`."
+description: "A link or image URL contains a literal space; encode spaces as `%20` or wrap the URL in angle brackets."
 code: Q-2-33
 subsystem: markdown
 status: stub
@@ -11,15 +11,16 @@ categories:
 
 # `Q-2-33` — Spaces in Link Targets
 
-> A link or image URL contains a literal space; URLs must encode
-> spaces as `%20`.
+> Link targets cannot contain spaces. Replace spaces with `%20`, or
+> wrap the target in angle brackets: `[text](<my file.png>)`.
 
 ## What this means
 
 The URL portion of a link or image — the part inside `(...)` —
-cannot contain literal spaces. The standard URL-encoding for a
-space is `%20`; an unencoded space terminates the URL prematurely
-and confuses the parser.
+cannot contain literal spaces unless it is wrapped in angle
+brackets (`<...>`). The standard URL-encoding for a space is `%20`;
+an unencoded space terminates the URL prematurely and confuses the
+parser.
 
 ## Why this happens
 
@@ -32,11 +33,20 @@ on macOS and Windows):
 
 ## How to fix
 
-Replace each space with `%20`:
+Wrap the target in angle brackets (CommonMark syntax), which may
+contain spaces:
+
+```markdown
+![](<image file.png>)
+```
+
+or replace each space with `%20`:
 
 ```markdown
 ![](image%20file.png)
 ```
+
+Both forms produce the same document.
 
 Better still, rename the file so it has no spaces — for example
 `image-file.png` or `image_file.png`. URL-encoding works, but
@@ -44,5 +54,7 @@ spaces in filenames cause friction in many other tools too.
 
 ## Related
 
+- [`Q-2-59`](Q-2-59.qmd) — text after the closing `>` of an
+  angle-bracket target.
 - [`Q-2-31`](Q-2-31.qmd) — inline code execution inside URLs:
   another restriction on link destination contents.

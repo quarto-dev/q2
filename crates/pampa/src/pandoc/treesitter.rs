@@ -38,7 +38,8 @@ use crate::pandoc::treesitter_utils::shortcode::{
     process_shortcode_string, process_shortcode_string_arg,
 };
 use crate::pandoc::treesitter_utils::span_link_helpers::{
-    process_content_node, process_pandoc_image, process_pandoc_span, process_target,
+    ANGLE_BRACKET_URL_FIELD, decode_angle_bracket_destination, process_content_node,
+    process_pandoc_image, process_pandoc_span, process_target,
 };
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
@@ -1407,9 +1408,31 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
         "url" => {
-            // Extract URL text directly
-            let text = node.utf8_text(input_bytes).unwrap().to_string();
-            PandocNativeIntermediate::IntermediateBaseText(text, node_location(node))
+            let text = node.utf8_text(input_bytes).unwrap();
+            if node
+                .parent()
+                .and_then(|p| p.child_by_field_name(ANGLE_BRACKET_URL_FIELD))
+                .is_some_and(|n| n.id() == node.id())
+            {
+                // `[x](<a b.png>)` (bd-angle-link-dest-qkqkegqo): decode as
+                // Pandoc does, and narrow the range to the bracket contents.
+                // The token cannot span lines, so column arithmetic is safe.
+                let mut range = node_location(node);
+                range.start.offset += 1;
+                range.start.column += 1;
+                range.end.offset -= 1;
+                range.end.column -= 1;
+                PandocNativeIntermediate::IntermediateBaseText(
+                    decode_angle_bracket_destination(text),
+                    range,
+                )
+            } else {
+                // Bare URL: extract text directly
+                PandocNativeIntermediate::IntermediateBaseText(
+                    text.to_string(),
+                    node_location(node),
+                )
+            }
         }
         "title" => {
             // Extract title text, strip quotes. As with `key_value_value`,
