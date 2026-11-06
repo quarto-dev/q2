@@ -23,6 +23,10 @@ pub const JUPYTER_ENGINE: &str = "jupyter";
 /// The engine that owns `{r}` units by default; its units also take Positron outputs (KNR-5).
 pub const KNITR_ENGINE: &str = "knitr";
 
+/// The engine that owns `{julia}` units; its plain-language units take Positron outputs too
+/// (RIU-3a, from spike J: a Julia cell's owner is `julia`).
+pub const JULIA_ENGINE: &str = "julia";
+
 /// Where imported outputs came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provenance {
@@ -151,12 +155,28 @@ impl PositronImport {
         lang: &str,
         fallback: bool,
     ) -> Option<&DisplayOnlyOutputs> {
-        let admitted = (owner == JUPYTER_ENGINE && is_plain_language(lang))
+        let admitted = ((owner == JUPYTER_ENGINE || owner == JULIA_ENGINE)
+            && is_plain_language(lang))
             || (owner == KNITR_ENGINE && lang == "r");
         if fallback || !admitted {
             return None;
         }
         self.cells.get(content_hash)?.get(occurrence)
+    }
+
+    /// How many cached code cells the file holds (duplicates counted), as against [`Self::len`],
+    /// which counts distinct content hashes.
+    pub fn cell_count(&self) -> usize {
+        self.cells.values().map(Vec::len).sum()
+    }
+
+    /// Whether the file holds a cached cell for the `occurrence`-th unit with `content_hash`,
+    /// whatever the language gate says about that unit. A cell a gated-out unit pairs with is
+    /// still claimed, so it is never mistaken for an orphan.
+    pub fn has_cell(&self, content_hash: &str, occurrence: usize) -> bool {
+        self.cells
+            .get(content_hash)
+            .is_some_and(|v| occurrence < v.len())
     }
 
     /// How many distinct content hashes the file holds.
@@ -407,6 +427,47 @@ mod tests {
         );
         assert!(imp.outputs_for(h, 0, "knitr", "python", false).is_none());
         assert!(imp.outputs_for(h, 0, "knitr", "", false).is_none());
+    }
+
+    /// RIU-3a: the Julia engine owns `{julia}` units (spike J), and a plain-language Julia unit
+    /// takes Positron outputs. The gate is a table, one entry per admitted owner.
+    #[test]
+    fn the_gate_table_admits_jupyter_julia_and_knitr_r_and_nothing_else() {
+        let imp = import_positron_cache(&positron_file()).unwrap();
+        let h = "aaaaaaaaaaaaaaaa";
+        let admitted =
+            |owner: &str, lang: &str| imp.outputs_for(h, 0, owner, lang, false).is_some();
+        assert!(admitted("jupyter", "python"));
+        assert!(admitted("julia", "julia"), "the julia owner is admitted");
+        assert!(admitted("knitr", "r"));
+        assert!(!admitted("knitr", "python"));
+        assert!(!admitted("julia", "python.marimo"));
+        assert!(!admitted("julia", ""));
+        assert!(!admitted("marimo", "python.marimo"));
+        assert!(!admitted("mystery", "python"));
+        // A fallback unit is refused whoever owns it.
+        assert!(imp.outputs_for(h, 0, "julia", "julia", true).is_none());
+    }
+
+    #[test]
+    fn claimed_cells_are_counted_by_hash_and_occurrence() {
+        let file = json!({
+            "nbformat": 4, "nbformat_minor": 5,
+            "metadata": {"quarto_cache_version": 1},
+            "cells": [
+                {"cell_type": "code", "metadata": {"quarto_content_hash": "h1"}, "outputs": [], "source": []},
+                {"cell_type": "code", "metadata": {"quarto_content_hash": "h1"}, "outputs": [], "source": []},
+                {"cell_type": "code", "metadata": {"quarto_content_hash": "h2"}, "outputs": [], "source": []}
+            ]
+        });
+        let imp = import_positron_cache(&serde_json::to_vec(&file).unwrap()).unwrap();
+        assert_eq!(imp.cell_count(), 3, "duplicates count; `len` counts hashes");
+        assert_eq!(imp.len(), 2);
+        assert!(imp.has_cell("h1", 0));
+        assert!(imp.has_cell("h1", 1));
+        assert!(!imp.has_cell("h1", 2));
+        assert!(imp.has_cell("h2", 0));
+        assert!(!imp.has_cell("h3", 0));
     }
 
     #[test]

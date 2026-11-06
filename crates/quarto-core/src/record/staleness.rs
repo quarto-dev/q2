@@ -62,13 +62,7 @@ pub fn record_is_stale(
             Unit::Cell(_) => UnitKind::Cell,
             Unit::Inline(_) => UnitKind::Inline,
         };
-        let content_only = || UnitKey {
-            kind,
-            exec_hash: String::new(),
-            content_hash: text.content_hash.clone(),
-            alt_exec_hashes: Vec::new(),
-            header_keys: None,
-        };
+        let content_only = || UnitKey::content_only(kind, &text.content_hash);
         let Some(entry) = engine_for(record, unit.lang()) else {
             owned.push(None);
             keys.push(content_only());

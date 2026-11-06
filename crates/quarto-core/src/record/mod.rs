@@ -24,6 +24,7 @@ mod overlay;
 mod place;
 mod positron_export;
 mod positron_import;
+mod positron_record;
 mod reader;
 mod sources;
 mod staleness;
@@ -55,13 +56,18 @@ pub use positron_export::{
     SkippedUnit, export_for_positron,
 };
 pub use positron_import::{
-    DisplayOnlyOutputs, ImportError, JUPYTER_ENGINE, KNITR_ENGINE, POSITRON_CACHE_VERSION,
-    PositronImport, Provenance, import_positron_cache,
+    DisplayOnlyOutputs, ImportError, JULIA_ENGINE, JUPYTER_ENGINE, KNITR_ENGINE,
+    POSITRON_CACHE_VERSION, PositronImport, Provenance, import_positron_cache,
+};
+pub use positron_record::{
+    PROVENANCE_KEY, PROVENANCE_POSITRON, UNCLAIMED_KEY, import_record_source,
+    imported_record_is_stale, is_imported_record, record_from_positron,
 };
 pub use reader::{ReadError, read_record, read_record_value};
 pub use sources::{
-    Chosen, EngineError, EngineResult, LookupError, OutcomeKind, RecordLookup, RecordSource,
-    RecordSources, Resolution, SourceOutcome, WalkContext, resolve_records,
+    Chosen, EngineError, EngineResult, ImportContext, ImportedOnly, LookupError, OutcomeKind,
+    ParseSourceError, RecordLookup, RecordSource, RecordSources, Resolution, SourceOutcome,
+    WalkContext, resolve_records,
 };
 pub use staleness::record_is_stale;
 pub use types::{

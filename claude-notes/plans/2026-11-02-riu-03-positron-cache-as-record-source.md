@@ -149,7 +149,7 @@ Phases E to G's stamp, TypeScript, documentation and the browser checks of the e
 RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--join`, `--static` and
 `--no-project` conflicts and the documentation of the option.
 
-- [ ] **The staleness rule (3a, Phase B).** An imported record never asserts freshness, but it may report
+- [x] **The staleness rule (3a, Phase B).** An imported record never asserts freshness, but it may report
       staleness (epic decision 5 of 2026-11-05). The guard skips only the engine-hash comparison
       (`record_is_stale`). A page is stale when **at least one cached cell is orphaned**: its output belongs
       to code that is no longer in the document. A unit the cache does not cover (never run in Positron, or
@@ -170,12 +170,13 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       unit, which an imported record never has. Imported cells carry no `quarto_header_keys`, so the
       splice's `lost_header_keys` demotion is a no-op for them; add a test that says so. A stale imported page stays stale
       until a restart or an engine re-execute: nothing re-reads the cache after boot.
-- [ ] **Wiring (3a).** The walk's `Positron` and `Dir` arms (RIU-2) call `import_record_source` through the
+- [x] **Wiring (3a).** The walk's `Positron` and `Dir` arms (RIU-2) call `import_record_source` through the
       locator; the preview passes its list in through `PreviewConfig.record_sources`. The minimal
       `--records` flag parses a comma list or repeated flag into RIU-2's list type with RIU-4's three
       classification rules (a known name, a path-like entry is a directory, anything else is an error) and
       sets `PreviewConfig.record_sources`. It does no validation, defaults or conflicts; those are RIU-4.
       Test it through the real argument parser.
+      *Done 2026-11-06: `ImportContext` on `WalkContext`; `--records` is `FromStr for RecordSource` plus clap's comma delimiter and repeated flag, tested through the real parser in `main.rs`. Not parsed or checked: that a directory exists, defaults, and the `--join`/`--static`/`--no-project` conflicts (RIU-4).*
 - [ ] **Tests (3a).** Editing a cell on an imported page flips the staleness (the viewer shows the
       Re-execute overlay; the editor UI label reads "code changed"). An unedited imported page stays quiet,
       including a page with units the cache does not cover and a page with an `{r}` chunk the gate refuses.
@@ -196,7 +197,7 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       can say which nodes it made (echoed code, which is transcluded source, will need the same). Name the
       tests `interim_` and say so in a comment, so whoever upgrades the engines replaces them.
 - [ ] Keep the `Header` exemption (decision 9).
-- [ ] The language-gate test (Phase A): KNR-5 has merged, and `positron_import.rs` already tests knitr with
+- [x] The language-gate test (Phase A): KNR-5 has merged, and `positron_import.rs` already tests knitr with
       the token exactly `r` (admitted, display-only) and a fallback unit (never admitted). This plan's new
       test is the `julia` owner entry, which can be written failing first; it also asserts that the
       conversion passes `fallback = false`.
@@ -216,13 +217,13 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
 
 ## Phase A: tests first
 
-- [ ] Port the four S4 scratch tests into the record module: occurrence count before the gate (a
+- [x] Port the four S4 scratch tests into the record module: occurrence count before the gate (a
       marimo `x = 1` then a Python `x = 1` gives the Python unit the **second** cached cell);
       provenance survives write and read and is absent from options; no engines and empty exec
       hashes; duplicate-content pairing.
-- [ ] A conformance test per EXR-16 fixture: import, convert, splice, assert the units that get
+- [ ] A conformance test per EXR-16 fixture (not done in 3a: the durable-fixture tests cover the three real or hand-built caches end to end; the per-EXR-16-case import-convert-splice sweep is open): import, convert, splice, assert the units that get
       outputs and the units that get none.
-- [ ] **Durable fixtures.** The S4 real-data inputs are not durable: the R cache lives in
+- [x] **Durable fixtures.** The S4 real-data inputs are not durable: the R cache lives in
       `~/Library/Application Support/Positron/User/globalStorage/quarto-inline-outputs/2d70fef49b77f134.ipynb`
       and the document it came from, `ks3.qmd`, exists only in another session's scratchpad. Check in
       small copies under `crates/quarto-core/tests/fixtures/` instead: the R cache (rebuild the
@@ -233,20 +234,20 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       `file://` URI so no user path is committed. Add a **hand-built Julia** cache in the same format (a stream,
       a string-valued result and a multi-MIME plot bundle, from the J5 and J7 shapes), marked hand-built in
       its header, since no Positron has produced one.
-- [ ] A real-data hash test with those fixtures: the `quarto_content_hash` of every cell equals the
+- [x] A real-data hash test with those fixtures: the `quarto_content_hash` of every cell equals the
       one q2 computes **through the splice path** (`scan_and_fill_ids` with the sugared snapshot) for
       the same document. Add a labeled cell so the sugared-text difference is covered.
-- [ ] A test that a unit whose language is not owned by the supplied owner gets no outputs, and a
+- [x] A test that a unit whose language is not owned by the supplied owner gets no outputs, and a
       test of the gate table: `jupyter` and `julia` owners accepted, `knitr` and an unknown owner
       refused, `python.marimo` refused.
-- [ ] A test with the **real engine registry**: a Python cell and a Julia cell resolve to owners
+- [x] A test with the **real engine registry**: a Python cell and a Julia cell resolve to owners
       `jupyter` and `julia`, and both receive outputs from a cache that holds them.
-- [ ] A test that nothing converts `DisplayOnlyOutputs` into a record cell by trait (keep the
+- [x] A test that nothing converts `DisplayOnlyOutputs` into a record cell by trait (keep the
       existing probe; extend it only if it does not cover the new function).
-- [ ] Conversion tests: the unclaimed count is stored in the record `extra`; a cache cell no unit pairs with
+- [x] Conversion tests: the unclaimed count is stored in the record `extra`; a cache cell no unit pairs with
       is counted; a cache cell whose unit the language gate refuses (an `{r}` chunk, a `python.marimo` unit)
       is **not** counted; a duplicate-content pair counts per occurrence.
-- [ ] Staleness tests (Phase B), written first: a record that is imported (marker present **and** no
+- [x] Staleness tests (Phase B), written first: a record that is imported (marker present **and** no
       engines) never reaches `record_is_stale`; a record whose unclaimed count is above zero is stale at
       publish (the boot case); an edited unit leaves the old cell in `Matching::orphaned` and flags the page;
       a unit with no cached cell and no orphan does not (so a page with uncovered units stays quiet); the
@@ -254,23 +255,23 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       hand-edited `.quarto` copy) takes the normal `record_is_stale` path and flags a changed document;
       `record_one` publishes the computed staleness for an imported record, and `recompute_staleness`
       returns the same answer for an unchanged document.
-- [ ] A provider test (Phase D) that publishing an imported record never calls an engine and never reaches
+- [x] A provider test (Phase D) that publishing an imported record never calls an engine and never reaches
       the consent gate, with a fake engine that fails if run and a provider built with `AlwaysReject`.
-- [ ] A cache-locator test (Phase C) with a file name computed from a known URI, one test per
+- [x] A cache-locator test (Phase C) with a file name computed from a known URI, one test per
       directory rule (the locator takes the host OS and the environment as parameters, so the Linux
       and Windows rules are tested on any host), and the two fallbacks.
-- [ ] A directory-source test (Phase C): a bare-path directory holding a Positron-format file supplies
+- [x] A directory-source test (Phase C): a bare-path directory holding a Positron-format file supplies
       a record through the same importer; a plain notebook without `quarto_cache_version` is rejected
       with a message.
 
 ## Phase B: the conversion and the staleness guard
 
-- [ ] `record_from_positron` in the record module, target-neutral, with the signature above.
-- [ ] `Record::describes_something()` and its use in `encode_capture_payload`
+- [x] `record_from_positron` in the record module, target-neutral, with the signature above.
+- [x] `Record::describes_something()` and its use in `encode_capture_payload`
       (`capture_files.rs:303`), the cache hit and write filters and `run_has_content` come from
       RIU-2; assert here that an engineless record is treated as a record everywhere (the failure
       mode without it: an empty legacy list in the hub doc, a cache that misses).
-- [ ] `SourceInputs` gains the `ownership` map, **computed only when the caller asks for it** (an option on
+- [x] `SourceInputs` gains the `ownership` map, **computed only when the caller asks for it** (an option on
       `compute_source_inputs`; every other caller pays nothing, because the cache-key path and each file
       change do not need it), and `compute_source_inputs` gains a registry-override parameter, with
       `resolve_engines_for_document` called on the parsed document before `mask_document` (see "Where a
@@ -282,7 +283,7 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       (it is `pub(crate)`, which is enough because the import lives in the same crate), then
       `import_positron_cache` and `record_from_positron` convert, with the owner from `inputs.ownership`. The
       import step is the only caller that asks for ownership.
-- [ ] **The guard in `recompute_staleness`** (`capture_driver.rs:324`, the Record arm, which calls
+- [x] **The guard in `recompute_staleness`** (`capture_driver.rs:324`, the Record arm, which calls
       `record_is_stale` on any record document including an imported one, and so violates the rule above).
       The guard is on provenance **and** on the engine list: when the record carries `quarto_provenance` in
       its `extra` **and** has no engines, skip only the `record_is_stale` comparison (narrowed 2026-11-05,
@@ -290,12 +291,12 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       page) and use the staleness function of the decisions above. Requiring both conditions keeps the
       guard to genuinely engineless imports: a record that has engines (an engine run never carries the
       marker, but a hand-edited `.quarto` or directory file can) goes through the normal `record_is_stale`.
-- [ ] The staleness function itself (see the decisions), called from `record_one` at publish and from
+- [x] The staleness function itself (see the decisions), called from `record_one` at publish and from
       `recompute_staleness` on a change; the splice's engineless key construction is extracted for it, not
       copied.
-- [ ] The walk's `Positron` and `Dir` arms and the minimal `--records` flag (see the decisions).
-- [ ] Run `npm run build:wasm` and say so in the module comment.
-- [ ] Gate `r` units through KNR-5's merged gate (`positron_import.rs:146`); do not add a second gate.
+- [x] The walk's `Positron` and `Dir` arms and the minimal `--records` flag (see the decisions).
+- [x] Run `npm run build:wasm` and say so in the module comment. (Run 2026-11-06 on the rebased branch, then `cargo xtask build-q2-preview-spa` and `cargo build --bin q2`: all three succeeded; the module comment of `positron_record.rs` says so.)
+- [x] Gate `r` units through KNR-5's merged gate (`positron_import.rs:146`); do not add a second gate.
 
 ## Phase C: locating the cache file
 
@@ -339,26 +340,26 @@ comment for spaces, non-ASCII characters and drive letters.
 `metadata.quarto_source`, the document URI it hashed (observed in both real files), although Positron
 does not read it when loading.
 
-- [ ] Compute the file name for the document's `file://` URI first and read that file.
-- [ ] If it is absent, scan the directory for a file whose `quarto_source` names the same path,
+- [x] Compute the file name for the document's `file://` URI first and read that file.
+- [x] If it is absent, scan the directory for a file whose `quarto_source` names the same path,
       comparing **decoded, normalized paths** (percent-decoded, drive letter case-folded, `%3A`
       read as `:`), not the raw string, so an encoding difference does not defeat the scan.
-- [ ] If that fails, match by content hash as Positron does (`findCacheByContentHash`,
+- [x] If that fails, match by content hash as Positron does (`findCacheByContentHash`,
       `quartoOutputCacheService.ts:611`, which exists for untitled documents): the file whose cells
       share the most content hashes with the document, newest `last_updated` on a tie. Read that
       function's tie-break before copying it, and refuse an ambiguous result with a diagnostic rather
       than guess.
-- [ ] Never write into the Positron directory from q2. Read only. A file that fails the
+- [x] Never write into the Positron directory from q2. Read only. A file that fails the
       importer version check (`quarto_cache_version` other than 1) is a skipped source with a
       diagnostic, not an error.
-- [ ] A document with no cache file, or a file in which no cell matches a unit, falls through to the
+- [x] A document with no cache file, or a file in which no cell matches a unit, falls through to the
       next source (RIU-4's list); it is not an error.
-- [ ] **The directory source (a bare path in `--records`, RIU-4).** A directory holding Positron-format
+- [x] **The directory source (a bare path in `--records`, RIU-4).** A directory holding Positron-format
       cache files is read by the same importer and the same three-tier locator as the `positron`
       source; the `positron` source is the same code pointed at the host's default Positron directory.
       A notebook without `quarto_cache_version` is rejected with a message (a q2 record file is the
       `q2` source, not a directory source). A directory entry is validated once at start (RIU-4).
-- [ ] **`provide-hub`.** It copies the project to a temp directory first, so a SHA-1 of that temp
+- [x] **`provide-hub`.** It copies the project to a temp directory first, so a SHA-1 of that temp
       `file://` URI never matches the file Positron wrote; there only the content-hash fallback or a
       directory source can find a record (read from `execute.rs:272-286`, not run).
 
@@ -376,16 +377,16 @@ Only the provider's `run_engine` reaches `run_and_store`, so only the engine sou
 record from any other source never does. The CLI builds the provider with `AlwaysReject`, which is never
 consulted and fails closed if a path ever reached it.
 
-- [ ] A provider method that publishes a resolved, non-engine record through the RIU-2 seam with its
+- [x] A provider method that publishes a resolved, non-engine record through the RIU-2 seam with its
       provenance (`positron`), writing the record document and the sidecar (with the staleness of the
       decisions above) without calling `run_and_store`. It takes the gate as an argument so a test needs no
       environment. Its test is the provider test in Phase A. Until RIU-4 wires `execute_document` to the walk
       it is reachable from tests only; RIU-3a's exit criterion for the provider is therefore this method's
       test, and the end-to-end provider path is RIU-4's.
-- [ ] With the gate off the seam refuses (an imported record has no legacy form); the walk then falls
+- [x] With the gate off the seam refuses (an imported record has no legacy form); the walk then falls
       through (RIU-2), and `provide-hub` with a Positron source needs `QUARTO_ENGINE_RECORD_WRITE=1` until
       the hosted hub has the reader (epic decisions 2 and 9).
-- [ ] Not here: the provider's trait implementation, the call from `execute_document`, its constructor
+- [x] Not here: the provider's trait implementation, the call from `execute_document`, its constructor
       parameter for the gate and the start-up validation are RIU-4.
 
 ## Phase E: the spliced output carries provenance (spike P)
@@ -530,13 +531,15 @@ TypeScript set).
 Use `target/debug/q2`, never the `q2` on PATH (an old nightly that cannot read records). The import
 itself needs no kernel; Python-side real data needs none either.
 
-- [ ] `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings` (`quarto` holds the minimal flag and its argument-parser test)
+- [x] `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings` (`quarto` holds the minimal flag and its argument-parser test)
+      *Run for the four crates 3a touched (`quarto-ast-reconcile` is 3b's); clean.*
 - [ ] The Windows cross-check (the locator builds paths and the fixtures carry file URIs):
       `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider -p quarto-ast-reconcile --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
       Cross-checking proves compilation only; the Windows directory and URI rules need a Windows run,
       which no one has done.
-- [ ] `cargo nextest run -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider -p quarto-ast-reconcile`
-- [ ] **3a, real data, needs a browser (Playwright on the preview iframe):** three documents: (1) the R
+- [x] `cargo nextest run -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider -p quarto-ast-reconcile`
+      *Run for the four crates 3a touched: 9153 run, 9151 passed, 2 failed before the last fixture fix (the reveal vendoring test, known noise, and the Julia fixture test, fixed since and re-run green). The reveal test still fails in this worktree (`node_modules/reveal.js` 6.0.0 against the 6.0.2 pin).*
+- [ ] **3a, real data, needs a browser (Playwright on the preview iframe):** *Partly done 2026-11-06, no browser.* Real binary, from the rebuilt `target/debug/q2`, on a temp project holding `positron-cache/python.qmd` and, in a separate directory, `python.cache.ipynb`: `q2 preview doc.qmd --records <cache dir> --no-browser --port 0`. With the writer gate on (and also with the variable unset, so the RIU-1 preview flip is on by default) the log read `recorded engine capture(s) rel_path=doc.qmd engines=` then `recorded engine captures count=1` three milliseconds after the hub listened: published with no engine and no kernel. With `QUARTO_ENGINE_RECORD_WRITE=0` the page got `Q-PREVIEW-CAP-1` (the refusal, RIU-2's design). `--records bogus` fails at argument parsing with the message naming the choices. **Not seen:** the rendered page, the Re-execute overlay after an edit, the Julia and R documents, `--records positron,engine`. Those need a browser run. Original text: three documents: (1) the R
       fixture (expect nothing with the real owner until R routes to Jupyter), (2) the **Python** fixture and
       (3) the **hand-built Julia** fixture (say it was hand-built; `julia` must be on PATH only if the engine
       is in the list, and it is not). Run the default viewer, `q2 preview --records positron <doc>`, with

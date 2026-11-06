@@ -159,13 +159,7 @@ fn splice_units(
                 })
                 // No owning engine, or options that do not parse: the unit can match by
                 // content hash only.
-                .unwrap_or_else(|| UnitKey {
-                    kind,
-                    exec_hash: String::new(),
-                    content_hash: text.content_hash.clone(),
-                    alt_exec_hashes: Vec::new(),
-                    header_keys: None,
-                })
+                .unwrap_or_else(|| UnitKey::content_only(kind, &text.content_hash))
         })
         .collect();
     let mut matching = match_units(&keys, &record.cells);

@@ -557,3 +557,119 @@ fn overlay_provenance_is_independent_of_flag_spelling() {
         "a non-execution key is absent: {flow}"
     );
 }
+
+/// A `jupyter` engine that claims `python` and panics if it is ever asked to run.
+struct MustNotRun;
+
+impl ExecutionEngine for MustNotRun {
+    fn name(&self) -> &str {
+        "jupyter"
+    }
+    fn execute(
+        &self,
+        _input: &str,
+        _ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        panic!("publishing an imported record must never run an engine");
+    }
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == "python" {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
+    }
+}
+
+const PYTHON_QMD: &str = "---\ntitle: T\n---\n\n```{python}\nx = 1\n```\n";
+
+/// A directory holding one Positron-format cache for `x = 1`. The document the provider sees
+/// is materialized to a random temp path, so only the content-hash tier can find this file.
+fn positron_cache_dir() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let file = serde_json::json!({
+        "nbformat": 4, "nbformat_minor": 5,
+        "metadata": {"quarto_source": "file:///somewhere/else.qmd", "quarto_cache_version": 1},
+        "cells": [{
+            "cell_type": "code", "execution_count": null,
+            "metadata": {"quarto_content_hash": quarto_core::record::content_hash("x = 1")},
+            "outputs": [{"output_type": "stream", "name": "stdout", "text": ["from positron\n"]}],
+            "source": []
+        }]
+    });
+    std::fs::write(dir.path().join("cache.ipynb"), file.to_string()).unwrap();
+    dir
+}
+
+/// RIU-3a Phase D: publishing an imported record never calls an engine and never reaches the
+/// consent gate. The provider is built with `AlwaysReject` (which would refuse any engine run)
+/// and an engine that panics if run; the record still lands. With the writer gate off the seam
+/// refuses, naming the variable, and nothing is written.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn publishing_an_imported_record_needs_no_consent_and_runs_no_engine() {
+    let (server_repo, ws_url) = spawn_server().await;
+    let file_id = create_text_doc(&server_repo, PYTHON_QMD).await;
+    let (server_index, index_id) = IndexDocument::create(&server_repo).await.unwrap();
+    server_index.add_file("doc.qmd", &file_id).unwrap();
+
+    let (provider_repo, provider_index) = join(
+        JoinConfig {
+            server_ws_url: ws_url,
+            index_doc_id: index_id.clone(),
+            connect_timeout: Duration::from_secs(10),
+        },
+        Arc::new(StaticTokenSource::new("test-token")),
+    )
+    .await
+    .expect("provider joins");
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let provider = Provider::new(
+        provider_repo,
+        provider_index,
+        "provider-actor",
+        Arc::new(AlwaysReject),
+        Some(Arc::new(registry)),
+    );
+    let cache = positron_cache_dir();
+    let source = quarto_core::record::RecordSource::Dir(cache.path().to_path_buf());
+
+    // Gate off: refused, naming the variable; nothing written.
+    let err = provider
+        .publish_record_source("doc.qmd", &source, false)
+        .await
+        .unwrap_err();
+    assert!(err.contains("QUARTO_ENGINE_RECORD_WRITE"), "{err}");
+    assert!(server_index.get_capture("doc.qmd").is_none());
+
+    // Gate on: published as a record document, fresh, with no engine run.
+    let outcome = provider
+        .publish_record_source("doc.qmd", &source, true)
+        .await
+        .unwrap();
+    let ExecOutcome::Executed(doc_id) = outcome else {
+        panic!("expected the record to be published")
+    };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let cap = loop {
+        if let Some(cap) = server_index.get_capture("doc.qmd") {
+            break cap;
+        }
+        assert!(Instant::now() < deadline, "the sidecar never synced");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    assert_eq!(cap.capture_doc_id, doc_id);
+    assert_eq!(cap.staleness, Some(false));
+    assert_eq!(cap.state, Some(CaptureState::Idle));
+
+    // A document the cache does not cover has nothing to publish: an error, not an empty page.
+    let empty = tempfile::tempdir().unwrap();
+    let none = quarto_core::record::RecordSource::Dir(empty.path().to_path_buf());
+    assert!(
+        provider
+            .publish_record_source("doc.qmd", &none, true)
+            .await
+            .is_err()
+    );
+    provider.stop().await;
+}

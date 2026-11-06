@@ -58,6 +58,9 @@ pub struct PreviewArgs {
     /// plan Phase 4, bd-jt1etjbn): the read-only preview SPA (default)
     /// or the full hub-client editor. Never changes the write policy.
     pub ui: quarto_preview::PreviewUi,
+    /// `--records`, in order; empty means the preview default (`cache,q2,engine`). RIU-3a's
+    /// minimal flag: classified when parsed, with no validation, defaults or conflicts (RIU-4).
+    pub records: Vec<quarto_core::record::RecordSource>,
     /// `--to`, as `q2 render --to` (F8). Applies to the viewer UI only.
     pub to: Option<String>,
     /// `-M/--metadata` arguments, unparsed, as `q2 render -M` (F8).
@@ -364,8 +367,11 @@ async fn run(args: PreviewArgs) -> Result<()> {
         // passthrough engine via the integration-test surface.
         engine_registry: None,
         engine_policy,
-        // The `--records` flag arrives with RIU-3a; until then the preview default.
-        record_sources: quarto_core::record::RecordSources::preview_default(),
+        record_sources: if args.records.is_empty() {
+            quarto_core::record::RecordSources::preview_default()
+        } else {
+            quarto_core::record::RecordSources::new(args.records)
+        },
         resource_html_files,
         // Phase C.7: derive the capture cache dir from `data_dir`
         // (per-session; tracked as a follow-up for per-project reuse).
