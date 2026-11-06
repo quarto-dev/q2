@@ -1,18 +1,20 @@
 /**
- * An IndexedDB-backed store, offered on its "storage" port. Owns the
- * adapter; reports what it holds and when it was last written.
+ * An IndexedDB database (`q2-demo-canvas`) behind an Automerge storage
+ * adapter, offered on the "idb" port for repos to persist every document
+ * they hold — exactly how hub-client's repo persists, and how several
+ * tabs of it share one database. The cylinder lights while a repo writes;
+ * the footer counts what the database holds.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
+import type { StorageAdapterInterface } from '@automerge/automerge-repo';
 import { IndexedDBStorageAdapter } from '@automerge/automerge-repo-storage-indexeddb';
-import { useOutput, type DocStore } from './ports';
+import { useOutput, type StorageAdapterPort } from './ports';
 
 const DB_NAME = 'q2-demo-canvas';
-const PREFIX = ['canvas'];
-const keyFor = (id: string) => [...PREFIX, id];
 
-interface Stored { bytes: number; at: number | null }
+interface Held { docs: number; bytes: number }
 
 function Cylinder({ lit }: { lit: boolean }) {
   return (
@@ -26,43 +28,61 @@ function Cylinder({ lit }: { lit: boolean }) {
 }
 
 export default function IndexedDbNode() {
-  const adapter = useMemo(() => new IndexedDBStorageAdapter(DB_NAME), []);
-  const [stored, setStored] = useState<Stored | null>(null);
-  const [busy, setBusy] = useState(false);
+  const inner = useMemo(() => new IndexedDBStorageAdapter(DB_NAME), []);
+  const [held, setHeld] = useState<Held | null>(null);
+  const [writes, setWrites] = useState(0);
+  const [lit, setLit] = useState(false);
+  const litTimer = useRef<number | null>(null);
 
+  // The adapter repos get: the real one, with a flash on every write.
+  const adapter = useMemo<StorageAdapterInterface>(() => {
+    const flash = () => {
+      setWrites((n) => n + 1);
+      setLit(true);
+      if (litTimer.current !== null) window.clearTimeout(litTimer.current);
+      litTimer.current = window.setTimeout(() => setLit(false), 300);
+    };
+    return {
+      load: (key) => inner.load(key),
+      save: (key, data) => { flash(); return inner.save(key, data); },
+      remove: (key) => { flash(); return inner.remove(key); },
+      loadRange: (prefix) => inner.loadRange(prefix),
+      removeRange: (prefix) => { flash(); return inner.removeRange(prefix); },
+    };
+  }, [inner]);
+
+  // What the database holds, re-counted a moment after writes settle.
   useEffect(() => {
-    void adapter.loadRange(PREFIX).then((chunks) => {
-      const bytes = chunks.reduce((n, c) => n + (c.data?.byteLength ?? 0), 0);
-      setStored(bytes === 0 ? null : { bytes, at: null });
-    });
-  }, [adapter]);
+    const timer = window.setTimeout(() => {
+      void inner.loadRange([]).then((chunks) => {
+        const docs = new Set(chunks.map((c) => c.key[0]));
+        setHeld({ docs: docs.size, bytes: chunks.reduce((n, c) => n + (c.data?.byteLength ?? 0), 0) });
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [inner, writes]);
 
-  const store = useMemo<DocStore>(() => ({
-    load: (id) => adapter.load(keyFor(id)),
-    save: async (id, bytes) => {
-      setBusy(true);
-      await adapter.save(keyFor(id), bytes);
-      setStored({ bytes: bytes.byteLength, at: Date.now() });
-      setBusy(false);
-    },
-  }), [adapter]);
-  useOutput('storage', store);
+  const port = useMemo<StorageAdapterPort>(() => ({ dbName: DB_NAME, adapter }), [adapter]);
+  useOutput('idb', port);
 
   const clear = () => {
-    void adapter.removeRange(PREFIX).then(() => setStored(null));
+    if (!window.confirm(`Delete everything in the ${DB_NAME} database? Repos keep what they hold in memory.`)) return;
+    void adapter.removeRange([]);
   };
 
   return (
     <div className="cd-node cd-idb">
-      <Handle type="source" position={Position.Top} id="storage" title="storage" />
-      <Cylinder lit={busy} />
-      <div className="cd-title">IndexedDB</div>
+      <Cylinder lit={lit} />
+      <div className="cd-title">IndexedDB adapter</div>
       <div className="cd-meta">
-        {stored === null
-          ? 'empty'
-          : `${stored.bytes} bytes${stored.at !== null ? `, saved ${new Date(stored.at).toLocaleTimeString()}` : ''}`}
+        {held === null
+          ? 'opening…'
+          : held.docs === 0
+            ? `${DB_NAME} · empty`
+            : `${DB_NAME} · ${held.docs} doc${held.docs === 1 ? '' : 's'}, ${held.bytes} bytes`}
       </div>
-      <button type="button" className="nodrag" onClick={clear} disabled={stored === null}>clear</button>
+      <button type="button" className="nodrag" onClick={clear} disabled={held === null || held.docs === 0}>clear</button>
+      <Handle type="source" position={Position.Right} id="idb" title="idb" />
     </div>
   );
 }

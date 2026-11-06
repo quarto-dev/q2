@@ -1488,17 +1488,15 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     try {
       const localOnly = options.network === 'none';
       if (!localOnly) {
-        const rawAdapter = await buildWsAdapter(
-          syncServerUrl,
-          effectiveAuth,
-          options.retryIntervalMs,
-        );
+        const rawAdapter =
+          options.networkAdapter ??
+          (await buildWsAdapter(syncServerUrl, effectiveAuth, options.retryIntervalMs));
         state.rawWsAdapter = rawAdapter;
         state.wsAdapter = wrapAdapter(rawAdapter);
       }
       state.repo = new Repo({
         network: state.wsAdapter ? [state.wsAdapter] : [],
-        storage: buildStorageAdapter(options.storage),
+        storage: options.storageAdapter ?? buildStorageAdapter(options.storage),
       });
       state.authorId = authorId ?? null;
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };

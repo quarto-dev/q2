@@ -56,8 +56,8 @@ export default function RawPreviewNode() {
             ? <div className="cd-empty">No WASM connected to parse with</div>
             : <Parsed text={doc.doc.text} path={`${doc.id}.qmd`} />}
       </div>
-      <Handle type="target" position={Position.Left} id="doc" title="doc" />
-      <Handle type="target" position={Position.Bottom} id="wasm" title="wasm" />
+      <Handle type="target" position={Position.Left} id="doc" title="doc" style={{ top: '35%' }} />
+      <Handle type="target" position={Position.Left} id="wasm" title="wasm" style={{ top: '65%' }} />
     </div>
   );
 }

@@ -2,6 +2,8 @@
  * Type definitions for the sync client.
  */
 
+import type { StorageAdapterInterface } from '@automerge/automerge-repo';
+import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 import type { Patch } from '@automerge/automerge-repo';
 import type { FileEntry, ActorIdentity, CaptureRef } from '@quarto/quarto-automerge-schema';
 
@@ -331,6 +333,20 @@ export interface ConnectOptions {
    * reject the upgrade); a later sign-in reloads the page and reconnects.
    */
   network?: 'websocket' | 'none';
+  /**
+   * A caller-built network adapter to attach to the Repo instead of the
+   * websocket adapter `connect` would build from the URL. The caller owns
+   * its lifetime but must hand over a fresh instance per `connect`: the
+   * client's `disconnect` is terminal for the adapter it was given. The
+   * module-level adapter wrapper still applies. Ignored when `network` is
+   * `'none'`.
+   */
+  networkAdapter?: NetworkAdapter;
+  /**
+   * A caller-built storage adapter for the Repo instead of the one `storage`
+   * names. Takes precedence over `storage` when both are given.
+   */
+  storageAdapter?: StorageAdapterInterface;
   /**
    * WebSocket adapter retry interval (ms). Default: upstream's 5000.
    * Note for Firefox-sensitive callers: do not shorten this — the

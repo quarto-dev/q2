@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import type { NetworkAdapter, StorageAdapterInterface } from '@automerge/automerge-repo';
 import { connect, getFileContent, getFileHandle, isConnected, type FileEntry } from '@quarto/preview-runtime';
 
 export const SYNC_SERVER_URL = 'ws://127.0.0.1:8080/ws';
@@ -16,13 +17,29 @@ export const FILE_PATH = 'a.qmd';
 // double-mount: two overlapping `connect` calls on the runtime's single
 // sync client clobber each other. Left connected on unmount; the next
 // `connect` (ours or App's) disconnects first anyway.
-let load: { url: string; promise: Promise<FileEntry[]>; settled: boolean } | undefined;
+let load: { key: string; promise: Promise<FileEntry[]>; settled: boolean } | undefined;
 
-export function loadProject(url: string = SYNC_SERVER_URL): Promise<FileEntry[]> {
+/**
+ * Connect the runtime to the project on `url`. With `takeAdapter` the
+ * connection uses a caller-provided websocket adapter (a fresh one per
+ * connect — the client's disconnect is terminal for it) instead of one
+ * built from the URL; `key` names that adapter source so a new one means
+ * a new connection. With `storageAdapter` the repo persists through it;
+ * `key` must change with it too.
+ */
+export function loadProject(
+  url: string = SYNC_SERVER_URL,
+  takeAdapter?: () => NetworkAdapter,
+  key: string = '',
+  storageAdapter?: StorageAdapterInterface,
+  indexDocId: string = INDEX_DOC_ID,
+): Promise<FileEntry[]> {
+  const loadKey = `${url}\n${key}\n${indexDocId}`;
   // Reuse the load for this server while it is in flight or still connected.
-  if (load !== undefined && load.url === url && (!load.settled || isConnected())) return load.promise;
-  // A different server, or the client went away: the new connect replaces it.
-  const current = { url, settled: false, promise: connect(url, INDEX_DOC_ID, undefined, undefined, undefined, { peerTimeoutMs: 30000 }) };
+  if (load !== undefined && load.key === loadKey && (!load.settled || isConnected())) return load.promise;
+  // A different server or adapter, or the client went away: the new connect replaces it.
+  const options = { peerTimeoutMs: 30000, networkAdapter: takeAdapter?.(), storageAdapter };
+  const current = { key: loadKey, settled: false, promise: connect(url, indexDocId, undefined, undefined, undefined, options) };
   current.promise.finally(() => { current.settled = true; }).catch(() => {});
   load = current;
   return current.promise;
@@ -41,7 +58,14 @@ export interface HubProject {
  * current. With a null path only the file list and initial contents load;
  * with a null url nothing loads.
  */
-export function useHubProject(filePath: string | null, url: string | null = SYNC_SERVER_URL): HubProject {
+export function useHubProject(
+  filePath: string | null,
+  url: string | null = SYNC_SERVER_URL,
+  takeAdapter?: () => NetworkAdapter,
+  adapterKey: string = '',
+  storageAdapter?: StorageAdapterInterface,
+  indexDocId: string = INDEX_DOC_ID,
+): HubProject {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +81,7 @@ export function useHubProject(filePath: string | null, url: string | null = SYNC
     };
     let handle: ReturnType<typeof getFileHandle>;
     let cancelled = false;
-    void loadProject(url)
+    void loadProject(url, takeAdapter, adapterKey, storageAdapter, indexDocId)
       .then((projectFiles) => {
         if (cancelled) return;
         const contents = new Map<string, string>();
@@ -77,7 +101,8 @@ export function useHubProject(filePath: string | null, url: string | null = SYNC
       cancelled = true;
       handle?.off('change', refresh);
     };
-  }, [filePath, url]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- takeAdapter is identified by adapterKey
+  }, [filePath, url, adapterKey, storageAdapter, indexDocId]);
 
   return { files, fileContents, currentFile: files.find((file) => file.path === filePath) ?? null, error };
 }

@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { initWasm, isWasmReady, vfsListFiles } from '@quarto/preview-runtime';
+import { WasmLogo } from './icons';
 import { useInput, useOutput, type ProjectPort, type WasmPort } from './ports';
 
 const POLL_MS = 1000;
@@ -44,8 +45,9 @@ export default function WasmNode() {
 
   return (
     <div className="cd-node cd-wasm">
-      <div className="cd-title">WASM</div>
-      <div className="cd-meta">quarto-hub-client.wasm · {status}</div>
+      <WasmLogo />
+      <div className="cd-title">q2 wasm</div>
+      <div className="cd-meta">wasm-quarto-hub-client · {status}</div>
       <Handle type="target" position={Position.Left} id="project" title="project" />
       <Handle type="source" position={Position.Right} id="wasm" title="wasm" />
     </div>

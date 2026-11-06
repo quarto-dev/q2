@@ -47,7 +47,7 @@ const DEMOS: Record<string, Demo> = {
   },
   canvas: {
     title: 'Canvas',
-    description: 'Every part of the hub-client editor as a node on an infinite canvas — server, project sync, WASM, document, editor, raw preview, language, presence, identity, LSP, render diagnostics, and the stores — with the dependencies as edges.',
+    description: 'Every part of the hub-client editor as a node on an infinite canvas — server, websocket adapters, project sync, file explorer, WASM, document, editor, raw preview, language, presence, identity, LSP, render diagnostics, and the stores — with the dependencies as edges.',
     icon: <span className="dg-glyph">⧉</span>,
     Component: CanvasDemo,
   },

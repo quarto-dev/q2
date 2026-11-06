@@ -58,8 +58,8 @@ export default function LspNode() {
             <div className="cd-meta">{loading ? 'analysing…' : `quarto-lsp-core on ${port.path}`}</div>
           </div>
         )}
-      <Handle type="target" position={Position.Left} id="editor" title="editor" />
-      <Handle type="target" position={Position.Bottom} id="wasm" title="wasm" />
+      <Handle type="target" position={Position.Left} id="editor" title="editor" style={{ top: '35%' }} />
+      <Handle type="target" position={Position.Left} id="wasm" title="wasm" style={{ top: '65%' }} />
     </div>
   );
 }

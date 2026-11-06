@@ -36,7 +36,7 @@ import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { createBinaryFile, type EditorContentChange } from '@quarto/preview-runtime';
-import { useAutomergeSync } from '../hooks/useAutomergeSync';
+import { useAutomergeSync, type DocumentSource } from '../hooks/useAutomergeSync';
 import { usePresence } from '../hooks/usePresence';
 import { useIntelligenceProviders } from '../hooks/useIntelligenceProviders';
 import { useRenderDiagnostics } from '../hooks/useRenderDiagnostics';
@@ -49,6 +49,8 @@ import { linkFromPaste } from '../utils/pasteLink';
 import { toggleWrap } from '../utils/markdownToggle';
 import { getLanguageForFile } from '../utils/monacoLanguage';
 import { QMD_EDITOR_OPTIONS } from '../utils/monacoEditorOptions';
+
+export type { DocumentSource };
 
 export interface DocumentEditorHandle {
   /** The mounted Monaco instance; null before mount and while no file is open. */
@@ -70,10 +72,18 @@ export interface DocumentEditorProps {
   file: FileEntry | null;
   /** Path -> content of the project; a change triggers reconciliation. */
   fileContents: Map<string, string>;
-  /** Propagate local edits to Automerge as positional splices. */
-  onContentOperations: (path: string, changes: EditorContentChange[]) => void;
-  /** Selects the quarto-light / quarto-dark theme. Default: light. */
-  theme?: 'light' | 'dark';
+  /** Propagate local edits to Automerge as positional splices (the runtime path). */
+  onContentOperations?: (path: string, changes: EditorContentChange[]) => void;
+  /**
+   * Bind to this document instead of the runtime's project file at
+   * `file.path`: text, remote changes and edits go through it, and
+   * `file.path` only names the file (VFS path, language, presence).
+   */
+  source?: DocumentSource;
+  /** Selects the quarto-light / quarto-dark theme; `none` is Monaco's plain default. Default: light. */
+  theme?: 'light' | 'dark' | 'none';
+  /** Monaco language id. Default: the hub's language for the file's extension (`qmd` for .qmd/.md). */
+  languageId?: string;
   /**
    * Diagnostics markers (owner `quarto`) to underline. When omitted the
    * editor renders the document through the project pipeline on every
@@ -219,7 +229,9 @@ const DocumentEditor = forwardRef<DocumentEditorHandle, DocumentEditorProps>(fun
     file,
     fileContents,
     onContentOperations,
+    source,
     theme = 'light',
+    languageId,
     markers,
     readOnly = false,
     replayActiveRef = NEVER_REPLAYING,
@@ -273,6 +285,7 @@ const DocumentEditor = forwardRef<DocumentEditorHandle, DocumentEditorProps>(fun
     replayIsActive,
     activeBranchId,
     onContentChange,
+    source,
   });
 
   // Collaborative cursors — the caller disables these on a local branch
@@ -470,8 +483,8 @@ const DocumentEditor = forwardRef<DocumentEditorHandle, DocumentEditorProps>(fun
       // file switch.
       loading=""
       height="100%"
-      language={getLanguageForFile(file?.path ?? '')}
-      theme={theme === 'dark' ? 'quarto-dark' : 'quarto-light'}
+      language={languageId ?? getLanguageForFile(file?.path ?? '')}
+      theme={theme === 'none' ? 'vs' : theme === 'dark' ? 'quarto-dark' : 'quarto-light'}
       // Use defaultValue instead of value to make Monaco uncontrolled.
       // This prevents the wrapper from calling setValue() on re-renders,
       // which would reset cursor position. We manage content via executeEdits().

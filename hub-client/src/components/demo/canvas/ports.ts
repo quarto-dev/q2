@@ -12,8 +12,8 @@
 import { createContext, useContext, useEffect } from 'react';
 import { useNodeConnections, useNodeId } from '@xyflow/react';
 import type { Doc } from '@automerge/automerge';
+import type { NetworkAdapter, StorageAdapterInterface } from '@automerge/automerge-repo';
 import type * as Monaco from 'monaco-editor';
-import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 
 export interface Ports {
@@ -69,18 +69,22 @@ export interface EditorPort {
   path: string;
 }
 
-/**
- * What the render node offers on its "diagnostics" port: what the render
- * pipeline reported for the file at `path`, for the editor to underline.
- */
-export interface DiagnosticsPort {
-  path: string;
-  diagnostics: Diagnostic[];
-}
-
 /** What the server node offers on its "server" port: where the hub is. */
 export interface ServerPort {
   url: string;
+}
+
+/**
+ * What a websocket adapter node offers on its "adapter" port. An
+ * Automerge network adapter is bound to one repo and its disconnect is
+ * terminal, so the node hands out a fresh `BrowserWebSocketClientAdapter`
+ * to each connection that takes one; `id` tells consumers which node (and
+ * which server) the adapters come from.
+ */
+export interface AdapterPort {
+  id: string;
+  url: string;
+  take(): NetworkAdapter;
 }
 
 /**
@@ -107,20 +111,31 @@ export interface IdentityPort {
   color: string;
 }
 
-/** What the language node offers on its "language" port: how qmd is shown. */
+/**
+ * What the language node offers on its "language" port: the Monaco
+ * language id the editor should open qmd files as (the hub's `qmd`, with
+ * its Monarch grammar) and which of the quarto themes to colour it with.
+ * Without it the editor shows plain text in Monaco's default theme.
+ */
 export interface LanguagePort {
+  languageId: string;
   theme: 'light' | 'dark';
 }
 
-/** What a local storage node offers on its "docid" port. */
+/** What a node offers on an id port ("docid", "projectid"): a remembered or picked id. */
 export interface IdStore {
   /** The remembered doc id, or null when nothing has been stored yet. */
   id: string | null;
   set(id: string): void;
 }
 
-/** What an IndexedDB node offers on its "storage" port; keyed by doc id. */
-export interface DocStore {
-  load(id: string): Promise<Uint8Array | undefined>;
-  save(id: string, bytes: Uint8Array): Promise<void>;
+/**
+ * What an IndexedDB node offers on its "idb" port: the Automerge storage
+ * adapter over its database, for a repo to persist every document it
+ * holds — the way hub-client's repo does, and the way several tabs of it
+ * share one database.
+ */
+export interface StorageAdapterPort {
+  dbName: string;
+  adapter: StorageAdapterInterface;
 }
