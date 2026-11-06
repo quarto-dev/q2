@@ -68,6 +68,7 @@ pub mod quarto_math_seam;
 pub mod regenerate_nested_buffers_tests;
 pub mod table_caption_provenance;
 pub mod test;
+pub mod test_angle_bracket_link_destination;
 pub mod test_ansi_writer;
 pub mod test_apostrophe_after_word;
 pub mod test_attr_key_colon;

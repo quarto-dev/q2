@@ -12,6 +12,59 @@ use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo, is_empty_attr};
 use crate::pandoc::inline::{Image, Inline, Link, Span, make_cite_inline};
 use crate::pandoc::location::{node_location, node_source_info_with_context};
 
+/// Grammar field marking the `url` node of the pointy-bracket destination
+/// form `[x](<a b.png>)` (both forms share the `url` node kind).
+pub const ANGLE_BRACKET_URL_FIELD: &str = "angle_bracket_url";
+
+/// Decode a pointy-bracket link destination (`<...>`, brackets included)
+/// the way Pandoc does: drop the brackets, resolve CommonMark backslash
+/// escapes (a backslash before ASCII punctuation), then percent-encode with
+/// [`escape_uri`].
+///
+/// The grammar token already guarantees the shape (no line ending, no
+/// unescaped `<`/`>`), so this only has to undo the syntax.
+pub fn decode_angle_bracket_destination(raw: &str) -> String {
+    let inner = raw
+        .strip_prefix('<')
+        .and_then(|s| s.strip_suffix('>'))
+        .unwrap_or(raw);
+    let mut unescaped = String::with_capacity(inner.len());
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\'
+            && let Some(&next) = chars.peek()
+            && next.is_ascii_punctuation()
+        {
+            unescaped.push(next);
+            chars.next();
+            continue;
+        }
+        unescaped.push(c);
+    }
+    escape_uri(&unescaped)
+}
+
+/// Pandoc's `escapeURI`: percent-encode (as UTF-8 bytes) whitespace and the
+/// characters `<>|"{}[]^` and backtick. Everything else — including `%`,
+/// `#`, `?`, parentheses and non-ASCII letters — passes through, so an
+/// already-encoded `%20` is not double-encoded.
+pub fn escape_uri(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_whitespace()
+            || matches!(c, '<' | '>' | '|' | '"' | '{' | '}' | '[' | ']' | '^' | '`')
+        {
+            let mut buf = [0u8; 4];
+            for b in c.encode_utf8(&mut buf).bytes() {
+                out.push_str(&format!("%{b:02X}"));
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Extract target (URL and title) from children
 pub fn process_target(
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -301,4 +354,41 @@ pub fn process_pandoc_image(
         attr_source,
         target_source,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected values are pandoc 3.12.1's output for `[x](<...>)`.
+    #[test]
+    fn angle_destination_matches_pandoc() {
+        let cases = [
+            ("<a path with spaces.png>", "a%20path%20with%20spaces.png"),
+            ("<nospace.png>", "nospace.png"),
+            ("<>", ""),
+            ("<a\\>b.html>", "a%3Eb.html"),
+            ("<a(b) c.png>", "a(b)%20c.png"),
+            ("<\u{e9} \u{fc}.png>", "\u{e9}%20\u{fc}.png"),
+            ("<a\u{a0}b>", "a%C2%A0b"),
+            ("<a \"q\">", "a%20%22q%22"),
+            ("<a{b}>", "a%7Bb%7D"),
+            ("<a\\\\n\\o>", "a\\n\\o"),
+            ("<a%20b#c?d>", "a%20b#c?d"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                decode_angle_bracket_destination(input),
+                expected,
+                "input: {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn escape_uri_encodes_pandoc_set_only() {
+        assert_eq!(escape_uri("<>|\"{}[]^`"), "%3C%3E%7C%22%7B%7D%5B%5D%5E%60");
+        assert_eq!(escape_uri("a\tb"), "a%09b");
+        assert_eq!(escape_uri("%;=&'~()"), "%;=&'~()");
+    }
 }
