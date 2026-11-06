@@ -32,7 +32,29 @@ grep -o '<div class="sourceCode[^"]*"[^>]*>\|<pre class="[^"]*"' _site/index.htm
 cargo run --bin q2 -- render claude-notes/issue-reports/1079/repro
 ```
 
-Quarto 1's full page is saved as `q1-output.html`; q2's as `q2-output.html`.
+The table summarizes the code-block elements the grep extracted from each `_site/index.html`. Raw excerpts:
+
+```html
+<!-- Quarto 1 -->
+<div class="sourceCode" id="cb1"> <pre class="sourceCode ini code-with-copy"
+<div class="sourceCode" id="cb2"> <pre class="sourceCode default code-with-copy"
+<div class="sourceCode" id="cb3"> <pre class="sourceCode bash code-with-copy"
+<div class="sourceCode" id="cb4"> <pre class="sourceCode conf code-with-copy"
+<pre class="text"
+<pre class="cell-output cell-output-stdout"
+<div class="sourceCode cell-code" id="cb7"> <pre class="sourceCode toml code-with-copy"
+<pre>
+
+<!-- q2, main @ 08806ee4e -->
+<pre class="ini code-with-copy"
+<pre class="default code-with-copy"
+<div class="sourceCode code-with-copy"> <pre class="sourceCode bash"
+<pre class="conf code-with-copy"
+<pre class="text code-with-copy"
+<pre class="cell-output cell-output-stdout code-with-copy"
+<pre class="cell-code toml code-with-copy"
+<pre class="code-with-copy"
+```
 
 | Block | Quarto 1 | q2 (`main`) |
 |---|---|---|
@@ -95,8 +117,8 @@ quarto pandoc --list-highlight-languages     # 163 names
 for l in ini default conf txt text nginx k q Dockerfile; do
   printf '```%s\nx\n```\n' "$l" | quarto pandoc -f markdown -t html | head -1
 done
-quarto render                                # in a copy of repro/ → q1-output.html
-cargo run --bin q2 -- render claude-notes/issue-reports/1079/repro   # → q2-output.html
+quarto render                                # in a copy of repro/
+cargo run --bin q2 -- render claude-notes/issue-reports/1079/repro
 ```
 
 ## Cross-references
