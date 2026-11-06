@@ -84,7 +84,7 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
    `classify.rs` must learn the new MIME or orphaned records leak. Immutable
    gzipped blob, not structured automerge (single writer, history bloat). One
    `CaptureRef` per path points at a legacy capture or a record, never both;
-   old docs are never rewritten. **Readers ship before writers, per writer and reader pair:** a writer may flip once every reader of the store it writes can parse a record. For the local preview, whose writer and reader are one binary, that is the first release that carries the reader; for a hosted hub it is the deployed `q2_ref`. See the records-in-use epic, decision 2 (2026-11-06).
+   old docs are never rewritten. **Readers ship before writers, per writer and reader pair:** a writer may flip once every reader of the store it writes can parse a record. For the local preview, whose writer and reader are one binary, that is the first release that carries the reader; for a hosted hub it is the deployed `q2_ref`. See the records-in-use epic, decision 2 (2026-11-06). The per-surface gate, its rollback and the stranding table are in [the release runbook](../instructions/release-runbook.md#engine-record-writer-gate-exr-13b-riu-1).
    Upgrade path kept open: content-addressed figure docs for single-cell runs.
 5. **Engine API scope.** Julia and marimo are in. New wire fields are optional
    and versioned; the Quarto API is not published to npm (bd-ixz93hjp, retitled

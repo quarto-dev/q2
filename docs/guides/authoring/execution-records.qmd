@@ -17,13 +17,14 @@ the code, so other tools can read it. Each cell of the notebook is one
 ::: callout-note
 ## Opt-in for now
 
-A plain `q2 render` writes no record. You ask for one per document with
-`record: true`, shown below. The preview and hub write records of their own
-behind the environment variable `QUARTO_ENGINE_RECORD_WRITE`, which is off by
-default while the feature is rolled out; set it to `1` to turn them on.
+A plain `q2 render` writes nothing under `.quarto/`. The preview keeps the
+records it needs on its own. `record: true`, shown below, asks for a copy of
+the record under the project's `.quarto/` directory. Hub uploads from
+`q2 provide-hub` still use the older format unless you set the environment
+variable `QUARTO_ENGINE_RECORD_WRITE` to `1`, while the feature is rolled out.
 :::
 
-## Writing a record
+## Keeping a copy of the record
 
 Add `record: true` to the document's `execute` options:
 
@@ -36,7 +37,7 @@ execute:
 ---
 ````
 
-A render then writes the record under the project's `.quarto/` directory, at
+A render then also writes a copy of the record under the project's `.quarto/` directory, at
 `.quarto/execution-records/<document path without extension>.ipynb`. In a
 project, `reports/q3.qmd` gets `.quarto/execution-records/reports/q3.ipynb`
 at the project root. A standalone document with no project gets a `.quarto/`
@@ -82,6 +83,15 @@ or deletes Positron's cache.
 
 ## Limits
 
+- A document that uses an engine that builds no execution record is stored in
+  the older format. Every output is still shown, but features that read
+  records may not work with it.
+- A preview that keeps its data with `--data-dir` stores execution records
+  there. If you later open that directory with an older version of `q2`, the
+  page shows "Failed to parse capture". Use a new `--data-dir`, or delete the
+  old one: the older version records the file again. Edits made in the
+  `--ui editor` session are not written to your files unless you pass
+  `--allow-edit`, so save anything you want to keep first.
 - A record from the knitr engine can be stored, but Positron cannot present
   rendered knitr output yet.
 - To run cells in a kernel other than Python, see

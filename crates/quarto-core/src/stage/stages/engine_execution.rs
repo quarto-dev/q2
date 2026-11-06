@@ -912,7 +912,22 @@ impl PipelineStage for EngineExecutionStage {
                 ),
             }
             if record_requested {
-                write_record_file(ctx, self.name(), &path, &record)?;
+                // The copy is optional (RIU-1, epic decision 10): a location that
+                // cannot be written warns and the render goes on.
+                if let Err(e) = write_record_file(ctx, self.name(), &path, &record) {
+                    ctx.add_diagnostic(
+                        DiagnosticMessageBuilder::warning("Execution record not written")
+                            .problem(format!(
+                                "the execution record copy requested by `record: true` could \
+                                 not be written: {e}"
+                            ))
+                            .add_hint(
+                                "The render is unaffected. Check that `.quarto/execution-records` \
+                                 is a directory you can write to.",
+                            )
+                            .build(),
+                    );
+                }
             }
         }
 

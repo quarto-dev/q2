@@ -30,6 +30,8 @@ records were integrated. This plan comes last on purpose.
 > rejects new `.js` files), a copyright header, and no non-ASCII characters in source. The dev build
 > is `scripts/code.sh`.
 
+**Lanes:** before starting a phase or landing work, read the epic's [lanes, landing and the ready board](2026-11-02-records-in-use-epic.md#lanes-landing-and-the-ready-board): lane branches, rebase and landing rules, and the board of which phases may start.
+
 ## Overview
 
 ```text

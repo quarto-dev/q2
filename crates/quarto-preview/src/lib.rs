@@ -420,7 +420,9 @@ where
     let re_execute_cfg = config::ReExecuteConfig {
         policy: config.engine_policy,
         sources: config.record_sources.clone(),
-        record_gate: quarto_core::engine::capture_files::record_writing_enabled(),
+        record_gate: quarto_core::engine::capture_files::record_writing_enabled(
+            quarto_core::engine::capture_files::WriterSurface::Preview,
+        ),
         cache_dir: config
             .cache_dir
             .clone()

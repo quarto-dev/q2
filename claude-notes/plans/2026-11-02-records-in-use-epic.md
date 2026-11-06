@@ -471,6 +471,7 @@ Every plan's verify step assumes this, so it is stated once.
 | RIU-4 | [CLI surface for record sources](2026-11-02-riu-04-cli-surface-for-record-sources.md) | 1.5 to 2 | ready; hardens the flag (bare paths, no prefix), implements the resolver for the provider and wires it into `execute_document`, builds the diagnostics from outcomes, final docs |
 | RIU-5 | [Export for Positron](2026-11-02-riu-05-export-for-positron.md) | 1 to 2 | ready; the function and `q2 record export-positron`; Julia and the representation rule (spike J) |
 | RIU-6 | [The Positron command demo](2026-11-02-riu-06-positron-command-demo.md) | 2 plus an early spike | ready; spike in the fork, mechanisms proven in S5 and S6; Phase 0 tests the viewer in Positron's preview pane and can run now; owns the closing reconciliation |
+| RIU-7 | [Flip the `provide-hub` writer default](2026-11-06-riu-07-provide-hub-flip.md) | under 1, plus the deploy | deferred; execute when everything else is in place and has settled; nothing waits on it |
 
 The six remaining plans total about 13.5 to 18 sessions (1, 4 to 5, 4 to 6, 1.5 to 2, 1 to 2, 2), an
 estimate after the fifth review. With the spikes already spent (RIU-0 at 6 to 7, RIU-0b at 1) the epic is
@@ -482,7 +483,7 @@ about 21 to 26 sessions. RIU-2 and RIU-3 are the largest.
 RIU-1 (local preview) --\
                          +--> flip ships (RIU-2 first) --> RIU-3 --> RIU-4 --> RIU-5 --> RIU-6
 RIU-2 -------------------/
-RIU-1 (provide-hub flip) waits on the hosted hub q2_ref, independently of the rest
+RIU-7 (provide-hub flip, deferred) waits on the hosted hub q2_ref and on everything else settling; nothing waits on it
 RIU-6 Phase 0 (the viewer in Positron's preview pane) needs none of the above and can run first
 ```
 
@@ -495,6 +496,102 @@ RIU-4 comes before RIU-5 because RIU-5's subcommand uses RIU-4's `--records` par
 wait on RIU-5. RIU-5's export function needs none of RIU-2 to RIU-4 and can be built first. RIU-1 and
 RIU-2 can overlap. RIU-2 must land before the flip ships in a release, because the flip makes the
 cache hold records. The `provide-hub` flip is a separate, later change gated by the deployed hub.
+
+## Lanes, landing and the ready board
+
+Most of this epic is one chain, so this section says what may run beside it and how work lands without
+anyone stopping. **Every session that works on a plan in this epic reads this section first.** It was
+written on 2026-11-06 after RIU-1, RIU-5 and RIU-6 Phase 0 had been started on lane branches in parallel and
+most of them stalled behind RIU-2; the landing step was tried in a scratch repository and not yet in this one.
+
+### Rules
+
+1. **The integration branch is checked out in no worktree.** `feature/records-in-use` is a ref. Every lane
+   works on its own branch, `feature/riu-<n>-<slug>`, cut from the integration tip
+   (`git switch -c feature/riu-<n>-<slug> feature/records-in-use`). A worktree that still holds the
+   integration branch (workspace-4 did on 2026-11-06) switches to a lane branch first:
+   `git switch -c feature/riu-<n>-<slug>` keeps its commits.
+2. **Landing is a local fast-forward.** From the lane's worktree, after rebasing onto the tip and passing the
+   plan's gates: `git push . HEAD:feature/records-in-use`. Git refuses if the tip moved since the rebase
+   (rebase again and retry) and refuses with "branch is currently checked out" if any worktree holds the
+   branch (rule 1). Never use `--force`. Never push to `origin` without Gordon's explicit permission.
+   Until the worktree that holds the integration branch has moved off it, land the old way: the session
+   there stops at a commit, the lane rebases, and `git merge --ff-only <lane>` runs inside that worktree.
+3. **Rebase before each phase and before landing.** Rebase onto the integration tip (linear history, no
+   merge commits). A lane resolves its own conflicts, in its own lane, and runs the full-tree conflict-marker
+   grep before committing the resolution. Turn on `git config rerere.enabled true` once so a resolved
+   conflict is not resolved again at the next rebase. After a rebase, grep the build for a **semantic** break
+   that merged cleanly (a changed signature in another lane's caller), not only for markers.
+4. **Gates per phase** are the plan's own: `cargo clippy -p <crate> --all-targets -- -D warnings` and
+   `cargo nextest run -p <crate>` for each crate touched, unpiped. A note under `claude-notes/` is checked
+   with `target/debug/q2 render --strict <file>`; the one known Q-12-13 error (from
+   `plans/2026-11-05-navbar-responsive-text.html`) is not yours.
+5. **Single writers.** A plan file is edited only by the lane that owns the plan (a lane that takes over a
+   phase also takes over that plan's checklist). This epic file is edited only in a commit that lands a
+   lane's work, to tick the board below and the Plans table's Status column.
+6. **A lane is not tied to a plan.** The board names phases, not sessions. A free session takes the first
+   row whose `Needs` are all met, branches from the tip, and works that phase; the plan it picks up carries
+   its checklist.
+7. **Do not touch another lane's `target/`.** A lane may have a `q2 preview` server running from its own
+   `target/debug/q2`; rebuilding there kills it.
+8. **Verification that needs a Windows machine, a browser run or the whole workspace** is batched into the
+   exit criteria below and does not block a lane. Say "not run" for any step that was not run.
+9. **A test that fails and is not in your diff** is reported with evidence (does it fail on the integration
+   tip without your change?), and is not chased inside a lane unless Gordon assigns it. First check the
+   environment: a stale `node_modules` (compare `node_modules/reveal.js/package.json` with the version in
+   `package.json`) fails the reveal vendoring test; run `npm install` from the repository root. Known flaky
+   tests on 2026-11-06: `dashboard_goldens::dashboard_skeletons_match_goldens` (passes alone and fails under
+   load, cause unknown) and `julia_engine_e2e::j7_failed_run_does_not_leak_worker` (asserts on the shared
+   `~/Library/Caches/quarto/julia/julia_transport.txt`, which concurrent sessions can remove). Both are
+   outside every plan.
+10. **Braid strands are only for out-of-plan work.** Anything that completes a plan goes in that plan's
+    checklist.
+
+### The board
+
+`Needs` names a checkable fact: a box ticked in the named plan on `feature/records-in-use`
+(`git show feature/records-in-use:claude-notes/plans/<plan>.md`) or a commit that landed there. The Status
+column is as of 2026-11-06 and is ticked by the lane that lands the row.
+
+| Phase | Needs | Status |
+|----|----|----|
+| RIU-1 (per-surface flip) | nothing | landed 2026-11-06 |
+| RIU-2 Phases A to E | nothing | landed; Phase F open |
+| RIU-2 Phase F (verify: Windows, workspace nextest, browser run) | RIU-2 Phases A to E | open |
+| RIU-3a (Phases A to D) | RIU-2 Phases A to E; RIU-1 for any browser check | open; the critical path |
+| RIU-3b (Phase E, F, and the 3b items of G) | RIU-3a landed | open |
+| RIU-4 (the `--records` hardening) | RIU-3a landed | open |
+| RIU-5 Phases A and B (the export function) | nothing | landed 2026-11-06 |
+| RIU-5 Phase B2 (`q2 record export-positron`) | RIU-4 landed (see the open question) | open |
+| RIU-5 Phase C | RIU-5 B2 | open |
+| RIU-6 Phase 0 (the viewer in the preview pane) | nothing | landed 2026-11-06 (notes only) |
+| RIU-6 Phase A (vitest tests), command 1 | nothing; lives in the Positron fork | open |
+| RIU-6 command 3 | RIU-3a landed; RIU-2 guard; RIU-1 | open |
+| RIU-6 command 2 | RIU-5 B2 landed | open |
+| RIU-6 Phases C to E | the commands | open |
+| RIU-7 (the `provide-hub` flip) | everything else settled; the hosted hub | deferred |
+
+Parallel runs are possible only at these points: RIU-2 Phase F beside RIU-3a; RIU-3b, RIU-4 and RIU-6
+command 3 beside one another after RIU-3a; RIU-6 Phase A at any time.
+
+### Conflict hotspots
+
+A lane expects a conflict in these files and resolves it when it rebases; the later lane to land resolves.
+
+| Files | Plans |
+|----|----|
+| `crates/quarto-core/src/engine/capture_files.rs`, `crates/quarto-hub-provider/src/execute.rs` | RIU-1, 2, 4 |
+| `crates/quarto-preview/src/lib.rs`, `crates/quarto/src/commands/preview.rs` | RIU-1, 3a, 4 |
+| `crates/quarto-core/src/record/mod.rs` | RIU-2, 3a, 5 |
+| `docs/guides/authoring/execution-records.qmd` | RIU-3, 4 |
+| this epic file | every lane that lands |
+
+### Open question for the plans' author
+
+RIU-6's header says no command needs RIU-4, but command 2 needs RIU-5 Phase B2, and RIU-5 and RIU-4 say B2
+uses RIU-4's `--records` parsing. Either B2 can use the minimal flag RIU-3a adds (then B2 moves up and RIU-6
+is right) or command 2 waits on RIU-4 (then RIU-6's header is wrong). The board above follows RIU-4 and
+RIU-5. Settle it before RIU-4 starts.
 
 ## Decisions recorded 2026-11-05 (third and fourth plan reviews, answered by Gordon)
 
@@ -593,7 +690,7 @@ Gordon agreed with each recommendation. The second was settled after spike S5 (o
 
 ## Direction: flipping `provide-hub` (deferred plan)
 
-Not built in this epic. The hosted hub (quarto-hub.com) was last deployed 2026-09-25 from q2 `main` at
+Not built in this epic; the plan is [RIU-7](2026-11-06-riu-07-provide-hub-flip.md). The hosted hub (quarto-hub.com) was last deployed 2026-09-25 from q2 `main` at
 `ce01489c4` (the newest deploy the deployment repo records; the instance's
 `/etc/quarto-hub/version.json` was not checked). The record reader, the Positron import and the splice
 by unit hash landed on 2026-10-31 (`430641e8d`, `9de60b9fe`, `9078d7470`), after it. So the hosted hub
@@ -657,6 +754,21 @@ without executing. Partial execution is not possible in Positron, so the rule is
 - Spliced record output is stamped, with the tests in RIU-3 Phase E green.
 - The RIU-6 demo exists, or the notes say what blocked it.
 - Plan checklists are reconciled with what landed; RIU-6 Phase E owns this step.
+- **Last step, after every plan's doc edits:** refresh the embedded docs once. Run
+  `cargo xtask build-agents-docs`, then `cargo build --bin q2`, then check
+  `target/debug/q2 docs llms --embed-info` (the commit, no `(dirty)` marker, the page count) and
+  `target/debug/q2 render docs/`. `q2 docs llms` and `q2 docs serve` read that embed, so it is stale
+  after any edit under `docs/`. RIU-1, RIU-3 and RIU-4 each list a refresh of their own; this one
+  covers them all and runs before the release that carries the flip.
+- [ ] **Windows testing, deferred to a native Windows run** (Gordon has no Windows machine yet; the
+  `aws-lc-sys` C build blocks `--target x86_64-pc-windows-msvc` from macOS). On Windows, run once
+  over the union of the crates the plans touched, then the tests:
+  `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings`
+  and `cargo nextest run` for the same crates. Each plan defers its own part: RIU-1 (tests that build
+  paths and make a file where a directory is expected), RIU-2 (cache tests with temp directories and
+  file names), RIU-3 (the Positron locator's `%APPDATA%` rules, and file URIs with a drive letter, `%3A`
+  and non-ASCII paths, all unverified), RIU-5 (the export subcommand's path and file write). Cross-checking
+  proves compilation only, so those directory and URI behaviors need the run itself.
 
 ## Risks
 

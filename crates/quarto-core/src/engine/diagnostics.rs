@@ -247,6 +247,70 @@ pub fn knitr_child_diagnostic(labels: &[String]) -> DiagnosticMessage {
         .build()
 }
 
+/// `Q-18-15`: the document uses an engine that builds no execution record, so the
+/// writer stored it in the older capture format (RIU-1). `with_records` are the engines
+/// whose records exist; `without_records` are the ones that build none. A warning, with
+/// every output still shown.
+pub fn engines_without_record_diagnostic(
+    with_records: &[String],
+    without_records: &[String],
+) -> DiagnosticMessage {
+    let quoted = |names: &[String]| names.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>();
+    let without = quoted(without_records);
+    let subject = match without.as_slice() {
+        [one] => format!("The engine {one} does not"),
+        [a, b] => format!("The engines {a} and {b} do not"),
+        many => {
+            let (last, rest) = many.split_last().expect("at least one engine");
+            format!("The engines {}, and {last} do not", rest.join(", "))
+        }
+    };
+    let mut b = DiagnosticMessageBuilder::warning("Execution record skipped")
+        .with_code("Q-18-15")
+        .problem(format!(
+            "{subject} build an execution record, so this document is stored in the older \
+             capture format. Every cell still ran and every output is shown."
+        ));
+    if !with_records.is_empty() {
+        b = b.add_detail(format!(
+            "Engines that build records: {}",
+            with_records.join(", ")
+        ));
+    }
+    b.add_detail(format!(
+        "Engines that do not: {}",
+        without_records.join(", ")
+    ))
+    .add_hint("Nothing needs to change; your output is intact.")
+    .add_hint(
+        "Features that read execution records, like reusing saved results or sharing them with \
+         other editors, may not work with this document.",
+    )
+    .add_hint(
+        "An engine author can add record support (see the execution records page in the docs).",
+    )
+    .build()
+}
+
+/// The one-line form of [`engines_without_record_diagnostic`] for `provide-hub`, which has
+/// no page to attach a diagnostic to.
+pub fn engines_without_record_line(doc: &str, without_records: &[String]) -> String {
+    let (noun, verb) = if without_records.len() == 1 {
+        ("engine", "builds")
+    } else {
+        ("engines", "build")
+    };
+    let names = without_records
+        .iter()
+        .map(|n| format!("\"{n}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "note: {doc}: {noun} {names} {verb} no execution record, so this document is stored in \
+         the older capture format (Q-18-15)."
+    )
+}
+
 /// A fence language that Quarto 2 invented and is removing. Not coded: it
 /// goes away with the alias table after one release.
 pub fn deprecated_alias_diagnostic(alias: &str, canonical: &str) -> DiagnosticMessage {
@@ -673,5 +737,56 @@ mod tests {
         assert!(text.contains("a.qmd:7:1"), "{text}");
         assert!(text.contains("image/png"), "{text}");
         assert!(text.contains("not valid base64"), "{text}");
+    }
+
+    // ── RIU-1: Q-18-15, an engine that builds no record ───────────────
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn engines_without_record_is_a_coded_warning_with_both_lists_and_hints() {
+        let d = engines_without_record_diagnostic(&names(&["jupyter"]), &names(&["echo"]));
+        assert_eq!(d.code.as_deref(), Some("Q-18-15"));
+        assert_eq!(d.kind, DiagnosticKind::Warning);
+        assert_eq!(d.title, "Execution record skipped");
+        let text = d.to_text(None);
+        assert!(
+            text.contains("The engine \"echo\" does not build an execution record"),
+            "{text}"
+        );
+        assert!(
+            text.contains("Engines that build records: jupyter"),
+            "{text}"
+        );
+        assert!(text.contains("Engines that do not: echo"), "{text}");
+        assert!(text.contains("Nothing needs to change"), "{text}");
+        assert!(text.contains("may not work with this document"), "{text}");
+        assert!(
+            text.contains("An engine author can add record support"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn engines_without_record_pluralizes_the_problem_line() {
+        let d = engines_without_record_diagnostic(&names(&["jupyter"]), &names(&["a", "b"]));
+        let text = d.to_text(None);
+        assert!(
+            text.contains("The engines \"a\" and \"b\" do not build"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn engines_without_record_line_is_one_line() {
+        let l = engines_without_record_line("tour.qmd", &names(&["echo"]));
+        assert_eq!(
+            l,
+            "note: tour.qmd: engine \"echo\" builds no execution record, so this document is \
+             stored in the older capture format (Q-18-15)."
+        );
+        assert!(!l.contains('\n'));
     }
 }

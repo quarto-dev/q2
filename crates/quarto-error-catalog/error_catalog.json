@@ -2036,6 +2036,13 @@
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-14",
     "since_version": "99.9.9"
   },
+  "Q-18-15": {
+    "subsystem": "engine",
+    "title": "Execution Record Skipped",
+    "message_template": "The document uses an engine that builds no execution record, so it is stored in the older capture format. Every cell still ran and every output is shown, but features that read execution records, like reusing saved results or sharing them with other editors, may not work with it.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-15",
+    "since_version": "99.9.9"
+  },
   "Q-19-1": {
     "subsystem": "image",
     "title": "Plot Document Not Found",

@@ -359,23 +359,55 @@ section is what to know when the two interact.
   shared, and caches saved on `main` are readable by tag runs, so a
   nightly the night before a release keeps the release's caches warm.
 
-## Engine-record writer gate (EXR-13b)
+## Engine-record writer gate (EXR-13b, RIU-1)
 
-Execution-record capture documents ship in two releases, readers first. Release N
-carries the record reader (`parse_capture_payload`, preview splice, `hub admin`
-classification) and the writers with the gate **off**. Release N+1 flips
-`RECORD_WRITING_DEFAULT` in `crates/quarto-core/src/engine/capture_files.rs` to `true`.
-Do not flip it in the same release that first ships the reader: once a store holds
-record documents, reverting to a reader that cannot parse them strands them (an older
-`q2 preview` replaces the whole page with "Render Error: Failed to parse capture: JSON
-parse failed"). The hub exposes no version or capability a writer can read, so the rule is
-operational: a `provide-hub` or `q2 preview` newer than the hub it writes to must keep
-the gate off (`QUARTO_ENGINE_RECORD_WRITE=0`) until that hub is on release N. The hosted
-hub is not deployed by release number: the `quarto-hub` binary and hub-client are built
-from a `q2_ref` input and deployed by hand, so for it "on release N" means "the deployed
-`q2_ref` contains the reader commits" (`cat /etc/quarto-hub/version.json` on the instance
-says which). An operator can opt in earlier with `QUARTO_ENGINE_RECORD_WRITE=1`. Plan:
-`claude-notes/plans/2026-10-28-exr-13-hub-wire.md` (Phase D).
+**The rule: never hand a record to a reader that cannot parse it.** It is stated per
+writer and reader pair, not per release. (The earlier wording, "do not flip it in the same
+release that first ships the reader", was a stricter stand-in for this rule.) The gate
+decides only the **form of the hub document payload** (a record document or the legacy
+capture array); it does not decide whether the local cache writes `<key>.record.bin`, and
+a plain `q2 render` never consults it. The default is per surface
+(`WriterSurface` in `crates/quarto-core/src/engine/capture_files.rs`), and
+`QUARTO_ENGINE_RECORD_WRITE` (`1`/`true`/`on`/`yes`, `0`/`false`/`off`/`no`) overrides both.
+
+| Surface | Can a record be stranded? | Default |
+|---|---|---|
+| Local `q2 preview`, and `--share` | No, by version: writer and reader are one binary, the SPA and WASM are embedded in it, and the store is a temp directory deleted on exit. A guest on another binary tunnels the host UI. | **On**, in the first release that carries the reader |
+| `q2 provide-hub` to a remote hub | Yes: the reader is whatever hub-client that hub deployed | **Off** until the hosted hub runs a `q2_ref` that contains the reader |
+| A persisted `--data-dir` opened by an older binary after a downgrade | Yes, observed | On (documented, not gated) |
+
+What strands, observed: an older `q2 preview` pointed at a store holding a record document
+replaces the whole page with "Render Error: Failed to parse capture: JSON parse failed:
+invalid type: map, expected a sequence". It is not shown as source. The one local-preview
+case that strands is a kept `--data-dir` opened by an older binary, and the release notes
+that carry the flip say so. `v0.39.0` has no `CapturePayload::Record`, so the flip waits
+for the next release that carries the epic branches.
+
+The hub exposes no version or capability a writer can read, so for `provide-hub` the rule
+is operational. The hosted hub is not deployed by release number: the `quarto-hub` binary
+and hub-client are built from a `q2_ref` input and deployed by hand, so "the hub has the
+reader" means "the deployed `q2_ref` contains the reader commits" (`cat
+/etc/quarto-hub/version.json` on the instance says which). An operator can opt in earlier
+with `QUARTO_ENGINE_RECORD_WRITE=1`. Flipping the `provide-hub` default is a separate,
+later change (RIU-7).
+
+**Rollback.** Reverting the flip is one commit and changes what new runs write; it does
+not change what is stored. Hub documents already written stay record documents, so a
+revert, or a `quarto-hub-rollback` of the hosted hub to a build without the reader,
+strands them: turn the gate off first, then provide the documents again. A persisted
+`--data-dir` keeps its record documents and its cache files, so an older binary opening it
+shows the Render Error above (observed 2026-11-06 with 0.39.0: "Failed to parse capture: JSON
+parse failed: invalid type: map, expected a sequence"). Recovery, also observed: a new
+`--data-dir` renders the page, and so does deleting the old one (the older binary records
+the file again and writes only `<key>.bin`). Deleting `captures/` alone is not enough: the
+capture refs live in `automerge/`. The default local preview has nothing to clean up.
+
+**Engines that build no record.** A document that uses an engine that builds no execution
+record is stored whole in the legacy capture format and gets the warning `Q-18-15`, with
+every output still shown. This holds until EXR-17 deletes the legacy path.
+
+Plans: `claude-notes/plans/2026-10-28-exr-13-hub-wire.md` (Phase D) and
+`claude-notes/plans/2026-11-02-riu-01-enablement-and-writer-flip.md`.
 
 ## Gotchas (learned the hard way in the v0.1.0 dry-run)
 

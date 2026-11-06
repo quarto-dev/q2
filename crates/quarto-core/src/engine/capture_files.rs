@@ -253,27 +253,49 @@ fn gzip_json(json: &[u8]) -> std::io::Result<Vec<u8>> {
     Ok(gzipped)
 }
 
-/// Build-time default of the record-writer gate (EXR-13b). Off until release
-/// N+1: readers ship a release before writers, because a store holding record
-/// documents is stranded if the reader is reverted (epic decision 4).
-pub const RECORD_WRITING_DEFAULT: bool = false;
+/// A surface that writes capture payloads to a hub document. The writer gate's
+/// default differs per surface because they differ in whether an older reader can
+/// be handed the result (RIU-1, epic decision 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriterSurface {
+    /// `q2 preview`: writer and reader are one binary and the store is a temp
+    /// directory, so a record cannot be stranded by version.
+    Preview,
+    /// `q2 provide-hub`: the reader is whatever hub-client the remote hub
+    /// deployed. Off until the hosted hub runs a `q2_ref` that contains the
+    /// record reader.
+    Provider,
+}
 
-/// Environment override of [`RECORD_WRITING_DEFAULT`]: `1`/`true`/`on`/`yes`
-/// enables, `0`/`false`/`off`/`no` disables, anything else keeps the default.
+impl WriterSurface {
+    /// Build-time default of the gate for this surface.
+    pub const fn default_gate(self) -> bool {
+        match self {
+            WriterSurface::Preview => true,
+            WriterSurface::Provider => false,
+        }
+    }
+}
+
+/// Environment override of the per-surface default, applying to both surfaces:
+/// `1`/`true`/`on`/`yes` enables, `0`/`false`/`off`/`no` disables, anything else
+/// keeps the surface default.
 pub const RECORD_WRITING_ENV: &str = "QUARTO_ENGINE_RECORD_WRITE";
 
-/// The single writer gate consulted by all three capture writers.
-pub fn record_writing_enabled() -> bool {
-    record_writing_from(std::env::var(RECORD_WRITING_ENV).ok().as_deref())
+/// The writer gate for `surface`. It decides only the **form of the hub document
+/// payload** (record document or legacy capture array). It does not decide whether
+/// the local cache writes `<key>.record.bin`, and `q2 render` never consults it.
+pub fn record_writing_enabled(surface: WriterSurface) -> bool {
+    record_writing_from(std::env::var(RECORD_WRITING_ENV).ok().as_deref(), surface)
 }
 
 /// Pure body of [`record_writing_enabled`] so the parsing is unit-testable
 /// without touching the process environment.
-pub fn record_writing_from(value: Option<&str>) -> bool {
+pub fn record_writing_from(value: Option<&str>, surface: WriterSurface) -> bool {
     match value.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
         Some("1" | "true" | "on" | "yes") => true,
         Some("0" | "false" | "off" | "no") => false,
-        _ => RECORD_WRITING_DEFAULT,
+        _ => surface.default_gate(),
     }
 }
 
@@ -288,6 +310,11 @@ pub struct EncodedCapturePayload {
     /// The `meta.engines` list: the record's `quarto_engines` names for a record,
     /// the captures' `engine_name`s for a legacy payload.
     pub engines: Vec<String>,
+    /// Engines that ran in this document but are not in the record, because they
+    /// build no execution record. Non-empty only when the writer chose the legacy
+    /// payload *because of them*: the record would have dropped their output
+    /// (RIU-1, option A). Callers report it with `Q-18-15`.
+    pub engines_without_record: Vec<String>,
 }
 
 /// Choose and encode the payload a capture writer stores. A record is written
@@ -295,28 +322,59 @@ pub struct EncodedCapturePayload {
 /// something (a preview cache hit has none, and an engine that builds no record
 /// leaves an engineless one); otherwise the legacy capture array is written, byte-identical
 /// to what the writers produced before EXR-13b.
+///
+/// **Record-less engines (RIU-1).** When the record names engines but a capture
+/// belongs to an engine that is not among them, the record cannot stand for the
+/// document (it would replace the legacy captures that hold that engine's output),
+/// so the whole document is stored in the legacy format and the engine names are
+/// returned in [`EncodedCapturePayload::engines_without_record`]. This holds until
+/// EXR-17 deletes the legacy path.
 pub fn encode_capture_payload(
     captures: &[quarto_trace::EngineCapture],
     record: Option<&crate::record::Record>,
     record_gate: bool,
 ) -> std::io::Result<EncodedCapturePayload> {
-    match record.filter(|r| record_gate && r.describes_something()) {
-        Some(record) => Ok(EncodedCapturePayload {
-            gzipped: gzip_record(record)?,
-            is_record: true,
-            engines: record
+    let candidate = record.filter(|r| record_gate && r.describes_something());
+    if let Some(record) = candidate {
+        let in_record = |name: &str| {
+            record
                 .metadata
                 .quarto_engines
                 .iter()
-                .map(|e| e.name.clone())
-                .collect(),
-        }),
-        None => Ok(EncodedCapturePayload {
+                .any(|e| e.name == name)
+        };
+        let mut outside: Vec<String> = Vec::new();
+        for c in captures {
+            if !in_record(&c.engine_name) && !outside.contains(&c.engine_name) {
+                outside.push(c.engine_name.clone());
+            }
+        }
+        if outside.is_empty() {
+            return Ok(EncodedCapturePayload {
+                gzipped: gzip_record(record)?,
+                is_record: true,
+                engines: record
+                    .metadata
+                    .quarto_engines
+                    .iter()
+                    .map(|e| e.name.clone())
+                    .collect(),
+                engines_without_record: Vec::new(),
+            });
+        }
+        return Ok(EncodedCapturePayload {
             gzipped: gzip_captures(captures)?,
             is_record: false,
             engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
-        }),
+            engines_without_record: outside,
+        });
     }
+    Ok(EncodedCapturePayload {
+        gzipped: gzip_captures(captures)?,
+        is_record: false,
+        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+        engines_without_record: Vec::new(),
+    })
 }
 
 /// Whether a run has no form the gate-off writer can publish: a record that describes something,
@@ -421,16 +479,22 @@ mod writer_tests {
     }
 
     #[test]
-    fn gate_defaults_off_and_parses_overrides() {
-        assert!(!RECORD_WRITING_DEFAULT);
-        assert!(!record_writing_from(None));
-        assert!(!record_writing_from(Some("")));
-        assert!(!record_writing_from(Some("garbage")));
+    fn gate_default_is_per_surface_and_overrides_apply_to_both() {
+        // Preview is on by default, provide-hub stays off until the hosted hub
+        // reads records (RIU-1).
+        for v in [None, Some(""), Some("garbage")] {
+            assert!(record_writing_from(v, WriterSurface::Preview), "{v:?}");
+            assert!(!record_writing_from(v, WriterSurface::Provider), "{v:?}");
+        }
         for on in ["1", "true", "TRUE", "on", "yes"] {
-            assert!(record_writing_from(Some(on)), "{on}");
+            for s in [WriterSurface::Preview, WriterSurface::Provider] {
+                assert!(record_writing_from(Some(on), s), "{on}");
+            }
         }
         for off in ["0", "false", "off", "no"] {
-            assert!(!record_writing_from(Some(off)), "{off}");
+            for s in [WriterSurface::Preview, WriterSurface::Provider] {
+                assert!(!record_writing_from(Some(off), s), "{off}");
+            }
         }
     }
 
@@ -486,6 +550,66 @@ mod writer_tests {
         let enc = encode_capture_payload(&caps, Some(&empty), true).unwrap();
         assert!(!enc.is_record);
         assert_eq!(enc.engines, vec!["test-passthrough".to_string()]);
+        assert!(enc.engines_without_record.is_empty());
+    }
+
+    fn record_engines() -> Vec<String> {
+        record()
+            .metadata
+            .quarto_engines
+            .iter()
+            .map(|e| e.name.clone())
+            .collect()
+    }
+
+    /// RIU-1 record-less-engine rule: a capture whose engine is not in the
+    /// record means the record cannot stand for the document, so the whole
+    /// document is stored in the legacy format and the engine is reported.
+    #[test]
+    fn a_capture_from_an_engine_outside_the_record_gives_legacy_and_reports_it() {
+        let r = record();
+        let first = record_engines().remove(0);
+        let caps = vec![capture(&first), capture("echo")];
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.gzipped, gzip_captures(&caps).unwrap());
+        assert_eq!(enc.engines_without_record, vec!["echo".to_string()]);
+    }
+
+    #[test]
+    fn two_captures_of_one_recordless_engine_report_it_once() {
+        let r = record();
+        let first = record_engines().remove(0);
+        let caps = vec![capture("echo"), capture(&first), capture("echo")];
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert_eq!(enc.engines_without_record, vec!["echo".to_string()]);
+    }
+
+    #[test]
+    fn captures_all_in_the_record_give_a_record_and_report_none() {
+        let r = record();
+        let caps: Vec<_> = record_engines().iter().map(|e| capture(e)).collect();
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert!(enc.is_record);
+        assert!(enc.engines_without_record.is_empty());
+    }
+
+    #[test]
+    fn a_record_and_no_captures_gives_a_record_and_reports_none() {
+        // An imported record (RIU-3) has no captures to compare.
+        let r = record();
+        let enc = encode_capture_payload(&[], Some(&r), true).unwrap();
+        assert!(enc.is_record);
+        assert!(enc.engines_without_record.is_empty());
+    }
+
+    #[test]
+    fn gate_off_reports_no_recordless_engines() {
+        let r = record();
+        let caps = vec![capture("echo")];
+        let enc = encode_capture_payload(&caps, Some(&r), false).unwrap();
+        assert!(!enc.is_record);
+        assert!(enc.engines_without_record.is_empty());
     }
 
     /// What RIU-3 imports: no engines, but cells. It describes something, so with the gate on it
