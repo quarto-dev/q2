@@ -181,6 +181,7 @@ pub mod repo_actions_pipeline;
 pub mod responsive_images_pipeline;
 pub mod revealjs_features;
 pub mod revealjs_format;
+pub mod root_directory_metadata;
 pub mod sass_cache_key;
 pub mod secondary_nav_pipeline;
 pub mod shortcode_all_contexts;
