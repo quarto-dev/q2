@@ -1,0 +1,22 @@
+---
+title: "Lightbox: retired quarto-ext/lightbox extension"
+# bd-kcpkgftw. Port of Q1 tests/docs/extensions/basic/filter.qmd. Documents
+# written for the quarto-ext/lightbox extension list it in `filters`. Q1
+# drops that extension because the feature is built in (kBuiltInExtNames)
+# and warns; the built-in does the work. Q2 warns Q-16-13.
+filters:
+  - lightbox
+lightbox: auto
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Extension is now built in"
+      ensureHtmlElements:
+        - - 'a.lightbox > img[src="images/mv-0.png"]'
+        - - 'img.legacy-extension-ran'
+---
+
+![Beach in Chilmark](images/mv-0.png)

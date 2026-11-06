@@ -1,0 +1,6 @@
+title: Lightbox
+author: Posit Software, PBC
+version: 0.1.0
+contributes:
+  filters:
+    - lightbox.lua

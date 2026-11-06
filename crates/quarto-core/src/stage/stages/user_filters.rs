@@ -234,6 +234,28 @@ impl PipelineStage for UserFiltersStage {
             ctx.runtime.as_ref(),
         );
 
+        // bd-kcpkgftw: a filter entry naming an extension Quarto now
+        // builds in (`quarto-ext/lightbox`) was dropped. Both passes
+        // resolve the same metadata, so say so once, from `Pre`.
+        if matches!(self.position, FilterPosition::Pre) {
+            for (id, source_info) in &resolved.superseded {
+                ctx.diagnostics.push(
+                    quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                        "Extension is now built in",
+                    )
+                    .with_code("Q-16-13")
+                    .with_location(source_info.clone())
+                    .problem(format!(
+                        "The `{id}` extension is now part of Quarto, so this filter entry is ignored and the built-in feature is used instead."
+                    ))
+                    .add_hint(format!(
+                        "Remove the entry from `filters`, and delete the extension's folder (`_extensions/{id}/`)."
+                    ))
+                    .build(),
+                );
+            }
+        }
+
         // book-projects P6: record whether filter resolution placed
         // `"citeproc"` into `.post` — computed once, from the `Pre` pass
         // only (both passes resolve independently from the same
