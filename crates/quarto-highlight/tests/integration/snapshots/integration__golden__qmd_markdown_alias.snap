@@ -1,0 +1,36 @@
+---
+source: crates/quarto-highlight/tests/integration/golden.rs
+description: "# Heading\n\n- item with `code`\n"
+---
+[
+  [
+    0,
+    1,
+    "punctuation.special"
+  ],
+  [
+    1,
+    10,
+    "markup.heading"
+  ],
+  [
+    11,
+    13,
+    "punctuation.special"
+  ],
+  [
+    22,
+    24,
+    "punctuation.special"
+  ],
+  [
+    24,
+    28,
+    "markup.raw"
+  ],
+  [
+    28,
+    29,
+    "punctuation.special"
+  ]
+]

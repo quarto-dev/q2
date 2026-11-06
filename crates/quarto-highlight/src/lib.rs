@@ -17,6 +17,7 @@ pub mod encoding;
 pub mod error;
 mod langs;
 pub mod provider;
+pub mod qmd;
 pub mod registry;
 
 #[cfg(not(target_arch = "wasm32"))]

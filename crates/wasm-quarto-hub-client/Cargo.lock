@@ -4463,6 +4463,7 @@ dependencies = [
  "tree-sitter-lmd",
  "tree-sitter-lua",
  "tree-sitter-python",
+ "tree-sitter-qmd",
  "tree-sitter-r",
  "tree-sitter-rust",
  "tree-sitter-sequel",

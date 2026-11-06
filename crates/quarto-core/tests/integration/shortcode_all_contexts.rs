@@ -584,14 +584,18 @@ fn render(case: &Case) -> Result<(String, Vec<String>), String> {
 /// `Ok(())` when the case's expectation holds, otherwise why not.
 fn check(case: &Case) -> Result<(), String> {
     let (html, codes) = render(case)?;
+    // Needles and forbidden strings are matched against both the raw HTML
+    // and its reader-visible text: highlighted code blocks split their text
+    // across `<span>`s (GH #1081), while some needles are markup.
+    let text = crate::html_text::display_text(&html);
     let mut problems = Vec::new();
     for n in case.needles {
-        if !html.contains(n) {
+        if !html.contains(n) && !text.contains(n) {
             problems.push(format!("missing {n:?}"));
         }
     }
     for f in case.forbid {
-        if html.contains(f) {
+        if html.contains(f) || text.contains(f) {
             problems.push(format!("unexpected {f:?}"));
         }
     }
