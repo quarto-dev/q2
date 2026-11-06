@@ -8,7 +8,7 @@ braid:
   priority: P2
 ---
 
-Strand: `bd-az53ojvo`. Related: `bd-25ezfgs8` (whitespace-only separator
+Strand: `bd-az53ojvo`. PR: <https://github.com/quarto-dev/q2/pull/1098>. Related: `bd-25ezfgs8` (whitespace-only separator
 lines make lists tight), `bd-i4xrcdqx` (whitespace-only blank line before
 `:::` in a list item makes the list tight), `bd-2gc9` (closed: nested tight
 lists marked loose), `bd-nrywksil` (preview parity for list items).
