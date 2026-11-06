@@ -2,7 +2,7 @@
 title: 'Ark on the execution-records epic: reconcile and restack (bd-yt2o2ovt)'
 date: 2026-11-05
 description: 'What the execution-records epic already does for Jupyter versus the Ark branch (PR 1076), verified by probes on the epic build, and the ordered stack that keeps only what the epic lacks.'
-status: planned  # nothing implemented; decided 2026-11-06: stack on the epic, Q-18-11, branch feature/ark-r-kernel; Epic B untouched
+status: implemented  # 2026-11-06: four commits, unpushed; Epic B untouched; open: owner verify and push, Windows check, probe-epic removal
 braid:
   strand: bd-yt2o2ovt  # stays open; bd-rorntup4 stays open (Epic B)
 ---
@@ -229,19 +229,32 @@ drafted it.
 
 - [x] Owner decisions (2026-11-06): stack on the epic; code `Q-18-11`; drop the
   kernel commit; branch named `feature/ark-r-kernel`.
-- [ ] Create local `braid/bd-yt2o2ovt-ark-r-kernel-on-epic` off
+- [x] Create local `braid/bd-yt2o2ovt-ark-r-kernel-on-epic` off
   `origin/feature/execution-records-epic` (remote name `feature/ark-r-kernel`).
-- [ ] Commit 1: write T1, see them fail on the epic, fix `decode_image`, gate.
-- [ ] Commit 2: write T2, see them fail, resolve the sink design question, add
-  the catalog entry, docs page and sidebar entry, fix, gate.
-- [ ] Commit 3: corpus, Epic B plan note, `main.rs` registration; confirm
-  35 plus 14.
-- [ ] Commit 4: docs section in the kernel guide, reconciled Epic A plan,
-  end-to-end record with the real binary and real Ark (plot included).
-- [ ] Render the touched plan files with `q2 render --strict <files>`.
-- [ ] Recommend `cargo xtask verify --skip-hub-build` and the WASM leg
-  (quarto-core and the shared presenter are in the WASM build); owner decides.
-- [ ] Reconcile this checklist against what landed before handing off.
+  The epic had moved from `b1854e441` to `baf2dcb9b` (a rebase of hub-client
+  changelog entries, a julia-engine subtree merge, CI and test-skip fixes); the
+  stack is cut from the newer tip.
+- [x] Commit 1: T1 written and failing (unit, fake-kernel e2e, real-Ark), fixed,
+  gated. The e2e fake-kernel test lives in `text_execute_e2e.rs`, not under
+  `tests/integration/`, because the fake kernel is lib-internal.
+- [x] Commit 2: T2 written and failing (`got ["Q-2-49"]`). Design question
+  settled: the sinks record failures and `present_document` drains them into a
+  new `PresentNote::ImageUnusable`, reusing the existing notes channel, so no
+  `write_image` signature change. The catalog entry, docs page and sidebar
+  entry are in the commit. More than the two named epic tests pinned the
+  unescaped placeholder: also `wasm_replay.rs` and three presenter goldens
+  (`png`, `jpeg`, `svg` `-invalid-base64-no-fallback/expected.md`); all updated.
+  `--strict` was checked on the real binary (exit 1), not by a unit test.
+- [x] Commit 3: corpus, Epic B plan note, `main.rs` registration; 49 cases, 35
+  pass, 14 expected-fail.
+- [x] Commit 4: docs section in the kernel guide, reconciled Epic A plan,
+  end-to-end record (in the Epic A plan) with the real binary and real Ark.
+- [x] Render the touched plan files with `q2 render --strict <files>`.
+- [ ] Owner: `cargo xtask verify --skip-hub-build` and the WASM leg
+  (`quarto-core` and the shared presenter are in the WASM build). Not run.
+- [ ] Windows cross-check: not possible here (`aws-lc-sys`); no platform APIs
+  were added.
+- [x] Reconcile this checklist against what landed.
 - [ ] Remove the scratch worktree `.worktrees/probe-epic` (17 GB target) once
   the owner agrees.
 
