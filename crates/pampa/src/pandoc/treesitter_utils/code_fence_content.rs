@@ -157,7 +157,10 @@ mod tests {
 
     #[test]
     fn strip_preserves_crlf() {
-        assert_eq!(strip_fence_indent("  a\r\n\r\n  b\r\n", 2), "a\r\n\r\nb\r\n");
+        assert_eq!(
+            strip_fence_indent("  a\r\n\r\n  b\r\n", 2),
+            "a\r\n\r\nb\r\n"
+        );
     }
 
     #[test]
