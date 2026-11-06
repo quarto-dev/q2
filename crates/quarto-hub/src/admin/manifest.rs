@@ -37,6 +37,12 @@ pub struct ScanManifest {
     /// Counts of every doc kind seen, keyed by [`DocKind::as_str`]
     /// (BTreeMap for stable JSON output).
     pub inventory: BTreeMap<String, KindStats>,
+    /// The `engine-capture` inventory entry split by payload kind
+    /// (`engine-capture` for legacy captures, `engine-record` for records),
+    /// from the uncompressed `meta.kind`; a doc with no `meta` counts as
+    /// legacy. Absent in manifests written before EXR-13.
+    #[serde(default)]
+    pub capture_inventory: BTreeMap<String, KindStats>,
     /// Docs the scan determined are safely removable.
     pub candidates: Vec<CandidateDoc>,
     /// Unreferenced docs that are NOT collectible in v1 (non-capture

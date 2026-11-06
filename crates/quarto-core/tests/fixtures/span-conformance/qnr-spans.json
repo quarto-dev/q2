@@ -1,0 +1,54 @@
+{
+    "indented-code.qmd": [
+        {
+            "line": 9,
+            "code": "2 + 2"
+        }
+    ],
+    "plain-fence.qmd": [
+        {
+            "line": 9,
+            "code": "2 + 2"
+        }
+    ],
+    "tab-separator.qmd": [
+        {
+            "line": 5,
+            "code": "2 + 2"
+        }
+    ],
+    "escaped-backtick.qmd": [
+        {
+            "line": 7,
+            "code": "2 + 2"
+        }
+    ],
+    "html-comment.qmd": [
+        {
+            "line": 7,
+            "code": "2 + 2"
+        }
+    ],
+    "double-backtick.qmd": [
+        {
+            "line": 5,
+            "code": "1 + 1"
+        }
+    ],
+    "agree-basic.qmd": [
+        {
+            "line": 5,
+            "code": "1 + 1"
+        },
+        {
+            "line": 5,
+            "code": "2 + 2"
+        }
+    ],
+    "front-matter.qmd": [
+        {
+            "line": 5,
+            "code": "2 + 2"
+        }
+    ]
+}

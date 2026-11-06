@@ -1,0 +1,34 @@
+---
+title: qmd highlighting
+engine: markdown
+---
+
+`````qmd
+---
+title: "Report"
+format: html
+---
+
+## Results
+
+Some **bold** text and a [link](https://example.com).
+
+```{python}
+#| echo: false
+print("hello")
+```
+`````
+
+````markdown
+## Results
+
+Some **bold** text.
+````
+
+```md
+# md alias
+```
+
+```yaml
+control: true
+```

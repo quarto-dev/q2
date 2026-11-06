@@ -912,7 +912,7 @@ Spaces in para start in blockquote
           (pandoc_paragraph
             (pandoc_str)))))
 ================================================================================
-Q-2-35: 4-space indent rejected (issue #184)
+Q-2-59: 4-space indent rejected (issue #184)
 ================================================================================
 Before.
 
@@ -928,7 +928,7 @@ After.
         (shortcode_name)
         (shortcode_name)))
 ================================================================================
-Q-2-35: tab indent rejected (issue #184)
+Q-2-59: tab indent rejected (issue #184)
 ================================================================================
 Before.
 
@@ -941,7 +941,7 @@ Before.
       (ERROR
         (shortcode_name)))
 ================================================================================
-Q-2-35 negative: 3-space indent is fine (issue #184)
+Q-2-59 negative: 3-space indent is fine (issue #184)
 ================================================================================
 Before.
 
@@ -954,7 +954,7 @@ Before.
         (pandoc_paragraph
           (pandoc_str))))
 ================================================================================
-Q-2-35 negative: lazy paragraph continuation with 4-space indent is fine (issue #184)
+Q-2-59 negative: lazy paragraph continuation with 4-space indent is fine (issue #184)
 ================================================================================
 Hello.
     world
@@ -966,7 +966,7 @@ Hello.
           (pandoc_soft_break)
           (pandoc_str))))
 ================================================================================
-Q-2-35 negative: list-item continuation after blank line with trailing 4 spaces (issue #196)
+Q-2-59 negative: list-item continuation after blank line with trailing 4 spaces (issue #196)
 ================================================================================
 4)  Outer:
     
@@ -989,7 +989,7 @@ Q-2-35 negative: list-item continuation after blank line with trailing 4 spaces 
                   (commonmark_specifier
                     (attribute_class)))))))))
 ================================================================================
-Q-2-35 negative: bullet-list-item continuation after blank line with trailing 4 spaces (issue #196)
+Q-2-59 negative: bullet-list-item continuation after blank line with trailing 4 spaces (issue #196)
 ================================================================================
 *   Outer:
     
@@ -1009,7 +1009,7 @@ Q-2-35 negative: bullet-list-item continuation after blank line with trailing 4 
               (pandoc_space)
               (pandoc_str))))))
 ================================================================================
-Q-2-35 negative: list-item continuation after blank line with a tab (issue #196)
+Q-2-59 negative: list-item continuation after blank line with a tab (issue #196)
 ================================================================================
 1)  Outer:
 	

@@ -26,7 +26,7 @@
 //! building the AST directly): `TableBody.head` rows (q2 rejects grid
 //! tables, Q-2-39), `CaptionBlock`, `BlockMetadata`, attr values on
 //! `Row` / `Cell`, and indented multi-paragraph footnote definitions
-//! (indented text is a code block in q2, Q-2-35).
+//! (indented text is a code block in q2, Q-2-59).
 
 use std::sync::Arc;
 
@@ -584,14 +584,18 @@ fn render(case: &Case) -> Result<(String, Vec<String>), String> {
 /// `Ok(())` when the case's expectation holds, otherwise why not.
 fn check(case: &Case) -> Result<(), String> {
     let (html, codes) = render(case)?;
+    // Needles and forbidden strings are matched against both the raw HTML
+    // and its reader-visible text: highlighted code blocks split their text
+    // across `<span>`s (GH #1081), while some needles are markup.
+    let text = crate::html_text::display_text(&html);
     let mut problems = Vec::new();
     for n in case.needles {
-        if !html.contains(n) {
+        if !html.contains(n) && !text.contains(n) {
             problems.push(format!("missing {n:?}"));
         }
     }
     for f in case.forbid {
-        if html.contains(f) {
+        if html.contains(f) || text.contains(f) {
             problems.push(format!("unexpected {f:?}"));
         }
     }

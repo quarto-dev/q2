@@ -30,6 +30,7 @@
 //! | markdown | ✓ | ✓ |
 //! | knitr | ✓ | ✗ |
 //! | jupyter | ✓ | ✗ |
+//! | ipynb stored-output replay | ✓ | ✓ |
 //!
 //! In WASM builds, requesting an unavailable engine will result in a
 //! warning and fallback to the markdown engine.
@@ -55,19 +56,23 @@
 
 pub mod capture_files;
 pub mod capture_splice;
+pub mod cell_lang;
 pub mod content_processors;
 mod context;
 mod detection;
 pub mod diagnostics;
 mod error;
+pub(crate) mod ipynb_replay;
 mod markdown;
 pub mod nested_cell_mask;
+pub(crate) mod patterns;
 pub mod preview_record;
 mod registry;
 mod replay;
 pub mod resolution;
 mod traits;
 pub mod ts_protocol;
+pub mod units;
 
 // Native-only: subprocess management + demux for TS engine extensions.
 #[cfg(not(target_arch = "wasm32"))]
@@ -76,6 +81,10 @@ pub mod ts_process;
 // Native-only: TsEngine struct implementing ExecutionEngine via TsEngineHost.
 #[cfg(not(target_arch = "wasm32"))]
 mod ts_engine;
+
+// EXR-7: the TS wire's unit list and notebook-to-record mapping.
+#[cfg(not(target_arch = "wasm32"))]
+mod ts_record;
 
 // File-backed test engine for exercising multi-engine sequencing
 // (bd-5yff4). Native-only test utility; never registered in the default
@@ -158,18 +167,22 @@ pub const HANDLED_LANGUAGES: &[&str] = &["ojs", "mermaid", "dot"];
 pub const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
 
 // Re-export public types
-pub use context::{ExecuteResult, ExecutionContext};
+pub use context::{CellOption, CellOptionsMap, ExecuteResult, ExecutionContext};
 pub use detection::{
     DetectedEngine, EngineSequence, detect_engine, detect_engine_sequence, detect_engines,
 };
 pub use error::ExecutionError;
 #[cfg(not(target_arch = "wasm32"))]
 pub use fixture::FixtureEngine;
+pub use ipynb_replay::IpynbReplayEngine;
 pub use markdown::MarkdownEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;
 pub(crate) use resolution::explicitly_declared_engines;
-pub use resolution::{EngineResolution, ResolutionNote, resolve_engines, resolve_engines_pass1};
+pub use resolution::{
+    DOCUMENT_OWN_FILE_ID, EngineResolution, ResolutionNote, resolve_engines,
+    resolve_engines_for_document, resolve_engines_pass1, resolve_engines_pass1_for_document,
+};
 pub use traits::ExecutionEngine;
 
 pub mod execution_policy;

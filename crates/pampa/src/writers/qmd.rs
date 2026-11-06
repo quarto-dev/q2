@@ -535,7 +535,7 @@ fn write_attr<W: std::io::Write + ?Sized>(
 /// code spans) where the parser encodes a space-separated `{lang .cls}`
 /// language token as a literal bracket-wrapped class string
 /// (`"{python}"` — see `test_code_block_attributes.rs` and
-/// `engine_cell_lang` in `quarto-core::engine::capture_splice`, the
+/// `engine_cell_lang` in `quarto-core::engine::cell_lang`, the
 /// reader-side unwrap this mirrors). Such a class is written back as a
 /// bare, unprefixed token instead of being dot-prefixed like a normal
 /// class, so `{python .marimo}` round-trips instead of becoming

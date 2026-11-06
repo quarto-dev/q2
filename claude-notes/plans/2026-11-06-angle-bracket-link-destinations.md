@@ -215,10 +215,10 @@ What differed from the plan, and what the plan missed:
   `field('angle_bracket_url', alias($._angle_bracket_url, $.url))`, and
   `treesitter.rs` checks `parent.child_by_field_name("angle_bracket_url")`.
   Corpus tests show the field (`angle_bracket_url: (url)`).
-- **New diagnostic Q-2-59** ("Text after angle-bracket link destination").
+- **New diagnostic Q-2-60** ("Text after angle-bracket link destination").
   `[x](<a>b>)`, `![](<my file>.png)` and `[x](<a b> c)` used to parse as a
   (wrong) bare-URL link on `main`. With the angle token they became an uncoded
-  "Parse error". CommonMark and Pandoc say these aren't links at all. Q-2-59 has
+  "Parse error". CommonMark and Pandoc say these aren't links at all. Q-2-60 has
   error-corpus cases for **every inline container** (both shapes: text glued
   to `>`, and an unquoted title after a space), following the coverage-trap
   guidance in `crates/pampa/AGENTS.md`. The reconciliation test is
@@ -240,5 +240,5 @@ What differed from the plan, and what the plan missed:
   inline-container coverage gap (uncoded inside emphasis, quotes, table cells,
   etc.). This already happens on `main`.
 - Docs: `docs/errors/markdown/Q-2-33.qmd` (angle form as a fix),
-  new `Q-2-59.qmd` (+ sidebar entry), and the `%20` paragraph in
+  new `Q-2-60.qmd` (+ sidebar entry), and the `%20` paragraph in
   `docs/guides/projects/paths.qmd`.

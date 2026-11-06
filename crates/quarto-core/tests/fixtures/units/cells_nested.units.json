@@ -1,0 +1,37 @@
+[
+  {
+    "code": "  in_list = 1\n  ",
+    "index": 0,
+    "kind": "cell",
+    "lang": "python",
+    "line": 3
+  },
+  {
+    "code": "> in_quote = 1\n> ",
+    "index": 1,
+    "kind": "cell",
+    "lang": "python",
+    "line": 7
+  },
+  {
+    "code": "four = 1\n",
+    "index": 2,
+    "kind": "cell",
+    "lang": "python",
+    "line": 11
+  },
+  {
+    "code": "  indented = 1\n  ",
+    "index": 3,
+    "kind": "cell",
+    "lang": "python",
+    "line": 15
+  },
+  {
+    "code": "top = 1\n",
+    "index": 4,
+    "kind": "cell",
+    "lang": "python",
+    "line": 19
+  }
+]

@@ -45,7 +45,7 @@ use quarto_source_map::SourceInfo;
 
 use super::anchor::Anchor;
 use super::desugar::{DesugarOptions, EmitMode, LmdError, desugar_lua_at, desugar_lua_expr_with};
-use crate::engine::capture_splice::engine_cell_lang;
+use crate::engine::cell_lang::engine_cell_lang;
 
 /// Output buffer plus indentation state.
 pub(super) struct Emitter {

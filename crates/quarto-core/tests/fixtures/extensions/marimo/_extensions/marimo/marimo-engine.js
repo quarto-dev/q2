@@ -35,13 +35,17 @@ function isMarimoCell(cell) {
   const firstLine = cell.sourceVerbatim.value.split("\n", 1)[0] ?? "";
   return MARIMO_CELL_REGEX.test(firstLine);
 }
-function cellOwnedByMarimo(cell, handledLanguages) {
+function cellOwnedByMarimo(cell, handledLanguages, ownedLanguages) {
   if (isMarimoCell(cell)) return true;
-  if (handledLanguages === void 0) return false;
   if (typeof cell.cell_type !== "object" || !("language" in cell.cell_type)) {
     return false;
   }
-  return cell.cell_type.language === "sql" && !handledLanguages.includes("sql");
+  if (cell.cell_type.language !== "sql") return false;
+  return bareSqlOwned(handledLanguages, ownedLanguages);
+}
+function bareSqlOwned(handledLanguages, ownedLanguages) {
+  if (ownedLanguages !== void 0) return ownedLanguages.includes("sql");
+  return handledLanguages !== void 0 && !handledLanguages.includes("sql");
 }
 var MARIMO_CELL_REGEX_WITH_BARE_SQL = withBareSqlAlternative(
   MARIMO_CELL_REGEX
@@ -404,6 +408,67 @@ function isRecord2(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+// src/engine/records.ts
+var MARIMO_HASH_DEFINITION = {
+  id: "marimo",
+  version: 1,
+  granularity: "document",
+  presentationCellOptions: [],
+  presentationExecuteKeys: [],
+  documentKeys: ["eval", "external-env", "pyproject"]
+};
+var QUARTO_MARKDOWN_MIME = "text/x-quarto-markdown";
+function buildMarimoRecord(input) {
+  const { units } = input;
+  if (units === void 0) return void 0;
+  const cellUnits = /* @__PURE__ */ new Map();
+  for (const unit of units) {
+    if (unit.kind === "cell") cellUnits.set(unit.line, unit);
+  }
+  const cells = [];
+  let line = 1;
+  let projectedIndex = 0;
+  for (const chunk of input.cells) {
+    const text = chunk.sourceVerbatim.value;
+    if (input.owned(chunk)) {
+      const markdown = input.projected[projectedIndex++];
+      if (markdown === void 0) return void 0;
+      const unit = cellUnits.get(line);
+      if (unit === void 0) return void 0;
+      if (unit.id !== void 0 && unit.owned) {
+        cells.push({
+          cell_type: "code",
+          execution_count: null,
+          metadata: { quarto_cell_id: unit.id },
+          outputs: [{
+            output_type: "display_data",
+            data: { [QUARTO_MARKDOWN_MIME]: markdown },
+            metadata: { quarto_format: input.format }
+          }],
+          source: chunk.source.value.split(/(?<=\n)/)
+        });
+      }
+    }
+    line += countNewlines(text);
+  }
+  return {
+    notebook: { nbformat: 4, nbformat_minor: 5, metadata: {}, cells },
+    recordInfo: {
+      version: 1,
+      granularity: "document",
+      outputKind: "rendered",
+      alignment: "ids",
+      coverage: "subset",
+      hashDefinition: MARIMO_HASH_DEFINITION
+    }
+  };
+}
+function countNewlines(text) {
+  let count = 0;
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) count++;
+  return count;
+}
+
 // src/engine/index.ts
 var quarto;
 var marimoEngineDiscovery = {
@@ -497,7 +562,8 @@ var marimoEngineDiscovery = {
     ),
     execute: async (options) => {
       const interactive = quarto.format.isHtmlCompatible(options.format);
-      const bareSql = options.handledLanguages !== void 0 && !options.handledLanguages.includes("sql");
+      const { ownedLanguages, units } = options;
+      const bareSql = bareSqlOwned(options.handledLanguages, ownedLanguages);
       const execution = await quarto.console.withSpinner(
         { message: "Executing marimo cells..." },
         async () => await runMarimoCompiler(quarto, {
@@ -517,14 +583,13 @@ var marimoEngineDiscovery = {
         false,
         bareSql ? MARIMO_CELL_REGEX_WITH_BARE_SQL : MARIMO_CELL_REGEX
       );
-      const marimoCells = chunks.cells.filter(
-        (cell) => cellOwnedByMarimo(cell, options.handledLanguages)
-      );
+      const owned = (cell) => cellOwnedByMarimo(cell, options.handledLanguages, ownedLanguages);
+      const marimoCells = chunks.cells.filter(owned);
       const projected = execution.kind === "page" ? projectInteractivePage(execution.page) : await projectStaticPage(execution.outputs, htmlToMarkdown);
       validateProjectionCount(projected, marimoCells.length);
       let index = 0;
       const markdown = chunks.cells.map(
-        (cell) => cellOwnedByMarimo(cell, options.handledLanguages) ? projected[index++] ?? "" : cell.sourceVerbatim.value
+        (cell) => owned(cell) ? projected[index++] ?? "" : cell.sourceVerbatim.value
       ).join("");
       const includes = {};
       if (execution.kind === "page") {
@@ -533,12 +598,20 @@ var marimoEngineDiscovery = {
           writeBrowserHeader(extensionDir, options.tempDir)
         ];
       }
+      const record = buildMarimoRecord({
+        cells: chunks.cells,
+        owned,
+        projected,
+        units,
+        format: options.format.identifier["target-format"] ?? ""
+      });
       return {
         engine: "marimo",
         markdown,
         supporting: [],
         filters: [],
-        includes
+        includes,
+        ...record ?? {}
       };
     },
     dependencies: (_options) => Promise.resolve({ includes: {} }),

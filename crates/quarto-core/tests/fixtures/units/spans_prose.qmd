@@ -1,0 +1,3 @@
+Some `{python} 1+1` prose, then `{r} x` and `{julia} y`.
+
+A link [x](u){title="has `{python} 2` inside"} here.

@@ -9,7 +9,7 @@
  *   resolved, then Pandoc's escapeURI (spaces -> %20, ...).
  * - The url source span covers the bracket *contents*.
  * - The qmd writer round-trips the result (as the %-encoded bare form).
- * - Q-2-33 (space in a bare target) still fires, and Q-2-59 (text after the
+ * - Q-2-33 (space in a bare target) still fires, and Q-2-60 (text after the
  *   closing `>`) is coded in every inline container. As with Q-2-41
  *   (test_brace_hint_contexts.rs), each inline container is its own LR state
  *   and needs its own error-corpus case; when the grammar gains an inline
@@ -178,24 +178,24 @@ const CONTAINERS: &[(&str, &str)] = &[
 ];
 
 #[test]
-fn q_2_59_text_after_closing_bracket_in_every_container() {
+fn q_2_60_text_after_closing_bracket_in_every_container() {
     let mut misses = vec![];
     for (name, tmpl) in CONTAINERS {
         let input = tmpl.replace('@', "![](<my file>.png)");
         let codes = error_codes(&input);
-        if codes != ["Q-2-59"] {
+        if codes != ["Q-2-60"] {
             misses.push(format!("{name}: {codes:?}"));
         }
     }
     assert!(
         misses.is_empty(),
-        "Q-2-59 not emitted in:\n{}",
+        "Q-2-60 not emitted in:\n{}",
         misses.join("\n")
     );
 }
 
 #[test]
-fn q_2_59_unquoted_title_in_every_container() {
+fn q_2_60_unquoted_title_in_every_container() {
     let mut misses = vec![];
     for (name, tmpl) in CONTAINERS {
         // A space inside ^...^ is already an error of its own (Q-2-9).
@@ -204,13 +204,13 @@ fn q_2_59_unquoted_title_in_every_container() {
         }
         let input = tmpl.replace('@', "[x](<a b> c)");
         let codes = error_codes(&input);
-        if codes != ["Q-2-59"] {
+        if codes != ["Q-2-60"] {
             misses.push(format!("{name}: {codes:?}"));
         }
     }
     assert!(
         misses.is_empty(),
-        "Q-2-59 not emitted in:\n{}",
+        "Q-2-60 not emitted in:\n{}",
         misses.join("\n")
     );
 }

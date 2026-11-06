@@ -18737,74 +18737,6 @@
     "name": "Q-2-34/multiple-params"
   },
   {
-    "column": 4,
-    "row": 2,
-    "state": 315,
-    "sym": "_indented_code_block_error",
-    "errorInfo": {
-      "code": "Q-2-35",
-      "title": "Indented code blocks are not supported",
-      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
-      "captures": [],
-      "notes": [],
-      "hints": [],
-      "guard": null,
-      "desynchronizes": false
-    },
-    "name": "Q-2-35/basic"
-  },
-  {
-    "column": 1,
-    "row": 2,
-    "state": 315,
-    "sym": "_indented_code_block_error",
-    "errorInfo": {
-      "code": "Q-2-35",
-      "title": "Indented code blocks are not supported",
-      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
-      "captures": [],
-      "notes": [],
-      "hints": [],
-      "guard": null,
-      "desynchronizes": false
-    },
-    "name": "Q-2-35/tab-indent"
-  },
-  {
-    "column": 6,
-    "row": 2,
-    "state": 315,
-    "sym": "_indented_code_block_error",
-    "errorInfo": {
-      "code": "Q-2-35",
-      "title": "Indented code blocks are not supported",
-      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
-      "captures": [],
-      "notes": [],
-      "hints": [],
-      "guard": null,
-      "desynchronizes": false
-    },
-    "name": "Q-2-35/more-than-four"
-  },
-  {
-    "column": 0,
-    "row": 2,
-    "state": 303,
-    "sym": "_indented_code_block_error",
-    "errorInfo": {
-      "code": "Q-2-35",
-      "title": "Indented code blocks are not supported",
-      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
-      "captures": [],
-      "notes": [],
-      "hints": [],
-      "guard": null,
-      "desynchronizes": false
-    },
-    "name": "Q-2-35/indented-blockquote"
-  },
-  {
     "column": 5,
     "row": 0,
     "state": 2769,
@@ -22471,12 +22403,80 @@
     "name": "Q-2-56/simple"
   },
   {
+    "column": 4,
+    "row": 2,
+    "state": 315,
+    "sym": "_indented_code_block_error",
+    "errorInfo": {
+      "code": "Q-2-59",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false
+    },
+    "name": "Q-2-59/basic"
+  },
+  {
+    "column": 1,
+    "row": 2,
+    "state": 315,
+    "sym": "_indented_code_block_error",
+    "errorInfo": {
+      "code": "Q-2-59",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false
+    },
+    "name": "Q-2-59/tab-indent"
+  },
+  {
+    "column": 6,
+    "row": 2,
+    "state": 315,
+    "sym": "_indented_code_block_error",
+    "errorInfo": {
+      "code": "Q-2-59",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false
+    },
+    "name": "Q-2-59/more-than-four"
+  },
+  {
+    "column": 0,
+    "row": 2,
+    "state": 303,
+    "sym": "_indented_code_block_error",
+    "errorInfo": {
+      "code": "Q-2-59",
+      "title": "Indented code blocks are not supported",
+      "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
+      "captures": [],
+      "notes": [],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false
+    },
+    "name": "Q-2-59/indented-blockquote"
+  },
+  {
     "column": 13,
     "row": 0,
     "state": 3182,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22487,7 +22487,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/image-extension-outside"
+    "name": "Q-2-60/image-extension-outside"
   },
   {
     "column": 10,
@@ -22495,7 +22495,7 @@
     "state": 3182,
     "sym": "info_string",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22506,7 +22506,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/link-text-after-bracket"
+    "name": "Q-2-60/link-text-after-bracket"
   },
   {
     "column": 22,
@@ -22514,7 +22514,7 @@
     "state": 3715,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22525,7 +22525,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/unquoted-title"
+    "name": "Q-2-60/unquoted-title"
   },
   {
     "column": 18,
@@ -22533,7 +22533,7 @@
     "state": 3715,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22544,7 +22544,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/image-unquoted-title"
+    "name": "Q-2-60/image-unquoted-title"
   },
   {
     "column": 16,
@@ -22552,7 +22552,7 @@
     "state": 3118,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22563,7 +22563,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/emphasis-star-text-after-bracket"
+    "name": "Q-2-60/emphasis-star-text-after-bracket"
   },
   {
     "column": 13,
@@ -22571,7 +22571,7 @@
     "state": 3798,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22582,7 +22582,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/emphasis-star-unquoted-title"
+    "name": "Q-2-60/emphasis-star-unquoted-title"
   },
   {
     "column": 16,
@@ -22590,7 +22590,7 @@
     "state": 3170,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22601,7 +22601,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/emphasis-underscore-text-after-bracket"
+    "name": "Q-2-60/emphasis-underscore-text-after-bracket"
   },
   {
     "column": 13,
@@ -22609,7 +22609,7 @@
     "state": 3809,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22620,7 +22620,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/emphasis-underscore-unquoted-title"
+    "name": "Q-2-60/emphasis-underscore-unquoted-title"
   },
   {
     "column": 17,
@@ -22628,7 +22628,7 @@
     "state": 3203,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22639,7 +22639,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/strong-star-text-after-bracket"
+    "name": "Q-2-60/strong-star-text-after-bracket"
   },
   {
     "column": 14,
@@ -22647,7 +22647,7 @@
     "state": 3776,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22658,7 +22658,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/strong-star-unquoted-title"
+    "name": "Q-2-60/strong-star-unquoted-title"
   },
   {
     "column": 17,
@@ -22666,7 +22666,7 @@
     "state": 3248,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22677,7 +22677,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/strong-underscore-text-after-bracket"
+    "name": "Q-2-60/strong-underscore-text-after-bracket"
   },
   {
     "column": 14,
@@ -22685,7 +22685,7 @@
     "state": 3790,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22696,7 +22696,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/strong-underscore-unquoted-title"
+    "name": "Q-2-60/strong-underscore-unquoted-title"
   },
   {
     "column": 17,
@@ -22704,7 +22704,7 @@
     "state": 3237,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22715,7 +22715,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/strikeout-text-after-bracket"
+    "name": "Q-2-60/strikeout-text-after-bracket"
   },
   {
     "column": 14,
@@ -22723,7 +22723,7 @@
     "state": 3734,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22734,7 +22734,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/strikeout-unquoted-title"
+    "name": "Q-2-60/strikeout-unquoted-title"
   },
   {
     "column": 16,
@@ -22742,7 +22742,7 @@
     "state": 3182,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22753,7 +22753,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/superscript-text-after-bracket"
+    "name": "Q-2-60/superscript-text-after-bracket"
   },
   {
     "column": 16,
@@ -22761,7 +22761,7 @@
     "state": 3182,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22772,7 +22772,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/subscript-text-after-bracket"
+    "name": "Q-2-60/subscript-text-after-bracket"
   },
   {
     "column": 13,
@@ -22780,7 +22780,7 @@
     "state": 3715,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22791,7 +22791,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/subscript-unquoted-title"
+    "name": "Q-2-60/subscript-unquoted-title"
   },
   {
     "column": 16,
@@ -22799,7 +22799,7 @@
     "state": 3159,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22810,7 +22810,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/double-quote-text-after-bracket"
+    "name": "Q-2-60/double-quote-text-after-bracket"
   },
   {
     "column": 13,
@@ -22818,7 +22818,7 @@
     "state": 3720,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22829,7 +22829,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/double-quote-unquoted-title"
+    "name": "Q-2-60/double-quote-unquoted-title"
   },
   {
     "column": 18,
@@ -22837,7 +22837,7 @@
     "state": 3073,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22848,7 +22848,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/single-quote-text-after-bracket"
+    "name": "Q-2-60/single-quote-text-after-bracket"
   },
   {
     "column": 15,
@@ -22856,7 +22856,7 @@
     "state": 3708,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22867,7 +22867,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/single-quote-unquoted-title"
+    "name": "Q-2-60/single-quote-unquoted-title"
   },
   {
     "column": 17,
@@ -22875,7 +22875,7 @@
     "state": 3192,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22886,7 +22886,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/inline-note-text-after-bracket"
+    "name": "Q-2-60/inline-note-text-after-bracket"
   },
   {
     "column": 14,
@@ -22894,7 +22894,7 @@
     "state": 3762,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22905,7 +22905,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/inline-note-unquoted-title"
+    "name": "Q-2-60/inline-note-unquoted-title"
   },
   {
     "column": 19,
@@ -22913,7 +22913,7 @@
     "state": 3148,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22924,7 +22924,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/highlight-span-text-after-bracket"
+    "name": "Q-2-60/highlight-span-text-after-bracket"
   },
   {
     "column": 16,
@@ -22932,7 +22932,7 @@
     "state": 3862,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22943,7 +22943,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/highlight-span-unquoted-title"
+    "name": "Q-2-60/highlight-span-unquoted-title"
   },
   {
     "column": 19,
@@ -22951,7 +22951,7 @@
     "state": 3148,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22962,7 +22962,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/delete-span-text-after-bracket"
+    "name": "Q-2-60/delete-span-text-after-bracket"
   },
   {
     "column": 16,
@@ -22970,7 +22970,7 @@
     "state": 3862,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -22981,7 +22981,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/delete-span-unquoted-title"
+    "name": "Q-2-60/delete-span-unquoted-title"
   },
   {
     "column": 19,
@@ -22989,7 +22989,7 @@
     "state": 3148,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23000,7 +23000,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/insert-span-text-after-bracket"
+    "name": "Q-2-60/insert-span-text-after-bracket"
   },
   {
     "column": 16,
@@ -23008,7 +23008,7 @@
     "state": 3862,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23019,7 +23019,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/insert-span-unquoted-title"
+    "name": "Q-2-60/insert-span-unquoted-title"
   },
   {
     "column": 19,
@@ -23027,7 +23027,7 @@
     "state": 3148,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23038,7 +23038,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/edit-comment-span-text-after-bracket"
+    "name": "Q-2-60/edit-comment-span-text-after-bracket"
   },
   {
     "column": 16,
@@ -23046,7 +23046,7 @@
     "state": 3862,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23057,7 +23057,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/edit-comment-span-unquoted-title"
+    "name": "Q-2-60/edit-comment-span-unquoted-title"
   },
   {
     "column": 18,
@@ -23065,7 +23065,7 @@
     "state": 3210,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23076,7 +23076,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/link-text-text-after-bracket"
+    "name": "Q-2-60/link-text-text-after-bracket"
   },
   {
     "column": 15,
@@ -23084,7 +23084,7 @@
     "state": 3823,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23095,7 +23095,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/link-text-unquoted-title"
+    "name": "Q-2-60/link-text-unquoted-title"
   },
   {
     "column": 15,
@@ -23103,7 +23103,7 @@
     "state": 3104,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23114,7 +23114,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/table-header-cell-text-after-bracket"
+    "name": "Q-2-60/table-header-cell-text-after-bracket"
   },
   {
     "column": 12,
@@ -23122,7 +23122,7 @@
     "state": 3771,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23133,7 +23133,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/table-header-cell-unquoted-title"
+    "name": "Q-2-60/table-header-cell-unquoted-title"
   },
   {
     "column": 15,
@@ -23141,7 +23141,7 @@
     "state": 3065,
     "sym": "attribute_class",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23152,7 +23152,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/table-body-cell-text-after-bracket"
+    "name": "Q-2-60/table-body-cell-text-after-bracket"
   },
   {
     "column": 12,
@@ -23160,7 +23160,7 @@
     "state": 3852,
     "sym": "pandoc_str_token1",
     "errorInfo": {
-      "code": "Q-2-59",
+      "code": "Q-2-60",
       "title": "Text after angle-bracket link destination",
       "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
       "captures": [],
@@ -23171,7 +23171,7 @@
       "guard": null,
       "desynchronizes": false
     },
-    "name": "Q-2-59/table-body-cell-unquoted-title"
+    "name": "Q-2-60/table-body-cell-unquoted-title"
   },
   {
     "column": 1,

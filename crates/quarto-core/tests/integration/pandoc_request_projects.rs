@@ -54,7 +54,7 @@ fn render(path: &Path, format: &str) -> PandocRequestOutcome {
             format,
             project: &project,
             source_date_epoch: Some(1_700_000_000),
-            captures: Vec::new(),
+            captures: Vec::new().into(),
             typst_available_fonts: None,
             // As the hub prelude installs it.
             resolver: Some(ResourceResolverContext::vfs_root(

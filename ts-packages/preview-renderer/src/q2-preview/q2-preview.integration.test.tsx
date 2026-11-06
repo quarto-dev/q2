@@ -444,23 +444,34 @@ describe('q2-preview Pandoc base-type gap-fill components', () => {
         expect(code.textContent).toBe('cat("hi")');
     });
 
-    it('CodeBlock falls back to plain text when data-hl-spans is empty array', () => {
-        // Defensive: the encoder may emit `[]` for a code cell whose
-        // grammar lookup succeeded but produced no captures (e.g.
-        // a single-character cell with no matchable tokens). Treat
-        // an empty array the same as missing attribute — no spans
-        // emitted, plain text rendered.
-        const ast = [{
-            t: 'CodeBlock',
-            c: [
-                ['', ['r'], [['data-hl-spans', '[]']]],
-                'x',
-            ],
-        }];
-        const { container } = mount(ast);
-        const code = container.querySelector('pre > code')!;
-        expect(code.querySelectorAll('span[class^="hl-"]').length).toBe(0);
-        expect(code.textContent).toBe('x');
+    it('CodeBlock keeps the div.sourceCode wrapper when data-hl-spans is an empty array', () => {
+        // The encoder emits `[]` for a code cell whose grammar produced
+        // no captures, and (GH #1079) for a block in a language Pandoc
+        // knows but q2 has no grammar for (`ini`, `default`, …). Either
+        // way the block is still a source-code block: Pandoc's nesting,
+        // no highlight spans. Mirrors
+        // `empty_hl_spans_codeblock_gets_div_wrapper` in
+        // `crates/pampa/src/writers/html.rs`.
+        for (const lang of ['r', 'ini']) {
+            const ast = [{
+                t: 'CodeBlock',
+                c: [
+                    ['', [lang, 'code-with-copy'], [['data-hl-spans', '[]']]],
+                    'x',
+                ],
+            }];
+            const { container } = mount(ast);
+            const pre = container.querySelector('pre')!;
+            const code = pre.querySelector('code')!;
+            const divWrapper = pre.parentElement!;
+            expect(divWrapper.tagName).toBe('DIV');
+            expect(divWrapper.className).toBe('sourceCode code-with-copy');
+            expect(pre.className).toBe(`sourceCode ${lang}`);
+            expect(code.className).toBe(`sourceCode ${lang}`);
+            expect(code.querySelectorAll('span[class^="hl-"]').length).toBe(0);
+            expect(code.textContent).toBe('x');
+            expect(pre.hasAttribute('data-hl-spans')).toBe(false);
+        }
     });
 
     it('CodeBlock highlight survives non-ASCII source (utf-8 byte offsets)', () => {

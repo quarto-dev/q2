@@ -13,6 +13,20 @@
 /** Current schema version for IndexDocument. */
 export const CURRENT_SCHEMA_VERSION = 3;
 
+/**
+ * MIME type stamped on a legacy engine-capture binary doc (the gzipped
+ * `EngineCapture[]`). Mirrors `CAPTURE_MIME_TYPE` in `quarto-hub`'s `resource.rs`.
+ */
+export const CAPTURE_MIME_TYPE = 'application/x-engine-capture+gzip';
+
+/**
+ * MIME type stamped on an engine-record binary doc (the gzipped coalesced
+ * execution record, EXR-13). Mirrors `RECORD_MIME_TYPE` in `quarto-hub`'s
+ * `resource.rs`. For tests and tooling: the render path never branches on it,
+ * because the payload is dispatched by shape in Rust.
+ */
+export const RECORD_MIME_TYPE = 'application/x-engine-record+gzip';
+
 /** Current schema version for ProjectSetDocument. */
 export const CURRENT_PROJECT_SET_SCHEMA_VERSION = 1;
 
@@ -31,7 +45,9 @@ export interface ActorIdentity {
  *
  * Stored in the `captures` sidecar map (V2+) keyed by the same path used
  * in `files`. `captureDocId` points to a separate Automerge document
- * holding the serialized `EngineCapture`. The other fields are surface
+ * holding either the serialized `EngineCapture[]` ({@link CAPTURE_MIME_TYPE}) or
+ * an engine execution record ({@link RECORD_MIME_TYPE}), never both for one path.
+ * Consumers treat the bytes as opaque; Rust tells the two apart. The other fields are surface
  * state consumed by the q2 preview SPA.
  *
  * `state` is reserved as a string enum (rather than a boolean `executing`)

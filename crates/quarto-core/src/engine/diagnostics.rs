@@ -31,7 +31,8 @@ const ISSUES_URL: &str = "https://github.com/quarto-dev/q2/issues";
 
 /// The diagnostic for an engine failure.
 ///
-/// `MalformedResult` maps to `Q-18-1`, `RuntimeNotFound` to `Q-18-3`. Every
+/// `MalformedResult` maps to `Q-18-1`, `RuntimeNotFound` to `Q-18-3`,
+/// `NoHandlerForLanguage` to `Q-18-5`. Every
 /// other variant currently maps to an uncoded error whose title is the
 /// variant's `Display` text — exactly what the stage produced before this
 /// seam existed — so adding a mapping here is the whole job of giving a
@@ -81,8 +82,119 @@ pub fn engine_error_diagnostic(err: &ExecutionError) -> DiagnosticMessage {
                 ))
                 .build()
         }
+        ExecutionError::NoHandlerForLanguage { engine, language } => {
+            no_runnable_kernel_diagnostic(engine, std::slice::from_ref(language), true)
+        }
         other => DiagnosticMessage::error(other.to_string()),
     }
+}
+
+/// Why an engine's returned notebook could not become an execution record (EXR-7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EngineRecordProblem {
+    /// The notebook is not a readable nbformat-4 notebook.
+    Malformed { detail: String },
+    /// The notebook has a different number of annotated units than the engine owns.
+    /// Both counts are over the engine's own units only.
+    CountMismatch { expected: usize, found: usize },
+    /// A cell names a unit id the engine does not own (or that the document lacks).
+    UnknownUnitId { id: String },
+    /// Two cells name the same unit id.
+    DuplicateUnitId { id: String },
+    /// An inline span the engine owns has no result (EXR-12). `location` is where it sits
+    /// in the author's file (`file:line`).
+    MissingSpan { location: String },
+    /// The record builder rejected the result.
+    Build { detail: String },
+}
+
+/// The diagnostic for a notebook an engine returned that cannot be turned into a record.
+///
+/// A warning, not an error: while the record is additive (before an engine flips to core
+/// presentation) the render itself is unaffected and only the record is dropped. `--strict`
+/// promotes it. Whether a problem may fail the render after an engine flips is decided in
+/// that engine's flip task. Not coded yet: `Q-18-5` to `Q-18-9` are claimed elsewhere.
+pub fn engine_record_diagnostic(engine: &str, problem: &EngineRecordProblem) -> DiagnosticMessage {
+    let what = match problem {
+        EngineRecordProblem::Malformed { detail } => {
+            format!("the notebook it returned is not readable: {detail}")
+        }
+        EngineRecordProblem::CountMismatch { expected, found } => format!(
+            "it returned {found} annotated units, but it owns {expected} units in this \
+             document"
+        ),
+        EngineRecordProblem::UnknownUnitId { id } => format!(
+            "the notebook names unit `{id}`, which is not one of the units it owns in this \
+             document"
+        ),
+        EngineRecordProblem::DuplicateUnitId { id } => {
+            format!("the notebook names unit `{id}` more than once")
+        }
+        EngineRecordProblem::MissingSpan { location } => {
+            format!("it reported no result for the inline expression at {location}, which it owns")
+        }
+        EngineRecordProblem::Build { detail } => {
+            format!("the record could not be built from its result: {detail}")
+        }
+    };
+    DiagnosticMessageBuilder::warning("Engine Execution Record Dropped")
+        .problem(format!("the `{engine}` engine ran, but {what}."))
+        .add_detail("The render is unaffected; only this engine's execution record was left out.")
+        .add_hint(format!(
+            "This is a bug in the `{engine}` engine's integration, not a problem in your \
+             document. Please report it at {ISSUES_URL}. Use `--strict` to make this stop \
+             the render."
+        ))
+        .build()
+}
+
+/// `Q-18-5`: the engine owns these languages but no installed kernel runs
+/// them. One diagnostic per document, listing every language. An error in a
+/// multi-engine document (`as_error`), where an `engine:` list means the
+/// author said who runs what; a warning otherwise, where the cells are left
+/// as written and the render continues. Both forms share the code and text.
+pub fn no_runnable_kernel_diagnostic(
+    engine: &str,
+    languages: &[String],
+    as_error: bool,
+) -> DiagnosticMessage {
+    let list = languages
+        .iter()
+        .map(|l| format!("`{l}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let builder = if as_error {
+        DiagnosticMessageBuilder::error("Owned Language Has No Runnable Kernel")
+    } else {
+        DiagnosticMessageBuilder::warning("Owned Language Has No Runnable Kernel")
+    };
+    let builder = builder.with_code("Q-18-5").problem(format!(
+        "the `{engine}` engine runs {list} cells, but no installed Jupyter kernel declares \
+         that language."
+    ));
+    let builder = if as_error {
+        builder
+    } else {
+        builder.add_detail("The cells are left as written and were not run.")
+    };
+    builder
+        .add_hint(
+            "Install a Jupyter kernel for the language (`jupyter kernelspec list` shows what \
+             is installed), name a kernel for the whole document with `jupyter: <kernel>`, \
+             or give the cell `eval: false` if it is only meant to be shown.",
+        )
+        .build()
+}
+
+/// A fence language that Quarto 2 invented and is removing. Not coded: it
+/// goes away with the alias table after one release.
+pub fn deprecated_alias_diagnostic(alias: &str, canonical: &str) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::warning("Deprecated Language Alias")
+        .problem(format!(
+            "`{{{alias}}}` cells are accepted for now, but the alias will be removed."
+        ))
+        .add_hint(format!("Write `{{{canonical}}}` instead."))
+        .build()
 }
 
 /// `Q-18-2`: the engine named an include file (`slot` is the Pandoc-style
@@ -111,6 +223,89 @@ pub fn unreadable_include_diagnostic(
              or report it at {ISSUES_URL}. Use `--strict` to make this stop the render."
         ))
         .build()
+}
+
+/// The code for every inline-expression diagnostic (EXR-3 Phase 1; `Q-18-5` to `Q-18-9`
+/// are claimed by other plans that have not landed, so the next free number is not the
+/// next unclaimed one).
+pub const INLINE_SPAN_CODE: &str = "Q-18-10";
+
+/// What went wrong with one inline expression (a brace-spelling span such as
+/// `` `{python} f(x)` ``).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InlineSpanProblem {
+    /// The kernel raised while evaluating the span. Fatal; `error: true` does not apply.
+    Raised { ename: String, evalue: String },
+    /// The kernel finished without a value: a statement such as `x = 1`. Fatal.
+    NoValue,
+    /// The kernel returned output, but nothing with a text mime type. A warning: the
+    /// span source stays in the document and the render succeeds.
+    NoUsableResult,
+    /// The span sits in a front matter value and its result cannot be written back into
+    /// the YAML string (a newline would fold to a space). Fatal; names the key.
+    FrontMatterValue { key: String, reason: String },
+}
+
+/// The one place the wording for an inline-expression problem lives (EXR-3
+/// implementer note): the answer to bd-30k2j00f would be a change here.
+///
+/// `language` and `expr` are the span's token and body; `location` is
+/// `file:line:column` when it resolves. [`InlineSpanProblem::NoUsableResult`] is a
+/// warning, the others are errors (the caller turns an error into a failed render).
+pub fn inline_span_diagnostic(
+    problem: &InlineSpanProblem,
+    language: &str,
+    expr: &str,
+    location: Option<&str>,
+) -> DiagnosticMessage {
+    let at = location.map(|l| format!(" at {l}")).unwrap_or_default();
+    let span = format!("`{{{language}}} {expr}`");
+    let builder = match problem {
+        InlineSpanProblem::Raised { ename, evalue } => {
+            DiagnosticMessageBuilder::error("Inline Expression Failed")
+                .with_code(INLINE_SPAN_CODE)
+                .problem(format!("inline expression{at} raised {ename}: {evalue}"))
+                .add_detail(format!("The expression was {span}."))
+                .add_hint(
+                    "Fix the expression, or move the computation into a code cell. \
+                     `error: true` does not apply to inline expressions.",
+                )
+        }
+        InlineSpanProblem::NoValue => DiagnosticMessageBuilder::error("Inline Expression Failed")
+            .with_code(INLINE_SPAN_CODE)
+            .problem(format!("inline expression{at} produced no value"))
+            .add_detail(format!(
+                "The expression was {span}. An inline expression must be a single \
+                 expression, not a statement such as an assignment."
+            ))
+            .add_hint("Move the statement into a code cell and refer to its value in the span."),
+        InlineSpanProblem::FrontMatterValue { key, reason } => {
+            DiagnosticMessageBuilder::error("Inline Expression Failed")
+                .with_code(INLINE_SPAN_CODE)
+                .problem(format!(
+                    "the inline expression in front matter key `{key}`{at} cannot be \
+                     written back into the front matter: {reason}"
+                ))
+                .add_detail(format!("The expression was {span}."))
+                .add_hint(
+                    "Make the expression return a single line of text, or move the \
+                     computation into the document body.",
+                )
+        }
+        InlineSpanProblem::NoUsableResult => {
+            DiagnosticMessageBuilder::warning("Inline Expression Left Unevaluated")
+                .with_code(INLINE_SPAN_CODE)
+                .problem(format!(
+                    "inline expression{at} produced no text value, so it was left as written"
+                ))
+                .add_detail(format!(
+                    "The expression was {span}. The kernel returned output, but none of it \
+                     had a text representation Quarto can place in the page."
+                ))
+                .add_hint("Make the expression return a string, a number, or a Markdown value.")
+        }
+    };
+    builder.build()
 }
 
 #[cfg(test)]
@@ -222,5 +417,95 @@ mod tests {
         assert!(text.contains("include-in-header"), "{text}");
         assert!(text.contains("/tmp/x/header.html"), "{text}");
         assert!(text.contains("No such file"), "{text}");
+    }
+
+    // ── inline-expression diagnostics (EXR-3, Q-18-10) ───────────────────
+
+    #[test]
+    fn inline_raised_is_a_coded_error_naming_span_and_location() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::Raised {
+                ename: "NameError".into(),
+                evalue: "name 'x' is not defined".into(),
+            },
+            "python",
+            "x + 1",
+            Some("doc.qmd:12:34"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Error);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains(
+                "inline expression at doc.qmd:12:34 raised NameError: name 'x' is not defined"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("`{python} x + 1`"), "{text}");
+    }
+
+    #[test]
+    fn inline_no_value_is_a_coded_error() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::NoValue,
+            "python",
+            "x = 1",
+            Some("d.qmd:3:1"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Error);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains("inline expression at d.qmd:3:1 produced no value"),
+            "{text}"
+        );
+        assert!(text.contains("`{python} x = 1`"), "{text}");
+    }
+
+    #[test]
+    fn inline_no_usable_result_is_a_coded_warning_that_does_not_fail_the_render() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::NoUsableResult,
+            "python",
+            "img",
+            Some("d.qmd:5:2"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Warning);
+        let text = diag.to_text(None);
+        assert!(text.contains("d.qmd:5:2"), "{text}");
+        assert!(text.contains("left as written"), "{text}");
+    }
+
+    #[test]
+    fn inline_front_matter_value_is_a_coded_error_naming_the_key() {
+        let diag = inline_span_diagnostic(
+            &InlineSpanProblem::FrontMatterValue {
+                key: "title".into(),
+                reason: "the value contains a newline".into(),
+            },
+            "python",
+            "f()",
+            Some("d.qmd:2:8"),
+        );
+        assert_eq!(diag.code.as_deref(), Some(INLINE_SPAN_CODE));
+        assert_eq!(diag.kind, DiagnosticKind::Error);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains("front matter key `title` at d.qmd:2:8"),
+            "{text}"
+        );
+        assert!(text.contains("the value contains a newline"), "{text}");
+    }
+
+    #[test]
+    fn inline_diagnostics_omit_the_location_when_it_does_not_resolve() {
+        let diag = inline_span_diagnostic(&InlineSpanProblem::NoValue, "r", "x <- 1", None);
+        let text = diag.to_text(None);
+        assert!(
+            text.contains("inline expression produced no value"),
+            "{text}"
+        );
+        assert!(!text.contains(" at "), "{text}");
     }
 }

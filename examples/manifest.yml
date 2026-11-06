@@ -44,3 +44,4 @@ projects:
   - lmd/08-echo
   - lmd/09-modules
   - lmd/10-project
+  - highlighting/01-user-grammar

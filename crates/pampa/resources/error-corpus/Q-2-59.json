@@ -1,232 +1,31 @@
 {
   "code": "Q-2-59",
-  "title": "Text after angle-bracket link destination",
-  "message": "An angle-bracket link destination `<...>` must be followed by `)` or a quoted title.",
+  "title": "Indented code blocks are not supported",
+  "message": "Quarto Markdown does not support 4-space indented code blocks. Use a fenced code block (```) instead, or remove the leading indentation.",
   "notes": [],
-  "hints": [
-    "Move the text inside the brackets, e.g. `![](<my file.png>)`, or put a title in double quotes: `[text](<my file.png> \"title\")`."
-  ],
   "cases": [
     {
-      "name": "image-extension-outside",
-      "description": "File extension left outside the closing `>` of an image destination.",
-      "content": "![](<my file>.png)\n",
+      "name": "basic",
+      "description": "4 leading spaces start a new block after a blank line",
+      "content": "Before.\n\n    foo\n\nAfter.\n",
       "captures": []
     },
     {
-      "name": "link-text-after-bracket",
-      "description": "Text directly after the closing `>` of a link destination.",
-      "content": "[text](<a>b>)\n",
+      "name": "tab-indent",
+      "description": "A single leading tab expands to 4 columns and triggers the same error",
+      "content": "Before.\n\n\tfoo\n\nAfter.\n",
       "captures": []
     },
     {
-      "name": "unquoted-title",
-      "description": "Unquoted word after an angle-bracket destination and a space.",
-      "content": "[text](<my file.html> title)\n",
+      "name": "more-than-four",
+      "description": "More than 4 leading spaces is the same error (CommonMark indented code is 4 or more)",
+      "content": "Before.\n\n      foo\n\nAfter.\n",
       "captures": []
     },
     {
-      "name": "image-unquoted-title",
-      "description": "Unquoted word after an angle-bracket image destination and a space.",
-      "content": "![](<my file.png> title)\n",
-      "captures": []
-    },
-    {
-      "name": "emphasis-star-text-after-bracket",
-      "description": "Text directly after `>` inside emphasis-star.",
-      "content": "a *![](<my file>.png)* b\n",
-      "captures": []
-    },
-    {
-      "name": "emphasis-star-unquoted-title",
-      "description": "Unquoted title after `> ` inside emphasis-star.",
-      "content": "a *[x](<a b> c)* b\n",
-      "captures": []
-    },
-    {
-      "name": "emphasis-underscore-text-after-bracket",
-      "description": "Text directly after `>` inside emphasis-underscore.",
-      "content": "a _![](<my file>.png)_ b\n",
-      "captures": []
-    },
-    {
-      "name": "emphasis-underscore-unquoted-title",
-      "description": "Unquoted title after `> ` inside emphasis-underscore.",
-      "content": "a _[x](<a b> c)_ b\n",
-      "captures": []
-    },
-    {
-      "name": "strong-star-text-after-bracket",
-      "description": "Text directly after `>` inside strong-star.",
-      "content": "a **![](<my file>.png)** b\n",
-      "captures": []
-    },
-    {
-      "name": "strong-star-unquoted-title",
-      "description": "Unquoted title after `> ` inside strong-star.",
-      "content": "a **[x](<a b> c)** b\n",
-      "captures": []
-    },
-    {
-      "name": "strong-underscore-text-after-bracket",
-      "description": "Text directly after `>` inside strong-underscore.",
-      "content": "a __![](<my file>.png)__ b\n",
-      "captures": []
-    },
-    {
-      "name": "strong-underscore-unquoted-title",
-      "description": "Unquoted title after `> ` inside strong-underscore.",
-      "content": "a __[x](<a b> c)__ b\n",
-      "captures": []
-    },
-    {
-      "name": "strikeout-text-after-bracket",
-      "description": "Text directly after `>` inside strikeout.",
-      "content": "a ~~![](<my file>.png)~~ b\n",
-      "captures": []
-    },
-    {
-      "name": "strikeout-unquoted-title",
-      "description": "Unquoted title after `> ` inside strikeout.",
-      "content": "a ~~[x](<a b> c)~~ b\n",
-      "captures": []
-    },
-    {
-      "name": "superscript-text-after-bracket",
-      "description": "Text directly after `>` inside superscript.",
-      "content": "a ^![](<my file>.png)^ b\n",
-      "captures": []
-    },
-    {
-      "name": "subscript-text-after-bracket",
-      "description": "Text directly after `>` inside subscript.",
-      "content": "a ~![](<my file>.png)~ b\n",
-      "captures": []
-    },
-    {
-      "name": "subscript-unquoted-title",
-      "description": "Unquoted title after `> ` inside subscript.",
-      "content": "a ~[x](<a b> c)~ b\n",
-      "captures": []
-    },
-    {
-      "name": "double-quote-text-after-bracket",
-      "description": "Text directly after `>` inside double-quote.",
-      "content": "a \"![](<my file>.png) x\" b\n",
-      "captures": []
-    },
-    {
-      "name": "double-quote-unquoted-title",
-      "description": "Unquoted title after `> ` inside double-quote.",
-      "content": "a \"[x](<a b> c) x\" b\n",
-      "captures": []
-    },
-    {
-      "name": "single-quote-text-after-bracket",
-      "description": "Text directly after `>` inside single-quote.",
-      "content": "a 'x ![](<my file>.png)' b\n",
-      "captures": []
-    },
-    {
-      "name": "single-quote-unquoted-title",
-      "description": "Unquoted title after `> ` inside single-quote.",
-      "content": "a 'x [x](<a b> c)' b\n",
-      "captures": []
-    },
-    {
-      "name": "inline-note-text-after-bracket",
-      "description": "Text directly after `>` inside inline-note.",
-      "content": "a ^[![](<my file>.png)] b\n",
-      "captures": []
-    },
-    {
-      "name": "inline-note-unquoted-title",
-      "description": "Unquoted title after `> ` inside inline-note.",
-      "content": "a ^[[x](<a b> c)] b\n",
-      "captures": []
-    },
-    {
-      "name": "highlight-span-text-after-bracket",
-      "description": "Text directly after `>` inside highlight-span.",
-      "content": "a [!! ![](<my file>.png)] b\n",
-      "captures": []
-    },
-    {
-      "name": "highlight-span-unquoted-title",
-      "description": "Unquoted title after `> ` inside highlight-span.",
-      "content": "a [!! [x](<a b> c)] b\n",
-      "captures": []
-    },
-    {
-      "name": "delete-span-text-after-bracket",
-      "description": "Text directly after `>` inside delete-span.",
-      "content": "a [-- ![](<my file>.png)] b\n",
-      "captures": []
-    },
-    {
-      "name": "delete-span-unquoted-title",
-      "description": "Unquoted title after `> ` inside delete-span.",
-      "content": "a [-- [x](<a b> c)] b\n",
-      "captures": []
-    },
-    {
-      "name": "insert-span-text-after-bracket",
-      "description": "Text directly after `>` inside insert-span.",
-      "content": "a [++ ![](<my file>.png)] b\n",
-      "captures": []
-    },
-    {
-      "name": "insert-span-unquoted-title",
-      "description": "Unquoted title after `> ` inside insert-span.",
-      "content": "a [++ [x](<a b> c)] b\n",
-      "captures": []
-    },
-    {
-      "name": "edit-comment-span-text-after-bracket",
-      "description": "Text directly after `>` inside edit-comment-span.",
-      "content": "a [>> ![](<my file>.png)] b\n",
-      "captures": []
-    },
-    {
-      "name": "edit-comment-span-unquoted-title",
-      "description": "Unquoted title after `> ` inside edit-comment-span.",
-      "content": "a [>> [x](<a b> c)] b\n",
-      "captures": []
-    },
-    {
-      "name": "link-text-text-after-bracket",
-      "description": "Text directly after `>` inside link-text.",
-      "content": "a [t ![](<my file>.png)](u) b\n",
-      "captures": []
-    },
-    {
-      "name": "link-text-unquoted-title",
-      "description": "Unquoted title after `> ` inside link-text.",
-      "content": "a [t [x](<a b> c)](u) b\n",
-      "captures": []
-    },
-    {
-      "name": "table-header-cell-text-after-bracket",
-      "description": "Text directly after `>` inside table-header-cell.",
-      "content": "| ![](<my file>.png) |\n|---|\n| x |\n",
-      "captures": []
-    },
-    {
-      "name": "table-header-cell-unquoted-title",
-      "description": "Unquoted title after `> ` inside table-header-cell.",
-      "content": "| [x](<a b> c) |\n|---|\n| x |\n",
-      "captures": []
-    },
-    {
-      "name": "table-body-cell-text-after-bracket",
-      "description": "Text directly after `>` inside table-body-cell.",
-      "content": "| a |\n|---|\n| ![](<my file>.png) |\n",
-      "captures": []
-    },
-    {
-      "name": "table-body-cell-unquoted-title",
-      "description": "Unquoted title after `> ` inside table-body-cell.",
-      "content": "| a |\n|---|\n| [x](<a b> c) |\n",
+      "name": "indented-blockquote",
+      "description": "Indented blockquote (CommonMark would treat the 4 spaces as opening an indented code block; Q2 rejects both)",
+      "content": "Before.\n\n    > Foo\n",
       "captures": []
     }
   ]

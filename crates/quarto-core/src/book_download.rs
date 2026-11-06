@@ -29,9 +29,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use quarto_error_reporting::DiagnosticMessage;
+
+use crate::pandoc_request::captures::CapturePayload;
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::SystemRuntime;
-use quarto_trace::EngineCapture;
 
 use crate::error::QuartoError;
 use crate::format::Format;
@@ -65,7 +66,7 @@ pub struct BookDownloadParams<'a> {
     /// The hub root, canonical: sidecar keys are relative to it.
     pub hub_root: &'a Path,
     /// Every sidecar entry, keyed by hub-root-relative path.
-    pub captures: &'a HashMap<String, Vec<EngineCapture>>,
+    pub captures: &'a HashMap<String, CapturePayload>,
     pub cancellation: Cancellation,
     /// Bound on each pandoc or typst child of the merge tail.
     pub child_deadline: Option<Duration>,
@@ -217,7 +218,7 @@ pub fn render_book_download(
     let captures = params.captures;
     let mut chapter_kind = |item: &BookRenderItem| {
         let none = || PartialKind::RequestMaterialized {
-            captures: Vec::new(),
+            captures: CapturePayload::Empty,
             materialize_dir: Some(materialize_dir.clone()),
         };
         let Some(file) = &item.file else {

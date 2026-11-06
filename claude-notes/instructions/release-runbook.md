@@ -359,6 +359,20 @@ section is what to know when the two interact.
   shared, and caches saved on `main` are readable by tag runs, so a
   nightly the night before a release keeps the release's caches warm.
 
+## Engine-record writer gate (EXR-13b)
+
+Execution-record capture documents ship in two releases, readers first. Release N
+carries the record reader (`parse_capture_payload`, preview splice, `hub admin`
+classification) and the writers with the gate **off**. Release N+1 flips
+`RECORD_WRITING_DEFAULT` in `crates/quarto-core/src/engine/capture_files.rs` to `true`.
+Do not flip it in the same release that first ships the reader: once a store holds
+record documents, reverting to a reader that cannot parse them strands them (they show
+as source). The hub exposes no version or capability a writer can read, so the rule is
+operational: a `provide-hub` or `q2 preview` newer than the hub it writes to must keep
+the gate off (`QUARTO_ENGINE_RECORD_WRITE=0`) until that hub is on release N. An
+operator can opt in earlier with `QUARTO_ENGINE_RECORD_WRITE=1`. Plan:
+`claude-notes/plans/2026-10-28-exr-13-hub-wire.md` (Phase D).
+
 ## Gotchas (learned the hard way in the v0.1.0 dry-run)
 
 - **Tag must equal `Cargo.toml` version** — preflight enforces it.

@@ -54,7 +54,7 @@ spaces in filenames cause friction in many other tools too.
 
 ## Related
 
-- [`Q-2-59`](Q-2-59.qmd) — text after the closing `>` of an
+- [`Q-2-60`](Q-2-60.qmd) — text after the closing `>` of an
   angle-bracket target.
 - [`Q-2-31`](Q-2-31.qmd) — inline code execution inside URLs:
   another restriction on link destination contents.

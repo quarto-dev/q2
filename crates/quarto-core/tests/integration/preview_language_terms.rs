@@ -37,7 +37,7 @@ fn preview_meta(source: &str) -> serde_json::Value {
         &mut ctx,
         runtime,
         None,
-        vec![],
+        vec![].into(),
     ))
     .expect("preview render");
     let ast: serde_json::Value = serde_json::from_str(&output.ast_json).expect("AST JSON");

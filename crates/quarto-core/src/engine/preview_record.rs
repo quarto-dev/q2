@@ -35,7 +35,8 @@ use quarto_trace::EngineCapture;
 use crate::format::Format;
 use crate::pipeline::build_html_pipeline_stages_with_options;
 use crate::project::{DocumentInfo, ProjectContext};
-use crate::stage::stages::ENGINE_CAPTURE_KIND;
+use crate::record::{Record, read_record_value};
+use crate::stage::stages::{ENGINE_CAPTURE_KIND, ENGINE_RECORD_KIND};
 use crate::stage::{
     EventLevel, LoadedSource, Pipeline, PipelineData, PipelineError, PipelineObserver,
     PipelineStage, StageContext,
@@ -52,22 +53,51 @@ use super::EngineRegistry;
 /// only the capture payload.
 struct CaptureCollector {
     captured: Arc<Mutex<Vec<EngineCapture>>>,
+    /// EXR-5: the document's coalesced execution record (one per run).
+    record: Arc<Mutex<Option<Record>>>,
 }
 
 impl CaptureCollector {
     fn new() -> Self {
         Self {
             captured: Arc::new(Mutex::new(Vec::new())),
+            record: Arc::new(Mutex::new(None)),
         }
     }
 
     fn handle(&self) -> Arc<Mutex<Vec<EngineCapture>>> {
         Arc::clone(&self.captured)
     }
+
+    fn record_handle(&self) -> Arc<Mutex<Option<Record>>> {
+        Arc::clone(&self.record)
+    }
+}
+
+/// What one capture run produced (EXR-5): the legacy per-engine captures, in
+/// execution order, and the document's coalesced execution record. The capture
+/// writers (the preview cache, the hub guest writer, `provide-hub`; the exact
+/// list is EXR-13's) take this; `record_capture` returns only `captures` for the
+/// callers that predate the record.
+#[derive(Debug, Clone, Default)]
+pub struct CaptureRun {
+    pub captures: Vec<EngineCapture>,
+    /// `None` when no engine ran.
+    pub record: Option<Record>,
 }
 
 impl PipelineObserver for CaptureCollector {
     fn on_auxiliary_data(&self, _stage: &str, _index: usize, kind: &str, data: &serde_json::Value) {
+        if kind == ENGINE_RECORD_KIND {
+            match read_record_value(data.clone()) {
+                Ok(record) => *self.record.lock().expect("record mutex poisoned") = Some(record),
+                Err(e) => tracing::warn!(
+                    "preview_record: failed to deserialize the execution record payload: {}",
+                    e
+                ),
+            }
+            return;
+        }
         if kind != ENGINE_CAPTURE_KIND {
             return;
         }
@@ -101,6 +131,11 @@ impl PipelineObserver for CaptureCollector {
     // VFSes) that cannot see this machine's disk — ask the stage to
     // embed supporting-file bytes in the capture payload.
     fn wants_engine_capture_files(&self) -> bool {
+        true
+    }
+
+    // EXR-5: the preview and hub writers carry the record (EXR-13, EXR-14).
+    fn wants_execution_record(&self) -> bool {
         true
     }
 }
@@ -142,6 +177,20 @@ pub async fn record_capture(
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<Arc<EngineRegistry>>,
 ) -> Result<Vec<EngineCapture>, PipelineError> {
+    record_capture_run(path, project, runtime, engine_registry)
+        .await
+        .map(|run| run.captures)
+}
+
+/// [`record_capture`] with the document's execution record too (EXR-5): the
+/// same pipeline, the same captures, plus the coalesced record the engine stage
+/// emitted (`None` when no engine ran).
+pub async fn record_capture_run(
+    path: &std::path::Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+    engine_registry: Option<Arc<EngineRegistry>>,
+) -> Result<CaptureRun, PipelineError> {
     let content = runtime
         .file_read(path)
         .map_err(|e| PipelineError::other(format!("Failed to read {}: {}", path.display(), e)))?;
@@ -153,6 +202,7 @@ pub async fn record_capture(
 
     let collector = CaptureCollector::new();
     let captured = collector.handle();
+    let recorded = collector.record_handle();
 
     let mut ctx = StageContext::new(runtime, format, project.clone(), document)?
         .with_observer(Arc::new(collector));
@@ -172,8 +222,9 @@ pub async fn record_capture(
 
     let _final_data = pipeline.run(input, &mut ctx).await?;
 
-    let mut slot = captured.lock().expect("capture mutex poisoned");
-    Ok(std::mem::take(&mut *slot))
+    let captures = std::mem::take(&mut *captured.lock().expect("capture mutex poisoned"));
+    let record = recorded.lock().expect("record mutex poisoned").take();
+    Ok(CaptureRun { captures, record })
 }
 
 /// Build the staleness-check sub-pipeline: every stage before
@@ -211,6 +262,32 @@ pub async fn compute_input_qmd(
     project: &ProjectContext,
     runtime: Arc<dyn SystemRuntime>,
 ) -> Result<Vec<u8>, PipelineError> {
+    compute_source_inputs(path, project, runtime)
+        .await
+        .map(|inputs| inputs.input_qmd)
+}
+
+/// What the engine stage reads from the source (EXR-5): the canonical QMD bytes
+/// of [`compute_input_qmd`] and the merged document metadata as the record's
+/// document hash reads it (`ExecutionContext::document_metadata_json`).
+#[derive(Debug, Clone, Default)]
+pub struct SourceInputs {
+    pub input_qmd: Vec<u8>,
+    pub metadata: std::collections::BTreeMap<String, serde_json::Value>,
+    /// The pre-sugaring snapshot of the same run: the author's text of each braced block, so
+    /// the staleness check hashes units the way the record writer did (EXR-15).
+    pub sugared_blocks: Vec<crate::record::SugaredBlock>,
+}
+
+/// [`compute_input_qmd`] plus the merged metadata, from one pre-engine run.
+/// `provide-hub` calls it on the overlay-free runtime to store the source's
+/// staleness key and recompute the record's hashes without the `-M` overlay
+/// (`record::rehash_record`).
+pub async fn compute_source_inputs(
+    path: &std::path::Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+) -> Result<SourceInputs, PipelineError> {
     let content = runtime
         .file_read(path)
         .map_err(|e| PipelineError::other(format!("Failed to read {}: {}", path.display(), e)))?;
@@ -234,6 +311,15 @@ pub async fn compute_input_qmd(
         )
     })?;
 
+    // The merged metadata, lowered as `EngineExecutionStage` lowers it for the
+    // engines (before masking, which rewrites spans in front-matter values).
+    let metadata = match serde_json::to_value(crate::project::document_metadata_to_ts_map(
+        &doc_ast.ast.meta,
+    )) {
+        Ok(serde_json::Value::Object(map)) => map.into_iter().collect(),
+        _ => std::collections::BTreeMap::new(),
+    };
+
     // nested-cell-masking (spec § "The engine capture — asymmetric, by
     // necessity" / `compute_input_qmd`'s three-consumer table): these bytes
     // must match what `EngineExecutionStage` hands the engine as
@@ -242,13 +328,17 @@ pub async fn compute_input_qmd(
     // cache key in `cache.rs`) both want masked bytes; only
     // `write_review_file` (`quarto-hub-provider/src/execute.rs`) unmasks,
     // and it does so itself after calling this function.
-    crate::engine::nested_cell_mask::mask(&mut doc_ast.ast);
+    crate::engine::nested_cell_mask::mask_document(&mut doc_ast.ast);
 
     let mut buf = Vec::new();
     pampa::writers::qmd::write(&doc_ast.ast, &mut buf).map_err(|diagnostics| {
         PipelineError::stage_error_with_diagnostics("preview-record/compute-input-qmd", diagnostics)
     })?;
-    Ok(buf)
+    Ok(SourceInputs {
+        input_qmd: buf,
+        metadata,
+        sugared_blocks: std::mem::take(&mut ctx.sugared_blocks),
+    })
 }
 
 #[cfg(test)]
@@ -600,6 +690,52 @@ mod tests {
             "compute_input_qmd must yield the same (masked) bytes the engine \
              receives, even for docs with a display block"
         );
+    }
+
+    /// EXR-2 decision 11: the stage masks spans in front-matter values the
+    /// document does not own (here a `_quarto.yml` value), so
+    /// `compute_input_qmd` must too, or the staleness compare and the cache key
+    /// would see different bytes than the engine does.
+    #[tokio::test]
+    async fn compute_input_qmd_masks_foreign_front_matter_spans() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        std::fs::write(
+            dir.path().join("_quarto.yml"),
+            "project:\n  type: default\nsubtitle: \"proj `{python} 2`\"\n",
+        )
+        .unwrap();
+        let path = dir.path().join("doc.qmd");
+        std::fs::write(
+            &path,
+            "---\nengine: test-passthrough\ntitle: \"own `{python} 1`\"\n---\n\n```{test-passthrough}\nSENTINEL\n```\n",
+        )
+        .unwrap();
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let project = ProjectContext::discover(dir.path(), runtime.as_ref()).expect("discover");
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(PassthroughTestEngine));
+        let captures = record_capture(&path, &project, runtime.clone(), Some(Arc::new(registry)))
+            .await
+            .expect("record_capture");
+        let capture = captures.first().expect("capture present");
+
+        let computed = String::from_utf8(
+            compute_input_qmd(&path, &project, runtime)
+                .await
+                .expect("compute_input_qmd"),
+        )
+        .unwrap();
+
+        assert!(
+            computed.contains("`q2-nested-executable {python} 2`"),
+            "the project's span must be masked:\n{computed}"
+        );
+        assert!(
+            computed.contains("own `{python} 1`"),
+            "the document's own span must not be:\n{computed}"
+        );
+        assert_eq!(computed, capture.input_qmd);
     }
 
     #[tokio::test]

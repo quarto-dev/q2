@@ -1321,8 +1321,8 @@ module.exports = grammar({
         // code blocks. The scanner emits this token when leftover indentation
         // (after block-quote / list-item matchers consume their share) is >= 4
         // at a block-start position, so the parser can raise the user-facing
-        // error Q-2-35 ("Indented code blocks are not supported",
-        // see crates/pampa/resources/error-corpus/Q-2-35.json) suggesting a
+        // error Q-2-59 ("Indented code blocks are not supported",
+        // see crates/pampa/resources/error-corpus/Q-2-59.json) suggesting a
         // fenced code block. Emission site: scanner.c,
         // EMIT_TOKEN(INDENTED_CODE_BLOCK_DISALLOWED).
         // See CONTRIBUTING.md "Known limitations" for the full list.

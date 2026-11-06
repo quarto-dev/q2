@@ -38,6 +38,8 @@ tree-sitter-lua = "0.5"
 # lmd: Lua plus `{= markdown =}` fragments (bd-76ogq4ew); the vendored
 # grammar in this workspace.
 tree-sitter-lmd.workspace = true
+# qmd (GH #1081): the composite for `qmd` / `markdown` / `md` blocks.
+tree-sitter-qmd.workspace = true
 tree-sitter-rust = "0.24"
 
 # Native-only: wasmtime-backed user-grammar loader. The `wasm` feature on

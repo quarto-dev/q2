@@ -1,0 +1,48 @@
+---
+params:
+  run: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width = 4, fig.process = function(x) x)
+knitr::opts_template$set(small = list(fig.height = 2, echo = TRUE))
+knitr::opts_hooks$set(fig.width = function(options) {
+  options$fig.height <- options$fig.width / 2
+  options
+})
+```
+
+```{r c_inherit}
+1 + 1
+```
+
+```{r c_header_wins, echo=TRUE}
+2 + 2
+```
+
+```{r c_template, opts.label='small'}
+3 + 3
+```
+
+```{r c_ref, ref.label='c_inherit'}
+```
+
+```{r c_params, eval=params$run}
+stop("not run")
+```
+
+```{r c_mid_change, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r c_after_mid_change}
+4 + 4
+```
+
+```{r c_yaml_names}
+#| fig-width: 5
+#| fig-cap: "A yaml cap"
+#| code-fold: true
+#| layout-ncol: 2
+plot(1:3)
+```

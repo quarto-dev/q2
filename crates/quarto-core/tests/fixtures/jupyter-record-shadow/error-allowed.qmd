@@ -1,0 +1,9 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+#| error: true
+raise ValueError("bad")
+```

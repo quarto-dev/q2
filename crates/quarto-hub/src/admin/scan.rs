@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use automerge::Automerge;
 use samod::storage::{Storage, StorageKey};
 
-use super::classify::{DocKind, classify, referenced_doc_ids};
+use super::classify::{DocKind, capture_payload_kind, classify, referenced_doc_ids};
 use super::manifest::{
     CandidateDoc, CandidateMeta, KindStats, MANIFEST_VERSION, ReportedDoc, ScanManifest,
 };
@@ -358,6 +358,7 @@ pub async fn scan<S: Storage>(
     let now = chrono::Utc::now();
 
     let mut inventory: BTreeMap<String, KindStats> = BTreeMap::new();
+    let mut capture_inventory: BTreeMap<String, KindStats> = BTreeMap::new();
     let mut candidates = Vec::new();
     let mut not_collectible = Vec::new();
 
@@ -365,6 +366,13 @@ pub async fn scan<S: Storage>(
         let stats = inventory.entry(d.kind.as_str().to_string()).or_default();
         stats.count += 1;
         stats.bytes += d.size_bytes;
+        if d.kind == DocKind::EngineCapture {
+            let stats = capture_inventory
+                .entry(capture_payload_kind(&d.doc).to_string())
+                .or_default();
+            stats.count += 1;
+            stats.bytes += d.size_bytes;
+        }
 
         if live.contains(&d.doc_id) {
             continue;
@@ -420,6 +428,7 @@ pub async fn scan<S: Storage>(
         older_than_days: opts.older_than_days,
         include_unstamped: opts.include_unstamped,
         inventory,
+        capture_inventory,
         candidates,
         not_collectible,
     }
@@ -610,6 +619,91 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn records_and_captures_scan_alike_and_count_separately() {
+        use crate::resource::create_record_document_at;
+        let record_at = |at: &str| {
+            create_record_document_at(
+                b"gz",
+                &CaptureDocMeta {
+                    source_path: "a.qmd".into(),
+                    engines: vec!["jupyter".into()],
+                },
+                at,
+            )
+            .unwrap()
+        };
+        let storage = InMemoryStorage::new();
+        put_doc(
+            &storage,
+            "idx1",
+            &mut index_doc(&[], &[("a.qmd", "recLive")]),
+        )
+        .await;
+        put_doc(
+            &storage,
+            "recLive",
+            &mut record_at("2020-01-01T00:00:00+00:00"),
+        )
+        .await;
+        put_doc(
+            &storage,
+            "recOrphan",
+            &mut record_at("2020-01-01T00:00:00+00:00"),
+        )
+        .await;
+        put_doc(&storage, "capOrphan", &mut old_capture()).await;
+        put_doc(
+            &storage,
+            "capUnstamped",
+            &mut create_binary_document(b"gz", CAPTURE_MIME_TYPE).unwrap(),
+        )
+        .await;
+        put_doc(
+            &storage,
+            "png",
+            &mut create_binary_document(b"png", "image/png").unwrap(),
+        )
+        .await;
+        let ids = [
+            "idx1",
+            "recLive",
+            "recOrphan",
+            "capOrphan",
+            "capUnstamped",
+            "png",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        let m = scan(&storage, &ids, "/tmp/x", &ScanOptions::default()).await;
+
+        // Only the two stamped orphans are candidates; the referenced
+        // record is live through its sidecar edge.
+        let mut cands: Vec<&str> = m.candidates.iter().map(|c| c.doc_id.as_str()).collect();
+        cands.sort_unstable();
+        assert_eq!(cands, vec!["capOrphan", "recOrphan"], "manifest: {m:#?}");
+        // The binary is reported, never collected.
+        assert!(m.not_collectible.iter().any(|r| r.doc_id == "png"));
+        assert!(!cands.contains(&"png"));
+        // DocKind string is shared; the split is by meta.kind, and a doc
+        // with no meta counts as legacy.
+        assert_eq!(m.inventory["engine-capture"].count, 4);
+        assert_eq!(m.capture_inventory["engine-record"].count, 2);
+        assert_eq!(m.capture_inventory["engine-capture"].count, 2);
+        let summary = human_summary(&m);
+        assert!(summary.contains("engine-record"), "{summary}");
+    }
+
+    #[test]
+    fn manifest_without_capture_inventory_still_parses() {
+        // Manifests written before EXR-13 have no `captureInventory`.
+        let json = r#"{"manifestVersion":1,"tool":"t","scannedAt":"x","dataDir":"d",
+            "olderThanDays":30,"includeUnstamped":false,"inventory":{},
+            "candidates":[],"notCollectible":[]}"#;
+        let m: ScanManifest = serde_json::from_str(json).unwrap();
+        assert!(m.capture_inventory.is_empty());
+    }
+
+    #[tokio::test]
     async fn include_unstamped_makes_legacy_capture_a_candidate() {
         let (storage, ids) = fixture_storage().await;
         let m = scan(
@@ -741,6 +835,12 @@ pub fn human_summary(m: &ScanManifest) -> String {
     for (kind, stats) in &m.inventory {
         out.push_str(&format!(
             "  {kind:<16} {:>6} docs  {:>12} bytes\n",
+            stats.count, stats.bytes
+        ));
+    }
+    for (kind, stats) in &m.capture_inventory {
+        out.push_str(&format!(
+            "    of which {kind:<14} {:>6} docs  {:>12} bytes\n",
             stats.count, stats.bytes
         ));
     }

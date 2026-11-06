@@ -38,12 +38,14 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
+use quarto_core::engine::preview_record::{
+    CaptureRun, SourceInputs, compute_input_qmd, compute_source_inputs, record_capture_run,
+};
 use quarto_core::overlay_runtime::RenderOverlay;
 use quarto_core::project::ProjectContext;
+use quarto_core::record::{overlay_difference, rehash_record};
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
-use quarto_trace::EngineCapture;
 use samod::Repo;
 
 use crate::ProviderError;
@@ -329,32 +331,37 @@ impl Provider {
 
         // Decision #4: always a fresh run (uncached record_capture) — code may
         // have side effects and we don't prove it side-effect-free.
-        let mut captures =
-            record_capture(&abs_path, &project, runtime.clone(), self.registry.clone())
+        let mut run =
+            record_capture_run(&abs_path, &project, runtime.clone(), self.registry.clone())
                 .await
                 .map_err(|e| format!("engine pipeline failed: {e}"))?;
-        if captures.is_empty() {
+        if run.captures.is_empty() {
             return Err("engine produced no capture (no code cells?)".to_string());
         }
-        if self.overlay.is_some() {
+        if let Some(overlay) = &self.overlay {
             // F8-D9 / 8.3c: the staleness key (the first capture's `input_qmd`)
             // describes the *source*, not this provider's execution settings.
             // Recorded under a `-M`, it would embed the overlay's metadata and
             // differ from the viewer's overlay-free recompute, marking every
             // capture stale. Store the overlay-free bytes; execution and the
-            // outputs above still saw the overlay.
+            // outputs above still saw the overlay. The execution record's
+            // document hashes are recomputed the same way (EXR-5).
             let source_project = ProjectContext::discover(&abs_path, plain.as_ref())
                 .map_err(|e| format!("project discovery failed: {e}"))?;
-            let source_qmd = compute_input_qmd(&abs_path, &source_project, plain)
+            let source = compute_source_inputs(&abs_path, &source_project, plain)
                 .await
-                .map_err(|e| format!("computing the source input_qmd failed: {e}"))?;
-            captures[0].input_qmd = String::from_utf8(source_qmd)
-                .map_err(|e| format!("source input_qmd is not UTF-8: {e}"))?;
+                .map_err(|e| format!("computing the source inputs failed: {e}"))?;
+            run = overlay_free_run(run, &source, overlay)?;
         }
 
-        let new_doc_id = write_capture_doc(&self.repo, rel_path, &captures)
-            .await
-            .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
+        let new_doc_id = write_capture_doc(
+            &self.repo,
+            rel_path,
+            &run,
+            quarto_core::engine::capture_files::record_writing_enabled(),
+        )
+        .await
+        .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
         let updated = CaptureRef {
             capture_doc_id: new_doc_id.clone(),
@@ -486,23 +493,62 @@ fn is_safe_relative(rel_path: &str) -> bool {
         && path.components().any(|c| matches!(c, Component::Normal(_)))
 }
 
-/// Gzip the captures to JSON and store them as a capture binary automerge doc.
-/// Mirror of `quarto-preview`'s `write_capture_doc` (kept in sync via the
-/// shared [`CAPTURE_MIME_TYPE`] and the shared wire-format helper
-/// `gzip_captures` — serialize + gzip + 10MB size warning, bd-qbhp2cvv).
+/// Make a capture run executed under a `-M` overlay describe the source (EXR-5;
+/// F8-D9): the first capture's `input_qmd` becomes the overlay-free bytes, and
+/// the record's unit hashes, document hashes and `quarto_execution_hash` become
+/// the overlay-free ones, with the overlay's execution-relevant keys noted in
+/// `quarto_overlay`. The outputs are untouched: they were produced under the
+/// overlay, which is the point of `-M`.
+pub fn overlay_free_run(
+    mut run: CaptureRun,
+    source: &SourceInputs,
+    overlay: &RenderOverlay,
+) -> Result<CaptureRun, String> {
+    if let Some(first) = run.captures.first_mut() {
+        first.input_qmd = String::from_utf8(source.input_qmd.clone())
+            .map_err(|e| format!("source input_qmd is not UTF-8: {e}"))?;
+    }
+    if let Some(record) = run.record.as_mut() {
+        rehash_record(record, &source.metadata)
+            .map_err(|e| format!("recomputing the record's overlay-free hashes failed: {e}"))?;
+        let noted = overlay
+            .metadata
+            .as_ref()
+            .map(|m| overlay_difference(m, record))
+            .unwrap_or_default();
+        record.metadata.quarto_overlay = (!noted.is_empty()).then_some(noted);
+    }
+    Ok(run)
+}
+
+/// Encode the run (a record doc when the writer gate is on and the run has a
+/// record, else a legacy capture doc) and store it as a binary automerge doc.
+/// Mirror of `quarto-preview`'s `write_capture_doc`; both go through
+/// `encode_capture_payload` (serialize + gzip + 10MB size warning, bd-qbhp2cvv)
+/// and `create_engine_payload_document`, behind the one gate
+/// `record_writing_enabled` (EXR-13b; the caller passes the gate).
 async fn write_capture_doc(
     repo: &Repo,
     rel_path: &str,
-    captures: &[EngineCapture],
+    run: &CaptureRun,
+    record_gate: bool,
 ) -> Result<String, ProviderError> {
-    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
-        .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
+    let encoded = quarto_core::engine::capture_files::encode_capture_payload(
+        &run.captures,
+        run.record.as_ref(),
+        record_gate,
+    )
+    .map_err(|e| ProviderError::Protocol(format!("serialize/gzip captures: {e}")))?;
     let meta = quarto_hub::resource::CaptureDocMeta {
         source_path: rel_path.to_string(),
-        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+        engines: encoded.engines,
     };
-    let doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
-        .map_err(|e| ProviderError::Protocol(format!("binary doc: {e}")))?;
+    let doc = quarto_hub::resource::create_engine_payload_document(
+        encoded.is_record,
+        &encoded.gzipped,
+        &meta,
+    )
+    .map_err(|e| ProviderError::Protocol(format!("binary doc: {e}")))?;
     let handle = repo
         .create(doc)
         .await
@@ -513,6 +559,101 @@ async fn write_capture_doc(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// EXR-13b writer gate: gate off writes a legacy capture doc even when the run
+    /// has a record; gate on writes a record doc.
+    async fn written_kind(gate: bool) -> (String, String) {
+        use automerge::ReadDoc;
+        use quarto_core::record::read_record;
+        let record = read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(record),
+        };
+        let repo = Repo::build_tokio().load().await;
+        let id = write_capture_doc(&repo, "doc.qmd", &run, gate)
+            .await
+            .unwrap();
+        let handle = repo
+            .find(id.parse().unwrap())
+            .await
+            .unwrap()
+            .expect("doc exists");
+        handle.with_document(|doc| {
+            let get = |k: &str| {
+                doc.get(automerge::ROOT, k)
+                    .unwrap()
+                    .and_then(|(v, _)| v.into_string().ok())
+                    .unwrap_or_default()
+            };
+            let kind = quarto_hub::resource::read_capture_meta(doc)
+                .and_then(|m| m.kind)
+                .unwrap_or_default();
+            (get("mimeType"), kind)
+        })
+    }
+
+    #[tokio::test]
+    async fn writer_gate_off_writes_a_legacy_capture_doc() {
+        let (mime, kind) = written_kind(false).await;
+        assert_eq!(mime, quarto_hub::resource::CAPTURE_MIME_TYPE);
+        assert_eq!(kind, "engine-capture");
+    }
+
+    #[tokio::test]
+    async fn writer_gate_on_writes_a_record_doc() {
+        let (mime, kind) = written_kind(true).await;
+        assert_eq!(mime, quarto_hub::resource::RECORD_MIME_TYPE);
+        assert_eq!(kind, "engine-record");
+    }
+
+    /// EXR-15: the record doc's `meta.engines` is the record's engines list, in order, and the
+    /// payload parses back to an equal record.
+    #[tokio::test]
+    async fn record_doc_meta_and_payload_match_the_record() {
+        use automerge::ReadDoc;
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        let expected_engines: Vec<String> = record
+            .metadata
+            .quarto_engines
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(record.clone()),
+        };
+        let repo = Repo::build_tokio().load().await;
+        let id = write_capture_doc(&repo, "doc.qmd", &run, true)
+            .await
+            .unwrap();
+        let handle = repo.find(id.parse().unwrap()).await.unwrap().unwrap();
+        let (engines, gzipped) = handle.with_document(|doc| {
+            let engines = quarto_hub::resource::read_capture_meta(doc)
+                .map(|m| m.engines)
+                .unwrap_or_default();
+            let content = doc
+                .get(automerge::ROOT, "content")
+                .unwrap()
+                .and_then(|(v, _)| v.into_bytes().ok())
+                .unwrap();
+            (engines, content)
+        });
+        assert_eq!(engines, expected_engines);
+        let parsed =
+            quarto_core::pandoc_request::captures::parse_capture_payload(Some(&gzipped), &id)
+                .unwrap();
+        let quarto_core::pandoc_request::captures::CapturePayload::Record(back) = parsed else {
+            panic!("expected a record payload");
+        };
+        assert_eq!(*back, record);
+    }
 
     #[test]
     fn is_safe_relative_guards_traversal() {

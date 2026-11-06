@@ -1,6 +1,6 @@
 ---
-title: "Text after angle-bracket link destination"
-description: "An angle-bracket link destination `<...>` was followed by something other than `)` or a quoted title."
+title: "Indented code blocks are not supported"
+description: "A line indented four or more spaces (or a tab) would start an indented code block in CommonMark, which Quarto Markdown does not support."
 code: Q-2-59
 subsystem: markdown
 status: stub
@@ -9,49 +9,40 @@ categories:
   - markdown
 ---
 
-# `Q-2-59` — Text after angle-bracket link destination
+# `Q-2-59` — Indented code blocks are not supported
 
-> An angle-bracket link destination `<...>` must be followed by `)` or
-> a quoted title.
+> Quarto Markdown does not support 4-space indented code blocks. Use a
+> fenced code block (```` ``` ````) instead, or remove the leading
+> indentation.
 
 ## What this means
 
-A link or image target can be wrapped in angle brackets so that it may
-contain spaces:
+In CommonMark, a paragraph-level line indented four or more spaces (or
+one tab) starts an *indented code block*. Quarto Markdown has no such
+block: only fenced code blocks are code. Rather than silently turning
+indented text into code, the parser reports this error.
 
-```markdown
-![](<my file.png>)
-[text](<my file.html> "a title")
-```
-
-Once the closing `>` is reached, the target is complete. Only the
-closing `)`, or whitespace and a title in double quotes, may follow it.
+This code was previously reported as `Q-2-35`, which now means only an
+invalid list-table structure (see [`Q-2-35`](Q-2-35.qmd)).
 
 ## Why this happens
 
-- **Part of the path left outside the brackets**, often a file
-  extension:
-
-  ```markdown
-  ![](<my file>.png)
-  ```
-
-- **A title without quotes:**
-
-  ```markdown
-  [text](<my file.html> a title)
-  ```
+- **Documents ported from Pandoc or CommonMark** that use indentation
+  to mark code.
+- **Accidental indentation**, such as a pasted block or a paragraph
+  continued with four leading spaces after a blank line.
+- **Writer output** that indents a continuation, for example the second
+  paragraph of a footnote.
 
 ## How to fix
 
-Keep the whole path inside the brackets, and quote any title:
+Use a fenced code block:
 
-```markdown
-![](<my file.png>)
-[text](<my file.html> "a title")
+````markdown
 ```
+foo
+```
+````
 
-## Related errors
-
-- [`Q-2-33`](Q-2-33.qmd) — spaces in a link target written without
-  angle brackets.
+If the indentation was accidental, remove it so the line starts at
+column zero, or at most three spaces in.

@@ -1,0 +1,37 @@
+[
+  {
+    "code": "1",
+    "kind": "span",
+    "lang": "python",
+    "line": 1,
+    "span_index": 0
+  },
+  {
+    "code": "a\n",
+    "index": 0,
+    "kind": "cell",
+    "lang": "python",
+    "line": 3
+  },
+  {
+    "code": "2",
+    "kind": "span",
+    "lang": "foo",
+    "line": 7,
+    "span_index": 1
+  },
+  {
+    "code": "b\n",
+    "index": 1,
+    "kind": "cell",
+    "lang": "r",
+    "line": 9
+  },
+  {
+    "code": "3",
+    "kind": "span",
+    "lang": "python",
+    "line": 13,
+    "span_index": 2
+  }
+]

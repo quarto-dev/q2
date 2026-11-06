@@ -27,7 +27,8 @@ live alongside your project. Drop them under
   names to syntactic patterns. Its classes flow through to the HTML
   output as `hl-<capture-with-dots-as-hyphens>` spans.
 
-Optional extras (`injections.scm`, `locals.scm`) are read if present.
+Other files in the folder are allowed but not read: `injections.scm` and
+`locals.scm` are not loaded for user grammars yet.
 
 This document includes [tree-sitter-toml v0.7.0](https://github.com/tree-sitter-grammars/tree-sitter-toml)
 under `_quarto/grammars/toml/`, then uses it to highlight a plain
@@ -38,6 +39,6 @@ name = "example"
 count = 42
 ```
 
-TOML isn't in the 14 built-in languages, but the user grammar takes
+TOML isn't one of the built-in languages, but the user grammar takes
 priority on class collision anyway — so you can override a built-in
 the same way you'd add a new one.
