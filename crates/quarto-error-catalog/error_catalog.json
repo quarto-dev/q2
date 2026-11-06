@@ -1987,6 +1987,13 @@
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-10",
     "since_version": "99.9.9"
   },
+  "Q-18-11": {
+    "subsystem": "engine",
+    "title": "Image Output Could Not Be Used",
+    "message_template": "A code cell's image output (a PNG, JPEG or SVG a Jupyter kernel returned) could not be used: its data was not valid base64, or the figure file could not be written. The figure is missing from the page, which shows the output's text representation, or a placeholder when it has none. The render continues.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-11",
+    "since_version": "99.9.9"
+  },
   "Q-19-1": {
     "subsystem": "image",
     "title": "Plot Document Not Found",

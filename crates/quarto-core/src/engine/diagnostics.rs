@@ -24,7 +24,13 @@ use std::path::Path;
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 
+use quarto_source_map::SourceInfo;
+
 use super::ExecutionError;
+use super::context::ExecutionContext;
+use super::units::{InlineUnit, Unit};
+use crate::presenter::cell::describe_location;
+use crate::presenter::document::PresentNote;
 
 /// Where users report engine-integration bugs.
 const ISSUES_URL: &str = "https://github.com/quarto-dev/q2/issues";
@@ -308,6 +314,82 @@ pub fn inline_span_diagnostic(
     builder.build()
 }
 
+/// The code for an image output the presenter could not use.
+pub const IMAGE_UNUSABLE_CODE: &str = "Q-18-11";
+
+/// `Q-18-11`: a cell's image output (`mime`) could not be written, so the figure is
+/// missing from the page. The render continues, so this is a warning; `--strict`
+/// promotes it. `location` is `file:line:column` of the cell when it resolves.
+pub fn image_unusable_diagnostic(
+    mime: &str,
+    reason: &str,
+    location: Option<&str>,
+) -> DiagnosticMessage {
+    let at = location.map(|l| format!(" at {l}")).unwrap_or_default();
+    DiagnosticMessageBuilder::warning("Image Output Could Not Be Used")
+        .with_code(IMAGE_UNUSABLE_CODE)
+        .problem(format!(
+            "the `{mime}` output of the code cell{at} could not be used: {reason}"
+        ))
+        .add_detail(
+            "The figure is missing from the page; the output shows the text \
+             representation the kernel sent, or a placeholder when it sent none.",
+        )
+        .add_hint(format!(
+            "Re-run the render; if it recurs, the kernel may be sending a malformed image. \
+             Report it at {ISSUES_URL} with the kernel's name. Use `--strict` to make this \
+             stop the render."
+        ))
+        .build()
+}
+
+/// The diagnostic for a span problem, located at the span's expression.
+pub(crate) fn span_diagnostic(
+    problem: &InlineSpanProblem,
+    span: &InlineUnit,
+    ctx: &ExecutionContext,
+) -> quarto_error_reporting::DiagnosticMessage {
+    let expr_source = SourceInfo::substring(
+        ctx.source_info.clone(),
+        span.code_start,
+        span.code_start + span.code.len(),
+    );
+    let location = describe_location(&expr_source, 0, ctx);
+    inline_span_diagnostic(problem, &span.lang, &span.code, location.as_deref())
+}
+
+/// A presenter note as the engine's warning: a span whose value has no usable text
+/// stays in the document (`Q-18-10`, as before the flip).
+pub(crate) fn note_diagnostic(
+    note: &PresentNote,
+    units: &[Unit],
+    ctx: &ExecutionContext,
+) -> quarto_error_reporting::DiagnosticMessage {
+    match note {
+        PresentNote::InlineNoUsableValue { unit } => match units.get(*unit) {
+            Some(Unit::Inline(span)) => {
+                span_diagnostic(&InlineSpanProblem::NoUsableResult, span, ctx)
+            }
+            _ => inline_span_diagnostic(&InlineSpanProblem::NoUsableResult, "?", "?", None),
+        },
+        PresentNote::ImageUnusable { unit, mime, reason } => {
+            let location = match units.get(*unit) {
+                Some(Unit::Cell(block)) => describe_location(
+                    &SourceInfo::substring(
+                        ctx.source_info.clone(),
+                        block.code_start,
+                        block.code_start + block.code.len(),
+                    ),
+                    0,
+                    ctx,
+                ),
+                _ => None,
+            };
+            image_unusable_diagnostic(mime, reason, location.as_deref())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,5 +589,20 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains(" at "), "{text}");
+    }
+
+    #[test]
+    fn image_unusable_is_a_coded_warning_that_names_the_cell_and_the_reason() {
+        let d = image_unusable_diagnostic(
+            "image/png",
+            "the payload is not valid base64",
+            Some("a.qmd:7:1"),
+        );
+        assert_eq!(d.code.as_deref(), Some("Q-18-11"));
+        assert_eq!(d.kind, DiagnosticKind::Warning);
+        let text = d.to_text(None);
+        assert!(text.contains("a.qmd:7:1"), "{text}");
+        assert!(text.contains("image/png"), "{text}");
+        assert!(text.contains("not valid base64"), "{text}");
     }
 }

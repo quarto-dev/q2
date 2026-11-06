@@ -24,7 +24,7 @@ differences (error-abort policy, `begin_cell` ordering relative to execution) ar
 here and are covered by the `#[ignore]`d kernel tests in `tests/integration/jupyter_integration.rs`.
 
 Known pinned oddities (documented, not fixed): widget payloads are silently dropped; an
-undecodable image with no `text/plain` renders `[Image output]`.
+undecodable image with no `text/plain` renders the escaped placeholder `\[Image output\]`.
 
 Changed on purpose (EXR-8 B3, 2026-11-01): `text/markdown` and math `text/latex` were pinned
 as silently dropped. The TS presenter emits them as markdown in a `.cell-output-markdown`
