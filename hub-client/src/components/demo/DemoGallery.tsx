@@ -9,6 +9,7 @@ import MonacoDemo from './MonacoDemo';
 import PreviewDemo from './PreviewDemo';
 import ProjectDemo from './ProjectDemo';
 import RadioTower from './RadioTower';
+import CanvasDemo from './CanvasDemo';
 import { QuartoFolderIcon } from '../icons';
 import './DemoGallery.css';
 
@@ -43,6 +44,12 @@ const DEMOS: Record<string, Demo> = {
     description: 'The hub-client file sidebar listing the same project, live from its index doc.',
     icon: <span className="dg-glyph"><QuartoFolderIcon size={40} /></span>,
     Component: ProjectDemo,
+  },
+  canvas: {
+    title: 'Canvas',
+    description: 'Standalone nodes on an infinite canvas: an in-memory hub document, an editable raw JSON view, and an IndexedDB store, wired by edges.',
+    icon: <span className="dg-glyph">⧉</span>,
+    Component: CanvasDemo,
   },
 };
 
