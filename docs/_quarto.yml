@@ -95,6 +95,7 @@ website:
             - guides/authoring/tables.qmd
             - guides/authoring/cross-references.qmd
             - guides/authoring/diagrams.qmd
+            - guides/authoring/code-highlighting.qmd
             - guides/authoring/shortcodes.qmd
             - guides/authoring/lmd.qmd
             - guides/authoring/lua-filters.qmd
