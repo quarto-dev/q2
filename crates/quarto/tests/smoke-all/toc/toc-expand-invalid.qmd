@@ -1,0 +1,26 @@
+---
+format:
+  html:
+    toc: true
+    toc-expand: sideways
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Invalid `toc-expand` value"
+      ensureHtmlElements:
+        - ["nav#TOC a.nav-link.active"]
+        - ["nav#TOC [data-toc-expanded]"]
+---
+
+bd-kr6721bn. A value `toc-expand` cannot use warns (Q-13-19) and is
+otherwise ignored: no `data-toc-expanded` attribute, so the script opens
+the table of contents to its default depth of 1.
+
+## Outer
+
+### Inner
+
+Body.
