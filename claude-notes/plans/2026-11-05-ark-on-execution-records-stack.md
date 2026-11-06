@@ -2,7 +2,7 @@
 title: 'Ark on the execution-records epic: reconcile and restack (bd-yt2o2ovt)'
 date: 2026-11-05
 description: 'What the execution-records epic already does for Jupyter versus the Ark branch (PR 1076), verified by probes on the epic build, and the ordered stack that keeps only what the epic lacks.'
-status: planned  # nothing implemented; decisions marked "owner" await Gordon; Epic B untouched
+status: planned  # nothing implemented; decided 2026-11-06: stack on the epic, Q-18-11, branch feature/ark-r-kernel; Epic B untouched
 braid:
   strand: bd-yt2o2ovt  # stays open; bd-rorntup4 stays open (Epic B)
 ---
@@ -103,11 +103,16 @@ Evidence column cites the probe rows above.
 
 # Stack
 
-New branch off the epic tip, `braid/bd-yt2o2ovt-ark-on-epic`, via
+New branch off the epic tip, with the friendly name **`feature/ark-r-kernel`**
+(decided 2026-11-06; the old remote branch `feature/bd-yt2o2ovt-ark-r-kernel`
+keeps its name). Locally the repo convention is a `braid/` branch pushed to a
+`feature/` remote name, so: local `braid/bd-yt2o2ovt-ark-r-kernel-on-epic`,
+pushed with `git push -u origin HEAD:feature/ark-r-kernel` (every later push
+repeats the refspec, then check `git ls-remote`). Create it with
 `cargo xtask switch-task bd-yt2o2ovt --from feature/execution-records-epic`
 (or `git switch -c` from `origin/feature/execution-records-epic`). No history
-rewrite, no force-push: the old branch and PR 1076 stay as they are until you
-decide. Snapshot refs already exist (`history/braid/bd-yt2o2ovt-ark-r-kernel`).
+rewrite, no force-push: the old branch and PR 1076 stay as they are until the
+new PR exists. Snapshot refs already exist (`history/braid/bd-yt2o2ovt-ark-r-kernel`).
 
 Each commit is one logical change, TDD, and gated on
 `cargo clippy -p quarto-core --all-targets -- -D warnings` plus
@@ -127,8 +132,7 @@ Each commit is one logical change, TDD, and gated on
 
 Order rationale: 1 and 2 are the behavior; 3 is test infrastructure that does
 not depend on them; 4 documents the finished behavior. 1 and 2 touch the
-presenter, which the epic owner is actively editing, so keep them small and
-tell the owner before opening the PR.
+presenter, which is active epic code, so keep them small.
 
 # Tests (TDD)
 
@@ -207,10 +211,9 @@ alone does **not** work on the epic (P4a/b: knitr runs). So:
 - **Alternative if the epic stalls:** nothing here can land on `main` alone
   without redoing the work against `text_execute.rs`, which the epic deletes.
   Not recommended.
-- **Tell the epic owner** that commit 2 touches `presenter/figures.rs`,
-  `presenter/cell.rs` and the `FigureSink` trait, and that `Q-18-11` is
-  reserved for it (and check no other branch claims it: the epic comments claim
-  `Q-18-5` to `Q-18-9`).
+- **Q-18-11 is decided** (2026-11-06): no one else needs notifying. Commit 2
+  touches `presenter/figures.rs`, `presenter/cell.rs` and the `FigureSink`
+  trait; say so in the PR description for the epic reviewers.
 
 # CI
 
@@ -224,10 +227,10 @@ drafted it.
 
 # Checklist
 
-- [ ] Owner decides: stack on the epic as proposed (new branch, new PR based on
-  the epic, PR 1076 closed later); `Q-18-11`; drop the kernel commit.
-- [ ] Notify the epic owner about the presenter files and the Q-18-11 reservation.
-- [ ] Create `braid/bd-yt2o2ovt-ark-on-epic` off `origin/feature/execution-records-epic`.
+- [x] Owner decisions (2026-11-06): stack on the epic; code `Q-18-11`; drop the
+  kernel commit; branch named `feature/ark-r-kernel`.
+- [ ] Create local `braid/bd-yt2o2ovt-ark-r-kernel-on-epic` off
+  `origin/feature/execution-records-epic` (remote name `feature/ark-r-kernel`).
 - [ ] Commit 1: write T1, see them fail on the epic, fix `decode_image`, gate.
 - [ ] Commit 2: write T2, see them fail, resolve the sink design question, add
   the catalog entry, docs page and sidebar entry, fix, gate.
