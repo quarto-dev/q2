@@ -103,6 +103,7 @@ pub mod ipynb_stored_replay;
 pub mod julia_engine_e2e;
 pub mod julia_presenter_parity;
 pub mod julia_span_conformance;
+pub mod jupyter_ark_figures;
 pub mod jupyter_inline_expressions;
 pub mod jupyter_integration;
 pub mod jupyter_kernel_cleanup;

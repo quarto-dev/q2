@@ -55,12 +55,24 @@ pub fn decode_image(mime: &str, value: &serde_json::Value) -> Option<(&'static s
     };
     let content = extract_text_content(value);
     // Q1 rule (`mdImageOutput`): SVG payloads that are literal `<svg` markup are written
-    // as text; everything else is base64 (strip the nbformat multiline newlines first).
+    // as text; everything else is base64 (whitespace-stripped, padding optional).
     let bytes: Vec<u8> = if ext == "svg" && content.trim_start().starts_with("<svg") {
         content.into_bytes()
     } else {
         use base64::Engine as _;
-        match base64::engine::general_purpose::STANDARD.decode(content.replace('\n', "")) {
+        // Lenient on purpose: kernels disagree on wrapping (nbformat `\n`, but also `\r\n`
+        // or spaces) and some (Ark) omit the trailing `=` padding. Strip all ASCII
+        // whitespace and accept padded or unpadded input.
+        const LENIENT: base64::engine::GeneralPurpose = base64::engine::GeneralPurpose::new(
+            &base64::alphabet::STANDARD,
+            base64::engine::GeneralPurposeConfig::new()
+                .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
+        );
+        let compact: String = content
+            .chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .collect();
+        match LENIENT.decode(compact) {
             Ok(bytes) => bytes,
             Err(e) => {
                 tracing::warn!(mime, error = %e, "jupyter figure: invalid base64; skipping");
@@ -307,6 +319,24 @@ mod tests {
     fn base64_newlines_are_stripped() {
         let split = format!("{}\n{}", &PNG[..20], &PNG[20..]);
         let (_, bytes) = decode_image("image/png", &json!(split)).unwrap();
+        let (_, expected) = decode_image("image/png", &json!(PNG)).unwrap();
+        assert_eq!(bytes, expected);
+    }
+
+    #[test]
+    fn unpadded_base64_decodes() {
+        // Some kernels (Ark) emit base64 without the trailing `=` padding.
+        let unpadded = PNG.trim_end_matches('=');
+        assert_ne!(unpadded, PNG);
+        let (_, bytes) = decode_image("image/png", &json!(unpadded)).unwrap();
+        let (_, expected) = decode_image("image/png", &json!(PNG)).unwrap();
+        assert_eq!(bytes, expected);
+    }
+
+    #[test]
+    fn base64_with_any_ascii_whitespace_decodes() {
+        let messy = format!("{}\r\n {}\t{}\r\n", &PNG[..20], &PNG[20..40], &PNG[40..]);
+        let (_, bytes) = decode_image("image/png", &json!(messy)).unwrap();
         let (_, expected) = decode_image("image/png", &json!(PNG)).unwrap();
         assert_eq!(bytes, expected);
     }
