@@ -126,6 +126,33 @@ fn e2e_record_files_are_deterministic() {
     );
 }
 
+// ── figures ──────────────────────────────────────────────────────────────
+
+/// A 1x1 PNG, base64 without the trailing `=` padding, as Ark emits plots.
+const UNPADDED_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg";
+
+/// A kernel whose figure arrives as unpadded base64 still yields a figure file and an
+/// `<img>` reference (bd-yt2o2ovt: on Ark every plot was silently dropped before).
+#[test]
+fn e2e_unpadded_base64_figure_is_written_and_referenced() {
+    let text = "```{python}\nplot\n```\n";
+    let script = Script::from([(
+        cell("plot"),
+        vec![FakeOutput::Display(
+            serde_json::json!({ "image/png": UNPADDED_PNG, "text/plain": "<Figure>" }),
+        )],
+    )]);
+    let (keep, ctx) = staged(text, &script);
+    let result = execute_qmd(text, &ctx).expect("execution succeeds");
+
+    let rel = "doc_files/figure-html/cell-1-output-1.png";
+    assert!(result.markdown.contains(rel), "{}", result.markdown);
+    let file = ctx.source_path.parent().unwrap().join(rel);
+    assert!(file.is_file(), "figure file missing: {}", file.display());
+    assert_eq!(&std::fs::read(&file).unwrap()[..4], b"\x89PNG");
+    drop(keep);
+}
+
 // ── IEE policy beyond the unit tests ────────────────────────────────────
 
 /// A statement as a span: a real kernel answers with a `SyntaxError` (the span is
