@@ -65,6 +65,7 @@ pub mod engine_merge;
 pub mod engine_output_parity;
 pub mod engine_record_stage;
 pub mod engine_registry_build;
+pub mod engine_resolution_corpus;
 pub mod engine_stage_driver;
 pub mod engine_visibility;
 pub mod equation_numbering_pipeline;
