@@ -131,16 +131,25 @@ pane's webview allows that (frame rules, CSP, asset and websocket requests) is n
 today's `q2 preview` and the dev build, no records and none of RIU-1 to RIU-5, so run it first, with Gordon
 at the window.
 
-- [ ] **Setup.** Use a **prose-only** document, or a Python document with a Jupyter venv on PATH (the default
+- [x] **Setup.** (Done 2026-11-06: prose-only fixture used; the rebuild chain ran, exited 0, and `q2 preview --help` runs from
+      the rebuilt `target/debug/q2`; the earlier rows in the findings note were seen on the older SPA, dated Oct 16.) Use a **prose-only** document, or a Python document with a Jupyter venv on PATH (the default
       list is `cache,q2,engine`, so a document with code cells runs its engine). Confirm that
       `target/debug/q2` embeds a current SPA: if the SPA or WASM changed, run the chain from `AGENTS.md`
       (`npm run build:wasm`, `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`), and check
       `q2 preview --help` runs from the build you will use.
-- [ ] A throwaway command in the spike worktree: start `target/debug/q2 preview <fixture> --no-browser` in a
+- [x] (Done 2026-11-06, with two differences: the command spawns `q2` as a child process, not in a terminal, and waits for
+      the port to accept before opening the pane, since q2 prints the URL before it listens; `createPreviewPanel` was
+      tried later in a second command, `q2spike.previewPanelStoppable`. Local commit `553b90b2ef` on `spike/riu-6-demo` in `positron-spike-s3`, not pushed.)
+      A throwaway command in the spike worktree: start `target/debug/q2 preview <fixture> --no-browser` in a
       terminal (absolute path from a setting, as S6 found), read the printed URL, call
       `positron.window.previewUrl`. Try `createPreviewPanel` too if `previewUrl` shows a problem, since the
       Quarto extension uses it and it adds the stop button.
-- [ ] Check and record, each as seen or not run: the page loads; the document renders in the SPA's iframe;
+- [x] (Done 2026-11-06 as seen or not run; see the findings note for each item. Gordon chose to stop here. Seen: page loads,
+      document renders (also in a `createPreviewPanel` pane), WASM initializes, live update, anchor link, console log, the
+      stop button, and the close behaviors. Found: external links are blocked by the sandbox; the big X only hides the pane
+      and q2 keeps running; no click-to-source or scroll sync (out of scope for this epic). Not run: Quarto 1 comparison
+      (declined), storage and service worker, remote workspace and `localhost` versus `127.0.0.1`, reopening the pane.)
+      Check and record, each as seen or not run: the page loads; the document renders in the SPA's iframe;
       live updates when the file is edited (the websocket); assets load, including the roughly 36 MB WASM
       (does it compile under the pane's content-security policy, `wasm-unsafe-eval`?); links and anchors;
       click-to-source and scroll sync if present (the postMessage path between the SPA and its iframe); the
@@ -149,7 +158,8 @@ at the window.
       workspace); the stop button or closing the pane ends the `q2` process; console errors from the preview
       webview (frame, CSP or mixed-content). Compare with Quarto 1's preview of the same file in the same
       pane.
-- [ ] Write the result into the findings note. If it fails, name the failing mechanism and the options
+- [x] (Findings note written 2026-11-06: `claude-notes/research/2026-11-06-riu-6-positron-demo-findings.md`; it has
+      results, observations 1 to 11 and the not-run list.) Write the result into the findings note. If it fails, name the failing mechanism and the options
       (open the URL in the external browser, or a q2 change); do not fix q2 inside the spike.
 
 ## Phase A: tests first
