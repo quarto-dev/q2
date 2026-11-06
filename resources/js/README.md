@@ -27,6 +27,29 @@ script keys on; the `.anchorjs-link` rules live in
 `resources/scss/bootstrap/_bootstrap-rules.scss`. Render-only: the
 hub-client preview does not load it.
 
+## `glightbox/`
+
+GLightbox — the click-to-zoom overlay and image galleries behind the
+`lightbox` option (bd-kcpkgftw).
+
+- **`glightbox.min.js`** — GLightbox v3.1.0, MIT, © Biati Digital.
+  Size: 55,880 bytes.
+- **`glightbox.min.css`** — its stylesheet. Size: 13,749 bytes.
+
+Both are byte-identical to the copies Quarto 1 vendors at
+`src/resources/formats/html/glightbox/` (upstream:
+<https://github.com/biati-digital/glightbox>). To refresh, copy
+`dist/js/glightbox.min.js` and `dist/css/glightbox.min.css` from the
+`glightbox` npm package and bump `version` in `resources/vendored.toml`.
+
+Shipped by `LightboxTransform`
+(`crates/quarto-core/src/transforms/lightbox.rs`) as the `js:glightbox` and
+`css:glightbox` artifacts, only on pages where at least one image was given
+the lightbox treatment. Quarto 1's third file, `lightbox.css` (theme colour
+overrides), is not vendored: its rules are ported into
+`resources/scss/bootstrap/_bootstrap-rules.scss` so they compile against the
+page's theme. Render-only: the hub-client preview does not load GLightbox.
+
 ## `bootstrap/`
 
 Bootstrap 5 JS runtime, used when a Bootstrap-backed theme is active.
