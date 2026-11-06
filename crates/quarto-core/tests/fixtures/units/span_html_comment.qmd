@@ -1,0 +1,10 @@
+<!-- `{python} 1` -->
+
+inline <!-- `{python} 2` --> and `{python} 3`
+
+<!--
+multi
+`{python} 4`
+-->
+
+after `{python} 5`

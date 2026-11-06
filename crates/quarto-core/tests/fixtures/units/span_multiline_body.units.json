@@ -1,0 +1,16 @@
+[
+  {
+    "code": "a +\nb",
+    "kind": "span",
+    "lang": "python",
+    "line": 1,
+    "span_index": 0
+  },
+  {
+    "code": "c",
+    "kind": "span",
+    "lang": "python",
+    "line": 2,
+    "span_index": 1
+  }
+]

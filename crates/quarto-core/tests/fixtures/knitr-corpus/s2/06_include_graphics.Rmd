@@ -1,0 +1,9 @@
+```{r make_png}
+png("made.png", width = 200, height = 200)
+plot(1:3)
+invisible(dev.off())
+```
+
+```{r incl}
+knitr::include_graphics("made.png")
+```

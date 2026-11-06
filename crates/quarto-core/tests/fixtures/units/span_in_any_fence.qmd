@@ -1,0 +1,21 @@
+````markdown
+shown `{python} 1`
+````
+
+```
+bare `{python} 2`
+```
+
+```python
+lang `{python} 3`
+```
+
+```{=html}
+<p>`{python} 4`</p>
+```
+
+```{{python}}
+doubled `{python} 5`
+```
+
+real `{python} 6`

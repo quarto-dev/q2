@@ -8,10 +8,12 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
+import { RECORD_MIME_TYPE } from '@quarto/quarto-automerge-schema';
 import type { FileEntry, Patch, SyncClient } from '@quarto/quarto-sync-client';
 import {
   setSyncHandlers,
   isConnected,
+  getBinaryDocById,
   getFileContent,
   getRepo,
   getDocInventory,
@@ -195,6 +197,22 @@ describe('automergeSync', () => {
 
       expect(getFileContent('old-name.qmd')).toBeNull();
       expect(getFileContent('new-name.qmd')).toBe('# Content');
+    });
+  });
+
+  describe('getBinaryDocById with an engine-record payload (EXR-13)', () => {
+    it('returns a record doc\'s bytes and MIME type unchanged', async () => {
+      const content = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3]);
+      const stub = {
+        getBinaryDocById: vi.fn(async () => ({ content, mimeType: RECORD_MIME_TYPE })),
+      };
+      _setClientForTesting(stub as unknown as SyncClient);
+
+      const doc = await getBinaryDocById('rec-1');
+
+      expect(stub.getBinaryDocById).toHaveBeenCalledWith('rec-1');
+      expect(doc?.mimeType).toBe(RECORD_MIME_TYPE);
+      expect(doc?.content).toBe(content);
     });
   });
 

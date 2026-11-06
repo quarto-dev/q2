@@ -20,7 +20,7 @@ The habits that most often break a note here, in order of frequency:
    emphasis. Write `\_quarto.yml`, or use code spans (better: they are filenames).
 5. Braces in prose: `{ a, b }`, `{python}`. Code span or `\{ \}`.
 6. A code block indented four spaces. Use a fence; q2 does not support indented
-   code (Q-2-35).
+   code (Q-2-59).
 7. A stray backtick, or a code span that contains a backtick with single-backtick
    delimiters. Use double backticks around a span that contains one.
 8. Bare brackets as editorial marks: `[REVISED]`, `[sic]`, `**[Q-1]**`,

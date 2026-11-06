@@ -1,0 +1,6 @@
+```{r c2, cache=2}
+print("c2 ran")
+plot(1:3)
+v2 <- 22
+v2
+```

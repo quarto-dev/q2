@@ -6,7 +6,7 @@ braid:
   strand: bd-19nc56ao
   priority: P1
   labels: [surface-syntax]
-status: in-progress  # IN EXECUTION — Phase 0 complete (2026-09-24); Phase 1 in-repo work complete (2026-09-24: converter core green, flagship mapping half green, clippy + full-crate gates green). Remaining Phase 1 work is the upstream quarto-error-reporting engagement (needs Gordon coordination). Architecture settled; see § Execution decisions.
+status: done  # COMPLETE 2026-09-25 (27/27; full `cargo xtask verify` green at e320a4087). See § Completion. Strand bd-19nc56ao stays open for follow-ups (WASM replay: bd-9zmpzw3w).
 ---
 
 **Series root:** [2026-06-27-plan7-native-percent-spin-sourceinfo.md](2026-06-27-plan7-native-percent-spin-sourceinfo.md)
@@ -22,7 +22,7 @@ second pass — clarity/consistency/implementability — same day (see § Review
 third pass — round-2 claim verification — same day (see § Review-3 pass).
 **Blocked, not ready to execute:** ~~Plan 7b is itself 0/33, not started.~~
 **Superseded 2026-09-24:** 7b landed on `plan7b-content-processors` (see Phase 0);
-this plan is in execution.
+this plan was executed and completed 2026-09-25 (see § Completion).
 
 ---
 

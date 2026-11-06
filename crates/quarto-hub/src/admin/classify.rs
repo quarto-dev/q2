@@ -14,7 +14,7 @@
 //! | `ProjectIndex`  | `files` map (V2 adds a `captures` sidecar)    |
 //! | `ProjectSet`    | `projects` map                                |
 //! | `TextFile`      | `text`                                        |
-//! | `EngineCapture` | `content` + `mimeType == CAPTURE_MIME_TYPE`   |
+//! | `EngineCapture` | `content` + `mimeType` is `CAPTURE_MIME_TYPE` or `RECORD_MIME_TYPE` |
 //! | `BinaryFile`    | `content` (any other MIME)                    |
 //! | `Unknown`       | anything else                                 |
 //!
@@ -23,10 +23,17 @@
 //! and is therefore never collectible (the collector's allowlist
 //! admits only `EngineCapture`). Never "improve" classification by
 //! guessing.
+//!
+//! An engine *record* (EXR-13) classifies as `EngineCapture` too, so an orphaned
+//! record is collectible exactly like an orphaned legacy capture; the collector's
+//! allowlist is unchanged. [`capture_payload_kind`] tells the two apart (by the
+//! uncompressed `meta.kind`) for inventory counts only.
 
 use automerge::{Automerge, ObjType, ROOT, ReadDoc};
 
-use crate::resource::CAPTURE_MIME_TYPE;
+use crate::resource::{
+    CAPTURE_META_KIND, CAPTURE_MIME_TYPE, RECORD_META_KIND, RECORD_MIME_TYPE, read_capture_meta,
+};
 
 /// What a stored automerge document is, by ROOT shape.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,13 +95,24 @@ pub fn classify(doc: &Automerge) -> DocKind {
             .ok()
             .flatten()
             .and_then(|(value, _)| value.as_str().map(str::to_string));
-        return if mime.as_deref() == Some(CAPTURE_MIME_TYPE) {
+        return if matches!(mime.as_deref(), Some(CAPTURE_MIME_TYPE | RECORD_MIME_TYPE)) {
             DocKind::EngineCapture
         } else {
             DocKind::BinaryFile
         };
     }
     DocKind::Unknown
+}
+
+/// Which kind of capture payload an [`DocKind::EngineCapture`] doc holds, for
+/// inventory counts: `"engine-record"` when `meta.kind` says so, otherwise
+/// `"engine-capture"` (a doc with no `meta` counts as legacy). Informational
+/// only; nothing collects or protects on this.
+pub fn capture_payload_kind(doc: &Automerge) -> &'static str {
+    match read_capture_meta(doc).and_then(|m| m.kind).as_deref() {
+        Some(RECORD_META_KIND) => RECORD_META_KIND,
+        _ => CAPTURE_META_KIND,
+    }
 }
 
 /// Extract every document id this document references — the edges of
@@ -239,6 +257,51 @@ mod tests {
             DocKind::BinaryFile
         );
         assert_eq!(classify(&Automerge::new()), DocKind::Unknown);
+    }
+
+    #[test]
+    fn a_record_doc_is_an_engine_capture() {
+        use crate::resource::{RECORD_MIME_TYPE, create_record_document};
+        let meta = CaptureDocMeta {
+            source_path: "a.qmd".into(),
+            engines: vec!["jupyter".into()],
+        };
+        assert_eq!(
+            classify(&create_record_document(b"gz", &meta).unwrap()),
+            DocKind::EngineCapture
+        );
+        // Without the meta envelope the MIME alone decides.
+        assert_eq!(
+            classify(&create_binary_document(b"gz", RECORD_MIME_TYPE).unwrap()),
+            DocKind::EngineCapture
+        );
+        // A near-miss MIME is an ordinary binary, never collectible.
+        assert_eq!(
+            classify(&create_binary_document(b"gz", "application/x-engine-record+json").unwrap()),
+            DocKind::BinaryFile
+        );
+        assert_eq!(DocKind::EngineCapture.as_str(), "engine-capture");
+    }
+
+    #[test]
+    fn capture_payload_kind_reads_meta_kind_and_defaults_to_legacy() {
+        use crate::resource::create_record_document;
+        let meta = CaptureDocMeta {
+            source_path: "a.qmd".into(),
+            engines: vec![],
+        };
+        assert_eq!(
+            capture_payload_kind(&create_record_document(b"gz", &meta).unwrap()),
+            "engine-record"
+        );
+        assert_eq!(
+            capture_payload_kind(&create_capture_document(b"gz", &meta).unwrap()),
+            "engine-capture"
+        );
+        assert_eq!(
+            capture_payload_kind(&create_binary_document(b"gz", CAPTURE_MIME_TYPE).unwrap()),
+            "engine-capture"
+        );
     }
 
     #[test]

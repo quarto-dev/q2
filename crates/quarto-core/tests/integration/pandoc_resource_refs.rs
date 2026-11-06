@@ -79,7 +79,7 @@ fn prepare(
         &input.to_string_lossy(),
         &mut ctx,
         runtime,
-        build_pandoc_request_stages(Vec::new()),
+        build_pandoc_request_stages(Vec::new().into()),
     ))
     .expect("pipeline runs");
     let request = ctx.pandoc_request.take().expect("request");

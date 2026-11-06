@@ -1,0 +1,23 @@
+```{r high_hold, fig.keep='high', fig.show='hold'}
+plot(1:5)
+lines(1:5)
+print("text between")
+plot(5:1)
+```
+
+```{r high_asis, fig.keep='high', fig.show='asis'}
+plot(1:5)
+lines(1:5)
+print("text between")
+plot(5:1)
+```
+
+```{r show_hide, fig.show='hide'}
+plot(1:5)
+```
+
+```{r keep_index, fig.keep=2}
+plot(1:5)
+plot(5:1)
+plot(1:3)
+```

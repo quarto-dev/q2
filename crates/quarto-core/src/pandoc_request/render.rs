@@ -9,6 +9,8 @@ use std::sync::Arc;
 
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_source_map::SourceContext;
+
+use super::captures::CapturePayload;
 use quarto_system_runtime::SystemRuntime;
 
 use super::formats::{TYPST_PDF_KEY, pandoc_format};
@@ -44,7 +46,7 @@ pub struct PandocRequestInput<'a> {
     pub project: &'a ProjectContext,
     /// Seconds. Set as `SOURCE_DATE_EPOCH`; `None` leaves it unset.
     pub source_date_epoch: Option<i64>,
-    pub captures: Vec<quarto_trace::EngineCapture>,
+    pub captures: CapturePayload,
     /// Echoed into the request (`None` until the PDF work).
     pub typst_available_fonts: Option<Vec<String>>,
     /// The hub prelude installs the vfs-root resolver for every render;
@@ -223,7 +225,7 @@ pub(crate) async fn build_request_in_context(
     content: &[u8],
     source_name: &str,
     runtime: Arc<dyn SystemRuntime>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     typst_available_fonts: Option<Vec<String>>,
 ) -> PandocRequestOutcome {
     // The browser has no engines: cells without a capture pass through
@@ -298,10 +300,10 @@ pub(crate) async fn build_request_in_context(
 fn active_file_captures(
     runtime: &dyn SystemRuntime,
     path: &Path,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     capture_error: Option<String>,
     captures_by_path: &std::collections::BTreeMap<String, Vec<u8>>,
-) -> Result<Vec<quarto_trace::EngineCapture>, String> {
+) -> Result<CapturePayload, String> {
     if let Some(error) = capture_error {
         return Err(format!("Failed to parse capture: {error}"));
     }
@@ -310,16 +312,16 @@ fn active_file_captures(
     }
     let key = super::captures::sidecar_key(runtime, path);
     match captures_by_path.get(&key) {
-        Some(bytes) => super::captures::parse_capture_gz(Some(bytes))
+        Some(bytes) => super::captures::parse_capture_payload(Some(bytes), &key)
             .map_err(|e| format!("Failed to parse capture: {e}")),
-        None => Ok(Vec::new()),
+        None => Ok(CapturePayload::Empty),
     }
 }
 
 /// What `render_project_request` needs beyond the document: the capture
 /// inputs.
 struct ProjectRequestInputs<'a> {
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     capture_error: Option<String>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
     hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
@@ -430,7 +432,7 @@ async fn render_project_request_resolved(
         // from the map, and the active file's own blob (and any error parsing
         // it) is ignored, so the request does not depend on which chapter is
         // active.
-        renderer_captures = Vec::new();
+        renderer_captures = CapturePayload::Empty;
     } else {
         renderer_captures = match active_file_captures(
             runtime.as_ref(),

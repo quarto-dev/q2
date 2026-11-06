@@ -43,6 +43,13 @@ import {
   preRunClose,
 } from "./worker-close.ts";
 
+// q2 execution-record wire handling (pure, unit-tested)
+import {
+  buildRecordResult,
+  coreWillPresent,
+  qnrRunOptions,
+} from "./record-wire.ts";
+
 // Constants for this engine
 import {
   kExecuteDaemon,
@@ -215,9 +222,11 @@ export const juliaEngineDiscovery: ExecutionEngineDiscovery = {
           },
         };
 
+        // q2 only: when core sends `units`, this adds `emitUnits` so QNR annotates
+        // its cells; `handledLanguages` passes through as core sent it.
         const juliaExecOptions: JuliaExecuteOptions = {
           oneShot: !executeDaemon,
-          ...execOptions,
+          ...qnrRunOptions(execOptions),
         };
 
         // TODO: executeDaemon can take a number for timeout of kernels, but
@@ -250,6 +259,27 @@ export const juliaEngineDiscovery: ExecutionEngineDiscovery = {
           const stem = options.target.source.replace(/\.[^.]+$/, "");
           const ipynbPath = stem + ".ipynb";
           writeFileSync(ipynbPath, JSON.stringify(nb, null, 2));
+        }
+
+        // q2 only: the record's notebook is a deep copy taken now, before
+        // toMarkdown mutates `nb` (empty when core sent no units).
+        const record = buildRecordResult(
+          nb,
+          (options as { units?: unknown[] }).units,
+        );
+
+        // q2 only: core presents the output from the record, so there is no markdown
+        // to make. Return the notebook and the supporting directory; core's presenter
+        // writes the cells and figures. (Dependencies and preserved HTML come from
+        // `toMarkdown`, so they are not produced on this path.)
+        if (coreWillPresent(options)) {
+          return {
+            engine: kJuliaEngine,
+            markdown: "",
+            supporting: [join(assets.base_dir, assets.supporting_dir)],
+            filters: [],
+            ...record,
+          };
         }
 
         // NOTE: for perforance reasons the 'nb' is mutated in place
@@ -324,6 +354,7 @@ export const juliaEngineDiscovery: ExecutionEngineDiscovery = {
           preserve: result.htmlPreserve,
           postProcess: result.htmlPreserve &&
             (Object.keys(result.htmlPreserve).length > 0),
+          ...record,
         };
       },
 

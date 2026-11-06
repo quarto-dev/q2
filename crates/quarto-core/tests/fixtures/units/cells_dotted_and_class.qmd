@@ -1,0 +1,15 @@
+```{python.marimo}
+a
+```
+
+```{py-thon}
+b
+```
+
+```{python .marimo}
+c
+```
+
+```{python}
+d
+```

@@ -1,6 +1,6 @@
 ---
 name: autonomously-fix-small-issue
-description: Take a small, unambiguous GitHub issue from report to open PR without further user input — braid strand, plan doc, topic branch, fix with tests, PR. User-invoked only (/autonomously-fix-small-issue <N or issue URL>). Starts with a scope gate that stops and hands off to /triage when the issue is not small, not unambiguous, or needs a product decision. Never merges, never closes the issue or the strand.
+description: Take a small, unambiguous GitHub issue from report to a green, mergeable PR without further user input — braid strand, plan doc, topic branch, fix with tests, PR, then watch CI and fix failures and merge conflicts until the checks pass. User-invoked only (/autonomously-fix-small-issue <N or issue URL>). Starts with a scope gate that stops and hands off to /triage when the issue is not small, not unambiguous, or needs a product decision. Never merges, never closes the issue or the strand.
 disable-model-invocation: true
 ---
 
@@ -16,9 +16,10 @@ one call site, unit tests, ~20 minutes).
 
 ## Invariants
 
-- **Stop at the PR.** Never merge, never close the GH issue, never close the
-  braid strand. `Closes #N` in the PR body is enough; the strand stays
-  `in_progress` until the PR merges.
+- **Stop at a green PR.** Open the PR, then watch CI and fix what breaks
+  (§ 7) until every check passes and the PR is mergeable. Never merge, never
+  close the GH issue, never close the braid strand. `Closes #N` in the PR
+  body is enough; the strand stays `in_progress` until the PR merges.
 - **Never touch the user's in-flight work.** No stashes left behind, no
   commits on someone else's branch, no rewrites of `CLAUDE.local.md` in the
   main checkout.
@@ -114,9 +115,17 @@ Run the checks that cover what you touched, not just the one new test:
   clippy from `.claude/rules/cross-platform.md`.
 - **Larger blast radius:** if you're unsure what depends on the change,
   run `cargo xtask verify --skip-hub-build`.
+- **Custom lints (always):** `RUSTFLAGS="-D warnings" cargo xtask lint`.
+  CI runs it early in the test-suite job, and it catches things the other
+  checks don't (e.g. committed q2 render output in a triage folder, which
+  failed PR #1093).
 - **Notes (always):** from `claude-notes/`, run `cargo run --bin q2 --
   render --strict <path>` on the plan, and on every other note you added or
-  changed. Any warning fails CI, so fix them all before you push.
+  changed. Any warning fails CI, so fix them all before you push. A note
+  added under `plans/` re-renders the `plans/` listing, so a partial render
+  can report Q-12-13 ("produced no preview content") for pages it didn't
+  render; if that's all you see, confirm with a full `q2 render --strict`
+  from `claude-notes/`, which is what CI runs.
 
 **Pre-existing failures:** if a check fails, re-run it on `main` (e.g.
 `git stash`, run, `git stash pop`) to tell whether you caused it. Only
@@ -152,8 +161,65 @@ Then:
 braid comment <id> "PR opened: <url>"
 ```
 
-## 7. Report back
+## 7. Watch CI and fix what breaks
+
+Opening the PR is not the end. Watch its checks until every one has finished,
+and fix failures as they come in. Use a `Monitor` that polls the check runs
+for the pushed commit and prints each one as it completes, so a failure
+reaches you as soon as it happens:
+
+```bash
+SHA=$(git rev-parse HEAD); prev=""
+while true; do
+  s=$(gh api "repos/quarto-dev/q2/commits/$SHA/check-runs?per_page=100" \
+        --jq '[.check_runs[] | {id, name, status, conclusion}]' || echo '[]')
+  cur=$(jq -r '.[] | select(.status=="completed") | "\(.id) \(.name): \(.conclusion)"' <<<"$s" | sort)
+  comm -13 <(echo "$prev") <(echo "$cur") | cut -d' ' -f2-; prev=$cur
+  [ "$(jq length <<<"$s")" -gt 0 ] && jq -e 'all(.status=="completed")' <<<"$s" >/dev/null \
+    && { echo "ALL CHECKS DONE"; break; }
+  sleep 45
+done
+```
+
+Watch by commit SHA, not by PR: after every push, stop the old monitor and
+start a new one for the new `HEAD`. CI on the PR takes 30–60 minutes, which
+outlasts one monitor, so re-arm it when it expires.
+
+**Merge conflicts.** Check `gh pr view <PR> --json mergeable,mergeStateStatus`
+once CI starts and again when it finishes. On `CONFLICTING`, merge (don't
+rebase or force-push) `origin/main` into the branch. Resolve the conflict,
+then re-run the § 5 checks for every crate or package the incoming changes
+touched, not just yours. Push with the refspec and confirm with `git
+ls-remote`.
+
+**A failing check.** Job logs are unavailable until the *whole run*
+finishes, so don't wait on them. First find the failed step:
+
+```bash
+gh run view <run-id> --repo quarto-dev/q2 --json jobs \
+  --jq '.jobs[] | select(.conclusion=="failure") | .steps[] | select(.conclusion=="failure") | .name'
+```
+
+Then find that step's command in `.github/workflows/` and run it locally. If
+the run has finished, `gh run view <run-id> --job <job-id> --log-failed` has
+the details. Fix the cause in a new commit (don't amend pushed commits), re-run
+the § 5 checks it affects, push, and re-arm the monitor.
+
+**Limits.** The no-scope-creep invariant still applies. Fix failures your
+change caused, and conflicts with `main`. A failure that is pre-existing
+on `main` or flaky (it passes on re-run, or fails the same way on `main`'s
+latest run) is not yours to fix: re-run it once (`gh run rerun <run-id>
+--failed`), and if it still fails, file a strand and say so in the PR body.
+If fixing your own failure would need changes beyond the gated scope, or
+three fix attempts haven't turned it green, stop and report to the user.
+
+When everything is green and the PR is mergeable, update the PR body if the
+fixes changed what it says (files, testing notes), and add a braid comment
+summarizing what CI caught and how you fixed it.
+
+## 8. Report back
 
 Tell the user: the PR link, the behaviour change in plain words, what was
-verified and what wasn't, and the strand/plan/branch names. Leave the strand
-open for the merge.
+verified (locally and in CI) and what wasn't, what CI or merge conflicts
+caught and how you fixed them, and the strand/plan/branch names. Leave the
+strand open for the merge.

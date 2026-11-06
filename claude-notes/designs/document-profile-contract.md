@@ -2,7 +2,7 @@
 
 **Status:** Active (Phase 0 of the website epic, `bd-0tr6` / `bd-f3jc`;
 extended in Phase 8 sub-phase 8.0, `bd-fegm` + `bd-r82e`).
-**Version tag:** `DOCUMENT_PROFILE_VERSION = 13` (see the Change log
+**Version tag:** `DOCUMENT_PROFILE_VERSION = 17` (see the Change log
 for per-version deltas; the authoritative history is the doc comment
 on the constant in `document_profile.rs`)
 **Type:** `quarto_core::document_profile::DocumentProfile`
@@ -25,7 +25,10 @@ Phase 0 introduces the type, the checkpoint, and the resumability
 contract. Phase 1 uses it to build the project-wide `ProjectIndex`.
 Phases 2–9 build on that index for sidebars, navbars, cross-document
 links, incremental rebuilds, and hub-client project nav. Eventually
-the same checkpoint substrate will back `freeze`.
+the same checkpoint substrate will back `freeze`. (As planned on 2026-11-01, freeze
+consumes the ipynb execution record, with the profile supplying its key inputs; the
+groundwork list is in [the execution-records
+epic](../plans/2026-10-28-execution-records-epic.md).)
 
 ## Pipeline position
 
@@ -598,6 +601,12 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   page). Plan:
   `claude-notes/plans/2026-08-25-document-profile-comments.md`.
 
+- **2026-10-09 — v14 (bd-8a9eum6p).** `title`, `subtitle` and `description`,
+  on the profile and on `listing_item`, change from `Option<String>` to
+  `Option<Inlines>`, and both gain `flattened_prose: Vec<String>`. The
+  serialized shape changes, so v13 profiles fail to deserialize at the
+  field level. Plain-text consumers project with `inlines_to_plain_text`.
+
 - **2026-10-09 — v15 (bd-listing-description-precedence-x4bh6w3m).**
   Adds `abstract` and `derived_listing`, and narrows
   `listing_item.description` / `listing_item.image` to author-supplied
@@ -612,3 +621,18 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   Pass-1 cache key gained the source modification date L1 records
   (`PROFILE_KEY_VERSION` 3).
   Plan: `claude-notes/plans/2026-10-09-listing-description-precedence.md`.
+
+- **2026-10-22 — v16 (bd-2hy80x1j).** Adds `draft_mode: DraftMode`, the page's own
+  `draft-mode` (or `website.draft-mode`) resolved from its merged metadata.
+  Strictly additive (`#[serde(default)]`, default `gone`), but bumped: a
+  cached v15 profile of a page under `draft-mode: visible` would
+  deserialize as `gone` and vanish from the site.
+
+- **2026-10-31 — v17 (JOL-2a).** `engine_resolution` changes meaning, not
+  shape: a page with no code cells whose own front matter declares an
+  engine (`engine:` or the `jupyter:` / `knitr:` shorthand) now stamps that
+  engine in its sequence, where it stamped an empty one. "Own" is decided by
+  provenance (the value roots at the document's `FileId(0)`); a declaration
+  from `_quarto.yml`, `_metadata.yml`, an extension or a format default does
+  not count. A cached v16 profile of such a page would claim no engine.
+  Plan: `claude-notes/plans/2026-10-28-jol-2a-jupyter-key.md`.

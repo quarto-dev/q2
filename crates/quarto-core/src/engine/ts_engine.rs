@@ -558,11 +558,17 @@ impl TsEngine {
             lib_dir,
             quiet: ctx.quiet,
             handled_languages: ctx.handled_languages.clone(),
+            owned_languages: ctx.owned_languages.clone(),
             params: None,
             source_map,
             // v1/Julia always resolves dependencies inline; deferred consumer
             // (render orchestrator) is RTQ FC-2 and not yet wired.
             dependencies: true,
+            // EXR-7: the stage's one shared unit list, relocated into `input`
+            // (`None` when the context carries no units).
+            units: crate::engine::ts_record::wire_units(input, ctx),
+            // Set by `execute` for an engine core presents for (`core_presents`).
+            presented_by: None,
         }
     }
 
@@ -659,6 +665,9 @@ impl TsEngine {
             // TS engines report problems through the protocol; nothing maps
             // to `ExecuteResult::warnings` yet (bd-yd94iyq9).
             warnings: Vec::new(),
+            // Set by `execute` through `ts_record::attach_record`, which needs
+            // the context's units; the mapping here never builds a record.
+            record: None,
         })
     }
 }
@@ -1048,7 +1057,13 @@ impl ExecutionEngine for TsEngine {
     ) -> Result<ExecuteResult, ExecutionError> {
         self.ensure_launched(&ctx.cancellation)?;
 
-        let options = Self::build_execute_options(input, ctx);
+        let mut options = Self::build_execute_options(input, ctx);
+        // EXR-8 B4: for Julia, core presents the output from the record and the engine
+        // returns only its notebook. An older engine ignores this and presents anyway.
+        let core_presents = crate::engine::ts_record::core_presents(&self.wire_name(), ctx);
+        if core_presents {
+            options.presented_by = Some(crate::engine::ts_protocol::TsPresentedBy::Core);
+        }
         let msg = ToEngine::Execute {
             engine: self.wire_name(),
             options,
@@ -1100,8 +1115,32 @@ impl ExecutionEngine for TsEngine {
             })?;
 
         match response {
-            FromEngine::ExecuteResult { result } => {
-                Self::map_execute_result(&self.wire_name(), result)
+            FromEngine::ExecuteResult { mut result } => {
+                // EXR-7: the notebook and its description become the engine's
+                // record. A problem with them is a warning on the result, never
+                // a failed render (the record is additive for now).
+                let notebook = result.notebook.take();
+                let record_info = result.record_info.take();
+                let engine = self.wire_name();
+                let mut mapped = Self::map_execute_result(&engine, result)?;
+                crate::engine::ts_record::attach_record(
+                    &engine,
+                    input,
+                    ctx,
+                    self.can_freeze(),
+                    notebook,
+                    record_info,
+                    &mut mapped,
+                );
+                if core_presents {
+                    crate::engine::ts_record::present_from_record(
+                        &engine,
+                        input,
+                        ctx,
+                        &mut mapped,
+                    )?;
+                }
+                Ok(mapped)
             }
             other => Err(ExecutionError::other(format!(
                 "unexpected response to Execute: {other:?}"
@@ -2155,6 +2194,61 @@ mod tests {
     //
     // Named revert (a): re-hardcode `needs_postprocess: false` in
     // `map_execute_result` → this assertion REDS (behavioral bind).
+
+    // ── EXR-7: units and handled languages on the execute options ─────────────
+
+    fn staged_ctx(doc: &str, owned: &[&str]) -> ExecutionContext {
+        use crate::engine::units::scan_units;
+        use crate::record::{AuthorTexts, fill_ids};
+        let mut units = scan_units(doc);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_owned_languages(owned.iter().map(|s| s.to_string()).collect())
+        .with_units(units)
+        .with_author_texts(texts)
+    }
+
+    #[test]
+    fn execute_options_carry_the_stage_units_and_none_without_them() {
+        let doc = "```{julia}\n1\n```\n\n```{python}\n2\n```\n";
+        let ctx = staged_ctx(doc, &["julia"]);
+        let units = TsEngine::build_execute_options(doc, &ctx).units.unwrap();
+        assert_eq!(units.len(), 2);
+        assert!(units.iter().all(|u| u.id.is_some()));
+        assert_eq!(
+            units.iter().map(|u| u.owned).collect::<Vec<_>>(),
+            vec![true, false]
+        );
+
+        let bare = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        );
+        assert_eq!(TsEngine::build_execute_options(doc, &bare).units, None);
+    }
+
+    #[test]
+    fn stage_handled_languages_reach_the_wire_unchanged() {
+        // The stage's value, including the language of a span no engine owns.
+        let handled = vec![
+            "ojs".to_string(),
+            "mermaid".to_string(),
+            "klingon".to_string(),
+        ];
+        let doc = "Inline `{klingon} qapla` here.\n";
+        let ctx = staged_ctx(doc, &["julia"]).with_handled_languages(handled.clone());
+        let options = TsEngine::build_execute_options(doc, &ctx);
+        assert_eq!(options.handled_languages, handled);
+        assert_eq!(options.owned_languages, vec!["julia".to_string()]);
+    }
 
     #[test]
     fn test_map_execute_result_wires_post_process() {

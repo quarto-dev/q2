@@ -527,7 +527,7 @@ mod seam2 {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            Vec::new().into(),
         )
         .await
         .expect("valid cross-cell notebook must render through the preview pipeline");
@@ -634,7 +634,7 @@ mod discovery_pass1 {
                 &mut ctx,
                 runtime.clone(),
                 None,
-                Vec::new(),
+                Vec::new().into(),
             )
             .await
             .unwrap_or_else(|e| panic!("{name} must convert+render in Pass-1: {e}"));

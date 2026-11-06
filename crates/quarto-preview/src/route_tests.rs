@@ -113,7 +113,7 @@ impl FakeSeam {
             kind,
             format: format.to_string(),
             source: options.source_override.clone(),
-            captures: options.captures.len(),
+            captures: options.captures.clone().into_captures().len(),
             typst_target: options.typst_target,
             attribution: options.attribution_json.clone(),
             materialize_is_output: options.capture_materialize_dir.as_deref()
@@ -593,13 +593,21 @@ fn capture(input: &str) -> EngineCapture {
             path: "plot.png".to_string(),
             contents_base64: base64::engine::general_purpose::STANDARD.encode(b"png"),
         }],
+        record: None,
     }
 }
 
 async fn record(ctx: &SharedContext, path: &str, captures: &[EngineCapture]) {
-    let id = crate::capture_driver::write_capture_doc(ctx, path, captures)
-        .await
-        .expect("capture doc");
+    let id = crate::capture_driver::write_capture_doc(
+        ctx,
+        path,
+        &quarto_core::engine::preview_record::CaptureRun {
+            captures: captures.to_vec(),
+            record: None,
+        },
+    )
+    .await
+    .expect("capture doc");
     ctx.index()
         .set_capture(
             path,
@@ -811,7 +819,7 @@ fn job_with_metadata(
         content: None,
         metadata,
         attribution_json: None,
-        captures: Vec::new(),
+        captures: Default::default(),
         all_captures: Default::default(),
         hub_root: root.to_path_buf(),
         cancellation: quarto_core::stage::Cancellation::new(),

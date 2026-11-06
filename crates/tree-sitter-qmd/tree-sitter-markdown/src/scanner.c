@@ -161,7 +161,7 @@ typedef enum {
 
     // KNOWN LIMITATION: QMD does not support 4-space indented code blocks.
     // Emitted when leftover line-leading indentation is >= 4 at a block-start
-    // position so the parser raises Q-2-35, suggesting fenced code blocks.
+    // position so the parser raises Q-2-59, suggesting fenced code blocks.
     // See grammar.js (`_indented_code_block_error`) and CONTRIBUTING.md.
     INDENTED_CODE_BLOCK_DISALLOWED,
 
@@ -3242,12 +3242,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
     }
 
-    // Q-2-35: QMD does not support 4-space indented code blocks. If we are at
+    // Q-2-59: QMD does not support 4-space indented code blocks. If we are at
     // a true block-start position (signalled by ATX_H1_MARKER or
     // BLANK_LINE_START being valid — both indicate the parser is willing to
     // begin a fresh block here) and the leftover indentation after container
     // matchers (block-quote, list-item) is >= 4, emit a token no rule
-    // consumes so the parser raises Q-2-35. Skip blank lines (lookahead is
+    // consumes so the parser raises Q-2-59. Skip blank lines (lookahead is
     // the line terminator) — those are handled by the BLANK_LINE_START case
     // in the switch below.
     //
@@ -3264,11 +3264,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // indent, not extra indent layered on top of it.
     //
     // The reliable discriminator from a trace of the misfire vs. the
-    // intended Q-2-35 cases is `valid_symbols[BLOCK_CONTINUATION] &&
+    // intended Q-2-59 cases is `valid_symbols[BLOCK_CONTINUATION] &&
     // s->open_blocks.size > 0`. With at least one open container *and*
     // BLOCK_CONTINUATION valid, the parser still owes the line a
     // continuation absorption — the indent has not yet been confirmed as
-    // "extra". Q-2-35 should defer in that case. When open_blocks is empty
+    // "extra". Q-2-59 should defer in that case. When open_blocks is empty
     // (genuine top-level indented block) or BLOCK_CONTINUATION is invalid
     // (in-list indent has already been absorbed and the leftover is true
     // extra indent), the gate still fires as intended.

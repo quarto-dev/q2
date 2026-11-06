@@ -40,8 +40,13 @@ import { assert, describe, expect, it } from "vitest";
 import type {
   EngineProjectContext,
   HostGlobalConfig,
+  TsExecuteOptions,
+  TsExecuteResult,
+  TsHashDefinition,
   TsLanguageClaim,
   TsPandocIncludes,
+  TsRecordInfo,
+  TsUnit,
 } from "./types.js";
 
 // ─── fixture ─────────────────────────────────────────────────────────────────
@@ -110,6 +115,54 @@ type _ExhaustiveTsLanguageClaim =
     ? true
     : never;
 
+const TS_UNIT_KEYS = [
+  "id",
+  "index",
+  "kind",
+  "language",
+  "line",
+  "owned",
+  "inFrontMatter",
+] as const satisfies readonly (keyof TsUnit)[];
+type _ExhaustiveTsUnit =
+  Exclude<keyof TsUnit, (typeof TS_UNIT_KEYS)[number]> extends never ? true : never;
+
+const TS_RECORD_INFO_KEYS = [
+  "version",
+  "granularity",
+  "outputKind",
+  "alignment",
+  "coverage",
+  "hashDefinition",
+] as const satisfies readonly (keyof TsRecordInfo)[];
+type _ExhaustiveTsRecordInfo =
+  Exclude<keyof TsRecordInfo, (typeof TS_RECORD_INFO_KEYS)[number]> extends never
+    ? true
+    : never;
+
+const TS_HASH_DEFINITION_KEYS = [
+  "id",
+  "version",
+  "granularity",
+  "presentationCellOptions",
+  "presentationExecuteKeys",
+  "documentKeys",
+  "profiles",
+] as const satisfies readonly (keyof TsHashDefinition)[];
+type _ExhaustiveTsHashDefinition =
+  Exclude<keyof TsHashDefinition, (typeof TS_HASH_DEFINITION_KEYS)[number]> extends never
+    ? true
+    : never;
+
+// The execute options and result: only the EXR-7 additions are pinned here (the older
+// fields predate this gate), so the check is that the fixture contains each new key
+// and that the TS type declares it.
+const EXR7_OPTIONS_KEYS = ["units"] as const satisfies readonly (keyof TsExecuteOptions)[];
+const EXR7_RESULT_KEYS = [
+  "notebook",
+  "recordInfo",
+] as const satisfies readonly (keyof TsExecuteResult)[];
+
 // Reference the guard aliases so an unused-type lint (if any) can't strip them;
 // each is `true` when KEYS is exhaustive, `never` (a compile error at the
 // assignment) otherwise.
@@ -118,7 +171,10 @@ const _guards: [
   _ExhaustiveTsPandocIncludes,
   _ExhaustiveEngineProjectContext,
   _ExhaustiveTsLanguageClaim,
-] = [true, true, true, true];
+  _ExhaustiveTsUnit,
+  _ExhaustiveTsRecordInfo,
+  _ExhaustiveTsHashDefinition,
+] = [true, true, true, true, true, true, true];
 void _guards;
 
 // ─── symmetric set-equality ──────────────────────────────────────────────────
@@ -188,5 +244,35 @@ describe("wire-parity", () => {
       TS_LANGUAGE_CLAIM_KEYS,
       "TsLanguageClaim",
     );
+  });
+
+  it("TsUnit keys match Rust fixture", () => {
+    assertSetEqual(Object.keys(instance("TsUnit")), TS_UNIT_KEYS, "TsUnit");
+  });
+
+  it("TsRecordInfo keys match Rust fixture", () => {
+    assertSetEqual(Object.keys(instance("TsRecordInfo")), TS_RECORD_INFO_KEYS, "TsRecordInfo");
+  });
+
+  it("TsRecordInfo.hashDefinition keys match Rust fixture", () => {
+    const info = instance("TsRecordInfo");
+    assertSetEqual(
+      Object.keys(info.hashDefinition as Record<string, unknown>),
+      TS_HASH_DEFINITION_KEYS,
+      "TsHashDefinition",
+    );
+  });
+
+  it("TsExecuteOptions carries the EXR-7 keys", () => {
+    const keys = Object.keys(instance("TsExecuteOptions"));
+    for (const k of EXR7_OPTIONS_KEYS) expect(keys).toContain(k);
+    expect(
+      (instance("TsExecuteOptions").units as Record<string, unknown>[])[0],
+    ).toBeDefined();
+  });
+
+  it("TsExecuteResult carries the EXR-7 keys", () => {
+    const keys = Object.keys(instance("TsExecuteResult"));
+    for (const k of EXR7_RESULT_KEYS) expect(keys).toContain(k);
   });
 });

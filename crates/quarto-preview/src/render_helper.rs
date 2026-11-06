@@ -39,6 +39,7 @@ use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::Format;
 use quarto_core::format_resolution::{book_scope_in_json, resolve_render_scope};
 use quarto_core::overlay_runtime::RenderOverlay;
+use quarto_core::pandoc_request::captures::CapturePayload;
 use quarto_core::pandoc_request::formats::TYPST_PDF_KEY;
 use quarto_core::preview_out::PreviewOutDir;
 use quarto_core::project::ProjectContext;
@@ -55,7 +56,6 @@ use quarto_error_reporting::{
 use quarto_hub::context::SharedContext;
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::SystemRuntime;
-use quarto_trace::EngineCapture;
 use serde::Serialize;
 
 /// Header carrying the render's warnings.
@@ -171,10 +171,10 @@ pub struct RenderJob {
     pub metadata: Option<serde_json::Value>,
     pub attribution_json: Option<String>,
     /// The sidecar captures of this path (never a client-named id; E10).
-    pub captures: Vec<EngineCapture>,
+    pub captures: CapturePayload,
     /// Every sidecar entry of the hub, keyed by hub-root-relative path;
     /// filled only when the request may resolve to a whole book.
-    pub all_captures: HashMap<String, Vec<EngineCapture>>,
+    pub all_captures: HashMap<String, CapturePayload>,
     /// The canonical hub root the sidecar keys are relative to.
     pub hub_root: PathBuf,
     pub cancellation: Cancellation,
@@ -266,7 +266,7 @@ pub struct BookDownloadRequest {
     pub request_dir: PathBuf,
     pub hub_root: PathBuf,
     /// Every sidecar entry of the hub, keyed by hub-root-relative path.
-    pub captures: HashMap<String, Vec<EngineCapture>>,
+    pub captures: HashMap<String, CapturePayload>,
     pub cancellation: Cancellation,
     /// Runtime-layer metadata for this render (FR12).
     pub metadata: Option<serde_json::Value>,
@@ -363,27 +363,27 @@ pub fn set_book_download(seam: Option<Arc<dyn BookDownload>>) {
 /// capture doc the sidecar names for exactly that path (E10, P9-D4). Absent,
 /// unreadable or never-recorded entries give no captures, so the document
 /// compiles unexecuted and reports the notice.
-pub async fn resolve_captures(ctx: &SharedContext, rel_path: &str) -> Vec<EngineCapture> {
+pub async fn resolve_captures(ctx: &SharedContext, rel_path: &str) -> CapturePayload {
     let Some(entry) = ctx.index().get_capture(rel_path) else {
-        return Vec::new();
+        return CapturePayload::Empty;
     };
     match crate::capture_driver::read_capture_from_doc(ctx, &entry.capture_doc_id).await {
-        Ok(captures) => captures,
+        Ok(payload) => payload,
         Err(e) => {
             tracing::debug!(path = rel_path, error = %e, "capture doc unreadable; rendering unexecuted");
-            Vec::new()
+            CapturePayload::Empty
         }
     }
 }
 
 /// Every sidecar entry of the hub, for a whole-book render.
-pub async fn resolve_all_captures(ctx: &SharedContext) -> HashMap<String, Vec<EngineCapture>> {
+pub async fn resolve_all_captures(ctx: &SharedContext) -> HashMap<String, CapturePayload> {
     let mut all = HashMap::new();
     for (key, entry) in ctx.index().get_all_captures() {
-        if let Ok(captures) =
+        if let Ok(payload) =
             crate::capture_driver::read_capture_from_doc(ctx, &entry.capture_doc_id).await
         {
-            all.insert(key, captures);
+            all.insert(key, payload);
         }
     }
     all

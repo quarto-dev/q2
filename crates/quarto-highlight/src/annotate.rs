@@ -9,6 +9,10 @@
 //!   resolves to `r`. The class itself is left as the author wrote it.
 //! - If the class resolves and no `data-hl-spans` key is already present
 //!   on the node's attribute KV map, compute the highlight and insert it.
+//! - A `CodeBlock` with no grammar but a class Pandoc's highlighter
+//!   knows (see [`crate::is_pandoc_known_language`]) gets an empty
+//!   list (`[]`), so it is still written as a source-code block
+//!   (GH #1079). Inline `Code` gets no such marker.
 //! - If the class doesn't resolve, or `data-hl-spans` is already set
 //!   (filter-authored), leave the node alone. "Filter wins" is deliberate:
 //!   a user can override the built-in highlighter by producing the
@@ -28,8 +32,13 @@ use quarto_pandoc_types::{Attr, Block, Blocks, Code, CodeBlock, Inline, Inlines,
 
 use crate::SPANS_ATTR_KEY;
 use crate::error::HighlightError;
+use crate::pandoc_languages::is_pandoc_known_language;
 use crate::provider::UserGrammarProvider;
 use crate::registry::Registry;
+
+/// The encoding of an empty span list: "no colors, but still a
+/// source-code block".
+const EMPTY_SPANS: &str = "[]";
 
 /// Walk `ast` and annotate every `CodeBlock` / inline `Code` whose first
 /// class resolves to a registered grammar. Mutates nodes in place.
@@ -181,7 +190,19 @@ where
     }
 
     fn annotate_codeblock(&mut self, cb: &mut CodeBlock) -> Result<(), HighlightError> {
-        annotate_attr(&mut cb.attr, &cb.text, self.user.as_deref_mut())
+        annotate_attr(&mut cb.attr, &cb.text, self.user.as_deref_mut())?;
+        // GH #1079: Quarto 1 wraps every block whose language Pandoc
+        // knows in `div.sourceCode`, colored or not. Mark such blocks
+        // with an empty span list; the HTML writer wraps any block
+        // carrying the attribute.
+        if !cb.attr.2.contains_key(SPANS_ATTR_KEY)
+            && cb.attr.1.iter().any(|c| is_pandoc_known_language(c))
+        {
+            cb.attr
+                .2
+                .insert(SPANS_ATTR_KEY.to_string(), EMPTY_SPANS.to_string());
+        }
+        Ok(())
     }
 
     fn annotate_inline_code(&mut self, c: &mut Code) -> Result<(), HighlightError> {

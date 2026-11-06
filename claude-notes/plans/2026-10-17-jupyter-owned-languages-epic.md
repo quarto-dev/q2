@@ -4,8 +4,20 @@ date: 2026-10-17
 description: 'Outline of an epic that replaces the Jupyter engine''s hard-coded language lists with resolver-assigned ownership (Plan 4d''s owned_languages), Q1-style kernelspec lookup by language, and multiple kernels per document.'
 ---
 
-**Status:** outline only. It gets further review and is then split into per-phase
-plans. Not started.
+**Status (updated 2026-11-01):** complete except JOL-2b's gate and the deferred JOL-3. Split into per-phase plans. JOL-1, JOL-2a, JOL-4 and JOL-5 are done;
+JOL-2b is implemented and awaits only its `cargo xtask verify` gate; JOL-3 is deferred. This
+file is the background; the per-phase plans and the 2026-10-31 review notes in JOL-2a and
+JOL-2b win on conflicts.
+**Part of:** [the engine-execution-records epic](2026-10-28-execution-records-epic.md)
+(branch `feature/execution-records-epic`). This epic stays separately reviewable but
+**executes as part of that one**: its phases are plans in that epic's DAG
+(JOL-1 = Phase 1, JOL-2a = the `jupyter:` slice of Phase 2, JOL-2b = the rest
+of Phase 2, JOL-3 = Phase 3, JOL-4 = Phase 4, JOL-5 = Phase 5). The two epics
+share `execute_blocks_inner` and `ExecuteOptions`, so they are sequenced
+together, not independently: Phase 1 and the `jupyter:` slice land first, then
+the records epic's unit loop adds a `kernel_for(unit)` seam that Phase 2's
+ownership gate and Phase 3 fill in. Where the two disagree, the records epic's
+sequencing wins.
 **Subsumes:** [Plan 4d](2026-07-06-plan4d-owned-languages.md) (`owned_languages`).
 **Trigger:** `{ggsql}` cells were never executed by `q2 render`
 (see "Starting point").
@@ -71,7 +83,9 @@ Other facts the epic builds on:
    `jupyter: {python: python3, ggsql: ggsql}` overrides per language.
 5. **Owned language with no matching kernelspec:** a loud error naming the
    language and saying how to install or pin a kernel. Not a warning, not a
-   passthrough (design §10).
+   passthrough (design §10). SUPERSEDED (2026-10-29, 2026-10-31): JOL-2b makes it a warning in
+   single-engine documents (once per document, `eval: false` exempt) and an error in
+   multi-engine ones.
 6. **Kernels are isolated sessions, with an ordering guarantee:** cells run
    strictly in document order across kernels (so a file written by one cell can
    be read by the next); nothing else is shared between kernels.
@@ -91,6 +105,15 @@ Other facts the epic builds on:
 
 ### Phase 2: jupyter consumes ownership; kernel lookup by language
 
+- **First slice, shippable alone: honor the `jupyter:` key in the text path.**
+  `text_execute.rs` picks the kernel with `map_language_to_kernel` on the first
+  executable cell and never reads the document metadata. `resolve_kernel` in
+  `kernelspec.rs` already implements the metadata-first order but is dead code.
+  Wire it in: a scalar (or `jupyter: {kernel: ...}`) names the kernel for the
+  whole document; absent, fall back to language lookup. This is what makes SoS
+  usable (see "Research notes: SoS"): fences stay `{python}` and `{ggsql}`, and
+  `jupyter: sos` sends every executed cell to the one SoS kernel. It does not
+  depend on Phase 1.
 - `partition_cells` executes `ctx.owned_languages.contains(lang)`; delete
   `is_executable_language`. Owned-by-nobody and ceded cells pass through
   untouched.
@@ -114,7 +137,10 @@ Everything in this phase is provisional. Q1 runs one kernel per document, so thi
 is new behavior with open design questions (how `jupyter:` should express several
 kernels, session lifecycle, record/replay and preview capture, error attribution).
 Phases 1, 2, 4 and 5 stand without it; until it lands, a mixed-language document
-keeps today's one-kernel behavior.
+keeps today's one-kernel behavior, or runs on a multiplexing kernel such as SoS
+chosen with `jupyter:` (see "Research notes: SoS"). That workaround is also the
+main alternative to building this phase: one kernel that multiplexes, versus q2
+managing several.
 
 - Resolve a kernel per distinct owned language (decision 4's `jupyter:` forms
   first, then kernelspec lookup); start sessions lazily, key by `SessionKey`,
@@ -165,7 +191,23 @@ keeps today's one-kernel behavior.
 - **Resolution of explicit `jupyter:` map keys:** the keys are language names.
   Are they matched case-insensitively and through the same alias table as
   fences?
-- **Does `engine: jupyter` need to be written?** See "Research notes".
+- **Does `engine: jupyter` need to be written?** Resolved 2026-10-30: no, for a plain
+  `{ggsql}` document or a python-only document (see "Research notes").
+- **Explicit `jupyter:` kernel versus the ownership gate.** When the document
+  names a kernel, should every non-ceded cell go to it, even for languages the
+  kernel would run but q2 does not list (a SoS document with `{bash}` or `{sas}`
+  cells)? Q1 does not send everything: it makes code cells only of fences in the
+  kernelspec\'s language (`external-sources/quarto-cli/src/core/jupyter/jupyter.ts:321-325`,
+  verified 2026-10-30) and leaves other fences display-only; how Q1 treats a SoS
+  kernelspec (`language: sos`) is not verified. Until Phase 1 and 2 replace the allowlist
+  with ownership, the allowlist keeps applying; decide how the two interact once
+  ownership exists.
+- **Subkernel selection inside a multiplexing kernel:** SoS reads
+  `content.sos.cell_kernel` from the execute request. Sending it from the fence
+  language would remove the `%use` magics from documents. Does `runtimelib`
+  let q2 add fields to the request content? SoS names subkernels by kernelspec
+  name, so q2 would look them up by the kernelspec `language` field (Phase 2
+  logic).
 
 ## Research notes (everything learned so far that the outline does not carry)
 
@@ -208,19 +250,17 @@ keeps today's one-kernel behavior.
   blocks. The `02` PNG was inspected and is a correct plot. Output goes to
   `<stem>_files/figure-html/cell-N-output-1.png`.
 - **Not verified:**
-  - `04-mixed-python.qmd` with the fix. The reviewer's claim (the python kernel
-    gets the ggsql text, or the reverse) is expected, not observed.
   - The PyPI kernel with the fixed binary. The PyPI install writes the same
     `{resource_dir}` form, so it should work.
-  - Whether `engine: jupyter` and `jupyter: ggsql` in the front matter are
-    actually needed. The test files had both added while debugging, and they were
-    never removed to test without them. The end-user instructions we want to give
-    depend on this. A plain `{ggsql}` document with no front matter is the case to
-    run.
-  - An unexplained observation: the very first renders (before any `engine:` key
-    was added) showed no python output in `04-mixed-python.html` either. It is not
-    known whether a `{python}` block with no `engine:` key executes. Check before
-    writing user docs.
+- **Resolved 2026-10-30** (q2 0.36.0-nightly.20261027 with the ggsql kernel 0.5.2 from
+  the `~/docs/ggsql-user` venv on `PATH`):
+  - `04-mixed-python.qmd` fails with a SyntaxError: the ggsql text goes to the python
+    kernel, with or without `engine: jupyter`. The reviewer's claim is observed.
+  - Neither `engine: jupyter` nor `jupyter: ggsql` is needed in the front matter. A
+    plain `{ggsql}` document renders its plot with no front matter, with only
+    `engine: jupyter`, with only `jupyter: ggsql`, and with both.
+  - A `{python}` block with no `engine:` key executes and shows its stdout, which
+    explains away the earlier unexplained observation.
 
 ### ggsql specifics
 
@@ -270,7 +310,9 @@ keeps today's one-kernel behavior.
   Cell options (`#|`) are partitioned per block before execution.
 - Kernel discovery: `kernelspec.rs` wraps `runtimelib::list_kernelspecs`
   (data dirs only, no per-venv search of its own) and `find_kernelspec(name)`;
-  `resolve_kernel` also reads the `jupyter:` metadata key (scalar string).
+  `resolve_kernel` also reads the `jupyter:` metadata key (scalar string) but is
+  `#[allow(dead_code)]` with no caller outside its tests; the text path ignores
+  `jupyter:` entirely (verified 2026-10-17, see "Research notes: SoS").
   `runtimelib` 2.0.0 `KernelspecDir::command` substitutes only `{connection_file}`.
 - `.ipynb` input: `content_processors/ipynb.rs:212` reads the one notebook-level
   `metadata.kernelspec.language` and fences every code cell with it (`cell_wrap`,
@@ -278,6 +320,40 @@ keeps today's one-kernel behavior.
   Percent scripts have their own content processor
   (`content_processors/percent.rs`) and were not examined.
 - `runtimelib` and `jupyter-protocol` are 2.0.0 in the cargo registry.
+
+### SoS (Script of Scripts) as a multi-language kernel (tested 2026-10-17)
+
+Checked because a multiplexing kernel could cover mixed-language documents
+without Phase 3.
+
+- **What exists** (web search, status not checked): `sos-notebook` (SoS) runs
+  several kernels behind one kernel, with language modules for variable exchange;
+  `allthekernels` is a multiplexer that picks the kernel from a cell prefix (the
+  PyPI release found is an old 0.0.1); Calysto `metakernel` is another;
+  `jupyter-kernel-proxy` forwards to an already running kernel and is not a
+  per-cell router.
+- **Kernel-level test** (jupyter_client against a venv with `sos`,
+  `sos-notebook`, and the user-level ggsql kernelspec; `python -m
+  sos_notebook.install` registers the `sos` kernelspec in the user data dir):
+  `print(1+1)` runs in SoS Python; `%use ggsql` switches the cell to ggsql and
+  returns `image/png`; `%use sos` switches back; variables persist across
+  subkernels. `%use ggsql` and the query in one cell works; `%%ggsql` does not
+  (parsed as Python); `%with ggsql` runs the cell but does not switch.
+- **Through q2 (fixed binary):** `jupyter: sos` in the front matter did nothing.
+  The kernel is chosen from the first executable cell's language
+  (`text_execute.rs`, `map_language_to_kernel`), so a document starting with
+  `{python}` got `python3`; the symptom was IPython's "Line magic function `%use`
+  not found". The workaround that worked: a kernelspec named `python3` that
+  launches SoS, put first on `JUPYTER_PATH`. With it, a document of `{python}`,
+  `{ggsql}` (first line `%use ggsql`), `{python}` (first line `%use sos`) printed
+  42, produced a PNG, and printed 22 (a variable set before the ggsql cell).
+- **Rough edge, not q2's:** SoS starts the ggsql subkernel without applying the
+  kernelspec `env`, so ggsql INFO logs (about 24 lines) appear as stderr in cell
+  output. `RUST_LOG=error` in the shim kernelspec did not help.
+- **What SoS needs from q2:** honor `jupyter:` (Phase 2, first slice). Optionally
+  send `cell_kernel` (see Risks). It needs nothing from Phase 1 or Phase 3.
+- **Side effect left on the machine:** the `sos` kernelspec in
+  `~/Library/Jupyter/kernels/`; test documents in `~/docs/ggsql-sos/`.
 
 ### Plan 4d facts that this epic changes
 

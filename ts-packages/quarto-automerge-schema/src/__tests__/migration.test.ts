@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  CAPTURE_MIME_TYPE,
   CURRENT_SCHEMA_VERSION,
+  RECORD_MIME_TYPE,
   migrateIndexDocument,
   setIdentity,
 } from '../index.js';
@@ -112,6 +114,25 @@ describe('migrateIndexDocument — v2 (capture sidecar) and v3 (folders)', () =>
     expect(changed).toBe(false);
     expect(doc.version).toBe(3);
     expect(doc.folders).toEqual({ drafts: true });
+  });
+
+  it('ignores the payload kind of a capture doc: an engine-record ref migrates untouched (EXR-13)', () => {
+    // `captureDocId` is opaque to migration; it may name a legacy capture or a record.
+    const doc: IndexDocument = {
+      files: { 'index.qmd': 'doc1' },
+      version: 2,
+      identities: {},
+      captures: { 'index.qmd': { captureDocId: 'rec-1', staleness: false, state: 'idle' } },
+    };
+    migrateIndexDocument(doc);
+    expect(doc.captures).toEqual({
+      'index.qmd': { captureDocId: 'rec-1', staleness: false, state: 'idle' },
+    });
+  });
+
+  it('exports distinct MIME constants for the two capture payload kinds', () => {
+    expect(CAPTURE_MIME_TYPE).toBe('application/x-engine-capture+gzip');
+    expect(RECORD_MIME_TYPE).toBe('application/x-engine-record+gzip');
   });
 
   it('preserves an existing captures sidecar through migration from V1', () => {

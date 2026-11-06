@@ -95,6 +95,7 @@ website:
             - guides/authoring/tables.qmd
             - guides/authoring/cross-references.qmd
             - guides/authoring/diagrams.qmd
+            - guides/authoring/code-highlighting.qmd
             - guides/authoring/shortcodes.qmd
             - guides/authoring/lmd.qmd
             - guides/authoring/lua-filters.qmd
@@ -108,6 +109,8 @@ website:
             - guides/authoring/computations.qmd
             - guides/authoring/notebooks.qmd
             - guides/authoring/engines.qmd
+            - guides/authoring/jupyter-kernels.qmd
+            - guides/authoring/execution-records.qmd
             - guides/authoring/navigation.qmd
             - guides/authoring/extensions.qmd
             - guides/authoring/components.qmd
@@ -221,6 +224,7 @@ website:
             - errors/markdown/Q-2-56.qmd
             - errors/markdown/Q-2-57.qmd
             - errors/markdown/Q-2-58.qmd
+            - errors/markdown/Q-2-59.qmd
         - section: "writer"
           contents:
             - errors/writer/Q-3-1.qmd
@@ -440,6 +444,9 @@ website:
             - errors/engine/Q-18-1.qmd
             - errors/engine/Q-18-2.qmd
             - errors/engine/Q-18-3.qmd
+            - errors/engine/Q-18-4.qmd
+            - errors/engine/Q-18-5.qmd
+            - errors/engine/Q-18-10.qmd
         - section: "image"
           contents:
             - errors/image/Q-19-1.qmd

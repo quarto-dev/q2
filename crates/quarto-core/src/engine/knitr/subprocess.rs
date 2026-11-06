@@ -388,11 +388,10 @@ where
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
 
-    if options.quiet {
-        cmd.stderr(Stdio::piped());
-    } else {
-        cmd.stderr(Stdio::inherit());
-    }
+    // Always piped: when not quiet, a tee thread forwards R's stderr as it arrives (what
+    // `inherit` did) while keeping a copy, so a failure's "Quitting from lines X-Y" can be
+    // parsed (EXR-11 11D) instead of being lost to the terminal.
+    cmd.stderr(Stdio::piped());
 
     // Spawn process
     let mut child = cmd.spawn().map_err(|e| {
@@ -403,6 +402,26 @@ where
         ))
     })?;
     RSCRIPT_SPAWN_COUNT.fetch_add(1, Ordering::Relaxed);
+
+    let tee = (!options.quiet)
+        .then(|| child.stderr.take())
+        .flatten()
+        .map(|mut pipe| {
+            std::thread::spawn(move || {
+                use std::io::Read;
+                let mut seen = Vec::new();
+                let mut buf = [0u8; 4096];
+                let mut err = std::io::stderr();
+                while let Ok(n) = pipe.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    let _ = err.write_all(&buf[..n]);
+                    seen.extend_from_slice(&buf[..n]);
+                }
+                seen
+            })
+        });
 
     // Write request to stdin
     if let Some(mut stdin) = child.stdin.take() {
@@ -416,9 +435,12 @@ where
         .wait_with_output()
         .map_err(|e| ExecutionError::other(format!("Failed to wait for Rscript: {}", e)))?;
 
+    let teed = tee.map(|t| t.join().unwrap_or_default());
+
     // Check exit status
     if !output.status.success() {
-        let mut stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        let mut stderr =
+            String::from_utf8_lossy(teed.as_deref().unwrap_or(&output.stderr)).into_owned();
 
         // Apply filter if provided
         if let Some(filter) = options.stderr_filter {

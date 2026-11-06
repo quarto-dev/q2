@@ -1,0 +1,13 @@
+Before.
+
+```{r plain}
+x <- 1:3
+x
+print("hi")
+cat("a\nb\n")
+invisible(7)
+y <- 2
+y + 1
+```
+
+After.

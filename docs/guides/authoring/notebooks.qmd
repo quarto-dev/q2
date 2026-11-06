@@ -48,7 +48,8 @@ or for one render, with `q2 render penguins.ipynb -M 'execute:{enabled: true}'`.
 (Unlike Quarto 1, `--execute` alone does not re-run a notebook; see
 [Computations](computations.qmd#rendering-without-running-any-code).)
 Execution goes through the
-[Jupyter engine](engines.qmd), so it requires a working Jupyter installation.
+[Jupyter engine](engines.qmd), so it requires a working Jupyter installation. To run a language other than Python, see
+[Running other languages with Jupyter kernels](jupyter-kernels.qmd).
 A notebook that demands execution is always executed — it is never silently
 replaced by its stored outputs.
 

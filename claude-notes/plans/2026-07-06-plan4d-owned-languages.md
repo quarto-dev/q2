@@ -1,13 +1,21 @@
 ---
 title: 'Plan 4d: `owned_languages` — a positive engine-ownership wire field'
 date: 2026-07-06
+status: complete
 description: 'Adds a positive `owned_languages` field to the engine-execute wire, so TypeScript engines can ask directly which languages q2 assigned to them instead of inferring this from the leave-alone `handled_languages` set.'
 ---
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** the shipping resolver + TS-engine wire (Plans 1a–c, 2, 3, 4). No new
-machinery — this is a small, additive wire field.
-**Blocks:** nothing. Purely additive; safe to land any time after the wire exists.
+machinery — this is a small, additive wire field. Inside the records epic, JOL-1
+(Phases 4d-A/B) depends on nothing else in the epic, and JOL-4 (Phases 4d-C/D/E)
+depends on JOL-1.
+**Blocks:** nothing outside the records epic; purely additive. Per the dependency table
+in [the epic](2026-10-28-execution-records-epic.md): JOL-1 blocks JOL-2b and JOL-4; JOL-4
+blocks EXR-8 (hard), EXR-7 and EXR-9 (soft) and JOL-5.
+**Lane:** B (`workspace-5`) for JOL-1 and JOL-4; run them under the epic\'s "Running the plans in four lanes" section.
+
+**Subsumed (2026-10-28):** by [the Jupyter owned-languages epic](2026-10-17-jupyter-owned-languages-epic.md), which executes as part of [the engine-execution-records epic](2026-10-28-execution-records-epic.md). Phases 4d-A/B become that epic's Phase 1 (JOL-1) and 4d-C/D/E its Phase 4 (JOL-4). The epic reverses this plan's earlier "q2 core does not read `owned_languages`" decision for the Jupyter engine (JOL-2b reads `ctx.owned_languages`), and the design decisions below are amended accordingly. The "Verification" and "Success Criteria" sections cover Phases 4d-A/B (JOL-1) only; the criteria that need the TypeScript side and the end-to-end checks sit in the Phase 4d-C/D/E (JOL-4) sections.
 **Estimated sessions:** 1–2 (the Phase 4d-D case-4 self-enforcement test adds a new synthetic `owns-cant-run` fixture + committed `dist/` build)
 
 > **For implementers:** this plan is TDD, task-by-task. Steps use `- [ ]` checkboxes.
@@ -25,7 +33,7 @@ of a leave-alone set.
 
 Today q2 carries only the **leave-alone set** to engines — `handled_languages`,
 produced by `EngineResolution::handled_languages_for`
-(`crates/quarto-core/src/engine/resolution.rs:298`), defined as
+(`crates/quarto-core/src/engine/resolution.rs:324`), defined as
 `HANDLED_LANGUAGES ∪ { lang : ownership[lang] != engine }`: q2's built-in
 cell-handler languages (`ojs`/`mermaid`/`dot`, `engine/mod.rs:123`) plus every
 language this render assigned to a **different** engine. It is the *negative*
@@ -63,7 +71,7 @@ duplicate of `handled_languages`:
    `engine: knitr` + a `{julia}` cell, T4 gated) is silently absent from the
    `ownership` map — no error, no default — and passes through as display code
    (T1–T4 are insert-only; test `test_t4_implicit_gate_explicit_knitr_no_jupyter`,
-   `resolution.rs:987-1007`; design §4.3/§6.1/§10).
+   `resolution.rs:1474`; design §4.3/§6.1/§10).
 2. **`!handled.includes(L)` is therefore ambiguous** — it means "L owned by me
    **or** L owned by nobody," not "owned by me." With both projections a language
    is exactly one of \{`owned` = mine, `handled` = someone else's / a cell handler,
@@ -81,10 +89,10 @@ duplicate of `handled_languages`:
 
 ### Carriage (verified) — where the parallel field must be threaded
 
-The leave-alone set flows: `handled_languages_for` (`resolution.rs:298`) →
-`EngineExecutionStage` calls it (`stage/stages/engine_execution.rs:345`) →
-`ExecutionContext.handled_languages` (`context.rs:89`, builder `:209`) →
-`TsEngine::execute` copies it onto the wire (`ts_engine.rs:423`) →
+The leave-alone set flows: `handled_languages_for` (`resolution.rs:324`) →
+`EngineExecutionStage` calls it (`stage/stages/engine_execution.rs:552`, builder call at `:582`) →
+`ExecutionContext.handled_languages` (`context.rs:104`, default seeding at `:189`, builder `:242`) →
+`TsEngine::execute` copies it onto the wire (`ts_engine.rs:560`) →
 `TsExecuteOptions.handled_languages` (`ts_protocol.rs:391`, `#[serde(rename_all =
 "camelCase")]` → `handledLanguages`) → Deno host `JSON.parse ... as` (`framing.ts:119`)
 → `TsExecuteOptions` TS interface (`types.ts:185`) → engine `execute()` (`host.ts:680`).
@@ -104,10 +112,12 @@ the Rust field keeps every deserialize path (round-trip tests) tolerant of its a
 - **Name:** `owned_languages` / `ownedLanguages`. Matches the existing `ownership`
   vocabulary in `resolution.rs`. Rejected `won_languages` (cute, non-idiomatic).
 - **Scope:** populate `ExecutionContext.owned_languages` for every engine (it is the
-  shared carrier) but forward it only on the **TS-engine wire**. Native engines
-  (knitr/jupyter) already consume `handled_languages` and can read resolution
-  in-process, so they don't need the wire field; leave `subprocess.rs`/`hooks.R`
-  untouched.
+  shared carrier) but forward it only on the **TS-engine wire** (Phase 4d-B adds the Rust
+  wire field, `TsExecuteOptions.owned_languages`, `ts_protocol.rs:361/391`). This plan
+  changes no native engine: `subprocess.rs` and `hooks.R` stay untouched, and knitr keeps
+  reading `handled_languages`. The Jupyter engine does read the carrier, in JOL-2b, where
+  `ctx.owned_languages` replaces its language allowlist; that change is not part of this
+  plan.
 - **Membership:** `{ lang : ownership[lang] == engine }`, sorted — only languages
   **present in this render** that q2 assigned to this engine. An engine that owns
   nothing this render gets `[]`. This is the exact complement of `handled_languages_for`
@@ -115,11 +125,15 @@ the Rust field keeps every deserialize path (round-trip tests) tolerant of its a
 - **Reflects *resolved* ownership, not static extension claims.** If the user
   reordered/overrode claims via `engine:`/`engines:`, `owned_languages` shows the
   effective decision — that is the point: the engine sees what q2 actually chose.
-- **Informational, not enforcement.** `handled_languages` remains the execute-time
-  gate (cede / re-emit); `owned_languages` changes no resolution or partition logic.
+- **Informational on the wire, not enforcement.** Phases 4d-A/B change no resolution or
+  partition logic, and `handled_languages` remains the execute-time gate for TS engines
+  (cede / re-emit). JOL-2b later makes `owned_languages` the Jupyter engine\'s execution
+  gate (its own change, in `partition_cells`).
 - **`handled_languages` is retained unchanged** (Q1 compatibility; native consumers
   and the R hooks read it). This plan **adds**, it does not deprecate or remove.
-- **q2 core does not read `owned_languages`.** It is engine-facing convenience only.
+- **Who reads `owned_languages`.** Phases 4d-A/B only produce and carry it. On the TS wire
+  it is engine-facing convenience; inside q2, the Jupyter engine reads
+  `ctx.owned_languages` from JOL-2b onward. No other q2 core code reads it.
 
 ## Open questions (none blocking)
 
@@ -133,15 +147,15 @@ the Rust field keeps every deserialize path (round-trip tests) tolerant of its a
 ## Phase 4d-A: Rust — produce the positive set (resolver + context)
 
 **Files:**
-- Modify: `crates/quarto-core/src/engine/resolution.rs` (add `owned_languages_for`; new unit test near `test_handled_languages_for` at `:1062`)
-- Modify: `crates/quarto-core/src/engine/context.rs` (add field `:89` region + builder `:209` region)
-- Modify: `crates/quarto-core/src/stage/stages/engine_execution.rs` (wire at `:345`)
+- Modify: `crates/quarto-core/src/engine/resolution.rs` (add `owned_languages_for`; new unit test near `test_handled_languages_for` at `:1549`; the test helpers `mock_registry`, `engine_cell`, `map_config`, `array_config`, `string_config` are at `:1120-1200`)
+- Modify: `crates/quarto-core/src/engine/context.rs` (add field `:104` region + builder `:242` region)
+- Modify: `crates/quarto-core/src/stage/stages/engine_execution.rs` (wire at `:552`)
 
 **Interfaces produced:**
 - `EngineResolution::owned_languages_for(&self, engine: &str) -> Vec<String>`
 - `ExecutionContext.owned_languages: Vec<String>` + `ExecutionContext::with_owned_languages(self, Vec<String>) -> Self`
 
-- [ ] **Step 1: Write the failing test** — append to the `tests` module in `resolution.rs` (mirrors `test_handled_languages_for`\'s setup at `:1062`):
+- [x] **Step 1: Write the failing test** — append to the `tests` module in `resolution.rs` (mirrors `test_handled_languages_for`\'s setup at `:1549`):
 
 ```rust
 /// `owned_languages_for` returns { lang present in doc : owned by this engine }.
@@ -180,12 +194,12 @@ fn test_owned_languages_for() {
 }
 ```
 
-- [ ] **Step 2: Run it, verify it fails**
+- [x] **Step 2: Run it, verify it fails**
 
 Run: `cargo nextest run -p quarto-core owned_languages_for`
 Expected: FAIL — `no method named owned_languages_for`.
 
-- [ ] **Step 3: Implement `owned_languages_for`** — add to `impl EngineResolution` in `resolution.rs`, directly after `handled_languages_for` (`:298-309`):
+- [x] **Step 3: Implement `owned_languages_for`** — add to `impl EngineResolution` in `resolution.rs`, directly after `handled_languages_for` (`:324-335`):
 
 ```rust
 /// Compute the **positive ownership set** for `engine`: every language present
@@ -198,8 +212,8 @@ Expected: FAIL — `no method named owned_languages_for`.
 /// The exact complement of [`handled_languages_for`] restricted to present
 /// languages, and **sorted** for deterministic output. Unlike the leave-alone
 /// set, an engine's own name *is* the membership test — engines can read this
-/// directly instead of inferring the complement. q2 core does not consume it;
-/// it is carried for engine-author convenience (see Plan 4d).
+/// directly instead of inferring the complement. It is carried to TS engines
+/// for engine-author convenience (Plan 4d) and read by the Jupyter engine (JOL-2b).
 pub fn owned_languages_for(&self, engine: &str) -> Vec<String> {
     let mut result: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for (lang, owner) in &self.ownership {
@@ -211,26 +225,26 @@ pub fn owned_languages_for(&self, engine: &str) -> Vec<String> {
 }
 ```
 
-- [ ] **Step 4: Run it, verify it passes**
+- [x] **Step 4: Run it, verify it passes**
 
 Run: `cargo nextest run -p quarto-core owned_languages_for`
 Expected: PASS.
 
-- [ ] **Step 5: Add the `ExecutionContext` carrier** — in `context.rs`, add the field immediately after `handled_languages` (`:89`):
+- [x] **Step 5: Add the `ExecutionContext` carrier** — in `context.rs`, add the field immediately after `handled_languages` (`:104`):
 
 ```rust
     /// Languages present in this render that q2 assigned to **this** engine
     /// (the positive complement of `handled_languages`). Populated by
     /// `EngineExecutionStage` via `EngineResolution::owned_languages_for`.
-    /// Defaults to empty (native engines and direct-construction tests do not
-    /// set it; it is engine-author convenience, not consumed by q2 core). See Plan 4d.
+    /// Defaults to empty (direct-construction tests do not set it). Carried to TS
+    /// engines on the wire (Plan 4d) and read by the Jupyter engine (JOL-2b).
     pub owned_languages: Vec<String>,
 ```
 
 Ensure the `Default`/constructor that initializes `handled_languages` (the
-`HANDLED_LANGUAGES`-seeding block around `:165`) also initializes
+`HANDLED_LANGUAGES`-seeding block at `:189`) also initializes
 `owned_languages: Vec::new()`. Then add the builder after `with_handled_languages`
-(`:209-212`):
+(`:242-245`):
 
 ```rust
     /// Set the positive owned-language set for this engine.
@@ -242,7 +256,7 @@ Ensure the `Default`/constructor that initializes `handled_languages` (the
     }
 ```
 
-- [ ] **Step 6: Wire it in `EngineExecutionStage`** — in `engine_execution.rs`, beside the existing `handled_languages` computation (`:345`) and its `.with_handled_languages(...)` (`:359`):
+- [x] **Step 6: Wire it in `EngineExecutionStage`** — in `engine_execution.rs`, beside the existing `handled_languages` computation (`:552`) and its `.with_handled_languages(...)` (`:582`):
 
 ```rust
             let handled_languages = resolution.handled_languages_for(engine.name());
@@ -256,7 +270,7 @@ and chain the builder call next to `.with_handled_languages(handled_languages)`:
             .with_owned_languages(owned_languages)
 ```
 
-- [ ] **Step 7: Build, commit**
+- [x] **Step 7: Build, commit**
 
 Run: `cargo build -p quarto-core`
 Expected: clean.
@@ -274,23 +288,23 @@ git commit -m "feat(engine): compute positive owned_languages set beside handled
 
 **Files:**
 - Modify: `crates/quarto-core/src/engine/ts_protocol.rs` (struct `:361`, test builder `:508-518`, camel-case test `:1223`, dependencies-default test `:1468`)
-- Modify: `crates/quarto-core/src/engine/ts_engine.rs` (execute-options construction `:411`)
+- Modify: `crates/quarto-core/src/engine/ts_engine.rs` (execute-options construction `:560`)
 
 **Interfaces produced:**
 - `TsExecuteOptions.owned_languages: Vec<String>` (wire key `ownedLanguages`)
 
-- [ ] **Step 1: Extend the camel-case wire test** — in `ts_protocol.rs`, `test_ts_execute_options_camel_case` (`:1223`) currently asserts `j["handledLanguages"] == json!([])`. Add, right below it:
+- [x] **Step 1: Extend the camel-case wire test** — in `ts_protocol.rs`, `test_ts_execute_options_camel_case` (`:1223`) currently asserts `j["handledLanguages"] == json!([])`. Add, right below it:
 
 ```rust
         assert_eq!(j["ownedLanguages"], json!([]));
 ```
 
-- [ ] **Step 2: Run it, verify it fails**
+- [x] **Step 2: Run it, verify it fails**
 
 Run: `cargo nextest run -p quarto-core test_ts_execute_options_camel_case`
 Expected: FAIL — `ownedLanguages` is `Null` (field absent).
 
-- [ ] **Step 3: Add the wire field** — in `TsExecuteOptions` (`ts_protocol.rs:361`), immediately after `handled_languages` (`:391`):
+- [x] **Step 3: Add the wire field** — in `TsExecuteOptions` (`ts_protocol.rs:361`), immediately after `handled_languages` (`:391`):
 
 ```rust
     /// The **positive** owned-language set for this engine — every language
@@ -309,28 +323,28 @@ Expected: FAIL — `ownedLanguages` is `Null` (field absent).
     pub owned_languages: Vec<String>,
 ```
 
-- [ ] **Step 4: Fix the two construction sites** — the test builder `make_execute_options` (`ts_protocol.rs:517`, beside `handled_languages: vec![]`):
+- [x] **Step 4: Fix the two construction sites** — the test builder `make_execute_options` (`ts_protocol.rs:517`, beside `handled_languages: vec![]`):
 
 ```rust
             handled_languages: vec![],
             owned_languages: vec![],
 ```
 
-and the production builder in `ts_engine.rs` (`:411-423`, beside `handled_languages: ctx.handled_languages.clone()`):
+and the production builder in `ts_engine.rs` (`:560`, beside `handled_languages: ctx.handled_languages.clone()`):
 
 ```rust
             handled_languages: ctx.handled_languages.clone(),
             owned_languages: ctx.owned_languages.clone(),
 ```
 
-- [ ] **Step 5: Update the other wire fixture** — `test_fc2_execute_options_dependencies_default_true` (`ts_protocol.rs:1468`) builds a JSON blob with `"handledLanguages": []` (`:1486`). Add `"ownedLanguages": []` beside it so the round-trip stays exact. (With `#[serde(default)]`, omitting it also works — but keep the pinned shape explicit.)
+- [x] **Step 5: Update the other wire fixture** — `test_fc2_execute_options_dependencies_default_true` (`ts_protocol.rs:1468`) builds a JSON blob with `"handledLanguages": []` (`:1486`). Add `"ownedLanguages": []` beside it so the round-trip stays exact. (With `#[serde(default)]`, omitting it also works — but keep the pinned shape explicit.)
 
-- [ ] **Step 6: Run the wire tests, verify they pass**
+- [x] **Step 6: Run the wire tests, verify they pass**
 
 Run: `cargo nextest run -p quarto-core ts_protocol`
 Expected: PASS (all).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add crates/quarto-core/src/engine/ts_protocol.rs crates/quarto-core/src/engine/ts_engine.rs
@@ -341,20 +355,22 @@ git commit -m "feat(engine): carry ownedLanguages on the TS execute wire (Plan 4
 
 ## Phase 4d-C: TypeScript — types + host passthrough + wire-parity
 
+**Reconciled 2026-10-31 (JOL-4 session):** the Deno host is gone (only a stale `dist/` remains under `quarto-engine-host-deno`); the host is `ts-packages/quarto-engine-host-node` and its tests are vitest, not `deno test`. `wire-parity.test.ts` pins only four other wire types (not `TsExecuteOptions`), so Step 4 became a binding host test (`ownedLanguages passthrough (Plan 4d-C)` in `host.test.ts`; reverting the `host.ts` line turns it red). Verify with `npm run typecheck -w @quarto/engine-host-node` and `npm run test -w @quarto/engine-host-node`.
+
 **Files:**
 - Modify: `ts-packages/quarto-types/src/execution.ts` (author-facing `ExecuteOptions`, `:51`)
-- Modify: `ts-packages/quarto-engine-host-deno/src/types.ts` (wire `TsExecuteOptions`, `:185`)
-- Modify: `ts-packages/quarto-engine-host-deno/src/host.ts` (assemble `ExecuteOptions`, `:680`)
-- Modify: `ts-packages/quarto-engine-host-deno/src/wire-parity.deno-test.ts` (pin the new field)
+- Modify: `ts-packages/quarto-engine-host-node/src/types.ts` (wire `TsExecuteOptions`, `:185`)
+- Modify: `ts-packages/quarto-engine-host-node/src/host.ts` (assemble `ExecuteOptions`, `:680`)
+- Modify: `ts-packages/quarto-engine-host-node/src/host.test.ts` (add `ownedLanguages: []` to every `TsExecuteOptions` fixture; add the passthrough test)
 
-- [ ] **Step 1: Add to the wire type** — in `quarto-engine-host-deno/src/types.ts`, `TsExecuteOptions` (`:185`), after `handledLanguages`:
+- [x] **Step 1: Add to the wire type** — in `quarto-engine-host-node/src/types.ts`, `TsExecuteOptions` (`:185`), after `handledLanguages`:
 
 ```ts
   handledLanguages: string[];
   ownedLanguages: string[];
 ```
 
-- [ ] **Step 2: Add to the author-facing type** — in `quarto-types/src/execution.ts`, the `ExecuteOptions` interface (`:51`), after `handledLanguages`:
+- [x] **Step 2: Add to the author-facing type** — in `quarto-types/src/execution.ts`, the `ExecuteOptions` interface (`:51`), after `handledLanguages`:
 
 ```ts
   handledLanguages: string[];
@@ -364,63 +380,66 @@ git commit -m "feat(engine): carry ownedLanguages on the TS execute wire (Plan 4
   ownedLanguages: string[];
 ```
 
-- [ ] **Step 3: Thread it through the host** — in `host.ts`, the `executeOptions` assembly (`:680`), after `handledLanguages: opts.handledLanguages`:
+- [x] **Step 3: Thread it through the host** — in `host.ts`, the `executeOptions` assembly (`:680`), after `handledLanguages: opts.handledLanguages`:
 
 ```ts
               handledLanguages: opts.handledLanguages,
               ownedLanguages: opts.ownedLanguages,
 ```
 
-- [ ] **Step 4: Extend the wire-parity pin** — in `wire-parity.deno-test.ts`, wherever the `TsExecuteOptions` shape is asserted (the `assertEquals` block), add `ownedLanguages: []` to the expected object so Rust↔Deno shape parity stays enforced. If the test builds its input from a Rust-emitted fixture, regenerate/extend that fixture to include the key.
+- [x] **Step 4: Pin the field in the node host tests** — `wire-parity.test.ts` does not cover `TsExecuteOptions`, so add `ownedLanguages: []` to every `TsExecuteOptions` fixture in `host.test.ts` (it is a required wire field) and add a test that the engine's `execute()` receives it (done: `ownedLanguages passthrough (Plan 4d-C)`).
 
-- [ ] **Step 5: Build + test the TS packages**
+- [x] **Step 5: Build + test the TS packages**
 
-Run (from repo root): `npm run build -w ts-packages/quarto-types -w ts-packages/quarto-engine-host-deno`
-Then: `cd ts-packages/quarto-engine-host-deno && deno test src/wire-parity.deno-test.ts`
-Expected: build clean; wire-parity PASS.
+Run (from repo root): `npm run build -w ts-packages/quarto-types -w ts-packages/quarto-engine-host-node`
+Then: `cd ts-packages/quarto-engine-host-node && npx vitest run`
+Expected: build clean; vitest PASS.
 
 > Note: `quarto-types/dist/execution.d.ts` is generated — rebuilding regenerates the
 > `ownedLanguages` line at `dist/execution.d.ts:38`. Do not hand-edit `dist/`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ts-packages/quarto-types/src/execution.ts \
-        ts-packages/quarto-engine-host-deno/src/types.ts \
-        ts-packages/quarto-engine-host-deno/src/host.ts \
-        ts-packages/quarto-engine-host-deno/src/wire-parity.deno-test.ts
-git commit -m "feat(ts): pass ownedLanguages through the Deno host to engines (Plan 4d-C)"
+        ts-packages/quarto-engine-host-node/src/types.ts \
+        ts-packages/quarto-engine-host-node/src/host.ts \
+        ts-packages/quarto-engine-host-node/src/host.test.ts
+git commit -m "feat(ts): pass ownedLanguages through the node host to engines (Plan 4d-C)"
 ```
+
+**Phase 4d-C verification (JOL-4):** `cd ts-packages/quarto-engine-host-node && npx tsc --noEmit && npx vitest run` is green (done: 162 passed).
 
 ---
 
 ## Phase 4d-D: End-to-end positive assertion + doc cross-reference
+
+**Reconciled 2026-10-31 (JOL-4 session):** the engine host is Node, not Deno, so the e2e tests are Node-gated (`node_available_for_tests()`), and fixture `dist/` bundles are gitignored and built at test time by `engine_fixture_build::ensure_bundle` (so nothing is committed under `dist/`; new fixtures register in `HERMETIC_FIXTURES`). The embedded host bundle `ts-packages/quarto-engine-host-node/dist/engine-host-node.mjs` IS committed and was rebuilt with `cargo xtask build-engine-host-bundle`. The Step 1 test uses `{echo}` plus `{behave}` cells (two TS fixture engines): a bare unclaimed language such as `{mystery}` is claimed by the Jupyter fallback engine, which fails in an environment without a kernel, so it cannot serve as the "owned by someone else" discriminator.
 
 Prove the positive set arrives at a real engine correct, and cross-link the two fields
 so the next reader sees both. This is the end-to-end check (per repo policy, unit round-trips
 are necessary but not sufficient).
 
 **Files:**
-- Modify: `crates/quarto-core/tests/integration/echo_engine_e2e.rs` (add one Deno-gated positive assertion + the Step-2b negative test)
-- Create: `crates/quarto-core/tests/fixtures/extensions/owns-cant-run/` (synthetic engine for the Step-2b case-4 self-enforcement test)
+- Modify: `crates/quarto-core/tests/integration/echo_engine_e2e.rs` (the positive assertion `jol4_owned_languages_reaches_engine` + the Step-2b negative test)
+- Create: `crates/quarto-core/tests/fixtures/extensions/owns-cant-run/` (synthetic engine for the Step-2b case-4 self-enforcement test); modify `crates/quarto-core/tests/integration/engine_fixture_build.rs` (register it in `HERMETIC_FIXTURES`)
 - Modify: `crates/quarto-core/src/engine/ts_protocol.rs` (add a cross-ref line to the `handled_languages` doc comment `:370`)
 
-- [ ] **Step 1: Add a Deno-gated e2e assertion** — extend an existing multi-language `echo_engine_e2e.rs` render (or add one) so echo-engine is asked to echo back `options.ownedLanguages`, and assert it equals the language(s) q2 assigned to it (not the leave-alone set). Mirror the existing `deno_available()` skip guard (`echo_engine_e2e.rs:38-43`, early-return, not `#[ignore]`). If echo-engine's fixture source does not already surface options back, add a minimal echo of `ownedLanguages` to its `src/echo-engine.ts` and rebuild its committed `dist/echo-engine.js` with `q2 build-ts-extension`.
+- [x] **Step 1: Add a Node-gated e2e assertion** — extend an existing multi-language `echo_engine_e2e.rs` render (or add one) so echo-engine is asked to echo back `options.ownedLanguages`, and assert it equals the language(s) q2 assigned to it (not the leave-alone set). Mirror the existing `node_available_for_tests()` skip guard (early-return, not `#[ignore]`). If echo-engine's fixture source does not already surface options back, add a minimal echo of `ownedLanguages` to its `src/echo-engine.ts` (its `dist/` is rebuilt at test time).
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
-Run: `cargo nextest run -p quarto-core --test integration echo_engine`
-Expected: PASS (or SKIP if deno absent — record which in the transcript).
+Run: `cargo nextest run -p quarto-core -E 'binary(integration) & test(jol4_)'`
+Expected: PASS (or SKIP if node absent). Observed: both `jol4_*` tests PASS; with `owned_languages: vec![]` forced in `build_execute_options` (ts_engine.rs:561) both go RED..
 
-- [ ] **Step 2b: Case-4 self-enforcement negative test (owned-but-unrunnable, driven by `owned_languages`).**
+- [x] **Step 2b: Case-4 self-enforcement negative test (owned-but-unrunnable, driven by `owned_languages`).**
   This is the in-scope replacement for Plan 4b's removed `claims-cant-run` fixture / case-4 row. q2 does
   **not** police engine execution and has **no** static capability model, so owned-but-unrunnable is the
   engine's own §10 contract obligation — and `owned_languages` is precisely what lets a TS engine
   self-enforce it *cleanly*, distinguishing "mine" from "owned by nobody" (which `handled_languages`
   alone cannot). What this test proves is engine-behavior + wire-field carriage, **not** any q2-side
   partition check.
-  - Add a minimal synthetic fixture `owns-cant-run` (echo-engine-shaped, Deno-gated, committed
-    `dist/…js` built with `q2 build-ts-extension`): it statically `Primary`-claims language `synth` (so
+  - Add a minimal synthetic fixture `owns-cant-run` (echo-engine-shaped, Node-gated, `dist/` built at test time via `HERMETIC_FIXTURES`): it statically `Primary`-claims language `synth` (so
     q2 assigns it ownership) but handles **no** computational language. Its `execute` reads
     `options.ownedLanguages`; if any entry falls outside its (empty) capability set it throws a clear
     `owns "<L>" but cannot run it` error.
@@ -429,12 +448,12 @@ Expected: PASS (or SKIP if deno absent — record which in the transcript).
     not about cell contents. (Do not have the engine scan cells to reach the error; drive it from the
     positive set.)
   - Render a doc with a `{synth}` cell through the binary; assert the render fails with the engine's
-    self-enforcement error naming `synth`. Deno-gated skip exactly like Step 1.
+    self-enforcement error naming `synth`. Node-gated skip exactly like Step 1.
   - **Do NOT** assert any q2-*side* case-4 behavior: q2 forwards `owned_languages` and the engine decides.
     Building a q2-side declaration-driven capability check would be a new capability model, explicitly out
     of scope for this epic.
 
-- [ ] **Step 3: Correct the overstated `handled_languages` doc comment + cross-reference** — the block at `ts_protocol.rs:370-390` currently claims q2 "assigns every language present in the document an owner, or hard-fails … so 'L absent from this set' and 'L owned by me' coincide." That is **false** (present-but-unclaimed languages are silently unowned — Background fact 1). Replace that soundness sentence with the accurate statement and point at the new field:
+- [x] **Step 3: Correct the overstated `handled_languages` doc comment + cross-reference** — the block at `ts_protocol.rs:370-390` currently claims q2 "assigns every language present in the document an owner, or hard-fails … so 'L absent from this set' and 'L owned by me' coincide." That is **false** (present-but-unclaimed languages are silently unowned — Background fact 1). Replace that soundness sentence with the accurate statement and point at the new field:
 
 ```rust
     /// NOTE: "absent from this set" means *owned by me OR owned by nobody* — a
@@ -444,15 +463,30 @@ Expected: PASS (or SKIP if deno absent — record which in the transcript).
     /// projection), not the complement of this set.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/quarto-core/tests/integration/echo_engine_e2e.rs \
         crates/quarto-core/src/engine/ts_protocol.rs \
         crates/quarto-core/tests/fixtures/extensions/echo-engine/ \
-        crates/quarto-core/tests/fixtures/extensions/owns-cant-run/
+        crates/quarto-core/tests/fixtures/extensions/owns-cant-run/ \
+        crates/quarto-core/tests/integration/engine_fixture_build.rs \
+        ts-packages/quarto-engine-host-node/dist/engine-host-node.mjs
 git commit -m "test(engine): e2e-verify ownedLanguages reaches an engine + case-4 self-enforcement; cross-ref docs (Plan 4d-D)"
 ```
+
+**Phase 4d-D success criteria (JOL-4):**
+
+- [x] `ownedLanguages` is carried end-to-end (Rust context → wire → node host → engine),
+  with the camel-case round trip and the node-host passthrough test pinning it. Recorded: `jol4_owned_languages_reaches_engine` renders `{echo}` + `{behave}` cells and observes `ownedLanguages == ["echo"]` (the positive set; `behave` is excluded).
+- [x] Case-4 self-enforcement (Step 2b): a synthetic engine that owns a language it
+  cannot run detects it via `ownedLanguages` and errors loudly, with the test bound to the wire
+  field (reddens if `owned_languages` is not carried). No q2-side capability check is added.
+- [x] The two wire fields cross-reference each other in the doc comments, and the
+  overstated `handled_languages` "coincide" claim is corrected.
+- [ ] (moved to the epic's pre-push gate, 2026-11-01) Before the push: `cargo xtask verify` is green (this touches `quarto-core` wire types
+  the WASM client depends on, so the full hub build must pass; do **not**
+  `--skip-hub-build`). Recommended for Gordon: `cargo nextest run --workspace`.
 
 ---
 
@@ -467,41 +501,42 @@ still correct after Phases A–D.
 - Review/modify: `claude-notes/designs/engine-resolution.md` (§5 positive projection, §9 `owned_languages_for` accessor, §13 verification item)
 - Review/modify: `claude-notes/designs/engine-api-surface.md` (the `ExecuteOptions → TsExecuteOptions` table row for `ownedLanguages`)
 
-- [ ] **Step 1: Reconcile `engine-resolution.md`.** After Phases A–D land, re-read §5/§9/§13 and confirm: the `owned_languages(k) = { lang : ownership[lang] == k }` formula matches `owned_languages_for` as implemented; the §9 accessor signature matches the real method; the §13 disjointness claim holds. Fix any mismatch (e.g. if the accessor name/signature or field name changed during implementation).
-- [ ] **Step 2: Reconcile `engine-api-surface.md`.** Re-read the `ExecuteOptions → TsExecuteOptions` table and confirm the `owned_languages` row's wire name (`ownedLanguages`), class (`q2-native`), and description match the shipped `TsExecuteOptions` field and the TS `ExecuteOptions`/`TsExecuteOptions` types.
-- [ ] **Step 3: Commit** any doc corrections.
+- [x] **Step 1: Reconcile `engine-resolution.md`.** After Phases A–D land, re-read §5/§9/§13 and confirm: the `owned_languages(k) = { lang : ownership[lang] == k }` formula matches `owned_languages_for` as implemented; the §9 accessor signature matches the real method; the §13 disjointness claim holds. Fix any mismatch (e.g. if the accessor name/signature or field name changed during implementation).
+- [x] **Step 2: Reconcile `engine-api-surface.md`.** Re-read the `ExecuteOptions → TsExecuteOptions` table and confirm the `owned_languages` row's wire name (`ownedLanguages`), class (`q2-native`), and description match the shipped `TsExecuteOptions` field and the TS `ExecuteOptions`/`TsExecuteOptions` types.
+- [x] **Step 3: Commit** any doc corrections.
 
 ```bash
 git add claude-notes/designs/engine-resolution.md claude-notes/designs/engine-api-surface.md
 git commit -m "docs(design): reconcile engine-resolution + api-surface with owned_languages as landed (Plan 4d-E)"
 ```
 
+**Phase 4d-E success criterion (JOL-4):**
+
+- [x] `engine-resolution.md` (§5/§9/§13) and `engine-api-surface.md` describe
+  `owned_languages` as landed — reviewed against the implementation, not just the
+  pre-written text.
+
 ---
 
-## Verification (before declaring done)
+## Verification (Phases 4d-A/B)
 
-- [ ] `cargo nextest run --workspace` — green.
-- [ ] `cd ts-packages/quarto-engine-host-deno && deno test` — green (wire-parity).
-- [ ] `cargo xtask verify` — green (this touches `quarto-core` wire types the WASM
-  client depends on, so the full hub build must pass; do **not** `--skip-hub-build`).
-- [ ] End-to-end example recorded in the transcript/plan: the exact `echo_engine_e2e`
-  assertion and the observed `ownedLanguages` value, confirming the positive set (not
-  the leave-alone set) arrived.
+- [x] `cargo clippy -p quarto-core --all-targets -- -D warnings`.
+- [x] `cargo nextest run -p quarto-core`, including the touched tests by name:
+  `owned_languages_for` (Phase 4d-A) and `test_ts_execute_options_camel_case` plus the
+  `ts_protocol` tests (Phase 4d-B; they live in `quarto-core`, so no other crate needs a
+  separate `-p` run).
+- Recommended pre-push step, for Gordon to decide (not a gate): `cargo nextest run
+  --workspace`. The Deno tests, `cargo xtask verify` and the recorded end-to-end example
+  belong to JOL-4 (Phases 4d-C/D/E).
 
-## Success Criteria
+## Success Criteria (Phases 4d-A/B)
 
-- [ ] `EngineResolution::owned_languages_for` returns the sorted positive ownership set,
+- [x] `EngineResolution::owned_languages_for` returns the sorted positive ownership set,
   disjoint from `handled_languages_for` for present languages, with a binding unit test.
-- [ ] `ownedLanguages` is carried end-to-end (Rust context → wire → Deno host → engine),
-  with wire-parity and camel-case round-trips pinning it.
-- [ ] Backward-compatible: `#[serde(default)]` on the Rust field; no schema tightening;
+- [x] `ExecutionContext.owned_languages` is populated by `EngineExecutionStage` and
+  `TsExecuteOptions.owned_languages` carries it on the Rust wire, pinned by the camel-case
+  round trip.
+- [x] Backward-compatible: `#[serde(default)]` on the Rust field; no schema tightening;
   existing engine bundles ignore the new key (verified: echo/marimo fixtures unchanged pass).
-- [ ] `handled_languages` is unchanged; native (knitr/jupyter) paths are untouched.
-- [ ] Case-4 self-enforcement (Phase 4d-D Step 2b): a synthetic engine that owns a language it
-  cannot run detects it via `ownedLanguages` and errors loudly, with the test bound to the wire
-  field (reddens if `owned_languages` is not carried). No q2-side capability check is added.
-- [ ] The two wire fields cross-reference each other in the doc comments, and the
-  overstated `handled_languages` "coincide" claim is corrected.
-- [ ] `engine-resolution.md` (§5/§9/§13) and `engine-api-surface.md` describe
-  `owned_languages` as landed — reviewed against the implementation (Phase 4d-E),
-  not just the pre-written text.
+- [x] `handled_languages` is unchanged, and no native engine is changed by this plan (the
+  Jupyter engine\'s own read of `ctx.owned_languages` is JOL-2b).

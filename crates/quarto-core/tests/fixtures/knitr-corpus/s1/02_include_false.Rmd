@@ -1,0 +1,11 @@
+Before.
+
+```{r hidden, include=FALSE}
+z <- 10
+print("not shown")
+message("hidden message")
+```
+
+```{r shown}
+z * 2
+```

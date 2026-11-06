@@ -21,6 +21,45 @@ use crate::engine::{DEFAULT_EXECUTE_TIMEOUT, HANDLED_LANGUAGES};
 use crate::stage::PandocIncludes;
 use crate::stage::cancellation::Cancellation;
 
+/// One crossref-consumed cell option, keyed by the cell's wrapper Div id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CellOption {
+    /// The `id` of the wrapper Div the crossref pass produced for this cell.
+    pub div_id: String,
+    /// The `label:` value the pass consumed from the cell's option lines.
+    pub label: String,
+}
+
+/// The per-cell options the crossref pass consumed, in document order.
+///
+/// The execution stage records the canonical serialized document, in which
+/// these options have been lifted onto wrapper Divs. Engines that need them
+/// back in the cell text (knitr's label-based output naming) re-add them from
+/// this map at the engine boundary; engines that do not need them ignore it.
+/// An empty map means nothing was consumed (or the pass never ran), and
+/// re-insertion is then a no-op.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CellOptionsMap {
+    entries: Vec<CellOption>,
+}
+
+impl CellOptionsMap {
+    /// Build a map from entries already in document order.
+    pub fn new(entries: Vec<CellOption>) -> Self {
+        Self { entries }
+    }
+
+    /// The entries, in document order.
+    pub fn entries(&self) -> &[CellOption] {
+        &self.entries
+    }
+
+    /// True when no option was consumed.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
 /// Context provided to execution engines.
 ///
 /// This contains all the information an engine needs to execute code cells
@@ -103,6 +142,18 @@ pub struct ExecutionContext {
     /// same leave-alone set as before this field existed.
     pub handled_languages: Vec<String>,
 
+    /// Languages present in this render that q2 assigned to **this** engine
+    /// (the positive complement of `handled_languages`). Populated by
+    /// `EngineExecutionStage` via `EngineResolution::owned_languages_for`.
+    /// Defaults to empty (direct-construction tests do not set it). Carried to TS
+    /// engines on the wire (Plan 4d) and read by the Jupyter engine (JOL-2b).
+    pub owned_languages: Vec<String>,
+
+    /// Cell options the crossref pass consumed, keyed by wrapper Div id.
+    ///
+    /// Defaults to empty. Only knitr consumes it today (EXR-10).
+    pub cell_options: CellOptionsMap,
+
     /// Cancellation token for graceful shutdown.
     ///
     /// Engines that support cancellation (TS engines) poll `cancellation.is_cancelled()`
@@ -127,7 +178,7 @@ pub struct ExecutionContext {
     /// Whether this engine is running in a multi-engine sequence
     /// (`|resolution.sequence| > 1`).
     ///
-    /// Used by jupyter's `partition_cells` to gate the "owned-but-unrunnable →
+    /// Used by jupyter's `plan_document` to gate the "owned-but-unrunnable →
     /// loud error" branch (P2-13): in a multi-engine sequence, a cell jupyter
     /// owns but cannot execute (e.g. `{sql}`) raises `NoHandlerForLanguage`;
     /// in a single-engine sequence the cell is passed through unexecuted
@@ -161,6 +212,30 @@ pub struct ExecutionContext {
     /// mutates its own environment; executed code sees these values
     /// only because spawn sites apply them with `Command::env`.
     pub project_env: Vec<(String, String)>,
+
+    /// The document's execution units from the one shared scan
+    /// (`engine::units::scan_units`), run by `EngineExecutionStage` before any
+    /// engine. The list is shared: every engine receives the same one and
+    /// relocates it into the text it is given (`units::locate_units`) and
+    /// applies its own ownership rule (`units::view_for_engine`). Empty when
+    /// no stage ran (an engine driven directly), in which case the engine
+    /// scans its own text (`units::units_for_engine`).
+    pub units: Vec<crate::engine::units::Unit>,
+
+    /// The author text and its content hash for every unit in `units`,
+    /// index-for-index (EXR-4's `AuthorTexts`). The stage builds it from the
+    /// pre-sugaring snapshot when a record is wanted; the record builder
+    /// hashes these, never the engine-visible text, because crossref sugaring
+    /// strips label and caption lines from what the engine sees (epic
+    /// decision 36). Empty when no record is wanted or no stage ran.
+    pub author_texts: crate::record::AuthorTexts,
+
+    /// Whether the engine should build an execution record as a side product
+    /// of this run (EXR-5). Set by `EngineExecutionStage` from
+    /// `PipelineObserver::wants_execution_record` or from
+    /// `execute: {record: true}` in the merged metadata; a plain render leaves
+    /// it `false` and the engine allocates nothing for the record.
+    pub want_record: bool,
 }
 
 impl ExecutionContext {
@@ -188,6 +263,8 @@ impl ExecutionContext {
             // Default: leave ojs/mermaid/dot alone. EngineExecutionStage
             // overrides this via `with_handled_languages` using the resolver.
             handled_languages: HANDLED_LANGUAGES.iter().map(|s| s.to_string()).collect(),
+            owned_languages: Vec::new(),
+            cell_options: CellOptionsMap::default(),
             cancellation: Cancellation::new(),
             execute_timeout: Some(DEFAULT_EXECUTE_TIMEOUT),
             // Default false; EngineExecutionStage sets true when |sequence| > 1.
@@ -196,7 +273,38 @@ impl ExecutionContext {
             // document metadata (P1.1b).
             metadata: HashMap::new(),
             project_env: Vec::new(),
+            units: Vec::new(),
+            author_texts: crate::record::AuthorTexts::default(),
+            want_record: false,
         }
+    }
+
+    /// Set the author-text mapping (see [`ExecutionContext::author_texts`]).
+    pub fn with_author_texts(mut self, author_texts: crate::record::AuthorTexts) -> Self {
+        self.author_texts = author_texts;
+        self
+    }
+
+    /// Ask the engine for an execution record (see [`ExecutionContext::want_record`]).
+    pub fn with_want_record(mut self, want: bool) -> Self {
+        self.want_record = want;
+        self
+    }
+
+    /// The merged document metadata as JSON, the shape the record's document hash
+    /// reads (EXR-5; `TsMetadataValue` is untagged JSON, so the lowering is exact).
+    /// An engine passes it as `EngineEntryInput::document_metadata`.
+    pub fn document_metadata_json(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+        match serde_json::to_value(&self.metadata) {
+            Ok(serde_json::Value::Object(map)) => map.into_iter().collect(),
+            _ => std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// Set the shared execution-unit list (see [`ExecutionContext::units`]).
+    pub fn with_units(mut self, units: Vec<crate::engine::units::Unit>) -> Self {
+        self.units = units;
+        self
     }
 
     /// Set the project environment pairs passed to engine
@@ -245,6 +353,20 @@ impl ExecutionContext {
         self
     }
 
+    /// Set the positive owned-language set for this engine.
+    ///
+    /// Computed by `EngineResolution::owned_languages_for(engine_name)`.
+    pub fn with_owned_languages(mut self, languages: Vec<String>) -> Self {
+        self.owned_languages = languages;
+        self
+    }
+
+    /// Set the cell options the crossref pass consumed.
+    pub fn with_cell_options(mut self, cell_options: CellOptionsMap) -> Self {
+        self.cell_options = cell_options;
+        self
+    }
+
     /// Set the cancellation token.
     pub fn with_cancellation(mut self, cancellation: Cancellation) -> Self {
         self.cancellation = cancellation;
@@ -262,7 +384,7 @@ impl ExecutionContext {
     /// Set whether this engine runs in a multi-engine sequence.
     ///
     /// `true` iff `|resolution.sequence| > 1`. Used by jupyter's
-    /// `partition_cells` to gate the "owned-but-unrunnable → loud error"
+    /// `plan_document` to gate the "owned-but-unrunnable → loud error"
     /// branch (P2-13).
     pub fn with_multi_engine(mut self, multi: bool) -> Self {
         self.multi_engine = multi;
@@ -380,6 +502,14 @@ pub struct ExecuteResult {
     /// pre-date this field deserializable.
     #[serde(default)]
     pub warnings: Vec<quarto_error_reporting::DiagnosticMessage>,
+
+    /// The engine's execution record for this run (EXR-5), built only when
+    /// `ExecutionContext::want_record` is set; `None` otherwise. Skipped by
+    /// serde on purpose: this struct is serialized whole into the legacy
+    /// `EngineCapture` payload, which must not grow (the trace carries the
+    /// record through its own `engine_capture.record` field instead).
+    #[serde(skip)]
+    pub record: Option<crate::record::EngineRecord>,
 }
 
 impl ExecuteResult {

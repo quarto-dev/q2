@@ -33,7 +33,8 @@ use std::sync::Arc;
 
 use tempfile::TempDir;
 
-use quarto_core::engine::capture_splice::{apply_capture_splice, engine_cell_lang};
+use quarto_core::engine::capture_splice::apply_capture_splice;
+use quarto_core::engine::cell_lang::engine_cell_lang;
 use quarto_core::engine::preview_record::record_capture;
 use quarto_core::project::ProjectContext;
 use quarto_pandoc_types::{Block, Pandoc};

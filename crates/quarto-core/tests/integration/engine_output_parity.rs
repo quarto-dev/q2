@@ -61,17 +61,7 @@ fn fixture(
 /// capture_splice_engines.rs for why pollster and not #[tokio::test])
 /// and parse the capture's post-engine markdown.
 fn post_engine_ast(content: &str, engine: &str) -> Pandoc {
-    let (_tmp, path, project, runtime) = fixture(content);
-    let captures =
-        pollster::block_on(record_capture(&path, &project, runtime, None)).expect("record_capture");
-    assert_eq!(captures.len(), 1, "expected one capture for {engine}");
-    let capture = &captures[0];
-    assert_eq!(capture.engine_name, engine);
-    let result_markdown = capture
-        .result
-        .get("markdown")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let result_markdown = post_engine_markdown(content, engine);
     let (pandoc, _, _) = pampa::readers::qmd::read(
         result_markdown.as_bytes(),
         false,
@@ -82,6 +72,22 @@ fn post_engine_ast(content: &str, engine: &str) -> Pandoc {
     )
     .expect("parse post-engine markdown");
     pandoc
+}
+
+/// The capture's post-engine markdown (see [`post_engine_ast`]).
+fn post_engine_markdown(content: &str, engine: &str) -> String {
+    let (_tmp, path, project, runtime) = fixture(content);
+    let captures =
+        pollster::block_on(record_capture(&path, &project, runtime, None)).expect("record_capture");
+    assert_eq!(captures.len(), 1, "expected one capture for {engine}");
+    let capture = &captures[0];
+    assert_eq!(capture.engine_name, engine);
+    capture
+        .result
+        .get("markdown")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 /// The classes downstream consumers key on. Language classes and
@@ -387,4 +393,148 @@ fn two_cell_doc(engine: &str, lang: &str, cell1: &str, cell2: &str) -> String {
     format!(
         "---\ntitle: Parity\nengine: {engine}\n---\n\nBefore.\n\n```{{{lang}}}\n{cell1}\n```\n\nBetween.\n\n```{{{lang}}}\n{cell2}\n```\n\nAfter.\n"
     )
+}
+
+/// Inline expressions (EXR-3, requested by bd-u996g8g2): the same prose with a brace
+/// span gives the same block shape under both engines, and the span is evaluated (no
+/// brace spelling left, the value present) in each.
+#[test]
+fn parity_inline_span() {
+    if !both_engines_available() {
+        eprintln!("Skipping test: parity suite needs both knitr and jupyter installed");
+        return;
+    }
+    let doc = |engine: &str, lang: &str, setup: &str| {
+        format!(
+            "---\ntitle: Parity\nengine: {engine}\n---\n\n```{{{lang}}}\n{setup}\n```\n\nValue is `{{{lang}}} x + 2`.\n"
+        )
+    };
+    let knitr_md = post_engine_markdown(&doc("knitr", "r", "x <- 40"), "knitr");
+    let jupyter_md = post_engine_markdown(&doc("jupyter", "python", "x = 40"), "jupyter");
+    for (name, md) in [("knitr", &knitr_md), ("jupyter", &jupyter_md)] {
+        assert!(
+            md.contains("Value is 42."),
+            "{name} did not evaluate the span:\n{md}"
+        );
+        assert!(
+            !md.contains("{r}") && !md.contains("{python}"),
+            "{name}:\n{md}"
+        );
+    }
+    let parse = |md: &str| {
+        pampa::readers::qmd::read(
+            md.as_bytes(),
+            false,
+            "capture-result.md",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("parse post-engine markdown")
+        .0
+    };
+    assert_blocks_parity(
+        &parse(&knitr_md).blocks,
+        &parse(&jupyter_md).blocks,
+        "blocks",
+    );
+}
+
+/// Record-present parity (EXR-18, Jupyter): presenting the record a live run produced
+/// gives the same markdown as that live run, with no engine in the loop. The skip is
+/// the jupyter engine alone (the knitr counterpart is `knitr_inline_records`).
+#[test]
+fn parity_jupyter_record_present_equals_live() {
+    let registry = EngineRegistry::default();
+    if !registry.get("jupyter").is_some_and(|e| e.is_available()) {
+        eprintln!("Skipping test: needs jupyter installed");
+        return;
+    }
+    let content = "---\ntitle: Parity\nengine: jupyter\n---\n\n```{python}\nx = 40\nprint(\"hello\")\n```\n\nValue is `{python} x + 2`.\n\n```{python}\nx + 1\n```\n";
+    let (_tmp, path, project, runtime) = fixture(content);
+    let run = pollster::block_on(quarto_core::engine::preview_record::record_capture_run(
+        &path, &project, runtime, None,
+    ))
+    .expect("record_capture_run");
+    assert_eq!(run.captures.len(), 1);
+    let live = run.captures[0]
+        .result
+        .get("markdown")
+        .and_then(|v| v.as_str())
+        .expect("live markdown")
+        .to_string();
+    let record = run.record.expect("a record");
+
+    let mut units = quarto_core::engine::units::scan_units(content);
+    let texts = quarto_core::record::AuthorTexts::from_scanned(&units);
+    quarto_core::record::fill_ids(&mut units, &texts).expect("ids");
+    let mut fig = quarto_core::presenter::figures::FsFigureSink::new(&path);
+    let presented = quarto_core::presenter::document::present_document(
+        &record.cells,
+        content,
+        &units,
+        None,
+        quarto_core::presenter::inline::InlineTarget::from_format("q2-preview"),
+        &mut fig,
+    )
+    .expect("present")
+    .markdown;
+    assert!(presented.contains("Value is 42."), "{presented}");
+    // The live capture's front matter carries pipeline-added metadata (language strings,
+    // listing data) that presenting a bare document does not; the body is what must match.
+    let body = |md: &str| md.splitn(3, "---\n").nth(2).unwrap_or(md).to_string();
+    assert_eq!(
+        body(&presented),
+        body(&live),
+        "present-from-record must equal the live run"
+    );
+}
+
+/// Julia shape parity (EXR-18 after EXR-8): a cell with a stream, then prose with a
+/// brace span, gives the same block shape under Julia as under jupyter, and the span is
+/// evaluated (value present, no brace spelling left) in each. The skip is `node`, `julia`
+/// or jupyter missing: Julia is a TS engine (a Node host driving QuartoNotebookRunner),
+/// found through the bundled extension subtree, so the default registry does not list it
+/// and `is_available` cannot gate it. The gate matches `julia_engine_e2e.rs`; like its
+/// rows, it needs the QuartoNotebookRunner environment already instantiated.
+///
+/// Deliberately not asserted: the value of a span that evaluates to an empty string. The
+/// engines differ there (Jupyter leaves the source in place), and whether Julia should
+/// match is still open (bd-30k2j00f), so this test must not pin either answer.
+#[test]
+fn parity_julia_cell_and_inline_span() {
+    let julia_on_path = crate::julia_engine_e2e::julia_available();
+    let jupyter_ok = EngineRegistry::default()
+        .get("jupyter")
+        .is_some_and(|e| e.is_available());
+    if !quarto_core::engine::ts_process::node_available_for_tests() || !julia_on_path || !jupyter_ok
+    {
+        eprintln!(
+            "Skipping test: Julia parity needs node, an instantiated julia environment and jupyter"
+        );
+        return;
+    }
+    let doc = |engine: &str, lang: &str, setup: &str| {
+        format!(
+            "---\ntitle: Parity\nengine: {engine}\n---\n\n```{{{lang}}}\n{setup}\n```\n\nValue is `{{{lang}}} x + 2`.\n"
+        )
+    };
+    let julia_src = doc("julia", "julia", "x = 40\nprintln(\"hello\")");
+    let jupyter_src = doc("jupyter", "python", "x = 40\nprint(\"hello\")");
+    for (name, src) in [("julia", &julia_src), ("jupyter", &jupyter_src)] {
+        let md = post_engine_markdown(src, name);
+        assert!(
+            md.contains("Value is 42."),
+            "{name} did not evaluate the span:\n{md}"
+        );
+        assert!(
+            !md.contains("{julia}") && !md.contains("{python}"),
+            "{name}:\n{md}"
+        );
+    }
+    let julia = post_engine_ast(&julia_src, "julia");
+    let jupyter = post_engine_ast(&jupyter_src, "jupyter");
+    // `assert_blocks_parity` names its two sides knitr and jupyter in failure messages;
+    // here the first side is Julia.
+    assert_blocks_parity(&julia.blocks, &jupyter.blocks, "blocks");
 }

@@ -161,6 +161,17 @@ pub fn create_binary_document(content: &[u8], mime_type: &str) -> Result<Automer
 /// re-export/consume this. The TS consumers hold the same literal.
 pub const CAPTURE_MIME_TYPE: &str = "application/x-engine-capture+gzip";
 
+/// MIME type stamped on engine-record binary docs (EXR-13): the gzipped
+/// coalesced record (nbformat with `quarto_` metadata) rather than an
+/// `EngineCapture[]`. The TS consumers hold the same literal in
+/// `quarto-automerge-schema`.
+pub const RECORD_MIME_TYPE: &str = "application/x-engine-record+gzip";
+
+/// `meta.kind` of a legacy capture doc.
+pub const CAPTURE_META_KIND: &str = "engine-capture";
+/// `meta.kind` of a record doc.
+pub const RECORD_META_KIND: &str = "engine-record";
+
 /// Uncompressed provenance stamped on capture binary docs
 /// (bd-eiku4ymo). Everything else about a capture lives inside the
 /// gzipped `content` payload, invisible to sync-server audits; these
@@ -209,11 +220,68 @@ pub fn create_capture_document_at(
     meta: &CaptureDocMeta,
     created_at: &str,
 ) -> Result<Automerge> {
+    create_payload_document(
+        gzipped,
+        meta,
+        created_at,
+        CAPTURE_MIME_TYPE,
+        CAPTURE_META_KIND,
+    )
+}
+
+/// Create an engine-record binary document (EXR-13): the same shape as
+/// [`create_capture_document`] with MIME [`RECORD_MIME_TYPE`] and
+/// `meta.kind == "engine-record"`. The envelope's `schemaVersion` stays 1;
+/// the record's own version is `quarto_record_version` inside the payload.
+pub fn create_record_document(gzipped: &[u8], meta: &CaptureDocMeta) -> Result<Automerge> {
+    create_record_document_at(gzipped, meta, &chrono::Utc::now().to_rfc3339())
+}
+
+/// Test seam: [`create_record_document`] with an explicit `createdAt`.
+pub fn create_record_document_at(
+    gzipped: &[u8],
+    meta: &CaptureDocMeta,
+    created_at: &str,
+) -> Result<Automerge> {
+    create_payload_document(
+        gzipped,
+        meta,
+        created_at,
+        RECORD_MIME_TYPE,
+        RECORD_META_KIND,
+    )
+}
+
+/// Create the binary doc for an encoded capture payload: a record doc when
+/// `is_record`, a legacy capture doc otherwise. The one call the three capture
+/// writers share, so they stop choosing MIME and `meta.kind` themselves
+/// (EXR-13b).
+pub fn create_engine_payload_document(
+    is_record: bool,
+    gzipped: &[u8],
+    meta: &CaptureDocMeta,
+) -> Result<Automerge> {
+    if is_record {
+        create_record_document(gzipped, meta)
+    } else {
+        create_capture_document(gzipped, meta)
+    }
+}
+
+/// The shared body of the capture and record writers: they differ only in
+/// MIME and `meta.kind`.
+fn create_payload_document(
+    gzipped: &[u8],
+    meta: &CaptureDocMeta,
+    created_at: &str,
+    mime_type: &str,
+    kind: &str,
+) -> Result<Automerge> {
     use automerge::ObjType;
-    let mut doc = create_binary_document(gzipped, CAPTURE_MIME_TYPE)?;
+    let mut doc = create_binary_document(gzipped, mime_type)?;
     doc.transact::<_, _, automerge::AutomergeError>(|tx| {
         let meta_obj = tx.put_object(ROOT, "meta", ObjType::Map)?;
-        tx.put(&meta_obj, "kind", "engine-capture")?;
+        tx.put(&meta_obj, "kind", kind)?;
         tx.put(&meta_obj, "schemaVersion", CAPTURE_META_SCHEMA_VERSION)?;
         tx.put(&meta_obj, "createdAt", created_at)?;
         tx.put(&meta_obj, "sourcePath", meta.source_path.as_str())?;
@@ -549,5 +617,58 @@ mod tests {
         // MIME) must read back as "no meta", not error.
         let doc = create_binary_document(b"gz", CAPTURE_MIME_TYPE).unwrap();
         assert!(read_capture_meta(&doc).is_none());
+    }
+
+    // ── EXR-13: engine-record documents ────────────────────────────
+
+    #[test]
+    fn record_document_has_binary_schema_and_record_mime() {
+        use automerge::ReadDoc;
+        let doc = create_record_document(b"gzipped-record", &sample_meta()).unwrap();
+        assert_eq!(detect_document_type(&doc), DocumentType::Binary);
+        let (mime, _) = doc.get(ROOT, "mimeType").unwrap().unwrap();
+        assert_eq!(mime.as_str(), Some(RECORD_MIME_TYPE));
+        assert_eq!(RECORD_MIME_TYPE, "application/x-engine-record+gzip");
+        let (hash, _) = doc.get(ROOT, "hash").unwrap().unwrap();
+        assert_eq!(
+            hash.as_str(),
+            Some(compute_hash(b"gzipped-record").as_str())
+        );
+        let (content, _) = doc.get(ROOT, "content").unwrap().unwrap();
+        assert_eq!(content.into_bytes().unwrap(), b"gzipped-record".to_vec());
+    }
+
+    #[test]
+    fn record_document_meta_has_record_kind_and_the_same_envelope() {
+        let doc =
+            create_record_document_at(b"gz", &sample_meta(), "2020-01-02T03:04:05+00:00").unwrap();
+        let meta = read_capture_meta(&doc).expect("meta map present");
+        assert_eq!(meta.kind.as_deref(), Some(RECORD_META_KIND));
+        assert_eq!(RECORD_META_KIND, "engine-record");
+        assert_eq!(meta.source_path.as_deref(), Some("posts/analysis.qmd"));
+        assert_eq!(meta.engines, vec!["knitr", "jupyter"]);
+        assert_eq!(
+            meta.created_at.as_deref(),
+            Some("2020-01-02T03:04:05+00:00")
+        );
+        // The envelope version is unchanged (the record's own version
+        // lives inside the payload as `quarto_record_version`).
+        use automerge::ReadDoc;
+        let (_, meta_obj) = doc.get(ROOT, "meta").unwrap().unwrap();
+        let (v, _) = doc.get(&meta_obj, "schemaVersion").unwrap().unwrap();
+        assert_eq!(v.as_i64(), Some(1));
+    }
+
+    #[test]
+    fn record_and_capture_documents_differ_only_in_mime_and_kind() {
+        use automerge::ReadDoc;
+        let at = "2020-01-02T03:04:05+00:00";
+        let cap = create_capture_document_at(b"gz", &sample_meta(), at).unwrap();
+        let rec = create_record_document_at(b"gz", &sample_meta(), at).unwrap();
+        let (_, cm) = cap.get(ROOT, "meta").unwrap().unwrap();
+        let (_, rm) = rec.get(ROOT, "meta").unwrap().unwrap();
+        let keys = |d: &Automerge, o| d.keys(o).collect::<Vec<_>>();
+        assert_eq!(keys(&cap, &cm), keys(&rec, &rm));
+        assert_eq!(keys(&cap, &ROOT), keys(&rec, &ROOT));
     }
 }

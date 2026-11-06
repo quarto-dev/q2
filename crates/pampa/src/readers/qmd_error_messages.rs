@@ -37,7 +37,7 @@ pub fn produce_diagnostic_messages(
     );
 
     for diag in &mut diagnostics {
-        if matches!(diag.code.as_deref(), Some("Q-2-35" | "Q-2-36")) {
+        if matches!(diag.code.as_deref(), Some("Q-2-59" | "Q-2-36")) {
             widen_diagnostic_to_line(diag, input_bytes);
         }
     }
@@ -50,7 +50,7 @@ pub fn produce_diagnostic_messages(
 /// per-token position, but the user-meaningful unit of the diagnostic is the
 /// whole line.
 ///
-/// - Q-2-35 (indented code blocks): the scanner-emitted token lands after the
+/// - Q-2-59 (indented code blocks): the scanner-emitted token lands after the
 ///   whitespace consumption loop, so the reported column is past the leading
 ///   indentation. Widening covers the indentation too.
 /// - Q-2-36 (knitr-style chunk options, Merr-mapped path-B forms — bare label

@@ -25,6 +25,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::record::{Granularity, HashDefinition};
+
 // ==================== Message enums ====================
 
 /// Messages from Rust (q2) → Node engine host.
@@ -371,15 +373,14 @@ pub struct TsExecuteOptions {
     /// assigned to me" set. Mirrors
     /// `EngineResolution::handled_languages_for` (`resolution.rs:292`):
     /// q2's built-in `HANDLED_LANGUAGES` ∪ every language this render
-    /// assigned to a DIFFERENT engine. A TS engine that wants to know
-    /// "did q2 assign ME ownership of language L for this render" must
-    /// infer it as the *complement* — L present in the document AND L
-    /// absent from `handled_languages` — not by looking for its own name
-    /// inside the array (it never appears there). This is sound because
-    /// q2's resolver assigns every language present in the document an
-    /// owner, or hard-fails, before `execute()` ever runs, so "L absent
-    /// from this set" and "L owned by me" coincide for any L the engine
-    /// actually has to make a decision about.
+    /// assigned to a DIFFERENT engine.
+    ///
+    /// NOTE: "absent from this set" means *owned by me OR owned by nobody* — a
+    /// present-but-unclaimed or execute-time-injected language is owned by no
+    /// engine and is absent here too (design §6.1, pass-through). To ask
+    /// unambiguously "did q2 assign me L?", read [`Self::owned_languages`] (the
+    /// positive projection), not the complement of this set. This engine's own
+    /// name never appears in this array.
     ///
     /// Got this backwards once already: the marimo TS engine's bare-`sql`
     /// Interop gate (`bareSqlOwned`) read `handled_languages.includes("sql")`
@@ -389,6 +390,20 @@ pub struct TsExecuteOptions {
     /// fired (q2 plan4c FINDING #4, fixed 2026-07-02 upstream in
     /// `quarto-marimo`).
     pub handled_languages: Vec<String>,
+    /// The **positive** owned-language set for this engine — every language
+    /// present in this render that q2's resolution assigned to it
+    /// (`ownedLanguages` on the wire). The positive projection of the ownership
+    /// map, disjoint from [`Self::handled_languages`] over present languages: an
+    /// engine may read `ownedLanguages.includes("L")` directly to select the
+    /// cells it owns, instead of inferring them as the complement of the
+    /// leave-alone set (which conflates "owned by me" with "owned by nobody").
+    /// **Informational, not enforcement** — `handled_languages` remains the
+    /// execute-time gate. Lists only Pass-1-resolved languages, so a language
+    /// that appears only in a *generated* cell is owned by nobody and is absent
+    /// here (a ratified pass-through, design §6.1 — not a re-resolution feature).
+    /// `#[serde(default)]` so an absent key deserializes as `[]`. Added by Plan 4d.
+    #[serde(default)]
+    pub owned_languages: Vec<String>,
     pub params: Option<HashMap<String, TsMetadataValue>>,
     pub source_map: Vec<TsSourceMapEntry>,
     /// Whether to resolve dependencies inline (`true`, Q1 default) or defer them
@@ -396,6 +411,59 @@ pub struct TsExecuteOptions {
     /// an absent wire key deserializes as `true` (Q1-compatible behaviour).
     #[serde(default = "default_true")]
     pub dependencies: bool,
+    /// q2-only (EXR-7): the document's execution units, one shared scan with ids
+    /// filled by the stage, each carrying this engine's `owned` flag. Absent from an
+    /// older core, in which case the engine scans for itself. Not part of Q1's
+    /// `ExecuteOptions`; the host attaches it beside `signal` (see `host.ts`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub units: Option<Vec<TsUnit>>,
+    /// q2-only (EXR-8 B4): who presents the engine's output. `Some(Core)` tells the
+    /// engine to skip its own markdown presenter and return the notebook only, since
+    /// core's presenter produces the markdown. Absent means the engine presents, as
+    /// before. Defined here, not by EXR-7; nothing sets it until the Julia flip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presented_by: Option<TsPresentedBy>,
+}
+
+/// Who presents an engine's output (`presentedBy` on the wire).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum TsPresentedBy {
+    Core,
+}
+
+/// Whether a wire unit is a braced cell or an inline span.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum TsUnitKind {
+    Cell,
+    Inline,
+}
+
+/// One execution unit on the wire (EXR-7). There are no byte or UTF-16 offsets in v1:
+/// engines work by `line` (the existing source map counts UTF-8 bytes while the TS side
+/// slices UTF-16 strings, so an offset has no safe unit).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TsUnit {
+    /// EXR-4's unit id (`{index}-{hash8}-{label|unlabeled}` or `{n}-{hash8}-inline`).
+    /// Absent for a unit the stage's scan did not number (a cell an earlier engine's
+    /// output introduced).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The document-wide cell index; cells only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
+    pub kind: TsUnitKind,
+    /// The language token as written.
+    pub language: String,
+    /// 1-based line of the unit in the `input` this engine receives.
+    pub line: usize,
+    /// Whether this engine runs the unit. Ceded units are listed with `false`.
+    pub owned: bool,
+    /// True only for a span in the document's own front matter; omitted when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub in_front_matter: bool,
 }
 
 // ==================== Execute result ====================
@@ -436,6 +504,91 @@ pub struct TsExecuteResult {
     /// (Deferred consumer — NOT yet wired in RTQ; will land with the book feature.)
     #[serde(default)]
     pub engine_dependencies: Option<HashMap<String, Vec<TsMetadataValue>>>,
+    /// q2-only (EXR-7): the engine's execution record as an nbformat notebook (EXR-4's
+    /// shape), validated by core's reader. Absent from an engine that records nothing.
+    #[serde(default)]
+    pub notebook: Option<serde_json::Value>,
+    /// q2-only (EXR-7): what `notebook` is. Travels with the result, not in static
+    /// engine metadata, which Q1's closed schema would reject.
+    #[serde(default)]
+    pub record_info: Option<TsRecordInfo>,
+}
+
+/// Whether a notebook's outputs are the engine's raw outputs or already rendered.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TsOutputKind {
+    #[default]
+    Raw,
+    Rendered,
+}
+
+/// How a notebook's cells line up with core's units.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TsAlignment {
+    /// Cells carry unit ids.
+    #[default]
+    Ids,
+    /// Cells match the engine's owned units by order.
+    Positional,
+}
+
+/// Which of the units core marked owned a notebook's cells cover (EXR-9).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TsCoverage {
+    /// The notebook covers every unit the engine owns, so core checks the count.
+    #[default]
+    Owned,
+    /// The engine applies its own ownership rule (marimo's class rule), so its notebook
+    /// covers some of the owned units, named by id. Core checks each id, not the count;
+    /// the engine validates its own count. Needs `ids` alignment.
+    Subset,
+}
+
+/// Self-description of a returned notebook (EXR-7). Every field is optional on the wire.
+/// Unknown keys are ignored, so a later revision can add fields.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TsRecordInfo {
+    #[serde(default = "default_record_info_version")]
+    pub version: u32,
+    #[serde(default = "default_record_info_granularity")]
+    pub granularity: Granularity,
+    /// Describes the outputs only; it plays no part in the hash rule.
+    #[serde(default)]
+    pub output_kind: TsOutputKind,
+    #[serde(default)]
+    pub alignment: TsAlignment,
+    /// Whether the cells cover every owned unit or only a subset the engine chose.
+    #[serde(default, skip_serializing_if = "is_default_coverage")]
+    pub coverage: TsCoverage,
+    /// The engine's declared execution-input hash rule (epic decision 35).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash_definition: Option<HashDefinition>,
+}
+
+fn is_default_coverage(c: &TsCoverage) -> bool {
+    *c == TsCoverage::Owned
+}
+
+fn default_record_info_version() -> u32 {
+    1
+}
+
+fn default_record_info_granularity() -> Granularity {
+    Granularity::Unit
+}
+
+impl TsRecordInfo {
+    /// The declared hash rule, or the conservative default (empty exclusion lists, so
+    /// everything counts: over-invalidates, never shows stale output) named for `engine_id`.
+    pub fn hash_definition_or_conservative(&self, engine_id: &str) -> HashDefinition {
+        self.hash_definition
+            .clone()
+            .unwrap_or_else(|| HashDefinition::conservative(engine_id))
+    }
 }
 
 // ==================== Dependencies options ====================
@@ -515,9 +668,12 @@ mod tests {
             lib_dir: "/project/doc_files".to_string(),
             quiet: false,
             handled_languages: vec![],
+            owned_languages: vec![],
             params: None,
             source_map: vec![],
             dependencies: true,
+            units: None,
+            presented_by: None,
         }
     }
 
@@ -1227,6 +1383,7 @@ mod tests {
         assert_eq!(j["tempDir"], "/tmp");
         assert_eq!(j["libDir"], "/project/doc_files");
         assert_eq!(j["handledLanguages"], json!([]));
+        assert_eq!(j["ownedLanguages"], json!([]));
         assert_eq!(j["sourceMap"], json!([]));
         // format is a nested object
         assert!(j["format"].is_object());
@@ -1484,6 +1641,7 @@ mod tests {
             "libDir": "/project/doc_files",
             "quiet": false,
             "handledLanguages": [],
+            "ownedLanguages": [],
             "params": null,
             "sourceMap": []
         });
@@ -1627,6 +1785,180 @@ mod tests {
     // makes the intent of each field visible at a glance.
     // ==========================================================
 
+    // ==========================================================
+    // EXR-7 Phase 0/1a — units, notebook and recordInfo on the wire
+    // ==========================================================
+
+    fn sample_units() -> Vec<TsUnit> {
+        vec![
+            TsUnit {
+                id: Some("3-1a2b3c4d-unlabeled".to_string()),
+                index: Some(3),
+                kind: TsUnitKind::Cell,
+                language: "julia".to_string(),
+                line: 12,
+                owned: true,
+                in_front_matter: false,
+            },
+            TsUnit {
+                id: Some("1-9f8e7d6c-inline".to_string()),
+                index: None,
+                kind: TsUnitKind::Inline,
+                language: "julia".to_string(),
+                line: 2,
+                owned: false,
+                in_front_matter: true,
+            },
+        ]
+    }
+
+    #[test]
+    fn execute_options_without_units_deserialize() {
+        let mut v = serde_json::to_value(make_execute_options()).unwrap();
+        v.as_object_mut().unwrap().remove("units");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back.units, None);
+    }
+
+    #[test]
+    fn presented_by_is_absent_by_default_and_roundtrips_as_core() {
+        let v = serde_json::to_value(make_execute_options()).unwrap();
+        assert!(v.get("presentedBy").is_none());
+        let mut opts = make_execute_options();
+        opts.presented_by = Some(TsPresentedBy::Core);
+        let v = serde_json::to_value(&opts).unwrap();
+        assert_eq!(v["presentedBy"], "core");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back, opts);
+        // An older core's options, without the key, still deserialize.
+        let mut v = serde_json::to_value(make_execute_options()).unwrap();
+        v.as_object_mut().unwrap().remove("presentedBy");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back.presented_by, None);
+    }
+
+    #[test]
+    fn execute_options_with_units_roundtrip() {
+        let mut opts = make_execute_options();
+        opts.units = Some(sample_units());
+        let v = serde_json::to_value(&opts).unwrap();
+        let wire_units = v["units"].as_array().unwrap();
+        for u in wire_units {
+            let o = u.as_object().unwrap();
+            assert!(!o.contains_key("start") && !o.contains_key("end"), "{o:?}");
+        }
+        // A cell omits nothing it has; a body span omits `inFrontMatter`.
+        assert_eq!(wire_units[0]["kind"], "cell");
+        assert_eq!(wire_units[0]["index"], 3);
+        assert!(wire_units[0].get("inFrontMatter").is_none());
+        assert_eq!(wire_units[1]["kind"], "inline");
+        assert!(wire_units[1].get("index").is_none());
+        assert_eq!(wire_units[1]["inFrontMatter"], true);
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back, opts);
+    }
+
+    #[test]
+    fn options_without_units_omit_the_key() {
+        let v = serde_json::to_value(make_execute_options()).unwrap();
+        assert!(v.get("units").is_none());
+    }
+
+    #[test]
+    fn execute_result_without_notebook_deserializes() {
+        let r: TsExecuteResult = serde_json::from_str(
+            r#"{"markdown":"x","supporting":[],"filters":[],"htmlDependencies":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(r.notebook, None);
+        assert_eq!(r.record_info, None);
+    }
+
+    #[test]
+    fn execute_result_with_notebook_and_record_info_roundtrips() {
+        let r = TsExecuteResult {
+            notebook: Some(serde_json::json!(
+                {"nbformat": 4, "nbformat_minor": 5, "metadata": {}, "cells": []}
+            )),
+            record_info: Some(TsRecordInfo {
+                version: 1,
+                granularity: Granularity::Unit,
+                output_kind: TsOutputKind::Rendered,
+                alignment: TsAlignment::Positional,
+                coverage: TsCoverage::Owned,
+                hash_definition: None,
+            }),
+            ..Default::default()
+        };
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(v["recordInfo"]["outputKind"], "rendered");
+        assert_eq!(v["recordInfo"]["alignment"], "positional");
+        assert_eq!(v["recordInfo"]["granularity"], "unit");
+        assert!(v["recordInfo"].get("hashDefinition").is_none());
+        let back: TsExecuteResult = serde_json::from_value(v).unwrap();
+        assert_eq!(back, r);
+    }
+
+    #[test]
+    fn record_info_hash_definition_roundtrips_camel_case() {
+        let mut def = HashDefinition::conservative("julia");
+        def.granularity = Granularity::Document;
+        def.presentation_cell_options = vec!["echo".to_string()];
+        def.document_keys = vec!["jupyter".to_string()];
+        let info = TsRecordInfo {
+            version: 1,
+            granularity: Granularity::Document,
+            output_kind: TsOutputKind::Raw,
+            alignment: TsAlignment::Ids,
+            coverage: TsCoverage::Owned,
+            hash_definition: Some(def.clone()),
+        };
+        let v = serde_json::to_value(&info).unwrap();
+        assert_eq!(v["hashDefinition"]["presentationCellOptions"][0], "echo");
+        assert_eq!(v["hashDefinition"]["documentKeys"][0], "jupyter");
+        assert_eq!(v["hashDefinition"]["granularity"], "document");
+        let back: TsRecordInfo = serde_json::from_value(v).unwrap();
+        assert_eq!(back.hash_definition_or_conservative("other"), def);
+
+        // No declaration: the conservative default, named for the engine.
+        let bare: TsRecordInfo = serde_json::from_str("{}").unwrap();
+        assert_eq!(bare.hash_definition, None);
+        assert_eq!(
+            bare.hash_definition_or_conservative("marimo"),
+            HashDefinition::conservative("marimo")
+        );
+    }
+
+    #[test]
+    fn record_info_coverage_defaults_to_owned_and_roundtrips() {
+        let bare: TsRecordInfo = serde_json::from_str("{}").unwrap();
+        assert_eq!(bare.coverage, TsCoverage::Owned);
+        assert!(
+            serde_json::to_value(&bare)
+                .unwrap()
+                .get("coverage")
+                .is_none(),
+            "the default is omitted from the wire"
+        );
+        let subset: TsRecordInfo = serde_json::from_str(r#"{"coverage":"subset"}"#).unwrap();
+        assert_eq!(subset.coverage, TsCoverage::Subset);
+        assert_eq!(serde_json::to_value(&subset).unwrap()["coverage"], "subset");
+    }
+
+    #[test]
+    fn unknown_record_info_fields_are_ignored() {
+        let info: TsRecordInfo =
+            serde_json::from_str(r#"{"version":2,"outputKind":"rendered","futureField":{"a":1}}"#)
+                .unwrap();
+        assert_eq!(info.version, 2);
+        assert_eq!(info.output_kind, TsOutputKind::Rendered);
+        let r: TsExecuteResult = serde_json::from_str(
+            r#"{"markdown":"","supporting":[],"filters":[],"htmlDependencies":[],"futureTop":1}"#,
+        )
+        .unwrap();
+        assert_eq!(r.record_info, None);
+    }
+
     /// Recursively sort the keys of every JSON object so the committed fixture
     /// is stable regardless of the workspace-wide `serde_json/preserve_order`
     /// feature (see schema_drift.rs for the same rationale). Key ORDER does not
@@ -1684,7 +2016,44 @@ mod tests {
         // all three variants share the same key-set {kind, priority}.
         let language_claim = TsLanguageClaim::Primary { priority: 5 };
 
+        // EXR-7: every optional populated (units, front-matter flag, hash definition).
+        let mut hash_def = HashDefinition::conservative("julia");
+        hash_def
+            .profiles
+            .insert("p".to_string(), crate::record::HashProfile::default());
+        let record_info = TsRecordInfo {
+            version: 1,
+            granularity: Granularity::Unit,
+            output_kind: TsOutputKind::Raw,
+            alignment: TsAlignment::Ids,
+            // Not the default, which is skipped on the wire: the fixture instance sets every
+            // optional field, so a rename of `coverage` changes the fixture.
+            coverage: TsCoverage::Subset,
+            hash_definition: Some(hash_def),
+        };
+        // `TsUnit` has skipped optionals; the fixture instance is the unit with all of them.
+        let full_unit = TsUnit {
+            id: Some("3-1a2b3c4d-unlabeled".to_string()),
+            index: Some(3),
+            kind: TsUnitKind::Cell,
+            language: "julia".to_string(),
+            line: 12,
+            owned: true,
+            in_front_matter: true,
+        };
+        let mut exec_opts = make_execute_options();
+        exec_opts.units = Some(vec![full_unit.clone()]);
+        let exec_result = TsExecuteResult {
+            notebook: Some(serde_json::json!({"nbformat": 4})),
+            record_info: Some(record_info.clone()),
+            ..Default::default()
+        };
+
         let obj = serde_json::json!({
+            "TsExecuteOptions": to_value(&exec_opts).unwrap(),
+            "TsExecuteResult": to_value(&exec_result).unwrap(),
+            "TsRecordInfo": to_value(&record_info).unwrap(),
+            "TsUnit": to_value(&full_unit).unwrap(),
             "HostGlobalConfig": to_value(&host_global).unwrap(),
             "TsPandocIncludes": to_value(&pandoc_includes).unwrap(),
             "EngineProjectContext": to_value(&project_ctx).unwrap(),

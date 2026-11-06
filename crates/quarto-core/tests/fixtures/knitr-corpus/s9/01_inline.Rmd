@@ -1,0 +1,23 @@
+Classic `r 1+1` and brace `r .QuartoInlineRender(1+1)`.
+
+Null: classic [`r NULL`] and brace [`r .QuartoInlineRender(NULL)`].
+
+Invisible `r invisible(3)` and assignment `r (x <- 4)`.
+
+Numbers: `r 1234567.891`, `r 1e-10`, `r pi`, `r 123456789012`, `r 0.1 + 0.2`, `r 100000`.
+
+Specials: classic `r "**bold** a_b"` and brace `r .QuartoInlineRender("**bold** a_b")`.
+
+Asis: `r knitr::asis_output("**asis**")` and brace `r .QuartoInlineRender(knitr::asis_output("**asis**"))`.
+
+Vector: `r c(1, 2, 3)` and `r c("a", "b")`.
+
+- list item with `r 2+2` and `r .QuartoInlineRender("x_y")`
+
+> quote with `r 5+5`
+
+```{r chunk_between}
+y <- 9
+```
+
+After chunk: `r y`

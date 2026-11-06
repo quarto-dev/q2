@@ -106,6 +106,16 @@ their rendered output.
 | [`lmd/09-modules`](lmd/09-modules/) | `require` of a module written in lmd (`components/cards.lmd`), used by two cells |
 | [`lmd/10-project`](lmd/10-project/) | Modules across a project: `lmd: modules:` autoload from `_quarto.yml`, a project-root `require("/…")`, an extension's module by name, and `quarto.include` of two partials |
 
+## Highlighting examples
+
+Syntax highlighting beyond the built-in languages, under
+[`highlighting/`](highlighting/). They back the code-highlighting page of
+the documentation (`docs/guides/authoring/code-highlighting.qmd`).
+
+| Example | Demonstrates |
+|---|---|
+| [`highlighting/01-user-grammar`](highlighting/01-user-grammar/) | A tree-sitter grammar (TOML) shipped in `_quarto/grammars/toml/`, highlighting blocks and inline code, and a CSS rule on one `hl-*` capture class |
+
 ## Other example categories
 
 Future categories (books, manuscripts) will get their own
