@@ -99,6 +99,30 @@ Quarto 1, documented in the user docs. No quarto-cli issue will be filed.
 - [x] Run the Phase 1 tests; confirm green. Run all of `quarto-core` for
   tests that relied on the root being skipped.
 
+### Phase 2b: lone documents (decided 2026-11-06)
+
+Quarto 1 also applies a `_metadata.yml` to a document rendered outside any
+project, when the file sits in the document's own directory (its stand-in
+project is rooted there; the same `"".split()` path as the root case). A
+parent directory's file does not apply. q2 skipped directory metadata for
+single-file projects entirely, a guard from the original port. We match
+Quarto 1.
+
+- [x] Tests (red first): `test_directory_metadata_single_file_reads_its_own_directory`
+  and `..._ignores_parent_directories` (`project/mod.rs`, through
+  `ProjectContext::discover` on the file); `single_file_project_reads_only_its_own_directory`
+  (`metadata_layers.rs`, replacing a test that set `is_single_file` on a
+  real project and expected no layers); `lone_document_*` in
+  `root_directory_metadata.rs` (rendered through `ProjectPipeline`).
+- [x] Drop the `is_single_file` guards in `directory_metadata_for_document`,
+  `directory_metadata_paths_for_document` and `collect_metadata_layers`.
+  A single-file context's `dir` is the document's directory, so the walk
+  reads that directory only.
+- [x] Docs: state the rule for documents outside a project.
+- [x] `cargo nextest run -p quarto-core` (only the `bsicons` failure) and
+  `-p quarto` (only `smoke_all`: 14 Typst fixtures with R cells failing on
+  `failed to load cairo DLL`; none has a `_metadata.yml`).
+
 ### Phase 3: preview and docs
 
 - [ ] `q2 preview` on the reproduction project: the TOC and theme apply,

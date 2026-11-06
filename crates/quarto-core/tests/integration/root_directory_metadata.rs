@@ -14,6 +14,9 @@
 //! splits the document's project-relative directory; q2 deliberately
 //! applies it to the whole tree.
 //!
+//! A document outside any project gets the `_metadata.yml` in its own
+//! directory and no other, as in Quarto 1.
+//!
 //! The render tests drive `ProjectPipeline` (the path `q2 render` takes)
 //! and inspect the HTML and CSS written to disk.
 //!
@@ -60,10 +63,11 @@ fn fixture(root_metadata: &str) -> (TempDir, PathBuf) {
     (temp, dir)
 }
 
-/// Render the whole project through the CLI's project pipeline.
-fn render(dir: &Path) {
+/// Render `path` through the CLI's project pipeline: a project directory
+/// renders the whole project, a file outside any project renders alone.
+fn render(path: &Path) {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
-    let mut project = ProjectContext::discover(dir, runtime.as_ref()).expect("discover");
+    let mut project = ProjectContext::discover(path, runtime.as_ref()).expect("discover");
     let options = RenderToFileOptions::default();
     let project_type = project_type_for(&project);
     let mut pipeline = ProjectPipeline::new(
@@ -186,4 +190,35 @@ fn root_metadata_sits_between_project_and_deeper_layers() {
     let front = merged(&dir, &dir.join("sub/front.qmd"));
     assert_eq!(front["winner"], "front", "{front}");
     assert_eq!(front["probe-root"], "r", "{front}");
+}
+
+/// A temp directory with no `_quarto.yml`, a `_metadata.yml` with
+/// `toc: true`, and `doc.qmd` beside it plus `sub/doc.qmd` below it.
+fn lone_fixture() -> (TempDir, PathBuf) {
+    let temp = TempDir::new().unwrap();
+    let dir = temp
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|_| temp.path().to_path_buf());
+    write(&dir.join("_metadata.yml"), "toc: true\n");
+    write(&dir.join("doc.qmd"), DOC);
+    write(&dir.join("sub/doc.qmd"), DOC);
+    (temp, dir)
+}
+
+#[test]
+fn lone_document_gets_the_metadata_beside_it() {
+    let (_temp, dir) = lone_fixture();
+    render(&dir.join("doc.qmd"));
+    assert!(has_toc(&read(&dir.join("doc.html"))), "doc.html has no TOC");
+}
+
+#[test]
+fn lone_document_ignores_metadata_in_parent_directories() {
+    let (_temp, dir) = lone_fixture();
+    render(&dir.join("sub/doc.qmd"));
+    assert!(
+        !has_toc(&read(&dir.join("sub/doc.html"))),
+        "sub/doc.html has a TOC from the parent's _metadata.yml"
+    );
 }

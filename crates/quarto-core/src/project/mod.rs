@@ -106,7 +106,8 @@ fn default_output_dir(dir: &Path, config: Option<&ProjectConfig>) -> PathBuf {
 /// - Walks directories from the project root to the document's parent directory
 /// - Includes the project root itself, for documents anywhere in the project
 ///   (Quarto 1 includes it only for documents directly in the root)
-/// - Returns empty vec for single-file projects (no project config)
+/// - For a single-file project (no `_quarto.yml`), which is rooted at the
+///   document's directory, that is the document's own directory only
 ///
 /// # Errors
 ///
@@ -142,11 +143,6 @@ pub fn directory_metadata_for_document(
     use pampa::pandoc::yaml_to_config_value;
     use pampa::utils::diagnostic_collector::DiagnosticCollector;
     use quarto_config::InterpretationContext;
-
-    // Single-file projects don't have directory metadata
-    if project.is_single_file {
-        return Ok(Vec::new());
-    }
 
     let document_path = runtime
         .canonicalize(document_path)
@@ -184,8 +180,8 @@ pub fn directory_metadata_for_document(
 /// [`directory_metadata_for_document`] (the spelling is what
 /// `quarto_yaml::parse_file` hashed into each layer's FileId, so
 /// diagnostic assembly re-derives layer ids from these exact paths;
-/// bd-x113wg9v). Returns an empty list for single-file projects and
-/// for documents outside the project directory.
+/// bd-x113wg9v). Returns an empty list for documents outside the
+/// project directory.
 ///
 /// Callers that already canonicalized `document_path` (as
 /// [`directory_metadata_for_document`] does) pass it through; the
@@ -195,9 +191,10 @@ pub fn directory_metadata_paths_for_document(
     document_path: &Path,
     runtime: &dyn SystemRuntime,
 ) -> Vec<PathBuf> {
-    if project.is_single_file {
-        return Vec::new();
-    }
+    // A single-file project is rooted at the document's own directory, so
+    // a lone document gets the `_metadata.yml` beside it and no other (as
+    // in Quarto 1).
+    //
     // Canonicalize so strip_prefix works reliably. project.dir is always
     // canonical (from ProjectContext::discover), but callers may pass
     // relative paths (e.g., WASM render_qmd with VFS paths).
@@ -3887,30 +3884,42 @@ mod tests {
         }
 
         #[test]
-        fn test_directory_metadata_single_file_project() {
-            // Single-file project (default config) should return empty vec
+        fn test_directory_metadata_single_file_reads_its_own_directory() {
+            // A lone document (no `_quarto.yml` anywhere above it) gets the
+            // `_metadata.yml` in its own directory, as in Quarto 1: its
+            // stand-in project is rooted at that directory.
             let temp = TempDir::new().unwrap();
-            let chapters = temp.path().join("chapters");
-            fs::create_dir(&chapters).unwrap();
-            fs::write(chapters.join("_metadata.yml"), "toc: true\n").unwrap();
-            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+            fs::write(temp.path().join("_metadata.yml"), "toc: true\n").unwrap();
+            fs::write(temp.path().join("doc.qmd"), "# Test\n").unwrap();
+            let doc_path = temp.path().join("doc.qmd");
 
-            // Single-file project has default config
-            let project = ProjectContext {
-                dir: temp.path().to_path_buf(),
-                config: ProjectConfig::default(),
-                is_single_file: true,
-                files: vec![],
-                output_dir: temp.path().to_path_buf(),
-
-                ..Default::default()
-            };
-            let doc_path = chapters.join("doc.qmd");
+            let project = ProjectContext::discover(&doc_path, &native_runtime()).unwrap();
+            assert!(project.is_single_file);
 
             let result =
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
-            // Per TS behavior: directory metadata requires project context
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
+        }
+
+        #[test]
+        fn test_directory_metadata_single_file_ignores_parent_directories() {
+            // Only the lone document's own directory counts; a
+            // `_metadata.yml` further up is outside its stand-in project.
+            let temp = TempDir::new().unwrap();
+            fs::write(temp.path().join("_metadata.yml"), "toc: true\n").unwrap();
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+            let doc_path = chapters.join("doc.qmd");
+
+            let project = ProjectContext::discover(&doc_path, &native_runtime()).unwrap();
+            assert!(project.is_single_file);
+
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
+
             assert!(result.is_empty());
         }
 
