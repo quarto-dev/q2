@@ -1,0 +1,20 @@
+---
+title: "Lightbox: preview parity"
+# bd-kcpkgftw. The lightbox links are added in the q2-preview pipeline too,
+# so the preview's <main> matches the render's (no GLightbox runtime in the
+# preview; a click there is inert). Explicit inline image plus an image
+# alone in its paragraph, so no figure chrome is involved.
+lightbox: true
+_quarto:
+  tests:
+    html:
+      dom-parity: true
+      ensureHtmlElements:
+        - - 'p > a.lightbox[data-gallery="quarto-lightbox-gallery-1"] > img[src="images/mv-0.png"]'
+          - 'p > a.lightbox[data-gallery="g"][data-desc-position="left"] > img[src="images/mv-1.png"]'
+        - []
+---
+
+Some text with an ![inline](images/mv-0.png){.lightbox} image.
+
+![](images/mv-1.png){group="g" desc-position="left"}
