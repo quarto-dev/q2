@@ -34,4 +34,5 @@ the element.
       `dockerfile` matches `Dockerfile`; `is_language_supported("R")`.
 - [x] `Registry::resolve` lowercase fallback.
 - [x] Walker: exact-then-lowercase user-grammar lookup.
-- [x] `cargo nextest run -p quarto-highlight -p quarto-lsp-core`, clippy (host + Windows cross).
+- [x] `cargo nextest run -p quarto-highlight -p quarto-lsp-core`, host clippy. (Windows cross-clippy
+      cannot build the tree-sitter C grammars from macOS; not run.)
