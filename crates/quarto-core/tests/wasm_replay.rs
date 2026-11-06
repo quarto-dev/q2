@@ -103,7 +103,7 @@ fn stored_notebook_figures_are_written_to_the_vfs() {
         out.markdown
     );
     assert!(
-        !out.markdown.contains("[Image output]"),
+        !out.markdown.contains("Image output"),
         "figure must not degrade to a placeholder; got:\n{}",
         out.markdown
     );

@@ -28,8 +28,8 @@ use super::session::SessionKey;
 use crate::cell_options::partition_cell_options;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::diagnostics::{
-    InlineSpanProblem, deprecated_alias_diagnostic, inline_span_diagnostic,
-    no_runnable_kernel_diagnostic,
+    InlineSpanProblem, deprecated_alias_diagnostic, no_runnable_kernel_diagnostic, note_diagnostic,
+    span_diagnostic,
 };
 use crate::engine::error::ExecutionError;
 use crate::engine::ts_protocol::TsMetadataValue;
@@ -38,7 +38,7 @@ use crate::engine::units::{
     view_for_engine,
 };
 use crate::presenter::cell::describe_location;
-use crate::presenter::document::{PresentError, PresentNote, present_document};
+use crate::presenter::document::{PresentError, present_document};
 use crate::presenter::figures::FsFigureSink;
 use crate::presenter::inline::InlineTarget;
 use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus};
@@ -736,21 +736,6 @@ fn span_fatal(result: &CellResult, span: &InlineUnit, ctx: &ExecutionContext) ->
     Err(span_error(&problem, span, ctx))
 }
 
-/// The diagnostic for a span problem, located at the span's expression.
-fn span_diagnostic(
-    problem: &InlineSpanProblem,
-    span: &InlineUnit,
-    ctx: &ExecutionContext,
-) -> quarto_error_reporting::DiagnosticMessage {
-    let expr_source = SourceInfo::substring(
-        ctx.source_info.clone(),
-        span.code_start,
-        span.code_start + span.code.len(),
-    );
-    let location = describe_location(&expr_source, 0, ctx);
-    inline_span_diagnostic(problem, &span.lang, &span.code, location.as_deref())
-}
-
 fn span_error(
     problem: &InlineSpanProblem,
     span: &InlineUnit,
@@ -758,23 +743,6 @@ fn span_error(
 ) -> JupyterError {
     JupyterError::CellExecutionFailed {
         message: span_diagnostic(problem, span, ctx).to_text(None),
-    }
-}
-
-/// A presenter note as the engine's warning: a span whose value has no usable text
-/// stays in the document (`Q-18-10`, as before the flip).
-pub(crate) fn note_diagnostic(
-    note: &PresentNote,
-    units: &[Unit],
-    ctx: &ExecutionContext,
-) -> quarto_error_reporting::DiagnosticMessage {
-    match note {
-        PresentNote::InlineNoUsableValue { unit } => match units.get(*unit) {
-            Some(Unit::Inline(span)) => {
-                span_diagnostic(&InlineSpanProblem::NoUsableResult, span, ctx)
-            }
-            _ => inline_span_diagnostic(&InlineSpanProblem::NoUsableResult, "?", "?", None),
-        },
     }
 }
 

@@ -6,7 +6,7 @@ x
 
 ::: {.cell-output .cell-output-display}
 
-[Image output]
+\[Image output\]
 
 :::
 

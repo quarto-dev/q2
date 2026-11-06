@@ -556,7 +556,7 @@ pub(super) fn present_from_record(
         presented
             .notes
             .iter()
-            .map(|note| crate::engine::jupyter::note_diagnostic(note, &units, ctx)),
+            .map(|note| crate::engine::diagnostics::note_diagnostic(note, &units, ctx)),
     );
     Ok(())
 }

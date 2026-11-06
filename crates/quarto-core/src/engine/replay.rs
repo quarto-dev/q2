@@ -151,6 +151,12 @@ impl ReplayEngine {
         let mut result = stored;
         result.markdown = presented.markdown;
         result.supporting_files = presented.files_written;
+        result.warnings.extend(
+            presented
+                .notes
+                .iter()
+                .map(|note| crate::engine::diagnostics::note_diagnostic(note, &units, ctx)),
+        );
         result.record = record
             .metadata
             .quarto_engines

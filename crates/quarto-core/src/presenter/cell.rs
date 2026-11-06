@@ -235,9 +235,11 @@ fn format_outputs(result: &CellResult, fig: &mut dyn FigureSink, show_warnings: 
                     // An image payload we failed to write (bad base64,
                     // I/O error) and no text fallback: keep the
                     // pre-bd-5t6wvu7m placeholder rather than dropping
-                    // the output silently.
+                    // the output silently. The brackets are escaped: a bare
+                    // `[Image output]` is a span without attributes, which loses
+                    // its brackets and raises Q-2-49.
                     output.push_str(
-                        "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n",
+                        "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n",
                     );
                 }
             }
@@ -867,7 +869,7 @@ mod tests {
 
         let md = format_outputs(&result, &mut test_fig(), true);
         assert!(md.contains("fallback"), "got:\n{md}");
-        assert!(!md.contains("[Image output]"), "got:\n{md}");
+        assert!(!md.contains("Image output"), "got:\n{md}");
     }
 
     #[test]
@@ -882,7 +884,7 @@ mod tests {
         }]);
         assert_eq!(
             format_outputs(&result, &mut test_fig(), true),
-            "\n::: {.cell-output .cell-output-display}\n\n[Image output]\n\n:::\n"
+            "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n"
         );
     }
 

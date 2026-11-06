@@ -37,6 +37,11 @@ pub trait FigureSink {
     /// falls back — fail-soft, matching the engine's other output paths).
     fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String>;
 
+    /// Image outputs that could not be used since the last call (malformed payload or a
+    /// failed write), drained. The presenter reports each as a diagnostic; the output
+    /// itself still falls back as described on `write_image`.
+    fn take_failures(&mut self) -> Vec<FigureFailure>;
+
     /// Whether any figure file was successfully written.
     fn wrote_any(&self) -> bool;
 
@@ -44,14 +49,31 @@ pub trait FigureSink {
     fn files_dir(&self) -> PathBuf;
 }
 
+/// An image output the presenter could not use (`Q-18-11`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FigureFailure {
+    /// The output's mime type, e.g. `image/png`.
+    pub mime: String,
+    /// Why, in the decoder's or the filesystem's words.
+    pub reason: String,
+}
+
 /// Decode an image output into `(file extension, bytes)`, or `None` when the mime is not
 /// an image type we write or the payload is malformed.
 pub fn decode_image(mime: &str, value: &serde_json::Value) -> Option<(&'static str, Vec<u8>)> {
+    decode_image_checked(mime, value).ok()
+}
+
+/// [`decode_image`], with the reason a payload was rejected.
+fn decode_image_checked(
+    mime: &str,
+    value: &serde_json::Value,
+) -> Result<(&'static str, Vec<u8>), String> {
     let ext = match mime {
         "image/png" => "png",
         "image/jpeg" => "jpeg",
         "image/svg+xml" => "svg",
-        _ => return None,
+        _ => return Err(format!("`{mime}` is not an image type Quarto writes")),
     };
     let content = extract_text_content(value);
     // Q1 rule (`mdImageOutput`): SVG payloads that are literal `<svg` markup are written
@@ -76,11 +98,11 @@ pub fn decode_image(mime: &str, value: &serde_json::Value) -> Option<(&'static s
             Ok(bytes) => bytes,
             Err(e) => {
                 tracing::warn!(mime, error = %e, "jupyter figure: invalid base64; skipping");
-                return None;
+                return Err(format!("the payload is not valid base64: {e}"));
             }
         }
     };
-    Some((ext, bytes))
+    Ok((ext, bytes))
 }
 
 /// Cell and output numbering plus the file layout, shared by every sink.
@@ -92,6 +114,8 @@ pub struct FigureNaming {
     cell_index: usize,
     /// 1-based index of the next output within the current cell. Reset by `begin_cell`.
     output_index: usize,
+    /// Failures not yet drained by `take_failures`.
+    failures: Vec<FigureFailure>,
 }
 
 impl FigureNaming {
@@ -104,7 +128,21 @@ impl FigureNaming {
             files_dir_name: format!("{stem}_files"),
             cell_index: 0,
             output_index: 0,
+            failures: Vec::new(),
         }
+    }
+
+    /// Remember an image output that could not be used.
+    pub fn record_failure(&mut self, mime: &str, reason: String) {
+        self.failures.push(FigureFailure {
+            mime: mime.to_string(),
+            reason,
+        });
+    }
+
+    /// Drain the recorded failures.
+    pub fn take_failures(&mut self) -> Vec<FigureFailure> {
+        std::mem::take(&mut self.failures)
     }
 
     pub fn begin_cell(&mut self) {
@@ -154,7 +192,13 @@ impl FigureSink for FsFigureSink {
     }
 
     fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String> {
-        let (ext, bytes) = decode_image(mime, value)?;
+        let (ext, bytes) = match decode_image_checked(mime, value) {
+            Ok(decoded) => decoded,
+            Err(reason) => {
+                self.naming.record_failure(mime, reason);
+                return None;
+            }
+        };
         let (file_name, rel) = self.naming.next_file(ext);
         let abs = self
             .doc_dir
@@ -162,14 +206,22 @@ impl FigureSink for FsFigureSink {
             .join("figure-html");
         if let Err(e) = std::fs::create_dir_all(&abs) {
             tracing::warn!(dir = %abs.display(), error = %e, "jupyter figure: cannot create figures dir");
+            self.naming
+                .record_failure(mime, format!("cannot create `{}`: {e}", abs.display()));
             return None;
         }
         if let Err(e) = std::fs::write(abs.join(&file_name), &bytes) {
             tracing::warn!(file = %file_name, error = %e, "jupyter figure: write failed");
+            self.naming
+                .record_failure(mime, format!("cannot write `{file_name}`: {e}"));
             return None;
         }
         self.wrote_any = true;
         Some(rel)
+    }
+
+    fn take_failures(&mut self) -> Vec<FigureFailure> {
+        self.naming.take_failures()
     }
 
     fn wrote_any(&self) -> bool {
@@ -209,7 +261,13 @@ impl FigureSink for RuntimeFigureSink {
     }
 
     fn write_image(&mut self, mime: &str, value: &serde_json::Value) -> Option<String> {
-        let (ext, bytes) = decode_image(mime, value)?;
+        let (ext, bytes) = match decode_image_checked(mime, value) {
+            Ok(decoded) => decoded,
+            Err(reason) => {
+                self.naming.record_failure(mime, reason);
+                return None;
+            }
+        };
         let (file_name, rel) = self.naming.next_file(ext);
         let abs = self
             .doc_dir
@@ -217,14 +275,22 @@ impl FigureSink for RuntimeFigureSink {
             .join("figure-html");
         if let Err(e) = self.runtime.dir_create(&abs, true) {
             tracing::warn!(dir = %abs.display(), error = %e, "jupyter figure: cannot create figures dir");
+            self.naming
+                .record_failure(mime, format!("cannot create `{}`: {e}", abs.display()));
             return None;
         }
         if let Err(e) = self.runtime.file_write(&abs.join(&file_name), &bytes) {
             tracing::warn!(file = %file_name, error = %e, "jupyter figure: write failed");
+            self.naming
+                .record_failure(mime, format!("cannot write `{file_name}`: {e}"));
             return None;
         }
         self.wrote_any = true;
         Some(rel)
+    }
+
+    fn take_failures(&mut self) -> Vec<FigureFailure> {
+        self.naming.take_failures()
     }
 
     fn wrote_any(&self) -> bool {
@@ -272,6 +338,9 @@ mod tests {
             }
             self.files.push((rel.clone(), bytes));
             Some(rel)
+        }
+        fn take_failures(&mut self) -> Vec<FigureFailure> {
+            self.naming.take_failures()
         }
         fn wrote_any(&self) -> bool {
             !self.files.is_empty()
@@ -381,6 +450,44 @@ mod tests {
         assert!(dir.path().join(&rel).is_file());
         assert!(sink.wrote_any());
         assert_eq!(sink.files_dir(), dir.path().join("report_files"));
+    }
+
+    // ── failures are recorded for the presenter to report (Q-18-11) ──
+
+    #[test]
+    fn undecodable_payload_is_recorded_once_and_drained() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut sink = FsFigureSink::new(&dir.path().join("report.qmd"));
+        sink.begin_cell();
+        assert_eq!(sink.write_image("image/png", &json!("!!!")), None);
+        let failures = sink.take_failures();
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert_eq!(failures[0].mime, "image/png");
+        assert!(failures[0].reason.contains("base64"), "{failures:?}");
+        assert!(sink.take_failures().is_empty(), "drained");
+    }
+
+    #[test]
+    fn unwritable_directory_is_recorded() {
+        let dir = tempfile::tempdir().unwrap();
+        // A file where the `<stem>_files` directory must go.
+        std::fs::write(dir.path().join("report_files"), "in the way").unwrap();
+        let mut sink = FsFigureSink::new(&dir.path().join("report.qmd"));
+        sink.begin_cell();
+        assert_eq!(sink.write_image("image/png", &json!(PNG)), None);
+        let failures = sink.take_failures();
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].reason.contains("report_files"), "{failures:?}");
+        assert!(!sink.wrote_any());
+    }
+
+    #[test]
+    fn a_good_image_records_no_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut sink = FsFigureSink::new(&dir.path().join("report.qmd"));
+        sink.begin_cell();
+        assert!(sink.write_image("image/png", &json!(PNG)).is_some());
+        assert!(sink.take_failures().is_empty());
     }
 
     // ── RuntimeFigureSink: every write goes through the SystemRuntime ──

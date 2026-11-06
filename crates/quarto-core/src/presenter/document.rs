@@ -60,6 +60,16 @@ pub enum PresentNote {
         /// Index into the `units` the driver was given.
         unit: usize,
     },
+    /// A cell's image output could not be used (a malformed payload or a failed write),
+    /// so the figure is missing from the page (`Q-18-11`).
+    ImageUnusable {
+        /// Index into the `units` the driver was given.
+        unit: usize,
+        /// The output's mime type, e.g. `image/png`.
+        mime: String,
+        /// Why it could not be used.
+        reason: String,
+    },
 }
 
 /// Why a document could not be presented.
@@ -127,6 +137,15 @@ pub fn present_document(
                     .map_err(|message| PresentError::InvalidCellOptions { unit: ui, message })?,
                     None => render_cell(&u.lang, &parsed.code, &result, fig, visibility),
                 };
+                notes.extend(
+                    fig.take_failures()
+                        .into_iter()
+                        .map(|f| PresentNote::ImageUnusable {
+                            unit: ui,
+                            mime: f.mime,
+                            reason: f.reason,
+                        }),
+                );
                 out.push_str(&document_text[last_end..u.start]);
                 if out.ends_with('\n') && !out.ends_with("\n\n") {
                     out.push('\n');
@@ -642,5 +661,44 @@ mod tests {
         // A hidden figure cell writes nothing and reports nothing.
         let (out, _) = present(text, &[(0, png())], Some(&scope("output", false)));
         assert!(out.files_written.is_empty());
+    }
+
+    // ── unusable images are noted per unit (Q-18-11) ────────────────────
+
+    /// A display whose only payload is an image that is not base64.
+    fn bad_png() -> Vec<Value> {
+        vec![json!({
+            "output_type": "display_data",
+            "data": {"image/png": "!!!not base64!!!"},
+            "metadata": {}
+        })]
+    }
+
+    #[test]
+    fn an_unusable_image_is_noted_against_its_cell_and_the_placeholder_is_escaped() {
+        let text = "Intro.\n\n```{python}\na()\n```\n\n```{python}\nplot()\n```\n";
+        let (out, _) = present(text, &[(0, stdout("A\n")), (1, bad_png())], None);
+        let [PresentNote::ImageUnusable { unit, mime, reason }] = out.notes.as_slice() else {
+            panic!("expected one ImageUnusable note, got {:?}", out.notes);
+        };
+        assert_eq!((*unit, mime.as_str()), (1, "image/png"));
+        assert!(reason.contains("base64"), "{reason}");
+        assert!(
+            out.markdown.contains("\\[Image output\\]"),
+            "{}",
+            out.markdown
+        );
+        assert!(out.files_written.is_empty());
+    }
+
+    #[test]
+    fn a_good_image_and_a_failed_one_note_only_the_failure() {
+        let text = "```{python}\nplot()\n```\n\n```{python}\nplot()\n```\n";
+        let (out, _) = present(text, &[(0, png()), (1, bad_png())], None);
+        assert_eq!(out.notes.len(), 1, "{:?}", out.notes);
+        assert!(matches!(
+            out.notes[0],
+            PresentNote::ImageUnusable { unit: 1, .. }
+        ));
     }
 }
