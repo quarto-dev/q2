@@ -153,22 +153,14 @@ function ensureClient(): SyncClient {
  * Auth is handled via HttpOnly cookies, sent automatically by the
  * browser on same-origin WebSocket upgrades.
  *
- * The sixth parameter is forwarded to the sync client: either the
- * legacy numeric `peerTimeoutMs` (how long to wait for the samod
- * handshake before falling through to offline-from-IndexedDB mode;
- * underlying default 1 ms, right for hub-client's cached-IndexedDB
- * flow) or a `ConnectOptions` bag (bd-jit6pdwq). The q2-preview SPA
- * passes `{ peerTimeoutMs: Infinity, storage: 'memory' }`: its hubs
- * are ephemeral (no cache to fall back to, nothing worth persisting)
- * and a finite WS deadline can't be made correct under Firefox's
- * per-IP handshake serialization — the SPA's boot controller
- * arbitrates server liveness over HTTP `/health` instead.
+ * `options` is forwarded to the sync client (`ConnectOptions`): storage
+ * and network choices, or a prebuilt repo.
  */
-export async function connect(syncServerUrl: string, indexDocId: string, authorId?: string, screenName?: string, color?: string, peerTimeoutMsOrOptions?: number | ConnectOptions): Promise<FileEntry[]> {
+export async function connect(syncServerUrl: string, indexDocId: string, authorId?: string, screenName?: string, color?: string, options: ConnectOptions = {}): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(syncServerUrl, indexDocId, authorId, screenName, color, peerTimeoutMsOrOptions ?? 1);
+  return ensureClient().connect(syncServerUrl, indexDocId, authorId, screenName, color, options);
 }
 
 /**

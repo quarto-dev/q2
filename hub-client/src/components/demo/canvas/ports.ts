@@ -12,7 +12,7 @@
 import { createContext, useContext, useEffect } from 'react';
 import { useNodeConnections, useNodeId } from '@xyflow/react';
 import type { Doc } from '@automerge/automerge';
-import type { NetworkAdapter, StorageAdapterInterface } from '@automerge/automerge-repo';
+import type { NetworkAdapter, Repo, StorageAdapterInterface } from '@automerge/automerge-repo';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic } from '@quarto/preview-renderer/types/diagnostic';
@@ -98,6 +98,15 @@ export interface AdapterPort {
   id: string;
   url: string;
   take(): NetworkAdapter;
+}
+
+/** What the repo node offers on its "repo" port: the one repo, and what is attached to it. */
+export interface RepoPort {
+  repo: Repo;
+  /** The server the attached network adapter points at, or null when none is attached. */
+  url: string | null;
+  networkAttached: boolean;
+  storageAttached: boolean;
 }
 
 /**

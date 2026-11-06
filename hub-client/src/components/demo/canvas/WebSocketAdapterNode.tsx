@@ -42,8 +42,8 @@ export default function WebSocketAdapterNode() {
           : `BrowserWebSocketClientAdapter → ${url}`}
       </div>
       {url !== null && <div className="cd-meta">instances handed to a repo: {taken}</div>}
-      <Handle type="target" position={Position.Top} id="server" title="server" />
-      <Handle type="source" position={Position.Bottom} id="adapter" title="adapter" />
+      <Handle type="target" position={Position.Left} id="server" title="server" />
+      <Handle type="source" position={Position.Right} id="adapter" title="adapter" />
     </div>
   );
 }

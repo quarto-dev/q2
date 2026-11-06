@@ -108,8 +108,6 @@ async function connectAndLoadContents(
   // handshake serialization, stale tabs retrying a dead port delay the
   // new server's handshake past it and the index doc comes back
   // "unavailable" (bd-ug0doz5q). Give them the long budget.
-  const peerTimeoutMs =
-    import.meta.env.VITE_E2E === '1' || isEphemeralStorage() ? 30000 : 1;
   // Ephemeral storage mode (bd-sw4xy1vw): the q2 preview embed build
   // keeps the automerge document cache in memory — each preview session
   // is a fresh origin, so a persisted cache could never hit and would
@@ -117,7 +115,7 @@ async function connectAndLoadContents(
   const storage: StorageKind = isEphemeralStorage() ? 'memory' : 'indexeddb';
   // Optional auth: signed out means local adapters only (see syncGate.ts).
   const network = isSyncAllowed() ? 'websocket' : 'none';
-  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, authorId, screenName, color, { peerTimeoutMs, storage, network });
+  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, authorId, screenName, color, { storage, network });
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);

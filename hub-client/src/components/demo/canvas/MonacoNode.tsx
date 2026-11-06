@@ -131,11 +131,11 @@ export default function MonacoNode() {
           ? <div className="cd-empty">No doc connected to edit</div>
           : <BoundEditor port={port} file={file} language={language} diagnostics={diagnostics} onEditor={setEditorPort} />}
       </div>
-      <Handle type="target" position={Position.Left} id="doc" title="doc" style={{ top: '35%' }} />
-      <Handle type="target" position={Position.Left} id="path" title="path" style={{ top: '65%' }} />
-      <Handle type="source" position={Position.Right} id="editor" title="editor" style={{ top: '25%' }} />
-      <Handle type="target" position={Position.Right} id="language" title="language" style={{ top: '50%' }} />
-      <Handle type="target" position={Position.Right} id="diagnostics" title="diagnostics" style={{ top: '75%' }} />
+      <Handle type="target" position={Position.Left} id="doc" title="doc" style={{ top: '25%' }} />
+      <Handle type="target" position={Position.Left} id="path" title="path" style={{ top: '50%' }} />
+      <Handle type="source" position={Position.Left} id="editor" title="editor" style={{ top: '75%' }} />
+      <Handle type="target" position={Position.Right} id="language" title="language" style={{ top: '35%' }} />
+      <Handle type="target" position={Position.Right} id="diagnostics" title="diagnostics" style={{ top: '65%' }} />
       <Handle type="source" position={Position.Bottom} id="file" title="file" />
     </div>
   );

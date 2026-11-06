@@ -60,7 +60,6 @@ export type {
 // Export sync client
 export {
   createSyncClient,
-  PeerUnavailableError,
   // Locked unavailability wording (bd-vm5e5u10) — reused by hub-mcp
   // so per-file tool errors match the sync client's diagnostics.
   fileUnavailableMessage,

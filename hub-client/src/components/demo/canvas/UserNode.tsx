@@ -52,7 +52,7 @@ export default function UserNode() {
           </div>
         )}
       {identity !== null && error !== null && <div className="cd-meta">{error}</div>}
-      <Handle type="source" position={Position.Bottom} id="identity" title="identity" />
+      <Handle type="source" position={Position.Top} id="identity" title="identity" />
     </div>
   );
 }
