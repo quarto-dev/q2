@@ -1,7 +1,8 @@
 //! Project file discovery
 //!
 //! Walks the project directory to find source files (`.qmd`, `.md`), config
-//! files, and binary resources.
+//! files, `_extensions/` files, `.tsx` components, stylesheets (`.css`,
+//! `.scss`, outside generated dirs), and binary resources.
 //!
 //! `.md` is a source file at this layer (bd-6d2wj4zp, D10): sync and watch
 //! are extension-based, symmetric with `.qmd`. Whether a given `.md` is
@@ -150,11 +151,14 @@ impl ProjectFiles {
 
                 // Check for stylesheets (`.css`, `.scss`): `theme:` files
                 // and the partials they import, which the browser render
-                // compiles from the VFS.
+                // compiles from the VFS. Stylesheets a render wrote (inside
+                // a generated dir) are skipped, not synced.
                 if ext.is_some_and(|e| {
                     e.eq_ignore_ascii_case("css") || e.eq_ignore_ascii_case("scss")
                 }) {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
+                    if let Ok(relative) = path.strip_prefix(project_root)
+                        && !in_generated_dir(relative)
+                    {
                         debug!(?relative, "Discovered stylesheet source file");
                         files.source_files.push(relative.to_path_buf());
                     }
@@ -308,6 +312,31 @@ impl ProjectFiles {
             .chain(self.resource_files.iter())
             .chain(self.text_dep_files.iter())
     }
+}
+
+/// Directory names Quarto or its engines own outright: nothing inside one
+/// is a source file.
+const GENERATED_DIRS: &[&str] = &["node_modules", "__pycache__", "_freeze", "site_libs"];
+
+/// Suffixes of engine sidecar directories (`<stem>_files/`,
+/// `<stem>_cache/`).
+const GENERATED_DIR_SUFFIXES: &[&str] = &["_files", "_cache"];
+
+/// Whether `name` is a directory Quarto or an engine generates (see
+/// [`GENERATED_DIRS`] and [`GENERATED_DIR_SUFFIXES`]).
+pub fn is_generated_dir_name(name: &str) -> bool {
+    GENERATED_DIRS.contains(&name) || GENERATED_DIR_SUFFIXES.iter().any(|s| name.ends_with(s))
+}
+
+/// Whether any parent directory of the project-relative `relative` path is a
+/// generated directory. `site_libs/` is matched at any depth, so it is caught
+/// under a custom `output-dir` too.
+fn in_generated_dir(relative: &Path) -> bool {
+    relative
+        .parent()
+        .into_iter()
+        .flat_map(Path::components)
+        .any(|c| c.as_os_str().to_str().is_some_and(is_generated_dir_name))
 }
 
 /// Check if a directory entry should be ignored during traversal.
@@ -731,6 +760,42 @@ mod tests {
             );
         }
         assert!(files.binary_files.is_empty());
+    }
+
+    /// Stylesheets that a render *wrote* — engine sidecars (`<stem>_files/`,
+    /// `<stem>_cache/`) and `site_libs/` (also under a custom `output-dir`) —
+    /// are not sources: the compiled theme alone is ~350 KB per hash. They
+    /// must not be synced, while other files under those dirs still are.
+    #[test]
+    fn test_discover_skips_generated_stylesheets() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::write(temp.path().join("custom.scss"), "$x: 1;\n").unwrap();
+        for dir in [
+            "index_files/quarto",
+            "index_cache/html",
+            "docs/site_libs/quarto",
+        ] {
+            fs::create_dir_all(temp.path().join(dir)).unwrap();
+            fs::write(temp.path().join(dir).join("quarto-theme-abc.css"), "a {}").unwrap();
+        }
+        fs::create_dir_all(temp.path().join("index_files/figure-html")).unwrap();
+        fs::write(
+            temp.path().join("index_files/figure-html/plot.png"),
+            b"\x89PNG",
+        )
+        .unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        assert_eq!(files.source_files, vec![PathBuf::from("custom.scss")]);
+        assert!(
+            files
+                .binary_files
+                .contains(&PathBuf::from("index_files/figure-html/plot.png")),
+            "non-stylesheet files under sidecar dirs must still be discovered"
+        );
     }
 
     /// bd-tnm3k: `q2 preview` on a single `.qmd` file with no

@@ -47,6 +47,7 @@ pub enum WatchFilter {
     ///   - `_metadata.yml` / `_metadata.yaml` (section config)
     ///   - `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp` (media)
     ///   - `.tsx` (custom React components)
+    ///   - `.css`, `.scss` (`theme:` stylesheets and their partials)
     /// `_extensions/**` is intentionally *not* expanded yet — see
     /// `claude-notes/plans/2026-05-13-q2-preview-phase-b.md` Q-B1.
     PreviewBroad,
@@ -302,8 +303,8 @@ fn is_preview_relevant(path: &Path) -> bool {
 
     // Extension-based match for media, custom React components, and
     // project-level stylesheets (`.css`, `.scss`: `theme:` files and
-    // their partials, which the WASM compiles from the VFS). SASS / LESS
-    // are deliberately omitted — Quarto themes don't use them.
+    // their partials, which the WASM compiles from the VFS). `.sass`
+    // partials are omitted (a theme file itself must be `.scss`), as is LESS.
     // (Phase D.3, bd-kw93.9.)
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let lower = ext.to_ascii_lowercase();

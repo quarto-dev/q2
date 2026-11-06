@@ -57,15 +57,6 @@ impl Action {
     }
 }
 
-/// Directory names Quarto or its engines own outright. A change inside
-/// one is never a source edit.
-const GENERATED_DIRS: &[&str] = &["node_modules", "__pycache__", "_freeze", "site_libs"];
-
-/// Suffixes of engine sidecar directories (`<stem>_files/`,
-/// `<stem>_cache/`). Matched on every component, so a nested sidecar
-/// is caught wherever it sits.
-const GENERATED_DIR_SUFFIXES: &[&str] = &["_files", "_cache"];
-
 /// Extensions `ProjectContext::discover` admits as inputs.
 const INPUT_EXTENSIONS: &[&str] = &["qmd", "md", "ipynb", "Rmd", "rmd"];
 
@@ -107,8 +98,9 @@ pub fn classify(path: &Path, ctx: &WatchContext) -> Action {
         if name.starts_with('.') && !(last && name.starts_with(".env")) {
             return Action::Ignore;
         }
-        if GENERATED_DIRS.contains(name) || GENERATED_DIR_SUFFIXES.iter().any(|s| name.ends_with(s))
-        {
+        // A change inside a generated dir is never a source edit. Matched
+        // on every component, so a nested sidecar is caught wherever it sits.
+        if quarto_hub::discovery::is_generated_dir_name(name) {
             return Action::Ignore;
         }
         if last && is_editor_temporary(name) {

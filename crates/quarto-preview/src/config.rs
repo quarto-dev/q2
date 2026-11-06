@@ -559,11 +559,73 @@ pub fn resolve_single_file_deps(
         }
     }
 
+    // Custom `theme:` stylesheets. Project-mode preview syncs `.css`/`.scss`
+    // via hub discovery's dir walk; single-file mode has no walk, so without
+    // this the browser render fails with Q-14-4 "Theme file not found". The
+    // front matter is not format-flattened yet, so `theme:` is read at the
+    // top level and under every `format.<fmt>`. Entries resolve like the
+    // render's `ThemeContext` (relative to the project root — the deck dir
+    // here — with a leading `/` meaning that root). Built-in names (`cosmo`)
+    // match no file and drop out. The `.scss` siblings in each theme's own
+    // directory come along so `@import`ed partials resolve, without walking
+    // anything beyond the directories the author named.
+    let mut theme_values = vec![doc.ast.meta.get("theme")];
+    if let Some(formats) = doc.ast.meta.get("format").and_then(|v| v.as_map_entries()) {
+        theme_values.extend(formats.iter().map(|f| f.value.get("theme")));
+    }
+    let mut theme_paths = Vec::new();
+    for value in theme_values.into_iter().flatten() {
+        collect_theme_paths(value, &mut theme_paths);
+    }
+    for raw in theme_paths {
+        let joined = project_root.join(raw.strip_prefix('/').unwrap_or(&raw));
+        let Ok(canon) = quarto_system_runtime::canonicalize(&joined) else {
+            continue;
+        };
+        let partials = canon
+            .parent()
+            .and_then(|dir| std::fs::read_dir(dir).ok())
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("scss"))
+            });
+        for path in std::iter::once(canon.clone()).chain(partials) {
+            if let Some(rel) = to_in_tree_rel(path)
+                && seen_qmd.insert(rel.clone())
+            {
+                qmd_files.push(rel);
+            }
+        }
+    }
+
     qmd_files.sort();
     binary_files.sort();
     SingleFileDeps {
         qmd_files,
         binary_files,
+    }
+}
+
+/// Collect the custom stylesheet paths (`.css`/`.scss`) named by a `theme:`
+/// value, in any of its shapes: a string, an array, or a `light`/`dark` map.
+fn collect_theme_paths(value: &ConfigValue, out: &mut Vec<String>) {
+    if let Some(items) = value.as_array() {
+        for item in items {
+            collect_theme_paths(item, out);
+        }
+    } else if let Some(entries) = value.as_map_entries() {
+        for entry in entries {
+            collect_theme_paths(&entry.value, out);
+        }
+    } else if let Some(raw) = value.as_plain_text()
+        && std::path::Path::new(&raw)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("css") || e.eq_ignore_ascii_case("scss"))
+    {
+        out.push(raw);
     }
 }
 
@@ -779,6 +841,67 @@ mod tests {
         assert!(
             deps.qmd_files.is_empty(),
             "missing/escaping/non-tsx entries must all be dropped; got {:?}",
+            deps.qmd_files,
+        );
+    }
+
+    /// Custom `theme:` stylesheets sync as text deps, wherever the front
+    /// matter declares them (top level, `format.<fmt>`, arrays, light/dark
+    /// maps). The `.scss` files in each theme's own directory come along
+    /// so `@import`ed partials resolve; built-in theme names and unrelated
+    /// directories do not.
+    #[test]
+    fn single_file_deps_theme_stylesheets() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::create_dir(root.join("styles")).unwrap();
+        std::fs::create_dir(root.join("other")).unwrap();
+        std::fs::write(root.join("top.css"), "/*-- scss:rules --*/\n").unwrap();
+        std::fs::write(root.join("dark.scss"), "/*-- scss:defaults --*/\n").unwrap();
+        std::fs::write(root.join("styles/deck.scss"), "@import 'vars';\n").unwrap();
+        std::fs::write(root.join("styles/_vars.scss"), "$x: 1;\n").unwrap();
+        std::fs::write(root.join("styles/notes.txt"), "not a stylesheet\n").unwrap();
+        std::fs::write(root.join("other/unrelated.scss"), "$y: 2;\n").unwrap();
+        std::fs::write(
+            root.join("main.qmd"),
+            "---\ntitle: T\ntheme: top.css\nformat:\n  html:\n    theme:\n      light: [cosmo, /styles/deck.scss]\n      dark: dark.scss\n---\n\n# Hi\n",
+        )
+        .unwrap();
+
+        let deps = resolve_single_file_deps(root, std::path::Path::new("main.qmd"), native_arc());
+        assert_eq!(
+            deps.qmd_files,
+            vec![
+                std::path::PathBuf::from("dark.scss"),
+                std::path::PathBuf::from("styles/_vars.scss"),
+                std::path::PathBuf::from("styles/deck.scss"),
+                std::path::PathBuf::from("top.css"),
+            ],
+            "theme stylesheets + their dir's partials must sync as text deps; got {:?}",
+            deps.qmd_files,
+        );
+    }
+
+    /// Missing and escaping (`../`) theme entries are dropped fail-soft, and
+    /// a theme in the deck dir does not drag in stylesheets from outside it.
+    #[test]
+    fn single_file_deps_theme_drops_missing_and_escaping() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        std::fs::write(root.join("secret.scss"), "$s: 1;\n").unwrap();
+        let deck_dir = root.join("deck");
+        std::fs::create_dir(&deck_dir).unwrap();
+        std::fs::write(
+            deck_dir.join("main.qmd"),
+            "---\ntitle: T\nformat:\n  revealjs:\n    theme: [missing.scss, ../secret.scss]\n---\n\n# Hi\n",
+        )
+        .unwrap();
+
+        let deps =
+            resolve_single_file_deps(&deck_dir, std::path::Path::new("main.qmd"), native_arc());
+        assert!(
+            deps.qmd_files.is_empty(),
+            "missing/escaping theme entries must be dropped; got {:?}",
             deps.qmd_files,
         );
     }

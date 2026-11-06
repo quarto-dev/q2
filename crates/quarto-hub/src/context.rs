@@ -978,7 +978,7 @@ async fn reconcile_files_with_index(
 ) -> Result<usize> {
     let mut added = 0;
 
-    // Reconcile text files (config + qmd)
+    // Reconcile text files (config, sources, extensions, stylesheets, deps)
     for file_path in project_files.text_files() {
         let path_str = file_path.to_string_lossy();
 

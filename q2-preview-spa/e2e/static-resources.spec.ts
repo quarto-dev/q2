@@ -190,8 +190,10 @@ test.describe('project theme files fixture', () => {
     // On-disk edit: the watcher re-syncs the stylesheet and the page re-themes.
     await writeFile(path.join(server.projectDir, 't.scss'), themeScss('#123456'));
 
+    // Same budget as the initial render: the edit forces a full Bootstrap
+    // recompile under a new cache key.
     await expect(body).toHaveCSS('background-color', 'rgb(18, 52, 86)', {
-      timeout: 5_000,
+      timeout: 20_000,
     });
   });
 });
