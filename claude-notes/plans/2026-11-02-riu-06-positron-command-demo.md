@@ -2,7 +2,7 @@
 title: 'RIU-6: the Positron command demo'
 date: 2026-11-02
 description: 'Three commands in Gordon fork of Positron that exercise both directions between Positron and q2 records: run inline expressions, render with q2 and push the outputs into the open document, and preview from the Positron cache with no execution. Mechanisms proven in RIU-0 S5 and S6; Python and Julia are in scope. Starts with an early spike that shows the default q2 preview viewer in the Positron preview pane, which can run before any other RIU plan. A spike in the fork, ending with a script, a capture, a findings note and the reconciliation of the epic checklists.'
-status: ready  # nothing started; written from RIU-0 S5 to S7 and RIU-0b spike J; the Phase 0 spike needs nothing; the commands need RIU-3a, RIU-2 and RIU-5 (command 3 does not need RIU-4's hardening); revised after the fourth review (default viewer in the preview pane)
+status: paused  # Phases 0 and A done; Phase B commands 1 and 3 done and seen in the window, S5 push method moved; resume at command 2 once RIU-5 B2 (q2 record export-positron) is on the integration branch; see Resume here
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -31,6 +31,60 @@ records were integrated. This plan comes last on purpose.
 > is `scripts/code.sh`.
 
 **Lanes:** before starting a phase or landing work, read the epic's [lanes, landing and the ready board](2026-11-02-records-in-use-epic.md#lanes-landing-and-the-ready-board): lane branches, rebase and landing rules, and the board of which phases may start.
+
+## Resume here (written 2026-11-06 when the lane paused)
+
+**State.** Phases 0 and A are done. In Phase B, command 1 (Run Inline Expressions) and command 3
+(preview from the Positron cache) are done and were seen in the window with Gordon; the S5 push
+method is now the internal command `_positronQuarto.pushOutputsFromFile(path)`, with no caller yet.
+Everything lives in the Positron fork worktree `/Users/gordon/src/positron-riu6-a`, branch
+`spike/riu-6-phase-a` (local only, never pushed; head `40a2d835bf`).
+
+**Waiting on.** RIU-5 B2, `q2 record export-positron` (RIU-4 lands first). Check with
+`git log feature/records-in-use --oneline | grep -i export-positron`; at pause the integration tip was
+`8e119ca17` with no such commit.
+
+**First steps on resume**
+
+1. Rebase this lane onto `feature/records-in-use`, then rebuild `q2` with the whole chain
+   (`(cd hub-client && npm run build:wasm) && cargo xtask build-q2-preview-spa && cargo build --bin q2`);
+   a plain `cargo build` leaves a stale embedded WASM.
+2. Read the export command's real flags and exit codes in RIU-5's plan, and replace the assumptions
+   in `extensions/q2-spike/src/q2Contract.ts` (`buildExportArgs`, `classifyFailure`) before writing
+   the command. Tests first: extend the vitest file, watch it fail, then implement.
+3. Command 2 in `extensions/q2-spike` calls the export through the same runner as command 3
+   (`q2.path` setting, then `PATH`, arguments as an array), adds the timeout (the one runner item still
+   open), then calls `_positronQuarto.pushOutputsFromFile` with the exported path.
+4. Window check with Gordon, then Phase C (Python, then Julia), Phase D (script, findings), Phase E.
+
+**Fork worktree environment (untracked scaffolding, not in git).** The worktree was assembled by hand
+and may need repair after a reboot or an S3 cleanup:
+
+- `.build/{electron,builtInExtensions,esm-package-dependencies}` are symlinks into
+  `/Users/gordon/src/positron-spike-s3/.build/`.
+- About 140 `extensions/*/{out,node_modules,dist}` are symlinks to S3's built copies (excluded in
+  `.git/info/exclude`). Two are real: `positron-supervisor/out` was compiled here (the symlinked one
+  made the supervisor fail with an MCP "positron-sessions" error), and
+  `positron-supervisor/resources/kallichore` is a symlink to S3's `kcserver` (without it the kernel
+  fails with "Unknown error").
+- After editing workbench sources, `npm run -s transpile-client` refreshes `out/`; check types with
+  `node_modules/.bin/tsc --noEmit -p src/tsconfig.json` (`npx tsgo` does not exist).
+- Launch the window from this tree: the earlier "picker still shows" and "no session manager" results
+  came from running the S3 tree (`lsof -p <pid> -d cwd` shows which tree a window runs from).
+  Use `--disable-extension=vscode.vscode-api-tests --extensionDevelopmentPath=/Users/gordon/src/positron-riu6-a/extensions/q2-spike`.
+- The window's logs are under `~/.local/state/positron/logs/<timestamp>/window1/exthost/`.
+
+**Playwright (optional, not needed for the demo).** A red e2e test for command 1 and its fixture are
+untracked in the fork (`test/e2e/tests/quarto/quarto-run-inline-expressions.test.ts`,
+`test/e2e/test-files/workspaces/quarto_inline_output/inline_exprs.qmd`). It has never run. It needs
+Node 24.22.1, `unset BUILD`, `env -u ELECTRON_RUN_AS_NODE`, the `POSITRON_PY_VER_SEL`,
+`POSITRON_R_VER_SEL`, `POSITRON_PY_ALT_VER_SEL` and `POSITRON_R_ALT_VER_SEL` variables, and
+`test/e2e` dependencies (`npm ci --ignore-scripts`, then `npm rebuild @vscode/sqlite3`). The supervisor
+and kallichore fixes above may be what was missing when Python could not start; untested.
+
+**Not mine, not to touch.** `/Users/gordon/src/positron`, workspace-3, other lanes' `target/`. Known open
+questions for others: why an edited cell loses its syntax highlighting in the preview (RIU-3a), and
+that the Viewer's big X does not end q2 (a Positron Viewer change, not taken).
 
 ## Overview
 
@@ -74,16 +128,19 @@ Positron cache --q2 preview --records positron (RIU-3a, RIU-2)--> page, no execu
    Skipped cells (inline spans, non-Jupyter-non-Julia cells, a cell whose code changed) and dropped
    representations are reported in the notification, not hidden.
 3. **Preview from the Positron cache, in Positron's preview pane.** Runs
-   `q2 preview --records positron --no-browser` on the current document in a terminal (RIU-3a, RIU-2),
-   reads the URL the preview prints (`  → http://127.0.0.1:<port>/...`, `commands/preview.rs:304`) and opens
-   it with `positron.window.previewUrl`, so it appears in the preview pane as Positron's Quarto 1 preview
-   does. The engine is omitted from the list, so nothing executes (RIU-2's guard refuses every re-execute
-   path, the POST and the automatic one). It uses the **default viewer**; the editor UI and `--share` are
-   product behavior checked in RIU-3 and RIU-4, not part of the demo. The locator is told which Positron
-   cache directory to read, the running build's (a dev build writes under `code-oss-dev`, a release under
-   `Positron`, and the locator tries the release path first), through its directory override. A stale page
-   shows the viewer's Re-execute overlay and, with `engine` absent, a click is refused with the guard's
-   message; the demo says so and does not hide it. A terminal, not `execFile`, because the
+   `q2 preview <doc> --records <cache dir> --no-browser` on the active document (RIU-3a, RIU-2) as a
+   child process of the extension, with the document's folder as the working directory. The cache
+   directory is the only entry in the list, so `engine` is absent and nothing executes (RIU-2's guard
+   refuses every re-execute path, the POST and the automatic one). q2 prints
+   `  → http://127.0.0.1:<port>/?page=<file>` before it listens, so the extension reads the URL from the
+   output, waits until the port accepts connections, and opens a stoppable pane
+   (`positron.window.createPreviewPanel`) that holds an iframe of the URL. It uses the **default
+   viewer**; the editor UI and `--share` are product behavior checked in RIU-3 and RIU-4, not part of
+   the demo. The cache directory is the sibling of the extension's own global storage directory
+   (`<User>/globalStorage/quarto-inline-outputs`), so it follows the running build (a dev build writes
+   under `code-oss-dev`, a release under `Positron`); that holds for the default profile only. A stale
+   page shows the viewer's Re-execute overlay and, with `engine` absent, a click is refused with the
+   guard's message; the demo says so and does not hide it. A child process, not `execFile`, because the
    preview is a long-running process that must be stoppable (`execFile` in S6 returns when the process
    exits, which suits the export in command 2 and not this). How Positron's Quarto extension does it
    (read 2026-11-05 from the bundled extension 1.139.0, minified): it runs `quarto preview <file>
@@ -166,25 +223,75 @@ at the window.
 
 ## Phase A: tests first
 
-- [ ] vitest tests for the pure TypeScript pieces: building the `q2` argument array (quoting paths
+- [x] vitest tests for the pure TypeScript pieces: building the `q2` argument array (quoting paths
       with spaces, no shell), parsing the JSON result line, classifying a failure (`ENOENT`, each
       exit code in RIU-5's table, 2 meaning "too old"), the refusal for an untitled document, and
-      matching exported cells to the open model (by content hash with the occurrence rule).
-- [ ] A scripted check, runnable without a window, that the exported file satisfies the
+      matching exported cells to the open model (by content hash; the rule is now S5's, see below).
+      Done in the Positron fork, branch `spike/riu-6-phase-a` (local, commits `e9834c4d4a`,
+      `c52e64a712`): `extensions/q2-spike/src/q2Contract.ts` (40 tests) and
+      `src/vs/workbench/contrib/positronQuarto/common/quartoPushMatching.ts` (11 tests); 51 pass.
+      Assumption to confirm: `buildPreviewArgs` uses `--records <dir> --no-browser` (RIU-3a's
+      interim answer; the flag is not implemented yet). Matcher rule, decided by Gordon
+      2026-11-06 and committed as `32781ea7e0` (11 tests, first written to fail 5 of 11 against the
+      old rule): S5's looser rule, prefer the open cell whose index equals the pushed id, else the
+      first cell with that hash. It can send two pushed cells to one open cell when duplicates
+      changed; the demo accepts that. The stricter occurrence rule was dropped.
+- [x] A scripted check, runnable without a window, that the exported file satisfies the
       `positron_loader` mirror (RIU-5 owns the test; this plan only calls it).
+      `scripts/riu-6-check-export-mirror.sh`: 12 tests passed (`positron_export::` and
+      `positron_conformance::` in the integration binary of `quarto-core`).
 - [ ] The rest is manual with Gordon at the window; write the script first so the run is
       repeatable (Phase D).
 
 ## Phase B: the commands
 
-- [ ] Move the S3 command into a new file, remove the mode picker (always `Interactive`).
+- [x] Move the S3 command into a new file, remove the mode picker (always `Interactive`).
+      Done 2026-11-06, fork commit `f7bb12aae9`: `quartoRunInlineExpressions.ts`, command
+      `positronQuarto.runInlineExpressions`, class `quarto-inline-expr-value`; the S3 spike command
+      is removed. Observed with Gordon in the window (riu6-a build): no picker; on `python.qmd` the
+      span reports the kernel's NameError for an undefined `x`; on `inline_exprs.qmd` the values
+      are 42 and 3.0, and a second run replaces them. Not run: the Playwright test
+      (`test/e2e/tests/quarto/quarto-run-inline-expressions.test.ts`, uncommitted; the harness
+      could not start Python until a late setup fix, so it has never been executed), R and Julia
+      documents, an unsaved or untitled document.
 - [ ] The `q2` runner as a proper extension (the S6 `q2-spike` is the starting point): a `q2.path`
       setting read on each run, then `PATH`, with an error naming the setting when the lookup
       returns `ENOENT`; arguments as an array; a timeout; stderr tail on failure; no shell.
-- [ ] Move the S5 push method out of the `spike` names and wrap edits to upstream files in Positron
+- [x] Move the S5 push method out of the `spike` names and wrap edits to upstream files in Positron
       markers; keep the command surface minimal (one internal command taking a file path).
-- [ ] Command 2 and command 3 as above (command 3 per Phase 0's result), with the refusals. Report q2 failures in a notification
-      with the stderr tail; never swallow them.
+      Done 2026-11-06, fork commit `40a2d835bf`: the user-facing "Spike: Push Outputs From File"
+      command and its quick-input path prompt are gone; `quartoPushOutputs.ts` registers the internal
+      `_positronQuarto.pushOutputsFromFile(path)` (returns `{ok, message, matched, skipped}`); the
+      spike methods are now `pushCells` and `parseIpynb`. No Positron markers: the edited files are
+      all inside Positron's own `positronQuarto` contrib. Checked: `tsc` clean for `positronQuarto/`,
+      eslint clean after moving the service lookups ahead of the `await`, matcher vitest 11 of 11.
+      Not run: the command in a window (nothing calls it until command 2 exists).
+- [x] Command 3 (`q2.previewFromCache`) in the fork's `extensions/q2-spike` (branch
+      `spike/riu-6-phase-a`; commits `f1e4058b47`, `5a5422c95d`, `ed2e1ecb12`; 51 vitest tests, `tsc` and
+      eslint clean). Checked 2026-11-06 with Gordon at the window, with the workspace-5 `target/debug/q2`
+      after the WASM, SPA and q2 rebuild chain (a plain `cargo build` had left a stale embedded WASM and
+      the viewer showed source only):
+    - Observed: the pane shows the cached outputs (the cell shows the planted marker
+      `PUSHED-FROM-FILE`), and no kernel started (a two-minute process watch saw only the q2 preview
+      appear).
+    - Observed: editing a code cell and saving shows the Re-execute overlay; the edited cell loses its
+      output and its syntax highlighting (plain monospace); reverting the edit and saving brings the
+      output back. Clicking Re-execute fails with 403, "Re-execute is disabled: the engine is not in
+      --records, so this preview never runs code", as designed. The lost highlighting is a question
+      for RIU-3a, not checked here.
+    - Observed: Stop and Clear empty the pane but leave the Viewer view open. After Gordon pressed Stop
+      (several times), `pgrep` found no q2 preview process, so Stop ends q2 (which press did it was not
+      watched). Closing the Viewer with the big X does **not** end q2
+      (the process was still running afterward); the extension gets no dispose event for it, and a fix
+      would be a Positron Viewer change, not taken.
+    - Observed: the page banner "this page reconnects automatically" is wrong in this pane (each run
+      uses a new port), so the extension also disposes the pane when q2 exits; that change was not
+      re-checked in the window.
+    - Not run: a wrong or unset `q2.path` notification, an untitled or unsaved document, the "q2 too old"
+      message, a non-default profile.
+- [ ] Command 2 as above, with the refusals (blocked on RIU-5 B2, `q2 record export-positron`; command 3
+      is done, see the entry above). Report q2 failures in a notification with the stderr tail; never
+      swallow them.
 
 ## Phase C: languages
 
