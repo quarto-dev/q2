@@ -1,9 +1,9 @@
 /**
  * Language intelligence for the editor wired into its "editor" port: the
  * hub-client providers (outline symbols, folding ranges, semantic tokens)
- * registered on its Monaco — quarto-lsp-core in the WASM module wired into
- * "wasm", analysing the file in that module's VFS. Shows what the analysis
- * found. Diagnostics are the render node's job.
+ * registered on its Monaco — quarto-lsp-core reading
+ * the file it edits from the virtual filesystem wired into "vfs". Shows
+ * what the analysis found. Diagnostics are the render node's job.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,12 +11,12 @@ import { Handle, Position } from '@xyflow/react';
 import { useIntelligence } from '../../../hooks/useIntelligence';
 import { useIntelligenceProviders } from '../../../hooks/useIntelligenceProviders';
 import { disposeIntelligenceProviders } from '../../../services/monacoProviders';
-import { useInput, type EditorPort, type WasmPort } from './ports';
+import { useInput, type EditorPort, type VfsPort } from './ports';
 
 export default function LspNode() {
   const editor = useInput<EditorPort>('editor');
-  const wasm = useInput<WasmPort>('wasm');
-  const port = wasm !== null && wasm.ready ? editor : null;
+  const vfs = useInput<VfsPort>('vfs');
+  const port = vfs !== null ? editor : null;
   const path = port?.path ?? null;
 
   // The providers resolve the file through this getter at request time.
@@ -49,17 +49,17 @@ export default function LspNode() {
       <div className="cd-title">LSP</div>
       {editor === null
         ? <div className="cd-empty">No editor connected</div>
-        : port === null
-          ? <div className="cd-empty">No WASM connected to analyse with</div>
+        : vfs === null
+          ? <div className="cd-empty">No VFS connected to read from</div>
         : (
           <div className="cd-kv">
             <div className="cd-row"><span>symbols</span><span>{symbols.length}</span></div>
             <div className="cd-row"><span>folding ranges</span><span>{foldingRanges.length}</span></div>
-            <div className="cd-meta">{loading ? 'analysing…' : `quarto-lsp-core on ${port.path}`}</div>
+            <div className="cd-meta">{loading ? 'analysing…' : `quarto-lsp-core on ${path}`}</div>
           </div>
         )}
       <Handle type="target" position={Position.Left} id="editor" title="editor" style={{ top: '35%' }} />
-      <Handle type="target" position={Position.Left} id="wasm" title="wasm" style={{ top: '65%' }} />
+      <Handle type="target" position={Position.Left} id="vfs" title="vfs" style={{ top: '65%' }} />
     </div>
   );
 }

@@ -1,7 +1,8 @@
 /**
  * The hub-client file tree over the hub project wired into "project".
- * Picking a file offers its doc id on the "docid" port, so an Automerge
- * node wired to it opens that file's document; an Automerge node that
+ * Picking a file offers its doc id on the "docid" port and its path — which
+ * only this node knows — on the "path" port, so an Automerge node wired to
+ * both opens that file's document under that name; an Automerge node that
  * already has an id selects the matching file here (through the port's
  * `set`). Until something is picked, the project's `a.qmd` (else its
  * first file) is the selection.
@@ -33,6 +34,7 @@ export default function FileExplorerNode() {
     };
   }, [project, selected]);
   useOutput('docid', store);
+  useOutput('path', selected?.path);
 
   const onSelect = (file: FileEntry) => setSelectedId(bareId(file.docId));
 
@@ -42,12 +44,13 @@ export default function FileExplorerNode() {
       <div className="cd-title">File explorer</div>
       <div className="cd-tree nodrag nowheel">
         {project === null
-          ? <div className="cd-empty">No hub project connected</div>
+          ? <div className="cd-empty">No project connected</div>
           : <FileTree files={files} currentFile={selected} onSelectFile={onSelect} onUploadFiles={noop} />}
       </div>
       <div className="cd-meta">{selected === null ? 'pick a file' : `${selected.path} · ${bareId(selected.docId)}`}</div>
       <Handle type="target" position={Position.Left} id="project" title="project" />
-      <Handle type="source" position={Position.Bottom} id="docid" title="doc id" />
+      <Handle type="source" position={Position.Right} id="docid" title="doc id" />
+      <Handle type="source" position={Position.Bottom} id="path" title="path" />
     </div>
   );
 }

@@ -60,8 +60,8 @@ export interface DocPort<T = unknown> {
 
 /**
  * What the document editor node offers on its "editor" port: the live
- * Monaco instance (recreated on every file switch) and the project path of
- * the file it shows, for nodes that attach behaviour to the editor.
+ * Monaco instance (recreated on every file switch) and the name of the
+ * file it is editing, for nodes that attach behaviour to the editor.
  */
 export interface EditorPort {
   editor: Monaco.editor.IStandaloneCodeEditor;
@@ -69,10 +69,22 @@ export interface EditorPort {
   path: string;
 }
 
-/** What the server node offers on its "server" port: where the hub is. */
-export interface ServerPort {
-  url: string;
+/**
+ * What the document editor node offers on its "file" port: the text it
+ * shows, under the name it is edited as — for the WASM node to keep in its
+ * virtual filesystem, where the LSP and render read it.
+ */
+export interface FilePort {
+  path: string;
+  text: string;
 }
+
+/**
+ * String ports carry a plain `string`: a string node's "string", the
+ * websocket adapters' "server" (a URL), the file explorer's and the
+ * editor's "path" (a file name). Any of them may be wired to any other.
+ */
+export const STRING_PORTS: ReadonlySet<string> = new Set(['string', 'server', 'path']);
 
 /**
  * What a websocket adapter node offers on its "adapter" port. An
@@ -98,10 +110,14 @@ export interface ProjectPort {
   files: FileEntry[];
 }
 
-/** What the WASM node offers on its "wasm" port: the module and its VFS. */
+/** What the WASM node offers on its "wasm" port: the module, once initialised. */
 export interface WasmPort {
   ready: boolean;
-  /** Paths in the virtual filesystem the LSP and render read from. */
+}
+
+/** What the VFS node offers on its "vfs" port: the module's virtual filesystem. */
+export interface VfsPort {
+  /** Paths the filesystem holds; the LSP and render read from it by path. */
   files: string[];
 }
 

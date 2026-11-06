@@ -6,15 +6,15 @@
  * diffed into the editor. Nothing here touches the hub project's own
  * copy of the file — if the Automerge node is offline, so are the edits.
  *
- * The hub project wired into "project" only names the file (its path, for
- * the VFS the LSP and render read, and for presence); without it the
- * document is edited under `<id>.qmd`. The language and theme come from
- * the language node wired into "language"; without it the file opens as
- * plain text.
+ * The file name wired into "path" is what the document is edited as.
+ * Without one it is edited under `<id>.qmd`. The text, under that name,
+ * goes out on the "file" port for the virtual filesystem; the live Monaco
+ * instance, with that name, goes out on "editor" for the nodes that attach
+ * behaviour to it. The language and theme come from the language node
+ * wired into "language"; without it the file opens as plain text.
  *
  * The editor's built-in presence, intelligence and diagnostics are off:
- * those are nodes of their own, wired to the Monaco instance this node
- * publishes on its "editor" port.
+ * those are nodes of their own.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,7 +24,7 @@ import { next as A } from '@automerge/automerge';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { TextDocumentContent } from '@quarto/quarto-automerge-schema';
 import DocumentEditor, { type DocumentSource } from '../../DocumentEditor';
-import { useInput, useOutput, type DocPort, type EditorPort, type LanguagePort, type ProjectPort } from './ports';
+import { useInput, useOutput, type DocPort, type EditorPort, type FilePort, type LanguagePort } from './ports';
 
 const bareId = (id: string) => id.replace(/^automerge:/, '');
 
@@ -88,19 +88,26 @@ function BoundEditor({ port, file, language, onEditor }: BoundEditorProps) {
 
 export default function MonacoNode() {
   const port = useInput<DocPort<TextDocumentContent>>('doc');
-  const project = useInput<ProjectPort>('project');
+  const pathInput = useInput<string>('path');
   const language = useInput<LanguagePort>('language');
   // The live Monaco instance; republished whenever the editor is recreated.
   const [editorPort, setEditorPort] = useState<EditorPort | undefined>(undefined);
   useOutput('editor', port === null ? undefined : editorPort);
 
-  // The file the document is: the project's entry for this id, else a
-  // stand-in name so the VFS, LSP and render have a path.
-  const file = useMemo<FileEntry | null>(() => {
-    if (port === null) return null;
-    const known = project?.files.find((f) => bareId(f.docId) === bareId(port.id));
-    return known ?? { path: `${bareId(port.id)}.qmd`, docId: port.id };
-  }, [port, project]);
+  // The file the document is edited as: the wired-in name, else a stand-in
+  // so the VFS, LSP and render have a path.
+  const path = port === null ? null : (pathInput ?? `${bareId(port.id)}.qmd`);
+  const file = useMemo<FileEntry | null>(
+    () => (port === null || path === null ? null : { path, docId: port.id }),
+    [port, path],
+  );
+  // The text under its name, for the VFS.
+  const text = port?.doc.text;
+  const filePort = useMemo<FilePort | undefined>(
+    () => (path === null || text === undefined ? undefined : { path, text }),
+    [path, text],
+  );
+  useOutput('file', filePort);
 
   return (
     <div className="cd-node cd-monaco">
@@ -115,9 +122,10 @@ export default function MonacoNode() {
           : <BoundEditor port={port} file={file} language={language} onEditor={setEditorPort} />}
       </div>
       <Handle type="target" position={Position.Left} id="doc" title="doc" style={{ top: '35%' }} />
-      <Handle type="target" position={Position.Left} id="project" title="project" style={{ top: '65%' }} />
+      <Handle type="target" position={Position.Left} id="path" title="path" style={{ top: '65%' }} />
       <Handle type="source" position={Position.Right} id="editor" title="editor" style={{ top: '35%' }} />
       <Handle type="target" position={Position.Right} id="language" title="language" style={{ top: '65%' }} />
+      <Handle type="source" position={Position.Bottom} id="file" title="file" />
     </div>
   );
 }

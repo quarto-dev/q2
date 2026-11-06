@@ -29,7 +29,9 @@
 .cd-node button:hover:not(:disabled) { background: #e5e7eb; }
 .cd-node button:disabled { color: #9ca3af; cursor: default; }
 
-.cd-automerge { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 18px; }
+.cd-automerge { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; }
+.cd-automerge .cd-title { margin-block-end: 0; }
+.cd-title-logo { display: flex; align-items: center; gap: 8px; }
 .cd-id { font-family: monospace; font-size: 11px; color: #6b7280; }
 .cd-id-box {
   inline-size: 220px;
@@ -120,10 +122,8 @@
 .cd-user-dot { inline-size: 10px; block-size: 10px; border-radius: 50%; flex: none; }
 .cd-lsp .cd-row span:last-child { font-family: monospace; }
 
-.cd-server, .cd-hubproject, .cd-wasm, .cd-user, .cd-language { min-inline-size: 200px; }
-.cd-server, .cd-hubproject { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.cd-server .cd-title, .cd-hubproject .cd-title { margin-block-end: 2px; }
-.cd-server .cd-id-box { inline-size: 220px; }
+.cd-hubproject, .cd-wasm, .cd-user, .cd-language { min-inline-size: 200px; }
+.cd-hubproject { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .cd-hubproject .cd-meta, .cd-wasm .cd-meta { margin-block-start: 2px; }
 .cd-user .cd-row { justify-content: flex-start; gap: 8px; }
 .cd-color { inline-size: 24px; block-size: 24px; padding: 0; border: 1px solid #d1d5db; border-radius: 6px; background: #ffffff; cursor: pointer; }
@@ -179,3 +179,27 @@
 .cd-wsadapter .rt-waves.lit path { stroke: #84cc16; }
 .cd-wsadapter .cd-title { margin-block-end: 2px; }
 .cd-wsadapter .cd-meta { margin-block-start: 0; }
+
+.cd-string { min-inline-size: 220px; display: flex; flex-direction: column; gap: 4px; }
+.cd-string .cd-title { margin-block-end: 2px; }
+.cd-string-box { inline-size: 100%; box-sizing: border-box; text-align: start; }
+.cd-string-wired { padding: 2px 6px; border: 1px solid #f3f4f6; border-radius: 4px; background: #f9fafb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cd-vfs { display: flex; flex-direction: column; inline-size: 100%; block-size: 100%; box-sizing: border-box; }
+.cd-vfs .cd-title, .cd-vfs .cd-meta { flex: none; }
+.cd-vfs-body {
+  flex: 1; min-block-size: 0; display: flex; flex-direction: column; overflow: auto;
+  border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb;
+  font-family: Menlo, Consolas, monospace; font-size: 11px;
+}
+.cd-vfs-body .cd-empty { padding: 8px; font-family: system-ui, sans-serif; }
+.cd-vfs-files { list-style: none; margin: 0; padding: 4px 0; flex: none; }
+.cd-vfs-files li { padding: 1px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cd-vfs-files li:hover { background: #f3f4f6; }
+.cd-vfs-files li.selected { background: #e0e7ff; color: #1e40af; }
+.cd-vfs-content { flex: 1; min-block-size: 0; margin: 0; padding: 6px 8px; overflow: auto; border-block-start: 1px solid #e5e7eb; background: #ffffff; white-space: pre; color: #1f2937; }
+
+/* Node families: Automerge (yellow), WASM (purple), editor (blue). */
+.cd-automerge, .cd-hubproject, .cd-wsadapter, .cd-idb, .cd-rawview { background: #fefce8; }
+.cd-wasm, .cd-vfs, .cd-lsp, .cd-render { background: #f5f3ff; }
+.cd-monaco, .cd-language, .cd-presence, .cd-rawpreview, .cd-user { background: #eff6ff; }

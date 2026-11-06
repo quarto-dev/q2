@@ -1,54 +1,36 @@
 /**
- * The quarto WASM module and its virtual filesystem. The hub project
- * wired into "project" fills the VFS with the project's files as they
- * sync; the LSP and the render read them from there. Offered on the
- * "wasm" port once the module is initialised.
+ * The quarto WASM module (wasm-quarto-hub-client): the Rust pipeline,
+ * parser and LSP compiled to WebAssembly, loaded once into the page.
+ * Offered on the "wasm" port once initialised, to the virtual filesystem
+ * it holds and to anything that parses or renders with it.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { initWasm, isWasmReady, vfsListFiles } from '@quarto/preview-runtime';
+import { initWasm, isWasmReady } from '@quarto/preview-runtime';
 import { WasmLogo } from './icons';
-import { useInput, useOutput, type ProjectPort, type WasmPort } from './ports';
-
-const POLL_MS = 1000;
+import { useOutput, type WasmPort } from './ports';
 
 export default function WasmNode() {
-  const project = useInput<ProjectPort>('project');
   const [ready, setReady] = useState(isWasmReady());
-  const [files, setFiles] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Initialise once a project is wired in, then follow the VFS.
   useEffect(() => {
-    if (project === null) return;
     let cancelled = false;
-    const poll = () => {
-      if (cancelled || !isWasmReady()) return;
-      const listed = vfsListFiles();
-      const next = listed.success ? (listed.files ?? []) : [];
-      setFiles((prev) => (prev.length === next.length && prev.every((f, i) => f === next[i]) ? prev : next));
-    };
-    void initWasm().then(() => { if (!cancelled) { setReady(true); poll(); } });
-    const timer = window.setInterval(poll, POLL_MS);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [project]);
+    void initWasm()
+      .then(() => { if (!cancelled) setReady(true); })
+      .catch((err: unknown) => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; };
+  }, []);
 
-  const port = useMemo<WasmPort | undefined>(
-    () => (project === null || !ready ? undefined : { ready, files }),
-    [project, ready, files],
-  );
+  const port = useMemo<WasmPort | undefined>(() => (ready ? { ready } : undefined), [ready]);
   useOutput('wasm', port);
-
-  const status = project === null
-    ? 'No project connected'
-    : !ready ? 'initialising…' : `${files.length} files in VFS`;
 
   return (
     <div className="cd-node cd-wasm">
       <WasmLogo />
       <div className="cd-title">q2 wasm</div>
-      <div className="cd-meta">wasm-quarto-hub-client · {status}</div>
-      <Handle type="target" position={Position.Left} id="project" title="project" />
+      <div className="cd-meta">wasm-quarto-hub-client · {error ?? (ready ? 'ready' : 'initialising…')}</div>
       <Handle type="source" position={Position.Right} id="wasm" title="wasm" />
     </div>
   );

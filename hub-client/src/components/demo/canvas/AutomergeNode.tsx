@@ -199,7 +199,7 @@ export default function AutomergeNode() {
 
   return (
     <div className="cd-node cd-automerge">
-      <AutomergeLogo />
+      <div className="cd-title cd-title-logo"><AutomergeLogo size={28} /> Document</div>
       <IdBox id={docId} onCommit={onCommitId} />
       {status !== null && <div className="cd-meta">{status}</div>}
       <div className="cd-meta">
@@ -208,8 +208,8 @@ export default function AutomergeNode() {
       <div className="cd-meta">
         {idb === null ? 'not stored' : `stored in ${idb.dbName}`} · {adapter !== null ? 'syncing' : 'offline'}
       </div>
-      <Handle type="target" position={Position.Top} id="adapter" title="adapter" style={{ left: '35%' }} />
-      <Handle type="target" position={Position.Top} id="docid" title="doc id" style={{ left: '65%' }} />
+      <Handle type="target" position={Position.Top} id="adapter" title="adapter" />
+      <Handle type="target" position={Position.Left} id="docid" title="doc id" />
       <Handle type="target" position={Position.Bottom} id="idb" title="idb" />
       <Handle type="source" position={Position.Right} id="doc" title="doc" />
     </div>

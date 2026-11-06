@@ -43,8 +43,7 @@ export default function HubProjectNode() {
 
   return (
     <div className="cd-node cd-hubproject">
-      <AutomergeLogo size={40} />
-      <div className="cd-title">Hub project</div>
+      <div className="cd-title cd-title-logo"><AutomergeLogo size={28} /> Project</div>
       <div className="cd-id">{indexDocId === null ? '—' : indexDocId.replace(/^automerge:/, '')}</div>
       <div className="cd-meta">{status}</div>
       <div className="cd-meta">repo · {idb === null ? 'memory storage (no IndexedDB connected)' : `IndexedDB storage (${idb.dbName})`}</div>

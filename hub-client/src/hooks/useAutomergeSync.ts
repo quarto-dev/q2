@@ -66,7 +66,8 @@ interface UseAutomergeSyncOptions {
   /**
    * The document to bind to, instead of the runtime's project file at
    * `currentFile.path`. Text, remote changes and local edits then all go
-   * through it; the VFS still mirrors what the editor shows.
+   * through it, and the VFS is the host's to keep (the hook only writes
+   * it on the runtime path).
    */
   source?: DocumentSource;
   /** Ref from useReplayMode — gates sync when replay is active */
@@ -292,8 +293,8 @@ export function useAutomergeSync({
     // Keep the VFS in step with whatever the editor displays, so the
     // preview renders the same state (covers branch switches in both
     // directions — the sync client only maintains the VFS for main edits).
-    // A bound source may be editing before the WASM module is up.
-    if (isWasmReady()) vfsAddFile(currentFile.path, automergeContent);
+    // Not for a bound source: its host owns the VFS.
+    if (source === undefined && isWasmReady()) vfsAddFile(currentFile.path, automergeContent);
     const vfsT1 = perfNow();
 
     const model = editorRef.current?.getModel();
@@ -345,8 +346,6 @@ export function useAutomergeSync({
         vfsAddFile(currentFileRef.current.path, value);
       } else if (sourceRef.current !== undefined) {
         sourceRef.current.applyChanges(event.changes);
-        // The bound source does not maintain the VFS; mirror the editor.
-        if (isWasmReady()) vfsAddFile(currentFileRef.current.path, value);
       } else {
         onContentOperations?.(currentFileRef.current.path, event.changes);
       }
