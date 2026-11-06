@@ -63,7 +63,7 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await server?.stop();
-  await new Promise((resolve) => host?.close(resolve));
+  if (host) await new Promise((resolve) => host.close(resolve));
 });
 
 async function rendererFrame(page: Page): Promise<Frame> {
