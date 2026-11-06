@@ -83,8 +83,15 @@ impl Registry {
         Registry { aliases, entries }
     }
 
+    /// Resolve a class to its entry, case-insensitively (GH #1080): Pandoc
+    /// matches language names that way, so ```` ```R ```` highlights as `r`.
+    /// Every built-in key and alias is lowercase, so we try the class as
+    /// written (no allocation in the common case) and then lowercased.
     pub(crate) fn resolve(&self, class: &str) -> Option<&LanguageEntry> {
-        let canonical = self.aliases.get(class)?;
+        let canonical = match self.aliases.get(class) {
+            Some(c) => c,
+            None => self.aliases.get(class.to_ascii_lowercase().as_str())?,
+        };
         self.entries.get(canonical)
     }
 
