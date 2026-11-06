@@ -221,3 +221,45 @@ fn filter_authored_spans_still_win_over_provider() {
         "provider must not be consulted when attr is already set",
     );
 }
+
+#[test]
+fn provider_matches_class_case_insensitively() {
+    // GH #1080: a user grammar loaded as `dockerfile` must highlight a
+    // ```Dockerfile fence. The walker asks the provider for the
+    // lowercased class and highlights with the key the provider knows;
+    // the author's class stays on the node.
+    let fixed_json = "[[0,4,\"keyword\"]]";
+    let mut provider = MockProvider::new().with("dockerfile", fixed_json);
+
+    let mut doc = empty_pandoc();
+    doc.blocks
+        .push(make_code_block("Dockerfile", "FROM alpine\n"));
+
+    annotate_pandoc(&mut doc, Some(&mut provider)).expect("annotate must succeed");
+
+    let Block::CodeBlock(cb) = &doc.blocks[0] else {
+        unreachable!()
+    };
+    assert_eq!(get_hl_attr(&cb.attr), Some(fixed_json));
+    assert_eq!(cb.attr.1, vec!["Dockerfile".to_string()]);
+    assert_eq!(provider.call_count, 1);
+}
+
+#[test]
+fn provider_exact_case_match_wins_over_lowercase() {
+    // A provider that registers a mixed-case name keeps matching that
+    // exact class (no regression for grammars whose `.wasm` stem is not
+    // lowercase).
+    let fixed_json = "[[0,3,\"custom.capture\"]]";
+    let mut provider = MockProvider::new().with("MyLang", fixed_json);
+
+    let mut doc = empty_pandoc();
+    doc.blocks.push(make_code_block("MyLang", "abc def"));
+
+    annotate_pandoc(&mut doc, Some(&mut provider)).expect("annotate must succeed");
+
+    let Block::CodeBlock(cb) = &doc.blocks[0] else {
+        unreachable!()
+    };
+    assert_eq!(get_hl_attr(&cb.attr), Some(fixed_json));
+}

@@ -158,3 +158,36 @@ fn code_block_with_no_class_is_skipped() {
     };
     assert!(get_hl_attr(&cb.attr).is_none());
 }
+
+#[test]
+fn annotates_builtin_class_case_insensitively() {
+    // GH #1080: ```R and ```Python must highlight like ```r and ```python
+    // (Pandoc matches language names case-insensitively). The author's
+    // class is left on the node as written.
+    for class in ["R", "Python", "YAML", "Js"] {
+        let mut doc = empty_pandoc();
+        doc.blocks.push(make_code_block(class, "x <- 1\n"));
+
+        annotate_pandoc(&mut doc, None).expect("annotate must not error");
+
+        let Block::CodeBlock(cb) = &doc.blocks[0] else {
+            panic!("expected CodeBlock");
+        };
+        assert!(
+            get_hl_attr(&cb.attr).is_some(),
+            "class {class:?} should resolve to a built-in grammar"
+        );
+        assert_eq!(cb.attr.1, vec![class.to_string()]);
+    }
+}
+
+#[test]
+fn builtin_lookup_api_is_case_insensitive() {
+    assert!(quarto_highlight::is_language_supported("R"));
+    assert!(quarto_highlight::is_language_supported("TypeScript"));
+    assert!(!quarto_highlight::is_language_supported("Klingon"));
+    assert_eq!(
+        quarto_highlight::highlight("R", "x <- 1").unwrap(),
+        quarto_highlight::highlight("r", "x <- 1").unwrap(),
+    );
+}
