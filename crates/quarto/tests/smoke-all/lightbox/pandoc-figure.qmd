@@ -1,0 +1,16 @@
+---
+title: "Lightbox: true"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/pandoc-figure.qmd:
+# `lightbox: true` is automatic mode; a captioned figure is wrapped and its
+# caption becomes the link title.
+lightbox: true
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'script[src$="glightbox/glightbox.min.js"]'
+          - 'div.quarto-figure figure a.lightbox[title="A Lovely Image"] > img'
+        - []
+---
+
+![A Lovely Image](images/mv-0.png)

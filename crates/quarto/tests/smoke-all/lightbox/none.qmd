@@ -1,0 +1,18 @@
+---
+title: "Lightbox: nothing qualifies"
+# bd-kcpkgftw. With no `lightbox` option and no `.lightbox` image, the
+# runtime is not shipped at all (Q1 only adds the dependency when an image
+# was actually wrapped).
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'figure img[src="images/mv-0.png"]'
+        - - 'a.lightbox'
+          - 'script[src$="glightbox/glightbox.min.js"]'
+      ensureFileRegexMatches:
+        - []
+        - ["GLightbox"]
+---
+
+![Beach in Chilmark](images/mv-0.png)

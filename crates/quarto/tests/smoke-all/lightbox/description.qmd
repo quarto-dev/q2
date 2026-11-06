@@ -1,0 +1,37 @@
+---
+title: "Lightbox: descriptions"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/addtl/example.qmd. A
+# `description` attribute is parsed as markdown into a hidden
+# `div.glightbox-desc.lightbox-desc-<n>` at the end of the body, and the
+# link points GLightbox at it via `data-glightbox`. `desc-position` is
+# forwarded to the link as a data attribute.
+lightbox: auto
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'div.hidden[aria-hidden="true"] > div.glightbox-desc.lightbox-desc-1'
+          - 'div.glightbox-desc.lightbox-desc-1 em'
+          - 'div.glightbox-desc.lightbox-desc-1 a[href="https://unsplash.com/photos/VBDJGOMCwps"]'
+          - 'div.glightbox-desc.lightbox-desc-3'
+          - 'a.lightbox[data-desc-position="left"] > img[src="images/mv-0.png"]'
+          - 'a.lightbox[data-gallery="elsewhere"] > img[src="images/mv-1.png"]'
+        - - 'img[description]'
+          - 'img[data-description]'
+          - 'img[data-desc-position]'
+          - 'div.lightbox-desc-2'
+      ensureFileRegexMatches:
+        - - "data-glightbox=\"description: .lightbox-desc-1;title:Beach in Chilmark;\""
+          - "data-glightbox=\"description: .lightbox-desc-3;title:Oak Bluffs;\""
+        - []
+---
+
+## Chilmark
+
+![Beach in Chilmark](images/mv-0.png){description="Chilmark has some of the best beaches on the island. _credit:_ [Chilmark Beach](https://unsplash.com/photos/VBDJGOMCwps)" desc-position="left"}
+
+## Elsewhere
+
+![Aquinnah](images/mv-1.png){group="elsewhere"}
+
+![Oak Bluffs](images/mv-3.png){group="elsewhere" description="Famous for its Gingerbread cottages."}

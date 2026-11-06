@@ -89,6 +89,7 @@ mod footnotes;
 mod footnotes_resolve;
 mod format_css;
 mod heading_id;
+mod lightbox;
 mod link_external;
 mod link_resource_discovery;
 mod link_rewrite;
@@ -195,6 +196,10 @@ pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 #[cfg(not(target_arch = "wasm32"))]
 pub use hephaestus::HephaestusRenderTransform;
 pub use image_alt_normalize::ImageAltNormalizeTransform;
+pub use lightbox::LightboxTransform;
+// Only `hephaestus-render` (native-only, see above) calls it.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use lightbox::sync_lightbox_hrefs;
 pub use link_external::LinkExternalTransform;
 pub use link_resource_discovery::{LinkResourceDiscoveryTransform, RESOURCE_DISCOVERY_KEY};
 pub use link_rewrite::LinkRewriteTransform;

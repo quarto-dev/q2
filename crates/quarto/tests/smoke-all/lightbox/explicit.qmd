@@ -1,0 +1,29 @@
+---
+title: "Lightbox: explicit class"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/lightbox-explicit.qmd.
+# With no `lightbox` option, only images carrying `.lightbox` are wrapped
+# (the class moves from the <img> to the <a>), and the GLightbox runtime
+# ships because at least one image qualified. A plain image and an image
+# already inside a link are left alone.
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'script[src$="glightbox/glightbox.min.js"]'
+          - 'link[href$="glightbox/glightbox.min.css"]'
+          - 'a.lightbox[href="images/mv-0.png"] > img[src="images/mv-0.png"]'
+          - 'a.lightbox[data-gallery="quarto-lightbox-gallery-1"]'
+          - 'a[href="https://example.com/ferry"] > img'
+        - - 'img.lightbox'
+          - 'a.lightbox img[src="images/mv-1.png"]'
+          - 'a.lightbox img[src="images/ferry.png"]'
+      ensureFileRegexMatches:
+        - - "GLightbox\\(\\{\"selector\":\".lightbox\",\"closeEffect\":\"zoom\",\"openEffect\":\"zoom\",\"descPosition\":\"bottom\",\"loop\":false\\}\\)"
+        - []
+---
+
+![Chilmark](images/mv-0.png){.lightbox}
+
+![Aquinnah](images/mv-1.png)
+
+[![More about the ferry.](images/ferry.png)](https://example.com/ferry)

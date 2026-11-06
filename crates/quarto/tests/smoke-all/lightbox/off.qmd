@@ -1,0 +1,23 @@
+---
+title: "Lightbox: off"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/lightbox-off.qmd.
+# `lightbox: false` disables the feature for the whole document, even for
+# images that carry the explicit `.lightbox` class (Q1 skips the filter
+# entirely), and nothing is shipped.
+lightbox: false
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'figure img[src="images/mv-0.png"]'
+        - - 'a.lightbox'
+          - 'script[src$="glightbox/glightbox.min.js"]'
+          - 'link[href$="glightbox/glightbox.min.css"]'
+      ensureFileRegexMatches:
+        - []
+        - ["GLightbox"]
+---
+
+![Beach in Chilmark](images/mv-0.png)
+
+![Explicit, but off](images/mv-1.png){.lightbox}

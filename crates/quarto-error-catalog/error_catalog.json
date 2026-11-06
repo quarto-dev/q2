@@ -2015,6 +2015,13 @@
     "docs_url": "https://quarto.org/docs/errors/image/Q-19-4",
     "since_version": "99.9.9"
   },
+  "Q-19-5": {
+    "subsystem": "image",
+    "title": "Invalid Lightbox Option",
+    "message_template": "A `lightbox` option (in the document metadata or a code cell's `lightbox` option) has a value Quarto does not recognize. It is ignored and the default is used; the rest of the lightbox configuration still applies.",
+    "docs_url": "https://quarto.org/docs/errors/image/Q-19-5",
+    "since_version": "99.9.9"
+  },
   "Q-21-1": {
     "subsystem": "typst",
     "title": "Typst Not Found",

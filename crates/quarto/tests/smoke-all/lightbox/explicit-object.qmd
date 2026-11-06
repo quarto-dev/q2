@@ -1,0 +1,20 @@
+---
+title: "Lightbox: options without match"
+# bd-kcpkgftw. The object form without `match: auto` keeps explicit mode:
+# only `.lightbox` images are wrapped, but the options still apply.
+lightbox:
+  effect: none
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'a.lightbox > img[src="images/mv-1.png"]'
+        - - 'a.lightbox > img[src="images/mv-0.png"]'
+      ensureFileRegexMatches:
+        - - "\"closeEffect\":\"none\",\"openEffect\":\"none\""
+        - []
+---
+
+![Not wrapped](images/mv-0.png)
+
+![Wrapped](images/mv-1.png){.lightbox}

@@ -1,0 +1,23 @@
+---
+title: "Lightbox: invalid option value"
+# bd-kcpkgftw. Q1 aborts the render on an unknown `effect`. Q2 warns with a
+# source-located Q-28-1 diagnostic and falls back to the default (`zoom`).
+lightbox:
+  match: auto
+  effect: wobble
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Invalid lightbox option"
+      ensureHtmlElements:
+        - - 'a.lightbox > img[src="images/mv-0.png"]'
+        - []
+      ensureFileRegexMatches:
+        - - "\"closeEffect\":\"zoom\""
+        - []
+---
+
+![Beach in Chilmark](images/mv-0.png)

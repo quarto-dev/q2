@@ -1,0 +1,24 @@
+---
+title: "Lightbox: figure alignment"
+# bd-kcpkgftw. Port of Q1 smoke-all/2023/12/08/7619.qmd and 2023/11/15/
+# 7516-b.qmd: `fig-align` keeps working on lightboxed figures (the image
+# is looked up through the wrapping link), for plain and cross-referenced
+# figures alike.
+lightbox: true
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'div.quarto-figure-right figure a.lightbox > img[src="images/mv-0.png"]'
+          - 'div#fig-placeholder.quarto-figure-right a.lightbox > img[src="images/mv-1.png"]'
+          - 'div.quarto-figure-left a.lightbox > img[src="images/mv-2.png"]'
+        - - 'div.quarto-figure-center'
+          - 'img[fig-align]'
+          - 'img[data-fig-align]'
+---
+
+![A placeholder image](images/mv-0.png){fig-alt="A placeholder image." fig-align="right" width=20%}
+
+![A placeholder image](images/mv-1.png){#fig-placeholder fig-alt="A placeholder image." fig-align="right" width=20%}
+
+![Left](images/mv-2.png){fig-align="left"}
