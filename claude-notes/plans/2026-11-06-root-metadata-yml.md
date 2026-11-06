@@ -18,9 +18,6 @@ under a parent project, its `_quarto.yml` becomes a nested project file,
 which Quarto 1 ignores, while a nested `_metadata.yml` still applies. So the
 settings have to stay in `_metadata.yml`, and q2 has to read it.
 
-No braid strand: braid isn't set up on this machine (no `[projects.q2]` in
-`~/.config/braid/projects.toml`). File one when braid is available.
-
 ## Root cause
 
 `directory_metadata_paths_for_document`
