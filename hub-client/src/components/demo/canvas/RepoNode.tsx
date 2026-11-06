@@ -110,8 +110,8 @@ export default function RepoNode() {
       <div className="cd-meta">
         {idb === null ? 'no storage attached' : `storage: IndexedDB (${idb.dbName})`} · {adapter === null ? 'no network attached' : 'network attached'}
       </div>
-      <Handle type="target" position={Position.Left} id="adapter" title="adapter" />
-      <Handle type="target" position={Position.Left} id="idb" title="idb" />
+      <Handle type="target" position={Position.Left} id="adapter" title="adapter" style={{ top: '35%' }} />
+      <Handle type="target" position={Position.Left} id="idb" title="idb" style={{ top: '65%' }} />
       <Handle type="source" position={Position.Right} id="repo" title="repo" />
     </div>
   );
