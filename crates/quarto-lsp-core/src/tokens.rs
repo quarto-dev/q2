@@ -1,465 +1,44 @@
 //! Semantic-token extraction for `.qmd` (Monaco `DocumentSemanticTokensProvider`).
 //!
-//! Three zones, disjoint by construction, all flattened with the **same**
-//! innermost-wins resolver the render pipeline uses
-//! ([`quarto_highlight::flatten_spans`]):
+//! The spans come from [`quarto_highlight::qmd::qmd_spans`], the same zone
+//! composer the render path uses for `qmd` / `markdown` / `md` blocks
+//! (GH #1081):
 //!
-//! - **Zone 1 (structural):** a `tree_sitter::Query` over
-//!   `tree_sitter_qmd::HIGHLIGHT_QUERY`, run on the qmd CST. Markdown/Pandoc
-//!   punctuation + text, but never the interiors of `metadata` (frontmatter) or
-//!   `code_fence_content` (code cells) — those are left to zones 2/3.
-//! - **Zone 2 (frontmatter YAML)** and **Zone 3 (code cells):** added in
-//!   Phase 3; they call [`quarto_highlight::highlight_captures`] for the
-//!   embedded language and offset the spans into document coordinates.
+//! - **Structural:** `tree_sitter_qmd::HIGHLIGHT_QUERY` over the qmd CST —
+//!   markdown/Pandoc punctuation and text, never inside front matter or a
+//!   code cell.
+//! - **Embedded:** front-matter YAML and code-cell interiors (with `#|` cell
+//!   options as YAML), highlighted by the built-in grammars.
 //!
-//! Byte spans are converted to UTF-16 `(line, character, length)` LSP tokens
-//! via [`Utf16LineIndex`], which also **splits any span crossing a newline into
-//! one token per line** (the LSP model forbids multi-line tokens). That split is
-//! editor-only and lives here, never in `flatten_spans` (the render path emits
-//! multi-line spans freely).
-
-use std::sync::OnceLock;
-
-use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator, Tree};
-
-use quarto_highlight::{HighlightSpan, flatten_spans};
+//! This module maps each span's capture onto the token legend
+//! ([`capture_to_token_type`], structural and embedded captures use separate
+//! legend families) and converts byte spans to UTF-16 `(line, character,
+//! length)` LSP tokens via [`Utf16LineIndex`], which also **splits any span
+//! crossing a newline into one token per line** (the LSP model forbids
+//! multi-line tokens). That split is editor-only; the render path emits
+//! multi-line spans freely.
 
 use crate::document::Document;
 use crate::types::{SemanticToken, capture_to_token_type};
-
-/// A byte-range token carrying its resolved legend index, before the
-/// byte→UTF-16 + per-line-split conversion.
-struct ByteToken {
-    start: usize,
-    end: usize,
-    token_type: u32,
-}
 
 /// Extract the semantic tokens for `doc`, sorted by position and
 /// non-overlapping. Parses independently of the heavier `analyze_document`
 /// pipeline (text only). Returns an empty vec if parsing fails.
 pub fn get_semantic_tokens(doc: &Document) -> Vec<SemanticToken> {
     let content = doc.content();
-    let Some((lang, query)) = lang_and_query() else {
+    let Ok(spans) = quarto_highlight::qmd::qmd_spans(content) else {
         return Vec::new();
     };
-
-    let mut parser = Parser::new();
-    if parser.set_language(lang).is_err() {
-        return Vec::new();
-    }
-    let Some(tree) = parser.parse(content.as_bytes(), None) else {
-        return Vec::new();
-    };
-
-    let src = content.as_bytes();
-    let mut byte_tokens: Vec<ByteToken> = Vec::new();
-    byte_tokens.extend(structural_tokens(&tree, query, src));
-    byte_tokens.extend(embedded_tokens(&tree, content));
-
-    // Each zone is independently flattened and the zones cover disjoint byte
-    // regions (structural excludes the interiors zones 2/3 own), so the
-    // cross-zone merge is just sort-by-start.
-    byte_tokens.sort_by_key(|t| t.start);
 
     let index = Utf16LineIndex::new(content);
     let mut tokens = Vec::new();
-    for t in &byte_tokens {
-        index.push_line_split(t.start, t.end, t.token_type, &mut tokens);
+    for s in &spans {
+        // Captures without a legend entry are not coloured.
+        if let Some(token_type) = capture_to_token_type(&s.capture, s.embedded) {
+            index.push_line_split(s.start, s.end, token_type, &mut tokens);
+        }
     }
     tokens
-}
-
-/// Compile `HIGHLIGHT_QUERY` against the qmd grammar once per process.
-/// `None` only if the (compile-time-constant) query fails to compile, which
-/// the test suite catches; at runtime it is effectively infallible.
-fn lang_and_query() -> Option<&'static (Language, Query)> {
-    static LANG_AND_QUERY: OnceLock<Option<(Language, Query)>> = OnceLock::new();
-    LANG_AND_QUERY
-        .get_or_init(|| {
-            let lang: Language = tree_sitter_qmd::LANGUAGE.into();
-            let query = Query::new(&lang, tree_sitter_qmd::HIGHLIGHT_QUERY).ok()?;
-            Some((lang, query))
-        })
-        .as_ref()
-}
-
-/// Zone 1: structural captures from the qmd query, excluding any that land
-/// inside a `metadata` / `code_fence_content` interior, flattened innermost-wins
-/// and translated to legend indices.
-fn structural_tokens(tree: &Tree, query: &Query, src: &[u8]) -> Vec<ByteToken> {
-    let interiors = collect_interior_ranges(tree.root_node());
-    let names = query.capture_names();
-
-    let mut spans: Vec<HighlightSpan> = Vec::new();
-    let mut cursor = QueryCursor::new();
-    let mut it = cursor.captures(query, tree.root_node(), src);
-    while let Some((m, capture_index)) = it.next() {
-        let cap = m.captures[*capture_index];
-        let name = match names.get(cap.index as usize) {
-            Some(n) => *n,
-            None => continue,
-        };
-        // Drop captures we do not colour (the translator owns the contract).
-        if capture_to_token_type(name, false).is_none() {
-            continue;
-        }
-        let node = cap.node;
-        let (start, end) = (node.start_byte(), node.end_byte());
-        // Zone-1 exclusion at the source: never enter an embedded interior.
-        if interiors.iter().any(|(rs, re)| start < *re && end > *rs) {
-            continue;
-        }
-        spans.push(HighlightSpan {
-            start,
-            end,
-            capture: name.to_string(),
-        });
-    }
-
-    flatten_spans(spans)
-        .into_iter()
-        .filter_map(|s| {
-            capture_to_token_type(&s.capture, false).map(|token_type| ByteToken {
-                start: s.start,
-                end: s.end,
-                token_type,
-            })
-        })
-        .collect()
-}
-
-/// Collect byte ranges of `metadata` (frontmatter) and `code_fence_content`
-/// (code-cell interior) nodes; structural captures inside these are dropped
-/// (their interiors belong to zones 2/3).
-fn collect_interior_ranges(root: Node<'_>) -> Vec<(usize, usize)> {
-    let mut ranges = Vec::new();
-    let mut stack = vec![root];
-    while let Some(node) = stack.pop() {
-        match node.kind() {
-            "metadata" | "code_fence_content" => {
-                ranges.push((node.start_byte(), node.end_byte()));
-                // Do not descend — children belong to the embedded layer.
-            }
-            _ => {
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    stack.push(child);
-                }
-            }
-        }
-    }
-    ranges
-}
-
-/// Zones 2 & 3: frontmatter YAML and code-cell interiors. Walks the CST for
-/// `metadata` and `pandoc_code_block` nodes and highlights each embedded region
-/// with the shared resolver.
-fn embedded_tokens(tree: &Tree, content: &str) -> Vec<ByteToken> {
-    let mut out = Vec::new();
-    let mut stack = vec![tree.root_node()];
-    while let Some(node) = stack.pop() {
-        match node.kind() {
-            "metadata" => out.extend(frontmatter_tokens(node, content)),
-            "pandoc_code_block" => out.extend(code_cell_tokens(node, content)),
-            _ => {
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    stack.push(child);
-                }
-            }
-        }
-    }
-    out
-}
-
-/// Zone 2: the `metadata` node is opaque, so synthesize the `---`/`...` fence
-/// delimiters by line and highlight the YAML body between them.
-fn frontmatter_tokens(meta: Node<'_>, content: &str) -> Vec<ByteToken> {
-    let start = meta.start_byte();
-    let end = meta.end_byte().min(content.len());
-    let meta_text = &content[start..end];
-
-    // (absolute byte start, line content without line ending).
-    let mut lines: Vec<(usize, &str)> = Vec::new();
-    let mut pos = start;
-    for line in meta_text.split_inclusive('\n') {
-        let body = line
-            .strip_suffix('\n')
-            .unwrap_or(line)
-            .strip_suffix('\r')
-            .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(line));
-        lines.push((pos, body));
-        pos += line.len();
-    }
-    if lines.is_empty() {
-        return Vec::new();
-    }
-
-    let mut out = Vec::new();
-    let fence_tt = capture_to_token_type("punctuation.delimiter.frontmatter", false);
-
-    // Opening fence is the first line; closing fence is the last `---`/`...` line.
-    if let (Some(tt), Some(range)) = (fence_tt, fence_marker_range(lines[0].0, lines[0].1)) {
-        out.push(ByteToken {
-            start: range.0,
-            end: range.1,
-            token_type: tt,
-        });
-    }
-    let closing = lines
-        .iter()
-        .enumerate()
-        .skip(1)
-        .rev()
-        .find_map(|(i, (abs, body))| fence_marker_range(*abs, body).map(|r| (i, r)));
-
-    let body_end = match closing {
-        Some((i, range)) => {
-            if let Some(tt) = fence_tt {
-                out.push(ByteToken {
-                    start: range.0,
-                    end: range.1,
-                    token_type: tt,
-                });
-            }
-            lines[i].0
-        }
-        None => end,
-    };
-
-    // YAML body sits between the line after the opening fence and the closing
-    // fence line.
-    if let Some(&(body_start, _)) = lines.get(1)
-        && body_end > body_start
-    {
-        out.extend(embedded_body_tokens(
-            "yaml",
-            &content[body_start..body_end],
-            body_start,
-        ));
-    }
-    out
-}
-
-/// If `content` (one line, sans ending) is a frontmatter fence (`---`/`...`),
-/// return the absolute byte range of the 3-char marker.
-fn fence_marker_range(line_start: usize, content: &str) -> Option<(usize, usize)> {
-    let trimmed = content.trim();
-    if trimmed == "---" || trimmed == "..." {
-        let lead = content.len() - content.trim_start().len();
-        Some((line_start + lead, line_start + lead + 3))
-    } else {
-        None
-    }
-}
-
-/// Zone 3: resolve the cell language and highlight the `code_fence_content`
-/// interior. The fence delimiters / info string / `{lang}` specifier are
-/// handled structurally (zone 1); only the interior is embedded.
-fn code_cell_tokens(code_block: Node<'_>, content: &str) -> Vec<ByteToken> {
-    let mut lang: Option<String> = None;
-    let mut interior: Option<Node> = None;
-
-    let mut cursor = code_block.walk();
-    for child in code_block.children(&mut cursor) {
-        match child.kind() {
-            "info_string" => {
-                // The language is the first whitespace-delimited token.
-                let text = node_text(child, content).trim();
-                if let Some(word) = text.split_whitespace().next() {
-                    lang = Some(word.to_string());
-                }
-            }
-            // Brace cell — executable `{r}`/`{python}` or class `{.r}`/`{.python}`.
-            "attribute_specifier" => lang = cell_language(child, content),
-            "code_fence_content" => interior = Some(child),
-            _ => {}
-        }
-    }
-
-    let (Some(lang), Some(interior)) = (lang, interior) else {
-        return Vec::new();
-    };
-    if !quarto_highlight::is_language_supported(&lang) {
-        return Vec::new();
-    }
-
-    let body_start = interior.start_byte();
-    let body = node_text(interior, content);
-
-    // A leading run of `#|` lines is a Quarto cell-option block — YAML, not
-    // code. Highlight it as yaml; hand only the remaining code to the cell grammar.
-    let mut out = Vec::new();
-    let directive_end = leading_directive_byte_len(body);
-    if directive_end > 0 {
-        out.extend(directive_tokens(&body[..directive_end], body_start));
-    }
-    if directive_end < body.len() {
-        out.extend(embedded_body_tokens(
-            &lang,
-            &body[directive_end..],
-            body_start + directive_end,
-        ));
-    }
-    out
-}
-
-/// Byte length of the leading contiguous run of `#|` option lines at the start
-/// of a cell body (each including its trailing newline). `0` if the first line
-/// is not an option line — Quarto only treats a leading run as cell options.
-fn leading_directive_byte_len(body: &str) -> usize {
-    let mut end = 0;
-    for line in body.split_inclusive('\n') {
-        if line.trim_start().starts_with("#|") {
-            end += line.len();
-        } else {
-            break;
-        }
-    }
-    end
-}
-
-/// Where one `#|` line's YAML content lives in both coordinate systems: its
-/// byte offset within the reconstructed yaml document and within the real
-/// document, plus its length. Used to map highlight spans back.
-struct DirectiveLine {
-    virt_start: usize,
-    doc_start: usize,
-    len: usize,
-}
-
-/// Tokenize a cell-option block (`segment`, starting at byte `seg_start`): the
-/// `#|` marker on each line is a comment, and the YAML after it is highlighted
-/// as a **single document** — the per-line content (with the `#|` prefix
-/// stripped, indentation preserved) is reassembled, highlighted once, and the
-/// spans mapped back into document coordinates. Parsing the whole block as one
-/// document is what makes multi-line YAML (block scalars, flow collections
-/// split across lines) highlight correctly.
-fn directive_tokens(segment: &str, seg_start: usize) -> Vec<ByteToken> {
-    let comment_tt = capture_to_token_type("comment", true);
-    let mut out = Vec::new();
-
-    // Pass 1: emit `#|` markers and reconstruct the YAML document, recording
-    // each line's content position in both the virtual and real documents.
-    let mut yaml_doc = String::with_capacity(segment.len());
-    let mut lines: Vec<DirectiveLine> = Vec::new();
-    let mut pos = seg_start;
-    for (i, line) in segment.split_inclusive('\n').enumerate() {
-        let mut line_body = line.strip_suffix('\n').unwrap_or(line);
-        line_body = line_body.strip_suffix('\r').unwrap_or(line_body);
-
-        let indent = line_body.len() - line_body.trim_start().len();
-        let marker_start = pos + indent;
-        if let Some(tt) = comment_tt {
-            out.push(ByteToken {
-                start: marker_start,
-                end: marker_start + 2, // `#|`
-                token_type: tt,
-            });
-        }
-        // YAML content begins after `#|` and an optional single space; the
-        // remaining indentation is kept so nesting survives reassembly.
-        let mut content_col = indent + 2;
-        if line_body.as_bytes().get(content_col) == Some(&b' ') {
-            content_col += 1;
-        }
-        let content = &line_body[content_col.min(line_body.len())..];
-
-        // One virtual line per directive line (preserve blank lines exactly).
-        if i > 0 {
-            yaml_doc.push('\n');
-        }
-        lines.push(DirectiveLine {
-            virt_start: yaml_doc.len(),
-            doc_start: pos + content_col,
-            len: content.len(),
-        });
-        yaml_doc.push_str(content);
-
-        pos += line.len();
-    }
-
-    // Pass 2: highlight the reassembled block once, then map each span back,
-    // splitting it across the lines it touches (a multi-line YAML span becomes
-    // one token per document line; the synthetic `\n` joins are never coloured).
-    let Ok(Some(spans)) = quarto_highlight::highlight_captures("yaml", &yaml_doc) else {
-        return out;
-    };
-    for s in flatten_spans(spans) {
-        let Some(tt) = capture_to_token_type(&s.capture, true) else {
-            continue;
-        };
-        for line in &lines {
-            // `lines` is sorted by `virt_start`, so once a line starts at or
-            // after the span's end, no later line can overlap it.
-            if line.virt_start >= s.end {
-                break;
-            }
-            let line_end = line.virt_start + line.len;
-            let start = s.start.max(line.virt_start);
-            let end = s.end.min(line_end);
-            if end > start {
-                out.push(ByteToken {
-                    start: line.doc_start + (start - line.virt_start),
-                    end: line.doc_start + (end - line.virt_start),
-                    token_type: tt,
-                });
-            }
-        }
-    }
-    out
-}
-
-/// Highlight `body` as `lang` with the shared resolver, flatten innermost-wins,
-/// translate to embedded (`code.*`) legend indices, and offset into document
-/// coordinates. Unknown captures and unsupported languages yield nothing.
-fn embedded_body_tokens(lang: &str, body: &str, offset: usize) -> Vec<ByteToken> {
-    let Ok(Some(spans)) = quarto_highlight::highlight_captures(lang, body) else {
-        return Vec::new();
-    };
-    flatten_spans(spans)
-        .into_iter()
-        .filter_map(|s| {
-            capture_to_token_type(&s.capture, true).map(|token_type| ByteToken {
-                start: s.start + offset,
-                end: s.end + offset,
-                token_type,
-            })
-        })
-        .collect()
-}
-
-/// Resolve a brace cell's highlight language. The executable form `{r}` carries
-/// a `language_specifier`; the class form `{.r}` carries `attribute_class`
-/// nodes. In document order, the first specifier naming a supported grammar
-/// wins — mirroring quarto-highlight's `pick_first_resolvable_class`, so
-/// `{.numberLines .python}` is python and `{r .foo}` is r.
-fn cell_language(attr: Node<'_>, content: &str) -> Option<String> {
-    fn collect<'a>(node: Node<'a>, out: &mut Vec<Node<'a>>) {
-        if matches!(node.kind(), "language_specifier" | "attribute_class") {
-            out.push(node);
-        }
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            collect(child, out);
-        }
-    }
-    let mut specifiers = Vec::new();
-    collect(attr, &mut specifiers);
-    specifiers
-        .into_iter()
-        // A `language_specifier` may span trailing classes ("r .foo"); the
-        // language is its first word. `attribute_class` text carries a leading dot.
-        .filter_map(|n| node_text(n, content).split_whitespace().next())
-        .map(|w| w.trim_start_matches('.'))
-        .find(|name| quarto_highlight::is_language_supported(name))
-        .map(str::to_string)
-}
-
-/// Borrow the source text a node spans.
-fn node_text<'a>(node: Node<'_>, content: &'a str) -> &'a str {
-    &content[node.start_byte()..node.end_byte().min(content.len())]
 }
 
 /// Maps document byte offsets to UTF-16 `(line, character)` positions and
@@ -710,41 +289,23 @@ mod tests {
     fn every_query_capture_maps_to_a_legend_entry() {
         // The translator silently skips unknown captures, so a query capture
         // with no legend home would render uncoloured with no error. Pin the
-        // Phase-1 query ↔ legend contract.
-        let (lang, query) = lang_and_query().expect("query compiles");
-        let _ = lang;
-        for name in query.capture_names() {
+        // query ↔ legend contract. (That structural spans never enter
+        // embedded interiors is tested next to the composer, in
+        // `quarto_highlight::qmd`.)
+        let lang: tree_sitter::Language = tree_sitter_qmd::LANGUAGE.into();
+        let query = tree_sitter::Query::new(&lang, tree_sitter_qmd::HIGHLIGHT_QUERY)
+            .expect("query compiles");
+        let synthesized = [quarto_highlight::qmd::FRONTMATTER_FENCE_CAPTURE];
+        for name in query.capture_names().iter().chain(synthesized.iter()) {
             assert!(
                 capture_to_token_type(name, false).is_some(),
                 "query capture `{name}` has no legend entry (add a legend row or a theme rule)"
             );
         }
-    }
-
-    #[test]
-    fn structural_captures_never_enter_interiors() {
-        // Run the ZONE-1 extractor alone (not get_semantic_tokens, which now
-        // adds the embedded layer) and assert no structural token intersects a
-        // `metadata` / `code_fence_content` interior. Checks exclusion at the
-        // source rather than relying on the belt-and-braces merge clip.
-        let src = "---\ntitle: x\n---\n\n```{r}\nx <- 1\n```\n";
-        let (lang, query) = lang_and_query().expect("query compiles");
-        let mut parser = Parser::new();
-        parser.set_language(lang).expect("set language");
-        let tree = parser.parse(src.as_bytes(), None).expect("parse");
-        let interiors = collect_interior_ranges(tree.root_node());
-        assert!(!interiors.is_empty(), "fixture must have interiors");
-
-        for t in structural_tokens(&tree, query, src.as_bytes()) {
-            for (rs, re) in &interiors {
-                assert!(
-                    !(t.start < *re && t.end > *rs),
-                    "structural token {}-{} entered interior {rs}-{re}",
-                    t.start,
-                    t.end
-                );
-            }
-        }
+        assert!(
+            capture_to_token_type(quarto_highlight::qmd::CELL_OPTION_MARKER_CAPTURE, true)
+                .is_some()
+        );
     }
 
     #[test]
@@ -1046,7 +607,7 @@ mod tests {
                 .expect("r registered"),
         )
         .expect("decode");
-        let editor = flatten_spans(
+        let editor = quarto_highlight::flatten_spans(
             quarto_highlight::highlight_captures("r", body)
                 .expect("editor highlight ok")
                 .expect("r registered"),

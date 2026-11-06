@@ -18,6 +18,7 @@ pub mod error;
 mod langs;
 mod pandoc_languages;
 pub mod provider;
+pub mod qmd;
 pub mod registry;
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -56,6 +56,8 @@ use quarto_core::ProjectContext;
 use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
+use crate::html_text::display_text;
+
 /// Return `true` when `Rscript` is on PATH. Copied from
 /// `marimo_engine_e2e.rs:76-81` per the task brief — the binary check alone
 /// (`KnitrEngine::is_available()` / `knitr_display_fence.rs`'s
@@ -181,7 +183,7 @@ fn t2_displayed_r_fence_shows_original_opener_no_marker_anywhere() {
     // baseline knitr replaces it with cell scaffolding
     // (` ```{.r .cell-code} `), so this substring is absent pre-fix.
     assert!(
-        html.contains("```{r}"),
+        display_text(&html).contains("```{r}"),
         "the display block must show the original `{{r}}` opener, \
          unmangled; html:\n{html}"
     );
@@ -252,7 +254,7 @@ fn t4_echo_false_display_block_neither_runs_nor_loses_its_source() {
     // echo=FALSE chunk's source entirely (only its output survives), so
     // this substring is absent before the fix and present after.
     assert!(
-        html.contains("paste0(&quot;OPTS&quot;"),
+        display_text(&html).contains("paste0(&quot;OPTS&quot;"),
         "the author's own source must survive (echo=FALSE must not cost \
          the reader the example) — this is what a naive occurrence-count \
          cannot discriminate (vacuity note 1); html:\n{html}"
@@ -370,7 +372,7 @@ fn t5_displayed_python_in_r_document_does_not_kill_the_render() {
                 .split_once("REAL-RAN")
                 .map_or(html.as_str(), |(_, rest)| rest);
             assert!(
-                after_real_cell.contains("```{python}"),
+                display_text(after_real_cell).contains("```{python}"),
                 "the display block must show the literal ```{{python}} \
                  opener, unexecuted; html:\n{html}"
             );
@@ -412,7 +414,7 @@ fn t6_blockquoted_display_block_stays_inside_the_blockquote() {
     // executed it as a real cell), so this contiguous substring is absent
     // before the fix.
     assert!(
-        html.contains("paste0(&quot;QUOTE&quot;"),
+        display_text(&html).contains("paste0(&quot;QUOTE&quot;"),
         "the blockquoted display block's body must survive intact, \
          unexecuted, inside the blockquote; html:\n{html}"
     );
@@ -512,7 +514,7 @@ fn control_display_block_with_no_live_cell_renders_unchanged() {
     let html = render_html(&tmp, "control.qmd", content);
 
     assert!(
-        html.contains("```{r}"),
+        display_text(&html).contains("```{r}"),
         "with no live cell anywhere, knitr must never start, so the \
          display block's opener must survive untouched; html:\n{html}"
     );
@@ -618,12 +620,12 @@ fn t26_displayed_inline_expression_shows_original_spelling_no_marker() {
     let html = render_html(&tmp, "t26.qmd", &t25_t26_fixture());
 
     assert!(
-        html.contains("Classic: `r v`"),
+        display_text(&html).contains("Classic: `r v`"),
         "the display block must show the classic inline spelling exactly as \
          written; html:\n{html}"
     );
     assert!(
-        html.contains("Brace: `{r} v`"),
+        display_text(&html).contains("Brace: `{r} v`"),
         "the display block must show the brace inline spelling exactly as \
          written; html:\n{html}"
     );
