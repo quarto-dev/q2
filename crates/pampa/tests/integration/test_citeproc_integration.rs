@@ -53,7 +53,7 @@ references:
   page: 1-10
 ---
 
-Here is a citation [@jones2019].
+Here is a citation [@jones2019], and another [@smith2020].
 "#;
 
     fs::write(&test_file, qmd_content).expect("Failed to write test file");
