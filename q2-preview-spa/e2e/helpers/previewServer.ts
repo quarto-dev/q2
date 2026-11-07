@@ -222,6 +222,17 @@ export interface StartOptions {
    * mode has no samod state); `dataDir` stays an empty tempdir.
    */
   staticMode?: boolean;
+  /**
+   * RIU-4: `--records` entries, passed one flag per entry (`['cache']`, `['cache', 'engine']`). Absent
+   * leaves the command's default list (`cache,q2,engine`). A directory source goes through `recordsDir`
+   * instead, because its path is only known once the temp dir exists.
+   */
+  records?: string[];
+  /**
+   * RIU-4: seed a scratch directory with these files (Positron-format cache files) and pass it as one
+   * more `--records <dir>` entry, after `records`. Removed on `stop()`.
+   */
+  recordsDir?: FixtureFile[];
 }
 
 /**
@@ -280,11 +291,25 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
     }
   }
 
+  let recordsDirPath: string | undefined;
+  if (opts.recordsDir) {
+    recordsDirPath = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-records-'));
+    for (const file of opts.recordsDir) {
+      const absPath = path.join(recordsDirPath, file.path);
+      await mkdir(path.dirname(absPath), { recursive: true });
+      await writeFile(absPath, file.content);
+    }
+  }
+  const recordsArgs = [...(opts.records ?? []), ...(recordsDirPath ? [recordsDirPath] : [])].flatMap(
+    (entry) => ['--records', entry],
+  );
+
   const proc = spawn(
     Q2_BINARY,
     [
       'preview',
       '--no-browser',
+      ...recordsArgs,
       ...(opts.staticMode ? ['--static', '--no-watch'] : ['--data-dir', dataDir]),
       ...(opts.allowEdit ? ['--allow-edit'] : []),
       ...(opts.ui === 'editor' ? ['--ui', 'editor'] : []),
@@ -362,6 +387,7 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
       await Promise.allSettled([
         rm(projectDir, { recursive: true, force: true }),
         rm(dataDir, { recursive: true, force: true }),
+        ...(recordsDirPath ? [rm(recordsDirPath, { recursive: true, force: true })] : []),
       ]);
     },
   };
