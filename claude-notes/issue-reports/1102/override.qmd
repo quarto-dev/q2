@@ -1,0 +1,9 @@
+---
+format: typst
+header-includes: |
+  ```{=typst}
+  #let quarto-delete(author: none, date: none, body) = text(fill: gray)[(removed)]
+  ```
+---
+
+Kept [-- this is overridden] text.

@@ -230,6 +230,25 @@ attribution:
 An explicit `author=` or `date=` always wins, and a highlight has no author in Word.
 PowerPoint output ignores authors on insertions and deletions.
 
+#### Typst and PDF output
+
+Typst output (`format: typst`) has no review pane, so the marks are drawn on the page instead:
+insertions are underlined in green, deletions struck through in red, highlights get a yellow background, and comments appear in a small blue box, prefixed with their `author` when they have one.
+The block forms get the same treatment, with a colored rule down their left side.
+
+Each mark is drawn by a Typst function that you can redefine to change how it looks.
+The inline forms call `quarto-insert`, `quarto-delete`, `quarto-highlight` and `quarto-edit-comment`; the block forms call the same names ending in `-block`.
+Every function takes the mark's `author` and `date` (or `none`) and its content as `body`.
+To redefine one, put a `#let` with the same name in the document's `header-includes`.
+For example, this shows each deletion as a gray "(removed)" instead of struck-through text:
+
+````yaml
+header-includes: |
+  ```{=typst}
+  #let quarto-delete(author: none, date: none, body) = text(fill: gray)[(removed)]
+  ```
+````
+
 ### Lists
 
 ### Escaping syntax characters
