@@ -1080,6 +1080,7 @@ fn render_sidebar_entry(
             id,
             contents,
             expanded,
+            active,
         } => {
             render_sidebar_section(
                 html,
@@ -1088,6 +1089,7 @@ fn render_sidebar_entry(
                 id.as_deref(),
                 contents,
                 *expanded,
+                *active,
                 depth,
                 path,
                 collapse_level,
@@ -1153,6 +1155,7 @@ fn render_sidebar_section(
     explicit_id: Option<&str>,
     contents: &[SidebarEntry],
     expanded: bool,
+    active: bool,
     depth: u32,
     path: &[usize],
     collapse_level: u32,
@@ -1169,9 +1172,13 @@ fn render_sidebar_section(
 
     // Header row: either a link (if href) or a data-toggle anchor.
     if let Some(href) = href {
+        // `active` marks the section's own page as current
+        // (bd-gtpwby98); only a linked header can be the current page.
+        let active_class = if active { " active" } else { "" };
         html.push_str(&format!(
-            "          <a href=\"{}\" class=\"sidebar-item-text sidebar-link\">{}</a>\n",
+            "          <a href=\"{}\" class=\"sidebar-item-text sidebar-link{}\">{}</a>\n",
             escape_attr(href),
+            active_class,
             label
         ));
     } else {
@@ -2906,6 +2913,7 @@ mod tests {
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: false,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -2933,12 +2941,45 @@ mod tests {
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: true,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
         let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("aria-expanded=\"true\""));
         assert!(html.contains("class=\"collapse list-unstyled sidebar-section depth1 show\""));
+    }
+
+    /// bd-gtpwby98 — an active section header (the current page is the
+    /// section's own `href`) carries `active` on its header anchor; an
+    /// inactive one does not.
+    #[test]
+    fn sidebar_render_active_section_header() {
+        let section = |href: &str, active: bool| SidebarEntry::Section {
+            text: Some(s("Groups")),
+            href: Some(href.to_string()),
+            href_source: SourceInfo::for_test(),
+            id: None,
+            contents: vec![link("a.html", "A")],
+            expanded: true,
+            active,
+        };
+        let sb = Sidebar {
+            contents: vec![section("groups.html", true), section("other.html", false)],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb, "./");
+        assert!(
+            html.contains("href=\"groups.html\" class=\"sidebar-item-text sidebar-link active\""),
+            "active section header should have active class; html: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"other.html\" class=\"sidebar-item-text sidebar-link\""),
+            "inactive section header should render without active class; html: {}",
+            html
+        );
+        assert_eq!(html.matches("sidebar-link active").count(), 1);
     }
 
     /// Test 11 — active leaf has the `active` class on its anchor.
@@ -3039,6 +3080,7 @@ mod tests {
                 id: None,
                 contents: vec![link("guides/a.html", "A")],
                 expanded: true,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -3065,6 +3107,7 @@ mod tests {
                 id: None,
                 contents: vec![active_link("guide.html", "Guide")],
                 expanded: true, // set by active-state expansion
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };

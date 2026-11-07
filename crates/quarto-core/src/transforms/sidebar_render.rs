@@ -578,6 +578,7 @@ mod tests {
                         },
                     }],
                     expanded: true,
+                    active: false,
                 },
                 SidebarEntry::Heading(inlines_cv(vec![nav_image("images/z.svg", "head")])),
             ],

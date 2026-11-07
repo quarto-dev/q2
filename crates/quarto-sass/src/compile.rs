@@ -781,6 +781,49 @@ mod tests {
         );
     }
 
+    /// bd-rl7r38pw: an expanded sidebar section must show a rotated
+    /// (down-pointing) chevron, a collapsed one a right-pointing one.
+    /// Bootstrap's collapse plugin keeps `aria-expanded` on the
+    /// `a.sidebar-item-toggle` in sync; the theme has to key the
+    /// rotation off it (Q1 `quarto-nav.scss:418-432`). The markup is
+    /// correct either way, so only the compiled CSS can show the bug.
+    #[test]
+    fn test_sidebar_toggle_chevron_rotates_when_expanded() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        // Find the declarations of the rule targeting the chevron of a
+        // toggle in the given `aria-expanded` state. Quotes around the
+        // attribute value are optional in CSS; normalize them away.
+        let decls_for = |state: &str| -> Option<String> {
+            let want = format!("[aria-expanded={state}]");
+            rules(&css).into_iter().find_map(|(selector, decls)| {
+                let sel = selector.replace('"', "");
+                (sel.contains(".sidebar-item-toggle")
+                    && sel.contains(&want)
+                    && sel.contains(".bi-chevron-right::before"))
+                .then(|| decls.replace(' ', ""))
+            })
+        };
+
+        let expanded = decls_for("true").expect(
+            "no rule for `.sidebar-item-toggle[aria-expanded=true] .bi-chevron-right::before` \
+             — expanded sidebar sections show a collapsed chevron. \
+             Port Q1 quarto-nav.scss:418-432.",
+        );
+        assert!(
+            expanded.contains("transform:rotate(90deg)"),
+            "expanded chevron rule does not rotate 90deg: {expanded}"
+        );
+
+        let collapsed = decls_for("false")
+            .expect("no rule for `.sidebar-item-toggle[aria-expanded=false]` chevron");
+        assert!(
+            collapsed.contains("transform:none"),
+            "collapsed chevron rule should reset transform: {collapsed}"
+        );
+    }
+
     /// bd-26bf3j1y: `role="doc-toc"` is NOT a safe hook for hiding
     /// things. q2 puts it on two different elements — the real TOC
     /// (`nav#TOC`) and, as a divergence from Q1 tracked in
