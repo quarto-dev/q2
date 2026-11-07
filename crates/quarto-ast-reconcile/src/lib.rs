@@ -34,7 +34,7 @@ pub use hash::{
     structural_eq_inlines,
 };
 pub use meta::reconcile_meta;
-pub use remap::remap_file_ids;
+pub use remap::{SourceRole, remap_file_ids, walk_source_infos};
 pub use types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
     ListItemAlignment, ReconciliationPlan, ReconciliationStats, TableCellPosition,

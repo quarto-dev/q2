@@ -2,7 +2,7 @@
 title: 'RIU-3: the Positron cache as a record source'
 date: 2026-11-02
 description: 'Promote the Positron cache importer from a library function with no caller to a record source: convert it with the record_from_positron design proven in S4 (no engines, empty execution hashes, language gate at conversion, owner from the engine registry, hashes from the sugared author text), find the cache file by the SHA-1 of the document URI with two fallbacks (one native-only locator in quarto-core that serves the Positron source and a bare-path directory source), guard staleness for imported records, add an import-only provider path that skips the consent gate, and stamp the spliced output through the SourceInfo system as proven by spike P.'
-status: ready  # nothing started; written from RIU-0 S3 to S5 and RIU-0b spike J and spike P, checked against the tree on 2026-11-03 and revised after the second, third and fourth plan reviews; split into 3a and 3b; R through Ark is not in this epic
+status: 3a landed 2026-11-06; 3b (Phase E stamping and the editor UI) never started  # reconciled 2026-11-07, see the follow-up plan, Item 5; earlier: nothing started; written from RIU-0 S3 to S5 and RIU-0b spike J and spike P, checked against the tree on 2026-11-03 and revised after the second, third and fourth plan reviews; split into 3a and 3b; R through Ark is not in this epic
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -185,7 +185,7 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       absent the same re-execute is refused (RIU-2's guard, exercised here through an imported page); the
       viewer still shows its Re-execute overlay on a stale page, and a click is refused with the guard's
       message, which the demo states rather than hides (RIU-6).
-- [ ] **A mis-paired expanded-cell Div (3b, Phase E): an interim rule, not a contract.** Read 2026-11-05:
+- [x] **A mis-paired expanded-cell Div (3b, Phase E): an interim rule, not a contract.** Read 2026-11-05:
       `splice_units` substitutes text, then reparses and reconciles (`merge_markdown_into_ast`). The
       `ReconciliationPlan` it returns holds only index alignments (`KeepBefore`, `UseAfter`,
       `RecurseIntoContainer{before_idx, after_idx}`), no unit ids or ranges, and the splice discards it
@@ -196,7 +196,7 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       a stopgap: engines will eventually return provenance for the nodes they produce, and then the splice
       can say which nodes it made (echoed code, which is transcluded source, will need the same). Name the
       tests `interim_` and say so in a comment, so whoever upgrades the engines replaces them.
-- [ ] Keep the `Header` exemption (decision 9).
+- [x] Keep the `Header` exemption (decision 9).
 - [x] The language-gate test (Phase A): KNR-5 has merged, and `positron_import.rs` already tests knitr with
       the token exactly `r` (admitted, display-only) and a fallback unit (never admitted). This plan's new
       test is the `julia` owner entry, which can be written failing first; it also asserts that the
@@ -442,19 +442,19 @@ What spike P proved (RIU-0b findings, P1 to P8):
 
 Tests first, in this order:
 
-- [ ] **The viewer regression test** (port spike 1's `spike-riu-s10-edit.integration.test.tsx`): a code
+- [x] **The viewer regression test** (port spike 1's `spike-riu-s10-edit.integration.test.tsx`): a code
       block that resolves into the reparse slot gets no edit affordance, and an atomic cell Div
       (`jupyter-output`) leaves an author-owned code block's affordance unchanged.
-- [ ] The **shape test** beside the splice tests (contract section 3, step 4): a stamped node is
+- [x] The **shape test** beside the splice tests (contract section 3, step 4): a stamped node is
       `Generated`, `from` empty, kind `jupyter-output`, `data.source` and `data.unit` set, and
       `by.is_atomic_kind()` is true.
-- [ ] Identification: every matched cell stamped and prose not; a stale cell not stamped; an inline
+- [x] Identification: every matched cell stamped and prose not; a stale cell not stamped; an inline
       span stamps the value `Str` only; a mixed document (a Positron record covering Python, an `{r}`
       chunk it does not cover) stamps only the Python unit; no edit means no stamp; an engine-run
       record is stamped with `source: "engine"`.
-- [ ] A `CodeBlock` inside a stamped unit keeps its `Original` and keeps its decoration; the parity
+- [x] A `CodeBlock` inside a stamped unit keeps its `Original` and keeps its decoration; the parity
       test stays green.
-- [ ] **The shapes** (spike 2 ran each through the real splice; port them as tests with these expected
+- [x] **The shapes** (spike 2 ran each through the real splice; port them as tests with these expected
       results). Stamped correctly: a cell in a div, callout, tabset, list item and blockquote (the
       container keeps its source info); a labeled and captioned cell; a cell with no outputs (its cell Div
       is still stamped); a stored markdown cell (every non-code node stamped); an inline value beside
@@ -464,24 +464,24 @@ Tests first, in this order:
       cell that shifts the block count lets reconcile pair the author's next Div with a spliced `.cell`
       Div, which keeps the author's source info and is not stamped. In every shape, the HTML
       and the diagnostic text are the same with the stamp on and off.
-- [ ] **The interim `.cell` rule** (see the decisions; port the spike 2 fixture): with `--allow-edit`, the
+- [x] **The interim `.cell` rule** (see the decisions; port the spike 2 fixture): with `--allow-edit`, the
       mis-paired Div gets no edit affordance, and an author-owned Div that is not a `.cell` keeps its
       affordance. The test name starts `interim_`.
-- [ ] **The stamp switch.** The stamping post-walk takes an explicit boolean (default on) from the splice
+- [x] **The stamp switch.** The stamping post-walk takes an explicit boolean (default on) from the splice
       entry point, so a test renders the same document with the stamp off and on. It is a test seam, not a
       user option; no flag, setting or environment variable is added. The shape, render-invariance, wire and
       structural-hash tests below use it.
-- [ ] **The render-invariance test.** One stored-markdown fixture (an explicit heading id, a duplicate
+- [x] **The render-invariance test.** One stored-markdown fixture (an explicit heading id, a duplicate
       implicit heading, a crossref-targeted table, and a duplicate crossref id with the author's own
       heading) rendered with the stamp on and with it off: identical HTML and identical diagnostic text.
       Spike 2 showed this holds, and that only the raw location of the Q-15-1 diagnostic differs. A kind
       that ever breaks it is added to the list of kinds the stamp skips.
-- [ ] The wire round trip with the strict reader, the `apply_node_edit` prose round trip (the cell
+- [x] The wire round trip with the strict reader, the `apply_node_edit` prose round trip (the cell
       fences and the other prose byte-identical), the tiling auditor on the untransformed AST (no
       findings) and on the stamped AST (no gated kinds), and the structural-hash equality with and
       without the stamp. Run the existing idempotence integration test too; it has no engine cells,
       so it cannot exercise a record, and the hash test above is the stand-in.
-- [ ] The TypeScript set: add `jupyter-output` to `ATOMIC_KINDS`
+- [x] The TypeScript set: add `jupyter-output` to `ATOMIC_KINDS`
       (`ts-packages/preview-renderer/src/utils/sourceInfo.ts:54`) with a unit test; update
       `utils/sourceInfo.test.ts:80-95`, which pins the set. Rust `is_atomic_kind` has no production
       consumer, so the viewer's set is the stamp's only visible effect. The set also lacks
@@ -494,7 +494,7 @@ TypeScript set).
 - **No banner** (epic decision 15). The "Showing executed output" label
   (`hub-client/src/components/render/PreviewStatusBar.tsx:204`) reads the sidecar `CaptureRef` and is
   left alone, so no `hub-client/` file changes in this plan.
-- [ ] The TypeScript set change is under `ts-packages/`, which `hub-client` bundles from source: run
+- [x] The TypeScript set change is under `ts-packages/`, which `hub-client` bundles from source: run
       `npm run build:all` from `hub-client/` and `npm run test` in the preview-renderer package even
       though no `hub-client/` file changes (so no changelog entry).
 - [ ] Verify how an imported Ark error traceback shows, against a real Ark cache (settled 2026-11-05: a
@@ -505,16 +505,16 @@ TypeScript set).
       traceback lines at `:280`; on `knr-5-positron-interop` it also strips `evalue` and handles an empty
       `ename`). It strips CSI sequences only. Add a test with escapes in a traceback; if they show, the fix is in KNR-5's
       presenter, not here.
-- [ ] Stamped nodes lose their resolved location in the JSON (`Generated` serializes offsets 0 and 0,
+- [x] Stamped nodes lose their resolved location in the JSON (`Generated` serializes offsets 0 and 0,
       `json.rs:380-398`), so `data-loc` and scroll sync (`iframe/scrollSyncDom.ts:145`) can reach an
       author-owned ancestor instead. Check click-to-source and scroll sync in a browser on a document
       with a stamped cell and say what was seen.
-- [ ] This reaches the WASM and the SPA, so run the full chain (`npm run build:wasm`,
+- [x] This reaches the WASM and the SPA, so run the full chain (`npm run build:wasm`,
       `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`).
 
 ## Phase F: documentation
 
-- [ ] Update the sentence in the user docs that says Quarto does not read the Positron cache, and document
+- [x] Update the sentence in the user docs that says Quarto does not read the Positron cache, and document
       the minimal `--records` flag as it exists after 3a (the names `cache`, `q2`, `positron`, `engine` and a
       bare directory path), in `docs/guides/authoring/execution-records.qmd`; RIU-4 revises that text for the
       hardened flag. Also say, in `docs/guides/projects/preview.qmd`, what an imported record looks like in
@@ -522,7 +522,7 @@ TypeScript set).
       Positron outputs to `--share` guests and can pick another document's cache. The embedded docs go stale
       with these edits: run `cargo xtask build-agents-docs` and `cargo build --bin q2`, then check
       `target/debug/q2 docs llms --embed-info` and render with `target/debug/q2 render docs/`.
-- [ ] Update `claude-notes/designs/provenance-contract.md`: the catalog in section 2 lacks
+- [x] Update `claude-notes/designs/provenance-contract.md`: the catalog in section 2 lacks
       `jupyter-output`, `citeproc` and `callout`, and section 3 says to add a constructor in
       `crates/quarto-source-map/`, which is now an external crate (a new kind needs a release of it).
 
@@ -539,7 +539,7 @@ itself needs no kernel; Python-side real data needs none either.
       which no one has done.
 - [x] `cargo nextest run -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider -p quarto-ast-reconcile`
       *Run for the four crates 3a touched: 9153 run, 9151 passed, 2 failed before the last fixture fix (the reveal vendoring test, known noise, and the Julia fixture test, fixed since and re-run green). The reveal test still fails in this worktree (`node_modules/reveal.js` 6.0.0 against the 6.0.2 pin).*
-- [ ] **3a, real data, needs a browser (Playwright on the preview iframe):** *Partly done 2026-11-06, no browser.* Real binary, from the rebuilt `target/debug/q2`, on a temp project holding `positron-cache/python.qmd` and, in a separate directory, `python.cache.ipynb`: `q2 preview doc.qmd --records <cache dir> --no-browser --port 0`. With the writer gate on (and also with the variable unset, so the RIU-1 preview flip is on by default) the log read `recorded engine capture(s) rel_path=doc.qmd engines=` then `recorded engine captures count=1` three milliseconds after the hub listened: published with no engine and no kernel. With `QUARTO_ENGINE_RECORD_WRITE=0` the page got `Q-PREVIEW-CAP-1` (the refusal, RIU-2's design). `--records bogus` fails at argument parsing with the message naming the choices. **Not seen:** the rendered page, the Re-execute overlay after an edit, the Julia and R documents, `--records positron,engine`. Those need a browser run. Original text: three documents: (1) the R
+- [ ] **3a, real data, needs a browser (Playwright on the preview iframe):** *Partly done 2026-11-06, no browser; since then RIU-6 saw the cached output, the edit overlay, the revert and the 403 on Re-execute with Gordon at the Positron window (2026-11-06), and drove the Python case through Playwright (2026-11-07); not seen: `--records positron,engine` running the engine, and the cache-older-than-document case in a browser.* Real binary, from the rebuilt `target/debug/q2`, on a temp project holding `positron-cache/python.qmd` and, in a separate directory, `python.cache.ipynb`: `q2 preview doc.qmd --records <cache dir> --no-browser --port 0`. With the writer gate on (and also with the variable unset, so the RIU-1 preview flip is on by default) the log read `recorded engine capture(s) rel_path=doc.qmd engines=` then `recorded engine captures count=1` three milliseconds after the hub listened: published with no engine and no kernel. With `QUARTO_ENGINE_RECORD_WRITE=0` the page got `Q-PREVIEW-CAP-1` (the refusal, RIU-2's design). `--records bogus` fails at argument parsing with the message naming the choices. **Not seen:** the rendered page, the Re-execute overlay after an edit, the Julia and R documents, `--records positron,engine`. Those need a browser run. Original text: three documents: (1) the R
       fixture (expect nothing with the real owner until R routes to Jupyter), (2) the **Python** fixture and
       (3) the **hand-built Julia** fixture (say it was hand-built; `julia` must be on PATH only if the engine
       is in the list, and it is not). Run the default viewer, `q2 preview --records positron <doc>`, with
@@ -584,6 +584,33 @@ itself needs no kernel; Python-side real data needs none either.
 - Click-to-source and scroll sync were checked in a browser on a document with a stamped cell.
 - The editor UI and live share checks of Phase G are recorded, and the documentation of Phase F is
   written for the flag as 3a leaves it (RIU-4 revises it for the hardened flag).
+
+**3b done 2026-11-07** (branch `feature/riu-3b-stamping`). What landed: `walk_source_infos` and
+`SourceRole` in `quarto-ast-reconcile` (one walk under `remap_file_ids` and the stamp);
+`merge_markdown_into_ast_with_slot`; `splice_record_with(.., stamp)` and the stamp post-walk in
+`record_splice.rs` (test seam: a thread-local read only under `cfg(test)`, so no flag, setting or
+environment variable exists); `jupyter-output` and `citeproc` in `ATOMIC_KINDS`; the interim `.cell`
+rule in `blocks/Div.tsx`; the tests in `record_splice/tests/stamp.rs` and
+`record-output-stamp.integration.test.tsx`; the docs of Phase F.
+
+- **The `.cell` question.** With the spike 2 fixture the mis-paired Div carries the class `cell` (and the
+  author's source info); the author's `.note` Div comes out under reparse source info. So the rule
+  catches it. The test is `interim_the_mispaired_div_carries_the_cell_class_not_the_authors`.
+- **Browser (Playwright, real `target/debug/q2`, the `python` fixture, hand-copied cache directory
+  via `--records <dir>`, content-hash fallback).** Viewer: the cache output renders with no kernel; both
+  `.cell` Divs and their `pre`s carry no `data-block-pool-id` and no `data-loc`, so
+  `closest('[data-loc]')` finds nothing and a click inside a stamped cell maps to no source line (it does
+  nothing); prose paragraphs keep both. Editor UI (`--ui editor`, after `cargo xtask
+  build-hub-client-embed`): status bar "Showing executed output", then "Showing executed output ·
+  code changed" after editing a cell on disk; no Run or Re-run control appears; "Clear results…" is
+  present. **Not seen:** a real click in the editor's preview pane and scroll sync in motion (checked
+  the DOM they key on, not the gestures), `--share --allow-edit` with a guest, "Clear results"
+  clicked, the `.cell` edit refusal in a live browser (covered by the jsdom test only).
+- **3a leftovers.** Done: Re-execute on an imported page refused with no engine and running it when
+  listed (`re_execute_on_an_imported_page_is_refused_without_engine_and_runs_it_when_listed`; it passed
+  on first run because the guard predates it). Not done: the per-EXR-16-case sweep and the labeled
+  cell with `fig-cap` acceptance case.
+- Windows cross-clippy still not run. `cargo xtask verify` is recommended, not run.
 
 ## Risks
 

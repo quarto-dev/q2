@@ -3186,4 +3186,72 @@ mod tests {
         assert!(matches!(err, RecordError::RecordFailed(_)), "{err:?}");
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
+
+    /// RIU-3a: Re-execute on a page that has only an imported record. With `engine` absent from
+    /// the list the request is refused (the guard's message, a 403), nothing runs and the
+    /// sidecar is untouched; with `engine` listed the same request runs the engine.
+    #[tokio::test]
+    async fn re_execute_on_an_imported_page_is_refused_without_engine_and_runs_it_when_listed() {
+        use axum::http::StatusCode;
+        crate::re_execute::reset_in_flight_for_tests();
+        let (tmp, dir, ctx, _runtime, mut cfg) =
+            publish_imported(IMPORT_DOC, &["x = 1", "y = 2"]).await;
+        // Edit a cell, so the imported record is stale and Re-execute is what the viewer offers.
+        std::fs::write(
+            tmp.path().join("doc.qmd"),
+            IMPORT_DOC.replace("x = 1", "x = 11"),
+        )
+        .unwrap();
+        let before = ctx.index().get_capture("doc.qmd").unwrap();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut reg = EngineRegistry::empty();
+        reg.register(Arc::new(UnstartableJupyter(calls.clone())));
+        let reg = Arc::new(reg);
+        let request = || crate::re_execute::ReExecuteRequest {
+            path: "doc.qmd".to_string(),
+        };
+
+        // No `engine` in the list (the Dir source alone): refused.
+        let response = crate::re_execute::re_execute_with_registry_and_cache(
+            ctx.clone(),
+            request(),
+            Some(reg.clone()),
+            &cfg,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let body = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        let msg = String::from_utf8_lossy(&body).into_owned();
+        assert!(msg.contains("--records"), "{msg}");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        let now = ctx.index().get_capture("doc.qmd").unwrap();
+        assert_eq!(
+            now.capture_doc_id, before.capture_doc_id,
+            "sidecar untouched"
+        );
+
+        // With `engine` listed the engine runs.
+        cfg.sources = RecordSources::new(vec![
+            RecordSource::Dir(dir.path().to_path_buf()),
+            RecordSource::Engine,
+        ]);
+        let response = crate::re_execute::re_execute_with_registry_and_cache(
+            ctx.clone(),
+            request(),
+            Some(reg),
+            &cfg,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while calls.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+            assert!(std::time::Instant::now() < deadline, "the engine never ran");
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // Let the worker finish before the runtime goes away.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
 }

@@ -2,7 +2,7 @@
 title: 'RIU-6: the Positron command demo'
 date: 2026-11-02
 description: 'Three commands in Gordon fork of Positron that exercise both directions between Positron and q2 records: run inline expressions, render with q2 and push the outputs into the open document, and preview from the Positron cache with no execution. Mechanisms proven in RIU-0 S5 and S6; Python and Julia are in scope. Starts with an early spike that shows the default q2 preview viewer in the Positron preview pane, which can run before any other RIU plan. A spike in the fork, ending with a script, a capture, a findings note and the reconciliation of the epic checklists.'
-status: in progress  # Phases 0, A, B and the Python part of C done (command 2 and the preview checked by Playwright against real q2); open: the Julia preview test (blocked on a stale Julia server), a person watching commands 2 and 3, the screen capture, Phase E; see Resume here
+status: done 2026-11-07 except the push to Gordon's fork (only when he asks); follow-ups are in 2026-11-07-riu-follow-up-did-we-build-it.md
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -35,19 +35,17 @@ records were integrated. This plan comes last on purpose.
 ## Resume here (updated 2026-11-07)
 
 **State.** All three commands exist in the Positron fork worktree `/Users/gordon/src/positron-riu6-a`, branch
-`spike/riu-6-phase-a` (local only, never pushed; head `8fda7e5edd` or later). RIU-5 B2 landed as `d6954ccdf`
+`spike/riu-6-phase-a` (local only, never pushed; head `99aa72fcb4` or later). RIU-5 B2 landed as `d6954ccdf`
 and this lane is rebased on it. Checks, and who ran each, are in
 [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md).
 
 **Still open**
 
-1. The Julia preview test (`Julia - the preview pane shows the pushed outputs from the cache`) fails because a
-   Julia server left from an earlier e2e run (pid 86369 at the time; its working directory is a deleted e2e
-   workspace) makes q2's Julia engine fail with `ArgumentError: startpath must be non-empty`. Stop that
-   process (it is not from any other lane; its working directory is `.../vscsmoke/test-files/...`) and
-   re-run; the other two Julia servers on the machine belong to other lanes. Then tick the Julia box.
-2. A person watching commands 2 and 3 in the window, and the screen capture or screenshots (Phase D box).
-3. Phase E: reconcile the epic.
+Nothing in this plan except the push (only when Gordon asks). The Julia preview test passes (the stale server
+is gone; a warm-up and a longer timeout keep it passing, see below), Gordon saw Python and Julia sessions in
+the window and said no screen capture is needed, and Phase E and Phase F are done. What is left lives in
+[the follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md): R through knitr first, the Julia server
+and the unexplained EPIPE, the loose ends, RIU-3b.
 
 **Running the e2e tests** (all in `test/e2e/tests/quarto/`; from the fork root; pinned Node 24.22.1 first on
 `PATH`, which the pre-commit hook needs as well):
@@ -56,13 +54,13 @@ and this lane is rebased on it. Checks, and who ran each, are in
 export PATH=<scratch venv with ipykernel, matplotlib, pandas>/bin:<node 24.22.1>/bin:$PATH
 unset BUILD
 env -u ELECTRON_RUN_AS_NODE -u ELECTRON_NO_ATTACH_CONSOLE \
-  POSITRON_E2E_ASSISTANT_PATH=$PWD/extensions/q2-spike \
+  POSITRON_E2E_ASSISTANT_PATH=$PWD/extensions/q2-records-demo \
   Q2_E2E_PATH=<q2 built from the integration tip> Q2_E2E_JULIA_PROJECT=<dir with a Plots project> \
   POSITRON_PY_VER_SEL=3.14.2 POSITRON_PY_ALT_VER_SEL=3.14.2 POSITRON_R_VER_SEL=4.3.2 POSITRON_R_ALT_VER_SEL=4.3.2 \
   npx playwright test test/e2e/tests/quarto/quarto-render-and-push.test.ts --project e2e-electron --reporter=line
 ```
 
-Each run takes about 2.7 minutes and ends with a harmless "worker teardown timeout". Build `q2` with the full
+Each run takes about 3.5 minutes and ends with a harmless "worker teardown timeout". Build `q2` with the full
 chain first (`(cd hub-client && npm run build:wasm) && cargo xtask build-q2-preview-spa && cargo build --bin q2`).
 
 **Fork worktree environment (untracked scaffolding, not in git).** The worktree was assembled by hand and may
@@ -76,9 +74,9 @@ need repair after a reboot or an S3 cleanup:
   symlink to S3's `kcserver` (without it the kernel fails with "Unknown error").
 - After editing workbench sources, `npm run -s transpile-client` refreshes `out/`; check types with
   `node_modules/.bin/tsc --noEmit -p src/tsconfig.json`; the extension compiles with
-  `node_modules/.bin/tsc -p extensions/q2-spike/tsconfig.json`.
+  `node_modules/.bin/tsc -p extensions/q2-records-demo/tsconfig.json`.
 - Launch a window from this tree, not S3 (`lsof -p <pid> -d cwd` shows which tree a window runs from), with
-  `--extensionDevelopmentPath=/Users/gordon/src/positron-riu6-a/extensions/q2-spike`. Window logs are under
+  `--extensionDevelopmentPath=/Users/gordon/src/positron-riu6-a/extensions/q2-records-demo`. Window logs are under
   `~/.local/state/positron/logs/<timestamp>/window1/exthost/`.
 
 **Not mine, not to touch.** `/Users/gordon/src/positron`, workspace-3, other lanes' `target/` and Julia servers.
@@ -320,7 +318,7 @@ at the window.
       also run with a nonexistent q2 path and fails as it should (the output never appears). Each
       passing run also logged a Playwright "worker teardown timeout" (the harness does not shut the app
       down in time), which is not a test failure. Not run: a person watching any of these.
-- [ ] **Julia**, in scope (epic decision 12). Partly done 2026-11-07: command 2 passes through
+- [x] **Julia**, in scope (epic decision 12). **Done 2026-11-07, with Playwright and with Gordon watching a Julia session:** both Julia tests pass, including the preview test, after the stale Julia server went away (Gordon ran `kill`; it had already exited) and after fork `53bf9ca105` (a warm-up render from a never-deleted directory, a 480 s timeout). Three full-file runs: 5 of 5 twice; the first never started because Positron's launch timed out. After the extension rename (`99aa72fcb4`) the file and the inline-expressions test passed 6 of 6. The text below is the state before that. Partly done 2026-11-07: command 2 passes through
       Playwright on a Julia document (fork `dd10d56a7c`): text, a printed message with a vector, an
       HTML value, an error cell (with `error: true`) and a plot all arrive, and the plot is exactly one
       image (the other representations are dropped, as RIU-5's rule says). Command 3 on the Julia
@@ -350,11 +348,11 @@ at the window.
 
 ## Phase D: demo and findings
 
-- [ ] A short script (what to open, what to click, what to expect) and a screen capture or
+- [x] A short script (what to open, what to click, what to expect) and a screen capture or
       screenshots. A step that no one watched is marked not run. Partly done 2026-11-07: the script is the
       last section of [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md). No
       screen capture exists; Playwright keeps traces with screenshots, but nobody has watched the run.
-      The box stays open until a capture exists or Gordon says it is not needed.
+      Gordon said on 2026-11-07 that no capture is needed (he saw Python and Julia sessions in the window). The script now also lives in `extensions/q2-records-demo/demo/README.md` (fork `99aa72fcb4`).
 - [x] A findings note. Written 2026-11-07: [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md)
       (what worked, what did not, what each command would need to ship, what was not run); it rendered with
       `q2 render --strict` and shows no errors beyond the known Q-12-13. The Phase 0 findings note stays as
@@ -367,11 +365,29 @@ This is the step the epic's last exit criterion names, and this plan owns it bec
 plan to finish. Whoever finishes RIU-6 does it (`CLAUDE.md`: re-read, verify each box against what
 landed, correct, commit).
 
-- [ ] Re-read the epic and RIU-0b to RIU-5; check each `- [ ]` and `- [x]` against the tree and the
+- [x] Done 2026-11-07 (see the epic's "Closing reconciliation"; boxes were checked in full for open ones and by sample for ticked ones). Re-read the epic and RIU-0b to RIU-5; check each `- [ ]` and `- [x]` against the tree and the
       findings, not against memory; fix the wrong ones, update each plan's `status:` line, and commit
       the plan files.
-- [ ] Update the epic's table (status, sessions actually spent) and the "Decisions for review" list
+- [x] Done 2026-11-07 (the sessions column was left as the estimate, since actual spend was not tracked). Update the epic's table (status, sessions actually spent) and the "Decisions for review" list
       with what Gordon decided since.
+
+## Phase F: one demo extension
+
+Added 2026-11-07 so the demo can be shown to people. Fork commit `99aa72fcb4`.
+
+- [x] Reader-facing text (reader-expectations review, Gordon approved the suggested text): command titles
+      "Render with q2 and Show Outputs" and "Preview from Saved Outputs" under the category "Quarto (q2)";
+      notifications that open with what the reader sees ("4 of 4 cells in this document now show outputs
+      from q2."), failure messages that end on the next step; tests first (15 failing vitest cases, then
+      green; 64 pass).
+- [x] The extension is `q2-records-demo` (was `q2-spike`): display name, description, two commands; the two
+      spike commands, the `q2spike.q2Path` setting and the workbench's `_positronQuarto.spikeReceive` are
+      gone; the CSS file lost "Spike" from its name.
+- [x] A `demo/` folder in the extension: three documents (inline expressions, Python outputs, Julia outputs)
+      and a README that is the run guide. The hygiene filters skip that folder.
+- [x] The e2e tests still pass after the rename (6 of 6).
+- [ ] Not done: someone running the demo from the README on a machine that is not this one (the setup
+      steps are written from memory of what this machine needed).
 
 ## Exit criteria
 

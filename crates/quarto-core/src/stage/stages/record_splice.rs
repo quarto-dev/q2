@@ -45,7 +45,7 @@ use crate::record::{
 };
 use crate::stage::data::DocumentAst;
 use crate::stage::stages::engine_execution::{
-    merge_execute_scope, merge_markdown_into_ast, scan_and_fill_ids, serialize_ast_to_qmd,
+    merge_execute_scope, merge_markdown_into_ast_with_slot, scan_and_fill_ids, serialize_ast_to_qmd,
 };
 use crate::stage::{EventLevel, StageContext};
 use crate::trace_event;
@@ -94,13 +94,26 @@ fn unit_id(unit: &Unit) -> String {
 }
 
 /// Splice `record` into `doc`. `doc_dir` is where figure and supporting files are written.
+/// The spliced output is stamped (see [`stamp_spliced_output`]).
 pub(crate) fn splice_record(
     doc: DocumentAst,
     record: &Record,
     ctx: &mut StageContext,
     doc_dir: &Path,
 ) -> (DocumentAst, SpliceReport) {
-    let (mut doc, report) = splice_units(doc, record, ctx, doc_dir);
+    splice_record_with(doc, record, ctx, doc_dir, stamp_by_default())
+}
+
+/// [`splice_record`] with an explicit switch for the stamping post-walk. A test seam: no flag,
+/// setting or environment variable reaches it, so the stamp is always on in a real render.
+pub(crate) fn splice_record_with(
+    doc: DocumentAst,
+    record: &Record,
+    ctx: &mut StageContext,
+    doc_dir: &Path,
+    stamp: bool,
+) -> (DocumentAst, SpliceReport) {
+    let (mut doc, report) = splice_units(doc, record, ctx, doc_dir, stamp);
     // Includes must reach the pane even when no unit splices, so they are folded here rather
     // than by the merge. (Before bd-8svy3p89's metadata reconcile the merge replaced the meta
     // with the reparsed text's, which also dropped anything folded earlier.)
@@ -109,11 +122,35 @@ pub(crate) fn splice_record(
     (doc, report)
 }
 
+thread_local! {
+    /// Set only by [`with_stamp_switch`], which exists under test.
+    static STAMP_OFF: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The stamp is always on outside tests. Under test, [`with_stamp_switch`] can turn it off
+/// for the calling thread, so tests that render the same document with the stamp on and off
+/// cannot disturb each other.
+fn stamp_by_default() -> bool {
+    !(cfg!(test) && STAMP_OFF.with(std::cell::Cell::get))
+}
+
+/// Run `f` with the default stamp switch set to `stamp`, on this thread only. The splice runs
+/// on the calling thread in a current-thread runtime, which is how the render-invariance test
+/// reaches it through the whole pipeline.
+#[cfg(test)]
+fn with_stamp_switch<T>(stamp: bool, f: impl FnOnce() -> T) -> T {
+    let previous = STAMP_OFF.with(|c| c.replace(!stamp));
+    let out = f();
+    STAMP_OFF.with(|c| c.set(previous));
+    out
+}
+
 fn splice_units(
     mut doc: DocumentAst,
     record: &Record,
     ctx: &mut StageContext,
     doc_dir: &Path,
+    stamp: bool,
 ) -> (DocumentAst, SpliceReport) {
     let format = ctx.format.identifier.to_string();
 
@@ -191,7 +228,7 @@ fn splice_units(
         &doc_dir.join(doc.path.file_name().unwrap_or_default()),
     ));
     let target = InlineTarget::from_format(&format);
-    let mut edits: Vec<(usize, usize, String)> = Vec::new();
+    let mut edits: Vec<(usize, usize, String, String)> = Vec::new();
     for (i, unit) in units.iter().enumerate() {
         let Some(cell_index) = matching.assignment[i] else {
             continue;
@@ -218,7 +255,8 @@ fn splice_units(
             Unit::Inline(_) => present_span(cell, target),
         };
         if let Some(markdown) = markdown {
-            edits.push(replacement(unit, &qmd, &markdown));
+            let (start, end, replaced) = replacement(unit, &qmd, &markdown);
+            edits.push((start, end, replaced, unit_id(unit)));
         }
     }
     if edits.is_empty() {
@@ -231,8 +269,26 @@ fn splice_units(
     let baseline = crate::engine::nested_cell_mask::unmask(&qmd);
     let mut text = qmd;
     edits.sort_by_key(|e| e.0);
-    for (start, end, replaced) in edits.into_iter().rev() {
+    // Where each unit's presented markdown lands in the final text, before the unmask.
+    let mut spans: Vec<StampSpan> = Vec::new();
+    let mut delta: isize = 0;
+    for (start, end, replaced, id) in &edits {
+        let new_start = (*start as isize + delta) as usize;
+        let new_end = new_start + replaced.len();
+        delta += replaced.len() as isize - (*end - *start) as isize;
+        spans.push(StampSpan {
+            start: new_start,
+            end: new_end,
+            unit: id.clone(),
+        });
+    }
+    for (start, end, replaced, _) in edits.into_iter().rev() {
         text.replace_range(start..end, &replaced);
+    }
+    // Unmasking changes lengths outside the units too; carry each span through it.
+    for span in &mut spans {
+        span.start = crate::engine::nested_cell_mask::unmask(&text[..span.start]).len();
+        span.end = crate::engine::nested_cell_mask::unmask(&text[..span.end]).len();
     }
     let text = crate::engine::nested_cell_mask::unmask(&text);
 
@@ -253,8 +309,17 @@ fn splice_units(
         derived_listing,
     } = doc;
     let fallback = ast.clone();
-    match merge_markdown_into_ast(ast, &mut ast_context, &baseline, &text, intermediate) {
-        Ok((merged, parse_warnings, _plan)) => {
+    match merge_markdown_into_ast_with_slot(ast, &mut ast_context, &baseline, &text, intermediate) {
+        Ok((mut merged, parse_warnings, _plan, slot)) => {
+            if stamp {
+                let source = record
+                    .metadata
+                    .extra
+                    .get("quarto_provenance")
+                    .and_then(Value::as_str)
+                    .unwrap_or("engine");
+                stamp_spliced_output(&mut merged, slot, &spans, source);
+            }
             warnings.extend(parse_warnings);
             doc = DocumentAst {
                 path,
@@ -284,6 +349,74 @@ fn splice_units(
         }
     }
     (doc, report)
+}
+
+/// A unit's presented markdown, as a byte range of the reparsed text.
+#[derive(Debug, Clone)]
+struct StampSpan {
+    start: usize,
+    end: usize,
+    unit: String,
+}
+
+/// The kind of every stamped node: `quarto-source-map`'s `jupyter-output`, which is atomic
+/// (output is regenerated or imported, never edited in place; provenance contract section 7).
+/// The name says "jupyter" for a Julia, knitr or Positron record too; `data.source` carries the
+/// real origin.
+fn record_output_by(source: &str, unit: &str) -> quarto_source_map::By {
+    let mut by = quarto_source_map::By::jupyter_output();
+    by.data = serde_json::json!({ "source": source, "unit": unit });
+    by
+}
+
+/// Mark every node the reparse produced inside a unit's span as
+/// `SourceInfo::Generated { from: [], by: jupyter-output }` with `data = {source, unit}`.
+///
+/// A node is spliced output when its source info resolves into `slot` (the file the reparse
+/// registered; reconcile keeps the document's own nodes under the document's file id, so prose,
+/// stale cells and unmatched units are never touched) and its range lies inside one span. A
+/// `Str` is stamped when it merely overlaps a span, because the reparse merges a value with the
+/// adjacent prose characters (`v1` and `.` become `Str("v1.")`).
+///
+/// Never stamped: a `CodeBlock` (the copy-button decoration is keyed on its `Original` range,
+/// `CodeBlockDecorationKey::from_source_info`) and a `Header` (the heading-id step treats a
+/// `Generated` header as having a deliberate id; epic decision 9). Attribute, target and
+/// metadata source info are not nodes and are left alone.
+///
+/// An interim measure: when engines return provenance for the nodes they produce, this
+/// post-walk goes away.
+fn stamp_spliced_output(
+    ast: &mut quarto_pandoc_types::Pandoc,
+    slot: FileId,
+    spans: &[StampSpan],
+    source: &str,
+) {
+    use quarto_ast_reconcile::SourceRole;
+    quarto_ast_reconcile::walk_source_infos(ast, &mut |si: &mut SourceInfo, role| {
+        if matches!(
+            role,
+            SourceRole::CodeBlock | SourceRole::Header | SourceRole::Ancillary | SourceRole::Meta
+        ) {
+            return;
+        }
+        if si.root_file_id() != Some(slot) {
+            return;
+        }
+        let Some(range) = si.preimage_in(slot) else {
+            return;
+        };
+        let is_str = role == SourceRole::Str;
+        let hit = spans.iter().find(|sp| {
+            if is_str {
+                range.start < sp.end && range.end > sp.start
+            } else {
+                range.start >= sp.start && range.end <= sp.end
+            }
+        });
+        if let Some(span) = hit {
+            *si = SourceInfo::generated(record_output_by(source, &span.unit));
+        }
+    });
 }
 
 /// A record cell's stored nbformat outputs as the kernel result shape [`render_cell_with`] consumes.
@@ -1238,6 +1371,7 @@ mod tests {
 
     mod layering;
     mod option_sweep;
+    mod stamp;
 
     const MIXED: &str =
         "```{r}\n#| echo: true\nx <- 1\nx\n```\n\n```{r}\n#| echo: true\ny <- 2\ny\n```\n";

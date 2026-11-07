@@ -954,6 +954,28 @@ impl PipelineStage for EngineExecutionStage {
 /// output's tells the engine's changes from the round-trip's (bd-8svy3p89,
 /// [`quarto_ast_reconcile::reconcile_meta`]).
 pub(crate) fn merge_markdown_into_ast(
+    ast: quarto_pandoc_types::pandoc::Pandoc,
+    merged_context: &mut pampa::pandoc::ASTContext,
+    baseline: &str,
+    markdown: &str,
+    intermediate_name: String,
+) -> Result<
+    (
+        quarto_pandoc_types::pandoc::Pandoc,
+        Vec<quarto_error_reporting::DiagnosticMessage>,
+        quarto_ast_reconcile::ReconciliationPlan,
+    ),
+    PipelineError,
+> {
+    merge_markdown_into_ast_with_slot(ast, merged_context, baseline, markdown, intermediate_name)
+        .map(|(ast, warnings, plan, _slot)| (ast, warnings, plan))
+}
+
+/// [`merge_markdown_into_ast`], also returning the `FileId` slot the reparsed text was
+/// registered under. Nodes the reparse produced and reconcile kept carry that file id; nodes
+/// reconcile preserved from the document keep their own. The record splice (RIU-3b) uses the
+/// slot to tell its own output from the author's text.
+pub(crate) fn merge_markdown_into_ast_with_slot(
     mut ast: quarto_pandoc_types::pandoc::Pandoc,
     merged_context: &mut pampa::pandoc::ASTContext,
     baseline: &str,
@@ -964,6 +986,7 @@ pub(crate) fn merge_markdown_into_ast(
         quarto_pandoc_types::pandoc::Pandoc,
         Vec<quarto_error_reporting::DiagnosticMessage>,
         quarto_ast_reconcile::ReconciliationPlan,
+        quarto_source_map::FileId,
     ),
     PipelineError,
 > {
@@ -1064,7 +1087,12 @@ pub(crate) fn merge_markdown_into_ast(
     );
     let (reconciled_ast, reconciliation_plan) = quarto_ast_reconcile::reconcile(ast, executed_ast);
 
-    Ok((reconciled_ast, parse_warnings, reconciliation_plan))
+    Ok((
+        reconciled_ast,
+        parse_warnings,
+        reconciliation_plan,
+        new_slot,
+    ))
 }
 
 /// [`quarto_ast_reconcile::reconcile_meta`] with the baseline parsed from
