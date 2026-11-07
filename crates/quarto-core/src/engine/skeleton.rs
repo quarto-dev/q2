@@ -435,6 +435,64 @@ mod tests {
         assert_eq!(out.skeleton, out.markdown);
     }
 
+    /// An unusable image in a recorded chunk comes back as a note (`Q-18-11`) with the units
+    /// the note's index refers to, so the knitr and replay callers can turn it into a warning.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn an_unusable_image_is_returned_as_a_note_with_its_ranged_units() {
+        use crate::record::{
+            AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, fill_ids,
+        };
+        use serde_json::json;
+
+        let doc = "```{r}\nplot(1)\n```\n";
+        let mut units = scan_units(doc);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        let def = HashDefinition::conservative("knitr");
+        let mut builder = RecordBuilder::new("knitr", &def, &units, &texts).unwrap();
+        builder
+            .push(
+                0,
+                UnitResult {
+                    outputs: vec![json!({
+                        "output_type": "display_data",
+                        "data": {"image/png": "!!!not base64!!!"},
+                        "metadata": {}
+                    })],
+                    execution_count: None,
+                    kernel: None,
+                },
+            )
+            .unwrap();
+        let record = builder.finish(EngineEntryInput::default()).unwrap();
+
+        let Some(Unit::Cell(cell)) = units.first() else {
+            panic!("a cell")
+        };
+        let id = cell.id.as_ref().unwrap().0.clone();
+        let skeleton = format!("{}\n", marker("n", &id));
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = crate::presenter::figures::FsFigureSink::new(&dir.path().join("d.qmd"));
+        let out = present_skeleton(
+            &skeleton,
+            "n",
+            Some(&record),
+            &units,
+            None,
+            "html",
+            &shipped(&[], &[]),
+            &mut fig,
+        );
+        let [PresentNote::ImageUnusable { unit, mime, .. }] = out.notes.as_slice() else {
+            panic!("expected one ImageUnusable note, got {:?}", out.notes);
+        };
+        assert_eq!(mime, "image/png");
+        // The note's index is into `ranged_units`, which `note_diagnostic` needs.
+        assert!(matches!(out.ranged_units.get(*unit), Some(Unit::Cell(_))));
+        assert!(out.files_written.is_empty());
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn nonces_are_distinct_hex() {
