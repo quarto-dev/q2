@@ -2,7 +2,7 @@
 title: 'RIU-6: the Positron command demo'
 date: 2026-11-02
 description: 'Three commands in Gordon fork of Positron that exercise both directions between Positron and q2 records: run inline expressions, render with q2 and push the outputs into the open document, and preview from the Positron cache with no execution. Mechanisms proven in RIU-0 S5 and S6; Python and Julia are in scope. Starts with an early spike that shows the default q2 preview viewer in the Positron preview pane, which can run before any other RIU plan. A spike in the fork, ending with a script, a capture, a findings note and the reconciliation of the epic checklists.'
-status: paused  # Phases 0 and A done; Phase B commands 1 and 3 done and seen in the window, S5 push method moved; resume at command 2 once RIU-5 B2 (q2 record export-positron) is on the integration branch; see Resume here
+status: in progress  # Phases 0, A, B and the Python part of C done (command 2 and the preview checked by Playwright against real q2); open: the Julia preview test (blocked on a stale Julia server), a person watching commands 2 and 3, the screen capture, Phase E; see Resume here
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -32,59 +32,58 @@ records were integrated. This plan comes last on purpose.
 
 **Lanes:** before starting a phase or landing work, read the epic's [lanes, landing and the ready board](2026-11-02-records-in-use-epic.md#lanes-landing-and-the-ready-board): lane branches, rebase and landing rules, and the board of which phases may start.
 
-## Resume here (written 2026-11-06 when the lane paused)
+## Resume here (updated 2026-11-07)
 
-**State.** Phases 0 and A are done. In Phase B, command 1 (Run Inline Expressions) and command 3
-(preview from the Positron cache) are done and were seen in the window with Gordon; the S5 push
-method is now the internal command `_positronQuarto.pushOutputsFromFile(path)`, with no caller yet.
-Everything lives in the Positron fork worktree `/Users/gordon/src/positron-riu6-a`, branch
-`spike/riu-6-phase-a` (local only, never pushed; head `40a2d835bf`).
+**State.** All three commands exist in the Positron fork worktree `/Users/gordon/src/positron-riu6-a`, branch
+`spike/riu-6-phase-a` (local only, never pushed; head `8fda7e5edd` or later). RIU-5 B2 landed as `d6954ccdf`
+and this lane is rebased on it. Checks, and who ran each, are in
+[the commands findings note](../research/2026-11-07-riu-6-commands-findings.md).
 
-**Waiting on.** RIU-5 B2, `q2 record export-positron` (RIU-4 lands first). Check with
-`git log feature/records-in-use --oneline | grep -i export-positron`; at pause the integration tip was
-`8e119ca17` with no such commit.
+**Still open**
 
-**First steps on resume**
+1. The Julia preview test (`Julia - the preview pane shows the pushed outputs from the cache`) fails because a
+   Julia server left from an earlier e2e run (pid 86369 at the time; its working directory is a deleted e2e
+   workspace) makes q2's Julia engine fail with `ArgumentError: startpath must be non-empty`. Stop that
+   process (it is not from any other lane; its working directory is `.../vscsmoke/test-files/...`) and
+   re-run; the other two Julia servers on the machine belong to other lanes. Then tick the Julia box.
+2. A person watching commands 2 and 3 in the window, and the screen capture or screenshots (Phase D box).
+3. Phase E: reconcile the epic.
 
-1. Rebase this lane onto `feature/records-in-use`, then rebuild `q2` with the whole chain
-   (`(cd hub-client && npm run build:wasm) && cargo xtask build-q2-preview-spa && cargo build --bin q2`);
-   a plain `cargo build` leaves a stale embedded WASM.
-2. Read the export command's real flags and exit codes in RIU-5's plan, and replace the assumptions
-   in `extensions/q2-spike/src/q2Contract.ts` (`buildExportArgs`, `classifyFailure`) before writing
-   the command. Tests first: extend the vitest file, watch it fail, then implement.
-3. Command 2 in `extensions/q2-spike` calls the export through the same runner as command 3
-   (`q2.path` setting, then `PATH`, arguments as an array), adds the timeout (the one runner item still
-   open), then calls `_positronQuarto.pushOutputsFromFile` with the exported path.
-4. Window check with Gordon, then Phase C (Python, then Julia), Phase D (script, findings), Phase E.
+**Running the e2e tests** (all in `test/e2e/tests/quarto/`; from the fork root; pinned Node 24.22.1 first on
+`PATH`, which the pre-commit hook needs as well):
 
-**Fork worktree environment (untracked scaffolding, not in git).** The worktree was assembled by hand
-and may need repair after a reboot or an S3 cleanup:
+```bash
+export PATH=<scratch venv with ipykernel, matplotlib, pandas>/bin:<node 24.22.1>/bin:$PATH
+unset BUILD
+env -u ELECTRON_RUN_AS_NODE -u ELECTRON_NO_ATTACH_CONSOLE \
+  POSITRON_E2E_ASSISTANT_PATH=$PWD/extensions/q2-spike \
+  Q2_E2E_PATH=<q2 built from the integration tip> Q2_E2E_JULIA_PROJECT=<dir with a Plots project> \
+  POSITRON_PY_VER_SEL=3.14.2 POSITRON_PY_ALT_VER_SEL=3.14.2 POSITRON_R_VER_SEL=4.3.2 POSITRON_R_ALT_VER_SEL=4.3.2 \
+  npx playwright test test/e2e/tests/quarto/quarto-render-and-push.test.ts --project e2e-electron --reporter=line
+```
+
+Each run takes about 2.7 minutes and ends with a harmless "worker teardown timeout". Build `q2` with the full
+chain first (`(cd hub-client && npm run build:wasm) && cargo xtask build-q2-preview-spa && cargo build --bin q2`).
+
+**Fork worktree environment (untracked scaffolding, not in git).** The worktree was assembled by hand and may
+need repair after a reboot or an S3 cleanup:
 
 - `.build/{electron,builtInExtensions,esm-package-dependencies}` are symlinks into
   `/Users/gordon/src/positron-spike-s3/.build/`.
 - About 140 `extensions/*/{out,node_modules,dist}` are symlinks to S3's built copies (excluded in
-  `.git/info/exclude`). Two are real: `positron-supervisor/out` was compiled here (the symlinked one
-  made the supervisor fail with an MCP "positron-sessions" error), and
-  `positron-supervisor/resources/kallichore` is a symlink to S3's `kcserver` (without it the kernel
-  fails with "Unknown error").
+  `.git/info/exclude`). Two are not: `positron-supervisor/out` was compiled here (the symlinked one made the
+  supervisor fail with an MCP "positron-sessions" error), and `positron-supervisor/resources/kallichore` is a
+  symlink to S3's `kcserver` (without it the kernel fails with "Unknown error").
 - After editing workbench sources, `npm run -s transpile-client` refreshes `out/`; check types with
-  `node_modules/.bin/tsc --noEmit -p src/tsconfig.json` (`npx tsgo` does not exist).
-- Launch the window from this tree: the earlier "picker still shows" and "no session manager" results
-  came from running the S3 tree (`lsof -p <pid> -d cwd` shows which tree a window runs from).
-  Use `--disable-extension=vscode.vscode-api-tests --extensionDevelopmentPath=/Users/gordon/src/positron-riu6-a/extensions/q2-spike`.
-- The window's logs are under `~/.local/state/positron/logs/<timestamp>/window1/exthost/`.
+  `node_modules/.bin/tsc --noEmit -p src/tsconfig.json`; the extension compiles with
+  `node_modules/.bin/tsc -p extensions/q2-spike/tsconfig.json`.
+- Launch a window from this tree, not S3 (`lsof -p <pid> -d cwd` shows which tree a window runs from), with
+  `--extensionDevelopmentPath=/Users/gordon/src/positron-riu6-a/extensions/q2-spike`. Window logs are under
+  `~/.local/state/positron/logs/<timestamp>/window1/exthost/`.
 
-**Playwright (optional, not needed for the demo).** A red e2e test for command 1 and its fixture are
-untracked in the fork (`test/e2e/tests/quarto/quarto-run-inline-expressions.test.ts`,
-`test/e2e/test-files/workspaces/quarto_inline_output/inline_exprs.qmd`). It has never run. It needs
-Node 24.22.1, `unset BUILD`, `env -u ELECTRON_RUN_AS_NODE`, the `POSITRON_PY_VER_SEL`,
-`POSITRON_R_VER_SEL`, `POSITRON_PY_ALT_VER_SEL` and `POSITRON_R_ALT_VER_SEL` variables, and
-`test/e2e` dependencies (`npm ci --ignore-scripts`, then `npm rebuild @vscode/sqlite3`). The supervisor
-and kallichore fixes above may be what was missing when Python could not start; untested.
-
-**Not mine, not to touch.** `/Users/gordon/src/positron`, workspace-3, other lanes' `target/`. Known open
-questions for others: why an edited cell loses its syntax highlighting in the preview (RIU-3a), and
-that the Viewer's big X does not end q2 (a Positron Viewer change, not taken).
+**Not mine, not to touch.** `/Users/gordon/src/positron`, workspace-3, other lanes' `target/` and Julia servers.
+Open questions for others: why an edited cell loses its syntax highlighting in the preview (RIU-3a), and that
+the Viewer's big X does not end q2 (a Positron Viewer change, not taken).
 
 ## Overview
 
@@ -254,9 +253,13 @@ at the window.
       (`test/e2e/tests/quarto/quarto-run-inline-expressions.test.ts`, uncommitted; the harness
       could not start Python until a late setup fix, so it has never been executed), R and Julia
       documents, an unsaved or untitled document.
-- [ ] The `q2` runner as a proper extension (the S6 `q2-spike` is the starting point): a `q2.path`
+- [x] The `q2` runner as a proper extension (the S6 `q2-spike` is the starting point): a `q2.path`
       setting read on each run, then `PATH`, with an error naming the setting when the lookup
       returns `ENOENT`; arguments as an array; a timeout; stderr tail on failure; no shell.
+      Done 2026-11-07, fork `e03401d05e`: command 3 and command 2 both read `q2.path` on each run, fall
+      back to `PATH`, name the setting on `ENOENT`, pass arguments as an array with no shell, and show
+      the stderr tail on failure; command 2 adds the timeout (`q2.exportTimeoutSeconds`, default 300).
+      Command 3 has no timeout because it is a long-running server by design.
 - [x] Move the S5 push method out of the `spike` names and wrap edits to upstream files in Positron
       markers; keep the command surface minimal (one internal command taking a file path).
       Done 2026-11-06, fork commit `40a2d835bf`: the user-facing "Spike: Push Outputs From File"
@@ -289,14 +292,48 @@ at the window.
       re-checked in the window.
     - Not run: a wrong or unset `q2.path` notification, an untitled or unsaved document, the "q2 too old"
       message, a non-default profile.
-- [ ] Command 2 as above, with the refusals (blocked on RIU-5 B2, `q2 record export-positron`; command 3
-      is done, see the entry above). Report q2 failures in a notification with the stderr tail; never
-      swallow them.
+- [x] Command 2 as above, with the refusals. Done 2026-11-07 in the fork: `q2.renderAndPush` in
+      `extensions/q2-spike/src/exportCommand.ts` (commit `e03401d05e`), calling RIU-5 B2's real
+      `q2 record export-positron` (landed as `d6954ccdf`; its flags and exit codes matched the
+      assumptions in `q2Contract.ts`, so the contract file did not change). Refusals: untitled and
+      non-`file` documents; a dirty document is noted; a push is refused when the document is no longer
+      the active editor. q2 failures show the stderr tail; nothing is swallowed. The message after a push
+      comes from `summarizeExportAndPush` (6 vitest tests written first and seen to fail on the missing
+      module, 57 pass in the extension). Checked against a real q2 built from the integration tip
+      (`target/debug/q2` in workspace-5, after the full WASM, SPA and q2 chain): the CLI export of a
+      Python document exits 0, prints one JSON line and the stderr notice first, and the file holds the
+      expected output kinds. Window checks are in Phase C. One bug found and fixed here: the output
+      cache write is debounced, so `q2 preview --records <cache dir>` run right after a push could find
+      no directory ("record source ... does not exist"); `_positronQuarto.pushOutputsFromFile` now calls
+      `flushCache` before it returns (fork `c6319c1f38`).
 
 ## Phase C: languages
 
-- [ ] **Python first** (S5 and S7 proved it).
-- [ ] **Julia**, in scope (epic decision 12), with these specifics from spike J:
+- [x] **Python first** (S5 and S7 proved it). Done 2026-11-07 with Playwright, which drives a real
+      Positron window (fork `055f2f5d07`, `8fda7e5edd`; not watched by a person). Run with the
+      `POSITRON_E2E_ASSISTANT_PATH` extension path, `Q2_E2E_PATH` set to the workspace-5 `q2`, and a scratch
+      venv with ipykernel, matplotlib and pandas first on `PATH`. Passing: command 1 on a two-span
+      document (42 and 3.0, no picker); command 2 on a one-cell document; command 2 on a four-cell document
+      with a plot, a data frame, a warning and a printed message (4 inline outputs, the image visible, the
+      data frame's columns present, the warning and message text present); and command 3 after command 2
+      (the preview pane shows the pushed output, read from the cache, nothing run). The command 2 test was
+      also run with a nonexistent q2 path and fails as it should (the output never appears). Each
+      passing run also logged a Playwright "worker teardown timeout" (the harness does not shut the app
+      down in time), which is not a test failure. Not run: a person watching any of these.
+- [ ] **Julia**, in scope (epic decision 12). Partly done 2026-11-07: command 2 passes through
+      Playwright on a Julia document (fork `dd10d56a7c`): text, a printed message with a vector, an
+      HTML value, an error cell (with `error: true`) and a plot all arrive, and the plot is exactly one
+      image (the other representations are dropped, as RIU-5's rule says). Command 3 on the Julia
+      document reads the pushed cache and the Viewer pane showed it (seen in a Playwright screenshot:
+      the cell outputs, the vector and the plot), but its test (`Julia - the preview pane shows the pushed
+      outputs from the cache`) does not pass yet: a Julia server left running from an earlier test run
+      (pid 86369, started by the e2e runs; its working directory is a deleted e2e workspace) makes q2's
+      Julia engine fail with `ArgumentError: startpath must be non-empty`. I was not allowed to stop that
+      process; once it is gone the test should be re-run. Still not run: Positron producing a Julia cache
+      itself (no Julia kernel in the dev build) and Positron hashing a Julia cell with `#|` lines. Julia
+      needs `julia` on `PATH` and, for the plot, a Julia project with Plots next to the document (q2 takes
+      the project from the document's folder; `JULIA_PROJECT` is not used), which the test copies from
+      `Q2_E2E_JULIA_PROJECT`. Specifics from spike J:
       - Command 2 needs RIU-5's keep rule (owners `jupyter` and `julia`) and its representation rule,
         or a Julia plot shows twice with base64 text (J8). Test it on a text and vector cell, an HTML
         value, an error cell and a plot cell.
@@ -314,10 +351,14 @@ at the window.
 ## Phase D: demo and findings
 
 - [ ] A short script (what to open, what to click, what to expect) and a screen capture or
-      screenshots. A step that no one watched is marked not run.
-- [ ] A findings note, `claude-notes/research/2026-MM-DD-riu-6-positron-demo-findings.md`: what
-      worked, what did not, what each command would need to ship. Render it, and every plan file Phase E
-      edits, with `target/debug/q2 render --strict <files>` before any push.
+      screenshots. A step that no one watched is marked not run. Partly done 2026-11-07: the script is the
+      last section of [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md). No
+      screen capture exists; Playwright keeps traces with screenshots, but nobody has watched the run.
+      The box stays open until a capture exists or Gordon says it is not needed.
+- [x] A findings note. Written 2026-11-07: [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md)
+      (what worked, what did not, what each command would need to ship, what was not run); it rendered with
+      `q2 render --strict` and shows no errors beyond the known Q-12-13. The Phase 0 findings note stays as
+      it was.
 - [ ] Push the spike branch to Gordon fork only when he asks.
 
 ## Phase E: reconcile the epic
