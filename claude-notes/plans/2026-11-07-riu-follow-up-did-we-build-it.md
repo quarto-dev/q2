@@ -43,7 +43,9 @@ left R out of the demo; with the knitr stack landed, that is now a gap to close 
 4. **Item 3** boxes marked "blocks" come before anything ships; the rest in Gordon's order.
 5. **Item 5** (the two open boxes) and **Item 6** (Windows) are independent of everything else.
    Item 6 needs a Windows machine.
-6. **Item 7** (one presenter path) is a design decision for Gordon, independent of Item 1: Item 1 needs only
+6. **Item 8** (`q2 convert` replaces `q2 record`) is independent of Item 1's gate changes; do it before Item 1
+   Phase B. Strand `bd-ju7u8a73` holds the ipynb-to-qmd side.
+7. **Item 7** (one presenter path) is a design decision for Gordon, independent of Item 1: Item 1 needs only
    the gate change. Do not start it without that decision.
 
 ## Item 1: R through knitr
@@ -373,6 +375,69 @@ no other engine supplies. Julia already goes through the Rust presenter (`b4d827
 - [ ] Jupyter cannot supply anchors or expression starts today (an `execute_request` reports no per-line
       positions), so those features stay knitr-only until an engine's capture reports them. That is new
       capture work, outside this item.
+
+## Item 8: `q2 convert --to positron-ipynb` replaces `q2 record export-positron`
+
+**Intended (Gordon, 2026-11-07):** remove `q2 record`, which is too specific, and use `q2 convert`, as Q1 had it,
+with the output format explicit. Q1's command chose its direction from the input's extension
+(`isJupyterNotebook`, `external-sources/quarto-cli/src/command/convert/cmd.ts`) and wrote beside the input,
+overwriting silently. q2's `convert` is only a stub (`crates/quarto/src/commands/convert.rs` returns
+`NotImplemented`; its `--output` flag is documented as a format, unlike Q1's `-o` path). `q2 record` is unreleased
+(it landed in `d6954ccdf`, RIU-5 B2, on the epic branch), so removing it costs nothing. The ipynb-to-qmd and
+plain qmd-to-ipynb sides are **not** part of this plan; they are strand `bd-ju7u8a73`.
+
+**Design (agreed 2026-11-07):**
+
+```
+q2 convert <input> --to <format> [--from <format>] [-o <path>] [target options]
+```
+
+- `--to` is required and never inferred. `--from` is optional, inferred from the input extension (`.qmd` and
+  `.md` are qmd, `.ipynb` is ipynb) and an error otherwise. An unsupported pair is an error that lists the
+  supported pairs. Names and flags match `q2 render` (`--to`, `-o`).
+- Supported in this plan: `--from qmd --to positron-ipynb`, the Positron cache notebook. Reserved by name, not
+  implemented: `--to ipynb` and `--from ipynb`.
+- Options for `positron-ipynb` only, rejected for other targets: `--records q2,engine` (the preview and
+  provide-hub grammar, only those two values accepted; default `q2,engine`; `--records q2` forbids running the
+  document) and `--source-uri`.
+- `-o <path>` is required for `positron-ipynb`, because the file name belongs to the consumer (a hash of the
+  document URI, computed by the extension). `-o -` writes the notebook to stdout, and the JSON report then goes
+  to stderr. Otherwise the report is the one JSON line on stdout, as today.
+- An existing output file is overwritten, with an info diagnostic naming it (Gordon's choice; Q1 overwrote
+  silently).
+- Unchanged: `export_for_positron` in `quarto-core`, the report fields, exit codes 10 to 13 (documented under
+  the target), exit 2 for usage errors (so the extension's "q2 too old" detection still works: an older q2's
+  `convert` has no `--to`). A `convert` that may run code is stated in its help text: Q1's never executed.
+- Not `-M`: `-M` is document metadata in `q2 render`, `preview` and `provide-hub`.
+- The `--source-uri` default (the document's native path) is written with forward slashes
+  (`quarto_util::to_forward_slashes`), per the cross-platform rule; `normalize_location` in `positron_cache.rs`
+  accepts both. A test builds its path with `Path::join`.
+
+**Order:** independent of Item 1's gate changes (the library function is untouched), but do it before Phase B of
+Item 1 so the CLI test written there targets the new command. Item 1's references to `q2 record export-positron`
+mean this command from here on.
+
+- [ ] `[unattended]` Tests first, through the binary (`crates/quarto/tests/integration/`, replacing
+      `record_export_positron_cli.rs`): `--to` missing is exit 2; an unsupported pair lists the supported ones;
+      `--from` inferred from `.qmd`; an unknown extension errors; `--records` values other than `q2` and `engine`
+      are rejected; `--records` and `--source-uri` are rejected for a target that does not take them; `-o -` puts
+      the notebook on stdout and the report on stderr; an existing file is overwritten and an info line names it;
+      exit codes 10 to 13 keep their meanings. Move, do not weaken, the existing cases.
+- [ ] `[unattended]` Implement `commands/convert.rs` (replacing the stub), wire `Commands::Convert` in
+      `main.rs` with `--to`, `--from`, `-o/--output` (a path), `--records`, `--source-uri`, delete
+      `commands/record.rs`, the `Record` subcommand, and the old test file name `record_export_positron_cli.rs`. Gates:
+      `cargo clippy -p quarto --all-targets -- -D warnings` and `cargo nextest run -p quarto`.
+- [ ] `[unattended]` Run the real binary end to end on a Python fixture and on the knitr fixture
+      (`q2 convert d.qmd --to positron-ipynb -o out.ipynb --source-uri file:///x/d.qmd`), read the JSON and the
+      ipynb, and record the invocation and output here.
+- [ ] `[unattended]` Update the fork's extension: `q2Contract.ts:34-38` (`buildExportArgs`: `convert`, `--to
+      positron-ipynb`, `-o`), its vitest, the comment at line 7, and `exportCommand.ts`. Keep the "too old"
+      detection and add a vitest for it.
+- [ ] `[unattended]` User-facing docs: a `docs/` page for `q2 convert` (usage only), then the embedded-docs
+      refresh (`cargo xtask build-agents-docs`, `cargo build --bin q2`). Update the RIU-5 and RIU-6 plans' command
+      references with a dated note rather than rewriting them.
+- [ ] Windows: the forward-slash default is the only path logic here; its test is portable. The rest of the
+      Windows list stays in Item 6.
 
 ## Eventual goal: span outputs in execution records (not demo work)
 
