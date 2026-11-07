@@ -201,10 +201,11 @@ mod tests {
             .unwrap();
             format!("{blocks:?}")
         };
+        // Bibliography text stays in separate `Str` chunks; check the month.
         let dutch = render(Some("nl"));
-        assert!(dutch.contains("juli 12"), "{dutch}");
+        assert!(dutch.contains("\"juli\""), "{dutch}");
         assert!(!dutch.contains("July"), "{dutch}");
-        assert!(render(None).contains("July 12"));
+        assert!(render(None).contains("\"July\""));
     }
 
     #[test]
