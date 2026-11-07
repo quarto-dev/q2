@@ -79,13 +79,18 @@ Positron window, the hash comparison, Ark's cache shapes.
 - [ ] `[Gordon]` What is left of the hash question is Positron-side only: does Positron's parser read `#|`
       lines the same way for a Julia cell as for Python and R? Check in the fork
       (`/Users/gordon/src/positron-riu6-a`), with one Julia `#|` cell.
-- [ ] **Design (read the review note's "Design findings after the review" first).** Replace the name lists
-      `EXPORT_OWNERS` and the `outputs_for` owner rule with data checks plus one declared fact, and write the
-      verdict in the findings note. Proposal: export admits a cell when the engine's granularity is `Unit`, the
-      cell is not a fallback cell (the `text/x-quarto-markdown` marker), and the language passes the syntactic
-      check; import needs an engine-declared `structured_languages` (jupyter and julia: any plain language,
-      knitr: `r`), carried in `EngineEntry` beside `hash_definition`. Check whether the other engines (marimo,
-      TS extension engines) meet the data checks, since no engine outside the lists was ever tried.
+- [ ] **Design (agreed with Gordon 2026-11-07; read the review note's "Design findings after the review").**
+      Replace the name lists `EXPORT_OWNERS` and the `outputs_for` owner rule with data checks plus one declared
+      fact, **kernel equivalence**: for which languages is a unit this engine owns ordinary kernel code, so the
+      same text gives the same outputs in a plain Positron kernel? One declaration serves both directions.
+      (It replaces the earlier "structured languages" idea: structured versus fallback is a presentation detail,
+      not what the gates protect; they protect "Positron ran the same program the engine would run", which is
+      why `python.marimo` and other engines' units are excluded.) Shape: a trait method on `ExecutionEngine`
+      following `try_claims_language` (`engine/traits.rs:176-184`): `Option`, `None` means "would have to load",
+      and **`None` is not admitted** (undeclared engines are excluded). Jupyter and Julia declare any plain
+      language; knitr declares `r`. The data checks stay as safety on the cell: granularity `Unit`, no fallback
+      marker, syntactic language. Settled: engines outside today's lists are admitted only by declaration, and
+      each gets a test (Gordon: "we'll have to test"). Independent of Item 7.
 - [ ] Write the answers into a findings note with a verdict: the export can cover knitr as is, needs a
       mapping (say which), or needs a change on the Positron side. "As is" is already ruled out by the owner
       rule; with the hash question settled, the likeliest verdict is "a q2-side change to the gates".
