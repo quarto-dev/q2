@@ -142,7 +142,9 @@ impl ReplayEngine {
         let mut fig = FsFigureSink::new(&ctx.source_path);
         // A whole-document engine (knitr) recorded a skeleton: present over it, not over the
         // input text, so the spans and chunks its own run substituted are already in place.
-        let (markdown, files_written, notes, note_units) = if let Some(skeleton) = stored.skeleton.as_ref() {
+        let (markdown, files_written, notes, note_units) = if let Some(skeleton) =
+            stored.skeleton.as_ref()
+        {
             // The markers are keyed by unit id, so every unit needs one (a stage that did not
             // want a record leaves them unset; filling is idempotent).
             let mut units = units.clone();

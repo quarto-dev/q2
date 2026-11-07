@@ -424,9 +424,11 @@ impl ExecutionEngine for KnitrEngine {
             if presented.fallbacks.total() > 0 {
                 tracing::debug!(fallbacks = ?presented.fallbacks, "knitr units rendered from shipped markdown");
             }
-            execute_result.warnings.extend(presented.notes.iter().map(|note| {
-                crate::engine::diagnostics::note_diagnostic(note, &presented.ranged_units, ctx)
-            }));
+            execute_result
+                .warnings
+                .extend(presented.notes.iter().map(|note| {
+                    crate::engine::diagnostics::note_diagnostic(note, &presented.ranged_units, ctx)
+                }));
             for file in presented.files_written {
                 if !execute_result.supporting_files.contains(&file) {
                     execute_result.supporting_files.push(file);
