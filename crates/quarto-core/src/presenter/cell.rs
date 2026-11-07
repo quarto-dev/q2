@@ -893,6 +893,8 @@ fn format_outputs_with(
                     let preferred = match cell_output {
                         CellOutput::DisplayData { metadata, .. }
                         | CellOutput::ExecuteResult { metadata, .. } => {
+                            // `metadata` is nbformat JSON (`serde_json::Value`), not a `ConfigValue`.
+                            // lint:allow(metadata-as-str) — serde_json `as_str`
                             metadata.get("quarto_file_path").and_then(|p| p.as_str())
                         }
                         _ => None,

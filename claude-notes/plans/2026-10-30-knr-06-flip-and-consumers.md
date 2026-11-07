@@ -131,7 +131,7 @@ Decisions 1 to 6 of the handoff stand; these settle the rest of 6B.
    decided there from what is unreferenced.
 7. **Probe before the flip.** Marker survival on docx, typst and revealjs, and inline markers on
    knitr 1.44 and 1.52, are red-first tests in 6A.
-8. **User-facing.** `cache: true` chunks stop caching on structured targets (Q-18-11 says so);
+8. **User-facing.** `cache: true` chunks stop caching on structured targets (Q-18-12 says so);
    state it in the docs page.
 
 ## What landed, and what differs from the design (2026-11-05)
@@ -460,7 +460,7 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
    knitr\'s cache off for every chunk on a structured route (`capture_install`, S4), so an old
    markdown cache is never replayed there; a fallback target (latex) has no markers and keeps its
    cache. The real user-facing cost is that `cache: true` chunks stop caching on structured targets
-   once recording is the default (info diagnostic Q-18-11 already says so). Pinned by
+   once recording is the default (info diagnostic Q-18-12 already says so). Pinned by
    `a_cache_written_without_capture_is_not_replayed_by_a_recorded_run`.
 
 ## References

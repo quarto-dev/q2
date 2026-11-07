@@ -76,7 +76,7 @@ at `989db3fe2` (the epic squashed as `c5f8c7593`). What changed, and what that d
    `cfg_attr(not(test), expect(dead_code))`; the build fails until the attribute is deleted.
 7. **Diagnostic codes.** `docs/errors/engine/` holds Q-18-1 to Q-18-5 and Q-18-10; Q-18-6 to
    Q-18-9 are claimed by other plans (`2026-09-18-pandoc-hybrid-P5-implementation.md`,
-   `2026-09-18-knitr-includes-and-engine-result-diagnostics.md`). This plan takes **Q-18-11 and up**,
+   `2026-09-18-knitr-includes-and-engine-result-diagnostics.md`). This plan takes **Q-18-12 and up** (Q-18-11 went to the Ark image-failure warning; renumbered at the rebase onto main, 2026-11-06),
    re-checking the catalog at each allocation; each code gets its docs page and sidebar entry in the
    same commit. The handoff\'s "Q-18-1 to Q-18-4" was out of date.
 8. **Corpus re-measured 2026-11-03 (report r16, 221 cases):** 198 accepted, 5 allowlisted, 11
@@ -188,8 +188,8 @@ failing on its assertion.
   route. Nothing is captured and nothing is said when no record is wanted. The `expect(dead_code)`
   on `target_route.rs` is gone. A fallback unit is what the EXR-11 recorder already wrote (finished
   markdown, default profile, no `quarto_hash_rule`).
-- **Three coded notes, all `info`:** `Q-18-11` (knitr\'s cache was off for chunks that asked for it),
-  `Q-18-12` (a knit hook was replaced; names the hook and the first chunk), `Q-18-13` (a `child=`
+- **Three coded notes, all `info`:** `Q-18-12` (knitr\'s cache was off for chunks that asked for it),
+  `Q-18-13` (a knit hook was replaced; names the hook and the first chunk), `Q-18-14` (a `child=`
   chunk). Each has its catalog entry, docs page and sidebar entry in this commit. The target note
   stays uncoded, as before.
 - **Cache.** `capture.R` records the labels of chunks whose `cache` option was truthy before the
@@ -248,8 +248,8 @@ failing on its assertion.
   with `execute: {record: true}`, a plain chunk, a plot, a `#| child: sub/kid.Rmd` chunk, a chunk that
   replaces the `output` hook, and one after it. The record at `.quarto/execution-records/sub/doc.ipynb`
   has cells: plain `STRUCTURED` (stream), plot `STRUCTURED` (`image/png`), child `FALLBACK`, override
-  `FALLBACK`, after `FALLBACK` (each `text/x-quarto-markdown`); the render printed `Info [Q-18-13]` and
-  `Info [Q-18-12]`. I read the cells with `jq`; the cache note was exercised by a test, not this run.
+  `FALLBACK`, after `FALLBACK` (each `text/x-quarto-markdown`); the render printed `Info [Q-18-14]` and
+  `Info [Q-18-13]`. I read the cells with `jq`; the cache note was exercised by a test, not this run.
 - **Existing tests changed, and why.** Four EXR-11 integration tests (`knitr_chunk_records`: one per
   owned chunk, files per chunk, stage shadow equality; `knitr_inline_records`: id embedding does not
   change output) asserted the one-markdown-block-per-chunk shape through `record::place`, which has no
