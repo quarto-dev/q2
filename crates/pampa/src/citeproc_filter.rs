@@ -923,7 +923,7 @@ fn localize_quotes(inlines: &mut Inlines, quotes: &QuoteConfig, depth: usize) {
             Inline::Span(x) => localize_quotes(&mut x.content, quotes, depth),
             Inline::Link(x) => localize_quotes(&mut x.content, quotes, depth),
             Inline::Quoted(q) => {
-                let (open, close) = if depth % 2 == 0 {
+                let (open, close) = if depth.is_multiple_of(2) {
                     (&quotes.outer_open, &quotes.outer_close)
                 } else {
                     (&quotes.inner_open, &quotes.inner_close)
