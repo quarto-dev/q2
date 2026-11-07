@@ -77,6 +77,15 @@ deletions struck through, highlights with a background fill, comments set apart
    plus block variants (or one function per kind that also accepts block content).
    Appearance lives **only** here. Prefer solid colors (same reasoning as
    `.claude/rules/hub-client-theme.md`).
+
+   *Update during implementation:* the template is vendored unmodified from
+   quarto-cli, so the functions live in a new q2-only partial,
+   `typst-template/editorial-marks.typ`, included by one `QUARTO2-PATCH` line at
+   the end of `definitions.typ` (so a custom `template:` still gets them). Both
+   are recorded in `resources/pandoc-filters/README.md` § Ours vs. pinned. And
+   `include-in-header` is dropped for every Pandoc-hybrid format today
+   (bd-7avt1ogu), so the documented override is a raw-Typst `header-includes`,
+   which works (`override.qmd`).
 2. **`EditorialMarksTypstTransform`** (new file in `crates/quarto-core/src/transforms/`),
    gated on `FormatIdentifier::Typst`: replace each mark Span with
    `RawInline("typst", "#quarto-insert(author: …)[")` + converted content +

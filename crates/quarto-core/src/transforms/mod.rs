@@ -14,6 +14,7 @@
 //! - [`CalloutResolveTransform`] - Resolves Callout CustomNodes to standard Div structure
 //! - [`ComponentsResolveTransform`] - Binds `components:` declarations to elements and ships the client runtime
 //! - [`EditorialMarksOoxmlTransform`] - Renders editorial marks to Word and PowerPoint (docx, pptx)
+//! - [`EditorialMarksTypstTransform`] - Renders editorial marks as calls to Typst template functions
 //! - [`FooterGenerateTransform`] - Resolves `page-footer:` YAML into `navigation.footer`
 //! - [`FooterRenderTransform`] - Renders `navigation.footer` to HTML
 //! - [`AnnouncementGenerateTransform`] - Resolves `website.announcement` into `navigation.announcement`
@@ -80,6 +81,7 @@ mod crossref_resolve;
 pub(crate) mod date_normalize;
 mod draft_alert;
 mod editorial_marks_ooxml;
+mod editorial_marks_typst;
 mod equation_label;
 mod example_embed;
 mod float_ref_target;
@@ -184,6 +186,7 @@ pub use crossref_resolve::CrossrefResolveTransform;
 pub use date_normalize::normalize_dates;
 pub use draft_alert::DraftAlertTransform;
 pub use editorial_marks_ooxml::EditorialMarksOoxmlTransform;
+pub use editorial_marks_typst::EditorialMarksTypstTransform;
 pub use equation_label::EquationLabelTransform;
 pub use example_embed::{ExampleEmbedRenderTransform, ExampleEmbedTransform};
 pub use float_ref_target::FloatRefTargetSugarTransform;

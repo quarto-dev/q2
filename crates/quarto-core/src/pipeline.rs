@@ -87,12 +87,12 @@ use crate::transforms::{
     CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
     CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
     CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform, DraftAlertTransform,
-    EditorialMarksOoxmlTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
-    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
-    FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform, LinkExternalTransform,
-    LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
-    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
+    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
+    LinkExternalTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
+    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
     ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
@@ -2768,6 +2768,12 @@ pub fn build_transform_pipeline(
     // profile; bucket B3, registered for every profile and excluded for none. After every
     // content transform that survives the Pandoc cut, so the whole tree it sees is final.
     pipeline.push(Box::new(EditorialMarksOoxmlTransform::new()));
+    // Editorial marks to Typst (GH #1102): rewrites the same marks into calls to the
+    // `quarto-insert`/`quarto-delete`/`quarto-highlight`/`quarto-edit-comment` functions
+    // the Typst template defines (`definitions.typ`), so the PDF shows them as annotations
+    // instead of body text. Self-gated on the typst identifier; bucket B3 for the same
+    // reasons as its OOXML sibling.
+    pipeline.push(Box::new(EditorialMarksTypstTransform::new()));
     // bd-react-components-a8flgldm: bind `components:` declarations to
     // their Divs/Spans (`data-quarto-component`), copy the modules under
     // `site_libs/quarto-components/`, register the vendored React ESM +
@@ -3244,6 +3250,10 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // I23). Gates itself on the docx/pptx identifiers, so it is inert elsewhere; it
     // crosses the cut because pandoc's docx writer needs the rewritten classes.
     ("editorial-marks-ooxml", Bucket::B3),
+    // Editorial marks to calls of the Typst template's annotation functions (GH #1102).
+    // Gates itself on the typst identifier; crosses the cut because pandoc's typst writer
+    // must see the raw Typst calls.
+    ("editorial-marks-typst", Bucket::B3),
     ("resource-collector", Bucket::B3),
     // Captures the markdown companion for llms.txt. A service, not
     // presentation of the current format; self-gates on `llms_view_active`
@@ -6905,6 +6915,7 @@ mod tests {
                 "mermaid-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "components-resolve",
                 "anchor-sections",
                 "resource-collector",
@@ -7007,6 +7018,7 @@ mod tests {
                 "mermaid-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "components-resolve",
                 "anchor-sections",
                 "resource-collector",
@@ -7155,6 +7167,7 @@ mod tests {
                 "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "resource-collector",
                 "llms-capture",
             ]
@@ -7384,6 +7397,7 @@ mod tests {
                 "example-embed-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "anchor-sections",
                 "resource-collector",
                 "table-bootstrap-class",
