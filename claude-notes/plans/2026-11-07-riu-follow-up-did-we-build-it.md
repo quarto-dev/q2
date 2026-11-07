@@ -108,8 +108,8 @@ produced it. (This corrects the same day's earlier proposal of one declaration f
       admitted only by declaration, each with a test (Gordon: "we'll have to test"). Independent of Item 7.
 - [ ] Write the answers into a findings note with a verdict on what the export must still do. Likeliest: write
       the record as a valid cache file and nothing else, with the image-representation rule an explicit decision.
-- [ ] **`[Gordon]` Gate: report the verdict and wait.** The raw-record experiment may show a Positron-side
-      problem; that is a decision for Gordon, not a q2 workaround.
+- [ ] **`[Gordon]` Gate: report the verdict and wait** (the gate itself agreed with Gordon 2026-11-07). The
+      raw-record experiment may show a Positron-side problem; that is a decision for Gordon, not a q2 workaround.
 
 ### Phase B: tests first (after the gate)
 
