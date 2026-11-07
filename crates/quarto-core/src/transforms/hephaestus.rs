@@ -160,6 +160,11 @@ impl AstTransform for HephaestusRenderTransform {
             ordinal += 1;
             render_image(img, ordinal, runtime.as_ref(), palette, ctx);
         });
+        // A lightboxed plot's link still points at the `.hep`
+        // (`lightbox` runs earlier); point it at the SVG too.
+        if ordinal > 0 {
+            super::sync_lightbox_hrefs(&mut ast.blocks);
+        }
         Ok(())
     }
 }

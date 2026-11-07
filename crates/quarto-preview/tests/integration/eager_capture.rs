@@ -142,7 +142,8 @@ async fn eager_capture_populates_index_sidecar() {
     // doc, ungzip, parse JSON.
     let captures = capture_driver::read_capture_from_doc(&ctx, &entry.capture_doc_id)
         .await
-        .expect("capture doc round-trips");
+        .expect("capture doc round-trips")
+        .into_captures();
     assert_eq!(captures.len(), 1);
     let capture = &captures[0];
 

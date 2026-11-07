@@ -151,7 +151,7 @@ fn shortcodes_false_attribute_opts_out() {
     let html =
         render_doc("```{.markdown shortcodes=\"false\"}\nvendor is {{< meta vendor >}}\n```\n");
     assert!(
-        html.contains("vendor is {{&lt; meta vendor &gt;}}"),
+        crate::html_text::display_text(&html).contains("vendor is {{&lt; meta vendor &gt;}}"),
         "shortcodes=false block must keep the literal text; got: {}",
         line_containing(&html, "vendor is")
     );

@@ -1,0 +1,35 @@
+---
+title: "knitr Child Document Kept As knitr Wrote It"
+description: "A chunk includes another document with child=, so its output is kept as knitr produced it."
+code: Q-18-14
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-14` — knitr Child Document Kept As knitr Wrote It
+
+> A chunk includes another document with `child=`, so its output is kept as knitr
+> produced it.
+
+## What this means
+
+A chunk such as
+
+````markdown
+```{r, child = "other.Rmd"}
+```
+````
+
+asks knitr to run another document and splice the result into this one. knitr returns the
+whole child document as one block of finished markdown. Quarto records that block for the
+chunk and keeps it as knitr wrote it; the child document's own chunks are not presented from
+recorded pieces.
+
+The output is the same as knitr's. This is a note, not a problem: nothing needs fixing.
+
+## Related errors
+
+- [`Q-18-13`](Q-18-13.qmd) — the document replaced a knitr hook.

@@ -1,0 +1,5 @@
+```{r c1, cache=1}
+print("c1 ran")
+v1 <- 11
+v1
+```

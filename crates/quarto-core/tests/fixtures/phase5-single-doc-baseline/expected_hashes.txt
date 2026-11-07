@@ -481,5 +481,12 @@
 # Re-captured 2026-11-05 (bd-5kf2dnw4): doc.html gained the `anchored` class on
 # body headings plus the AnchorJS script tag and init; doc_files/styles.css
 # gained the `.anchorjs-link` rules ported from Q1.
+#
+# Re-captured 2026-11-06 (bd-kcpkgftw): doc_files/styles.css hash updated
+# because Q1's GLightbox overrides (`formats/html/glightbox/lightbox.css`)
+# were ported into `_bootstrap-rules.scss`. Verified the only delta is
+# those five rules: rendering with the SCSS hunk removed reproduces the
+# previous hash (9fc3c3c9…) exactly. doc.html hash unchanged: the baseline
+# document has no lightbox images, so nothing is wrapped or shipped.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css 9fc3c3c9b9dad52af04d8629e19f51d255feaa21f76b48d7e79b5da218b8ff43
+doc_files/styles.css 187803ae0e0f8ff281bb3baaa6f22522781ec900b04eca68ea2b11b993980c0b

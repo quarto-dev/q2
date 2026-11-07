@@ -589,6 +589,19 @@ last_reviewed = "2026-11-05"
 notes = "Byte-identical to Quarto 1's copy (bd-5kf2dnw4). Hover heading links; consumes the `.anchored` class."
 
 [[asset]]
+id = "glightbox"
+title = "GLightbox"
+paths = ["resources/js/glightbox"]
+policy = "track"
+version = "3.1.0"
+version_sources = [{ kind = "file-contains", file = "resources/js/glightbox/glightbox.min.js" }]
+upstream = { kind = "npm", package = "glightbox" }
+procedure = "resources/js/README.md"
+license = "MIT"
+last_reviewed = "2026-11-06"
+notes = "Byte-identical to Quarto 1's copy (bd-kcpkgftw). Lightbox images; Quarto's colour overrides (Q1 lightbox.css) live in resources/scss/bootstrap/_bootstrap-rules.scss, not here."
+
+[[asset]]
 id = "react"
 title = "React / ReactDOM ES modules for quarto.component"
 paths = ["resources/js/react"]

@@ -7,7 +7,7 @@ import {
   wasmRenderOptions,
 } from './previewConfig';
 
-const loc = { protocol: 'http:', host: 'localhost:1' };
+const loc = 'http://localhost:1/';
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const fast = { attempts: 3, delayMs: 0 };

@@ -46,12 +46,32 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 use quarto_core::engine::ts_process::node_available_for_tests;
 
-/// Return `true` when `julia` is on PATH (the QuartoNotebookRunner backend).
-fn julia_available() -> bool {
-    Command::new("julia")
+/// Return `true` when Julia can run a document here: `julia` is on PATH (the
+/// QuartoNotebookRunner backend) AND the QuartoNotebookRunner environment is already
+/// instantiated.
+///
+/// A bare `julia` on PATH is not enough. CI images ship one, but the engine then has to
+/// resolve and precompile QuartoNotebookRunner on first use, and that fails there
+/// ("Ensuring an updated julia server environment failed"). So these tests run where
+/// someone has set the environment up, the same precondition the isolated rows below
+/// already require, and skip everywhere else. The environment is `QUARTO_JULIA_PROJECT`
+/// when set, else the engine's default: the `julia` runtime directory.
+pub fn julia_available() -> bool {
+    let on_path = Command::new("julia")
         .arg("--version")
         .output()
-        .is_ok_and(|o| o.status.success())
+        .is_ok_and(|o| o.status.success());
+    if !on_path {
+        return false;
+    }
+    let project = std::env::var_os("QUARTO_JULIA_PROJECT")
+        .map(PathBuf::from)
+        .or_else(|| {
+            quarto_util::quarto_runtime_dir()
+                .ok()
+                .map(|d| d.join("julia"))
+        });
+    project.is_some_and(|dir| dir.join("Manifest.toml").exists())
 }
 
 /// Recursively copy `src` into `dst` (dst is created).
@@ -124,56 +144,90 @@ fn isolate_julia_project() -> Option<TempDir> {
     Some(tmp)
 }
 
-/// Snapshot of the SHARED (non-isolated) julia transport file's
-/// existence + mtime, taken before a live run so the caller can prove
-/// "the shared transport was untouched during the run" after — the
-/// PC3 acceptance criterion for the isolation fix. Resolves the shared
-/// path from `real_home` (the ambient `HOME`, captured BEFORE this
-/// process overrides it) so the check targets the user's actual
-/// `~/Library/Caches/quarto/julia/julia_transport.txt`, never the
-/// isolated one.
+/// Proof that an isolated run never joined the SHARED julia server.
+///
+/// The shared transport file is `~/Library/Caches/quarto/julia/julia_transport.txt`
+/// under the REAL `HOME` (captured before this process overrides it). Other
+/// processes legitimately create, rewrite, and remove that file at any time:
+/// another session's Julia test, a real `q2 preview`, a server idle timeout.
+/// So the old "existence + mtime unchanged across the run" check flaked whenever
+/// anything else touched the file during the run's several minutes. What an
+/// isolated run can actually promise is narrower and stable: the server IT
+/// started is not the server the shared file names. That is the property
+/// asserted here, by pid.
 struct SharedTransportSentinel {
     path: PathBuf,
-    existed_before: bool,
-    mtime_before: Option<std::time::SystemTime>,
 }
 
 impl SharedTransportSentinel {
     fn capture(real_home: &Path) -> Self {
-        let path = real_home
-            .join("Library")
-            .join("Caches")
-            .join("quarto")
-            .join("julia")
-            .join("julia_transport.txt");
-        let meta = std::fs::metadata(&path).ok();
         Self {
-            existed_before: meta.is_some(),
-            mtime_before: meta.and_then(|m| m.modified().ok()),
-            path,
+            path: real_home
+                .join("Library")
+                .join("Caches")
+                .join("quarto")
+                .join("julia")
+                .join("julia_transport.txt"),
         }
     }
 
-    /// Panics with a diagnostic if the shared transport file's
-    /// existence or mtime changed since `capture`.
-    fn assert_untouched(&self) {
-        let meta = std::fs::metadata(&self.path).ok();
-        let existed_after = meta.is_some();
-        let mtime_after = meta.and_then(|m| m.modified().ok());
-        assert_eq!(
-            self.existed_before, existed_after,
-            "shared transport file {:?} existence changed during the run \
-             (before: {}, after: {}) — isolation leaked onto the shared server",
-            self.path, self.existed_before, existed_after
-        );
-        if self.existed_before {
-            assert_eq!(
-                self.mtime_before, mtime_after,
-                "shared transport file {:?} mtime changed during the run \
+    /// Panics if the shared transport file names `isolated_pid` — i.e. the
+    /// isolated run's server registered itself in (or was reached through) the
+    /// shared file. A missing or unparsable shared file passes: it names no
+    /// server at all.
+    fn assert_not_isolated_server(&self, isolated_pid: i32) {
+        if let Some(shared_pid) = transport_pid(&self.path) {
+            assert_ne!(
+                shared_pid, isolated_pid,
+                "shared transport file {:?} names the isolated server (pid {}) \
                  — isolation leaked onto the shared server",
-                self.path
+                self.path, isolated_pid
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod sentinel_tests {
+    use super::*;
+
+    fn write_transport(dir: &Path, pid: i32) -> PathBuf {
+        let path = dir.join("Library/Caches/quarto/julia/julia_transport.txt");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            format!("{{\"port\": 1, \"pid\": {pid}, \"key\": \"k\"}}\n"),
+        )
+        .unwrap();
+        path
+    }
+
+    #[test]
+    fn sentinel_passes_when_shared_file_is_absent() {
+        let home = TempDir::new().unwrap();
+        SharedTransportSentinel::capture(home.path()).assert_not_isolated_server(4242);
+    }
+
+    #[test]
+    fn sentinel_passes_when_another_process_rewrites_the_shared_file() {
+        // The flake: the file is created, replaced, and removed by unrelated
+        // Julia runs while an isolated run is in flight. None of that is a leak.
+        let home = TempDir::new().unwrap();
+        let sentinel = SharedTransportSentinel::capture(home.path());
+        let path = write_transport(home.path(), 1111);
+        sentinel.assert_not_isolated_server(4242);
+        write_transport(home.path(), 2222);
+        sentinel.assert_not_isolated_server(4242);
+        std::fs::remove_file(path).unwrap();
+        sentinel.assert_not_isolated_server(4242);
+    }
+
+    #[test]
+    #[should_panic(expected = "isolation leaked onto the shared server")]
+    fn sentinel_fails_when_shared_file_names_the_isolated_server() {
+        let home = TempDir::new().unwrap();
+        write_transport(home.path(), 4242);
+        SharedTransportSentinel::capture(home.path()).assert_not_isolated_server(4242);
     }
 }
 
@@ -211,7 +265,9 @@ fn j1_minimal_julia_render() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j1_minimal_julia_render");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j1_minimal_julia_render"
+        );
         return;
     }
     let tmp = setup_julia_project();
@@ -280,7 +336,7 @@ fn j2_document_level_echo_false_hides_source_keeps_output() {
     }
     if !julia_available() {
         eprintln!(
-            "SKIP: julia not on PATH — j2_document_level_echo_false_hides_source_keeps_output"
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j2_document_level_echo_false_hides_source_keeps_output"
         );
         return;
     }
@@ -403,7 +459,9 @@ fn j3_exeflags_and_env_through_julia_block() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j3_exeflags_and_env_through_julia_block");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j3_exeflags_and_env_through_julia_block"
+        );
         return;
     }
     let tmp = setup_julia_project();
@@ -473,7 +531,9 @@ fn j4_error_handling_does_not_wedge_host() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j4_error_handling_does_not_wedge_host");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j4_error_handling_does_not_wedge_host"
+        );
         return;
     }
     let tmp = setup_julia_project();
@@ -703,7 +763,9 @@ fn j5_website_figure_lands_as_file_and_is_referenced() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j5_website_figure_lands_as_file_and_is_referenced");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j5_website_figure_lands_as_file_and_is_referenced"
+        );
         return;
     }
     let tmp = setup_julia_website_project();
@@ -809,7 +871,9 @@ fn j6_one_engine_host_per_project_render() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j6_one_engine_host_per_project_render");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j6_one_engine_host_per_project_render"
+        );
         return;
     }
     // SAFETY/scope: process-local under nextest (one process per test).
@@ -997,8 +1061,8 @@ impl TargetCapture {
 // into a per-test temp dir and re-points `QUARTO_JULIA_PROJECT` at the copy, so
 // the detached server's `--project=` flag never names the shared, real directory
 // (the depot named by `JULIA_DEPOT_PATH` stays shared — no re-instantiation).
-// `SharedTransportSentinel` proves the shared `julia_transport.txt` is untouched
-// across the run (existence + mtime, captured from the REAL `HOME` before the
+// `SharedTransportSentinel` proves the shared `julia_transport.txt` never names this
+// run's isolated server (pid comparison; the REAL `HOME` is captured before the
 // override). Gated behind `QUARTO_PC4A_LIVE=1` AND `#[ignore]` so it never runs —
 // nor touches any julia server — by accident. Unix only (cleanup uses process
 // groups). Run it explicitly:
@@ -1202,10 +1266,11 @@ fn pc4a_abandoned_worker_close_busy() {
          (proves forceclose recovery ran the cell, not an inert listing); markdown:\n{markdown}"
     );
 
-    // P3 acceptance: the shared, real transport file was never touched by
-    // this run's (isolated) QNR servers.
-    if let Some(sentinel) = &shared_sentinel {
-        sentinel.assert_untouched();
+    // P3 acceptance: the shared, real transport file never names this run's
+    // (isolated) QNR server. Read the pid now, while the isolated transport
+    // file still exists; a missing pid leaves nothing to compare.
+    if let (Some(sentinel), Some(pid)) = (&shared_sentinel, transport_pid(&transport)) {
+        sentinel.assert_not_isolated_server(pid);
     }
 }
 
@@ -1314,7 +1379,9 @@ fn j7_failed_run_does_not_leak_worker() {
         return;
     }
     if !julia_available() {
-        eprintln!("SKIP: julia not on PATH — j7_failed_run_does_not_leak_worker");
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j7_failed_run_does_not_leak_worker"
+        );
         return;
     }
     let Some(real_home) = std::env::var("HOME").ok().map(PathBuf::from) else {
@@ -1322,7 +1389,8 @@ fn j7_failed_run_does_not_leak_worker() {
         return;
     };
 
-    // Proves at the end that the isolation never touched the user's real server.
+    // Proves at the end that the isolated server is not the one the user's real
+    // transport file names.
     let shared_sentinel = SharedTransportSentinel::capture(&real_home);
 
     let home = TempDir::new().unwrap();
@@ -1401,5 +1469,183 @@ fn j7_failed_run_does_not_leak_worker() {
         server_pid
     );
 
-    shared_sentinel.assert_untouched();
+    shared_sentinel.assert_not_isolated_server(server_pid);
+}
+
+// ── J8: the record row (EXR-8 B5) ─────────────────────────────────────────────
+//
+// `execute: {record: true}` makes core ask for an execution record, which flips Julia
+// to core presentation (`presentedBy: "core"`, EXR-8 B4). j1 to j7 never ask for a
+// record, so they never exercise that path; this row does.
+const RECORD_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n  record: true\n---\n\n\
+Inline `{julia} 40 + 2` here, and a foreign `{r} 3` span.\n\n\
+```{julia}\nusing QuartoNotebookWorker\nstruct Pair2\n    cells::Any\nend\nQuartoNotebookWorker.expand(p::Pair2) = p.cells\n```\n\n\
+```{julia}\nPair2([Cell(() -> \"expanded-one\"), Cell(() -> \"expanded-two\")])\n```\n\n\
+```{julia}\n1 + 1\n```\n";
+
+#[test]
+fn j8_record_row_core_presents_the_output() {
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j8_record_row_core_presents_the_output");
+        return;
+    }
+    if !julia_available() {
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j8_record_row_core_presents_the_output"
+        );
+        return;
+    }
+    let tmp = setup_julia_project();
+    let input = tmp.path().join("rec.qmd");
+    write_file(&input, RECORD_DOC);
+
+    let html = render_html(&input);
+    if let Ok(dump) = std::env::var("J8_DUMP_HTML") {
+        std::fs::write(dump, &html).unwrap();
+    }
+
+    let text = std::fs::read_to_string(
+        tmp.path()
+            .join(".quarto")
+            .join("execution-records")
+            .join("rec.ipynb"),
+    )
+    .expect("the record file was written");
+    let record = quarto_core::record::read_record(&text).expect("a readable record");
+
+    // Unit count and ids: the inline span first (no leading front-matter cell), then
+    // the three cells. The foreign `{r}` span is not Julia's, so it has no unit.
+    let ids: Vec<&str> = record
+        .cells
+        .iter()
+        .map(|c| c.metadata.quarto_cell_id.as_str())
+        .collect();
+    assert_eq!(
+        ids.len(),
+        4,
+        "one inline span and three cells, no front-matter cell: {ids:?}"
+    );
+    assert!(
+        ids[0].starts_with("0-") && ids[0].ends_with("-inline"),
+        "{ids:?}"
+    );
+    assert!(ids[1].starts_with("0-"), "{ids:?}");
+    assert!(ids[2].starts_with("1-"), "{ids:?}");
+    assert!(ids[3].starts_with("2-"), "{ids:?}");
+    assert!(
+        record
+            .cells
+            .iter()
+            .all(|c| c.metadata.quarto_lang == "julia"
+                && c.metadata.quarto_engine.as_deref() == Some("julia")),
+        "{text}"
+    );
+
+    // The expand cell carries two tagged expansions on its one unit.
+    let expanded = &record.cells[2];
+    let tagged = expanded
+        .outputs
+        .iter()
+        .filter(|o| o.get("quarto_expansion").is_some())
+        .count();
+    assert_eq!(
+        tagged, 4,
+        "marker + output for each of two expansions: {text}"
+    );
+
+    // Presented HTML: the span's value, the foreign span untouched, both expansions
+    // and the plain cell's result.
+    assert!(html.contains("Inline 42 here"), "{}", body_excerpt(&html));
+    assert!(
+        html.contains("<code>{r} 3</code>"),
+        "{}",
+        body_excerpt(&html)
+    );
+    assert!(html.contains("expanded-one"), "{}", body_excerpt(&html));
+    assert!(html.contains("expanded-two"), "{}", body_excerpt(&html));
+    assert!(html.contains("<code>2</code>"), "{}", body_excerpt(&html));
+
+    // Core presented it, not the engine's `toMarkdown`: the engine's markdown puts
+    // `data-execution_count` on every cell div, and core's presenter does not (measured
+    // against the same run with `core_presents` forced false).
+    assert!(
+        !html.contains("data-execution_count"),
+        "the engine presented instead of core: {}",
+        body_excerpt(&html)
+    );
+    // The expand cell's own source is shown, as the engine's markdown shows it; its
+    // expansions are hidden by the `#| echo: false` QNR writes on them.
+    assert!(
+        html.contains("hl-function-call\">Pair2<"),
+        "the expand cell's source is listed: {}",
+        body_excerpt(&html)
+    );
+}
+
+// ── J9: units QNR does not run (EXR-8 B5b) ────────────────────────────────────
+//
+// The scanner claims a span with a tab after the language token and a `{julia}` cell in
+// a blockquote; QNR runs neither (its marker is a literal space, and it runs only
+// top-level cells). Aligned by position, not by count, the record still has the units QNR
+// ran, and core presents the other two as their source.
+const UNRUN_DOC: &str = "---\nengine: julia\nexecute:\n  daemon: false\n  record: true\n---\n\n\
+Tab `{julia}\t1 + 1` and run `{julia} 40 + 2`.\n\n\
+> ```{julia}\n> println(\"nested-\" * \"output\")\n> ```\n\n\
+```{julia}\nprintln(\"plain-\" * \"output\")\n```\n";
+
+#[test]
+fn j9_units_qnr_does_not_run_stay_as_source_and_the_rest_are_recorded() {
+    if !node_available_for_tests() {
+        eprintln!("SKIP: node not found — j9_units_qnr_does_not_run_stay_as_source");
+        return;
+    }
+    if !julia_available() {
+        eprintln!(
+            "SKIP: julia or its QuartoNotebookRunner environment not available — j9_units_qnr_does_not_run_stay_as_source"
+        );
+        return;
+    }
+    let tmp = setup_julia_project();
+    let input = tmp.path().join("unrun.qmd");
+    write_file(&input, UNRUN_DOC);
+
+    let html = render_html(&input);
+    let record_path = tmp
+        .path()
+        .join(".quarto")
+        .join("execution-records")
+        .join("unrun.ipynb");
+    eprintln!("record: {}", record_path.display());
+    let text = std::fs::read_to_string(&record_path).expect("the record file was written");
+    let record = quarto_core::record::read_record(&text).expect("a readable record");
+
+    // Four units in the document, two run: the `40 + 2` span and the top-level cell.
+    let sources: Vec<String> = record.cells.iter().map(|c| c.source.concat()).collect();
+    assert_eq!(
+        sources,
+        vec![
+            "40 + 2".to_string(),
+            "println(\"plain-\" * \"output\")".to_string()
+        ],
+        "{text}"
+    );
+
+    // The run units are presented, the others are left as their source.
+    assert!(html.contains("run 42."), "{}", body_excerpt(&html));
+    assert!(html.contains("plain-output"), "{}", body_excerpt(&html));
+    assert!(
+        html.contains("<code>{julia}\t1 + 1</code>"),
+        "the tab span is left as written: {}",
+        body_excerpt(&html)
+    );
+    assert!(
+        html.contains("<blockquote>") && html.contains("nested-"),
+        "the nested cell's source stays: {}",
+        body_excerpt(&html)
+    );
+    assert!(
+        !html.contains("nested-output"),
+        "the nested cell was not run: {}",
+        body_excerpt(&html)
+    );
 }

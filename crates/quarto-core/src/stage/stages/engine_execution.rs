@@ -33,7 +33,8 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use std::time::Duration;
 
 use crate::engine::{
-    DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine, resolve_engines,
+    DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine,
+    resolve_engines_for_document,
 };
 use crate::format::FormatIdentifier;
 use crate::stage::{
@@ -50,6 +51,19 @@ use crate::trace_event;
 /// execution order) instead of to the generic pipeline aux channel. The
 /// payload's JSON shape matches [`quarto_trace::EngineCapture`].
 pub const ENGINE_CAPTURE_KIND: &str = "EngineCapture";
+
+/// Auxiliary-data kind for one engine's **uncoalesced** execution record
+/// (EXR-5). Emitted right after that engine's `ENGINE_CAPTURE_KIND` event
+/// with the same `run_index`; the payload is `{"engine_name", "record"}`.
+/// Only the JSON trace observer stores it (on that engine's
+/// `engine_capture.record`); the preview and hub recorders ignore it.
+pub const ENGINE_CAPTURE_RECORD_KIND: &str = "EngineCaptureRecord";
+
+/// Auxiliary-data kind for the document's **coalesced** execution record
+/// (EXR-5): one event per stage run, after the engine loop, whose payload is
+/// the record notebook as JSON. Observers that do not know the kind ignore
+/// it.
+pub const ENGINE_RECORD_KIND: &str = "EngineRecord";
 
 /// Pipeline stage that executes code cells via the appropriate engine.
 ///
@@ -195,6 +209,31 @@ impl Default for EngineExecutionStage {
     }
 }
 
+/// KNR-6: a replay capture whose engine never executed means the replay ignored its recording
+/// (for example a `{r}` chunk nothing claimed rendered as unexecuted code with exit 0).
+fn fail_on_unused_replay(
+    stage: &str,
+    registry: &crate::engine::EngineRegistry,
+) -> Result<(), PipelineError> {
+    let unused = registry.unused_replay_engines();
+    if unused.is_empty() {
+        return Ok(());
+    }
+    Err(PipelineError::stage_error(
+        stage,
+        format!(
+            "replay: the trace holds a capture for {} that never ran, so the document was \
+             rendered without it. Check that the trace was recorded from this document and that \
+             its cells are claimed by that engine.",
+            unused
+                .iter()
+                .map(|n| format!("`{n}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    ))
+}
+
 /// `Q-2-40`: a `.md` document asked for an engine it will never get.
 fn md_engine_ignored_diagnostic(
     ignored: &[&str],
@@ -264,11 +303,12 @@ impl PipelineStage for EngineExecutionStage {
         // exactly that engine. Registry comes from ctx.registry (threaded from
         // project.registry in Task 8; may be overridden via
         // RenderContext.engine_registry_override).
-        let resolution = resolve_engines(
+        let resolution = resolve_engines_for_document(
             &doc_ast.ast.meta,
             &doc_ast.ast,
             &ctx.registry,
             ctx.claimed_engine_name.as_deref(),
+            Some(crate::engine::DOCUMENT_OWN_FILE_ID),
         );
         ctx.engine_resolution = Some(resolution.clone());
 
@@ -314,9 +354,11 @@ impl PipelineStage for EngineExecutionStage {
         //
         // Declared, not resolved, and the distinction is load-bearing:
         // `resolve_engines` above derives its sequence from the languages
-        // actually present in the document, so a `.md` file with
-        // `engine: jupyter` but no code cells resolves to an *empty*
-        // sequence. Q-2-40 is about the spec the author wrote being
+        // actually present in the document, so a `.md` file whose engine
+        // is declared only in a project layer (or is not registered)
+        // resolves to an *empty* sequence, and even a document-declared
+        // engine with no cells resolves to it only through the own-file
+        // rule (JOL-2a). Q-2-40 is about the spec the author wrote being
         // ignored, so it reads the declared engines instead — covering
         // both `engine:` and the top-level shorthand (`jupyter: …`), which
         // this branch resolves against registry names rather than main's
@@ -420,19 +462,14 @@ impl PipelineStage for EngineExecutionStage {
             // live engine (mask → serialize → execute → unmask → capture
             // → reparse), so capture/splice works unchanged.
             //
-            // Native only: `engine::jupyter` — and the replay engine — is
-            // gated out of the WASM build (engine/mod.rs), so this push
-            // compiles out there. `to_run` stays empty and Step 3's
-            // empty-`to_run` fast path passes the AST through unchanged:
-            // stored cells inert, no misleading warning, native behavior
-            // untouched. WASM keeps `notebook_replay` true so the policy
-            // gate above still bypasses for replay (replay never launches
-            // a kernel).
+            // Replay is target-neutral: the engine lives outside the
+            // native-only `engine::jupyter` module. Figures go through the
+            // render's runtime (the VFS on WASM, the filesystem natively).
             #[cfg(not(target_arch = "wasm32"))]
-            to_run.push((
-                Arc::new(crate::engine::jupyter::IpynbReplayEngine) as Arc<dyn ExecutionEngine>,
-                None,
-            ));
+            let replay = crate::engine::IpynbReplayEngine::new();
+            #[cfg(target_arch = "wasm32")]
+            let replay = crate::engine::IpynbReplayEngine::with_runtime(ctx.runtime.clone());
+            to_run.push((Arc::new(replay) as Arc<dyn ExecutionEngine>, None));
         } else {
             let mut engine_warnings = Vec::new();
             for detected in &resolution.sequence {
@@ -466,6 +503,7 @@ impl PipelineStage for EngineExecutionStage {
                 EventLevel::Debug,
                 "no executable engines — passing through unchanged"
             );
+            fail_on_unused_replay(self.name(), &ctx.registry)?;
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
@@ -499,9 +537,32 @@ impl PipelineStage for EngineExecutionStage {
         // follow-up.
         let source_context_arc = std::sync::Arc::new(source_context.clone());
 
-        // P2-13: multi-engine flag for partition_cells (must be captured
+        // P2-13: multi-engine flag for plan_document (must be captured
         // before `to_run.into_iter()` moves the vec).
         let multi_engine = to_run.len() > 1;
+
+        // EXR-5: whether the engines build an execution record this run. The
+        // observer asks for one (the preview recorder, the hub, the trace) or
+        // the document does with `execute: {record: true}` (epic decision 24);
+        // a plain render asks for nothing and the engines allocate nothing.
+        let record_requested = ast
+            .meta
+            .get("execute")
+            .and_then(|e| e.get("record"))
+            .and_then(|r| r.as_bool())
+            .unwrap_or(false);
+        let want_record = record_requested || ctx.observer.wants_execution_record();
+        // The author texts of the one scan (built with the units, below) and
+        // the per-engine records, coalesced after the loop.
+        let mut shared_author_texts: Option<crate::record::AuthorTexts> = None;
+        let mut engine_records: Vec<crate::record::EngineRecord> = Vec::new();
+
+        // EXR-2 Phase 4: the one scan. It runs over the text the first engine
+        // receives, before any engine runs, and every engine gets the same
+        // list. An engine relocates it into its own text
+        // (`units::locate_units`), so a later engine keeps the document-wide
+        // `index`/`span_index` even after an earlier engine's cells are gone.
+        let mut shared_units: Option<Vec<crate::engine::units::Unit>> = None;
 
         for (run_index, (engine, engine_config)) in to_run.into_iter().enumerate() {
             // nested-cell-masking (spec § Approach): mask executable-fence
@@ -514,23 +575,21 @@ impl PipelineStage for EngineExecutionStage {
             // (e.g. spliced-in preview results), so masking once before the
             // loop would leave it unprotected.
             let mut masked_ast = ast.clone();
-            crate::engine::nested_cell_mask::mask(&mut masked_ast);
+            // Also masks spans in front-matter values the document does not
+            // own (EXR-2 decision 11): only the document's own front matter
+            // is scanned for spans, the project's values stay literal.
+            crate::engine::nested_cell_mask::mask_document(&mut masked_ast);
 
-            // bd-2lxj10z0 (plan §D1/§D2): re-inject a crossref-consumed
-            // `label:` option into the text handed to knitr, so knitr's
-            // own label-based output naming (`fig-cars-1.svg`) sees the
-            // label again. Additive on this per-engine clone only — `ast`
-            // itself (what `reconcile` below compares against) and the
-            // wrapping Div's `id` are untouched; the Div still needs the
-            // label independently for crossref numbering. Scoped to
-            // knitr: Jupyter has no label-based naming to restore, and
-            // this must not risk changing its behavior (plan §D1).
-            if engine.name() == "knitr" {
-                crate::crossref::label_reinject::inject(
-                    &mut masked_ast,
-                    ctx.ref_type_registry.as_ref(),
-                );
-            }
+            // EXR-10: the stage serializes the canonical AST (the crossref pass's
+            // consumed `label:` options live on wrapper Divs) and records that as
+            // the capture's `input_qmd`, so the recorded input means the same for
+            // every engine and matches `compute_input_qmd`. The consumed options go
+            // to the engine as a map; knitr re-adds the chunk-header lines at its
+            // own boundary (bd-2lxj10z0's label-based output naming).
+            let cell_options = crate::crossref::label_reinject::collect(
+                &masked_ast,
+                ctx.ref_type_registry.as_ref(),
+            );
 
             // Serialize the masked AST to QMD for this engine. Every engine
             // goes through this one call, so knitr, q2's jupyter text
@@ -551,7 +610,23 @@ impl PipelineStage for EngineExecutionStage {
             let temp_dir = ctx.temp_dir()?.to_path_buf();
             // Per-engine leave-alone set: HANDLED_LANGUAGES ∪ languages owned
             // by other engines in the sequence (design doc §5).
-            let handled_languages = resolution.handled_languages_for(engine.name());
+            // EXR-5: the one scan also fills every unit's id from the author
+            // text (epic decisions 36 and 38). Ids are filled whether or not a
+            // record is wanted, since the wire (EXR-7) carries them. It runs
+            // here, before the leave-alone set, because EXR-8 B1b adds the
+            // languages of spans no engine owns to that set.
+            let units_for_engine = shared_units
+                .get_or_insert_with(|| {
+                    let (units, texts) = scan_and_fill_ids(&qmd, &ctx.sugared_blocks);
+                    shared_author_texts = Some(texts);
+                    units
+                })
+                .clone();
+            let handled_languages = resolution.with_unowned_span_languages(
+                resolution.handled_languages_for(engine.name()),
+                &units_for_engine,
+            );
+            let owned_languages = resolution.owned_languages_for(engine.name());
             let exec_context = ExecutionContext::new(
                 temp_dir,
                 ctx.project.dir.clone(),
@@ -582,11 +657,16 @@ impl PipelineStage for EngineExecutionStage {
             ))
             .with_source_info(qmd_source_info, source_context_arc.clone())
             .with_handled_languages(handled_languages)
+            .with_owned_languages(owned_languages)
+            .with_cell_options(cell_options)
             .with_cancellation(ctx.cancellation.clone())
             .with_execute_timeout(execute_timeout)
-            // P2-13: loud "owned-but-unrunnable" gate in partition_cells
+            // P2-13: loud "owned-but-unrunnable" gate in plan_document
             // fires only in a multi-engine sequence (|sequence| > 1).
             .with_multi_engine(multi_engine)
+            .with_units(units_for_engine)
+            .with_author_texts(shared_author_texts.clone().unwrap_or_default())
+            .with_want_record(want_record)
             .with_metadata(document_metadata.clone())
             .with_project_env({
                 let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
@@ -689,6 +769,24 @@ impl PipelineStage for EngineExecutionStage {
                 }
             }
 
+            // EXR-5: the engine's own record, with the result's side data
+            // folded into its entry and sent to the trace as its own event
+            // right after the capture, under the same `run_index`. Only the
+            // trace observer stores it (`engine_capture.record`); the preview
+            // and hub recorders ignore the kind. Taken before the drains
+            // below, which move the side data out of `result`.
+            if let Some(mut engine_record) = result.record.take() {
+                fold_side_data(&mut engine_record.engine, &result);
+                emit_engine_record(
+                    ctx,
+                    self.name(),
+                    run_index,
+                    &engine_record,
+                    shared_units.as_deref().unwrap_or(&[]),
+                );
+                engine_records.push(engine_record);
+            }
+
             // Drain warnings the engine raised without failing (e.g.
             // knitr's Q-18-2) into the stage diagnostics. After the capture
             // emit above, so a replayed trace re-raises them faithfully.
@@ -741,97 +839,12 @@ impl PipelineStage for EngineExecutionStage {
             // the current use (filename attribution in the trace) this is
             // adequate.
             let intermediate_name = intermediate_filename(&path, engine.name());
-            let (mut executed_ast, executed_ast_context, parse_warnings) =
-                pampa::readers::qmd::read(
-                    result.markdown.as_bytes(),
-                    false, // loose mode
-                    &intermediate_name,
-                    &mut std::io::sink(),
-                    true, // track source locations
-                    None, // file_id
-                )
-                .map_err(|diagnostics| {
-                    // bd-render-failure-unattributed-yxe0v7th shape 1:
-                    // these spans index into `result.markdown`, NOT into the
-                    // original document. Returning a bare `StageError` here
-                    // drops the only context that gives them meaning, and
-                    // `run_pipeline`'s generic `StageError -> QuartoError::Parse`
-                    // conversion then rebinds `FileId(0)` to the *source*
-                    // document's bytes. Engine output is normally much larger
-                    // than its source, so the offset lands past EOF and the
-                    // renderer emits neither an ariadne frame nor its
-                    // `at <file>:<row>:<col>` fallback — the page dies with no
-                    // attribution at all. When the source happens to be long
-                    // enough, the offset instead resolves to arbitrary
-                    // unrelated text and is reported with full confidence.
-                    //
-                    // So bind the spans here, to the buffer they actually
-                    // index, and hand back a `Structured` error that
-                    // `run_pipeline` passes through untouched.
-                    let mut source_context = quarto_source_map::SourceContext::new();
-                    source_context
-                        .add_file(intermediate_name.clone(), Some(result.markdown.clone()));
-                    PipelineError::Structured(crate::error::ParseError::new(
-                        diagnostics,
-                        source_context,
-                    ))
-                })?;
-
-            // Register this engine's intermediate as a new file slot, using
-            // the FileId the source context actually assigns. Deriving it
-            // from `filenames.len()` is wrong: sparse registrations —
-            // MetadataMergeStage's config files, added via
-            // `add_file_with_id` — grow `source_context.files` without
-            // growing `ast_context.filenames`, so in a project render the
-            // two counts diverge and the derived id lands on `_quarto.yml`'s
-            // dense slot (bd-itj2mjkr).
-            let new_slot = if let Some(intermediate_file) = executed_ast_context
-                .source_context
-                .get_file(quarto_source_map::FileId(0))
-                .cloned()
-            {
-                if let Some(info) = intermediate_file.file_info {
-                    merged_context
-                        .source_context
-                        .add_file_with_info(intermediate_name.clone(), info)
-                } else {
-                    merged_context
-                        .source_context
-                        .add_file(intermediate_name.clone(), None)
-                }
-            } else {
-                merged_context
-                    .source_context
-                    .add_file(intermediate_name.clone(), None)
-            };
-            merged_context.filenames.push(intermediate_name);
-            // Carry the executed parse's example-list counter forward; the
-            // last engine's value wins so downstream numbering is coherent.
-            merged_context
-                .example_list_counter
-                .set(executed_ast_context.example_list_counter.get());
-
-            // Remap the executed AST's `FileId(0)` to this engine's slot.
-            // Kept original blocks keep their FileIds; new blocks reference
-            // `new_slot`. The remap is conditional (not additive): the
-            // executed AST is a fresh single-file parse, so `FileId(0)` is
-            // the only id it can legitimately contain — any other id (e.g. a
-            // quarto-yaml hash id that leaked in) must pass through
-            // untouched rather than be shifted into garbage.
-            quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
-                if id == quarto_source_map::FileId(0) {
-                    new_slot
-                } else {
-                    id
-                }
-            });
-
-            // Reconcile: keep unchanged content's source locations, take
-            // new content from the executed AST. The "original" side may
-            // already carry FileIds from earlier engines; reconcile decides
-            // keep/replace by content, so mixed provenance is fine.
-            let (reconciled_ast, reconciliation_plan) =
-                quarto_ast_reconcile::reconcile(ast, executed_ast);
+            let (reconciled_ast, parse_warnings, reconciliation_plan) = merge_markdown_into_ast(
+                ast,
+                &mut merged_context,
+                &result.markdown,
+                intermediate_name,
+            )?;
             ast = reconciled_ast;
             warnings.extend(parse_warnings);
 
@@ -852,6 +865,35 @@ impl PipelineStage for EngineExecutionStage {
                 .on_engine_data(engine.name(), run_index, &ast, &merged_context);
         }
 
+        // EXR-5: coalesce the engines' records into the document's record,
+        // ordered by the one unit list (epic decision 38), and hand it out as
+        // an aux event (the preview recorder and the hub collect it). When the
+        // document asked for it, the record is also written beside the
+        // project's `.quarto/` (epic decisions 3 and 33).
+        if want_record {
+            let unit_order = shared_units.as_deref().unwrap_or(&[]);
+            let mut record = crate::record::coalesce(&engine_records, unit_order).map_err(|e| {
+                PipelineError::stage_error(self.name(), format!("execution record: {e}"))
+            })?;
+            record.metadata.quarto_source = Some(project_relative_source(&ctx.project.dir, &path));
+            match serde_json::to_value(&record) {
+                Ok(value) => {
+                    ctx.observer
+                        .on_auxiliary_data(self.name(), 0, ENGINE_RECORD_KIND, &value);
+                }
+                Err(e) => trace_event!(
+                    ctx,
+                    EventLevel::Warn,
+                    "failed to serialize the execution record: {}",
+                    e
+                ),
+            }
+            if record_requested {
+                write_record_file(ctx, self.name(), &path, &record)?;
+            }
+        }
+
+        fail_on_unused_replay(self.name(), &ctx.registry)?;
         Ok(PipelineData::DocumentAst(DocumentAst {
             path,
             ast,
@@ -862,6 +904,249 @@ impl PipelineStage for EngineExecutionStage {
             derived_listing,
         }))
     }
+}
+
+/// Parse engine-produced markdown against its own intermediate file slot and reconcile it
+/// into `ast`, so unchanged content keeps its source locations and new content points at the
+/// slot. Shared by the engine stage and the record splice (EXR-14), so a spliced record
+/// attributes diagnostics exactly as a live engine run does.
+pub(crate) fn merge_markdown_into_ast(
+    ast: quarto_pandoc_types::pandoc::Pandoc,
+    merged_context: &mut pampa::pandoc::ASTContext,
+    markdown: &str,
+    intermediate_name: String,
+) -> Result<
+    (
+        quarto_pandoc_types::pandoc::Pandoc,
+        Vec<quarto_error_reporting::DiagnosticMessage>,
+        quarto_ast_reconcile::ReconciliationPlan,
+    ),
+    PipelineError,
+> {
+    let (mut executed_ast, executed_ast_context, parse_warnings) = pampa::readers::qmd::read(
+        markdown.as_bytes(),
+        false, // loose mode
+        &intermediate_name,
+        &mut std::io::sink(),
+        true, // track source locations
+        None, // file_id
+    )
+    .map_err(|diagnostics| {
+        // bd-render-failure-unattributed-yxe0v7th shape 1:
+        // these spans index into `result.markdown`, NOT into the
+        // original document. Returning a bare `StageError` here
+        // drops the only context that gives them meaning, and
+        // `run_pipeline`'s generic `StageError -> QuartoError::Parse`
+        // conversion then rebinds `FileId(0)` to the *source*
+        // document's bytes. Engine output is normally much larger
+        // than its source, so the offset lands past EOF and the
+        // renderer emits neither an ariadne frame nor its
+        // `at <file>:<row>:<col>` fallback — the page dies with no
+        // attribution at all. When the source happens to be long
+        // enough, the offset instead resolves to arbitrary
+        // unrelated text and is reported with full confidence.
+        //
+        // So bind the spans here, to the buffer they actually
+        // index, and hand back a `Structured` error that
+        // `run_pipeline` passes through untouched.
+        let mut source_context = quarto_source_map::SourceContext::new();
+        source_context.add_file(intermediate_name.clone(), Some(markdown.to_string()));
+        PipelineError::Structured(crate::error::ParseError::new(diagnostics, source_context))
+    })?;
+
+    // Register this engine's intermediate as a new file slot, using
+    // the FileId the source context actually assigns. Deriving it
+    // from `filenames.len()` is wrong: sparse registrations —
+    // MetadataMergeStage's config files, added via
+    // `add_file_with_id` — grow `source_context.files` without
+    // growing `ast_context.filenames`, so in a project render the
+    // two counts diverge and the derived id lands on `_quarto.yml`'s
+    // dense slot (bd-itj2mjkr).
+    let new_slot = if let Some(intermediate_file) = executed_ast_context
+        .source_context
+        .get_file(quarto_source_map::FileId(0))
+        .cloned()
+    {
+        if let Some(info) = intermediate_file.file_info {
+            merged_context
+                .source_context
+                .add_file_with_info(intermediate_name.clone(), info)
+        } else {
+            merged_context
+                .source_context
+                .add_file(intermediate_name.clone(), None)
+        }
+    } else {
+        merged_context
+            .source_context
+            .add_file(intermediate_name.clone(), None)
+    };
+    merged_context.filenames.push(intermediate_name);
+    // Carry the executed parse's example-list counter forward; the
+    // last engine's value wins so downstream numbering is coherent.
+    merged_context
+        .example_list_counter
+        .set(executed_ast_context.example_list_counter.get());
+
+    // Remap the executed AST's `FileId(0)` to this engine's slot.
+    // Kept original blocks keep their FileIds; new blocks reference
+    // `new_slot`. The remap is conditional (not additive): the
+    // executed AST is a fresh single-file parse, so `FileId(0)` is
+    // the only id it can legitimately contain — any other id (e.g. a
+    // quarto-yaml hash id that leaked in) must pass through
+    // untouched rather than be shifted into garbage.
+    quarto_ast_reconcile::remap_file_ids(&mut executed_ast, &|id| {
+        if id == quarto_source_map::FileId(0) {
+            new_slot
+        } else {
+            id
+        }
+    });
+
+    // Reconcile: keep unchanged content's source locations, take
+    // new content from the executed AST. The "original" side may
+    // already carry FileIds from earlier engines; reconcile decides
+    // keep/replace by content, so mixed provenance is fine.
+    let (reconciled_ast, reconciliation_plan) = quarto_ast_reconcile::reconcile(ast, executed_ast);
+
+    Ok((reconciled_ast, parse_warnings, reconciliation_plan))
+}
+
+/// EXR-5: the one scan, with every unit's id filled from the author text the
+/// sugaring stage snapshotted (`StageContext::sugared_blocks`). `author_texts`
+/// is total over the units it is built from, so `fill_ids` cannot fail.
+pub(crate) fn scan_and_fill_ids(
+    qmd: &str,
+    snapshot: &[crate::record::SugaredBlock],
+) -> (Vec<crate::engine::units::Unit>, crate::record::AuthorTexts) {
+    let mut units = crate::engine::units::scan_units(qmd);
+    let texts = crate::record::author_texts(&units, snapshot);
+    crate::record::fill_ids(&mut units, &texts)
+        .expect("author_texts is total over the units it was built from");
+    (units, texts)
+}
+
+/// EXR-5: fold an engine's side data (everything in its `ExecuteResult` but the
+/// markdown and the supporting files) into its record entry, as notebook-level
+/// metadata. The stage does this for every engine, so no engine fills these
+/// itself.
+fn fold_side_data(entry: &mut crate::record::EngineEntry, result: &crate::engine::ExecuteResult) {
+    fn json_map(
+        map: &std::collections::HashMap<String, crate::engine::ts_protocol::TsMetadataValue>,
+    ) -> std::collections::BTreeMap<String, serde_json::Value> {
+        map.iter()
+            .filter_map(|(k, v)| serde_json::to_value(v).ok().map(|v| (k.clone(), v)))
+            .collect()
+    }
+    let includes = &result.includes;
+    entry.includes = if includes.header_includes.is_empty()
+        && includes.include_before.is_empty()
+        && includes.include_after.is_empty()
+    {
+        None
+    } else {
+        serde_json::to_value(includes).ok()
+    };
+    entry.filters = result.filters.clone();
+    entry.preserve = result
+        .preserve
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    entry.needs_postprocess = result.needs_postprocess;
+    entry.html_dependencies = result
+        .html_dependencies
+        .iter()
+        .filter_map(|d| serde_json::to_value(d).ok())
+        .collect();
+    entry.pandoc = result.pandoc.as_ref().map(json_map);
+    entry.metadata = result.metadata.as_ref().map(json_map);
+    entry.resource_files = result.resource_files.clone();
+    entry.warnings = result
+        .warnings
+        .iter()
+        .filter_map(|w| serde_json::to_value(w).ok())
+        .collect();
+}
+
+/// EXR-5: send one engine's uncoalesced record to the observer as a one-engine
+/// record notebook, paired with that engine's capture by `run_index` and name.
+fn emit_engine_record(
+    ctx: &StageContext,
+    stage: &str,
+    run_index: usize,
+    engine_record: &crate::record::EngineRecord,
+    unit_order: &[crate::engine::units::Unit],
+) {
+    let single = crate::record::coalesce(std::slice::from_ref(engine_record), unit_order);
+    match single
+        .map_err(|e| e.to_string())
+        .and_then(|r| serde_json::to_value(&r).map_err(|e| e.to_string()))
+    {
+        Ok(record) => ctx.observer.on_auxiliary_data(
+            stage,
+            run_index,
+            ENGINE_CAPTURE_RECORD_KIND,
+            &serde_json::json!({
+                "engine_name": engine_record.engine.name,
+                "record": record,
+            }),
+        ),
+        Err(e) => trace_event!(
+            ctx,
+            EventLevel::Warn,
+            "[{}] failed to serialize the engine's execution record: {}",
+            engine_record.engine.name,
+            e
+        ),
+    }
+}
+
+/// The document's path relative to the project directory, with forward slashes
+/// (the record's `quarto_source`; a standalone document is relative to its own
+/// directory). A path outside the project keeps its file name.
+fn project_relative_source(project_dir: &std::path::Path, path: &std::path::Path) -> String {
+    let rel = path
+        .strip_prefix(project_dir)
+        .unwrap_or_else(|_| path.file_name().map_or(path, std::path::Path::new));
+    quarto_util::to_forward_slashes(rel)
+}
+
+/// EXR-5 (epic decisions 3 and 33): write the coalesced record to
+/// `.quarto/execution-records/<doc path without extension>.ipynb`,
+/// project-relative (a `.quarto/` beside a standalone document), with the
+/// deterministic serializer, so two renders of the same inputs write the same
+/// bytes.
+fn write_record_file(
+    ctx: &StageContext,
+    stage: &str,
+    path: &std::path::Path,
+    record: &crate::record::Record,
+) -> Result<(), PipelineError> {
+    let rel = std::path::PathBuf::from(project_relative_source(&ctx.project.dir, path))
+        .with_extension("ipynb");
+    let target = ctx
+        .project
+        .dir
+        .join(".quarto")
+        .join("execution-records")
+        .join(rel);
+    let text = crate::record::write_record(record).map_err(|e| {
+        PipelineError::stage_error(stage, format!("serializing the execution record: {e}"))
+    })?;
+    if let Some(parent) = target.parent() {
+        ctx.runtime.dir_create(parent, true).map_err(|e| {
+            PipelineError::stage_error(stage, format!("creating {}: {e}", parent.display()))
+        })?;
+    }
+    ctx.runtime
+        .file_write(&target, text.as_bytes())
+        .map_err(|e| {
+            PipelineError::stage_error(
+                stage,
+                format!("writing the execution record {}: {e}", target.display()),
+            )
+        })
 }
 
 /// Derive the per-engine intermediate filename from the source path.
@@ -884,7 +1169,7 @@ fn intermediate_filename(source_path: &std::path::Path, engine_name: &str) -> St
 ///
 /// This produces QMD that can be fed to execution engines.
 /// Uses pampa's QMD writer which preserves code cell attributes.
-fn serialize_ast_to_qmd(
+pub(crate) fn serialize_ast_to_qmd(
     ast: &quarto_pandoc_types::pandoc::Pandoc,
 ) -> Result<(String, quarto_source_map::SourceInfo), PipelineError> {
     let (buffer, source_info) =
@@ -1075,7 +1360,7 @@ fn ts_document_metadata(
     map
 }
 
-fn merge_execute_scope(
+pub fn merge_execute_scope(
     base_format: FormatIdentifier,
     document_scope: Option<quarto_pandoc_types::ConfigValue>,
 ) -> Option<quarto_pandoc_types::ConfigValue> {
@@ -1970,6 +2255,192 @@ mod tests {
         );
     }
 
+    // ── Cell-less pages with a declared engine (JOL-2a) ─────────────────
+    //
+    // Q1 reads the engine from the document's own front matter. A page with
+    // no cells that declares one therefore reaches the engine stage; a
+    // declaration that lives only in a project layer does not.
+
+    /// Stub engine: claims nothing, counts how often it executes, and
+    /// returns its input unchanged.
+    struct CountingEngine {
+        name: &'static str,
+        available: bool,
+        runs: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl CountingEngine {
+        fn arc(
+            name: &'static str,
+            available: bool,
+        ) -> (Arc<Self>, Arc<std::sync::atomic::AtomicUsize>) {
+            let runs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let engine = Arc::new(Self {
+                name,
+                available,
+                runs: runs.clone(),
+            });
+            (engine, runs)
+        }
+    }
+
+    impl crate::engine::ExecutionEngine for CountingEngine {
+        fn name(&self) -> &str {
+            self.name
+        }
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            self.runs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(crate::engine::ExecuteResult::new(input))
+        }
+        fn is_available(&self) -> bool {
+            self.available
+        }
+        fn claims_language(
+            &self,
+            _language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            crate::engine::LanguageClaim::None
+        }
+    }
+
+    fn context_with_engines(engines: Vec<Arc<dyn crate::engine::ExecutionEngine>>) -> StageContext {
+        let mut registry = EngineRegistry::empty();
+        registry.register(Arc::new(crate::engine::MarkdownEngine::new()));
+        for e in engines {
+            registry.register(e);
+        }
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        ctx
+    }
+
+    /// Case 1: the document's own front matter declares an engine whose
+    /// runtime is missing (R absent for `engine: knitr`) and the page has no
+    /// cells. Hard error, as in Q1.
+    #[tokio::test]
+    async fn cell_less_declared_engine_with_missing_runtime_is_a_hard_error() {
+        let (engine, runs) = CountingEngine::arc("knitr", false);
+        let mut ctx = context_with_engines(vec![engine]);
+        let doc_ast = parse_qmd_to_ast(
+            b"---\nengine: knitr\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        let err = EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("a declared engine with no runtime must fail the render");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("knitr") && msg.contains("not available"),
+            "unexpected error: {msg}"
+        );
+        assert_eq!(runs.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// Case 2: the declared engine is not registered at all (Jupyter in a
+    /// WASM build). The plan expected the "not available in this build"
+    /// warning, but `explicitly_declared_engines` drops engines the registry
+    /// lacks, so the engine never reaches the stage's fallback and the page
+    /// renders silently, as it did before JOL-2a. Pinned as found; whether
+    /// the hub should warn is Gordon's call.
+    #[tokio::test]
+    async fn cell_less_declared_engine_not_in_build_is_silent() {
+        let mut ctx = context_with_engines(vec![]);
+        let doc_ast = parse_qmd_to_ast(
+            b"---\njupyter: python3\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect("an engine missing from the build does not fail the render");
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    /// Case 3: a plain page in a project whose `_quarto.yml` declares an
+    /// engine runs none (Q1 ignores a project-level declaration).
+    #[tokio::test]
+    async fn cell_less_page_with_project_declared_engine_runs_none() {
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        use quarto_source_map::{FileId, SourceInfo};
+
+        let (engine, runs) = CountingEngine::arc("knitr", false);
+        let mut ctx = context_with_engines(vec![engine]);
+        let mut doc_ast = parse_qmd_to_ast(
+            b"---\ntitle: Test\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+        // The declaration arrives from a project layer: its source roots at
+        // a hash-based file id, not the document's own `FileId(0)`.
+        let foreign = SourceInfo::original(FileId(0x1234_5678), 0, 1);
+        let mut entries = doc_ast.ast.meta.as_map_entries().unwrap().to_vec();
+        entries.push(ConfigMapEntry {
+            key: "engine".to_string(),
+            key_source: foreign.clone(),
+            value: quarto_pandoc_types::ConfigValue::new_string("knitr", foreign.clone()),
+        });
+        doc_ast.ast.meta = quarto_pandoc_types::ConfigValue::new_map(entries, foreign);
+
+        EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect("a project-level declaration must not start an engine");
+        assert_eq!(runs.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
+    /// Case 4, pinning an accepted quirk (Gordon, 2026-10-31): project
+    /// `engine: [knitr]` merged with document `engine: [jupyter]` yields one
+    /// array rooted at the document's file id, so the own-file rule fires
+    /// and the project's engine starts on a cell-less page. With R missing
+    /// the render fails on knitr. A later change must be deliberate.
+    #[tokio::test]
+    async fn cell_less_page_with_merged_project_and_document_engines_runs_both() {
+        let (knitr, knitr_runs) = CountingEngine::arc("knitr", false);
+        let (jupyter, _) = CountingEngine::arc("jupyter", true);
+        let mut ctx = context_with_engines(vec![knitr, jupyter]);
+        // The merged array, as the pipeline hands it to the stage.
+        let doc_ast = parse_qmd_to_ast(
+            b"---\nengine: [knitr, jupyter]\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        let err = EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("the project's knitr starts and fails without R");
+        assert!(format!("{err}").contains("knitr"), "{err}");
+        assert_eq!(knitr_runs.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// With the runtime present, a declared engine on a cell-less page runs
+    /// exactly once (the page still goes through the engine), without
+    /// diagnostics.
+    #[tokio::test]
+    async fn cell_less_declared_engine_with_runtime_runs_once() {
+        let (engine, runs) = CountingEngine::arc("jupyter", true);
+        let mut ctx = context_with_engines(vec![engine]);
+        let doc_ast = parse_qmd_to_ast(
+            b"---\njupyter: python3\n---\n\nNo cells here.\n",
+            "/project/test.qmd",
+        );
+
+        EngineExecutionStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect("render succeeds");
+        assert_eq!(runs.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(ctx.diagnostics.is_empty(), "{:?}", ctx.diagnostics);
+    }
+
     #[test]
     fn test_engine_fallback_with_unavailable_engine() {
         let stage = EngineExecutionStage::new();
@@ -2421,6 +2892,134 @@ mod tests {
             !second_input.contains("```{r}"),
             "the raw `{{r}}` opener must not survive unmasked into \
              fixture-b's input; fixture-b received:\n{second_input}"
+        );
+    }
+
+    /// EXR-2 decision 11: a span in a front-matter value whose provenance is
+    /// not the document's own (here a value stamped with another file's id,
+    /// standing in for `_quarto.yml`) reaches the engine masked, and is
+    /// restored in the output; the document's own span is not masked.
+    #[tokio::test]
+    async fn exr2_p2_engine_input_masks_only_foreign_front_matter_spans() {
+        use crate::engine::FixtureEngine;
+
+        let fixture = FixtureEngine::with_results("fixture-a", vec!["done".to_string()]);
+        let received = fixture.received_inputs();
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(fixture));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        let content = b"---\nengine: fixture-a\ntitle: \"own `{python} 1`\"\nsubtitle: \"proj `{python} 2`\"\n---\n\n```{fixture-a}\nseed\n```\n";
+        let mut doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        doc_ast
+            .ast
+            .meta
+            .get_mut("subtitle")
+            .expect("subtitle")
+            .source_info =
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(777), 0, 1);
+
+        stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+
+        let received = received.lock().unwrap();
+        let input = &received[0];
+        assert!(
+            input.contains("own `{python} 1`"),
+            "own span must stay unmasked:\n{input}"
+        );
+        assert!(
+            input.contains("proj `q2-nested-executable {python} 2`"),
+            "foreign span must be masked:\n{input}"
+        );
+    }
+
+    /// EXR-2 Phase 4: the stage scans once, before any engine runs, and gives
+    /// every engine the same shared list. The second engine's located list
+    /// keeps the document-wide cell index (the first engine's fence is gone
+    /// from its text; nothing is renumbered), and a unit's offsets are valid
+    /// in the text it received.
+    #[tokio::test]
+    async fn exr2_p4_stage_scans_once_and_second_engine_keeps_document_wide_indices() {
+        use crate::engine::FixtureEngine;
+        use crate::engine::units::{Unit, line_at};
+
+        let a = FixtureEngine::with_results("fixture-a", vec!["A OUTPUT".to_string()]);
+        let b = FixtureEngine::with_results("fixture-b", vec!["B OUTPUT".to_string()]);
+        let (a_units, b_units, b_inputs) =
+            (a.received_units(), b.received_units(), b.received_inputs());
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(a));
+        registry.register(Arc::new(b));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        let content = b"---\nengine: [fixture-a, fixture-b]\n---\n\nSpan `{python} 1` here.\n\n```{fixture-a}\nseed\n```\n\nMiddle.\n\n```{fixture-b}\nseed-b\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+
+        let a_calls = a_units.lock().unwrap();
+        let b_calls = b_units.lock().unwrap();
+        let b_input = b_inputs.lock().unwrap()[0].clone();
+        assert_eq!((a_calls.len(), b_calls.len()), (1, 1));
+
+        // One scan, shared: both engines were handed the identical list, and
+        // it is the document-wide scan of the first engine's text.
+        assert_eq!(a_calls[0].0, b_calls[0].0, "same shared list");
+        let cell_indices = |units: &[Unit]| -> Vec<(String, usize)> {
+            units
+                .iter()
+                .filter_map(|u| match u {
+                    Unit::Cell(c) => Some((c.lang.clone(), c.index)),
+                    Unit::Inline(_) => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            cell_indices(&a_calls[0].0),
+            [("fixture-a".to_string(), 0), ("fixture-b".to_string(), 1)]
+        );
+
+        // The second engine's located list: a's cell is gone, b keeps index 1,
+        // and the span keeps span_index 0.
+        assert_eq!(
+            cell_indices(&b_calls[0].1),
+            [("fixture-b".to_string(), 1)],
+            "b's list in the text it received: {:?}",
+            b_calls[0].1
+        );
+        let b_cell = b_calls[0]
+            .1
+            .iter()
+            .find_map(|u| match u {
+                Unit::Cell(c) => Some(c),
+                Unit::Inline(_) => None,
+            })
+            .unwrap();
+        assert_eq!(
+            &b_input[b_cell.start..b_cell.start + 3],
+            "```",
+            "offsets are valid in the text b received:\n{b_input}"
+        );
+        assert_eq!(
+            b_input.lines().nth(line_at(&b_input, b_cell.start) - 1),
+            Some("```{fixture-b}")
+        );
+        assert!(
+            b_calls[0]
+                .1
+                .iter()
+                .any(|u| matches!(u, Unit::Inline(i) if i.span_index == 0 && i.lang == "python"))
         );
     }
 
@@ -2941,6 +3540,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -3343,6 +3943,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -3362,6 +3963,46 @@ mod tests {
         assert!(
             msg.contains("replay miss"),
             "expected 'replay miss' diagnostic in stage error, got: {msg}"
+        );
+    }
+
+    /// KNR-6: a replay capture whose engine never runs is an error, not a silent no-op. A
+    /// `{r}` chunk nothing claims once rendered as unexecuted code with exit 0 (interlude I2).
+    #[tokio::test]
+    async fn test_replay_capture_that_never_runs_fails_the_stage() {
+        use crate::engine::{EngineRegistry, ReplayEngine};
+        use quarto_trace::EngineCapture;
+
+        // The document has no cell for the recorded engine, so it is never in the sequence.
+        let content = b"---\ntitle: T\n---\n\nJust prose.\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        let capture = EngineCapture {
+            engine_name: "mock-replay-engine".into(),
+            input_qmd: String::from_utf8_lossy(content).into_owned(),
+            result: serde_json::json!({
+                "markdown": "x\n",
+                "supporting_files": [],
+                "filters": [],
+                "includes": {"header_includes": [], "include_before": [], "include_after": []},
+                "needs_postprocess": false,
+            }),
+            record: None,
+            files: Vec::new(),
+        };
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(ReplayEngine::new(capture)));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        let err = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("an unused replay capture must fail the render");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("mock-replay-engine") && msg.contains("never ran"),
+            "the error names the engine and says it never ran: {msg}"
         );
     }
 

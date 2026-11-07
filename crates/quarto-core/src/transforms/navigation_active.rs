@@ -20,8 +20,15 @@
 //! ancestors" semantic. A matched item in a dropdown menu marks
 //! *only* itself active; the top-level dropdown remains inactive.
 //! This matches Q1's navbar behavior.
+//!
+//! [`mark_active_for_section`] is the navbar's fallback for pages the
+//! navbar doesn't link to directly: the first top-level item whose
+//! `href` also appears in the page's sidebar goes active, so readers
+//! see which section of the site they are in (GH #1064).
 
-use quarto_navigation::NavigationItem;
+use std::collections::HashSet;
+
+use quarto_navigation::{NavigationItem, Sidebar, SidebarEntry};
 
 use crate::render::RenderContext;
 use crate::transforms::navigation_href::is_external;
@@ -71,6 +78,52 @@ pub fn mark_active(items: &mut [NavigationItem], page_source: &str) -> bool {
         }
     }
     any
+}
+
+/// Every `href` in `sidebar` (links and section headers, recursively).
+pub fn sidebar_hrefs(sidebar: &Sidebar) -> HashSet<String> {
+    fn walk(entries: &[SidebarEntry], out: &mut HashSet<String>) {
+        for entry in entries {
+            match entry {
+                SidebarEntry::Link { item } => out.extend(item.href.clone()),
+                SidebarEntry::Section { href, contents, .. } => {
+                    out.extend(href.clone());
+                    walk(contents, out);
+                }
+                SidebarEntry::Separator | SidebarEntry::Heading(_) | SidebarEntry::Auto(_) => {}
+            }
+        }
+    }
+    let mut out = HashSet::new();
+    walk(&sidebar.contents, &mut out);
+    out
+}
+
+/// Mark the first top-level item (in `groups` order) whose `href` is
+/// one of `section_hrefs` as active, and stop. Returns `true` on a hit.
+///
+/// Q1 parity: its website post-processor marks the first `a.nav-link`
+/// whose href is in the page's `.sidebar-navigation`. Dropdown
+/// children render as `dropdown-item`, not `nav-link`, so they are not
+/// considered. Callers run this only when [`mark_active`] found no
+/// exact match, so a page's own navbar link always wins.
+pub fn mark_active_for_section(
+    groups: &mut [&mut [NavigationItem]],
+    section_hrefs: &HashSet<String>,
+) -> bool {
+    for items in groups.iter_mut() {
+        for item in items.iter_mut() {
+            if let Some(href) = item.href.as_deref()
+                && !is_external(href)
+                && !href.starts_with('#')
+                && section_hrefs.contains(href)
+            {
+                item.active = true;
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -215,5 +268,99 @@ mod tests {
         assert!(items[0].active);
         assert!(!items[1].active);
         assert!(items[2].active);
+    }
+
+    fn link(href: &str) -> SidebarEntry {
+        SidebarEntry::Link {
+            item: NavigationItem {
+                href: Some(href.to_string()),
+                ..NavigationItem::default()
+            },
+        }
+    }
+
+    /// GH #1064 — section hrefs come from links and section headers at
+    /// any depth.
+    #[test]
+    fn sidebar_hrefs_collects_links_and_section_headers() {
+        let mut sidebar = Sidebar::with_defaults();
+        sidebar.contents = vec![
+            link("guide/index.qmd"),
+            SidebarEntry::Section {
+                text: None,
+                href: Some("guide/advanced/index.qmd".to_string()),
+                href_source: SourceInfo::for_test(),
+                id: None,
+                contents: vec![link("guide/advanced/tuning.qmd")],
+                expanded: false,
+            },
+            SidebarEntry::Separator,
+        ];
+        let hrefs = sidebar_hrefs(&sidebar);
+        let mut got: Vec<_> = hrefs.iter().map(String::as_str).collect();
+        got.sort_unstable();
+        assert_eq!(
+            got,
+            vec![
+                "guide/advanced/index.qmd",
+                "guide/advanced/tuning.qmd",
+                "guide/index.qmd"
+            ]
+        );
+    }
+
+    /// GH #1064 — only the first top-level item whose href is in the
+    /// section goes active, searching `left` before `right`; dropdown
+    /// children and external links never match.
+    #[test]
+    fn mark_active_for_section_marks_first_top_level_match() {
+        let mut left = [
+            NavigationItem {
+                href: Some("index.qmd".to_string()),
+                ..NavigationItem::default()
+            },
+            NavigationItem {
+                text: Some(s("Menu")),
+                menu: vec![NavigationItem {
+                    href: Some("guide/install.qmd".to_string()),
+                    ..NavigationItem::default()
+                }],
+                ..NavigationItem::default()
+            },
+        ];
+        let mut right = [
+            NavigationItem {
+                href: Some("guide/index.qmd".to_string()),
+                ..NavigationItem::default()
+            },
+            NavigationItem {
+                href: Some("guide/install.qmd".to_string()),
+                ..NavigationItem::default()
+            },
+        ];
+        let section: HashSet<String> = ["guide/index.qmd", "guide/install.qmd"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let matched = mark_active_for_section(&mut [&mut left[..], &mut right[..]], &section);
+        assert!(matched);
+        assert!(!left[0].active);
+        assert!(
+            !left[1].menu[0].active,
+            "dropdown children are not nav-links"
+        );
+        assert!(right[0].active);
+        assert!(!right[1].active, "only the first match goes active");
+    }
+
+    #[test]
+    fn mark_active_for_section_no_match() {
+        let mut left = [NavigationItem {
+            href: Some("https://example.com".to_string()),
+            ..NavigationItem::default()
+        }];
+        let section: HashSet<String> = ["https://example.com".to_string()].into();
+        assert!(!mark_active_for_section(&mut [&mut left[..]], &section));
+        assert!(!left[0].active);
     }
 }

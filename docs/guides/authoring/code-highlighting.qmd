@@ -1,0 +1,232 @@
+---
+title: "Code highlighting"
+description: "How Quarto highlights code blocks and inline code with tree-sitter, which languages are built in, how to add a language by shipping a tree-sitter grammar (a `.wasm` file and `highlights.scm`) in `_quarto/grammars/`, how capture names become `hl-*` CSS classes, and how a Lua filter can supply highlighting itself."
+---
+
+## Overview
+
+Quarto highlights code at render time with
+[tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammars. Give a
+fenced code block a language and its contents are parsed and colored:
+
+````markdown
+```python
+def greet(name):
+    return f"Hello, {name}!"
+```
+````
+
+Inline code works the same way, with the language as a class:
+`` `len(xs)`{.python} ``.
+
+When a code block or inline code has several classes, the **first class
+that names a known language** chooses the grammar, so both
+```` ```{.python .numberLines} ```` and ```` ```{.numberLines .python} ````
+highlight as Python. A block with no recognized language is rendered as
+plain code, without an error or warning.
+
+Highlighting applies to the HTML-based formats (`html`, `revealjs`, and
+dashboards). The colors come from the `syntax-highlighting:` palette; see
+[Syntax highlighting](../formats/html/themes.qmd#syntax-highlighting) for
+choosing a palette and for light and dark variants.
+
+## Built-in languages
+
+These languages need no setup. Each language name in the table works as a
+code block class, and so does each alias.
+
+| Language   | Aliases     |
+|------------|-------------|
+| bash       | `sh`        |
+| css        |             |
+| html       |             |
+| javascript | `js`, `jsx` |
+| json       |             |
+| julia      | `jl`        |
+| lmd        |             |
+| lua        |             |
+| python     | `py`        |
+| r          |             |
+| rust       | `rs`        |
+| sql        |             |
+| tsx        |             |
+| typescript | `ts`        |
+| yaml       | `yml`       |
+
+## Adding a language with a tree-sitter grammar
+
+To highlight a language that isn't built in, put a tree-sitter grammar in
+your project. Quarto looks in `_quarto/grammars/`, and each subfolder there
+holds one grammar:
+
+```text
+my-project/
+├── _quarto.yml
+├── document.qmd
+└── _quarto/
+    └── grammars/
+        └── toml/
+            ├── toml.wasm        # the grammar, compiled to WebAssembly
+            └── highlights.scm   # the grammar's highlight query
+```
+
+No `_quarto.yml` setting is needed: every subfolder that contains both a
+`.wasm` file and a `highlights.scm` file is loaded, and the language it
+serves is the `.wasm` file's name without the extension. With the layout
+above, ```` ```toml ```` blocks and `` `…`{.toml} `` inline code are
+highlighted with the TOML grammar. For a single document that isn't part
+of a project, `_quarto/grammars/` sits next to the document.
+
+@demo-user-grammar shows a document highlighting TOML this way:
+
+:::: {#demo-user-grammar .embed-example-iframe file="/examples/highlighting/01-user-grammar/document.html"}
+````markdown
+---
+title: "A user-supplied grammar"
+format: html
+---
+
+TOML is not one of Quarto's built-in highlighting languages. This
+project adds it by shipping a tree-sitter grammar in
+`_quarto/grammars/toml/`: the compiled `toml.wasm` and its
+`highlights.scm` query. Any code block marked `toml` now picks it up:
+
+```toml
+# Site configuration
+[server]
+host = "localhost"
+port = 8080
+debug = false
+started = 2026-11-05T09:30:00Z
+
+[[server.routes]]
+path = "/docs"
+cache = { enabled = true, max-age = 3600 }
+```
+
+Inline code works the same way: `retries = 3`{.toml}.
+````
+
+[View source](https://github.com/quarto-dev/q2/tree/main/examples/highlighting/01-user-grammar)
+::::
+
+### Getting the grammar files
+
+Many tree-sitter grammars publish a compiled `tree-sitter-<language>.wasm`
+with each GitHub release, for example
+[tree-sitter-toml](https://github.com/tree-sitter-grammars/tree-sitter-toml/releases).
+Download it and rename it to the class you want to write on your code
+blocks (`tree-sitter-toml.wasm` becomes `toml.wasm`). Without a release
+asset, build one from the grammar's repository with
+`tree-sitter build --wasm`.
+
+Take `highlights.scm` from the same repository, usually at
+`queries/highlights.scm`, and from the same version as the `.wasm`. A query
+written for a different version of the grammar can name node types the
+grammar doesn't have, and then the grammar fails to load.
+
+Quarto uses tree-sitter 0.26, which loads grammars generated with
+tree-sitter language ABI versions 13 to 15.
+
+### Rules and limits
+
+- **One grammar per folder.** A folder with more than one `.wasm` file is
+  skipped without a warning. The folder's own name doesn't matter; the
+  `.wasm` file name does.
+- **The file name is the language name.** User grammars have no aliases. To
+  serve both `toml` and another class, use two folders.
+- **A user grammar replaces a built-in one.** Quarto checks user grammars
+  before its built-in grammars, so a `_quarto/grammars/python/python.wasm`
+  takes over every `python` block. A user grammar named after a built-in
+  alias, such as `py.wasm`, takes over only that alias.
+- **Only `highlights.scm` is read.** `injections.scm` and `locals.scm` are
+  ignored, so code embedded in another language (for example JavaScript
+  inside HTML) is not highlighted by a user grammar.
+- **Problems are warnings, not errors.** If a grammar fails to load, the
+  render prints a `failed to load user grammars from …` warning and
+  continues, and the affected blocks render unhighlighted. A `.wasm` named
+  differently from the class on your code blocks produces no warning: the
+  grammar loads, but nothing asks for it.
+- **Previews load the same folder.** Live previews in `q2 preview` and
+  Quarto Hub pick up `_quarto/grammars/` too, so a grammar added there
+  highlights in the preview and in the rendered output alike.
+
+## How capture names become CSS classes
+
+A grammar's `highlights.scm` assigns **capture names** to parts of the
+syntax tree. For example, this line from the TOML query marks every comment:
+
+```scheme
+(comment) @comment
+```
+
+Quarto wraps each captured piece of code in a `<span>` whose class is the
+capture name with an `hl-` prefix and dots turned into hyphens. `@comment`
+becomes `<span class="hl-comment">` and `@function.builtin` becomes
+`<span class="hl-function-builtin">`. When captures nest, the innermost one
+colors each character.
+
+The palettes color the standard tree-sitter capture names: `attribute`,
+`boolean`, `character`, `comment`, `constant`, `constructor`, `embedded`,
+`error`, `escape`, `function`, `keyword`, `label`, `markup`, `module`,
+`namespace`, `number`, `operator`, `property`, `punctuation`, `special`,
+`string`, `tag`, `type` and `variable`, along with their common
+refinements, such as `function.builtin`, `keyword.control` or
+`string.special`. Most published `highlights.scm` files use these names.
+
+A capture outside that set, such as `@string.special.key`, still produces a
+span, but no palette colors it. Either change the capture in
+`highlights.scm` to a standard name or style the class yourself in a
+stylesheet:
+
+```css
+.hl-string-special-key {
+  color: #8250df;
+}
+```
+
+The same approach adjusts a standard capture. The full document behind
+@demo-user-grammar ends with a rule that sets `.hl-type` (which the TOML query uses
+for keys) in bold.
+
+## Highlighting from a filter
+
+A tree-sitter grammar isn't the only way to highlight a block. The
+highlighter writes its result to a `data-hl-spans` attribute on the code
+block, and if a block **already has** that attribute, Quarto leaves it
+alone. A Lua filter can therefore highlight a block itself.
+
+The value is a JSON array of `[start, end, capture]` triples. `start` and
+`end` are byte offsets into the block's text, counted from 0, with `end`
+exclusive. This filter marks the words `ERROR` and `WARN` in ```` ```log ````
+blocks:
+
+```lua
+function CodeBlock(cb)
+  if cb.attr.classes[1] ~= "log" then
+    return nil
+  end
+
+  local spans = {}
+  for _, row in ipairs({ { "ERROR", "error" }, { "WARN", "warning" } }) do
+    local needle, capture = row[1], row[2]
+    local init = 1
+    while true do
+      -- Plain find returns 1-based inclusive offsets; subtracting 1 from
+      -- the start gives the 0-based, end-exclusive range.
+      local s, e = cb.text:find(needle, init, true)
+      if not s then break end
+      table.insert(spans, { s - 1, e, capture })
+      init = e + 1
+    end
+  end
+  table.sort(spans, function(a, b) return a[1] < b[1] end)
+
+  cb.attr.attributes["data-hl-spans"] = pandoc.json.encode(spans)
+  return cb
+end
+```
+
+The captures become classes exactly as grammar captures do (`error` becomes
+`hl-error`, which the palettes color). `warning` is not a standard capture
+name, so give `.hl-warning` a style of your own.

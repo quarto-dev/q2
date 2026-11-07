@@ -1,0 +1,579 @@
+# Engine-resolution corpus (bd-yt2o2ovt design review, 2026-11-04).
+#
+# Each case is a pure resolver input (metadata layers + code-cell languages +
+# registry) with the expected engine sequence and per-language ownership under
+# the TARGET design (D2b, claude-notes/plans/2026-11-04-engine-interface-review.md).
+# Driven by `engine_resolution_corpus.rs`; rendered for humans in
+# claude-notes/research/2026-11-04-engine-resolution-corpus.md.
+#
+# Fields
+#   id          stable id (never reuse)
+#   title       one line
+#   project     optional project-layer front matter (YAML text), merged below the document
+#   front_matter  document front matter (YAML text, may be empty)
+#   languages   code-cell languages in document order; "python .marimo" adds a class
+#   registry    E1 built-ins (knitr, jupyter, markdown); E2 + Julia extension
+#               (Primary 1 on julia); E3 + marimo-style extension (Primary 1 on
+#               python with first class marimo); E3b same at Primary 2
+#   expect      target: sequence (engine names) and ownership (language -> engine)
+#   status      pass              the current resolver already meets `expect`
+#               pending-phase4    current resolver differs; `today` pins what it does now
+#   today       current sequence/ownership (required when status is pending-phase4)
+#   q1          what Quarto 1 does; q1_verified: RAN | DERIVED | none (q2-only syntax)
+#   verdict     intuitive | surprising | q2-only | divergence
+#   notes       free text; Rn refers to the plan's recommendations
+#
+# Sequence order is asserted exactly for E1. For E2/E3/E3b it is compared as a
+# set: the test cannot set the registry contribution order (no public API), and
+# a real registry lists extension engines before the built-ins.
+
+# ---- implicit selection (no declaration) ------------------------------------
+- id: C01
+  title: "no declaration, r only"
+  front_matter: ""
+  languages: [r]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr}}
+  status: pass
+  q1: "knitr (processing file: doc.qmd)"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C02
+  title: "no declaration, python only"
+  front_matter: ""
+  languages: [python]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {python: jupyter}}
+  status: pass
+  q1: "jupyter"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C03
+  title: "no declaration, r then python (knitr takes both via reticulate)"
+  front_matter: ""
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr, python: knitr}}
+  status: pass
+  q1: "knitr for both orders; python via reticulate"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C04
+  title: "no declaration, python then r (cell order does not change the winner)"
+  front_matter: ""
+  languages: [python, r]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {python: knitr, r: knitr}}
+  status: pass
+  q1: "knitr; order does not matter"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C05
+  title: "no declaration, julia with no Julia extension falls to jupyter"
+  front_matter: ""
+  languages: [julia]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {julia: jupyter}}
+  status: pass
+  q1: "jupyter picks the julia kernel by language (Q1 claims julia for its own julia engine)"
+  q1_verified: DERIVED
+  verdict: intuitive
+- id: C06
+  title: "no declaration, r plus bash stay together under knitr"
+  front_matter: ""
+  languages: [r, bash]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr, bash: knitr}}
+  status: pass
+  q1: "knitr runs bash"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C07
+  title: "no cells means no sequence"
+  front_matter: "engine: jupyter"
+  languages: []
+  registry: E1
+  expect: {sequence: [], ownership: {}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+
+# ---- explicit single engine (D2b: the listed engine wins its languages) -----
+- id: C10
+  title: "engine jupyter owns r"
+  front_matter: "engine: jupyter"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "jupyter starts (python3 kernel); the R cell is inert code"
+  q1_verified: RAN
+  verdict: divergence
+  notes: "q2 runs the R cell in a kernel chosen by D1 (language lookup); Q1 leaves it inert. Bd-rorntup4."
+- id: C11
+  title: "engine jupyter, python only"
+  front_matter: "engine: jupyter"
+  languages: [python]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {python: jupyter}}
+  status: pass
+  q1: "jupyter"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C12
+  title: "engine jupyter, r plus python go to one jupyter"
+  front_matter: "engine: jupyter"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter, python: jupyter}}
+  status: pending-phase4
+  today: {sequence: [jupyter, knitr], ownership: {r: knitr, python: jupyter}}
+  q1: "python runs in the kernel; the R cell is inert"
+  q1_verified: RAN
+  verdict: surprising
+  notes: "Works today (r in knitr, python in jupyter). After D2b both need one kernel, so R1 (kernel/ownership mismatch) matters here."
+- id: C13
+  title: "engine knitr, r plus python via reticulate"
+  front_matter: "engine: knitr"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr, python: knitr}}
+  status: pass
+  q1: "knitr; python via reticulate"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C14
+  title: "engine knitr with a julia cell and no julia engine leaves julia unowned"
+  front_matter: "engine: knitr"
+  languages: [julia]
+  registry: E1
+  expect: {sequence: [], ownership: {}}
+  status: pass
+  q1: "knitr fails: there is no package called JuliaCall"
+  q1_verified: RAN
+  verdict: surprising
+  notes: "q2 passes the cell through unexecuted with no message (R3 should warn)."
+- id: C15
+  title: "engine markdown disables execution"
+  front_matter: "engine: markdown"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [markdown], ownership: {}}
+  status: pass
+  q1: "markdown engine"
+  q1_verified: DERIVED
+  verdict: intuitive
+- id: C16
+  title: "engine jupyter, r plus bash"
+  front_matter: "engine: jupyter"
+  languages: [r, bash]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter, bash: jupyter}}
+  status: pending-phase4
+  today: {sequence: [jupyter, knitr], ownership: {r: knitr, bash: jupyter}}
+  q1: "jupyter runs python-kernel cells only; r and bash are inert"
+  q1_verified: DERIVED
+  verdict: surprising
+  notes: "A single jupyter leaves bash inert at execution (RAN: python, sql, bash under engine jupyter ran python only); see R4 for the multi-engine path."
+
+# ---- explicit lists (specific beats universal) -------------------------------
+- id: C20
+  title: "[jupyter, knitr], r only: knitr keeps r"
+  front_matter: "engine: [jupyter, knitr]"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr}}
+  status: pass
+  q1: "rejected by the schema (engine must be a string)"
+  q1_verified: RAN
+  verdict: q2-only
+  notes: "D2 as originally approved gave r to jupyter here; D2b keeps knitr."
+- id: C21
+  title: "[jupyter, knitr], r plus python: each engine gets its own language"
+  front_matter: "engine: [jupyter, knitr]"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [jupyter, knitr], ownership: {r: knitr, python: jupyter}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: RAN
+  verdict: q2-only
+- id: C22
+  title: "[knitr, jupyter], r plus python"
+  front_matter: "engine: [knitr, jupyter]"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [knitr, jupyter], ownership: {r: knitr, python: jupyter}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: RAN
+  verdict: q2-only
+- id: C23
+  title: "[knitr, jupyter], r plus sql: jupyter owns sql but cannot run it"
+  front_matter: "engine: [knitr, jupyter]"
+  languages: [r, sql]
+  registry: E1
+  expect: {sequence: [knitr, jupyter], ownership: {r: knitr, sql: jupyter}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: surprising
+  notes: "RAN: render fails with 'engine jupyter has no handler for language sql' (multi-engine path only). Pinned as current; R4 decides the outcome."
+- id: C24
+  title: "[jupyter, nosuch], r: an unknown name is ignored and jupyter wins r"
+  front_matter: "engine: [jupyter, nosuch]"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "rejected by the schema"
+  q1_verified: RAN
+  verdict: surprising
+  notes: "No diagnostic for the unknown name today (R3)."
+- id: C25
+  title: "engine knitrr (typo), python: nothing owns python"
+  front_matter: "engine: knitrr"
+  languages: [python]
+  registry: E1
+  expect: {sequence: [], ownership: {}}
+  status: pass
+  q1: "unknown engine name is ignored; language selection runs python under jupyter (no error)"
+  q1_verified: RAN
+  verdict: surprising
+  notes: "q2 renders with exit 0 and the cell unexecuted (RAN). R3 should warn with a did-you-mean."
+
+# ---- bare jupyter key and kernel spellings -----------------------------------
+- id: C30
+  title: "jupyter: ark (string form) selects jupyter and owns r"
+  front_matter: "jupyter: ark"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "jupyter key selects Jupyter; R runs in the ark kernel"
+  q1_verified: RAN
+  verdict: divergence
+  notes: "Today the key selects Jupyter as an explicit engine but jupyter only has a Fallback claim, which loses r to knitr's Primary in T1, so knitr runs the cell."
+- id: C31
+  title: "jupyter: {kernel: ark} owns r"
+  front_matter: "jupyter:\n  kernel: ark"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "works (undocumented kernel key)"
+  q1_verified: RAN
+  verdict: divergence
+- id: C32
+  title: "engine: {jupyter: {kernel: ark}} owns r"
+  front_matter: "engine:\n  jupyter:\n    kernel: ark"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "rejected by the schema (engine must be a string)"
+  q1_verified: RAN
+  verdict: q2-only
+- id: C33
+  title: "engine: jupyter plus jupyter: {kernel: ark} (the epic target)"
+  front_matter: "engine: jupyter\njupyter:\n  kernel: ark"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "works: Starting ark kernel, all chunks and the plot render"
+  q1_verified: RAN
+  verdict: divergence
+  notes: "The Q1-valid spelling of the epic target is engine: jupyter plus jupyter: ark."
+- id: C34
+  title: "engine: knitr plus jupyter: {kernel: ark}: the jupyter key is ignored"
+  front_matter: "engine: knitr\njupyter:\n  kernel: ark"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr}}
+  status: pass
+  q1: "knitr wins when engine: knitr is present with a jupyter key (python3 probe)"
+  q1_verified: RAN
+  verdict: surprising
+  notes: "q2 ignores the key silently (R3)."
+
+- id: C35
+  title: "engine: jupyter plus a top-level jupyter claims map: the claims are dead"
+  front_matter: "engine: jupyter\njupyter:\n  claims:\n    r: 1"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "n/a (claims is a q2-only key)"
+  q1_verified: none
+  verdict: surprising
+  notes: "Finding 6: the bare-string engine entry carries no config, so the top-level jupyter map is never read for claims and knitr wins. D2b makes the outcome moot (a sole explicit engine owns r), but the claims remain silently dead for any other layout, e.g. when engine: lists a bare jupyter next to knitr. Spike-confirmed with real Ark (Epic A, S1). The working spelling is C42 or jupyter: {claims: {r: 1}} with no engine: key."
+
+# ---- claims tables ------------------------------------------------------------
+- id: C40
+  title: "jupyter narrowed to python: r stays with knitr"
+  front_matter: "engine:\n  jupyter:\n    claims:\n      python: 1"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [jupyter, knitr], ownership: {r: knitr, python: jupyter}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: RAN
+  verdict: q2-only
+- id: C41
+  title: "jupyter narrowed to python, julia cell is orphaned"
+  front_matter: "engine:\n  jupyter:\n    claims:\n      python: 1"
+  languages: [julia]
+  registry: E1
+  expect: {sequence: [], ownership: {}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: surprising
+  notes: "Silent no-op today (R3)."
+- id: C42
+  title: "jupyter claims r at Primary(1): the listed engine's claim beats unlisted knitr"
+  front_matter: "engine:\n  jupyter:\n    claims:\n      r: 1"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: RAN
+  verdict: q2-only
+  notes: "The old workaround from the Ark example; D2b makes it unnecessary."
+- id: C43
+  title: "engine: jupyter plus engines: knitr claims r at Primary(2): unlisted Primary(2) beats the promoted claim"
+  front_matter: "engine: jupyter\nengines:\n  - knitr:\n      claims:\n        r: 2"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [jupyter, knitr], ownership: {r: knitr, python: jupyter}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+- id: C44
+  title: "engines: [jupyter, knitr] alone only configures; it does not select"
+  front_matter: "engines: [jupyter, knitr]"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr, python: knitr}}
+  status: pass
+  q1: "engines is a project key listing engine names; it does not select"
+  q1_verified: DERIVED
+  verdict: intuitive
+
+- id: C45
+  title: "[knitr, jupyter claims r: 1]: equal priority, declared order decides (knitr listed first)"
+  front_matter: "engine:\n  - knitr\n  - jupyter:\n      claims:\n        r: 1"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: none
+  verdict: surprising
+  notes: "The tie: knitr claims r at Primary(1) and so does the table. Candidate order breaks it (strict > in T1). Run with real Ark (Epic A, tie spike): output class cell-output-stdout, i.e. knitr. The jupyter engine owns nothing, so it drops out of the sequence silently (R3)."
+- id: C46
+  title: "[jupyter claims r: 1, knitr]: equal priority, declared order decides (jupyter listed first)"
+  front_matter: "engine:\n  - jupyter:\n      claims:\n        r: 1\n  - knitr"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: none
+  verdict: surprising
+  notes: "Mirror of C45; reordering the list flips the owner. Real Ark run: cell-output-display, i.e. Jupyter. knitr owns nothing and drops out."
+- id: C47
+  title: "[knitr, jupyter claims r: 2]: a higher priority beats knitr regardless of order"
+  front_matter: "engine:\n  - knitr\n  - jupyter:\n      claims:\n        r: 2"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: none
+  verdict: intuitive
+  notes: "Real Ark run: Jupyter owns r although knitr is listed first. Priority 2 is the order-independent spelling; priority 1 is a tie (C45, C46)."
+- id: C48
+  title: "[jupyter claims r: 2, knitr]: a higher priority beats knitr (jupyter also first)"
+  front_matter: "engine:\n  - jupyter:\n      claims:\n        r: 2\n  - knitr"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pass
+  q1: "rejected by the schema"
+  q1_verified: none
+  verdict: intuitive
+  notes: "Real Ark run: Jupyter. Same owner as C47, so order does not matter at priority 2."
+
+# ---- layering (project layer below document layer) ---------------------------
+- id: C50
+  title: "project [jupyter] + document knitr (scalar replaces the array)"
+  project: "engine: [jupyter]"
+  front_matter: "engine: knitr"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr, python: knitr}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+- id: C51
+  title: "project [jupyter] + document [knitr] (arrays concatenate)"
+  project: "engine: [jupyter]"
+  front_matter: "engine: [knitr]"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [jupyter, knitr], ownership: {r: knitr, python: jupyter}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+  notes: "Under D2 as first approved this flipped r to jupyter; D2b keeps knitr."
+- id: C52
+  title: "project [knitr] + document [jupyter]: same owners as C51 in the other layer order"
+  project: "engine: [knitr]"
+  front_matter: "engine: [jupyter]"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [knitr, jupyter], ownership: {r: knitr, python: jupyter}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+- id: C53
+  title: "project knitr + document jupyter (scalars): the document wins"
+  project: "engine: knitr"
+  front_matter: "engine: jupyter"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter, python: jupyter}}
+  status: pending-phase4
+  today: {sequence: [jupyter, knitr], ownership: {r: knitr, python: jupyter}}
+  q1: "document engine: jupyter selects jupyter; the R cell is inert"
+  q1_verified: DERIVED
+  verdict: surprising
+  notes: "Same R1 caveat as C12."
+- id: C54
+  title: "project [jupyter] + document !prefer [knitr]: !prefer replaces the array"
+  project: "engine: [jupyter]"
+  front_matter: "engine: !prefer [knitr]"
+  languages: [r, python]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {r: knitr, python: knitr}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+- id: C55
+  title: "project [jupyter] + document jupyter: {kernel: ark}"
+  project: "engine: [jupyter]"
+  front_matter: "jupyter:\n  kernel: ark"
+  languages: [r]
+  registry: E1
+  expect: {sequence: [jupyter], ownership: {r: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr], ownership: {r: knitr}}
+  q1: "n/a (project-level engine lists are q2-only)"
+  q1_verified: none
+  verdict: divergence
+- id: C56
+  title: "project [knitr] + document jupyter: {kernel: ark}: an engine key anywhere disables the shorthand"
+  project: "engine: [knitr]"
+  front_matter: "jupyter:\n  kernel: ark"
+  languages: [python]
+  registry: E1
+  expect: {sequence: [knitr], ownership: {python: knitr}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: surprising
+  notes: "The jupyter key is ignored with no message (R3)."
+
+# ---- extension engines --------------------------------------------------------
+- id: C60
+  title: "Julia extension owns julia implicitly"
+  front_matter: ""
+  languages: [julia]
+  registry: E2
+  expect: {sequence: [julia], ownership: {julia: julia}}
+  status: pass
+  q1: "julia engine"
+  q1_verified: RAN
+  verdict: intuitive
+- id: C61
+  title: "engine: jupyter with a Julia extension: the explicit engine takes julia"
+  front_matter: "engine: jupyter"
+  languages: [julia]
+  registry: E2
+  expect: {sequence: [jupyter], ownership: {julia: jupyter}}
+  status: pending-phase4
+  today: {sequence: [julia], ownership: {julia: julia}}
+  q1: "Q1 picks the julia-1.11 kernel by language even with engine: jupyter"
+  q1_verified: RAN
+  verdict: divergence
+  notes: "Documented consequence of D2b. Escape: a jupyter claims table without julia."
+- id: C62
+  title: "[knitr, jupyter], r plus julia with a Julia extension: listed jupyter beats the unlisted extension"
+  front_matter: "engine: [knitr, jupyter]"
+  languages: [r, julia]
+  registry: E2
+  expect: {sequence: [knitr, jupyter], ownership: {r: knitr, julia: jupyter}}
+  status: pending-phase4
+  today: {sequence: [knitr, julia], ownership: {r: knitr, julia: julia}}
+  q1: "n/a"
+  q1_verified: none
+  verdict: surprising
+  notes: "A user listing knitr and jupyter for r and python may not expect the Julia extension to lose; see R6."
+- id: C63
+  title: "marimo-style extension owns python with class marimo"
+  front_matter: ""
+  languages: ["python .marimo"]
+  registry: E3
+  expect: {sequence: [marimo], ownership: {python: marimo}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+- id: C64
+  title: "engine: jupyter with a Primary(1) class claim: promoted jupyter wins python .marimo"
+  front_matter: "engine: jupyter"
+  languages: ["python .marimo"]
+  registry: E3
+  expect: {sequence: [jupyter], ownership: {python: jupyter}}
+  status: pending-phase4
+  today: {sequence: [marimo], ownership: {python: marimo}}
+  q1: "n/a"
+  q1_verified: none
+  verdict: surprising
+  notes: "R6: the real marimo extension claims at Primary(2) (C65) and is unaffected."
+- id: C65
+  title: "engine: jupyter with a Primary(2) class claim: the extension still owns python .marimo"
+  front_matter: "engine: jupyter"
+  languages: ["python .marimo"]
+  registry: E3b
+  expect: {sequence: [marimo], ownership: {python: marimo}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive
+- id: C66
+  title: "no declaration, r plus python .marimo: knitr and marimo split"
+  front_matter: ""
+  languages: [r, "python .marimo"]
+  registry: E3b
+  expect: {sequence: [knitr, marimo], ownership: {r: knitr, python: marimo}}
+  status: pass
+  q1: "n/a"
+  q1_verified: none
+  verdict: intuitive

@@ -638,7 +638,7 @@ fn typst_request_matches_the_recorded_native_run() {
     check_against_recordings(
         &Format::from_format_string("typst").unwrap(),
         "typst",
-        || build_pandoc_request_stages(Vec::new()),
+        || build_pandoc_request_stages(Vec::new().into()),
         |name, req, rec| {
             let tmp = rec.join("fs/__q2_tmp__");
             let mut checked = 0;

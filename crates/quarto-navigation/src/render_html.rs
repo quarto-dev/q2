@@ -138,7 +138,7 @@ pub fn navbar_to_html(
     if !navbar.left.is_empty() {
         html.push_str("      <ul class=\"navbar-nav me-auto\">\n");
         for item in &navbar.left {
-            html.push_str(&render_navbar_item(item, 4));
+            html.push_str(&render_navbar_item(item, 4, false));
         }
         html.push_str("      </ul>\n");
     } else {
@@ -149,7 +149,7 @@ pub fn navbar_to_html(
     if !navbar.right.is_empty() {
         html.push_str("      <ul class=\"navbar-nav ms-auto\">\n");
         for item in &navbar.right {
-            html.push_str(&render_navbar_item(item, 4));
+            html.push_str(&render_navbar_item(item, 4, true));
         }
         html.push_str("      </ul>\n");
     }
@@ -864,7 +864,9 @@ fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str)
     ))
 }
 
-fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
+/// `align_end` adds Bootstrap's `dropdown-menu-end` to dropdown menus, as Q1
+/// does for the right navbar section, so they don't overflow the page edge.
+fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> String {
     let pad = " ".repeat(indent);
 
     // Dropdown submenu: item has a menu and (typically) no direct href.
@@ -885,7 +887,12 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
              data-bs-toggle=\"dropdown\" aria-expanded=\"false\"{}>{}</a>\n",
             pad, aria, label
         ));
-        out.push_str(&format!("{}  <ul class=\"dropdown-menu\">\n", pad));
+        let menu_class = if align_end {
+            "dropdown-menu dropdown-menu-end"
+        } else {
+            "dropdown-menu"
+        };
+        out.push_str(&format!("{}  <ul class=\"{}\">\n", pad, menu_class));
         for sub in &item.menu {
             out.push_str(&render_dropdown_item(sub, indent + 4));
         }
@@ -899,8 +906,10 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
     let label = render_navbar_label(item);
 
     let href = item.href.as_deref().unwrap_or("#");
+    // Q1 parity: the active link also carries `aria-current="page"`
+    // (GH #1064).
     let class = if item.active {
-        "class=\"nav-link active\""
+        "class=\"nav-link active\" aria-current=\"page\""
     } else {
         "class=\"nav-link\""
     };
@@ -1274,9 +1283,11 @@ fn render_footer_region(
         FooterRegion::Empty => String::new(),
         FooterRegion::Text(cv) => render_text(cv),
         FooterRegion::Items(items) => {
-            // `.footer-items` is the class Quarto 1's SCSS targets for
-            // inline-flex alignment of links within a region.
-            let mut s = String::from("\n      <ul class=\"nav footer-items\">\n");
+            // Quarto 1's class list. `.footer-items` is what the footer SCSS
+            // targets for inline-flex alignment within a region. No `.nav`:
+            // it sets `flex-wrap: wrap`, which splits e.g. a logo and a
+            // copyright line onto separate lines (GH #1066).
+            let mut s = String::from("\n      <ul class=\"footer-items list-unstyled\">\n");
             for item in items {
                 s.push_str(&render_footer_item(item, 8));
             }
@@ -2098,6 +2109,34 @@ mod tests {
     }
 
     #[test]
+    fn navbar_right_dropdown_menu_is_end_aligned() {
+        let menu_item = |text: &str| NavigationItem {
+            text: Some(s(text)),
+            menu: vec![NavigationItem {
+                href: Some("a.qmd".to_string()),
+                text: Some(s("A")),
+                ..NavigationItem::default()
+            }],
+            ..NavigationItem::default()
+        };
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            left: vec![menu_item("Docs")],
+            right: vec![menu_item("Help")],
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert_eq!(
+            html.matches("<ul class=\"dropdown-menu dropdown-menu-end\">")
+                .count(),
+            1
+        );
+        assert_eq!(html.matches("<ul class=\"dropdown-menu\">").count(), 1);
+        let end = html.find("dropdown-menu-end").unwrap();
+        assert!(end > html.find("navbar-nav ms-auto").unwrap());
+    }
+
+    #[test]
     fn navbar_search_emits_box_before_toggler_when_collapsing() {
         let navbar = Navbar {
             search: Some(true),
@@ -2472,7 +2511,7 @@ mod tests {
     }
 
     #[test]
-    fn footer_items_render_as_nav_list() {
+    fn footer_items_render_as_unstyled_list() {
         let footer = PageFooter {
             right: FooterRegion::Items(vec![
                 NavigationItem {
@@ -2489,7 +2528,10 @@ mod tests {
             ..PageFooter::default()
         };
         let html = page_footer_to_html(&footer);
-        assert!(html.contains("<ul class=\"nav footer-items\">"));
+        assert!(html.contains("<ul class=\"footer-items list-unstyled\">"));
+        // `.nav` sets `flex-wrap: wrap`, which splits a region onto several
+        // lines; Quarto 1 does not use it here (GH #1066).
+        assert!(!html.contains("class=\"nav footer-items"));
         assert!(html.contains("bi-github"));
         assert!(html.contains("href=\"/privacy\""));
         assert!(html.contains(">Privacy</a>"));
@@ -2745,8 +2787,8 @@ mod tests {
         };
         let html = navbar_to_html(&navbar, None, "./");
         assert!(
-            html.contains("class=\"nav-link active\""),
-            "expected nav-link active class; got: {}",
+            html.contains("class=\"nav-link active\" aria-current=\"page\""),
+            "expected nav-link active class and aria-current; got: {}",
             html
         );
     }
@@ -2770,6 +2812,7 @@ mod tests {
             "inactive item should not carry active class; got: {}",
             html
         );
+        assert!(!html.contains("aria-current"));
     }
 
     /// Phase 3 test 11 — active propagates into dropdown leaves:

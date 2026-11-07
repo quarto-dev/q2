@@ -58,9 +58,9 @@ them point at the exact character to escape.
 | `{ a, b }` or `{python}` in prose | literal | Q-2-41 (braces are reserved for attributes) or a parse error | `\{ a, b \}`, or a code span |
 | a lone `` ` `` in prose | literal | parse error | `` \` `` |
 | `` `has a ` inside` `` (a code span containing a backtick) | error too | parse error | double the delimiter: ``` ``has a ` inside`` ``` |
-| a code block indented four spaces | code block | Q-2-35 | a fenced block |
+| a code block indented four spaces | code block | Q-2-59 | a fenced block |
 | `term` / `: definition` (a definition list) | definition list | Q-2-54 | a list or a table |
-| `[^1]: First paragraph.` followed by an indented second paragraph | multi-paragraph note | Q-2-35 (the intended code is Q-2-29) | a block footnote, below |
+| `[^1]: First paragraph.` followed by an indented second paragraph | multi-paragraph note | Q-2-59 (the intended code is Q-2-29) | a block footnote, below |
 
 A footnote with more than one paragraph is written as a fenced div whose
 label is the reference, instead of Pandoc's indented continuation:
@@ -100,6 +100,7 @@ harmless.
 | `[REVISED]`, `[x]` outside a task list (bare brackets) | literal | Q-2-49; rendered as a span | `\[REVISED\]`; a code span for `argv[1]` |
 | `<anonymous>`, `Vec<String>` (angle brackets in prose) | raw HTML | Q-2-9; passed through as raw HTML, so invisible in the page | `\<anonymous>` for a placeholder; a code span for a type |
 | `<br>`, `<details>` (HTML you want rendered) | raw HTML | Q-2-9; passed through, with a warning | `` `<br>`{=html} `` inline; a ```` ```{=html} ```` block for a tag-only line |
+| `nocite: "@*"` in the front matter (list every bibliography entry) | every entry listed | Q-1-20, because `@*` is not a valid citation; every entry is still listed | `nocite: !str "@*"` |
 
 ## Shortcodes inside code spans and blocks
 

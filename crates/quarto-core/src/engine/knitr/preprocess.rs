@@ -255,6 +255,24 @@ const BRACE_MARKER: &str = "{r}";
 /// assert_eq!(output, "The answer is `r .QuartoInlineRender(1+1)`.");
 /// ```
 pub fn resolve_inline_r_expressions(markdown: &str) -> String {
+    resolve_inline_r_expressions_with_ids(markdown, &mut |_| None)
+}
+
+/// [`resolve_inline_r_expressions`], embedding a unit id in the brace spans that have one
+/// (EXR-12).
+///
+/// `id_for_span` is called once per brace span, in document order, with the byte offset of
+/// the span's opening backtick in `markdown`. A span it returns an id for is rewritten as
+/// `` `r .QuartoInlineId("<id>"); .QuartoInlineRender(expr)` ``: the leading statement
+/// returns an invisible `NULL` and the expression's value is the last statement's, so the
+/// rendered value is unchanged. The id is how `hooks.R` matches the span knitr evaluated to
+/// the unit the stage numbered; it is never a position. Classic spans are never offered an
+/// id (they are no unit) and a brace span the closure declines is rewritten exactly as by
+/// [`resolve_inline_r_expressions`].
+pub fn resolve_inline_r_expressions_with_ids(
+    markdown: &str,
+    id_for_span: &mut dyn FnMut(usize) -> Option<String>,
+) -> String {
     INLINE_R_PATTERN
         .replace_all(markdown, |caps: &regex::Captures| {
             // Group 1 is the guard character (empty at start of input); it is
@@ -285,7 +303,13 @@ pub fn resolve_inline_r_expressions(markdown: &str) -> String {
                 // because `execute-inline.ts` scans the raw source ahead of
                 // any AST round-trip; that residual divergence is a property
                 // of where the two passes sit, not of this branch.
-                format!("{}`r .QuartoInlineRender({})`", prefix, trimmed)
+                let id_statement = id_for_span(caps.get(0).map_or(0, |m| m.start()) + prefix.len())
+                    .map(|id| format!(".QuartoInlineId({}); ", r_string_literal(&id)))
+                    .unwrap_or_default();
+                format!(
+                    "{}`r {}.QuartoInlineRender({})`",
+                    prefix, id_statement, trimmed
+                )
             } else if trimmed.is_empty() {
                 // The classic branch keeps the opposite treatment, for the
                 // same reason: knitr *does* claim `` `r   ` `` and errors on
@@ -298,6 +322,12 @@ pub fn resolve_inline_r_expressions(markdown: &str) -> String {
             }
         })
         .into_owned()
+}
+
+/// `s` as an R string literal. Unit ids are `{n}-{hash8}-inline`, so nothing here is ever
+/// escaped in practice; the escape keeps a stray backslash or quote from breaking the span.
+fn r_string_literal(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 /// Check if the markdown contains any inline R expressions, in either
@@ -717,5 +747,75 @@ mod tests {
         assert!(!has_inline_r_expressions("````r\nx <- `y`\n````"));
         assert!(!has_inline_r_expressions("```{r}\n1 + 1\n```"));
         assert!(!has_inline_r_expressions("```{r} \n1 + 1\n```"));
+    }
+
+    // === EXR-12: ids embedded in brace spans ===
+
+    fn with_ids(input: &str, ids: &[&str]) -> String {
+        let mut ids = ids.iter().map(|s| s.to_string());
+        resolve_inline_r_expressions_with_ids(input, &mut |_| ids.next())
+    }
+
+    #[test]
+    fn rewrite_embeds_ids_in_brace_spans() {
+        assert_eq!(
+            with_ids("A `{r} x` b.", &["1-aaaaaaaa-inline"]),
+            "A `r .QuartoInlineId(\"1-aaaaaaaa-inline\"); .QuartoInlineRender(x)` b."
+        );
+        // Tab-separated, and the id is applied after the trim.
+        assert_eq!(
+            with_ids("`{r}\t x + 1 `", &["2-bbbbbbbb-inline"]),
+            "`r .QuartoInlineId(\"2-bbbbbbbb-inline\"); .QuartoInlineRender(x + 1)`"
+        );
+        // Attribute values.
+        assert_eq!(
+            with_ids(r#"::: {#h data-v="`{r} v`"}"#, &["3-cccccccc-inline"]),
+            r#"::: {#h data-v="`r .QuartoInlineId("3-cccccccc-inline"); .QuartoInlineRender(v)`"}"#
+        );
+        // `I()` stays inside the wrapper.
+        assert_eq!(
+            with_ids("`{r} I(b)`", &["4-dddddddd-inline"]),
+            "`r .QuartoInlineId(\"4-dddddddd-inline\"); .QuartoInlineRender(I(b))`"
+        );
+    }
+
+    #[test]
+    fn rewrite_leaves_classic_spans_without_ids() {
+        // The closure is never offered a classic span, so a supply of ids is not consumed.
+        let mut asked = 0;
+        let out = resolve_inline_r_expressions_with_ids("`r x` and `r\ty `.", &mut |_| {
+            asked += 1;
+            Some("never".to_string())
+        });
+        assert_eq!(out, resolve_inline_r_expressions("`r x` and `r\ty `."));
+        assert_eq!(out, "`r x` and `r y`.");
+        assert_eq!(asked, 0);
+    }
+
+    #[test]
+    fn rewrite_with_no_ids_is_the_plain_rewrite() {
+        let doc = "a `{r} x` `r y` ::: {v=\"`{r} z`\"}";
+        assert_eq!(
+            resolve_inline_r_expressions_with_ids(doc, &mut |_| None),
+            resolve_inline_r_expressions(doc)
+        );
+    }
+
+    #[test]
+    fn rewrite_leaves_empty_classic_span_alone() {
+        // Loud failure preserved: knitr claims `r  ` and errors on it.
+        assert_eq!(with_ids("x `r   ` y", &[]), "x `r   ` y");
+    }
+
+    #[test]
+    fn the_closure_gets_the_offset_of_each_brace_spans_backtick_in_order() {
+        let doc = "`{r} a` mid `r b` `{r} c`";
+        let mut offsets = Vec::new();
+        resolve_inline_r_expressions_with_ids(doc, &mut |o| {
+            offsets.push(o);
+            None
+        });
+        assert_eq!(offsets, vec![0, doc.rfind("`{r} c").unwrap()]);
+        assert!(offsets.iter().all(|o| doc.as_bytes()[*o] == b'`'));
     }
 }

@@ -99,3 +99,76 @@ invalid email-shaped content also lexes as autolink (over-approximation; pampa c
       (section
         (pandoc_paragraph
           (autolink))))
+================================================================================
+angle-bracket destination with spaces (bd-angle-link-dest-qkqkegqo)
+================================================================================
+![](<a path with spaces.png>)
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_image
+            (target
+              angle_bracket_url: (url))))))
+================================================================================
+angle-bracket destination with title
+================================================================================
+[link](<foo bar.html> "a title")
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              angle_bracket_url: (url)
+              (title))))))
+================================================================================
+angle-bracket destination with attributes, empty, and escaped bracket
+================================================================================
+[x](<a b>){.c} [y](<>) [z](<a\>b>)
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              angle_bracket_url: (url))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_class))))
+          (pandoc_space)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              angle_bracket_url: (url)))
+          (pandoc_space)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              angle_bracket_url: (url))))))
+================================================================================
+unclosed '<' falls back to a bare destination
+================================================================================
+[x](<foo)
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              (url))))))
+================================================================================
+angle-bracket destination cannot span lines (CommonMark)
+:error
+================================================================================
+[x](<a
+b>)
+--------------------------------------------------------------------------------

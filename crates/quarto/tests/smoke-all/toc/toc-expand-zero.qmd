@@ -1,0 +1,22 @@
+---
+format:
+  html:
+    toc: true
+    toc-expand: 0
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["nav#TOC ul[data-toc-expanded=\"-1\"]"]
+        - ["nav#TOC [data-toc-expanded=\"0\"]"]
+---
+
+bd-kr6721bn. Quarto 1 treats `toc-expand: 0` as falsy and writes `-1`,
+the same as `toc-expand: false`, so nested lists start collapsed.
+
+## Outer
+
+### Inner
+
+Body.

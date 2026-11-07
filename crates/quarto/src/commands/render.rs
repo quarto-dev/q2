@@ -979,7 +979,7 @@ pub fn render_once(
         child_deadline: None,
         capture_materialize_dir: None,
         typst_target: None,
-        captures: Vec::new(),
+        captures: Default::default(),
         overlay,
     };
 

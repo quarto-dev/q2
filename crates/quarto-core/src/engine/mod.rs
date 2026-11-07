@@ -30,6 +30,7 @@
 //! | markdown | ✓ | ✓ |
 //! | knitr | ✓ | ✗ |
 //! | jupyter | ✓ | ✗ |
+//! | ipynb stored-output replay | ✓ | ✓ |
 //!
 //! In WASM builds, requesting an unavailable engine will result in a
 //! warning and fallback to the markdown engine.
@@ -55,19 +56,24 @@
 
 pub mod capture_files;
 pub mod capture_splice;
+pub mod cell_lang;
 pub mod content_processors;
 mod context;
 mod detection;
 pub mod diagnostics;
 mod error;
+pub(crate) mod ipynb_replay;
 mod markdown;
 pub mod nested_cell_mask;
+pub(crate) mod patterns;
 pub mod preview_record;
 mod registry;
 mod replay;
 pub mod resolution;
+pub mod skeleton;
 mod traits;
 pub mod ts_protocol;
+pub mod units;
 
 // Native-only: subprocess management + demux for TS engine extensions.
 #[cfg(not(target_arch = "wasm32"))]
@@ -76,6 +82,10 @@ pub mod ts_process;
 // Native-only: TsEngine struct implementing ExecutionEngine via TsEngineHost.
 #[cfg(not(target_arch = "wasm32"))]
 mod ts_engine;
+
+// EXR-7: the TS wire's unit list and notebook-to-record mapping.
+#[cfg(not(target_arch = "wasm32"))]
+mod ts_record;
 
 // File-backed test engine for exercising multi-engine sequencing
 // (bd-5yff4). Native-only test utility; never registered in the default
@@ -91,6 +101,23 @@ pub mod jupyter;
 // rscript_spawn_count()` from outside the `engine` module tree.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod knitr;
+
+// KNR-1's S2 mapper and wire types, reachable from `tests/integration/` and
+// KNR-3 without widening the rest of `knitr`.
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::pieces_map::{
+    expression_starts, knitr_visibility, output_kinds, pieces_to_cell, pieces_to_cell_anchored,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::types::{KnitrCapturedChunk, KnitrPiece};
+// The R call seam for the KNR-1 corpus harness (`tests/integration/knitr_corpus_*`):
+// it drives `execute` with capture on and off, which the public `KnitrEngine` never
+// does. Gordon chose this over an in-crate harness (2026-11-01).
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::{
+    CallROptions, KNITR_RESOURCES, KnitrExecuteParams, KnitrExecuteResult, KnitrFormatConfig,
+    call_r,
+};
 
 /// Static file claims every built-in engine declares (Plan 7b Phase 5),
 /// without constructing any engine or probing the environment (unlike
@@ -141,6 +168,22 @@ pub enum LanguageClaim {
     None,
 }
 
+/// What knitr claims, as a pure function so a replay of a knitr trace claims the same languages.
+///
+/// It lives here, not in the native-only `knitr` module, because [`replay::ReplayEngine`] calls
+/// it and the replay path builds for `wasm32` (hub guests replay knitr records without R).
+pub(crate) fn knitr_claims(language: &str) -> LanguageClaim {
+    match language {
+        "r" => LanguageClaim::Primary(1),
+        // The Interop set is knitr's `knit_engines` in-session capability
+        // (reticulate/eng_sql/shell), ceded to a dedicated engine when one is
+        // present. Pinned, not guessed: Q1 ships verified knitr support for
+        // each of these (knitr-fixup.lua for sql, reticulate for python, etc.).
+        "python" | "sql" | "bash" | "sh" => LanguageClaim::Interop(0),
+        _ => LanguageClaim::None,
+    }
+}
+
 /// Languages that Quarto handles downstream via cell handlers (ojs, mermaid, dot).
 ///
 /// Engines must **leave these blocks unchanged** in their output — they are
@@ -158,18 +201,22 @@ pub const HANDLED_LANGUAGES: &[&str] = &["ojs", "mermaid", "dot"];
 pub const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
 
 // Re-export public types
-pub use context::{ExecuteResult, ExecutionContext};
+pub use context::{CellOption, CellOptionsMap, ExecuteResult, ExecutionContext, Skeleton};
 pub use detection::{
     DetectedEngine, EngineSequence, detect_engine, detect_engine_sequence, detect_engines,
 };
 pub use error::ExecutionError;
 #[cfg(not(target_arch = "wasm32"))]
 pub use fixture::FixtureEngine;
+pub use ipynb_replay::IpynbReplayEngine;
 pub use markdown::MarkdownEngine;
 pub use registry::EngineRegistry;
 pub use replay::ReplayEngine;
 pub(crate) use resolution::explicitly_declared_engines;
-pub use resolution::{EngineResolution, ResolutionNote, resolve_engines, resolve_engines_pass1};
+pub use resolution::{
+    DOCUMENT_OWN_FILE_ID, EngineResolution, ResolutionNote, resolve_engines,
+    resolve_engines_for_document, resolve_engines_pass1, resolve_engines_pass1_for_document,
+};
 pub use traits::ExecutionEngine;
 
 pub mod execution_policy;

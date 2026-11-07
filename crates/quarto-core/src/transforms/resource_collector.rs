@@ -463,6 +463,13 @@ impl<'a> ResourceVisitor<'a> {
         // this arm keeps the collector correct on its own, and gives
         // `collect_referenced_asset_urls` — whose anchors are empty —
         // the doc-dir-relative form the preview asset sync needs.)
+        //
+        // The URL is percent-decoded first: `![](<my file.png>)` reaches the
+        // AST as `my%20file.png` (Pandoc's escapeURI, bd-angle-link-dest-
+        // qkqkegqo), as does a hand-written `my%20file.png`, but the file on
+        // disk is `my file.png`. Same decoding as `link_resource_discovery`.
+        let decoded = percent_encoding::percent_decode_str(url).decode_utf8_lossy();
+        let url: &str = &decoded;
         let (src, dest) = if let Some(stripped) = url.strip_prefix('/') {
             if stripped.is_empty() {
                 return;
@@ -627,6 +634,24 @@ mod tests {
             ],
             "relative image URLs in order, deduped; external dropped; \
              leading-/ mapped to doc-dir-relative"
+        );
+    }
+
+    /// Image URLs are percent-encoded in the AST (`![](<my file.png>)`
+    /// becomes `my%20file.png`, matching Pandoc), but the copy source must
+    /// be the on-disk name (bd-angle-link-dest-qkqkegqo).
+    #[test]
+    fn percent_encoded_image_urls_resolve_to_decoded_paths() {
+        let blocks = vec![para(vec![
+            image("figs/sales%20chart.png"),
+            image("/root%20dir/a%2Bb.png"),
+        ])];
+        assert_eq!(
+            collect_referenced_asset_urls(&blocks),
+            vec![
+                "figs/sales chart.png".to_string(),
+                "root dir/a+b.png".to_string(),
+            ]
         );
     }
 

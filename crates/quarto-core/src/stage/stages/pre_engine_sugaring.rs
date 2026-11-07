@@ -34,8 +34,11 @@
 //! introduces is handled by `EngineExecutionStage`, which serializes the
 //! whole AST and reconciles the post-engine parse against it — see plan D2.
 
+use crate::engine::cell_lang::engine_cell_lang;
+use crate::record::SugaredBlock;
 use async_trait::async_trait;
 use quarto_error_reporting::DiagnosticMessage;
+use quarto_pandoc_types::block::Block;
 use quarto_source_map::FileId;
 
 use crate::crossref::{
@@ -136,6 +139,13 @@ impl PipelineStage for PreEngineSugaringStage {
         let mut index = CrossrefIndex::new(FileId(0));
         index.promised_ids = extracted.promised_ids;
 
+        // EXR-5 (epic decision 36): before the pass rewrites anything, record the
+        // author's text of every braced executable block, in document order, the
+        // untouched ones included. The engine stage pairs the list with its unit
+        // scan to hash what the author wrote, since the desugaring below strips
+        // the label and caption lines from what the engine sees.
+        let author_texts = executable_block_texts(&doc.ast.blocks);
+
         // Desugar code-block crossref shorthand into the canonical Div
         // scaffold so engine execution sees plain code blocks. The walk
         // uses the finalized registry so user-declared categories work.
@@ -146,6 +156,31 @@ impl PipelineStage for PreEngineSugaringStage {
             &mut ctx.diagnostics,
         );
 
+        let sugared_texts = executable_block_texts(&doc.ast.blocks);
+        if author_texts.len() == sugared_texts.len() {
+            ctx.sugared_blocks = author_texts
+                .into_iter()
+                .zip(sugared_texts)
+                .map(|(author_text, sugared_text)| SugaredBlock {
+                    author_text,
+                    sugared_text,
+                })
+                .collect();
+        } else {
+            // Cannot happen: the desugaring replaces a block in place. Keep the
+            // list empty rather than misalign it; the engine stage then hashes
+            // the scanned text.
+            trace_event!(
+                ctx,
+                EventLevel::Warn,
+                "pre-engine sugaring: {} executable blocks before desugaring, {} after; \
+                 no author-text snapshot",
+                author_texts.len(),
+                sugared_texts.len()
+            );
+            ctx.sugared_blocks = Vec::new();
+        }
+
         ctx.ref_type_registry = Some(registry);
         // Only seed the index if no prior stage has set one. Idempotent so
         // re-running the stage in tests is harmless.
@@ -155,6 +190,34 @@ impl PipelineStage for PreEngineSugaringStage {
 
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// The text of every braced executable code block under `blocks`, in document
+/// order, descending into the same containers `desugar_blocks` descends into (so
+/// the list before and the list after the pass align block for block).
+fn executable_block_texts(blocks: &[Block]) -> Vec<String> {
+    fn walk(blocks: &[Block], out: &mut Vec<String>) {
+        for block in blocks {
+            match block {
+                Block::BlockQuote(bq) => walk(&bq.content, out),
+                Block::Div(div) => walk(&div.content, out),
+                Block::OrderedList(ol) => ol.content.iter().for_each(|item| walk(item, out)),
+                Block::BulletList(bl) => bl.content.iter().for_each(|item| walk(item, out)),
+                Block::DefinitionList(dl) => {
+                    for (_term, defs) in &dl.content {
+                        defs.iter().for_each(|def| walk(def, out));
+                    }
+                }
+                Block::CodeBlock(cb) if engine_cell_lang(block).is_some() => {
+                    out.push(cb.text.clone());
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(blocks, &mut out);
+    out
 }
 
 /// Convert a metadata extraction error into a diagnostic message.
@@ -350,6 +413,99 @@ mod tests {
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
         }
+    }
+
+    /// Parse `qmd` the way the pipeline does, so the snapshot sees real blocks.
+    fn parse_doc(qmd: &str) -> DocumentAst {
+        let (ast, ast_context, _warnings) = pampa::readers::qmd::read(
+            qmd.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            true,
+            None,
+        )
+        .expect("qmd parses");
+        DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast,
+            source_context: ast_context.source_context.clone(),
+            ast_context,
+            warnings: vec![],
+            recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
+        }
+    }
+
+    async fn snapshot_of(qmd: &str) -> Vec<SugaredBlock> {
+        let mut ctx = make_ctx();
+        PreEngineSugaringStage::new()
+            .run(PipelineData::DocumentAst(parse_doc(qmd)), &mut ctx)
+            .await
+            .expect("stage runs");
+        ctx.sugared_blocks
+    }
+
+    /// EXR-5: the snapshot lists every braced executable block, the ones the
+    /// pass leaves alone included, so an untouched cell whose text equals a
+    /// rewritten cell\'s stripped text cannot take that cell\'s entry.
+    #[tokio::test]
+    async fn snapshot_lists_untouched_blocks_too() {
+        let qmd = "```{python}\nx = 1\n```\n\n```{python}\n#| label: fig-a\n#| fig-cap: A\nx = 1\n```\n\n```{python}\nx = 1\n```\n";
+        let snapshot = snapshot_of(qmd).await;
+        assert_eq!(snapshot.len(), 3, "{snapshot:?}");
+        assert_eq!(snapshot[0].author_text, "x = 1");
+        assert_eq!(snapshot[0].sugared_text, "x = 1");
+        assert_eq!(
+            snapshot[1].author_text,
+            "#| label: fig-a\n#| fig-cap: A\nx = 1"
+        );
+        assert_eq!(snapshot[1].sugared_text, "x = 1");
+        assert_eq!(snapshot[2].author_text, "x = 1");
+        assert_eq!(snapshot[2].sugared_text, "x = 1");
+    }
+
+    /// A labeled cell with a caption line between two kept options keeps the
+    /// author\'s raw lines, in order, while the engine text drops the two.
+    #[tokio::test]
+    async fn snapshot_has_the_authors_raw_lines_for_a_sugared_cell() {
+        let qmd = "```{python}\n#| echo: false\n#| fig-cap: \"A cap\"\n#| label: fig-x\n#| fig-width: 7\nplot()\n```\n";
+        let snapshot = snapshot_of(qmd).await;
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(
+            snapshot[0].author_text,
+            "#| echo: false\n#| fig-cap: \"A cap\"\n#| label: fig-x\n#| fig-width: 7\nplot()"
+        );
+        assert!(
+            !snapshot[0].sugared_text.contains("fig-cap"),
+            "{:?}",
+            snapshot[0]
+        );
+        assert!(
+            !snapshot[0].sugared_text.contains("label"),
+            "{:?}",
+            snapshot[0]
+        );
+        assert!(
+            snapshot[0].sugared_text.contains("#| echo: false"),
+            "{:?}",
+            snapshot[0]
+        );
+        assert!(
+            snapshot[0].sugared_text.contains("#| fig-width: 7"),
+            "{:?}",
+            snapshot[0]
+        );
+    }
+
+    /// A sugared cell inside a container is in the list, in document order.
+    #[tokio::test]
+    async fn snapshot_includes_cells_inside_containers() {
+        let qmd = "```{python}\na\n```\n\n::: {.panel}\n```{python}\n#| label: fig-in\n#| fig-cap: In\nb\n```\n:::\n\n```{python}\nc\n```\n";
+        let snapshot = snapshot_of(qmd).await;
+        let authors: Vec<&str> = snapshot.iter().map(|b| b.author_text.as_str()).collect();
+        assert_eq!(authors, ["a", "#| label: fig-in\n#| fig-cap: In\nb", "c"]);
+        assert_eq!(snapshot[1].sugared_text, "b");
     }
 
     #[tokio::test]

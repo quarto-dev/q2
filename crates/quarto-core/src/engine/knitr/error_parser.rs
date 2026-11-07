@@ -201,8 +201,38 @@ fn parse_package_version(stderr: &str) -> Option<RErrorInfo> {
     None
 }
 
+/// Parse the newer knitr form, `Quitting from doc.rmarkdown:X-Y [label]`, with the error
+/// text on the lines before it (`Error:\n! boom`, or `Error in f(): boom`).
+fn parse_knitr_file_range_error(stderr: &str) -> Option<RErrorInfo> {
+    let re = Regex::new(r"Quitting from ([^\s:]+):(\d+)-(\d+)(?:\s+\[[^\]]*\])?").unwrap();
+    let caps = re.captures(stderr)?;
+    let start_line: usize = caps.get(2)?.as_str().parse().ok()?;
+    let end_line: usize = caps.get(3)?.as_str().parse().ok()?;
+    let before = &stderr[..caps.get(0)?.start()];
+    // Everything after the last "Error" marker up to "Quitting" is the message.
+    let detail = before
+        .rfind("Error")
+        .map_or(before, |i| &before[i..])
+        .trim();
+    let message = detail.strip_prefix("Error:").map_or_else(
+        || detail.to_string(),
+        |m| m.trim().trim_start_matches("! ").to_string(),
+    );
+    Some(RErrorInfo {
+        error_type: RErrorType::KnitrExecutionError {
+            source_file: Some(caps.get(1)?.as_str().to_string()),
+        },
+        message: clean_error_message(&message),
+        suggestion: None,
+        source_lines: Some(start_line..end_line + 1),
+    })
+}
+
 /// Parse knitr "Quitting from lines X-Y" errors.
 fn parse_knitr_error(stderr: &str) -> Option<RErrorInfo> {
+    if let Some(info) = parse_knitr_file_range_error(stderr) {
+        return Some(info);
+    }
     // Pattern: "Quitting from lines X-Y (file.Rmd)..."
     // or "Quitting from lines X-Y ..."
     let re = Regex::new(r"Quitting from lines\s+(\d+)-(\d+)\s*(?:\(([^)]+)\))?[:\s]*(.+?)(?:\n|$)")
@@ -426,6 +456,20 @@ Execution halted
             RErrorType::KnitrExecutionError { source_file: None }
         ));
         assert_eq!(info.source_lines, Some(10..16));
+    }
+
+    #[test]
+    fn test_parse_knitr_file_range_error() {
+        let stderr = "processing file: doc.rmarkdown\nError:\n! boom\n\nQuitting from doc.rmarkdown:154-158 [unnamed-chunk-1]\nExecution halted\n";
+        let info = parse_r_error(stderr);
+        assert_eq!(
+            info.error_type,
+            RErrorType::KnitrExecutionError {
+                source_file: Some("doc.rmarkdown".to_string())
+            }
+        );
+        assert_eq!(info.source_lines, Some(154..159));
+        assert_eq!(info.message, "boom");
     }
 
     #[test]

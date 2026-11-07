@@ -1,0 +1,12 @@
+- item one
+
+  ```{r hidden_in_list, include=FALSE}
+  q <- 5
+  print("hidden in list")
+  ```
+
+  ```{r shown_in_list}
+  q + 1
+  ```
+
+- item two

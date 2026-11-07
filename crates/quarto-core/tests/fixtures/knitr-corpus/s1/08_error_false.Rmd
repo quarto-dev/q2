@@ -1,0 +1,8 @@
+```{r errfatal}
+print("before")
+stop("fatal")
+```
+
+```{r later2}
+"later2"
+```

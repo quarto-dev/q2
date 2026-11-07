@@ -1,0 +1,3 @@
+```{r cached3, cache=3}
+print("cached chunk")
+```

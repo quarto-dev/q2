@@ -1,0 +1,56 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "f36c28972be9cd62",
+   "metadata": {
+    "quarto_cell_id": "0-f36c2897-unlabeled",
+    "quarto_content_hash": "f36c28972be9cd62",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "a0d01df8758e6b073cae4dd19a71fd6c1e284c363473856d9acb3d8f94397e76",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "1\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(1)"
+   ]
+  }
+ ],
+ "metadata": {
+  "quarto_cache_version": 1,
+  "quarto_engines": [
+   {
+    "can_freeze": false,
+    "document_hash": "b03d174edb9a670f7ed646a4eaff303383f657febfb8c11594ce24fe2820caa2",
+    "hash_definition": {
+     "documentKeys": [],
+     "granularity": "unit",
+     "id": "jupyter",
+     "presentationCellOptions": [],
+     "presentationExecuteKeys": [],
+     "version": 1
+    },
+    "name": "jupyter",
+    "needs_postprocess": false,
+    "owned_languages": [
+     "python"
+    ]
+   }
+  ],
+  "quarto_execution_hash": "107f55aac00f4c3be586067d70b0de3348aa44d75195082f7cb4e1b1c2c9d9f5",
+  "quarto_record_version": 1
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

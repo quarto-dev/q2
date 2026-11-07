@@ -1,0 +1,6 @@
+```{r nechoes, echo=c(1, 3)}
+a <- 1
+b <- 2
+c <- a + b
+c
+```

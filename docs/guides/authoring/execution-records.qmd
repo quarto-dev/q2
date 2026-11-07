@@ -1,0 +1,91 @@
+---
+title: Execution records
+---
+
+## Overview
+
+When Quarto runs the code in a document, it can keep what the code produced
+--- each cell's outputs and each inline expression's value --- as an
+**execution record**. A record lets Quarto present the document again
+without running anything: `q2 preview` and hub use
+this to show an up-to-date page while you edit prose.
+
+A record is an ordinary Jupyter notebook file (`.ipynb`), whichever engine ran
+the code, so other tools can read it. Each cell of the notebook is one
+**unit** of the document: a code cell, or an inline expression.
+
+::: callout-note
+## Opt-in for now
+
+A plain `q2 render` writes no record. You ask for one per document with
+`record: true`, shown below. The preview and hub write records of their own
+behind the environment variable `QUARTO_ENGINE_RECORD_WRITE`, which is off by
+default while the feature is rolled out; set it to `1` to turn them on.
+:::
+
+## Writing a record
+
+Add `record: true` to the document's `execute` options:
+
+````markdown
+---
+title: Report
+jupyter: python3
+execute:
+  record: true
+---
+````
+
+A render then writes the record under the project's `.quarto/` directory, at
+`.quarto/execution-records/<document path without extension>.ipynb`. In a
+project, `reports/q3.qmd` gets `.quarto/execution-records/reports/q3.ipynb`
+at the project root. A standalone document with no project gets a `.quarto/`
+beside it, so `q3.qmd` gets `.quarto/execution-records/q3.ipynb`.
+
+Two renders of the same inputs write the same bytes. Many projects ignore
+`.quarto/` in version control, so a record is not something to commit; do not
+expect it to be shared between collaborators until a durable use for it
+exists.
+
+## What an edit does to a record
+
+Quarto compares a record with the document to decide whether it still
+describes it:
+
+| You edit                                             | The record is |
+|------------------------------------------------------|---------------|
+| prose outside cells and spans                        | still fresh   |
+| the code in a cell                                   | stale         |
+| a `#|` option line                                   | stale         |
+| an inline expression                                 | stale         |
+| a front matter key that affects execution            | stale         |
+
+So correcting a typo in a paragraph does not re-run your cells in the preview
+or in hub. Any other edit above does.
+
+The preview also keeps a cache of its own, keyed on the whole input. A prose
+edit can therefore still cause a re-run there for reasons unrelated to the
+record; the table is about the record only.
+
+## Positron's cache is a different file
+
+[Positron](https://positron.posit.co) keeps its own cache of Quarto outputs,
+in per-user storage. Quarto does not use or write that file as its record,
+for three reasons: Positron's file is rewritten from a fixed set of fields, so
+extra information in it is dropped; it is named after a hash of the document's
+location, which Quarto cannot reproduce; and it carries a timestamp that
+changes on every write, so its bytes are never stable.
+
+Quarto does not read Positron's cache when it renders. The two files stay
+independent: neither one reuses the other's outputs, and a render never changes
+or deletes Positron's cache.
+
+## Limits
+
+- A record from the knitr engine can be stored, but Positron cannot present
+  rendered knitr output yet.
+- To run cells in a kernel other than Python, see
+  [Running other languages with Jupyter kernels](jupyter-kernels.qmd), which
+  also covers choosing a kernel and what happens when one is missing.
+- Inline expressions are described in
+  [Inline expressions](computations.qmd#inline-expressions).

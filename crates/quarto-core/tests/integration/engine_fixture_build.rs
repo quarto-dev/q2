@@ -34,6 +34,7 @@ pub const HERMETIC_FIXTURES: &[&str] = &[
     "whenclass-marimo",
     "echo-engine",
     "echo-legacy",
+    "owns-cant-run",
     "synth-echo",
 ];
 

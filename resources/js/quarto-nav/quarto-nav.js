@@ -331,6 +331,34 @@
       }, 50);
     }
   });
+
+  // Scroll the active sidebar item into view, if necessary (Q1's block
+  // of the same name; GH #1065). A ResizeObserver on the scrollable nav
+  // waits until its height has resolved; while it is still laying out,
+  // the visible bottom equals `scrollHeight`. Then, if the active item
+  // is below the visible area, scroll it to the top, once.
+  //
+  // Q1 runs this only off `file:` (it sits inside its index.html link
+  // fixup block); the scroll has nothing to do with links, so q2 runs
+  // it on every page. Runs once at init: in the hub-client preview the
+  // sidebar mounts later, so this is a no-op there.
+  const navSidebar = window.document.querySelector("nav#quarto-sidebar");
+  const activeItem = navSidebar
+    ? navSidebar.querySelector("li.sidebar-item a.active")
+    : null;
+  if (activeItem && window.ResizeObserver) {
+    const sidebarObserver = new window.ResizeObserver(() => {
+      const elTop = activeItem.offsetTop;
+      const viewBottom = navSidebar.scrollTop + navSidebar.clientHeight;
+      if (viewBottom !== navSidebar.scrollHeight) {
+        if (elTop >= viewBottom) {
+          navSidebar.scrollTop = elTop;
+        }
+        sidebarObserver.unobserve(navSidebar);
+      }
+    });
+    sidebarObserver.observe(navSidebar);
+  }
   }
 
   // Native pages load this via a plain <script src> in <head>, before

@@ -1,0 +1,6 @@
+```{r holdfig, fig.show='hold'}
+set.seed(1)
+plot(1:5)
+print("between plots")
+plot(5:1)
+```

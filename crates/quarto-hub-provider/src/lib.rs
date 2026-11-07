@@ -27,7 +27,7 @@ pub use consent::{
 };
 pub use dialer::BearerDialer;
 pub use exec_channel::{BEACON_INTERVAL, BEACON_TIMEOUT, ExecMessage, parse_exec_message};
-pub use execute::{CAPTURE_MIME_TYPE, ExecOutcome, Provider};
+pub use execute::{CAPTURE_MIME_TYPE, ExecOutcome, Provider, overlay_free_run};
 pub use join::{JoinConfig, join, join_and_list_files};
 pub use materialize::materialize_project;
 pub use token::{StaticTokenSource, TokenSource};

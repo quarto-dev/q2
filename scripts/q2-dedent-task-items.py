@@ -14,7 +14,7 @@ Notes here often write
 The item's content column is 2 (after `- `; the `[x]` is content), so
 anything indented six is four past it: a lazy continuation line is fine,
 but a paragraph after a blank line, a fenced block or a sub-list becomes
-an *indented code block*, which q2 rejects (Q-2-35, or a parse error at
+an *indented code block*, which q2 rejects (Q-2-59, or a parse error at
 the fence). CommonMark and Pandoc read it the same way; q2 just says so.
 
 This script finds every top-level `- [ ]` / `- [x]` item whose non-blank

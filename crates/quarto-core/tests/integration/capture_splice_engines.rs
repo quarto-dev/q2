@@ -23,7 +23,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::capture_splice::{derive_cell_outputs, engine_cell_lang, splice_cells};
+use quarto_core::engine::capture_splice::{derive_cell_outputs, splice_cells};
+use quarto_core::engine::cell_lang::engine_cell_lang;
 use quarto_core::engine::jupyter::JupyterError;
 use quarto_core::engine::preview_record::record_capture;
 use quarto_core::project::ProjectContext;

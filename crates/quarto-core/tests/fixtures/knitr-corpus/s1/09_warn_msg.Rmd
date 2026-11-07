@@ -1,0 +1,37 @@
+```{r base_wm}
+message("m1")
+warning("w1")
+message("m2")
+warning("w2")
+```
+
+```{r warn_false, warning=FALSE}
+warning("dropped warning")
+print("x")
+```
+
+```{r warn_na, warning=NA}
+warning("na warning")
+print("y")
+```
+
+```{r msg_false, message=FALSE}
+message("dropped message")
+print("z")
+```
+
+```{r msg_na, message=NA}
+message("na message")
+print("w")
+```
+
+```{r warn_num, warning=1}
+warning("first")
+warning("second")
+```
+
+```{r msg_num, message=2}
+message("one\n")
+message("two\n")
+message("three\n")
+```

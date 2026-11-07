@@ -1,0 +1,15 @@
+```{r kable}
+knitr::kable(head(data.frame(a = 1:2, b = c("x", "y"))))
+```
+
+```{r asis_obj}
+knitr::asis_output("**raw markdown from asis_output**")
+```
+
+```{r asis_html}
+knitr::asis_output("<div class='raw'>raw html</div>")
+```
+
+```{r asis_hide, results='hide'}
+knitr::asis_output("dropped by results=hide")
+```

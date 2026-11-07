@@ -1,0 +1,48 @@
+---
+title: "Indented code blocks are not supported"
+description: "A line indented four or more spaces (or a tab) would start an indented code block in CommonMark, which Quarto Markdown does not support."
+code: Q-2-59
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-59` — Indented code blocks are not supported
+
+> Quarto Markdown does not support 4-space indented code blocks. Use a
+> fenced code block (```` ``` ````) instead, or remove the leading
+> indentation.
+
+## What this means
+
+In CommonMark, a paragraph-level line indented four or more spaces (or
+one tab) starts an *indented code block*. Quarto Markdown has no such
+block: only fenced code blocks are code. Rather than silently turning
+indented text into code, the parser reports this error.
+
+This code was previously reported as `Q-2-35`, which now means only an
+invalid list-table structure (see [`Q-2-35`](Q-2-35.qmd)).
+
+## Why this happens
+
+- **Documents ported from Pandoc or CommonMark** that use indentation
+  to mark code.
+- **Accidental indentation**, such as a pasted block or a paragraph
+  continued with four leading spaces after a blank line.
+- **Writer output** that indents a continuation, for example the second
+  paragraph of a footnote.
+
+## How to fix
+
+Use a fenced code block:
+
+````markdown
+```
+foo
+```
+````
+
+If the indentation was accidental, remove it so the line starts at
+column zero, or at most three spaces in.

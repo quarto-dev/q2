@@ -157,7 +157,12 @@ use crate::project::drafts::{DraftMode, meta_is_draft, resolve_draft_mode};
 ///   default `gone`), but bumped: a cached v15 profile of a page under
 ///   `draft-mode: visible` would deserialize as `gone` and silently
 ///   vanish from the site.
-pub const DOCUMENT_PROFILE_VERSION: u32 = 16;
+/// - `17`: JOL-2a. `engine_resolution` changes meaning: a page with no
+///   code cells whose own front matter declares an engine (`engine:` or
+///   the `jupyter:` / `knitr:` shorthand) now stamps that engine in its
+///   sequence, where it used to stamp an empty one. A cached v16 profile
+///   of such a page would claim no engine.
+pub const DOCUMENT_PROFILE_VERSION: u32 = 17;
 
 /// Listing values L1 (`ListingItemInfoStage`) derives from a document's
 /// body, kept apart from anything the author wrote.
@@ -2710,8 +2715,8 @@ Body.
     }
 
     #[test]
-    fn document_profile_version_is_16() {
-        assert_eq!(DOCUMENT_PROFILE_VERSION, 16);
+    fn document_profile_version_is_17() {
+        assert_eq!(DOCUMENT_PROFILE_VERSION, 17);
     }
 
     // bd-2hy80x1j: `draft-mode` is read from merged metadata in either

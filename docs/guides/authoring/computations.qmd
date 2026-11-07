@@ -137,6 +137,35 @@ Jinja or Mustache templates, GitHub Actions expressions — render
 correctly, where Quarto 1 would collapse them.
 :::
 
+## Cell openers
+
+A code cell starts with a fence whose header is a single **language token**
+in braces:
+
+````markdown
+```{python}
+1 + 1
+```
+````
+
+The token is letters, digits, `_`, `.` and `-`, starts with a letter, and is
+matched case-insensitively. A dot is part of the token: `{python.marimo}` is
+one token, naming a language and the engine flavor together. A space starts a
+class instead: `{python .marimo}` is a `python` cell with the class `marimo`.
+
+Options never go inside the braces. Put them in `#|` lines at the top of the
+cell:
+
+````markdown
+```{python}
+#| echo: false
+1 + 1
+```
+````
+
+A header such as `{python echo=false}` is the knitr style and is rejected
+with error [`Q-2-36`](../../errors/markdown/Q-2-36.qmd).
+
 ## Inline expressions
 
 A document can also compute a value **inline** --- inside a sentence, or
@@ -187,8 +216,9 @@ exactly that reason.
 
 ### Where inline expressions work
 
-In prose, and in attribute values --- a fenced div's attributes, or a link
-title:
+Inline expressions are evaluated in three places: prose, attribute values
+(a fenced div's attributes, or a link title), and the document's **own**
+front matter:
 
 ````markdown
 The current release is `{r} release_version`.
@@ -199,6 +229,135 @@ Download the latest build.
 
 [Download](https://example.com/dl "Version `{r} release_version`")
 ````
+
+In front matter, write the expression inside a quoted string:
+
+````markdown
+---
+title: "Report for `{python} __import__('datetime').date.today().year`"
+jupyter: python3
+---
+````
+
+Front matter is evaluated before any cell runs, so a span there cannot use
+variables a cell defines. A value that would put a newline inside a YAML
+string stops the render and names the key.
+
+They are left exactly as written in these places:
+
+- any fenced code block, whether braced (a `{r}` cell) or not, and whatever
+  its language;
+- HTML comments;
+- project-level metadata: `_quarto.yml`, `_metadata.yml`, and extension or
+  format defaults. A span in `_quarto.yml` is **not** evaluated, even though
+  one in a document's own front matter is;
+- a span written in a language no engine in the document owns, such as
+  `` `{zzz} x` ``.
+
+::: callout-note
+## Migrating from Quarto 1
+
+Quarto 1 also evaluated a span written inside a braced `{r}` cell (a comment
+such as `# a `{python} x` span`). Quarto 2 treats the cell body as code and
+leaves it alone.
+:::
+
+### Inline expressions with Jupyter
+
+With the [Jupyter engine](engines.qmd), a `` `{python} expr` `` span runs in
+the document's kernel, so it sees the state left by earlier cells. The
+language token matches case-insensitively: `{Python}` also runs in Quarto 2,
+though Quarto 1 does not recognize it.
+
+````markdown
+```{python}
+total = 40 + 2
+```
+
+The answer is `{python} total`.
+````
+
+The span is an **expression**, as in Quarto 1. A statement such as `y = 5`
+has no value; the kernel answers with a `SyntaxError` and the render stops
+with error [`Q-18-10`](../../errors/engine/Q-18-10.qmd), naming the span as
+`file:line:col` together with the kernel's message. `error: true` does not
+apply to a span, and neither does `execute: eval: false`: a span runs
+either way.
+
+#### How a value is inserted
+
+As with knitr's brace spelling, the value is inserted as **text**, with
+Markdown's special characters escaped. To insert Markdown (or HTML) instead,
+return it from `IPython.display`:
+
+````markdown
+```{python}
+from IPython.display import Markdown
+note = Markdown("**important**")
+```
+
+The notice is `{python} note`.
+````
+
+`Markdown(...)` is the Jupyter analog of knitr's `I()`.
+
+Two values need a word:
+
+- `None` renders the text `None`, because that is the value's text.
+- An empty string, or any value with no text form Quarto can place in the
+  page (for example only a plot), leaves the span's source in the document.
+  The second case also prints a warning naming the file and line; the render
+  still succeeds.
+
+::: callout-warning
+## Empty values differ by engine
+
+An empty string leaves the span source in place with Jupyter, while knitr and
+Julia render nothing. This is not settled, so do not rely on either behavior
+across engines.
+:::
+
+### Documents that contain only inline expressions
+
+A document with no executable cell has no code for Quarto to hand to an
+engine, so it needs a hint. Without one, its spans are left as written and no
+kernel starts. Select the engine in the document's **own** front matter:
+
+````markdown
+---
+title: Spans only
+jupyter: python3
+---
+
+Today is `{python} __import__("datetime").date.today().year`.
+````
+
+`engine: jupyter` works too. The key must be in the document's own front
+matter: `engine:` in `_quarto.yml` does not make a page without cells run its
+spans, as in Quarto 1. A page with at least one executable cell needs no key.
+
+To show a span as code instead of running it, wrap it in a `markdown` code
+block, as in
+[Writing about an inline expression](#writing-about-an-inline-expression).
+Doubling the braces is not an escape: `` `{{python}} x` `` is left alone, but
+it is displayed with both pairs of braces.
+
+### Other engines
+
+- **knitr**: unchanged. Both spellings work as described above.
+- **Julia**: spans use the brace spelling, and Julia evaluates them. It finds
+  spans by parsing the document as Markdown rather than scanning its text, so
+  a couple of cases come out differently from Jupyter:
+  - A span in the document's own front matter is left as written. Julia does
+    not evaluate front matter spans.
+  - The language and the code must be separated by one space. A tab leaves the
+    span as written.
+
+  As in any document, a span in a language that no engine in the document
+  owns is left as written.
+- **marimo**: inline expressions are not supported. marimo runs no spans, so
+  a `` `{python} x` `` span in a marimo document is left as written, with no
+  output. Compute the value in a cell and show it there.
 
 ### Writing about an inline expression
 
@@ -224,10 +383,12 @@ prose around it, so a reader can copy the whole line into their own document.
 As with cells, the wrapping fence only needs to be longer than the longest run
 of backticks inside it.
 
-The block has to be a `markdown` block, or a fence carrying no language at
-all. A fence labelled with some other language --- ```` ```r ````, say ---
-displays its text but does not stop an expression inside it from running, so
-reach for `markdown` when what you are showing is Quarto syntax.
+Any fenced code block displays its text and never evaluates it, so the same
+holds for a block with no language, or one labelled with another language such
+as ```` ```r ```` or ```` ```text ````. A braced `{r}` cell is code, not
+prose, and is not scanned for spans at all. Reach
+for `markdown` when what you are showing is Quarto syntax, because that is the
+label that tells readers (and highlighters) what the block contains.
 
 ::: callout-note
 ## Migrating from Quarto 1

@@ -87,6 +87,19 @@ pub struct KnitrExecuteParams {
 
     /// Languages handled by Quarto (pass-through, don't execute)
     pub handled_languages: Vec<String>,
+
+    /// Record each chunk's evaluate() pieces next to the markdown (KNR-1
+    /// capture; `execute.R` then returns `pieces`). Omitted from the wire
+    /// when off, so existing requests are unchanged. Turning it on also
+    /// turns knitr's cache off for the run.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub capture: bool,
+
+    /// KNR-6: this run's marker nonce (see `skeleton.rs`). When set, a chunk or brace span
+    /// Rust may present is returned as `<!-- q2:<nonce>:<unit-id> -->` instead of its markdown.
+    /// Omitted when off, so existing requests are unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
 }
 
 /// Result from the knitr execute action.
@@ -134,6 +147,149 @@ pub struct KnitrExecuteResult {
     /// Whether post-processing is needed
     #[serde(default)]
     pub post_process: bool,
+
+    /// One record per chunk that carried a `quarto-unit-id` option, in
+    /// execution order (EXR-11). Absent from results that predate it.
+    #[serde(default)]
+    pub chunks: Vec<KnitrChunkRecord>,
+
+    /// One record per brace-spelling inline span that carried an id statement, in
+    /// evaluation order (EXR-12). Absent from results that predate it.
+    #[serde(default)]
+    pub spans: Vec<KnitrSpanRecord>,
+
+    /// One entry per executed chunk, with knitr's pieces (source, output,
+    /// plots, ...) before `sew` turns them into markdown (KNR-1 S2). Parallel
+    /// to `chunks`, not an extension of it. Absent from results that predate it.
+    #[serde(default)]
+    pub pieces: Vec<KnitrCapturedChunk>,
+
+    /// The option names the knitr that ran knows (`names(knitr::opts_chunk$get())`, read before
+    /// any chunk runs, so a setup chunk\'s `opts_chunk$set` cannot make an unknown name known).
+    /// Present only on a captured run; becomes the record\'s `known_options` (KNR-3).
+    #[serde(default)]
+    pub known_options: Option<Vec<String>>,
+
+    /// The labels of chunks that asked for knitr\'s cache and had it forced off by the capture
+    /// (KNR-1 S4). Empty on an uncaptured run.
+    #[serde(default)]
+    pub cache_disabled: Vec<String>,
+}
+
+/// A brace-spelling inline expression recorded by the `evaluate.inline` and `inline`
+/// hooks (EXR-12).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnitrSpanRecord {
+    /// The unit id the span carried in its `.QuartoInlineId` statement.
+    pub id: String,
+
+    /// The markdown knitr inserted for the span: empty for a value knitr inserts
+    /// nothing for (`invisible`, a zero-length vector).
+    pub markdown: String,
+
+    /// The value as a captured piece when knitr read it as `knit_asis` or image paths (an
+    /// `I(...)`-wrapped htmlwidget or `include_graphics()`): the same wire shape as a chunk
+    /// piece, so the record can hold the mime knitr produced, not only the flattened text
+    /// (KNR-4 decision 6). Absent for a plain value.
+    #[serde(default)]
+    pub piece: Option<KnitrPiece>,
+}
+
+/// A chunk's captured pieces (KNR-1 S2 wire shape).
+// Read by KNR-1's mapper (integration tests) and KNR-3's adapter, not by the lib yet.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct KnitrCapturedChunk {
+    /// 1-based position in knitr's own chunk sequence. Harness-local: not a record id.
+    pub ordinal: u32,
+    pub label: String,
+    /// The code `evaluate()` received.
+    #[serde(default)]
+    pub code: String,
+    /// The resolved chunk options (KNR-1 S3).
+    #[serde(default)]
+    pub options: Value,
+    pub pieces: Vec<KnitrPiece>,
+    /// Files the chunk wrote, as knitr addresses them.
+    #[serde(default)]
+    pub files: Vec<String>,
+    /// The first knit hook found replaced by the document (`output`, `source`, ...), kept on
+    /// every chunk from the one that replaced it on: the presenter cannot see what the
+    /// override did, so those chunks are fallback units (KNR-3, KNR-1 S5).
+    #[serde(default)]
+    pub hook_override: Option<String>,
+}
+
+/// One piece of a chunk's evaluation, tagged by `class` on the wire.
+// The fields are read by KNR-1's mapper (integration tests) and KNR-3's adapter,
+// not by the lib yet, like `KnitrExecuteResult::chunks`.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "class", rename_all = "snake_case")]
+pub enum KnitrPiece {
+    Source {
+        text: String,
+    },
+    Output {
+        text: String,
+    },
+    Message {
+        text: String,
+    },
+    Warning {
+        text: String,
+        #[serde(default)]
+        call: Option<String>,
+    },
+    Error {
+        text: String,
+        ename: String,
+        evalue: String,
+        #[serde(default)]
+        call: Option<String>,
+    },
+    Plot {
+        files: Vec<String>,
+    },
+    ImagePaths {
+        paths: Vec<String>,
+        /// The width knitr computed for each path (`raster_dpi_width`), where it did.
+        #[serde(default, deserialize_with = "numbers_or_none")]
+        widths: Vec<Option<f64>>,
+    },
+    Asis {
+        text: String,
+        mime: String,
+        #[serde(default)]
+        widget: bool,
+        #[serde(default)]
+        knit_meta: Option<String>,
+    },
+    /// Any class not listed: the whole chunk becomes a fallback unit.
+    Other {
+        classes: Vec<String>,
+    },
+}
+
+/// A knitr chunk recorded by the chunk hook (EXR-11).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnitrChunkRecord {
+    /// The unit id the chunk carried in its `quarto-unit-id` option.
+    pub id: String,
+
+    /// The chunk's finished markdown: what lands in the document (empty, or
+    /// the indent, for `include: false`).
+    pub markdown: String,
+
+    /// Stable digest of the resolved chunk options.
+    pub options_digest: String,
+
+    /// Files the chunk wrote under its figure directory, as knitr addresses
+    /// them (relative to the knit working directory unless `base.dir` is set).
+    #[serde(default)]
+    pub files: Vec<String>,
 }
 
 /// Include files from knitr execution.
@@ -323,6 +479,8 @@ mod tests {
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
+            capture: false,
+            nonce: None,
         };
 
         let json = serde_json::to_string(&params).unwrap();
@@ -335,6 +493,100 @@ mod tests {
 
         // lib_dir is None, should not appear
         assert!(!json.contains("\"libDir\""));
+    }
+
+    #[test]
+    fn execute_result_without_chunks_field_has_no_chunks() {
+        let json = r##"{"engine": "knitr", "markdown": "x"}"##;
+        let result: KnitrExecuteResult = serde_json::from_str(json).unwrap();
+        assert!(result.chunks.is_empty());
+    }
+
+    #[test]
+    fn pieces_field_deserializes_with_and_without() {
+        let without = r##"{"engine": "knitr", "markdown": "x"}"##;
+        let result: KnitrExecuteResult = serde_json::from_str(without).unwrap();
+        assert!(result.pieces.is_empty());
+
+        // The S2 example from KNR-1: every piece class on the wire.
+        let with = r##"{
+            "engine": "knitr",
+            "markdown": "x",
+            "pieces": [{
+                "ordinal": 1,
+                "label": "plain",
+                "code": "x <- 1:3\nx\n",
+                "options": {},
+                "pieces": [
+                    {"class": "source", "text": "x <- 1:3\n"},
+                    {"class": "output", "text": "[1] 1 2 3\n"},
+                    {"class": "message", "text": "hi\n"},
+                    {"class": "warning", "text": "Warning in f(): boom", "call": "f()"},
+                    {"class": "error", "text": "Error in f(): boom\n", "ename": "simpleError",
+                     "evalue": "boom", "call": "f()"},
+                    {"class": "plot", "files": ["doc_files/figure-html/plain-1.png"]},
+                    {"class": "image_paths", "paths": ["made.png"]},
+                    {"class": "asis", "text": "<div>..</div>", "mime": "text/html",
+                     "widget": true, "knit_meta": "[]"},
+                    {"class": "other", "classes": ["weird"]}
+                ],
+                "files": ["doc_files/figure-html/plain-1.png"]
+            }, {"ordinal": 2, "label": "bare", "pieces": []}]
+        }"##;
+        let result: KnitrExecuteResult = serde_json::from_str(with).unwrap();
+        assert_eq!(result.pieces.len(), 2);
+        let first = &result.pieces[0];
+        assert_eq!(first.ordinal, 1);
+        assert_eq!(first.label, "plain");
+        assert_eq!(first.pieces.len(), 9);
+        assert!(matches!(&first.pieces[0], KnitrPiece::Source { text } if text == "x <- 1:3\n"));
+        assert!(matches!(
+            &first.pieces[3],
+            KnitrPiece::Warning { call: Some(c), .. } if c == "f()"
+        ));
+        assert!(matches!(
+            &first.pieces[7],
+            KnitrPiece::Asis {
+                widget: true,
+                knit_meta: Some(_),
+                ..
+            }
+        ));
+        // Optional fields default.
+        let second = &result.pieces[1];
+        assert_eq!(second.code, "");
+        assert!(second.options.is_null());
+        assert!(second.files.is_empty());
+    }
+
+    #[test]
+    fn execute_result_with_chunks_field_deserializes_records() {
+        let json = r##"{
+            "engine": "knitr",
+            "markdown": "x",
+            "chunks": [
+                {"id": "a1", "markdown": "m1", "optionsDigest": "d1", "files": ["f/a-1.png"]},
+                {"id": "a2", "markdown": "", "optionsDigest": "d2"}
+            ]
+        }"##;
+        let result: KnitrExecuteResult = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.chunks,
+            vec![
+                KnitrChunkRecord {
+                    id: "a1".into(),
+                    markdown: "m1".into(),
+                    options_digest: "d1".into(),
+                    files: vec!["f/a-1.png".into()],
+                },
+                KnitrChunkRecord {
+                    id: "a2".into(),
+                    markdown: String::new(),
+                    options_digest: "d2".into(),
+                    files: vec![],
+                },
+            ]
+        );
     }
 
     #[test]
@@ -564,6 +816,8 @@ mod tests {
             params: None,
             resource_dir: PathBuf::from("/resources"),
             handled_languages: vec![],
+            capture: false,
+            nonce: None,
         };
 
         let request = KnitrRequest::new(
@@ -616,4 +870,10 @@ mod tests {
         assert!(result.preserve.is_some());
         assert!(result.post_process);
     }
+}
+
+/// R writes a missing number as the string `"NA"`; anything that is not a number is `None`.
+fn numbers_or_none<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Option<f64>>, D::Error> {
+    let values = Vec::<serde_json::Value>::deserialize(d)?;
+    Ok(values.iter().map(|v| v.as_f64()).collect())
 }

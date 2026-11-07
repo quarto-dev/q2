@@ -584,8 +584,9 @@ fn write_code_container_attr<W: Write>(
 /// `cell-code`), so that `div.sourceCode` CSS rules — which paint the
 /// rounded background — match. The first class in the code block's
 /// attribute list is treated as the language; remaining classes move to
-/// the div. Plain (un-highlighted) code blocks are emitted as a bare
-/// `<pre><code>` and never enter this path.
+/// the div. Code blocks without a `data-hl-spans` attribute are emitted
+/// as a bare `<pre><code>` and never enter this path; an empty or
+/// malformed span list enters it with `spans: None` (plain text).
 fn write_highlighted_codeblock<W: Write>(
     codeblock: &crate::pandoc::block::CodeBlock,
     block: &Block,
@@ -1528,9 +1529,16 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             writeln!(ctx, "</div>")?;
         }
         Block::CodeBlock(codeblock) => {
+            // The attribute's presence — even as an empty list — marks a
+            // source-code block: the annotate step writes `[]` for
+            // languages Pandoc knows but q2 has no grammar for, which
+            // Quarto 1 still wraps in `div.sourceCode` (GH #1079).
             let spans = read_hl_spans(&codeblock.attr);
-            let highlighted = spans.is_some();
-            if highlighted {
+            let source_code = codeblock
+                .attr
+                .2
+                .contains_key(quarto_highlight_encoding::SPANS_ATTR_KEY);
+            if source_code {
                 write_highlighted_codeblock(codeblock, block, spans.as_deref(), ctx)?;
             } else {
                 write!(ctx, "<pre")?;
@@ -3106,6 +3114,28 @@ mod tests {
             html.contains("<code class=\"sourceCode\">"),
             "expected code.sourceCode without language, got:\n{html}",
         );
+    }
+
+    /// GH #1079: an empty span list marks a block in a language Pandoc
+    /// knows but q2 has no grammar for. It gets the full Pandoc nesting
+    /// (so themes draw the code-block box), with no highlight spans.
+    #[test]
+    fn empty_hl_spans_codeblock_gets_div_wrapper() {
+        let html = render_block_to_html(codeblock_with_id_classes_and_spans(
+            "cb1",
+            vec!["ini", "code-with-copy"],
+            "a = <b>",
+            "[]",
+        ));
+        assert!(
+            html.contains(
+                "<div class=\"sourceCode code-with-copy\" id=\"cb1\"><pre class=\"sourceCode ini\">\
+                 <code class=\"sourceCode ini\">a = &lt;b&gt;</code></pre></div>"
+            ),
+            "expected the div.sourceCode nesting with escaped text, got:\n{html}",
+        );
+        assert!(!html.contains("data-hl-spans"), "got:\n{html}");
+        assert!(!html.contains("<span class=\"hl-"), "got:\n{html}");
     }
 
     #[test]

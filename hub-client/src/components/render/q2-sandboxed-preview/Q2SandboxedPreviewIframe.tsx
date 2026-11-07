@@ -22,7 +22,7 @@ interface Q2SandboxedPreviewIframeProps {
    *  - `undefined`: render failed or pre-first-render. Skip the post
    *    entirely so the iframe keeps its last-good styling.
    *
-   * Unlike `Q2PreviewIframe`, the CSS travels as **text**, not a blob
+   * As in `Q2PreviewIframe`, the CSS travels as **text**, not a blob
    * URL: blob URLs are scoped to the origin that minted them, so the
    * cross-origin sandboxed iframe could never fetch a parent-minted
    * one. The iframe mints its own blob URL from the text.

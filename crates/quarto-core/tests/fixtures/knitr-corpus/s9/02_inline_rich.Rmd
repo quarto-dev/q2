@@ -1,0 +1,5 @@
+KNR-4 rich values. Raw html: brace `{r} I(knitr::asis_output("<b>bold</b>"))` in prose.
+
+An image: brace `{r} I(knitr::include_graphics("dot.svg"))` inline.
+
+A plain number beside them: `{r} 6 * 7`.

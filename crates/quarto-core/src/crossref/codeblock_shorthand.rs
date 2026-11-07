@@ -644,14 +644,17 @@ pub(crate) fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String 
 /// block-span fallback. It is unreachable from the qmd parser: a fenced
 /// block with a non-empty body always contains a newline, and qmd does
 /// not produce CommonMark 4-space indented code blocks at all (the
-/// scanner raises Q-2-35 instead —
+/// scanner raises Q-2-59 instead —
 /// `tree-sitter-qmd/tree-sitter-markdown/grammar.js:1210-1220`).
 ///
 /// Falls back to the block's span when the body is not a contiguous
 /// substring of the region. That happens legitimately: a fence inside a
 /// blockquote or a list item has its continuation markers (`> `,
 /// indentation) stripped from `text` by the parser, so no contiguous
-/// range matches. Diagnostics then point at the block rather than the
+/// range matches. The same holds for a multi-line body under an
+/// *indented* fence, whose indentation the parser also strips from each
+/// line (CommonMark §4.5; pinned by
+/// `body_source_for_handles_an_indented_fence`). Diagnostics then point at the block rather than the
 /// exact key — coarser, but never *wrong*, which is the property that
 /// matters (the alternative, binding an assumed span to real content,
 /// is the failure mode `add_file_with_id` is lint-gated against).
@@ -1966,6 +1969,99 @@ mod tests {
             (12, 18),
             "body span must be the body between the fences, not the \
              `python` inside the `{{python}}` info string at 4..10"
+        );
+    }
+
+    /// EXR-4 Phase 0 (epic decision 36). After crossref sugaring strips a
+    /// `fig-cap` line from the middle of a cell's options, the stripped
+    /// `CodeBlock` keeps the original `source_info` but its text is no
+    /// longer a contiguous run of the file, so `body_source_for` on it
+    /// falls back to the **whole block** (fence lines included). The span
+    /// of a sugared block therefore cannot locate the author's text, which
+    /// is why the engine-execution stage must take the author text from the
+    /// unsugared source (see the EXR-4 plan, Phase 0).
+    #[test]
+    fn body_source_for_falls_back_to_whole_block_after_mid_body_strip() {
+        let text = "```{python}\n#| label: fig-plot\n#| fig-width: 7\n#| fig-cap: A caption\n#| fig-height: 5\nx = 1\n```\n";
+        let (mut ast, ast_context, _diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let sources = &ast_context.source_context;
+        let Block::CodeBlock(original) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock");
+        };
+        let original_body = body_source_for(original, sources);
+        let original_len = original_body.length();
+        assert!(
+            original_len < text.len(),
+            "precondition: before sugaring the body span is inside the fences"
+        );
+
+        let reg = RefTypeRegistry::builtin();
+        desugar_blocks(&mut ast.blocks, &reg, sources, &mut Vec::new());
+        let Block::Div(div) = &ast.blocks[0] else {
+            panic!("expected the float Div, got {:?}", ast.blocks[0]);
+        };
+        let Block::CodeBlock(stripped) = &div.content[0] else {
+            panic!("expected the stripped CodeBlock");
+        };
+        assert_eq!(
+            stripped.text, "#| fig-width: 7\n#| fig-height: 5\nx = 1",
+            "precondition: the fig-cap line is stripped from between two kept options"
+        );
+        let after = body_source_for(stripped, sources);
+        assert_eq!(
+            after.length(),
+            stripped.source_info.length(),
+            "stripped text is not contiguous in the file, so the span is the whole block"
+        );
+        assert!(after.length() > original_len);
+    }
+
+    /// Hull `(start, end)` byte offsets of `body_source_for` for the first
+    /// block of `text`, which must be a CodeBlock with body `expected_text`.
+    fn body_hull(text: &str, expected_text: &str) -> (usize, usize) {
+        let (ast, ast_context, _parse_diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let Block::CodeBlock(cb) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock, got {:?}", ast.blocks[0]);
+        };
+        assert_eq!(cb.text, expected_text, "fixture precondition");
+        let sources = &ast_context.source_context;
+        let body = body_source_for(cb, sources);
+        let start = body.map_offset(0, sources).expect("start should map");
+        let end = body
+            .map_offset(body.length(), sources)
+            .expect("end should map");
+        (start.location.offset, end.location.offset)
+    }
+
+    /// bd-fenced-code-list-indent-wsirymk4: the parser strips an indented
+    /// fence's indentation from each body line (CommonMark §4.5), so a
+    /// multi-line body is no longer a contiguous substring of the source.
+    /// A one-line body still is, and is located exactly; a multi-line one
+    /// takes the whole-block fallback — coarser, never wrong.
+    #[test]
+    fn body_source_for_handles_an_indented_fence() {
+        // `  ```{python}\n  x\n  ```\n`: body `x` sits at 16..17.
+        assert_eq!(body_hull("  ```{python}\n  x\n  ```\n", "x"), (16, 17));
+        // Multi-line body `x\ny`: no contiguous match, whole block (0..28).
+        assert_eq!(
+            body_hull("  ```{python}\n  x\n  y\n  ```\n", "x\ny"),
+            (0, 28)
         );
     }
 }

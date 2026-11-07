@@ -88,6 +88,7 @@ fn marker_capture() -> EngineCapture {
             "markdown": "::: {.cell}\n```{.markerlang .cell-code}\n1 + 1\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nSPLICEMARKER_ZX9\n```\n:::\n:::\n"
         }),
         files: Vec::new(),
+        record: None,
     }
 }
 

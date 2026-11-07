@@ -1,0 +1,16 @@
+```{r asis_cat, results='asis'}
+cat("**markdown from cat**\n\n")
+cat("- item a\n- item b\n")
+```
+
+```{r asis_md}
+knitr::asis_output("**markdown from asis_output**")
+```
+
+```{r asis_html}
+knitr::asis_output("<div class='raw'>raw html</div>")
+```
+
+```{r asis_html_results_asis, results='asis'}
+knitr::asis_output("<div class='raw'>raw html under results asis</div>")
+```

@@ -25,6 +25,7 @@ yaml-rust2.workspace = true
 smallvec.workspace = true
 hashlink = "0.11"
 pathdiff.workspace = true
+sha1 = "0.11"
 sha2 = "0.11"
 hex = "0.4"
 # Image links in imported qmd are percent-encoded (document import I12).
@@ -216,8 +217,15 @@ libc = "0.2"
 [target.'cfg(target_os = "linux")'.dependencies]
 fontique = { version = "0.9", default-features = false, features = ["fontconfig-dlopen"] }
 
-[dev-dependencies]
+# Native-only: the test suites need tokio/tempfile/socket2 and friends, none of which
+# build for wasm32-unknown-unknown. The wasm32 table below carries only what
+# `tests/wasm_replay.rs` needs (the pampa `wasm_lua` precedent).
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 insta.workspace = true
+# EXR-3: `TestKernel` is the protocol half of the fake kernel the Jupyter unit-loop
+# tests drive (`engine/jupyter/fake_kernel.rs`). Features are additive with the
+# normal dependency above.
+runtimelib = { version = "2.0", features = ["tokio-runtime", "test-kernel"] }
 quarto-error-catalog = { workspace = true }
 # P7 Task 11: the shared docx/pptx semantic extractor + pandoc-goldens
 # fixture manifest, also used by `cargo xtask capture-pandoc-goldens`.
@@ -226,6 +234,9 @@ quarto-output-extract = { path = "../quarto-output-extract" }
 # diagnostic points, not just which code it carries (bd-9yh3pzfu).
 quarto-config = { workspace = true, features = ["span-assert"] }
 tempfile = "3"
+# KNR-1: the knitr corpus manifest (tests/fixtures/knitr-corpus/manifest.toml).
+toml.workspace = true
+proptest = "1.10"
 # R1: validate the PandocRequest golden against its published JSON Schema.
 jsonschema = { version = "0.55", default-features = false }
 walkdir.workspace = true
@@ -249,6 +260,11 @@ roxmltree = "0.21"
 # `pdf-extract` needs no external binary.
 # P2: the gordonwoodhull fork is accepted for MCID support; keep pinned to a commit SHA.
 pdf-extract = { git = "https://github.com/gordonwoodhull/pdf-extract", rev = "b1371931381491fe2557c013d99cc3671f6e28c3" }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+# C stdlib shims for tree-sitter on wasm32 (see dev-docs/wasm.md).
+wasm-c-shim = { path = "../wasm-c-shim" }
 
 [lints]
 workspace = true

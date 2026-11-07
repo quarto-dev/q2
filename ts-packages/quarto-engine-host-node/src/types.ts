@@ -183,11 +183,67 @@ export interface TsExecuteOptions {
   libDir: string;
   quiet: boolean;
   handledLanguages: string[];
+  /** Positive set: languages present in this render that q2 assigned to this engine. */
+  ownedLanguages: string[];
   params?: Record<string, TsMetadataValue> | null;
   sourceMap: TsSourceMapEntry[];
   /** Whether to resolve dependencies inline (true, Q1 default) or defer them.
    *  Absent key on the wire deserializes as true (Rust `#[serde(default = "default_true")]`). */
   dependencies: boolean;
+  /** q2-only (EXR-7), absent from an older core: the document's execution units, one
+   *  shared scan, each carrying this engine's `owned` flag. */
+  units?: TsUnit[];
+  /** q2-only (EXR-8 B4), absent from an older core: `"core"` means core presents the
+   *  output from the record, so the engine returns its notebook and no markdown. */
+  presentedBy?: "core";
+}
+
+/** One execution unit on the wire (q2-only, EXR-7). No byte or UTF-16 offsets in v1:
+ *  engines work by `line`. */
+export interface TsUnit {
+  /** EXR-4 unit id; absent for a unit the stage's scan did not number. */
+  id?: string;
+  /** Document-wide cell index; cells only. */
+  index?: number;
+  kind: "cell" | "inline";
+  /** The language token as written. */
+  language: string;
+  /** 1-based line of the unit in this engine's `input`. */
+  line: number;
+  /** Whether this engine runs the unit. Ceded units are listed with `false`. */
+  owned: boolean;
+  /** True only for a span in the document's own front matter; omitted when false. */
+  inFrontMatter?: boolean;
+}
+
+/** The engine's declared execution-input hash rule (q2-only, EXR-7; epic decision 35).
+ *  Mirrors Rust `HashDefinition`. */
+export interface TsHashDefinition {
+  id: string;
+  version: number;
+  granularity: "unit" | "document";
+  presentationCellOptions?: string[];
+  presentationExecuteKeys?: string[];
+  documentKeys?: string[];
+  profiles?: Record<
+    string,
+    { presentationCellOptions?: string[]; presentationExecuteKeys?: string[] }
+  >;
+}
+
+/** Self-description of a returned notebook (q2-only, EXR-7). Every field is optional. */
+export interface TsRecordInfo {
+  version?: number;
+  granularity?: "unit" | "document";
+  /** Describes the outputs only; plays no part in the hash rule. */
+  outputKind?: "raw" | "rendered";
+  /** `ids`: cells carry unit ids. `positional`: cells match owned units by order. */
+  alignment?: "ids" | "positional";
+  /** Whether the cells cover every unit core marked owned (`owned`, the default) or only
+   *  a subset the engine chose by its own rule (`subset`, which needs `ids` alignment).
+   *  Core checks the count only under `owned`. */
+  coverage?: "owned" | "subset";
+  hashDefinition?: TsHashDefinition;
 }
 
 // ==================== Dependencies options ====================
@@ -225,6 +281,10 @@ export interface TsExecuteResult {
   preserve: Record<string, string>;
   postProcess: boolean;
   engineDependencies?: Record<string, TsMetadataValue[]> | null;
+  /** q2-only (EXR-7): the engine's execution record as an nbformat notebook (EXR-4 shape). */
+  notebook?: unknown;
+  /** q2-only (EXR-7): what `notebook` is. */
+  recordInfo?: TsRecordInfo;
   // NOTE: there is NO `engine` field on the wire result.
 }
 

@@ -1,0 +1,9 @@
+---
+title: "fence"
+---
+
+```text
+`{julia} 1 + 1`
+```
+
+Body `{julia} 2 + 2`.

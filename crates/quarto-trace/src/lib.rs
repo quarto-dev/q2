@@ -217,6 +217,19 @@ pub struct EngineCapture {
     /// pre-field wire format.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<CaptureFile>,
+
+    /// This engine's own (uncoalesced) execution record (EXR-5), as the
+    /// opaque notebook JSON `quarto-core::record` writes.
+    ///
+    /// Trace-only: `EngineExecutionStage` emits it as a separate aux event
+    /// next to the capture, and only `JsonTraceObserver` stores it here,
+    /// pairing by `run_index`. The preview and hub recorders never set it,
+    /// so their captures serialize without the key, byte-identical to the
+    /// pre-field wire format; traces that predate the field still parse
+    /// (`serde(default)`). After the flip (EXR-6) `ReplayEngine` replays
+    /// from this record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<serde_json::Value>,
 }
 
 /// One engine-generated supporting file embedded in an
