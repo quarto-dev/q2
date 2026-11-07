@@ -2,7 +2,7 @@
 title: 'RIU-3: the Positron cache as a record source'
 date: 2026-11-02
 description: 'Promote the Positron cache importer from a library function with no caller to a record source: convert it with the record_from_positron design proven in S4 (no engines, empty execution hashes, language gate at conversion, owner from the engine registry, hashes from the sugared author text), find the cache file by the SHA-1 of the document URI with two fallbacks (one native-only locator in quarto-core that serves the Positron source and a bare-path directory source), guard staleness for imported records, add an import-only provider path that skips the consent gate, and stamp the spliced output through the SourceInfo system as proven by spike P.'
-status: 3a landed 2026-11-06; 3b (Phase E stamping and the editor UI) never started  # reconciled 2026-11-07, see the follow-up plan, Item 5; earlier: nothing started; written from RIU-0 S3 to S5 and RIU-0b spike J and spike P, checked against the tree on 2026-11-03 and revised after the second, third and fourth plan reviews; split into 3a and 3b; R through Ark is not in this epic
+status: 3a landed 2026-11-06; 3b (Phase E stamping) landed 2026-11-07 (the editor UI, Phase F browser items and live share are not run)  # corrected 2026-11-07 by the follow-up plan rewrite (the line said 3b never started); earlier: nothing started; written from RIU-0 S3 to S5 and RIU-0b spike J and spike P, checked against the tree on 2026-11-03 and revised after the second, third and fourth plan reviews; split into 3a and 3b; R through Ark is not in this epic
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)

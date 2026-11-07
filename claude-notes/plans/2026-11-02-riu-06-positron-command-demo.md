@@ -352,7 +352,7 @@ at the window.
       screenshots. A step that no one watched is marked not run. Partly done 2026-11-07: the script is the
       last section of [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md). No
       screen capture exists; Playwright keeps traces with screenshots, but nobody has watched the run.
-      Gordon said on 2026-11-07 that no capture is needed (he saw Python and Julia sessions in the window). The script now also lives in `extensions/q2-records-demo/demo/README.md` (fork `99aa72fcb4`).
+      Gordon said on 2026-11-07 that no capture is needed (he saw Python and Julia sessions in the window). ~~The script now also lives in `extensions/q2-records-demo/demo/README.md` (fork `99aa72fcb4`).~~ **Corrected 2026-11-07:** that file does not exist (not in the commit's file list, not on disk); only the findings note holds the script. See the follow-up plan, Item 3.
 - [x] A findings note. Written 2026-11-07: [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md)
       (what worked, what did not, what each command would need to ship, what was not run); it rendered with
       `q2 render --strict` and shows no errors beyond the known Q-12-13. The Phase 0 findings note stays as
@@ -383,8 +383,10 @@ Added 2026-11-07 so the demo can be shown to people. Fork commit `99aa72fcb4`.
 - [x] The extension is `q2-records-demo` (was `q2-spike`): display name, description, two commands; the two
       spike commands, the `q2spike.q2Path` setting and the workbench's `_positronQuarto.spikeReceive` are
       gone; the CSS file lost "Spike" from its name.
-- [x] A `demo/` folder in the extension: three documents (inline expressions, Python outputs, Julia outputs)
-      and a README that is the run guide. The hygiene filters skip that folder.
+- [ ] A `demo/` folder in the extension: three documents (inline expressions, Python outputs, Julia outputs)
+      and a README that is the run guide. The hygiene filters skip that folder. **Corrected 2026-11-07:** the three
+      documents exist (fork `99aa72fcb4`); the README does not, so this box was ticked in error. See the follow-up
+      plan, Item 3.
 - [x] The e2e tests still pass after the rename (6 of 6).
 - [ ] Not done: someone running the demo from the README on a machine that is not this one (the setup
       steps are written from memory of what this machine needed).
