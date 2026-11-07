@@ -603,7 +603,10 @@ fn pipeline_section_with_text_key_shows_configured_text() {
     // <title>/<h1>).
     let index_html = find_html(&outputs, "index");
     assert!(
-        index_html.contains("class=\"sidebar-item-text sidebar-link\">Short Name</a>"),
+        index_html.contains(
+            "class=\"sidebar-item-text sidebar-link\"><span class=\"menu-text\" \
+             id=\"quarto-sidebar-section-0-label\">Short Name</span></a>"
+        ),
         "sidebar section header must show the configured `text:`; \
          got sidebar region: {}",
         index_html
@@ -690,4 +693,68 @@ fn pipeline_section_header_page_is_marked_active() {
         sidebar_region(leaf)
     );
     assert_eq!(leaf.matches("sidebar-link active").count(), 1);
+}
+
+// === bd-3bg8h1rx ==========================================================
+
+/// Sidebar section toggles are keyboard-operable `<button>`s named after
+/// their section, with the `toggle-section` term localized through the
+/// real language pipeline (Q1 #14826). Neither a linked nor an unlinked
+/// section emits an `<a role="navigation">` toggle.
+#[test]
+fn pipeline_section_toggles_are_localized_buttons() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             lang: pt\n\
+             website:\n  sidebar:\n    contents:\n\
+             \x20     - index.qmd\n\
+             \x20     - section: Grupos\n\
+             \x20       href: groups.qmd\n\
+             \x20       contents:\n\
+             \x20         - leaf.qmd\n\
+             \x20     - section: Outros\n\
+             \x20       contents:\n\
+             \x20         - other.qmd\n",
+        );
+        for (name, title) in [
+            ("index", "Home"),
+            ("groups", "Groups"),
+            ("leaf", "Leaf"),
+            ("other", "Other"),
+        ] {
+            write(
+                &project_dir.join(format!("{name}.qmd")),
+                &format!("---\ntitle: {title}\n---\n\nBody.\n"),
+            );
+        }
+    });
+
+    let index = find_html(&outputs, "index");
+    let sidebar = index
+        .find("<nav id=\"quarto-sidebar\"")
+        .map_or("<no sidebar nav>", |i| &index[i..]);
+    let sidebar = &sidebar[..sidebar.find("</nav>").unwrap_or(sidebar.len())];
+
+    assert!(
+        sidebar.contains("<button type=\"button\" class=\"sidebar-item-toggle text-start")
+            && sidebar.contains("aria-label=\"Alternar seção: Grupos\""),
+        "linked section needs a localized, named chevron button; got: {sidebar}"
+    );
+    assert!(
+        sidebar.contains(
+            "<button type=\"button\" class=\"sidebar-item-text sidebar-item-toggle sidebar-link"
+        ),
+        "unlinked section must be a single button; got: {sidebar}"
+    );
+    assert!(
+        sidebar.contains("aria-labelledby=\"quarto-sidebar-section-1-label\"")
+            && sidebar.contains("aria-labelledby=\"quarto-sidebar-section-2-label\""),
+        "each section list is labelled by its header; got: {sidebar}"
+    );
+    assert!(
+        !sidebar.contains("role=\"navigation\""),
+        "toggles must not be navigation landmarks; got: {sidebar}"
+    );
 }
