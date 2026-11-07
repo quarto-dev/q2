@@ -651,7 +651,10 @@ pub(crate) fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String 
 /// substring of the region. That happens legitimately: a fence inside a
 /// blockquote or a list item has its continuation markers (`> `,
 /// indentation) stripped from `text` by the parser, so no contiguous
-/// range matches. Diagnostics then point at the block rather than the
+/// range matches. The same holds for a multi-line body under an
+/// *indented* fence, whose indentation the parser also strips from each
+/// line (CommonMark §4.5; pinned by
+/// `body_source_for_handles_an_indented_fence`). Diagnostics then point at the block rather than the
 /// exact key — coarser, but never *wrong*, which is the property that
 /// matters (the alternative, binding an assumed span to real content,
 /// is the failure mode `add_file_with_id` is lint-gated against).
@@ -2019,5 +2022,46 @@ mod tests {
             "stripped text is not contiguous in the file, so the span is the whole block"
         );
         assert!(after.length() > original_len);
+    }
+
+    /// Hull `(start, end)` byte offsets of `body_source_for` for the first
+    /// block of `text`, which must be a CodeBlock with body `expected_text`.
+    fn body_hull(text: &str, expected_text: &str) -> (usize, usize) {
+        let (ast, ast_context, _parse_diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let Block::CodeBlock(cb) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock, got {:?}", ast.blocks[0]);
+        };
+        assert_eq!(cb.text, expected_text, "fixture precondition");
+        let sources = &ast_context.source_context;
+        let body = body_source_for(cb, sources);
+        let start = body.map_offset(0, sources).expect("start should map");
+        let end = body
+            .map_offset(body.length(), sources)
+            .expect("end should map");
+        (start.location.offset, end.location.offset)
+    }
+
+    /// bd-fenced-code-list-indent-wsirymk4: the parser strips an indented
+    /// fence's indentation from each body line (CommonMark §4.5), so a
+    /// multi-line body is no longer a contiguous substring of the source.
+    /// A one-line body still is, and is located exactly; a multi-line one
+    /// takes the whole-block fallback — coarser, never wrong.
+    #[test]
+    fn body_source_for_handles_an_indented_fence() {
+        // `  ```{python}\n  x\n  ```\n`: body `x` sits at 16..17.
+        assert_eq!(body_hull("  ```{python}\n  x\n  ```\n", "x"), (16, 17));
+        // Multi-line body `x\ny`: no contiguous match, whole block (0..28).
+        assert_eq!(
+            body_hull("  ```{python}\n  x\n  y\n  ```\n", "x\ny"),
+            (0, 28)
+        );
     }
 }

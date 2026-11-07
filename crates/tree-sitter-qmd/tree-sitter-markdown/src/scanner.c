@@ -649,10 +649,16 @@ static int match(Scanner *s, TSLexer *lexer, Block block) {
                 s->indentation -= list_item_indentation(block);
                 return 1;
             }
+            // A blank line: return 2 so match_line() moves on to the next
+            // line. The lexer has already advanced past the line ending, so
+            // the BLOCK_CONTINUATION token emitted afterwards *contains* the
+            // blank line(s). pampa's code_fence_content.rs relies on this
+            // and copies those line endings back into fenced code bodies
+            // (bd-fenced-code-list-indent-wsirymk4).
             if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
                 s->indentation = 0;
                 return 2;
-            }            
+            }
             /* PREVIOUS BROKEN CODE:
                 if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
                     s->indentation = 0;
