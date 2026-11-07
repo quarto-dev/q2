@@ -284,17 +284,20 @@ impl<'a> EvalContext<'a> {
     }
 
     /// Check if the current reference is in English.
-    /// Returns true if: language field is missing or starts with "en".
-    /// Returns false if: language field is present and doesn't start with "en".
+    ///
+    /// A reference's own `language` field decides. Without one, the
+    /// reference is taken to be in the document's locale (CSL 1.0.2,
+    /// "Text-case"; citeproc does the same), so a Dutch document does not
+    /// title-case its titles. That is the locale actually loaded: for an
+    /// unknown language (`lang: xx`) it is en-US, and titles are
+    /// title-cased, as in Pandoc.
     fn is_english_reference(&self) -> bool {
-        match &self.reference.language {
-            Some(lang) => {
-                let lang_lower = lang.to_lowercase();
-                lang_lower.starts_with("en")
-            }
-            // No language field means assume English (default behavior)
-            None => true,
-        }
+        let lang = self
+            .reference
+            .language
+            .as_deref()
+            .unwrap_or_else(|| self.processor.locales.default_locale());
+        is_english_lang(lang)
     }
 
     /// Get a term from the locale.
@@ -3889,6 +3892,13 @@ fn format_month_or_season(
             Some(month.to_string())
         }
     }
+}
+
+/// Whether a language value counts as English for title-casing: it starts
+/// with "en", case-insensitively (unchanged from the reference-language
+/// check this replaced).
+fn is_english_lang(lang: &str) -> bool {
+    lang.to_lowercase().starts_with("en")
 }
 
 /// Format a day value according to the specified form.
