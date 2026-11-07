@@ -573,6 +573,41 @@ $sidebar-section-bottom-margin: 0.2em !default;
   width: 100%;
 }
 
+// Section disclosure chevron (`a.sidebar-item-toggle > i.bi-chevron-right`).
+// Ported from Q1 `quarto-nav.scss:412-432` and `756-762` (bd-rl7r38pw).
+// Bootstrap's collapse plugin keeps `aria-expanded` on the toggle in sync
+// with the section, so the chevron points down while the section is open.
+// `test_sidebar_toggle_chevron_rotates_when_expanded` (quarto-sass) checks
+// the compiled CSS.
+.sidebar-item .sidebar-item-toggle .bi {
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.sidebar-item .sidebar-item-toggle .bi-chevron-right::before {
+  transition: transform 200ms ease;
+}
+
+.sidebar-item
+  .sidebar-item-toggle[aria-expanded="false"]
+  .bi-chevron-right::before {
+  transform: none;
+}
+
+.sidebar-item
+  .sidebar-item-toggle[aria-expanded="true"]
+  .bi-chevron-right::before {
+  transform: rotate(90deg);
+}
+
+.sidebar-section .bi-chevron-right {
+  vertical-align: middle;
+}
+
+.sidebar-section .bi-chevron-right::before {
+  font-size: 0.9em;
+}
+
 // Sidebar text colors. The link itself inherits `color` from the
 // surrounding `div.sidebar-item-container`; the active/hover/disabled
 // states are scoped to that container too. The four `$sidebar-*-color`
