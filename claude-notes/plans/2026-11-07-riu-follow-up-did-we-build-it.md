@@ -1,19 +1,24 @@
 ---
 title: 'Records in use: follow-up, did we build what we intended?'
 date: 2026-11-07
-description: 'The epic is done. This plan checks the result against the intent, one question at a time, starting with R through knitr (the export skips every knitr cell, so the demo cannot show R), then the loose ends the RIU-6 demo exposed. Each item says what was intended, how it will be checked, and what counts as done.'
-status: ready  # written 2026-11-07 after the RIU-6 demo; nothing started
+description: 'The epic is done. This plan checks the result against the intent, one question at a time, starting with R through knitr (the export skips every knitr cell, so the demo cannot show R), then the loose ends the RIU-6 demo exposed. Each item says what was intended, how it will be checked, what counts as done, and who runs it.'
+status: ready  # written 2026-11-07; reviewed and amended 2026-11-07 (see the review note); no item started except the ticked boxes
 ---
 
-**Follows:** [the records-in-use epic](2026-11-02-records-in-use-epic.md) (done).
-**Evidence so far:** (RIU-6 commands findings)(../research/2026-11-07-riu-6-commands-findings.md),
-(RIU-6 plan)(2026-11-02-riu-06-positron-command-demo.md).
+**Follows:** [the records-in-use epic](2026-11-02-records-in-use-epic.md) (done except the Windows run).
+**Evidence so far:** [RIU-6 commands findings](../research/2026-11-07-riu-6-commands-findings.md),
+[RIU-6 plan](2026-11-02-riu-06-positron-command-demo.md).
+**Review of this plan:** [findings](../research/2026-11-07-riu-follow-up-review.md) (2026-11-07). Finding numbers
+below refer to it.
 **Related:** [knitr execution-records epic](2026-10-30-knitr-execution-records-epic.md).
 
 > **For implementers:** tests first. Check with `target/debug/q2` built in the checkout, never the
 > `q2` on `PATH`. Say which window steps were seen by a person, which ran under Playwright, and which
 > were not run. Gates per crate: `cargo clippy -p <crate> --all-targets -- -D warnings` and
 > `cargo nextest run -p <crate>`. Nothing is pushed without Gordon's say-so.
+>
+> **Who runs a box.** `[unattended]` can run without Gordon. `[Gordon]` needs a decision or a person in a
+> Positron window. `[either]` is a Playwright run in the checkout that Gordon may repeat by eye.
 
 ## Overview
 
@@ -21,57 +26,84 @@ The epic intended this: a q2 execution record is the one place outputs live, and
 it, write it, and preview from it, for the languages q2 runs. RIU-6 showed that for Python and Julia.
 It also showed that for R through knitr the loop is open on one side: the import direction handles
 knitr-owned units (KNR-5), but `q2 record export-positron` skips every knitr cell with
-"engine is not jupyter or julia" (`crates/quarto-core/src/record/positron_export.rs`, `SkipReason::EngineNotExportable`).
-The epic's decision 11 left R out of the demo; with the knitr stack landed, that is now a gap to
-close or to state plainly.
+"engine is not jupyter or julia" (`crates/quarto-core/src/record/positron_export.rs:23,33`,
+`SkipReason::EngineNotExportable`; the owner list is `EXPORT_OWNERS`, `:101`). The epic's decision 11
+left R out of the demo; with the knitr stack landed, that is now a gap to close or to state plainly.
 
-## Item 1: R through knitr (top of the list)
+## Order and dependencies
+
+1. **Item 4 (second box) first, five minutes, `[unattended]`:** the uncovered-intent list is already in
+   the review note; turn it into boxes (done below) so Item 1 does not spend effort before the gaps are known.
+2. **Item 1 Phase A**, alone. Then **stop and ask Gordon** with the verdict (a Positron-side change is a
+   real possible outcome). Phases B to D wait for the answer.
+3. **Item 2** is independent of Item 1 Phases A to C. It contends with Item 1 Phase D only for the e2e
+   test file in the fork (`quarto-render-and-push.test.ts`), so serialize those two, not the whole items.
+   (The earlier claim that Item 2 decides whether the e2e tests can be trusted for R was wrong: R through
+   knitr starts no Julia server.)
+4. **Item 3** boxes marked "blocks" come before anything ships; the rest in Gordon's order.
+5. **Item 5** (the two open boxes) and **Item 6** (Windows) are independent of everything else.
+   Item 6 needs a Windows machine.
+
+## Item 1: R through knitr
 
 **Intended:** a `.qmd` with `engine: knitr` renders once in q2, and its outputs can be pushed into an
 open Positron editor and previewed from Positron's cache, as Python and Julia can.
 
-**Seen so far (CLI, 2026-11-07):** a three-chunk knitr document (`x <- 6 * 7; print(x)`, `plot(1:10)`,
-`message()` plus a data frame). `q2 record export-positron` ran the document through knitr, produced a
-record, then exited 11 with `{"cells":0,"skipped":[3 x "engine is not jupyter or julia"]}`. R 4.x and
-knitr 1.50 are installed. Not run: anything in a Positron window.
+**Seen (CLI, 2026-11-07):** a three-chunk knitr document. `q2 record export-positron` ran it through knitr,
+produced a record, printed `{"cells":0, "skipped":[3 x "engine is not jupyter or julia"]}` and then
+`error: the record has no cells Positron can display`. R 4.x and knitr 1.50 are installed.
+**Seen (review, 2026-11-07, `execute: record: true` on the same shape of document):** all three cells are
+*structured* code cells owned by `knitr`: a `stream`; a `display_data` with `image/png`; a labeled cell with two
+`stream` outputs (message and data frame, both text). Each carries `quarto_hash_rule` and `quarto_header_keys`.
+None is a fallback cell, so the owner rule is the only reason the export skips them. Not run: anything in a
+Positron window, the hash comparison, Ark's cache shapes.
 
-### Phase A: characterize (spike, no product code)
+### Phase A: characterize (spike, no product code) `[unattended]`
 
-- [ ] Read what a knitr record cell holds: where the text output, the figure, the message and the data
-      frame go, and how they differ from a Jupyter cell's outputs (KNR-1 to KNR-5; start at
-      `record/positron_import.rs` and the knitr-owned-unit import commit `5db29f6bc`).
-- [ ] Read how Positron's R side stores and shows outputs for a `.qmd` (Ark kernel, the same
-      `quarto-inline-outputs` cache?), and whether the cache loader accepts an R cell with the shapes
-      q2 would write. Fork worktree: `/Users/gordon/src/positron-riu6-a`.
-- [ ] Check whether the content hash Positron computes for an R cell equals the hash in a knitr record
-      (header options such as `#| label` and `#| fig-cap` are the likely mismatch; the Julia `#|` case
-      is the same question and is still open).
-- [ ] Write the answers into a findings note, with a verdict: the export can cover knitr as is, needs
-      a mapping, or needs a change on the Positron side.
+- [x] Dump a knitr record and say, per cell, structured or fallback (done in the review, above).
+- [ ] Dump a larger knitr record that includes an `asis` chunk, a raw HTML chunk, a `results: hide` chunk, an
+      error chunk (`error: true`), a chunk with `fig-cap`, and an inline `` `r expr` `` span, and list each
+      cell's kind and outputs. This settles which cells stay skipped (Phase B's decision).
+- [ ] Read what Positron's R side (Ark) stores and shows for a `.qmd` (the same `quarto-inline-outputs` cache?),
+      and compare shapes with the knitr cells: data frame as text versus HTML, the message stream, an empty
+      `ename`, messages on stdout (RIU-3 lists these as KNR-5 presenter limits). Fork worktree:
+      `/Users/gordon/src/positron-riu6-a` (branch `spike/riu-6-phase-a`, tree clean at `99aa72fcb4`).
+- [ ] Check whether the content hash Positron computes for an R cell equals the knitr record's
+      `quarto_content_hash`. The record's hash is computed under the `structured` profile (`quarto_hash_rule`);
+      header lines such as `#| label` and `#| fig-cap` are the likely mismatch. The Julia `#|` case is the same
+      question and still open (add one Julia `#|` cell to the check). State which fix a mismatch needs: q2
+      recomputes the hash at export (a q2-side mapping), or Positron changes.
+- [ ] Write the answers into a findings note with a verdict: the export can cover knitr as is, needs a
+      mapping (say which), or needs a change on the Positron side. Note that "as is" is already ruled out
+      by the owner rule; the question is what has to change beyond it.
+- [ ] **`[Gordon]` Gate: report the verdict and wait.** Do not start Phase B on the plan's say-so.
 
-### Phase B: tests first
+### Phase B: tests first (after the gate)
 
-- [ ] Export unit tests for a knitr record: text output, a figure (one `image/png`), a message, a
-      data frame, an error, a chunk with options. Each fails on the current skip.
-- [ ] A CLI test through the binary: `q2 record export-positron` on an `engine: knitr` fixture exits 0
-      and prints cells greater than 0. Keep the Python and Julia tests green.
-- [ ] Decide, with Gordon, which knitr cells stay skipped (for example `asis`, raw HTML chunks, inline
-      `` `r expr` `` spans) and give each its own skip reason in the JSON.
+- [ ] Export unit tests for a knitr record: text output, a figure (one `image/png`), a message, a data frame,
+      an error, a chunk with options. Each fails on the current skip.
+- [ ] A test that a knitr-owned unit whose language is not `r` (for example `python` under `engine: knitr`)
+      **stays skipped**: the importer admits knitr only for the language token `r`, and the export must agree.
+- [ ] A CLI test through the binary: `q2 record export-positron` on an `engine: knitr` fixture exits 0 and
+      prints cells greater than 0. Keep the Python and Julia tests green.
+- [ ] **`[Gordon]`** Decide which knitr cells stay skipped (from the Phase A dump) and give each its own skip
+      reason in the JSON.
 
 ### Phase C: export
 
-- [ ] Replace `EngineNotExportable` for knitr with a real mapping, per the Phase A verdict. Update the
-      subcommand help text and the RIU-5 plan's rule list.
+- [ ] Replace `EngineNotExportable` for knitr with the Phase A mapping. Do not add `knitr` to `EXPORT_OWNERS`
+      without the `r` language check. Update the subcommand help text and the RIU-5 plan's rule list.
 - [ ] Gates on `quarto-core` and the `quarto` binary crate. Run the real binary on the fixture and read
       the JSON and the ipynb.
 
 ### Phase D: in a Positron window
 
-- [ ] An R session exists in the dev build (the e2e runs set `POSITRON_R_VER_SEL=4.3.2`; check the
-      session starts, as the kernel server and supervisor needed care for Python).
-- [ ] An e2e test, R version of `quarto-render-and-push.test.ts`: command 2 on an R document, outputs
-      appear; command 3 shows them from the cache with no R process started by the preview.
-- [ ] Someone watches it once. Mark each step seen, Playwright, or not run.
+- [ ] `[unattended]` An R session exists in the dev build (the e2e runs set `POSITRON_R_VER_SEL=4.3.2`; check
+      it is set in the fork's e2e config and that the session starts).
+- [ ] `[unattended]` An e2e test, R version of `quarto-render-and-push.test.ts`: command 2 on an R document,
+      outputs appear; command 3 shows them from the cache with no R process started by the preview.
+      Serialize with Item 2's edits to the same file.
+- [ ] `[Gordon]` Someone watches it once. Mark each step seen, Playwright, or not run.
 
 **Done when:** an R document shows its knitr outputs in the open editor after command 2, the preview
 shows them from the cache, and the findings note says which cell kinds are skipped and why.
@@ -86,62 +118,135 @@ pays startup and precompile time.
 - [x] Time the export cold and warm (CLI, 2026-11-07, Julia fixture, scratch directory): cold 20 s, warm
       10 to 12 s. The engine is Quarto 1's `julia-engine` extension: a detached server, a transport file in
       `~/Library/Caches/quarto/julia`, reused by the next render. The launcher starts it with
-      `serve(; timeout = 300)`, and the server log showed "Server stopped" mid-run, so a gap of more than
-      five minutes means a cold start. `q2 call` has no `julia` subcommand, so `status` and `stop` are not
-      reachable from q2.
+      `serve(; timeout = 300)` (`resources/extension-subtrees/julia-engine/_extensions/julia-engine/quartonotebookrunner.jl:48`),
+      and the server log showed "Server stopped" mid-run, so a gap of more than five minutes means a cold start.
+      `q2 call` has no `julia` subcommand (`crates/quarto/src/main.rs:1066-1084`: `test`, `build-ts-extension`
+      and a hidden `inline-css`), so `status` and `stop` are not reachable from q2.
 - [x] With a warm server both Julia tests pass (2 passed, 2.9 min). On a full-file run they twice timed
-      out at the default 120 s with 0 outputs; the failing run's server log was overwritten before I read
-      it, so the cause (cold server, versus a stale server) is likely but not proven.
-- [x] Change (fork, uncommitted until the three runs below finish): a `warmJuliaServer` helper renders a
-      trivial Julia document from `os.tmpdir()/q2-julia-warmup` (never deleted) before each Julia test,
-      and the Julia tests set a 480 s test timeout (their expectations already wait up to 300 s).
-- [ ] Re-run the whole file three times and report pass counts (running 2026-11-07).
-- [ ] **Open observation, unexplained:** after a Positron-driven run the Julia server log holds
-      `Failed to run notebook ... IOError: write: broken pipe (EPIPE)` for the e2e workspace document,
-      raised while the server wrote a chunk-progress message to the client socket, so the client (q2) had
-      closed the connection mid-run. It does not happen in CLI runs, and the tests still passed. Find out
-      who closes the connection (the extension's timeout kill? the window closing at test end?).
+      out at the default 120 s with 0 outputs; the failing run's server log was overwritten before it was read,
+      so the cause (cold server, versus a stale server) is likely but not proven. (A cold start measured at
+      20 s does not alone explain 120 s with zero outputs; a first-ever precompile could.)
+- [x] Change **committed** in the fork as `53bf9ca105` ("warm the Julia server, longer Julia timeout, clear the
+      viewer and remove files the tests leave behind"): `warmJuliaServer` at
+      `test/e2e/tests/quarto/quarto-render-and-push.test.ts:17`, `setTimeout(480000)` on the Julia tests. (An
+      earlier version of this plan said "uncommitted"; that was wrong.)
+- [ ] `[unattended]` Re-run the whole file three times and report pass counts. Keep each run's Julia server
+      log (copy it before the next run overwrites it).
+- [ ] `[unattended]` **Find the EPIPE closer, cheapest experiment first.** The Julia engine is a TS extension, so
+      the client socket is held by a **Node child of q2**, not by q2; an EPIPE on the server's progress write
+      means that Node child (or q2 above it) was killed. Candidates: the extension's `execFile` timeout
+      (`extensions/q2-records-demo/src/exportCommand.ts`, default 300 s, SIGTERM, `q2.exportTimeoutSeconds`),
+      Playwright test timeout or worker teardown (the commands findings already record a teardown timeout on
+      every run), q2's own cancel or kill path (`crates/quarto-core/src/engine/ts_process.rs`). Experiment:
+      (1) in a scratch directory run `q2 record export-positron` on the Julia fixture, SIGKILL q2 and its Node
+      child a few seconds in, and read the server log: EPIPE there means a hung-up client is sufficient;
+      (2) match the EPIPE timestamp in an e2e server log to the per-test end times: inside a test means a
+      timeout kill, at the end means teardown; (3) check for a second q2 run (the warm helper, or an orphan from
+      an earlier timed-out test) still in flight when a passing test tore down.
 
 ## Item 3: loose ends from RIU-6
 
-Each is a question for Gordon, not an assumption. Recommendation in parentheses.
+Ranked by whether they block shipping the commands. Each "Gordon" box is a decision, not an assumption.
 
-- [ ] **Positron's cache location from an API** instead of the sibling-of-`globalStorageUri` guess
-      (wrong for non-default profiles). (Needed before anything ships.)
-- [ ] **Viewer close button leaves q2 running.** A Positron Viewer change. (Needed before shipping
-      command 3.)
-- [ ] **Edited cell loses syntax highlighting in the q2 preview** (RIU-3a question). (Check against the
-      intent: is the preview meant to be editable?)
-- [ ] **Command 1 on Julia and R spans**, and whether values should persist. (Python only so far.)
-- [ ] **Not run in any window:** wrong `q2.path`, untitled document, "q2 too old" (exit 2), non-default
-      profile, a dirty document. (Run the first three by hand; they are quick.)
-- [ ] **Command 2 does not change Positron's kernel state:** a later cell that uses a variable from a
-      pushed cell fails. (Say so in user-facing docs if this ships.)
+**Blocks shipping**
+
+- [ ] `[Gordon]` **Positron's cache location from an API** instead of the sibling-of-`globalStorageUri`
+      guess (wrong for a non-default profile; commands 2 and 3 fail there with "does not exist").
+- [ ] `[Gordon]` **Viewer close button leaves q2 running** (leaks a process and a port; a Positron Viewer
+      change). Blocks command 3 only; decide whether to ship command 3 without it.
+- [ ] `[unattended]` **Command 2: progress and cancel.** The engine may run the whole document with no
+      progress or cancel. Confirm what the command shows today and write the gap down (a box if code is needed).
+- [ ] `[unattended]` **Dirty document wording.** Epic decision 7 says a dirty document exports from disk and the
+      push skips changed cells with a report; the commands findings say "exported as saved, with a note". Check
+      the actual behavior and make the two statements agree.
+
+**Should fix before shipping**
+
+- [ ] `[unattended]` **Stale Julia servers and a missing Plots project** produce confusing results (`startpath
+      must be non-empty`; an `ArgumentError` exported as an error output that looks like a working run). Item 2
+      covers timing and EPIPE only. Write down what q2 can say when it sees either.
+- [ ] `[Gordon]` The preview banner text "this page reconnects automatically" is wrong for a one-shot server;
+      epic decision 15 says no banner. Reconcile.
+- [ ] `[Gordon]` Does pushing over existing outputs ask first? (Today it replaces them.)
+- [ ] `[unattended]` **Not run in any window:** untitled document, "q2 too old" (exit 2), non-default profile,
+      a dirty document. Wrong `q2.path` was run under Playwright and failed correctly (commands findings);
+      change the box to say that. The first two can be added to the fork's e2e suite.
+
+**Polish or documentation**
+
+- [ ] `[Gordon]` **Edited cell loses syntax highlighting in the q2 preview** (RIU-3a question). Check against
+      the intent: is the preview meant to be editable? `[either]` the observation itself is a Playwright check.
+- [ ] `[Gordon]` **Command 1 on Julia and R spans**, and whether values should persist. (Python only so far; the
+      R half waits on Item 1.)
+- [ ] Command 2 does not change Positron's kernel state: a later cell that uses a variable from a pushed cell
+      fails. Say so in the user-facing text before it ships.
 
 ## Item 4: does the epic match the tree
 
 - [x] RIU-6 Phase E, done 2026-11-07: every plan re-read and its boxes checked against the tree (open boxes
       all, ticked boxes by sample); statuses, the epic's table, board and exit criteria updated; see the
       epic's "Closing reconciliation". Decision 11 (R) gets its outcome from Item 1.
-- [ ] Re-read the epic's stated intent once more against what the three commands do, and list anything
-      the epic promised that no command or test covers.
+- [x] Re-read the epic's stated intent once more against what the three commands do (done in miniature in the
+      review note, "Intent the epic states that no checklist covers"). Each gap is now a box:
+- [ ] `[unattended]` **Hub verification.** Exit criterion 1 says preview and hub work from records alone,
+      "verified through the real binary and a browser". Find where the hub half was verified and cite it, or run
+      it (`q2 provide-hub` with the writer gate on, a hub client).
+- [ ] `[unattended]` **Embedded-docs refresh** (the epic's last step): `cargo xtask build-agents-docs`, then
+      `cargo build --bin q2`, then `target/debug/q2 docs llms --embed-info` and `target/debug/q2 render docs/`.
+      The 3b docs edits make the embed stale. Not a box in any plan today.
+- [ ] `[either]` **RIU-3 browser items never seen:** `--records positron,engine` running the engine, a cache
+      older than the document shown in a browser, `--share --allow-edit` with a guest, "Clear results" clicked,
+      a real click or scroll sync.
+- [ ] `[Gordon]` **Stamped cells carry no `data-loc`**, so a click inside a stamped cell maps to no source line.
+      This follows from decision 14 (stamped means not editable). Is that acceptable for the editor?
+- [ ] `[unattended]` Decision 12 (a failed optional `record: true` copy fails soft) says "not re-verified
+      against the code"; re-verify with the real binary.
+- [ ] `[unattended]` Fix the epic's "Closing reconciliation" (`records-in-use-epic.md:755`), which still says
+      RIU-3b never started, against its Exit criteria, which mark 3b met.
 
-## Item 5: RIU-3b never started
+## Item 5: RIU-3b (landed 2026-11-07) and the 3a leftovers
 
-**Intended (epic exit criterion):** spliced record output is stamped so the viewer can tell a generated
-output node from the author's text, with the RIU-3 Phase E tests green. **Checked 2026-11-07:** there is
-no stamping code, no `jupyter-output` in `ts-packages/preview-renderer/src/utils/sourceInfo.ts`
-(`ATOMIC_KINDS` is still `filter`, `shortcode`, `title-block`, `tree-sitter-postprocess`), no viewer
-regression test and no interim `.cell` rule tests. 3a landed (conversion, locator, directory source,
-staleness, `--records`). Ask first: does the demo or any user need 3b, or was it meant for later? The
-plan has 14 open boxes for it (Phase E, the 3b part of F and G).
+**3b landed on `feature/riu-3b-stamping`** (`3f0c55a6d` here): the stamp post-walk in
+`crates/quarto-core/src/stage/stages/record_splice.rs`, `jupyter-output` in `ATOMIC_KINDS`
+(`ts-packages/preview-renderer/src/utils/sourceInfo.ts`), the stamp tests and the viewer regression test. See the
+3b note in the RIU-3 plan. An earlier version of this section said it never started; that was written before the
+merge.
 
-- [x] Decide with Gordon whether 3b is wanted now, deferred, or dropped; record the decision in the epic. *Decided 2026-11-07: wanted now. Done on `feature/riu-3b-stamping`; see the 3b note in the RIU-3 plan.*
-- [ ] Also open from 3a (the Re-execute test is done 2026-11-07; the EXR-16 sweep and the labeled-cell acceptance case are not): tests that Re-execute on an imported page is refused with no engine and runs the
-      engine when it is listed (only the refusal was seen in a browser); the per-EXR-16-case import,
-      convert and splice sweep; an acceptance case with a labeled cell and `fig-cap`.
+- [x] Decide with Gordon whether 3b is wanted now, deferred, or dropped. *Decided 2026-11-07: wanted now. Done.*
+- [x] Re-execute on an imported page is refused with no engine and runs the engine when it is listed:
+      `re_execute_on_an_imported_page_is_refused_without_engine_and_runs_it_when_listed`
+      (`crates/quarto-preview/src/capture_driver.rs:3194`).
+- [ ] `[unattended]` **EXR-16 sweep.** One table-driven test in
+      `crates/quarto-core/tests/integration/positron_source.rs` (or a sibling in the same binary) that, for each
+      of the 21 `CASES` in `positron_conformance.rs`, builds a Positron-style cache from the case's fixture,
+      imports, converts and splices, and asserts which units receive outputs. Cases where Positron and q2 diverge
+      (`positron-expected.json`) assert the divergence. Today `positron_conformance.rs` tests only the generator
+      and the loader; `positron_source.rs` covers three durable fixtures (python, hand-built julia, r). Indirect
+      unit coverage already exists for `blockquote`, `crlf`, `duplicate_pair` and the marimo cases (hash,
+      placement, matching, export), not through import.
+- [ ] `[unattended]` **Labeled-cell `fig-cap` splice case.** A Python cell with `#| label: fig-x` and
+      `#| fig-cap: ...` through import, convert and splice, asserting the output shows on the page.
+      `knitr_positron_import.rs:179` and `:261` cover the hash and the record shape only.
 
-## Order
+## Item 6: the Windows run (deferred by the epic)
 
-Item 1 first, Phase A alone before committing to B to D. Item 2 next, since it decides whether the
-e2e tests can be trusted for Item 1. Items 3, 4 and 5 after, in whatever order Gordon prefers (Item 4 is done).
+Carried over from the epic's unchecked box so it is not lost. Needs a Windows machine (`aws-lc-sys` blocks the
+msvc cross-check from macOS). The review's targeted list, highest risk first:
+
+- [ ] `[Gordon]` `crates/quarto-hub-provider/src/execute.rs:331` and `:527`: `canonicalize()` returns a `\\?\`
+      verbatim path on Windows; check the "outside the document directory" comparison.
+- [ ] `[Gordon]` `crates/quarto-core/src/positron_cache.rs:150` (`vscode_file_uri`) and the `%APPDATA%` rule:
+      drive letter, `%3A` and non-ASCII are unverified.
+- [ ] `[unattended]` `crates/quarto/src/commands/record.rs:139`: without `--source-uri`, `quarto_source` is a
+      native (backslash) path in a wire format. Decide whether to use `quarto_util::to_forward_slashes`, or
+      require `--source-uri`. (A product fix, so it is a box here, not done in this review.)
+- [ ] `[Gordon]` `crates/quarto/tests/integration/record_export_positron_cli.rs`: `python3` at about `:250`, and
+      the literal `/some/dir` at about `:113`.
+- [ ] `[Gordon]` `crates/quarto-core/tests/integration/julia_engine_e2e.rs:1075-1098`: `kill` and `pgrep` with no
+      `cfg(unix)` gate; confirm they cannot run on Windows with Julia installed.
+- [ ] `[Gordon]` `crates/quarto-core/src/record/sources.rs:49,101-107,179-199`, and
+      `crates/quarto-preview/src/capture_driver.rs:2932-2934`: native-separator display and a self-consistent URI test.
+- [ ] `[Gordon]` CRLF: `positron-conformance/crlf.qmd` and `positron-cache/*.ipynb` under `autocrlf`.
+- [ ] `[Gordon]` Then the epic's command, once: `cargo clippy -p quarto -p quarto-core -p quarto-preview
+      -p quarto-hub -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings` and
+      `cargo nextest run` for the same crates.
