@@ -1,0 +1,22 @@
+== cited-order-reversed.qmd
+[1]	A. Adams, “Second cited work”, Journal, 2019.
+[2]	J. Smith, “Cited work”, Journal, 2020.
+
+== nocite-order.qmd
+[1]	A. Adams, “Second cited work”, Journal, 2019.
+[2]	J. Smith, “Cited work”, Journal, 2020.
+[3]	J. Doe, “Uncited work”, Journal, 2021.
+[4]	B. Brown, “Nocite work”, Journal, 2018.
+
+== nocite-order-reversed.qmd
+[1]	A. Adams, “Second cited work”, Journal, 2019.
+[2]	J. Smith, “Cited work”, Journal, 2020.
+[3]	J. Doe, “Uncited work”, Journal, 2021.
+[4]	B. Brown, “Nocite work”, Journal, 2018.
+
+== nocite-star.qmd
+[1]	A. Adams, “Second cited work”, Journal, 2019.
+[2]	J. Doe, “Uncited work”, Journal, 2021.
+[3]	J. Smith, “Cited work”, Journal, 2020.
+[4]	B. Brown, “Nocite work”, Journal, 2018.
+

@@ -2,13 +2,12 @@
 title: 'citeproc: unsorted styles order the bibliography by file order (bd-mumobar8)'
 date: 2026-11-07
 description: 'For CSL styles without a bibliography sort, list entries by citation number, as Pandoc does, instead of bibliography-file order.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: done  # implemented on braid/bd-mumobar8-citeproc-unsorted-styles-order
 braid:
   strand: bd-mumobar8
 ---
 
 **Branch:** `braid/bd-mumobar8-citeproc-unsorted-styles-order` (topic branch in the main checkout, based on `main` @ `e95a3efbf`; no PR, per the user)
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -47,21 +46,37 @@ So the rule to match: cited entries in citation-number order, then the uncited e
 
 The harness (`tests/integration/csl_conformance.rs`) cites every input item in input order unless a test supplies `CITATIONS` or `CITATION-ITEMS`. A script over `test-data/csl-suite/` found 15 bibliography-mode tests that supply explicit citations and whose style has no bibliography `<sort>`. Eight are enabled and seven disabled. In all 15, first-cited order equals input order, so **no conformance test can tell the two orderings apart**. The change should not move the suite in either direction; Phase 0 confirms this by running the full report before and after.
 
-## Proposed phases (draft)
+## Decisions (2026-11-07)
 
-- Phase 0: tests first.
-  - Unit tests in `quarto-citeproc`: a no-sort style where citation order differs from insertion order, and an uncited reference that has no number.
-  - Pampa filter tests covering the `cited-order-reversed` and `nocite-order-reversed` cases.
-  - A baseline from `csl_conformance_report`.
-- Phase 1: in the no-sort branch, order ids by initial citation number. Ids with no number come after, in insertion order. Possibly merge the two generator functions first (design question 2).
-- Phase 2: end-to-end `q2 render` of the fixtures, compared against `pandoc-3.12.1-expected.txt`. Book smoke test with a numeric style.
-- Phase 3: rerun the conformance report and confirm the enabled set is unchanged.
+1. The fix lives in `quarto-citeproc`, in the no-sort branch, so every caller gets Pandoc's order.
+2. Merge the two generators: `generate_bibliography` renders the entries from `generate_bibliography_to_outputs`. Side effect: the string API now applies `subsequent-author-substitute`, which only the AST path applied before. Only tests call the string API.
+3. References without a citation number go after the numbered ones, in insertion order, which matches Pandoc.
 
-## Open design questions for the user
+## Checklist
 
-1. **Where should the fix live?** Option (a), recommended: in `quarto-citeproc`\'s no-sort branch, since the `Processor` already owns the citation numbers and every caller (single documents, book merge, Lua `pandoc.utils.citeproc` once k-476 lands) would get Pandoc's order. Option (b): reorder in pampa after generation, which leaves the crate's library behavior as file order.
-2. **Merge the duplicate generators?** `generate_bibliography` (string output) and `generate_bibliography_to_outputs` (Output AST) repeat the same sort and renumber logic. Should this change merge them, for example with the string version calling the AST version, or should it touch both and leave the merge for later?
-3. **References with no citation number.** These only happen for library callers that never number uncited references (pampa now always does). Is "after the numbered ones, in insertion order" the right fallback? It matches Pandoc's observable result.
+### Phase 0: tests first
+
+- [x] `quarto-citeproc` unit test: no-sort style, citation order differs from insertion order, so the bibliography follows citation numbers.
+- [x] `quarto-citeproc` unit test: an unnumbered reference comes after the numbered ones, in insertion order.
+- [x] `quarto-citeproc` unit test: the string API applies `subsequent-author-substitute`, as the AST API does.
+- [x] pampa filter tests: cited order reversed; `nocite` order reversed (uncited entries follow load order).
+- [x] Run them and confirm they fail.
+- [x] Baseline the CSL conformance suite (`cargo nextest run -p quarto-citeproc`).
+
+### Phase 1: implementation
+
+- [x] The no-sort branch orders ids by initial citation number; unnumbered ids follow in insertion order.
+- [x] `generate_bibliography` delegates to `generate_bibliography_to_outputs`.
+
+### Phase 2: verification
+
+- [x] `cargo nextest run -p quarto-citeproc -p pampa -p quarto-core -p quarto`; clippy for the touched crates.
+- [x] End-to-end `q2 render` of the investigation fixtures, compared with `pandoc-3.12.1-expected.txt`.
+- [x] Rerun the conformance suite and confirm the enabled set still passes.
+
+### Result
+
+End to end, `q2 render` of the four investigation fixtures produces the same entries, numbers, and order as Pandoc 3.12.1. The output is saved as `q2-after-fix.txt` next to `pandoc-3.12.1-expected.txt`. The only remaining difference is punctuation placement in quotes, which bd-citeproc-cluster-collapse-kns8uggw tracks. No snapshot files changed. I did not run a separate numeric-style book smoke test; the existing `quarto-core` book tests pass.
 
 ## Incidental finding (not in scope)
 

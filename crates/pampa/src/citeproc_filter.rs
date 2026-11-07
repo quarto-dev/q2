@@ -4504,6 +4504,16 @@ mod tests {
     /// Run the filter on a document citing `cited` against `SCOPE_BIB`, with
     /// `extra_meta` added to the metadata.
     fn render_scoped(extra_meta: Vec<(&str, ConfigValue)>, files: &[(&str, &str)]) -> Pandoc {
+        render_citing(&["cited"], extra_meta, files)
+    }
+
+    /// Like [`render_scoped`], but the body cites `cited_ids`, one
+    /// citation each, in order.
+    fn render_citing(
+        cited_ids: &[&str],
+        extra_meta: Vec<(&str, ConfigValue)>,
+        files: &[(&str, &str)],
+    ) -> Pandoc {
         let mut all_files = vec![("/mem/refs.bib", SCOPE_BIB)];
         all_files.extend_from_slice(files);
         let rt = MemRuntime::new(&all_files);
@@ -4512,7 +4522,7 @@ mod tests {
         let pandoc = Pandoc {
             meta: meta_map(meta),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
-                content: vec![make_cite("cited")],
+                content: cited_ids.iter().map(|id| make_cite(id)).collect(),
                 source_info: si(),
             })],
         };
@@ -4641,6 +4651,51 @@ mod tests {
             vec![
                 ("cited".to_string(), "[1] Cited work".to_string()),
                 ("extra".to_string(), "[2] Nocite work".to_string()),
+            ]
+        );
+    }
+
+    // ---- Unsorted styles list by citation number (bd-mumobar8) ----
+    //
+    // `NUMERIC_CSL` has no bibliography `<sort>`. Pandoc lists cited entries
+    // by citation number, then uncited (`nocite`) entries in load order,
+    // whatever order `nocite` names them in. `SCOPE_BIB` load order is
+    // `uncited`, `cited`, `extra`.
+
+    #[test]
+    fn unsorted_style_lists_cited_entries_in_citation_order() {
+        let out = render_citing(
+            &["extra", "cited"],
+            vec![("csl", meta_string("numeric.csl"))],
+            &[("/mem/numeric.csl", NUMERIC_CSL)],
+        );
+        assert_eq!(
+            bibliography_entries(&out),
+            vec![
+                ("extra".to_string(), "[1] Nocite work".to_string()),
+                ("cited".to_string(), "[2] Cited work".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn unsorted_style_lists_nocite_entries_in_load_order() {
+        let out = render_scoped(
+            vec![
+                ("csl", meta_string("numeric.csl")),
+                (
+                    "nocite",
+                    meta_inlines(vec![make_cite("extra"), make_cite("uncited")]),
+                ),
+            ],
+            &[("/mem/numeric.csl", NUMERIC_CSL)],
+        );
+        assert_eq!(
+            bibliography_entries(&out),
+            vec![
+                ("cited".to_string(), "[1] Cited work".to_string()),
+                ("uncited".to_string(), "[2] Uncited work".to_string()),
+                ("extra".to_string(), "[3] Nocite work".to_string()),
             ]
         );
     }
