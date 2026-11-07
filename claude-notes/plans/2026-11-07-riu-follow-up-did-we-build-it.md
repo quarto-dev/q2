@@ -50,6 +50,15 @@ left R out of the demo; with the knitr stack landed, that is now a gap to close 
 8. **Item 7** (one presenter path) is a design decision for Gordon, independent of Item 1: Item 1 needs only
    the gate change. Do not start it without that decision.
 
+## Before the next review session
+
+Spikes that settle facts, not design, and should be done first (Gordon, 2026-11-07):
+
+- [ ] Item 1 Phase A, including the raw-record experiment, the validity list and the Julia `#|` check, ending in
+      the verdict note. The gate stays: report and wait.
+- [ ] The presenter spikes in [the one-presenter-path epic](2026-11-07-one-presenter-path-epic.md), the ones
+      Gordon approves.
+
 ## Item 1: R through knitr
 
 **Intended:** a `.qmd` with `engine: knitr` renders once in q2, and its outputs can be pushed into an
@@ -95,7 +104,7 @@ produced it. (This corrects the same day's earlier proposal of one declaration f
       `ename`, messages on stdout (RIU-3 lists these as KNR-5 presenter limits). This matters for the import
       direction. Fork worktree: `/Users/gordon/src/positron-riu6-a` (branch `spike/riu-6-phase-a`, tree clean at
       `99aa72fcb4`).
-- [ ] `[Gordon]` What is left of the hash question is Positron-side only: does Positron's parser read `#|`
+- [ ] `[unattended]` **Spike, before the next review.** What is left of the hash question is Positron-side only: does Positron's parser read `#|`
       lines the same way for a Julia cell as for Python and R? Check in the fork, with one Julia `#|` cell
       (the raw-record experiment can include it).
 - [ ] **Validity list.** From Positron's loader and the conformance mirror, write down exactly what a cache file
@@ -340,7 +349,7 @@ msvc cross-check from macOS). The review's targeted list, highest risk first:
       verbatim path on Windows; check the "outside the document directory" comparison.
 - [ ] `[Gordon]` `crates/quarto-core/src/positron_cache.rs:150` (`vscode_file_uri`) and the `%APPDATA%` rule:
       drive letter, `%3A` and non-ASCII are unverified.
-- [ ] The `--source-uri` default (`record.rs:139`, native path in a wire format): decided in Item 8 (open there).
+- [x] The `--source-uri` default (`record.rs:139`, native path in a wire format): forward slashes, agreed; see Item 8.
 - [ ] `[Gordon]` The CLI test file (`record_export_positron_cli.rs`, replaced by Item 8's test): `python3` at about `:250`, and
       the literal `/some/dir` at about `:113`.
 - [ ] `[Gordon]` `crates/quarto-core/tests/integration/julia_engine_e2e.rs:1075-1098`: `kill` and `pgrep` with no
@@ -352,29 +361,16 @@ msvc cross-check from macOS). The review's targeted list, highest risk first:
       -p quarto-hub -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings` and
       `cargo nextest run` for the same crates.
 
-## Item 7: one presenter path (a separate plan, not part of Item 1)
+## Item 7: one presenter path (now its own epic)
 
-**Intended (knitr epic decision 4, "one presenter"; parent epic decision 5):** the shared Rust presenter gives
-every engine the same cell semantics, so knitr's features are open to other engines. **Found 2026-11-07 (see the
-review note's "Design findings after the review"):** the presenter is already one renderer
-(`render_cell_whole`, one option reader `CellOptions::from_lookup`), but `present_cell` branches on whether a
-cell carries `quarto_resolved_options`, and the knitr branch has its own option layering, its own visibility
-function and four capture-side inputs (output anchors, expression starts, output kinds, the plot count) that
-no other engine supplies. Julia already goes through the Rust presenter (`b4d827186`).
+**Decided (Gordon, 2026-11-07): yes, make it an epic.** It lives in
+[the one-presenter-path epic](2026-11-07-one-presenter-path-epic.md), which holds the intent, what is known, the
+open design questions and the proposed spikes. The number of plans is not known yet: **settling it is the goal of
+the next review session**, which reviews the presenter design with Gordon first. Nothing under this epic starts
+before that review. Item 1 does not depend on it (the exporter reads raw outputs and never calls the presenter).
 
-- [ ] `[Gordon]` Decide whether to make this a plan: one `present_cell` with the capture-side inputs optional
-      (each feature already degrades when its input is missing), engine capability meaning the presence of that
-      data on a cell, and one declared flag for who enforces `warning` and `message` (R at capture for knitr,
-      the presenter for Jupyter). It touches the splice stage, `presenter/document.rs`, the Jupyter option
-      sweep and the byte-identical Jupyter goldens (knitr epic decision 12), so it needs its own tests-first plan.
-- [ ] If yes, the plan's first questions: is layering the document scope under a knitr record's options a no-op
-      when the record is fresh (for Jupyter the presenter layers it, because the hash excludes presentation
-      `execute:` keys; for knitr every `execute:` key counts in the hash); what Julia's annotated notebook
-      carries of the knitr inputs; and whether the `want_record`-false path to the TS `toMarkdown` is still
-      reachable in a normal render.
-- [ ] Jupyter cannot supply anchors or expression starts today (an `execute_request` reports no per-line
-      positions), so those features stay knitr-only until an engine's capture reports them. That is new
-      capture work, outside this item.
+- [x] `[Gordon]` Decide whether to make this a plan. *Yes, an epic; structure first, plans after the review.*
+- [ ] `[unattended]` The pre-review spikes listed in the epic, if Gordon approves them.
 
 ## Item 8: `q2 convert --to positron-ipynb` replaces `q2 record export-positron`
 
@@ -409,12 +405,11 @@ q2 convert <input> --to <format> [--from <format>] [-o <path>] [target options]
   the target), exit 2 for usage errors (so the extension's "q2 too old" detection still works: an older q2's
   `convert` has no `--to`). A `convert` that may run code is stated in its help text: Q1's never executed.
 - Not `-M`: `-M` is document metadata in `q2 render`, `preview` and `provide-hub`.
-- **Open, `[Gordon]`:** the `--source-uri` default. Today it is the document's native path
-  (`commands/record.rs:138-139`). Proposed, **not yet confirmed**: write it with forward slashes
-  (`quarto_util::to_forward_slashes`), per the cross-platform rule for paths in a wire format;
-  `normalize_location` in `positron_cache.rs` accepts both forms, and Positron ignores the field on load. The
-  alternatives are to require `--source-uri` (breaks hand use for no gain) or to build a `file://` URI in q2
-  (against epic decision 13). If confirmed, a test builds its path with `Path::join`.
+- The `--source-uri` default is the document's path written with forward slashes
+  (`quarto_util::to_forward_slashes`), per the cross-platform rule for paths in a wire format. **Agreed with
+  Gordon 2026-11-07.** Today it is the native path (`commands/record.rs:138-139`). `normalize_location` in
+  `positron_cache.rs` accepts both forms and Positron ignores the field on load. A test builds its path with
+  `Path::join`. (q2 builds no `file://` URI: epic decision 13.)
 
 **Order:** independent of Item 1's gate changes (the library function is untouched), but do it before Phase B of
 Item 1 so the CLI test written there targets the new command. Item 1's references to `q2 record export-positron`
