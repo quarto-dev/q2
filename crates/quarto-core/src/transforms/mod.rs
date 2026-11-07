@@ -157,6 +157,7 @@ pub use announcement_render::AnnouncementRenderTransform;
 pub use appendix::AppendixStructureTransform;
 pub use attribution_generate::AttributionGenerateTransform;
 pub use attribution_render::AttributionRenderTransform;
+pub(crate) use attribution_render::query_attribution;
 pub use attribution_viewer::AttributionViewerTransform;
 pub use authors_normalize::{AuthorsNormalizeTransform, normalize_authors_meta};
 pub use book_cover_image::BookCoverImageTransform;
