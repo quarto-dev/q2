@@ -261,12 +261,16 @@ release; each item is either fixed for the demo, or written down as a known issu
       `quartoInlineExprExecutor.ts` is Python-specific. Only Python was run (42 and 3.0, also under
       Playwright), so Julia and R are untested, not known broken. Add a Julia and an R document to the fork's e2e
       for command 1. Independent of Item 1.
-- [x] **Command 1 values do not persist** (Gordon decides; read 2026-11-07). The values are editor decorations
-      only (`createDecorationsCollection` with injected `after` text, `quartoRunInlineExpressions.ts:62-82`); no
-      file under the command writes the output cache (`saveOutput`, the cache service and `persist` do not
-      appear in it), so they vanish on reload and command 3 cannot show them. For the demo: say so in the run
-      guide. Persisting them would be a new Positron feature (writing span outputs into the cache), not needed
-      for the demo. *Open for Gordon if the demo story needs spans to round-trip through command 3.*
+- [x] **Command 1 values do not persist, and that is the demo's honest state** (read 2026-11-07; Gordon: span
+      outputs are not yet tied back to execution records). The values are editor decorations only
+      (`createDecorationsCollection` with injected `after` text, the fork command,
+      `quartoRunInlineExpressions.ts:62-82`); no file under the command writes the output cache, so they vanish on
+      reload and command 3 cannot show them. Command 1 is an out-of-band implementation, in the way Q1 handles
+      span execution, not a use of records. Say so in the run guide. **Eventual goal (a proposal to Positron, not
+      demo work):** persist span outputs in the cache and carry them as inline units in execution records, so
+      spans round-trip like cells. q2's side already has the shape: records hold spans as inline units with
+      domain-separated hashes (`span_content_hash`, `crates/quarto-core/src/record/ids.rs:31-36`). See the
+      "Eventual goal" section below.
 - [ ] Command 2 does not change Positron's kernel state: a later cell that uses a variable from a pushed cell
       fails. Say so in the user-facing text before it ships.
 
@@ -369,3 +373,14 @@ no other engine supplies. Julia already goes through the Rust presenter (`b4d827
 - [ ] Jupyter cannot supply anchors or expression starts today (an `execute_request` reports no per-line
       positions), so those features stay knitr-only until an engine's capture reports them. That is new
       capture work, outside this item.
+
+## Eventual goal: span outputs in execution records (not demo work)
+
+Command 1 runs inline expressions out of band: it executes each span on the document's kernel and shows the value
+as an editor decoration, much as Q1 handles span execution. Nothing ties those values back to execution records.
+The eventual goal is that a span's output is a first-class record cell: Positron would persist it in the cache
+(a Positron-side feature to propose, not to build in the demo) and q2 would export and import it as an inline
+unit, the way cells already round-trip. Until then the export skips inline units (Positron skips them itself) and
+command 3 cannot show span values. When this is planned, start from: q2's inline units and span hash
+(`ids.rs:31-36`), the import and export skip rules for inline units, and Epic decision 6 (a Positron record is
+display-only).
