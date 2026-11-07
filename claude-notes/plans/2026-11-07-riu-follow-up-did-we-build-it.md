@@ -230,8 +230,8 @@ release; each item is either fixed for the demo, or written down as a known issu
 - [ ] `[unattended]` **Stale Julia servers and a missing Plots project** produce confusing results (`startpath
       must be non-empty`; an `ArgumentError` exported as an error output that looks like a working run). Item 2
       covers timing and EPIPE only. Write down what q2 can say when it sees either.
-- [ ] `[Gordon]` The preview banner text "this page reconnects automatically" is wrong for a one-shot server;
-      epic decision 15 says no banner. Reconcile.
+- [x] The preview banner text "this page reconnects automatically" is wrong for a one-shot server (epic
+      decision 15 says no banner). *Gordon, 2026-11-07: don't care; left as is.*
 - [ ] `[Gordon]` Does pushing over existing outputs ask first? (Today it replaces them.)
 - [ ] `[unattended]` **Not run in any window:** untitled document, "q2 too old" (exit 2), non-default profile,
       a dirty document. Wrong `q2.path` was run under Playwright and failed correctly (commands findings);
