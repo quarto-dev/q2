@@ -45,7 +45,9 @@ left R out of the demo; with the knitr stack landed, that is now a gap to close 
    Item 6 needs a Windows machine.
 6. **Item 8** (`q2 convert` replaces `q2 record`) is independent of Item 1's gate changes; do it before Item 1
    Phase B. Strand `bd-ju7u8a73` holds the ipynb-to-qmd side.
-7. **Item 7** (one presenter path) is a design decision for Gordon, independent of Item 1: Item 1 needs only
+7. **Item 9** (rename `--records` to `--execution-records`) goes before Item 8's implementation. It is
+   mechanical and unreleased, so no alias.
+8. **Item 7** (one presenter path) is a design decision for Gordon, independent of Item 1: Item 1 needs only
    the gate change. Do not start it without that decision.
 
 ## Item 1: R through knitr
@@ -397,8 +399,8 @@ q2 convert <input> --to <format> [--from <format>] [-o <path>] [target options]
   supported pairs. Names and flags match `q2 render` (`--to`, `-o`).
 - Supported in this plan: `--from qmd --to positron-ipynb`, the Positron cache notebook. Reserved by name, not
   implemented: `--to ipynb` and `--from ipynb`.
-- Options for `positron-ipynb` only, rejected for other targets: `--records q2,engine` (the preview and
-  provide-hub grammar, only those two values accepted; default `q2,engine`; `--records q2` forbids running the
+- Options for `positron-ipynb` only, rejected for other targets: `--execution-records q2,engine` (the preview and
+  provide-hub grammar, only those two values accepted; default `q2,engine`; `--execution-records q2` forbids running the
   document) and `--source-uri`.
 - `-o <path>` is required for `positron-ipynb`, because the file name belongs to the consumer (a hash of the
   document URI, computed by the extension). `-o -` writes the notebook to stdout, and the JSON report then goes
@@ -419,12 +421,12 @@ mean this command from here on.
 
 - [ ] `[unattended]` Tests first, through the binary (`crates/quarto/tests/integration/`, replacing
       `record_export_positron_cli.rs`): `--to` missing is exit 2; an unsupported pair lists the supported ones;
-      `--from` inferred from `.qmd`; an unknown extension errors; `--records` values other than `q2` and `engine`
-      are rejected; `--records` and `--source-uri` are rejected for a target that does not take them; `-o -` puts
+      `--from` inferred from `.qmd`; an unknown extension errors; `--execution-records` values other than `q2` and `engine`
+      are rejected; `--execution-records` and `--source-uri` are rejected for a target that does not take them; `-o -` puts
       the notebook on stdout and the report on stderr; an existing file is overwritten and an info line names it;
       exit codes 10 to 13 keep their meanings. Move, do not weaken, the existing cases.
 - [ ] `[unattended]` Implement `commands/convert.rs` (replacing the stub), wire `Commands::Convert` in
-      `main.rs` with `--to`, `--from`, `-o/--output` (a path), `--records`, `--source-uri`, delete
+      `main.rs` with `--to`, `--from`, `-o/--output` (a path), `--execution-records`, `--source-uri`, delete
       `commands/record.rs`, the `Record` subcommand, and the old test file name `record_export_positron_cli.rs`. Gates:
       `cargo clippy -p quarto --all-targets -- -D warnings` and `cargo nextest run -p quarto`.
 - [ ] `[unattended]` Run the real binary end to end on a Python fixture and on the knitr fixture
@@ -438,6 +440,58 @@ mean this command from here on.
       references with a dated note rather than rewriting them.
 - [ ] Windows: the forward-slash default is the only path logic here; its test is portable. The rest of the
       Windows list stays in Item 6.
+
+## Item 9: rename `--records` to `--execution-records`
+
+**Intended (Gordon, 2026-11-07):** the flag that names where a document's execution record comes from is spelled
+`--execution-records`, matching the term used everywhere else ("execution records"). **Unreleased, so no alias and
+no deprecation period:** neither `v0.42.0` (the latest tag) nor `main` has the flag (checked with
+`git grep -e '--records' v0.42.0 -- crates/quarto/src/main.rs docs`: no matches). The grammar is unchanged:
+a comma list or repeated flag; entries `cache`, `q2`, `positron`, `engine`, or a directory path; the defaults per
+command; `cache` refused for `provide-hub` and `convert`; `convert` accepts only `q2` and `engine`. The setting
+`preview.engine` is a different name and does not change.
+
+**Where it appears** (a mechanical rename; found 2026-11-07 with `git grep -e '--records'`):
+
+- CLI definitions, `crates/quarto/src/main.rs`: the `records` fields at lines 63 (`record export-positron`,
+  removed by Item 8), 352 (`preview`) and 809 (`provide-hub`), the parse tests (about lines 1408-1430, 1583,
+  1609) and the doc comments at 311 and 1574. Renaming the field to `execution_records` renames the long flag.
+- Commands: `crates/quarto/src/commands/preview.rs` (4 places), `provide_hub.rs` (2) and `record.rs` (2, which
+  Item 8 deletes).
+- User-visible messages and their tests: `crates/quarto-core/src/engine/diagnostics.rs` (the page warning and its
+  tests, 6 places), `crates/quarto-core/src/record/sources.rs` (3, including the `cache` refusal text),
+  `crates/quarto-hub-provider/src/execute.rs` (4), `crates/quarto-preview/src/re_execute.rs` (2, one is a test
+  assertion), `capture_driver.rs` (2, one assertion), `lib.rs`, `share.rs` and the two integration tests that
+  mention it.
+- User-facing docs: `docs/guides/authoring/execution-records.qmd` (4 places) and
+  `docs/guides/projects/preview.qmd` (4), then the embedded-docs refresh.
+- TypeScript: `q2-preview-spa/e2e/helpers/previewServer.ts` (3) and `q2-preview-spa/e2e/records-sources.spec.ts`
+  (7).
+- The fork's extension: `q2Contract.ts` (`buildPreviewArgs`, line 54, and its comments) and `previewCommand.ts`,
+  with their vitests.
+- Notes: 19 files under `claude-notes/` mention the old flag. They are history and are not rewritten; the epic
+  gets one dated line saying the flag was renamed.
+
+**Order:** do this before Item 8's implementation, so `q2 convert` is written with the new name from the start;
+Item 8's tests use the new name.
+
+- [ ] `[unattended]` Tests first: change the parse tests in `main.rs` and the assertions in `diagnostics.rs`,
+      `re_execute.rs`, `capture_driver.rs`, the share and hub-provider integration tests to the new spelling;
+      add a test that the old spelling is rejected as an unknown flag on `preview` and `provide-hub` (no alias).
+      They fail first on the current name.
+- [ ] `[unattended]` Rename the flag and every message, comment and doc string in the list above. Gates:
+      `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider --all-targets -- -D warnings`
+      and `cargo nextest run` for the same crates.
+- [ ] `[unattended]` Update `q2-preview-spa/e2e` (two files) and run the records-sources e2e if it can run here;
+      say which ran.
+- [ ] `[unattended]` Update the two docs pages, run `target/debug/q2 render docs/`, then the embedded-docs
+      refresh (`cargo xtask build-agents-docs`, `cargo build --bin q2`).
+- [ ] `[unattended]` Update the fork extension and its vitests (`q2Contract.ts`, `previewCommand.ts`).
+- [ ] `[unattended]` A final `git grep -e '--records'` outside `claude-notes/` must come back empty; add the
+      dated rename line to the epic.
+- [ ] `[unattended]` Run the real binary: `q2 preview <doc> --execution-records positron,engine --no-browser`
+      starts as before, and `q2 preview <doc> --records positron` fails as an unknown argument. Record the
+      invocations and output here.
 
 ## Eventual goal: span outputs in execution records (not demo work)
 

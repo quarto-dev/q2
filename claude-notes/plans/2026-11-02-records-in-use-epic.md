@@ -24,6 +24,9 @@ U21 to U29). Section names in parentheses below point there.
 **Origin:** a session of 2026-11-02 that began as a Positron demo request and found that the
 records were built and unit tested but had never been run through the real `q2 preview`. RIU-0
 ran them; the demo moved to the end of this epic.
+**Rename (2026-11-07):** the `--records` flag is now `--execution-records` (unreleased, no alias; see
+[the follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md), Item 9). Plans and notes below keep the old
+spelling as history.
 **Terminology:** as in the parent epic. A **record source** is anything that can supply a
 record for a document: an engine run, the preview cache, a file under
 `.quarto/execution-records/`, a directory of Positron-format cache files, or the Positron
