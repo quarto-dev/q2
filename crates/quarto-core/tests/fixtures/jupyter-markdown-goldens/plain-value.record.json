@@ -69,7 +69,18 @@
       "layout-ncol",
       "layout-nrow",
       "layout-align",
-      "layout-valign"
+      "layout-valign",
+      "panel",
+      "column",
+      "keep-hidden",
+      "fig-env",
+      "fig-pos",
+      "out-width",
+      "out-height",
+      "out-extra",
+      "classes",
+      "fig-column",
+      "tbl-column"
      ],
      "presentationExecuteKeys": [
       "echo",
@@ -100,7 +111,18 @@
       "layout-ncol",
       "layout-nrow",
       "layout-align",
-      "layout-valign"
+      "layout-valign",
+      "panel",
+      "column",
+      "keep-hidden",
+      "fig-env",
+      "fig-pos",
+      "out-width",
+      "out-height",
+      "out-extra",
+      "classes",
+      "fig-column",
+      "tbl-column"
      ],
      "version": 1
     },
