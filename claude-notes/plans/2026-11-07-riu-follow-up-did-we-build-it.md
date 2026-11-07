@@ -194,13 +194,13 @@ pays startup and precompile time.
 
 **This is still a demo (Gordon, 2026-11-07).** "Ship" means the demo in the fork, so nothing here blocks a
 release; each item is either fixed for the demo, or written down as a known issue in the demo's run guide
-(`extensions/q2-records-demo`'s demo folder). Each "Gordon" box is a decision, not an assumption.
+(the demo folder under `extensions/q2-records-demo`). Each "Gordon" box is a decision, not an assumption.
 
 **Fix or document for the demo**
 
 - [ ] `[unattended]` **Positron's cache location: prototype a Positron feature, idiomatically** (Gordon,
       2026-11-07: a Positron-side prototype is wanted here). Found so far, by a targeted grep of the fork, not
-      an exhaustive search: the extension takes `ctx.globalStorageUri`'s sibling
+      an exhaustive search: the extension takes the sibling of `ctx.globalStorageUri`
       (`q2-records-demo/src/previewHelpers.ts:31-35`), which is profile-scoped, while Positron's cache service
       always writes under `defaultProfile.globalStorageHome`
       (`src/vs/workbench/contrib/positronQuarto/browser/quartoOutputCacheService.ts:133-136`). Positron's own
