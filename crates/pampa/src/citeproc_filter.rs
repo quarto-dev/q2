@@ -953,18 +953,13 @@ fn quote_str(text: &str) -> Inline {
     })
 }
 
-/// [`localize_quotes`] over a bibliography entry's blocks.
+/// [`localize_quotes`] over a bibliography entry's blocks. Unlike citations,
+/// bibliography entries keep their `Str` chunks unmerged, as before.
 fn localize_quotes_in_blocks(blocks: &mut [Block], quotes: &QuoteConfig) {
     for block in blocks {
         match block {
-            Block::Plain(x) => {
-                localize_quotes(&mut x.content, quotes, 0);
-                merge_adjacent_strs(&mut x.content);
-            }
-            Block::Paragraph(x) => {
-                localize_quotes(&mut x.content, quotes, 0);
-                merge_adjacent_strs(&mut x.content);
-            }
+            Block::Plain(x) => localize_quotes(&mut x.content, quotes, 0),
+            Block::Paragraph(x) => localize_quotes(&mut x.content, quotes, 0),
             Block::Div(x) => localize_quotes_in_blocks(&mut x.content, quotes),
             _ => {}
         }
