@@ -1,0 +1,26 @@
+---
+format: html
+lang: nl
+references:
+  - id: item
+    type: webpage
+    title: A page
+    author:
+      - family: Smith
+        given: Jane
+    issued:
+      date-parts: [[2020, 7, 12]]
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["juli 12", "‘A page’"]
+        - ["July 12", "A Page", "“"]
+---
+
+GH #1110: the document `lang` selects the citation locale, as in Quarto 1:
+Dutch date and quote marks, and no English title-casing. The expected
+strings are Pandoc 3.12.1's output for the same input.
+
+See [@item].

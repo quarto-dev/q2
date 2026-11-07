@@ -153,3 +153,33 @@ The worktree is at the same commit, so verify wasn't run again there.
 
 Out of scope here: `lang` affecting non-citation strings (crossref prefixes,
 callout titles) — that is Quarto's own translation layer, not citeproc.
+
+## Resolution (same branch)
+
+Implemented as scoped above, plus quote localization and en-US fallback:
+
+- `Processor::with_lang` (quarto-citeproc) computes the effective locale
+  (`lang` > CSL `default-locale` > en-US), normalizing spellings (`NL`,
+  `nl_NL`) and mapping bare codes through the CSL primary-dialect table.
+- Style `<locale>` blocks apply only when their `xml:lang` matches the
+  effective locale (exact, then base, then unscoped), for terms, date
+  formats, quote terms, and locale options.
+- With no `language` field, a reference counts as English (and gets title
+  case) only when the loaded locale is English. An unknown `lang: xx` loads
+  en-US and title-cases, as Pandoc does. A style's own
+  `<locale xml:lang="xx">` still applies in that case (CSL test
+  `locale_NonExistentLocaleDef`).
+- pampa replaces citeproc's `Quoted` nodes with a `Span` holding the locale's
+  quote marks as text, matching Pandoc's AST (`‘A page’`, `„A page“`).
+- pampa's citeproc filter and the book bibliography merge both pass `lang`.
+- Three CSL conformance tests now pass and are enabled:
+  `locale_NonExistentLocaleDef`, `locale_OverloadWithEmptyString`,
+  `locale_TitleCaseEmptyLangNonEnglishLocale`.
+
+Still different from Pandoc, tracked separately:
+
+- en-US punctuation-in-quote (`“A Page”.` vs `“A Page.”`):
+  bd-citeproc-cluster-collapse-kns8uggw.
+- English ordinal day suffix under non-English locales: bd-mn9jphx3.
+- Typst output fails to compile citations to front-matter `references:`
+  (also on main): bd-yjf99rzx.

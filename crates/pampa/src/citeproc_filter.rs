@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use biblatex::{Bibliography, ChunksExt, DateValue, EntryType, PermissiveType};
-use quarto_citeproc::output::{Output, Tag};
+use quarto_citeproc::output::{Output, QuoteConfig, Tag};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::StyleClass;
 use quarto_csl::parse_csl;
@@ -133,8 +133,9 @@ pub fn apply_citeproc_filter(
     // Load CSL style
     let style = load_csl_style(&config, base_dir, runtime)?;
 
-    // Create processor
-    let mut processor = Processor::new(style);
+    // Create processor. The document `lang` overrides the style's
+    // `default-locale`, as in Pandoc and Quarto 1 (issue #1110).
+    let mut processor = Processor::with_lang(style, config.lang.as_deref());
 
     // Add inline references from metadata
     if !config.references.is_empty() {
@@ -182,10 +183,11 @@ pub fn apply_citeproc_filter(
     // `link-citations` applies to in-text (author-date, numeric) styles
     // only, as in Pandoc.
     let link_citations = config.link_citations && processor.style.class != StyleClass::Note;
+    let quotes = processor.get_quote_config();
     let rendered = RenderedCitations {
         content: outputs
             .into_iter()
-            .map(|output| render_citation(output, link_citations))
+            .map(|output| render_citation(output, link_citations, &quotes))
             .collect(),
         keep_cite_nodes: keeps_resolved_cite_nodes(target_format),
     };
@@ -890,7 +892,7 @@ fn keeps_resolved_cite_nodes(target_format: &str) -> bool {
 /// Render one citation's Output AST to inlines. With `link_citations`,
 /// each cited item links to its bibliography entry (`#ref-<id>`, the id
 /// [`generate_bibliography`] gives the entry's div).
-fn render_citation(output: Output, link_citations: bool) -> Inlines {
+fn render_citation(output: Output, link_citations: bool, quotes: &QuoteConfig) -> Inlines {
     let mut inlines = if link_citations {
         let mut inlines = link_cited_items(output).to_inlines();
         mark_bibliography_links(&mut inlines);
@@ -898,8 +900,75 @@ fn render_citation(output: Output, link_citations: bool) -> Inlines {
     } else {
         output.to_inlines()
     };
+    localize_quotes(&mut inlines, quotes, 0);
     merge_adjacent_strs(&mut inlines);
     inlines
+}
+
+/// Replace each `Quoted` node in citeproc output with a `Span` holding the
+/// locale's quote marks as text, as Pandoc's citeproc does (issue #1110):
+/// `‘A page’` in Dutch, `„A page“` in German, `“A Page”` in English. A
+/// `Quoted` node would let the writer pick its own (English) marks.
+/// Nested quotes alternate outer and inner marks.
+fn localize_quotes(inlines: &mut Inlines, quotes: &QuoteConfig, depth: usize) {
+    for inline in inlines.iter_mut() {
+        match inline {
+            Inline::Emph(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Strong(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Underline(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Strikeout(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Superscript(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Subscript(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::SmallCaps(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Span(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Link(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Quoted(q) => {
+                let (open, close) = if depth % 2 == 0 {
+                    (&quotes.outer_open, &quotes.outer_close)
+                } else {
+                    (&quotes.inner_open, &quotes.inner_close)
+                };
+                let mut content = std::mem::take(&mut q.content);
+                localize_quotes(&mut content, quotes, depth + 1);
+                let mut wrapped = Vec::with_capacity(content.len() + 2);
+                wrapped.push(quote_str(open));
+                wrapped.extend(content);
+                wrapped.push(quote_str(close));
+                *inline = Inline::Span(crate::pandoc::Span {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                    content: wrapped,
+                    source_info: q.source_info.clone(),
+                    attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
+fn quote_str(text: &str) -> Inline {
+    Inline::Str(crate::pandoc::Str {
+        text: text.to_string(),
+        source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc()),
+    })
+}
+
+/// [`localize_quotes`] over a bibliography entry's blocks.
+fn localize_quotes_in_blocks(blocks: &mut [Block], quotes: &QuoteConfig) {
+    for block in blocks {
+        match block {
+            Block::Plain(x) => {
+                localize_quotes(&mut x.content, quotes, 0);
+                merge_adjacent_strs(&mut x.content);
+            }
+            Block::Paragraph(x) => {
+                localize_quotes(&mut x.content, quotes, 0);
+                merge_adjacent_strs(&mut x.content);
+            }
+            Block::Div(x) => localize_quotes_in_blocks(&mut x.content, quotes),
+            _ => {}
+        }
+    }
 }
 
 /// Merge each run of adjacent `Str` inlines into one, at every level, as
@@ -1242,9 +1311,11 @@ pub fn generate_bibliography(processor: &mut Processor) -> Result<Vec<Block>, Ci
     }
 
     // Convert each entry to blocks
+    let quotes = processor.get_quote_config();
     let mut bib_blocks = Vec::new();
     for (id, output) in entries {
-        let blocks = output.to_blocks();
+        let mut blocks = output.to_blocks();
+        localize_quotes_in_blocks(&mut blocks, &quotes);
         if !blocks.is_empty() {
             // Wrap each entry in a Div with the reference ID
             // Attr is a tuple: (id, classes, attributes)
@@ -4287,6 +4358,33 @@ mod tests {
                 source_info: si(),
             })],
         }
+    }
+
+    #[test]
+    fn localize_quotes_uses_locale_marks_and_alternates_when_nested() {
+        // Issue #1110: Pandoc's citeproc writes the locale's quote marks as
+        // text in a Span; nested quotes take the inner marks.
+        let quotes = QuoteConfig {
+            outer_open: "„".to_string(),
+            outer_close: "“".to_string(),
+            inner_open: "‚".to_string(),
+            inner_close: "‘".to_string(),
+        };
+        let quoted = |content: Inlines| {
+            Inline::Quoted(Quoted {
+                quote_type: QuoteType::DoubleQuote,
+                content,
+                source_info: si(),
+            })
+        };
+        let mut inlines = vec![quoted(vec![
+            str_inline("a "),
+            quoted(vec![str_inline("b")]),
+        ])];
+        localize_quotes(&mut inlines, &quotes, 0);
+        merge_adjacent_strs(&mut inlines);
+        assert_eq!(inlines_to_text(&inlines), "„a ‚b‘“");
+        assert!(matches!(&inlines[0], Inline::Span(_)));
     }
 
     #[test]

@@ -85,7 +85,9 @@ pub fn build_merged_bibliography(
         ))
     })?;
 
-    let mut processor = Processor::new(style);
+    // The references chapter's `lang` picks the locale, as in each
+    // chapter's own pass (issue #1110).
+    let mut processor = Processor::with_lang(style, config.lang.as_deref());
     processor.add_references(references);
 
     // Seed citation-number state in book-wide first-cited order (numeric
@@ -172,6 +174,37 @@ mod tests {
                 "c2021".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn merged_bibliography_uses_the_references_chapter_lang() {
+        // Issue #1110: the book-wide merge picks the locale from `lang`, as
+        // each chapter's own citeproc pass does.
+        let reference: Reference = serde_json::from_str(
+            r#"{"id": "item", "type": "webpage", "title": "A page",
+                "author": [{"family": "Smith", "given": "Jane"}],
+                "issued": {"date-parts": [[2020, 7, 12]]}}"#,
+        )
+        .unwrap();
+        let render = |lang: Option<&str>| {
+            let config = CiteprocConfig {
+                lang: lang.map(str::to_string),
+                ..Default::default()
+            };
+            let blocks = build_merged_bibliography(
+                &config,
+                Path::new("."),
+                &["item".to_string()],
+                vec![reference.clone()],
+                &quarto_system_runtime::NativeRuntime::new(),
+            )
+            .unwrap();
+            format!("{blocks:?}")
+        };
+        let dutch = render(Some("nl"));
+        assert!(dutch.contains("juli 12"), "{dutch}");
+        assert!(!dutch.contains("July"), "{dutch}");
+        assert!(render(None).contains("July 12"));
     }
 
     #[test]
