@@ -57,6 +57,7 @@ pub mod inline_splice_property_tests;
 pub mod inline_splice_safety_tests;
 pub mod json_location_test;
 pub mod json_reader_smoke_tests;
+pub mod list_looseness;
 pub mod lua_conformance;
 pub mod lua_differential;
 pub mod math_text_source;

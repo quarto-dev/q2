@@ -777,19 +777,47 @@ fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
     Some(rewritten)
 }
 
+/// Spell the list tight (no blank lines between items or between an item's
+/// blocks) unless some item directly contains a `Paragraph`.
+///
+/// The reader (CommonMark, bd-az53ojvo) turns every direct `Paragraph` of a
+/// tight list's items into `Plain`, so a `Paragraph` anywhere means loose.
+/// Items with no paragraph at all (a code block, a sublist, an empty item)
+/// carry no spacing information either way, so they must not force the
+/// loose spelling: `[[BulletList ..], [Plain]]` written with a blank line
+/// between the items would read back as `[[BulletList ..], [Para]]`.
+/// (pandoc's markdown writer looks only at each item's first block and does
+/// lose that shape; the qmd writer round-trips it.)
+fn list_is_tight(items: &[Vec<Block>]) -> bool {
+    !items.iter().any(|item| {
+        item.iter()
+            .any(|block| matches!(block, Block::Paragraph(_)))
+    })
+}
+
+/// In a tight item two blocks are written back to back, except where the
+/// reader would then merge them: a block quote directly followed by another
+/// block quote continues it, and a paragraph directly below a block quote or
+/// a sublist is a lazy continuation line of it. Those pairs get a blank line
+/// even in a tight list. (A tight item holding such a pair *and* a `Plain`
+/// has no CommonMark spelling at all; the reader never produces one, and
+/// the blank line is the conservative choice for an AST built by hand.)
+fn tight_blocks_need_separator(prev: &Block, next: &Block) -> bool {
+    let prev_can_continue = matches!(
+        prev,
+        Block::BlockQuote(_) | Block::BulletList(_) | Block::OrderedList(_)
+    );
+    let next_is_text = matches!(next, Block::Plain(_) | Block::Paragraph(_));
+    let both_quotes = matches!(prev, Block::BlockQuote(_)) && matches!(next, Block::BlockQuote(_));
+    (prev_can_continue && next_is_text) || both_quotes
+}
+
 fn write_bulletlist(
     bulletlist: &BulletList,
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    // A list is tight if every non-empty item starts with Plain (not Para).
-    // Length-0 items (Vec<Block> = []) carry no spacing information and
-    // are skipped here, so a list with a trailing empty item stays tight
-    // when its other items are tight.
-    let is_tight = bulletlist
-        .content
-        .iter()
-        .all(|item| item.is_empty() || matches!(item[0], Block::Plain(_)));
+    let is_tight = list_is_tight(&bulletlist.content);
 
     // Read before the items are written: nested lists reset the context field.
     let marker = ctx.bullet_marker;
@@ -827,8 +855,9 @@ fn write_bulletlist(
             let mut item_writer = BulletListContext::new(buf, marker);
             ctx.begin_block_sequence();
             for (j, block) in item.iter().enumerate() {
-                if j > 0 && !is_tight {
-                    // Add a blank line between blocks within a list item in loose lists
+                if j > 0 && (!is_tight || tight_blocks_need_separator(&item[j - 1], block)) {
+                    // Blank line between blocks within a list item: always in
+                    // loose lists, and where the pair would otherwise merge.
                     writeln!(&mut item_writer)?;
                 }
                 write_block(block, &mut item_writer, ctx)?;
@@ -845,11 +874,7 @@ fn write_orderedlist(
 ) -> std::io::Result<()> {
     let (start_num, number_style, delimiter) = &orderedlist.attr;
 
-    // See write_bulletlist: empty items don't carry spacing info.
-    let is_tight = orderedlist
-        .content
-        .iter()
-        .all(|item| item.is_empty() || matches!(item[0], Block::Plain(_)));
+    let is_tight = list_is_tight(&orderedlist.content);
 
     for (i, item) in orderedlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
@@ -882,8 +907,8 @@ fn write_orderedlist(
             OrderedListContext::new(buf, current_num, number_style.clone(), delimiter.clone());
         ctx.begin_block_sequence();
         for (j, block) in item.iter().enumerate() {
-            if j > 0 && !is_tight {
-                // Add a blank line between blocks within a list item in loose lists
+            if j > 0 && (!is_tight || tight_blocks_need_separator(&item[j - 1], block)) {
+                // See write_bulletlist.
                 writeln!(&mut item_writer)?;
             }
             write_block(block, &mut item_writer, ctx)?;

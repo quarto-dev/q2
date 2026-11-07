@@ -371,20 +371,20 @@ fn attributed_div_is_transparent_to_list_indentation() {
         ),
     );
     // The Connect-docs repro: whitespace-only separator lines (4
-    // spaces) inside an attributed div. The list structure must match
-    // the truly-blank-line variant below. Note the first block is
-    // Plain here but Para in the blank variant: v0.18.0 behaves the
-    // same way (whitespace-only lines read as tight in the loose/tight
-    // computation, with or without a div — pandoc/Q1 say loose). That
-    // pre-existing quirk is out of scope and tracked separately; these
-    // cells pin the v0.18.0 output.
+    // spaces) inside an attributed div. The list structure and the
+    // loose/tight verdicts must match the truly-blank-line variant
+    // below: a whitespace-only line is a blank line (CommonMark), so
+    // the outer item is loose (blank between its paragraph and the
+    // sublist) and so is the inner list (blank between its items).
+    // Until bd-az53ojvo the whitespace-only variant read as tight
+    // (bd-25ezfgs8) and the inner list of both variants read as tight.
     check_cell(
         &mut failures,
         "div + whitespace-only lines (repro A)".to_string(),
         "::: {.definition-list}\n\n* Find:\n    \n    1.  Exact.\n    \n    2.  Latest.\n:::\n",
         Ok("[ Div ( \"\" , [\"definition-list\"] , [] ) [BulletList \
-             [[Plain [Str \"Find:\"], OrderedList (1, Decimal, Period) \
-             [[Plain [Str \"Exact.\"]], [Plain [Str \"Latest.\"]]]]]] ]"),
+             [[Para [Str \"Find:\"], OrderedList (1, Decimal, Period) \
+             [[Para [Str \"Exact.\"]], [Para [Str \"Latest.\"]]]]]] ]"),
     );
     check_cell(
         &mut failures,
@@ -392,7 +392,7 @@ fn attributed_div_is_transparent_to_list_indentation() {
         "::: {.definition-list}\n\n* Find:\n\n    1.  Exact.\n\n    2.  Latest.\n:::\n",
         Ok("[ Div ( \"\" , [\"definition-list\"] , [] ) [BulletList \
              [[Para [Str \"Find:\"], OrderedList (1, Decimal, Period) \
-             [[Plain [Str \"Exact.\"]], [Plain [Str \"Latest.\"]]]]]] ]"),
+             [[Para [Str \"Exact.\"]], [Para [Str \"Latest.\"]]]]]] ]"),
     );
     // Prose continuation inside a div still soft-breaks.
     check_cell(

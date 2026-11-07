@@ -920,27 +920,24 @@ fn definition_list_shapes_round_trip() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
-/// Single-paragraph definitions separated by blank lines (`Para` each)
-/// read back tight: the qmd reader, like pandoc's definition-list reader,
-/// does not loosen a list for a blank line between its items. Tight/loose
-/// is not preserved here, but the list settles: the AST is stable from the
-/// first re-read and the text from the second write.
+/// Single-paragraph definitions round-trip with their loose/tight verdict:
+/// the writer puts a blank line between `Para` definitions and none between
+/// `Plain` ones, and the reader applies the CommonMark rule to the bullet
+/// list the `.definition-list` div wraps (bd-az53ojvo), so each spelling
+/// reads back as itself. (pandoc's own definition-list reader would settle
+/// the loose spelling into the tight one; the qmd sugar is a bullet list
+/// and follows CommonMark.)
 #[test]
-fn loose_single_paragraph_definitions_settle_into_tight_ones() {
-    let loose = |b: fn(Vec<Value>) -> Value| {
+fn loose_and_tight_single_paragraph_definitions_round_trip() {
+    let definitions = |b: fn(Vec<Value>) -> Value| {
         doc(vec![definition_list(vec![(
             inl("T"),
             vec![vec![b(inl("a"))], vec![b(inl("b"))]],
         )])])
     };
-    // First trip: the loose AST reads back as the tight one.
-    let first = assert_roundtrip_with(loose(para), |expected| *expected = loose(plain));
-    // From then on the tight AST (and so its text) is a fixpoint.
-    let second = assert_roundtrip(loose(plain));
-    assert_ne!(
-        first, second,
-        "the loose spelling is written once, then settles"
-    );
+    let loose = assert_roundtrip(definitions(para));
+    let tight = assert_roundtrip(definitions(plain));
+    assert_ne!(loose, tight, "the two verdicts have distinct spellings");
 }
 
 /// An empty term is written as the `* []` placeholder, which the reader
