@@ -616,3 +616,78 @@ fn pipeline_section_with_text_key_shows_configured_text() {
         "the landing page's title must not leak into another page's sidebar"
     );
 }
+
+/// bd-gtpwby98 — a page that is itself a sidebar section header gets
+/// `active` on the header anchor (Q1 parity), for both authoring forms:
+/// `section:` + `href:` and `file:` + `contents:`. A page that is a leaf
+/// inside the section leaves the header unmarked.
+#[test]
+fn pipeline_section_header_page_is_marked_active() {
+    let (_dir, outputs) = render_project(|project_dir| {
+        write(
+            &project_dir.join("_quarto.yml"),
+            "project:\n  type: website\n  output-dir: _site\n\
+             website:\n  sidebar:\n    contents:\n\
+             \x20     - index.qmd\n\
+             \x20     - section: Groups\n\
+             \x20       href: groups.qmd\n\
+             \x20       contents:\n\
+             \x20         - leaf.qmd\n\
+             \x20     - file: files.qmd\n\
+             \x20       contents:\n\
+             \x20         - other.qmd\n",
+        );
+        for (name, title) in [
+            ("index", "Home"),
+            ("groups", "Groups"),
+            ("leaf", "Leaf"),
+            ("files", "Files"),
+            ("other", "Other"),
+        ] {
+            write(
+                &project_dir.join(format!("{name}.qmd")),
+                &format!("---\ntitle: {title}\n---\n\nBody.\n"),
+            );
+        }
+    });
+
+    let sidebar_region = |html: &str| -> String {
+        html.find("<nav id=\"quarto-sidebar\"")
+            .map_or("<no sidebar nav>".to_string(), |i| {
+                html[i..(i + 3000).min(html.len())].to_string()
+            })
+    };
+
+    // `section:` + `href:` form.
+    let groups = find_html(&outputs, "groups");
+    assert!(
+        groups.contains("href=\"groups.html\" class=\"sidebar-item-text sidebar-link active\""),
+        "section header for the current page must carry `active`; got: {}",
+        sidebar_region(groups)
+    );
+    assert_eq!(
+        groups.matches("sidebar-link active").count(),
+        1,
+        "exactly one sidebar link is active; got: {}",
+        sidebar_region(groups)
+    );
+
+    // `file:` + `contents:` form.
+    let files = find_html(&outputs, "files");
+    assert!(
+        files.contains("href=\"files.html\" class=\"sidebar-item-text sidebar-link active\""),
+        "file+contents header for the current page must carry `active`; got: {}",
+        sidebar_region(files)
+    );
+    assert_eq!(files.matches("sidebar-link active").count(), 1);
+
+    // A leaf inside the section: the leaf is active, the header is not.
+    let leaf = find_html(&outputs, "leaf");
+    assert!(leaf.contains("href=\"leaf.html\" class=\"sidebar-item-text sidebar-link active\""));
+    assert!(
+        leaf.contains("href=\"groups.html\" class=\"sidebar-item-text sidebar-link\""),
+        "a section containing the active page is not itself active; got: {}",
+        sidebar_region(leaf)
+    );
+    assert_eq!(leaf.matches("sidebar-link active").count(), 1);
+}
