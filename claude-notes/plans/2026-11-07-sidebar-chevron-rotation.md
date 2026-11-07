@@ -54,7 +54,7 @@ Out of scope:
   section's chevron `::before` computes to a rotated transform and the
   collapsed one does not.
 - [x] `cargo xtask verify --skip-hub-build` (local failures are environment-only: pandoc 3.13 vs pinned 3.12.1, local R/cairo; the one real failure, the `phase5-single-doc-baseline` styles.css hash, was re-captured)
-- [ ] PR; monitor CI.
+- [x] PR #1119; CI green (15/15).
 
 ## End-to-end verification (2026-11-07)
 
