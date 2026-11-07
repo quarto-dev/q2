@@ -100,6 +100,7 @@ harmless.
 | `[REVISED]`, `[x]` outside a task list (bare brackets) | literal | Q-2-49; rendered as a span | `\[REVISED\]`; a code span for `argv[1]` |
 | `<anonymous>`, `Vec<String>` (angle brackets in prose) | raw HTML | Q-2-9; passed through as raw HTML, so invisible in the page | `\<anonymous>` for a placeholder; a code span for a type |
 | `<br>`, `<details>` (HTML you want rendered) | raw HTML | Q-2-9; passed through, with a warning | `` `<br>`{=html} `` inline; a ```` ```{=html} ```` block for a tag-only line |
+| `nocite: "@*"` in the front matter (list every bibliography entry) | every entry listed | Q-1-20, because `@*` is not a valid citation; every entry is still listed | `nocite: !str "@*"` |
 
 ## Shortcodes inside code spans and blocks
 

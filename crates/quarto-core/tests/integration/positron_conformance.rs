@@ -28,6 +28,7 @@ const CASES: &[(&str, &str)] = &[
         "label_comment",
         "```{python}\n#| label: fig-a\nx = 1\n```\n",
     ),
+    ("r_label_comment", "```{r}\n#| label: fig-r\nx <- 1\n```\n"),
     ("brace_label_r", "```{r, label=foo}\nx <- 1\n```\n"),
     ("brace_label_bare", "```{python, fig-x}\nx = 1\n```\n"),
     ("brace_id", "```{python #bar}\nx = 1\n```\n"),

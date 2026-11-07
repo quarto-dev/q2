@@ -510,6 +510,25 @@ pub struct ExecuteResult {
     /// record through its own `engine_capture.record` field instead).
     #[serde(skip)]
     pub record: Option<crate::record::EngineRecord>,
+
+    /// KNR-6: the skeleton a whole-document engine built the document around, with the nonce
+    /// its markers carry. `markdown` holds the final presented text; replay presents the
+    /// record over `skeleton.text` again. `None` for an engine with no skeleton (Jupyter) and
+    /// for a trace that predates the field, which replays its markdown verbatim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skeleton: Option<Skeleton>,
+}
+
+/// A skeleton document: text whose `<!-- q2:<nonce>:<unit-id> -->` markers stand where the
+/// units belong (see `engine::knitr::skeleton`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Skeleton {
+    pub text: String,
+    pub nonce: String,
+    /// How many units rendered from shipped markdown instead of the presenter, by reason; the
+    /// trace carries it as KNR-8's evidence. Never shown to users.
+    #[serde(default)]
+    pub fallbacks: super::skeleton::FallbackCounts,
 }
 
 impl ExecuteResult {

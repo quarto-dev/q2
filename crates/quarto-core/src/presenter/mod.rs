@@ -18,6 +18,10 @@ pub mod document;
 pub mod expansion;
 pub mod figures;
 pub mod inline;
+#[cfg(test)]
+mod jupyter_option_sweep;
+pub mod knitr_inputs;
+pub mod options;
 pub mod output;
 #[cfg(test)]
 pub(crate) mod recording_runtime;

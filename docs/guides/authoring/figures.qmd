@@ -420,6 +420,14 @@ Figures produced by executable code blocks are automatically included in your do
 To set the ID, caption and link, use the chunk options `label`, `fig-cap` and `fig-link` respectively.
 Other attributes, e.g. `fig-align` and `fig-alt`, can be set using the chunk option of the same name.
 
+Jupyter and Knitr cells read these options the same way, so a chunk behaves alike in both engines.
+The options `fig-align`, `fig-alt`, `fig-link`, `fig-scap`, `out-width`, `out-height` and `out-extra` set the figure attribute they name (`out-width` sets its `width`).
+The options `classes`, `fig-column`, `tbl-column`, `cap-location` and `fig-cap-location` add classes to the cell.
+Write the dashed names, which work in both engines; Knitr also accepts its dotted spellings, such as `fig.align` and `out.width`.
+
+When a cell produces several figures, an option given as a list gives each figure its own entry.
+A list shorter than the number of figures starts again from its first entry, and a single value applies to every figure.
+
 You can control the default size for computational figures using the `fig-width` and `fig-height` options in the document header.
 Read more about these options in [Execution Options: Figure Options](/docs/computations/execution-options.qmd#figure-options).
 
@@ -573,3 +581,9 @@ Some text that should be laid out below the code
 
 The id attributes (`#first-column` and `#second-column`) are optional,
 but aid readability.
+
+## Differences from Quarto 1
+
+- **Figure options in Jupyter cells.** Quarto 1 ignored `out-width`, `out-height` and `out-extra` on a Jupyter cell. Quarto 2 applies them, as it does for Knitr. It also turns `fig-align` into the cell\'s `layout-align`, which Quarto 1 did only for Knitr.
+- **Lists of options.** Quarto 1 gave each output of a Jupyter cell the list entry at that output\'s position, counting outputs that are not figures, and did not repeat a short list. Quarto 2 counts figures only and repeats a short list, in both engines.
+- **`cap-location`.** The class `caption-top` (or `caption-bottom`, `caption-margin`) comes from the value of `cap-location` itself. Quarto 1 took it from `fig-cap-location` in a Jupyter cell, so `cap-location: top` on its own produced `caption-undefined` ([quarto-cli#15281](https://github.com/quarto-dev/quarto-cli/issues/15281)).

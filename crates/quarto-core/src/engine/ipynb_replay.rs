@@ -241,6 +241,8 @@ fn replay_stored_outputs(
         &units,
         ctx.execute_scope.as_ref(),
         InlineTarget::from_format(&ctx.format),
+        &ctx.format,
+        None,
         fig.as_mut(),
     )
     .map_err(|e| ExecutionError::execution_failed(IPYNB, e.to_string()))?;

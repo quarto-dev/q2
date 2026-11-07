@@ -6,13 +6,13 @@
   },
   {
     "path": "capture/citations.typ",
-    "size": 13119,
-    "sha256": "6820eabde05d0480e6d7299987d8cccec7db6fe7df55239e18c629202724b253"
+    "size": 15201,
+    "sha256": "0036758c28ce9f3dff95fbc67ad409dc595b93d41037f3a2229c106935bd0acb"
   },
   {
     "path": "env.json",
     "size": 18076,
-    "sha256": "1efae604c8129a4ef31e86da58b00e5adf05c4646588351e2249de6fb088eaf3"
+    "sha256": "1b7a13b0771bd7c367c9784a03bd7dd5f20c6d4ca72c484e0317e91ebf7385d8"
   },
   {
     "path": "fs/__q2_doc__/citations.qmd",
@@ -41,8 +41,13 @@
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/definitions.typ",
-    "size": 8022,
-    "sha256": "d317143dbcc9e1ffa2fa4ec89c7103d8ded17f245904d9a8024c9fb8e90a2e29"
+    "size": 8135,
+    "sha256": "a02be9f80ea852746bea37a1ace9376441832321c033c34f321d91639488f9f0"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-typst-template/editorial-marks.typ",
+    "size": 2082,
+    "sha256": "f398f8b04b266caca8a60ce10a73b2af95cd1b82ed1513b461e7899b0b940239"
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/notes.typ",
@@ -81,7 +86,7 @@
   },
   {
     "path": "reference/citations.typ",
-    "size": 13119,
-    "sha256": "6820eabde05d0480e6d7299987d8cccec7db6fe7df55239e18c629202724b253"
+    "size": 15201,
+    "sha256": "0036758c28ce9f3dff95fbc67ad409dc595b93d41037f3a2229c106935bd0acb"
   }
 ]

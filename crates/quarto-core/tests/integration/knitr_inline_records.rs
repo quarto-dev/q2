@@ -22,7 +22,11 @@ use quarto_core::engine::units::{Unit, scan_units};
 use quarto_core::record::{AuthorTexts, Record, RecordCell, fill_ids};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-use crate::engine_stage_driver::{AuxRecorder, run_engine_stage, run_engine_stage_ast};
+use crate::engine_stage_driver::{AuxRecorder, run_engine_stage, run_engine_stage_ast_as};
+
+/// The shadow-equality test pins the fallback unit (stored markdown, which `place` splices); see
+/// `knitr_chunk_records::FALLBACK_FORMAT`.
+const FALLBACK_FORMAT: &str = "pdf";
 
 fn skip(name: &str) -> bool {
     let ok = Command::new("Rscript")
@@ -195,11 +199,11 @@ fn inline_id_embedding_does_not_change_output() {
         let input = tmp.path().join("doc.qmd");
         std::fs::write(&input, &source).unwrap();
 
-        let live = run_engine_stage_ast(&input, AuxRecorder::arc(false), None)
+        let live = run_engine_stage_ast_as(&input, FALLBACK_FORMAT, AuxRecorder::arc(false), None)
             .unwrap_or_else(|e| panic!("{what}: live run: {e:?}"));
 
         let recording = AuxRecorder::arc(true);
-        let with_record = run_engine_stage_ast(&input, recording.clone(), None)
+        let with_record = run_engine_stage_ast_as(&input, FALLBACK_FORMAT, recording.clone(), None)
             .unwrap_or_else(|e| panic!("{what}: record run: {e:?}"));
         let record = recording.record();
         assert_eq!(
@@ -233,7 +237,7 @@ fn inline_id_embedding_does_not_change_output() {
                 _ => panic!("{what}: unit kinds differ"),
             }
         }
-        let placed = quarto_core::record::place(&record, &units, &canonical, "html");
+        let placed = quarto_core::record::place(&record, &units, &canonical, FALLBACK_FORMAT);
         assert!(placed.notes.is_empty(), "{what}: {:?}", placed.notes);
         let (shadow, _, _) = pampa::readers::qmd::read(
             placed.text.as_bytes(),

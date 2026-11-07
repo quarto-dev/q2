@@ -255,6 +255,11 @@ Each is additive; none reopens a decision.
 - **Knitr epic (workspace-3).** The knitr adapter converts `knit_meta` into the neutral
   manifest and keeps the serialized R objects as an opaque engine-private field. KNR-5's
   imported-widget limit needs rechecking against Ark's self-contained form. Their call.
+  **Settled 2026-11-03 (Gordon):** KNR-3 does not write the manifest and the knitr conversion
+  is this plan's (the adapters item below). Until it exists the knitr record keeps the opaque
+  `knit_meta` string, and KNR-6 holds the flip for knitr documents with captured widget output,
+  so the live path keeps serving them. The conversion therefore gates flipping those
+  documents. See epic decision 27 (amended) in the knitr epic.
 
 ## Tests, when it is scoped
 

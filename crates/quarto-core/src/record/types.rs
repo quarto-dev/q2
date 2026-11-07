@@ -109,6 +109,14 @@ pub struct EngineEntry {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<Value>,
 
+    /// The option names the engine knows, from the engine that ran (knitr:
+    /// `names(knitr::opts_chunk$get())`). The presenter subtracts them from a chunk's current
+    /// options to find the ones to forward as cell attributes. Absent means no filtering, as for
+    /// Jupyter and records written before the field existed; optional, so
+    /// `quarto_record_version` stays 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub known_options: Option<Vec<String>>,
+
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -275,6 +283,7 @@ mod tests {
             metadata: Some(BTreeMap::from([("title".into(), json!("t"))])),
             resource_files: vec!["a.png".into()],
             warnings: vec![json!({"title": "w"})],
+            known_options: None,
             extra: BTreeMap::new(),
         }
     }
@@ -330,6 +339,26 @@ mod tests {
             },
             cells: vec![cell()],
         }
+    }
+
+    #[test]
+    fn known_options_round_trips_and_is_absent_when_unset() {
+        // Absent means no filtering: the key is not written, and a record without it reads.
+        let none = serde_json::to_value(entry()).unwrap();
+        assert!(none.get("known_options").is_none());
+        assert_eq!(
+            serde_json::from_value::<EngineEntry>(none)
+                .unwrap()
+                .known_options,
+            None
+        );
+        let mut with = entry();
+        with.known_options = Some(vec!["echo".into(), "fig.cap".into()]);
+        let json = serde_json::to_value(&with).unwrap();
+        assert_eq!(json["known_options"], json!(["echo", "fig.cap"]));
+        assert_eq!(serde_json::from_value::<EngineEntry>(json).unwrap(), with);
+        // The schema version does not move for an optional field.
+        assert_eq!(Record::RECORD_VERSION, 1);
     }
 
     #[test]

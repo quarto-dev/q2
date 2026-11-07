@@ -438,7 +438,9 @@ impl PipelineStage for MetadataMergeStage {
 ///   `.quarto/trace/<filename>/latest.json.gz` relative to the project
 ///   directory. The on-disk format is gzipped compact JSON (bd-5qnj);
 ///   `quarto trace show` and the trace-viewer SPA decompress
-///   transparently.
+///   transparently. While replaying (`ctx.registry.is_replaying()`) or when the render
+///   context suppresses trace output (the Pass-1 profile pass) it installs nothing and
+///   logs one info event, so a replay cannot overwrite the trace it reads.
 /// - `trace: "summary"` installs a `SummaryTraceObserver` that prints
 ///   to stderr.
 ///
@@ -465,7 +467,15 @@ fn activate_trace_from_metadata(
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        if wants_json {
+        if wants_json && (ctx.suppress_trace_output || ctx.registry.is_replaying()) {
+            // A replay's input usually sits at this very path, and the Pass-1 profile pass would
+            // replace it before the real render runs; never overwrite it.
+            trace_event!(
+                ctx,
+                EventLevel::Info,
+                "`trace: true` is ignored here (replay or profile pass); no trace is written"
+            );
+        } else if wants_json {
             let stem = doc_path
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -689,6 +699,88 @@ mod tests {
     // ============================================================================
     // Project Metadata Merging Tests
     // ============================================================================
+
+    /// Run the stage over `trace: true` with `registry` installed; return the context so the
+    /// caller can read which observer ended up installed.
+    async fn run_trace_true(
+        registry: Option<crate::engine::EngineRegistry>,
+        suppress_trace_output: bool,
+    ) -> StageContext {
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let mut ctx =
+            StageContext::new(Arc::new(MockRuntime), Format::html(), project, doc).unwrap();
+        if let Some(registry) = registry {
+            ctx.registry = Arc::new(registry);
+        }
+        ctx.suppress_trace_output = suppress_trace_output;
+        let doc_ast = DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc {
+                meta: config_map(vec![("trace", config_bool(true))]),
+                ..Default::default()
+            },
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+            recorded_includes: Vec::new(),
+            derived_listing: Default::default(),
+        };
+        MetadataMergeStage::new()
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+        ctx
+    }
+
+    /// Control: an ordinary render of a `trace: true` document installs the JSON trace observer
+    /// (the one that asks the engines for execution records).
+    #[tokio::test]
+    async fn trace_true_installs_the_json_trace_observer() {
+        let ctx = run_trace_true(None, false).await;
+        assert!(ctx.observer.wants_execution_record());
+    }
+
+    /// KNR-6: the Pass-1 profile pass runs before the real render and must not write a trace of
+    /// its own; during a replay that file is the recording being read.
+    #[tokio::test]
+    async fn trace_true_is_ignored_when_trace_output_is_suppressed() {
+        let ctx = run_trace_true(None, true).await;
+        assert!(
+            !ctx.observer.wants_execution_record(),
+            "a suppressed pass must not install the trace writer"
+        );
+    }
+
+    /// KNR-6: a replay never writes a trace. The document still says `trace: true`, and the
+    /// default trace path is where the recording being replayed usually lives, so writing there
+    /// would replace it.
+    #[tokio::test]
+    async fn trace_true_is_ignored_while_replaying() {
+        use crate::engine::{EngineRegistry, ReplayEngine};
+        use quarto_trace::EngineCapture;
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(ReplayEngine::new(EngineCapture {
+            engine_name: "mock-replay-engine".into(),
+            input_qmd: String::new(),
+            result: serde_json::json!({}),
+            record: None,
+            files: Vec::new(),
+        })));
+        let ctx = run_trace_true(Some(registry), false).await;
+        assert!(
+            !ctx.observer.wants_execution_record(),
+            "a replay must not install the trace writer"
+        );
+    }
 
     #[tokio::test]
     async fn test_project_metadata_merging_basic() {

@@ -2015,6 +2015,27 @@
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-11",
     "since_version": "99.9.9"
   },
+  "Q-18-12": {
+    "subsystem": "engine",
+    "title": "knitr Cache Is Off While Recording",
+    "message_template": "A knitr chunk asked for knitr's cache (`cache: true`), and Quarto turned the cache off for the run that records the document, because a cache hit skips the run and leaves nothing to record. The chunks run every time the document is executed, so a document that relies on the cache is slower. The output is the same.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-12",
+    "since_version": "99.9.9"
+  },
+  "Q-18-13": {
+    "subsystem": "engine",
+    "title": "knitr Hook Replaced By The Document",
+    "message_template": "A knitr chunk replaced one of knitr's output hooks (`knitr::knit_hooks$set(source = ...)`, `output`, `message`, `warning`, `error` or `plot`). Quarto cannot reproduce what a replaced hook does from the recorded pieces, so that chunk and every chunk after it keep knitr's finished markdown. The output is the same as knitr's.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-13",
+    "since_version": "99.9.9"
+  },
+  "Q-18-14": {
+    "subsystem": "engine",
+    "title": "knitr Child Document Kept As knitr Wrote It",
+    "message_template": "A knitr chunk includes another document with `child=`. knitr runs the child document and returns its finished markdown as one block, so Quarto keeps that markdown as knitr wrote it instead of presenting the child's chunks from recorded pieces. The output is the same as knitr's.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-14",
+    "since_version": "99.9.9"
+  },
   "Q-19-1": {
     "subsystem": "image",
     "title": "Plot Document Not Found",

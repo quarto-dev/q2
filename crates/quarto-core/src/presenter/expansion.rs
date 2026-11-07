@@ -18,10 +18,11 @@ use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::{By, SourceInfo};
 use serde_json::Value;
 
-use super::cell::render_cell;
+use super::cell::render_cell_with;
 use super::figures::FigureSink;
+use super::options::CellOptions;
 use super::output::CellResult;
-use super::visibility::{CellVisibility, resolve_cell_options};
+use super::visibility::{CellVisibility, cell_config, resolve_cell_options};
 use crate::cell_options::partition_cell_options;
 
 /// The key an expansion's marker and outputs carry.
@@ -73,15 +74,17 @@ pub fn render_expansions(
 pub fn render_expanded_unit(
     lang: &str,
     own_code: &str,
+    own_options: &CellOptions,
     own_visibility: CellVisibility,
     expansions: &[Expansion],
     scope: Option<&ConfigValue>,
     fig: &mut dyn FigureSink,
 ) -> Result<String, String> {
-    let own = render_cell(
+    let own = render_cell_with(
         lang,
         own_code,
         &CellResult::from_nbformat(&[], None),
+        own_options,
         fig,
         own_visibility,
     );
@@ -110,13 +113,15 @@ fn render_each(
             SourceInfo::generated(By::unknown()),
         )
         .map_err(|e| e.to_string())?;
+        let cell_only = cell_config(parsed.options.clone());
         let resolved = resolve_cell_options(scope, parsed.options);
         let visibility = CellVisibility::resolve(resolved.as_ref());
         if i > 0 || begin_first {
             fig.begin_cell();
         }
         let result = CellResult::from_nbformat(&expansion.outputs, None);
-        let text = render_cell(lang, &parsed.code, &result, fig, visibility);
+        let options = CellOptions::from_config(resolved.as_ref()).forwarding(cell_only.as_ref());
+        let text = render_cell_with(lang, &parsed.code, &result, &options, fig, visibility);
         if !text.is_empty() {
             parts.push(text);
         }

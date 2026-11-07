@@ -52,3 +52,15 @@ intended exception here, with the golden it affects and the plan that decided it
 the rule above: a golden changes only by the one command, and only by a decision written
 down. The question itself (where the CI script should carry such a note) is still open; its
 text is in lane A\'s EXR-2 message, which this note summarizes and does not replace.
+
+### 2026-11-07: Jupyter `known_options` grew (13 `*.record.json` goldens)
+
+Gordon decided this change is intended. The knitr epic's commit "Share generic cell options
+across Jupyter and knitr presenters" (`presenter-generic-cell-options` plan) adds eleven names
+to the Jupyter engine's `known_options` in `engine/jupyter/mod.rs`: `panel`, `column`,
+`keep-hidden`, `fig-env`, `fig-pos`, `out-width`, `out-height`, `out-extra`, `classes`,
+`fig-column`, `tbl-column`. The engine entry of every `<case>.record.json` lists them, so
+those 13 files were re-blessed with the one command above. The diff is only those names,
+appended to the two option lists in each file; no hash, no `.md` golden and no
+`.preview.md` golden changed. The shadow half of the test skips without a Python kernel, so
+this only shows up where one is installed (CI).
