@@ -228,7 +228,7 @@ pub fn present_skeleton(
                 scope,
                 InlineTarget::from_format(format),
                 format,
-                Some(&record.engine),
+                std::slice::from_ref(&record.engine),
                 fig,
             ) {
                 Ok(result) => {

@@ -10,7 +10,7 @@
 //! A structured knitr cell carries, besides its nbformat outputs, the inputs the presenter
 //! needs and cannot recover from them: `quarto_output_anchors`, `quarto_output_kinds`,
 //! `quarto_expression_starts` and `quarto_resolved_options`, plus the engine entry\'s
-//! `known_options`. [`present_knitr_cell`] reads them all and renders the cell, so the three
+//! `known_options`. [`CellInputs::from_cell`] reads them all and [`present_with_inputs`] renders the cell, so the
 //! presenter paths (`present_document`, the splice stage, the replay engine) share one
 //! implementation and cannot drift.
 //!
@@ -30,7 +30,7 @@ use super::cell::{
 use super::figures::FigureSink;
 use super::options::{CellOptions, OutputKind, config_to_json};
 use super::output::{CellOutput, CellResult};
-use super::visibility::knitr_visibility;
+use super::visibility::{CellVisibility, knitr_visibility};
 
 /// The cell-metadata keys this reader consumes.
 pub const ECHOED_CODE_KEY: &str = "quarto_echoed_code";
@@ -50,96 +50,167 @@ pub fn original_chunk(lang: &str, attr_tail: &str, author_code: &str) -> (String
     (format!("{lang} {attr_tail}").trim().to_string(), lines)
 }
 
-/// Present `cell` as a structured knitr cell, or `None` when it is not one (it has no
-/// `quarto_resolved_options`), so the caller presents it as it always did.
+/// Everything a record cell can supply beyond its outputs, each input independently optional
+/// (OPR-1a, decision D1). A missing input degrades one feature and no other: without anchors
+/// the cell renders whole; without expression starts `prompt` treats the code as one
+/// expression; without kinds numeric `warning` and `message` are ignored; without a figure
+/// count figures get no id or caption wrapper.
+///
+/// `resolved_options` is one field like the rest. Its presence also decides the scope rule
+/// (D3): R already baked the document `execute:` scope into resolved options, so a cell that
+/// carries them is not layered with the scope; a cell that carries none is.
+#[derive(Debug, Clone, Default)]
+pub struct CellInputs {
+    /// The lines the engine echoed, when they differ from the authored code; the anchors and
+    /// expression starts index into them.
+    pub echoed_code: Option<String>,
+    /// Per output, the number of code lines that precede it.
+    pub anchors: Option<Vec<usize>>,
+    /// The line index where each expression of the code starts.
+    pub expression_starts: Option<Vec<usize>>,
+    /// Per output, whether it is a message or a warning; empty when unknown.
+    pub output_kinds: Vec<Option<OutputKind>>,
+    /// The number of plots the engine\'s plot hook wrote.
+    pub figure_count: Option<usize>,
+    /// The engine\'s resolved chunk options, under the engine\'s own names.
+    pub resolved_options: Option<Value>,
+    /// The option names the engine knows; any other becomes a cell attribute.
+    pub known_options: Option<Vec<String>>,
+    /// The chunk as written (info string, `#|` lines), for `fenced.echo`.
+    pub original_chunk: Option<(String, String)>,
+}
+
+impl CellInputs {
+    /// Read the inputs from `cell`\'s metadata and its engine entry. `original` is the chunk as
+    /// written; it is kept only with resolved options, the one case that read it before.
+    /// This is the only place `quarto_resolved_options` is read.
+    pub fn from_cell(
+        cell: &RecordCell,
+        engine: Option<&EngineEntry>,
+        original: (&str, &str),
+    ) -> Self {
+        let extra = &cell.metadata.extra;
+        let resolved_options = extra.get(RESOLVED_OPTIONS_KEY).cloned();
+        let figure_count = resolved_options.as_ref().map(|_| {
+            CellResult::from_nbformat(&cell.outputs, cell.execution_count)
+                .outputs
+                .iter()
+                .filter(|o| is_plot_output(o) && !is_included_graphic(o))
+                .count()
+        });
+        let original_chunk = resolved_options
+            .as_ref()
+            .map(|_| (original.0.to_string(), original.1.to_string()));
+        CellInputs {
+            echoed_code: echoed_code(cell),
+            anchors: usize_array(extra.get(OUTPUT_ANCHORS_KEY)),
+            expression_starts: usize_array(extra.get(EXPRESSION_STARTS_KEY)),
+            output_kinds: output_kinds(cell),
+            figure_count,
+            resolved_options,
+            known_options: engine.and_then(|e| e.known_options.clone()),
+            original_chunk,
+        }
+    }
+}
+
+/// Present one cell from its outputs and `inputs`.
 ///
 /// `code` is the cell\'s partitioned code (the `#|` lines removed) and `header` its current
-/// `#|` options, resolved without the document scope. `original` is the chunk as written:
-/// the info string (`r c1`) and its leading `#|` lines.
-pub fn present_knitr_cell(
+/// `#|` options (read as knitr reads them), used only with resolved options. `fallback` is the
+/// options and visibility a cell with no resolved options gets (the document scope layered
+/// under its own options).
+pub fn present_with_inputs(
     language: &str,
     code: &str,
     cell: &RecordCell,
-    engine: Option<&EngineEntry>,
+    inputs: &CellInputs,
     header: Option<&ConfigValue>,
-    original: (&str, &str),
+    fallback: (CellOptions, CellVisibility),
     fig: &mut dyn FigureSink,
-) -> Option<String> {
-    let recorded = cell.metadata.extra.get(RESOLVED_OPTIONS_KEY)?;
-    // The code knitr echoed, when it differs from the authored code; the anchors and
-    // expression starts index into it.
-    let echoed = echoed_code(cell);
-    let code = echoed.as_deref().unwrap_or(code);
-    let known = engine.and_then(|e| e.known_options.as_deref());
-    let mut merged = layer_options(recorded, header, known);
-
+) -> String {
+    let code = inputs.echoed_code.as_deref().unwrap_or(code);
+    let known = inputs.known_options.as_deref();
     let mut result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
-    synthesize_layout(
-        &mut merged,
-        result.outputs.iter().filter(|o| is_plot_output(o)).count(),
-    );
-    let mut kinds = output_kinds(cell);
-    let mut anchors = usize_array(cell.metadata.extra.get(OUTPUT_ANCHORS_KEY));
-    let starts = usize_array(cell.metadata.extra.get(EXPRESSION_STARTS_KEY)).unwrap_or_default();
+    let mut merged: Option<Value> = None;
+    let (options, visibility) = match &inputs.resolved_options {
+        Some(recorded) => {
+            let mut m = layer_options(recorded, header, known);
+            synthesize_layout(
+                &mut m,
+                result.outputs.iter().filter(|o| is_plot_output(o)).count(),
+            );
+            let pair = (
+                CellOptions::from_knitr_known(&m, known),
+                knitr_visibility(&m),
+            );
+            merged = Some(m);
+            pair
+        }
+        None => fallback,
+    };
+    let mut kinds = inputs.output_kinds.clone();
+    let mut anchors = inputs.anchors.clone();
+    let starts = inputs.expression_starts.clone().unwrap_or_default();
 
-    // `fig.beforecode` then the holds, as knitr orders them; both run at present time over the
-    // capture-order anchors (epic decision 21).
-    if merged.get("fig.beforecode").and_then(Value::as_bool) == Some(true)
-        && let Some(a) = anchors
+    if let Some(merged) = &merged {
+        // `fig.beforecode` then the holds, as knitr orders them; both run at present time over
+        // the capture-order anchors (epic decision 21).
+        if merged.get("fig.beforecode").and_then(Value::as_bool) == Some(true)
+            && let Some(a) = anchors
+                .as_deref()
+                .filter(|a| a.len() == result.outputs.len())
+        {
+            anchors = Some(before_code_anchors(&result.outputs, a));
+        }
+        let is = |key: &str, want: &str| merged.get(key).and_then(Value::as_str) == Some(want);
+        let hold = HoldMode {
+            plots: is("fig.show", "hold"),
+            text: is("results", "hold"),
+        };
+        if let Some(a) = anchors
             .as_deref()
             .filter(|a| a.len() == result.outputs.len())
-    {
-        anchors = Some(before_code_anchors(&result.outputs, a));
-    }
-    let is = |key: &str, want: &str| merged.get(key).and_then(Value::as_str) == Some(want);
-    let hold = HoldMode {
-        plots: is("fig.show", "hold"),
-        text: is("results", "hold"),
-    };
-    if let Some(a) = anchors
-        .as_deref()
-        .filter(|a| a.len() == result.outputs.len())
-        && (hold.plots || hold.text)
-    {
-        let held = |o: &CellOutput| {
-            (hold.plots && is_plot_output(o))
-                || (hold.text && matches!(o, CellOutput::Stream { name, .. } if name == "stdout"))
-        };
-        // Held outputs are never a message or a warning, so the kinds of the others stay in
-        // order and each output moved to the end has none.
-        if kinds.len() == result.outputs.len() {
-            let kept: Vec<_> = kinds
-                .iter()
-                .zip(&result.outputs)
-                .filter(|(_, o)| !held(o))
-                .map(|(k, _)| *k)
-                .collect();
-            kinds = kept;
+            && (hold.plots || hold.text)
+        {
+            let held = |o: &CellOutput| {
+                (hold.plots && is_plot_output(o))
+                    || (hold.text
+                        && matches!(o, CellOutput::Stream { name, .. } if name == "stdout"))
+            };
+            // Held outputs are never a message or a warning, so the kinds of the others stay
+            // in order and each output moved to the end has none.
+            if kinds.len() == result.outputs.len() {
+                let kept: Vec<_> = kinds
+                    .iter()
+                    .zip(&result.outputs)
+                    .filter(|(_, o)| !held(o))
+                    .map(|(k, _)| *k)
+                    .collect();
+                kinds = kept;
+            }
+            let (outputs, new_anchors) = apply_holds(
+                std::mem::take(&mut result.outputs),
+                a,
+                code.lines().count(),
+                hold,
+            );
+            if !kinds.is_empty() || outputs.is_empty() {
+                kinds.resize(outputs.len(), None);
+            }
+            result.outputs = outputs;
+            anchors = Some(new_anchors);
         }
-        let (outputs, new_anchors) = apply_holds(
-            std::mem::take(&mut result.outputs),
-            a,
-            code.lines().count(),
-            hold,
-        );
-        if !kinds.is_empty() || outputs.is_empty() {
-            kinds.resize(outputs.len(), None);
-        }
-        result.outputs = outputs;
-        anchors = Some(new_anchors);
     }
 
-    // The plots knitr\'s plot hook writes: `include_graphics` images and asis output are not.
-    let plots = result
-        .outputs
-        .iter()
-        .filter(|o| is_plot_output(o) && !is_included_graphic(o))
-        .count();
-    let options = CellOptions::from_knitr_known(&merged, known)
-        .with_figure_count(plots)
-        .with_output_kinds(kinds)
-        .with_original_chunk(original.0, original.1);
-    Some(render_cell_interleaved(
+    let mut options = options.with_output_kinds(kinds);
+    if let Some(n) = inputs.figure_count {
+        options = options.with_figure_count(n);
+    }
+    if let Some((info, lines)) = &inputs.original_chunk {
+        options = options.with_original_chunk(info, lines);
+    }
+    render_cell_interleaved(
         language,
         code,
         &result,
@@ -147,8 +218,8 @@ pub fn present_knitr_cell(
         &starts,
         &options,
         fig,
-        knitr_visibility(&merged),
-    ))
+        visibility,
+    )
 }
 
 /// The knitr `#|` header read as literal YAML scalars (R\'s `yaml.load` and Quarto 1 keep
@@ -397,6 +468,24 @@ mod tests {
     use serde_json::json;
     use std::collections::BTreeMap;
     use std::path::Path;
+
+    /// The pre-OPR-1a entry point, kept for these tests: `None` for a cell with no resolved options.
+    fn present_knitr_cell(
+        language: &str,
+        code: &str,
+        cell: &RecordCell,
+        engine: Option<&EngineEntry>,
+        header: Option<&ConfigValue>,
+        original: (&str, &str),
+        fig: &mut dyn FigureSink,
+    ) -> Option<String> {
+        let inputs = CellInputs::from_cell(cell, engine, original);
+        inputs.resolved_options.as_ref()?;
+        let fallback = (CellOptions::default(), CellVisibility::resolve(None));
+        Some(present_with_inputs(
+            language, code, cell, &inputs, header, fallback, fig,
+        ))
+    }
 
     fn stream(name: &str, text: &str) -> Value {
         json!({"output_type": "stream", "name": name, "text": text})
@@ -970,5 +1059,117 @@ mod tests {
             vec![(RESOLVED_OPTIONS_KEY, json!({"include": false}))],
         );
         assert_eq!(present("a\n", &c, None, None).as_deref(), Some(""));
+    }
+
+    // ---- OPR-1a: each input is independently optional ------------------------------------
+
+    /// Present `c` with exactly `inputs` and a plain (Jupyter-style) fallback carrying `fallback`.
+    fn present_inputs(c: &RecordCell, code: &str, inputs: &CellInputs, fallback: Value) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        present_with_inputs(
+            "r",
+            code,
+            c,
+            inputs,
+            None,
+            (
+                CellOptions::from_knitr(&fallback),
+                CellVisibility::resolve(None),
+            ),
+            &mut fig,
+        )
+    }
+
+    #[test]
+    fn with_every_input_absent_the_cell_renders_whole() {
+        let c = cell("a\nb\n", vec![stream("stdout", "1")], vec![]);
+        let md = present_inputs(&c, "a\nb\n", &CellInputs::default(), json!({}));
+        assert!(
+            md.find("a\nb").unwrap() < md.find("cell-output").unwrap(),
+            "{md}"
+        );
+        assert_eq!(md.matches("cell-code").count(), 1, "{md}");
+    }
+
+    #[test]
+    fn anchors_alone_interleave_source_and_output() {
+        let c = cell("a\nb\n", vec![stream("stdout", "1")], vec![]);
+        let inputs = CellInputs {
+            anchors: Some(vec![1]),
+            ..Default::default()
+        };
+        let md = present_inputs(&c, "a\nb\n", &inputs, json!({}));
+        assert_eq!(md.matches("cell-code").count(), 2, "{md}");
+        assert!(
+            md.find("cell-output").unwrap() < md.rfind("cell-code").unwrap(),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn expression_starts_alone_make_prompt_exact() {
+        let c = cell("a\nb\n", vec![], vec![]);
+        let without = present_inputs(
+            &c,
+            "a\nb\n",
+            &CellInputs::default(),
+            json!({"prompt": true}),
+        );
+        let inputs = CellInputs {
+            expression_starts: Some(vec![0, 1]),
+            ..Default::default()
+        };
+        let with = present_inputs(&c, "a\nb\n", &inputs, json!({"prompt": true}));
+        assert!(with.contains("> a\n> b"), "{with}");
+        assert_ne!(with, without);
+    }
+
+    #[test]
+    fn a_figure_count_alone_adds_the_figure_id() {
+        let c = cell("plot(1)\n", vec![plot()], vec![]);
+        let opts = json!({"label": "fig-one", "fig.cap": "One"});
+        let without = present_inputs(&c, "plot(1)\n", &CellInputs::default(), opts.clone());
+        let inputs = CellInputs {
+            figure_count: Some(1),
+            ..Default::default()
+        };
+        let with = present_inputs(&c, "plot(1)\n", &inputs, opts);
+        assert!(with.contains("){#fig-one}"), "{with}");
+        assert!(!without.contains("{#fig-one}"), "{without}");
+    }
+
+    // ---- OPR-1a: the scope rule (D3), through the one step -------------------------------
+
+    fn step_with_scope(extra: Vec<(&str, Value)>) -> String {
+        use crate::presenter::cell_step::present_cell_step;
+        let scope = ConfigValue::new_map(
+            vec![quarto_pandoc_types::ConfigMapEntry {
+                key: "echo".into(),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_bool(false, SourceInfo::for_test()),
+            }],
+            SourceInfo::for_test(),
+        );
+        let mut c = cell("a\n", vec![stream("stdout", "OUT")], extra);
+        if c.metadata.extra.get(RESOLVED_OPTIONS_KEY) == Some(&json!(null)) {
+            c.metadata.extra.remove(RESOLVED_OPTIONS_KEY);
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        present_cell_step("r", "", "a\n", &c, None, Some(&scope), &mut fig).unwrap()
+    }
+
+    #[test]
+    fn a_cell_with_resolved_options_is_not_layered_with_the_document_scope() {
+        // R baked the scope into the resolved options; an empty set means "echo as written".
+        let md = step_with_scope(vec![]);
+        assert!(md.contains("cell-code") && md.contains("OUT"), "{md}");
+    }
+
+    #[test]
+    fn a_cell_without_resolved_options_is_layered_with_the_document_scope() {
+        let md = step_with_scope(vec![(RESOLVED_OPTIONS_KEY, json!(null))]);
+        assert!(!md.contains("cell-code") && md.contains("OUT"), "{md}");
     }
 }

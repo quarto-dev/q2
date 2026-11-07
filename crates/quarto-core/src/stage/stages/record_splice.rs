@@ -29,16 +29,11 @@ use std::path::Path;
 use quarto_source_map::{FileId, SourceInfo};
 use serde_json::Value;
 
-use crate::cell_options::partition_cell_options;
 use crate::engine::units::Unit;
-use crate::presenter::cell::render_cell_with;
-use crate::presenter::expansion::{render_expanded_unit, split_expansions};
+use crate::presenter::cell_step::{present_cell_step, record_engine_entry};
 use crate::presenter::figures::{FigureSink, RuntimeFigureSink};
 use crate::presenter::inline::{InlineTarget, render_inline};
-use crate::presenter::knitr_inputs::{knitr_header_options, original_chunk, present_knitr_cell};
-use crate::presenter::options::CellOptions;
 use crate::presenter::output::{CellOutput, CellResult};
-use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
 use crate::record::{
     EngineEntry, Record, UnitKey, UnitKind, UnitLocation, UnitStaleness, lost_header_keys,
     match_units, replacement, stored_markdown,
@@ -249,7 +244,7 @@ fn splice_units(
                     doc_scope.as_ref(),
                     fig.as_mut(),
                     &format,
-                    engine_entry_for(record, cell),
+                    record_engine_entry(record, cell),
                 )
             }
             Unit::Inline(_) => present_span(cell, target),
@@ -445,65 +440,19 @@ fn present_cell(
     if let Some((markdown, stored_format)) = stored_markdown(cell) {
         return (stored_format.as_deref() == Some(format)).then_some(markdown);
     }
-    let lang = unit.lang();
-    let body_source = SourceInfo::original(FileId(0), 0, author_text.len());
-    let partitioned = partition_cell_options(lang, author_text, body_source).ok()?;
-    let partitioned_options = partitioned.options.clone();
-    let resolved = resolve_cell_options(doc_scope, partitioned.options);
-    let visibility = CellVisibility::resolve(resolved.as_ref());
-    let options = CellOptions::from_config(resolved.as_ref());
-    if let Some(expansions) = split_expansions(&cell.outputs) {
-        // An expanded cell: the author's cell, then one cell per expansion, each with its
-        // own options.
-        return render_expanded_unit(
-            lang,
-            &partitioned.code,
-            &options,
-            visibility,
-            &expansions,
-            doc_scope,
-            fig,
-        )
-        .ok();
-    }
-    // A structured knitr cell is read by the shared reader; any other cell presents as it
-    // always did.
-    if let Unit::Cell(u) = unit {
-        let header = knitr_header_options(partitioned_options);
-        let (info, lines) = original_chunk(&u.lang, &u.attr_tail, author_text);
-        if let Some(markdown) = present_knitr_cell(
-            lang,
-            &partitioned.code,
-            cell,
-            engine,
-            header.as_ref(),
-            (&info, &lines),
-            fig,
-        ) {
-            return Some(markdown);
-        }
-    }
-    let result = stored_result_for_cell(&serde_json::to_value(cell).ok()?);
-    Some(render_cell_with(
-        lang,
-        &partitioned.code,
-        &result,
-        &options,
+    let Unit::Cell(u) = unit else {
+        return None;
+    };
+    present_cell_step(
+        &u.lang,
+        &u.attr_tail,
+        author_text,
+        cell,
+        engine,
+        doc_scope,
         fig,
-        visibility,
-    ))
-}
-
-/// The engine entry that ran `cell`: the one its `quarto_engine` names, else the only one.
-fn engine_entry_for<'a>(
-    record: &'a crate::record::Record,
-    cell: &crate::record::RecordCell,
-) -> Option<&'a crate::record::EngineEntry> {
-    let engines = &record.metadata.quarto_engines;
-    match cell.metadata.quarto_engine.as_deref() {
-        Some(name) => engines.iter().find(|e| e.name == name),
-        None => (engines.len() == 1).then(|| &engines[0]),
-    }
+    )
+    .ok()
 }
 
 /// A span: its first output that carries data, as an inline value. `None` keeps the source.
@@ -1370,6 +1319,7 @@ mod tests {
     }
 
     mod layering;
+    mod opr_pinning;
     mod option_sweep;
     mod stamp;
 

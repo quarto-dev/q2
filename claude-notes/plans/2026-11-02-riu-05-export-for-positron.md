@@ -30,6 +30,12 @@ invalid cache files (the conformance mirror's rule; not seen in a window), and r
 file keeping only `quarto_cell_id`, `quarto_content_hash` and `quarto_label` per cell. The function
 returns bytes; it never writes into the Positron directory (the extension does, RIU-6).
 
+> **Note, 2026-11-07 (follow-up plan, Item 1).** Gordon's principle: q2 does nothing special for Positron, and
+> designing Positron-side features is out of scope. The "transform" below is under review; the proposed outcome
+> is to keep only what makes a valid cache file and to treat the image-representation rule as an explicit
+> decision. See [the RIU follow-up epic](2026-11-08-rfu-epic-riu-follow-up.md), RFU-2 (formerly Item 1, Phases A to C). The
+> text below is the record of what landed.
+
 ## What S7 and spike J showed
 
 Two real Jupyter Python records (rendered through q2 with `record: true`) were pushed into open

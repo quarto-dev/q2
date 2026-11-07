@@ -89,7 +89,7 @@ fn present(source: &str) -> String {
         None,
         InlineTarget::from_format("html"),
         "html",
-        None,
+        &[],
         &mut fig,
     )
     .unwrap()

@@ -234,8 +234,9 @@ pub struct CellOptions {
     code_line_numbers: Option<String>,
     lst_cap: Option<String>,
     lst_label: Option<String>,
-    /// knitr `fig.cap` (one caption, or one per figure) and `fig.subcap`. Read under knitr\'s
-    /// dotted names only: Jupyter\'s `fig-cap` is handled by the Quarto crossref layer.
+    /// knitr `fig.cap` (one caption, or one per figure) and `fig.subcap`. Both front
+    /// ends read the canonical dashed `fig-cap` and `fig-subcap`; `from_knitr` also accepts knitr\'s
+    /// dotted spellings (`fig.cap`).
     fig_cap: Vec<String>,
     fig_subcap: Vec<String>,
     fig_alt: Option<String>,
@@ -1302,5 +1303,137 @@ mod tests {
         assert_eq!(sel(json!(true)).echo_selection(), None);
         assert_eq!(sel(json!(false)).echo_selection(), None);
         assert_eq!(CellOptions::from_knitr(&json!({})).echo_selection(), None);
+    }
+}
+
+/// OPR-0a: the two option front ends over the union of option keys, pinned.
+///
+/// `from_config` reads a Jupyter cell's resolved options; `from_knitr` reads a knitr record's
+/// `quarto_resolved_options` JSON. OPR-1a makes `quarto_resolved_options` one field of one cell
+/// step instead of the switch between the two, so the two must keep agreeing wherever they
+/// agree today: all rows but knitr's dotted aliases.
+#[cfg(test)]
+mod opr_pinning {
+    use super::*;
+    use crate::cell_options::options_to_config;
+    use serde_json::{Value, json};
+
+    const ROWS: &[(&str, &str)] = &[
+        ("echo", "false"),
+        ("output", "false"),
+        ("warning", "false"),
+        ("include", "false"),
+        ("code-fold", "true"),
+        ("code-summary", "\"'Show'\""),
+        ("code-overflow", "wrap"),
+        ("code-line-numbers", "true"),
+        ("code-copy", "false"),
+        ("fig-cap", "\"'A caption'\""),
+        ("fig-subcap", "\"'sub'\""),
+        ("fig-scap", "\"'short'\""),
+        ("fig-alt", "\"'alt text'\""),
+        ("fig-align", "center"),
+        ("fig-link", "\"'http://x'\""),
+        ("fig-cap-location", "top"),
+        ("tbl-cap", "\"'A table'\""),
+        ("tbl-subcap", "\"'sub'\""),
+        ("tbl-scap", "\"'short'\""),
+        ("tbl-colwidths", "\"[30, 70]\""),
+        ("tbl-cap-location", "top"),
+        ("lst-cap", "\"'Listing'\""),
+        ("lst-label", "lst-a"),
+        ("cap-location", "top"),
+        ("layout", "\"[[1]]\""),
+        ("layout-ncol", "2"),
+        ("layout-nrow", "2"),
+        ("layout-align", "center"),
+        ("layout-valign", "top"),
+        ("panel", "tabset"),
+        ("column", "margin"),
+        ("keep-hidden", "true"),
+        ("fig-env", "\"'figure*'\""),
+        ("fig-pos", "\"'h'\""),
+        ("out-width", "\"'50%'\""),
+        ("out-height", "\"'50%'\""),
+        ("classes", "plain"),
+        ("fig-column", "margin"),
+        ("tbl-column", "margin"),
+        ("out-extra", "\"'style=\\\"x\\\"'\""),
+        ("results", "hide"),
+        ("collapse", "true"),
+        ("prompt", "true"),
+        ("comment", "\"'#>'\""),
+        ("fig.show", "hide"),
+        ("fig.align", "center"),
+        ("fig.env", "\"'figure*'\""),
+        ("fig.cap", "\"'A caption'\""),
+        ("fig.scap", "\"'short'\""),
+        ("fig.subcap", "\"'sub'\""),
+        ("fig.pos", "\"'h'\""),
+        ("out.width", "\"'50%'\""),
+        ("out.height", "\"'50%'\""),
+        ("out.extra", "\"'style=\\\"x\\\"'\""),
+        ("fenced.echo", "true"),
+        ("fig.alt", "\"'alt text'\""),
+        ("class.source", "foo"),
+        ("class.output", "foo"),
+        ("class.message", "foo"),
+        ("class.warning", "foo"),
+        ("attr.source", "\"'.n'\""),
+        ("attr.output", "\"'.n'\""),
+        ("attr.message", "\"'.n'\""),
+        ("attr.warning", "\"'.n'\""),
+        ("fig.link", "\"'http://x'\""),
+    ];
+
+    fn config(yaml: &str) -> ConfigValue {
+        let parsed = quarto_yaml::parse(yaml).expect("test YAML parses");
+        options_to_config(parsed).0
+    }
+
+    /// The knitr reader sets `keep_trailing_space` for its own reasons; the Jupyter one never does.
+    fn inert(mut o: CellOptions) -> CellOptions {
+        o.keep_trailing_space = false;
+        o
+    }
+
+    /// A sweep value as the JSON a knitr record would hold.
+    fn json_of(v: &str) -> Value {
+        serde_json::from_str(v).unwrap_or_else(|_| Value::String(v.to_string()))
+    }
+
+    #[test]
+    fn the_two_front_ends_agree_except_on_knitrs_dotted_aliases() {
+        let (mut same, mut differ) = (Vec::new(), Vec::new());
+        for (k, v) in ROWS {
+            let cfg = config(&format!("{k}: {v}\n"));
+            let jupyter = CellOptions::from_config(Some(&cfg));
+            let jv = cfg.get(k).map_or_else(|| json_of(v), config_to_json);
+            let knitr = inert(CellOptions::from_knitr(&json!({ *k: jv })));
+            if jupyter == knitr {
+                same.push(*k);
+            } else {
+                differ.push(*k);
+            }
+        }
+        assert_eq!(ROWS.len(), 65);
+        assert_eq!(same.len(), 55, "same: {same:?}\ndiffer: {differ:?}");
+        // The ten differences are knitr's dotted spellings, which the Jupyter front end reads
+        // only under their dashed names (`fig-align`, ...). OPR-1a keeps both readers.
+        assert_eq!(
+            differ,
+            [
+                "fig.align",
+                "fig.env",
+                "fig.cap",
+                "fig.scap",
+                "fig.subcap",
+                "fig.pos",
+                "out.width",
+                "out.height",
+                "out.extra",
+                "fig.link"
+            ]
+        );
     }
 }

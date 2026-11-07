@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1820" height="928" viewBox="0 0 1820 928" font-family="Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6b7280"/></marker><marker id="x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#b45309"/></marker></defs>
+<rect width="1820" height="928" fill="#ffffff"/>
+<text x="20" y="30" font-size="20" font-weight="bold" fill="#111827">One-presenter and RIU follow-up: lanes and dependencies</text>
+<text x="20" y="50" font-size="12" fill="#6b7280">Arrow: plan on the left must be complete before the plan on the right starts. Columns are dependency depth.</text>
+<rect x="10" y="70" width="1800" height="200" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+<text x="22" y="168.0" font-size="13" font-weight="bold" fill="#111827">Lane A  presenter chain</text>
+<text x="22" y="186.0" font-size="11" fill="#6b7280">workspace-3</text>
+<rect x="10" y="276" width="1800" height="200" rx="8" fill="#f3f4f6" stroke="#e5e7eb"/>
+<text x="22" y="374.0" font-size="13" font-weight="bold" fill="#111827">Lane B  Julia + knitr capture</text>
+<text x="22" y="392.0" font-size="11" fill="#6b7280">workspace-4</text>
+<rect x="10" y="482" width="1800" height="142" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+<text x="22" y="551.0" font-size="13" font-weight="bold" fill="#111827">Lane C  flag + fork</text>
+<text x="22" y="569.0" font-size="11" fill="#6b7280">workspace-5</text>
+<rect x="10" y="630" width="1800" height="142" rx="8" fill="#f3f4f6" stroke="#e5e7eb"/>
+<text x="22" y="699.0" font-size="13" font-weight="bold" fill="#111827">Lane D  measurement, gate, docs</text>
+<text x="22" y="717.0" font-size="11" fill="#6b7280">workspace-6</text>
+<rect x="10" y="778" width="1800" height="84" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+<text x="22" y="818.0" font-size="13" font-weight="bold" fill="#111827">Gordon's machine</text>
+<text x="22" y="836.0" font-size="11" fill="#6b7280">no workspace</text>
+<path d="M358,119.0 C389.0,119.0 389.0,119.0 420,119.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,119.0 C619.0,119.0 619.0,119.0 650,119.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,119.0 C849.0,119.0 849.0,119.0 880,119.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,325.0 C619.0,325.0 619.0,119.0 880,119.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,383.0 C389.0,383.0 389.0,325.0 420,325.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,325.0 C619.0,325.0 619.0,325.0 650,325.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,325.0 C504.0,325.0 504.0,325.0 650,325.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,325.0 C849.0,325.0 849.0,177.0 880,177.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,119.0 C849.0,119.0 849.0,177.0 880,177.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,531.0 C389.0,531.0 389.0,531.0 420,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,325.0 C389.0,325.0 389.0,531.0 420,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,589.0 C389.0,589.0 389.0,531.0 420,531.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
+<path d="M588,531.0 C734.0,531.0 734.0,531.0 880,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,119.0 C849.0,119.0 849.0,531.0 880,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,119.0 C964.0,119.0 964.0,531.0 1110,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,325.0 C734.0,325.0 734.0,531.0 1110,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1048,531.0 C1079.0,531.0 1079.0,531.0 1110,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,737.0 C389.0,737.0 389.0,383.0 420,383.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,679.0 C734.0,679.0 734.0,679.0 1110,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,119.0 C964.0,119.0 964.0,679.0 1110,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1048,119.0 C1079.0,119.0 1079.0,679.0 1110,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,383.0 C849.0,383.0 849.0,679.0 1110,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1048,177.0 C1079.0,177.0 1079.0,679.0 1110,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1278,531.0 C1309.0,531.0 1309.0,679.0 1340,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,383.0 C964.0,383.0 964.0,679.0 1340,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1278,679.0 C1309.0,679.0 1309.0,679.0 1340,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,119.0 C1194.0,119.0 1194.0,679.0 1570,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1048,119.0 C1309.0,119.0 1309.0,679.0 1570,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,531.0 C1079.0,531.0 1079.0,679.0 1570,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1048,531.0 C1309.0,531.0 1309.0,679.0 1570,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1508,679.0 C1539.0,679.0 1539.0,679.0 1570,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M1048,177.0 C1309.0,177.0 1309.0,679.0 1570,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M818,679.0 C1194.0,679.0 1194.0,679.0 1570,679.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
+<path d="M358,589.0 C389.0,589.0 389.0,441.0 420,441.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,325.0 C389.0,325.0 389.0,441.0 420,441.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
+<path d="M818,119.0 C849.0,119.0 849.0,235.0 880,235.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
+<path d="M588,531.0 C619.0,531.0 619.0,531.0 650,531.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
+<path d="M1048,531.0 C1079.0,531.0 1079.0,827.0 1110,827.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
+<path d="M358,589.0 C734.0,589.0 734.0,827.0 1110,827.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,441.0 C849.0,441.0 849.0,827.0 1110,827.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,589.0 C504.0,589.0 504.0,589.0 650,589.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,441.0 C619.0,441.0 619.0,589.0 650,589.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,531.0 C619.0,531.0 619.0,589.0 650,589.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
+<path d="M358,589.0 C504.0,589.0 504.0,679.0 650,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M588,441.0 C619.0,441.0 619.0,679.0 650,679.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<rect x="190" y="96" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="114" font-size="13" font-weight="bold" fill="#111827">OPR-0a</text>
+<text x="198" y="131" font-size="10.5" fill="#374151">pinning tests</text>
+<rect x="190" y="656" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="674" font-size="13" font-weight="bold" fill="#111827">OPR-0b</text>
+<text x="198" y="691" font-size="10.5" fill="#374151">parity corpus + harness</text>
+<rect x="190" y="714" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="732" font-size="13" font-weight="bold" fill="#111827">OPR-0c</text>
+<text x="198" y="749" font-size="10.5" fill="#374151">measurements (note)</text>
+<rect x="190" y="508" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="526" font-size="13" font-weight="bold" fill="#111827">OPR-0d</text>
+<text x="198" y="543" font-size="10.5" fill="#374151">metadata-key research</text>
+<rect x="420" y="96" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="428" y="114" font-size="13" font-weight="bold" fill="#111827">OPR-1a</text>
+<text x="428" y="131" font-size="10.5" fill="#374151">one per-cell step</text>
+<rect x="650" y="96" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="658" y="114" font-size="13" font-weight="bold" fill="#111827">OPR-1b</text>
+<text x="658" y="131" font-size="10.5" fill="#374151">one document function</text>
+<rect x="880" y="96" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="888" y="114" font-size="13" font-weight="bold" fill="#111827">OPR-2</text>
+<text x="888" y="131" font-size="10.5" fill="#374151">enforcement from hash</text>
+<rect x="190" y="302" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="320" font-size="13" font-weight="bold" fill="#111827">OPR-3</text>
+<text x="198" y="337" font-size="10.5" fill="#374151">Julia declaration fix</text>
+<rect x="190" y="360" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="378" font-size="13" font-weight="bold" fill="#111827">OPR-4a</text>
+<text x="198" y="395" font-size="10.5" fill="#374151">Julia spike (note)</text>
+<rect x="420" y="302" width="168" height="46" rx="6" fill="#fef3c7" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="428" y="320" font-size="13" font-weight="bold" fill="#111827">OPR-4b</text>
+<text x="428" y="337" font-size="10.5" fill="#374151">runner facts (other repo)</text>
+<circle cx="576" cy="314" r="8" fill="#111827"/><text x="576" y="318" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
+<rect x="650" y="302" width="168" height="46" rx="6" fill="#fef3c7" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="658" y="320" font-size="13" font-weight="bold" fill="#111827">OPR-4c</text>
+<text x="658" y="337" font-size="10.5" fill="#374151">engine/wire/pin facts</text>
+<circle cx="806" cy="314" r="8" fill="#111827"/><text x="806" y="318" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
+<rect x="880" y="154" width="168" height="46" rx="6" fill="#fef3c7" stroke="#6b7280" stroke-width="1"/>
+<text x="888" y="172" font-size="13" font-weight="bold" fill="#111827">OPR-4d</text>
+<text x="888" y="189" font-size="10.5" fill="#374151">facts as cell metadata</text>
+<rect x="420" y="508" width="168" height="46" rx="6" fill="#dbeafe" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="428" y="526" font-size="13" font-weight="bold" fill="#111827">OPR-5</text>
+<text x="428" y="543" font-size="10.5" fill="#374151">record-sources key</text>
+<circle cx="576" cy="520" r="8" fill="#111827"/><text x="576" y="524" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
+<rect x="880" y="508" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="888" y="526" font-size="13" font-weight="bold" fill="#111827">OPR-6</text>
+<text x="888" y="543" font-size="10.5" fill="#374151">render reads the key</text>
+<rect x="1110" y="508" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="1118" y="526" font-size="13" font-weight="bold" fill="#111827">OPR-7a</text>
+<text x="1118" y="543" font-size="10.5" fill="#374151">handshake + record</text>
+<rect x="420" y="360" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="428" y="378" font-size="13" font-weight="bold" fill="#111827">OPR-7b</text>
+<text x="428" y="395" font-size="10.5" fill="#374151">knitr cache fallback</text>
+<rect x="1110" y="656" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="1118" y="674" font-size="13" font-weight="bold" fill="#111827">OPR-7c</text>
+<text x="1118" y="691" font-size="10.5" fill="#374151">run the parity gate</text>
+<rect x="1340" y="656" width="168" height="46" rx="6" fill="#dbeafe" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="1348" y="674" font-size="13" font-weight="bold" fill="#111827">OPR-7d</text>
+<text x="1348" y="691" font-size="10.5" fill="#374151">switch plain render</text>
+<circle cx="1496" cy="668" r="8" fill="#111827"/><text x="1496" y="672" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
+<rect x="1570" y="656" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
+<text x="1578" y="674" font-size="13" font-weight="bold" fill="#111827">OPR-8</text>
+<text x="1578" y="691" font-size="10.5" fill="#374151">docs + end-to-end</text>
+<rect x="190" y="566" width="168" height="46" rx="6" fill="#dcfce7" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="584" font-size="13" font-weight="bold" fill="#111827">RFU-1</text>
+<text x="198" y="601" font-size="10.5" fill="#374151">q2 convert</text>
+<rect x="420" y="418" width="168" height="46" rx="6" fill="#dcfce7" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="428" y="436" font-size="13" font-weight="bold" fill="#111827">RFU-2</text>
+<text x="428" y="453" font-size="10.5" fill="#374151">knitr export + import gate</text>
+<circle cx="576" cy="430" r="8" fill="#111827"/><text x="576" y="434" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
+<rect x="880" y="212" width="168" height="46" rx="6" fill="#dcfce7" stroke="#6b7280" stroke-width="1"/>
+<text x="888" y="230" font-size="13" font-weight="bold" fill="#111827">RFU-3</text>
+<text x="888" y="247" font-size="10.5" fill="#374151">splice tests</text>
+<rect x="650" y="508" width="168" height="46" rx="6" fill="#dcfce7" stroke="#6b7280" stroke-width="1"/>
+<text x="658" y="526" font-size="13" font-weight="bold" fill="#111827">RFU-4</text>
+<text x="658" y="543" font-size="10.5" fill="#374151">verification + small fixes</text>
+<rect x="190" y="418" width="168" height="46" rx="6" fill="#dcfce7" stroke="#6b7280" stroke-width="1"/>
+<text x="198" y="436" font-size="13" font-weight="bold" fill="#111827">RFU-5</text>
+<text x="198" y="453" font-size="10.5" fill="#374151">Julia e2e flake (note)</text>
+<rect x="1110" y="804" width="168" height="46" rx="6" fill="#dcfce7" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="1118" y="822" font-size="13" font-weight="bold" fill="#111827">RFU-6</text>
+<text x="1118" y="839" font-size="10.5" fill="#374151">Windows run</text>
+<circle cx="1266" cy="816" r="8" fill="#111827"/><text x="1266" y="820" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
+<rect x="650" y="566" width="168" height="46" rx="6" fill="#dcfce7" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="658" y="584" font-size="13" font-weight="bold" fill="#111827">RFU-7</text>
+<text x="658" y="601" font-size="10.5" fill="#374151">Positron fork</text>
+<circle cx="806" cy="578" r="8" fill="#111827"/><text x="806" y="582" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
+<rect x="650" y="656" width="168" height="46" rx="6" fill="#dcfce7" stroke="#6b7280" stroke-width="1"/>
+<text x="658" y="674" font-size="13" font-weight="bold" fill="#111827">RFU-8</text>
+<text x="658" y="691" font-size="10.5" fill="#374151">docs: convert + export</text>
+<rect x="20" y="894" width="22" height="14" rx="3" fill="#dbeafe" stroke="#6b7280"/><text x="48" y="906" font-size="11" fill="#374151">OPR plan</text>
+<rect x="129.6" y="894" width="22" height="14" rx="3" fill="#dcfce7" stroke="#6b7280"/><text x="157.6" y="906" font-size="11" fill="#374151">RFU plan</text>
+<rect x="239.2" y="894" width="22" height="14" rx="3" fill="#fef3c7" stroke="#6b7280"/><text x="267.2" y="906" font-size="11" fill="#374151">conditional (Julia chain)</text>
+<rect x="454.2" y="894" width="22" height="14" rx="3" fill="#fff" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/><circle cx="465.2" cy="901" r="0" /><text x="482.2" y="906" font-size="11" fill="#374151">waits on a Gordon decision (G)</text>
+<path d="M704.2,901 L734.2,901" stroke="#b45309" stroke-width="1.5" marker-end="url(#x)"/><text x="742.2" y="906" font-size="11" fill="#374151">edge between the two epics</text>
+</svg>

@@ -2,7 +2,7 @@
 title: 'Epic: execution records in use (preview, hub, and records from other tools)'
 date: 2026-11-02
 description: 'Follow-up to the execution-records epic. The RIU-0 and RIU-0b spikes proved records through the real q2 preview and hub, Julia, and node-level provenance; the remaining plans make records a total substitute for the preview capture cache, flip the writer default per surface, add record sources that do not execute (starting with the Positron cache), and end with the Positron command demo.'
-status: done except the deferred Windows run (RIU-3b landed 2026-11-07 on feature/riu-3b-stamping)  # reconciled against the tree 2026-11-07 (RIU-6 Phase E); follow-ups are in 2026-11-07-riu-follow-up-did-we-build-it.md
+status: done except the deferred Windows run (RIU-3b landed 2026-11-07 on feature/riu-3b-stamping)  # reconciled against the tree 2026-11-07 (RIU-6 Phase E); follow-ups are in 2026-11-08-rfu-epic-riu-follow-up.md
 ---
 
 **Branch:** `feature/records-in-use`, the third branch of a stack: `feature/execution-records-epic`, then
@@ -24,6 +24,9 @@ U21 to U29). Section names in parentheses below point there.
 **Origin:** a session of 2026-11-02 that began as a Positron demo request and found that the
 records were built and unit tested but had never been run through the real `q2 preview`. RIU-0
 ran them; the demo moved to the end of this epic.
+**Rename (2026-11-07):** the `--records` flag is now `--execution-records` (unreleased, no alias; see
+[the RIU follow-up epic](2026-11-08-rfu-epic-riu-follow-up.md); the work is OPR-5 in the one-presenter epic). Plans and notes below keep the old
+spelling as history.
 **Terminology:** as in the parent epic. A **record source** is anything that can supply a
 record for a document: an engine run, the preview cache, a file under
 `.quarto/execution-records/`, a directory of Positron-format cache files, or the Positron
@@ -752,9 +755,10 @@ RIU-6 Phase E re-read every plan against the tree (two read-only fact checks ove
 What changed: the RIU-2, RIU-4 and RIU-5 front-matter statuses said "ready" or "in-progress" although the work
 had landed; one box in RIU-0 was ticked; one checked box in RIU-4 (the Windows cross-check, which did not run)
 was unticked; the RIU-3 and RIU-5 window checks now say what RIU-6 ran. What the check found that the plans
-did not say: **RIU-3b never started**, so spliced record output is not stamped and the exit criterion for it
-is unmet. The Windows run is still the only item every plan defers. Everything still open is in
-[the follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md). Not verified by the checks: every ticked
+did not say: **RIU-3b had not started**, so spliced record output was not stamped and the exit criterion for it
+was unmet. (**Superseded the same day:** 3b landed on `feature/riu-3b-stamping`, `3f0c55a6d`; the Exit
+criteria below mark it met.) The Windows run is still the only item every plan defers. Everything still open is in
+[the RIU follow-up epic](2026-11-08-rfu-epic-riu-follow-up.md). Not verified by the checks: every ticked
 box (each plan was spot-checked, six to eight boxes, and none was contradicted except the RIU-4 Windows box).
 
 ## Exit criteria

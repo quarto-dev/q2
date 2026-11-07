@@ -189,7 +189,7 @@ impl ReplayEngine {
                 ctx.execute_scope.as_ref(),
                 InlineTarget::from_format(&ctx.format),
                 &ctx.format,
-                record.metadata.quarto_engines.first(),
+                &record.metadata.quarto_engines,
                 &mut fig,
             )
             .map_err(|e| {

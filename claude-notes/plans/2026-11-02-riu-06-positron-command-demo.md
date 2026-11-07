@@ -2,7 +2,7 @@
 title: 'RIU-6: the Positron command demo'
 date: 2026-11-02
 description: 'Three commands in Gordon fork of Positron that exercise both directions between Positron and q2 records: run inline expressions, render with q2 and push the outputs into the open document, and preview from the Positron cache with no execution. Mechanisms proven in RIU-0 S5 and S6; Python and Julia are in scope. Starts with an early spike that shows the default q2 preview viewer in the Positron preview pane, which can run before any other RIU plan. A spike in the fork, ending with a script, a capture, a findings note and the reconciliation of the epic checklists.'
-status: done 2026-11-07 except the push to Gordon's fork (only when he asks); follow-ups are in 2026-11-07-riu-follow-up-did-we-build-it.md
+status: done 2026-11-07 except the push to Gordon's fork (only when he asks); follow-ups are in 2026-11-08-rfu-epic-riu-follow-up.md
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -44,7 +44,7 @@ and this lane is rebased on it. Checks, and who ran each, are in
 Nothing in this plan except the push (only when Gordon asks). The Julia preview test passes (the stale server
 is gone; a warm-up and a longer timeout keep it passing, see below), Gordon saw Python and Julia sessions in
 the window and said no screen capture is needed, and Phase E and Phase F are done. What is left lives in
-[the follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md): R through knitr first, the Julia server
+[the RIU follow-up epic](2026-11-08-rfu-epic-riu-follow-up.md): R through knitr first, the Julia server
 and the unexplained EPIPE, the loose ends, RIU-3b.
 
 **Running the e2e tests** (all in `test/e2e/tests/quarto/`; from the fork root; pinned Node 24.22.1 first on
@@ -352,7 +352,7 @@ at the window.
       screenshots. A step that no one watched is marked not run. Partly done 2026-11-07: the script is the
       last section of [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md). No
       screen capture exists; Playwright keeps traces with screenshots, but nobody has watched the run.
-      Gordon said on 2026-11-07 that no capture is needed (he saw Python and Julia sessions in the window). The script now also lives in `extensions/q2-records-demo/demo/README.md` (fork `99aa72fcb4`).
+      Gordon said on 2026-11-07 that no capture is needed (he saw Python and Julia sessions in the window). ~~The script now also lives in `extensions/q2-records-demo/demo/README.md` (fork `99aa72fcb4`).~~ **Corrected 2026-11-07:** that file does not exist (not in the commit's file list, not on disk); only the findings note holds the script. See the follow-up plan, Item 3.
 - [x] A findings note. Written 2026-11-07: [the commands findings note](../research/2026-11-07-riu-6-commands-findings.md)
       (what worked, what did not, what each command would need to ship, what was not run); it rendered with
       `q2 render --strict` and shows no errors beyond the known Q-12-13. The Phase 0 findings note stays as
@@ -383,8 +383,10 @@ Added 2026-11-07 so the demo can be shown to people. Fork commit `99aa72fcb4`.
 - [x] The extension is `q2-records-demo` (was `q2-spike`): display name, description, two commands; the two
       spike commands, the `q2spike.q2Path` setting and the workbench's `_positronQuarto.spikeReceive` are
       gone; the CSS file lost "Spike" from its name.
-- [x] A `demo/` folder in the extension: three documents (inline expressions, Python outputs, Julia outputs)
-      and a README that is the run guide. The hygiene filters skip that folder.
+- [ ] A `demo/` folder in the extension: three documents (inline expressions, Python outputs, Julia outputs)
+      and a README that is the run guide. The hygiene filters skip that folder. **Corrected 2026-11-07:** the three
+      documents exist (fork `99aa72fcb4`); the README does not, so this box was ticked in error. See the follow-up
+      plan, Item 3.
 - [x] The e2e tests still pass after the rename (6 of 6).
 - [ ] Not done: someone running the demo from the README on a machine that is not this one (the setup
       steps are written from memory of what this machine needed).

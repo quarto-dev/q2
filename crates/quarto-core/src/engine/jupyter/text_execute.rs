@@ -717,7 +717,7 @@ async fn execute_blocks_inner(
         doc_scope.as_ref(),
         InlineTarget::from_format(&ctx.format),
         &ctx.format,
-        None,
+        &[],
         &mut fig,
     )
     .map_err(|e| present_error(e, &presented_units, ctx))?;

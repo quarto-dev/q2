@@ -81,6 +81,7 @@
         "version": 1
       },
       "outputKind": "raw",
+      "presentedBy": "core",
       "version": 1
     },
     "resourceFiles": [],
@@ -120,6 +121,7 @@
       "version": 1
     },
     "outputKind": "raw",
+    "presentedBy": "core",
     "version": 1
   },
   "TsUnit": {

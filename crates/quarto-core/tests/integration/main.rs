@@ -202,6 +202,7 @@ pub mod positron_conformance;
 pub mod positron_demo;
 pub mod positron_export;
 pub mod positron_source;
+pub mod presenter_pinning;
 pub mod preview_language_terms;
 pub mod preview_render_css_parity;
 pub mod preview_route_core;
