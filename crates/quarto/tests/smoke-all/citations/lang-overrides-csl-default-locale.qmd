@@ -1,0 +1,24 @@
+---
+format: html
+lang: nl
+csl: style-de.csl
+references:
+  - id: item
+    type: webpage
+    title: A page
+    issued:
+      date-parts: [[2020, 7, 12]]
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureFileRegexMatches:
+        - ["A page en 12 juli 2020"]
+        - [" und ", "Juli"]
+---
+
+GH #1110: the document `lang` overrides the CSL `default-locale` (here
+`de-DE`), as in Quarto 1. The expected string is Pandoc 3.12.1's output
+for the same input.
+
+See [@item].

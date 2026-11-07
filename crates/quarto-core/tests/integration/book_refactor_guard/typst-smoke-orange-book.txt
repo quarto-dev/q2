@@ -1533,67 +1533,67 @@ We can also reference content from main chapters: see #ref(<dino-trex>, suppleme
 <quarto-bibliography>
 #block[
 #block[
-Backus, John/. 1978/. "Can Programming Be Liberated from the von Neumann Style? A Functional Style and Its Algebra of Programs"/. #emph[Communications of the ACM] 21 /(8): 613--41.
+Backus, John/. 1978/. “Can Programming Be Liberated from the von Neumann Style? A Functional Style and Its Algebra of Programs”/. #emph[Communications of the ACM] 21 /(8): 613--41.
 ] <ref-backus1978>
 #block[
 Box, George E. P., and Gwilym M. Jenkins/. 1976/. #emph[Time Series Analysis: Forecasting and Control]/. Revised/. Holden-Day.
 ] <ref-box1976>
 #block[
-Breiman, Leo/. 2001a/. "Random Forests"/. #emph[Machine Learning] 45 /(1): 5--32.
+Breiman, Leo/. 2001a/. “Random Forests”/. #emph[Machine Learning] 45 /(1): 5--32.
 ] <ref-breiman2001>
 #block[
-Breiman, Leo/. 2001b/. "Statistical Modeling: The Two Cultures"/. #emph[Statistical Science] 16 /(3): 199--231.
+Breiman, Leo/. 2001b/. “Statistical Modeling: The Two Cultures”/. #emph[Statistical Science] 16 /(3): 199--231.
 ] <ref-breiman2001b>
 #block[
-Cleveland, William S., and Susan J. Devlin/. 1988/. "Locally Weighted Regression: An Approach to Regression Analysis by Local Fitting"/. #emph[Journal of the American Statistical Association] 83 /(403): 596--610.
+Cleveland, William S., and Susan J. Devlin/. 1988/. “Locally Weighted Regression: An Approach to Regression Analysis by Local Fitting”/. #emph[Journal of the American Statistical Association] 83 /(403): 596--610.
 ] <ref-cleveland1988>
 #block[
-Codd, Edgar F. 1970/. "A Relational Model of Data for Large Shared Data Banks"/. #emph[Communications of the ACM] 13 /(6): 377--87.
+Codd, Edgar F. 1970/. “A Relational Model of Data for Large Shared Data Banks”/. #emph[Communications of the ACM] 13 /(6): 377--87.
 ] <ref-codd1970>
 #block[
-Cooley, James W., and John W. Tukey/. 1965/. "An Algorithm for the Machine Calculation of Complex Fourier Series"/. #emph[Mathematics of Computation] 19 /(90): 297--301.
+Cooley, James W., and John W. Tukey/. 1965/. “An Algorithm for the Machine Calculation of Complex Fourier Series”/. #emph[Mathematics of Computation] 19 /(90): 297--301.
 ] <ref-cooley1965>
 #block[
-Cortes, Corinna, and Vladimir Vapnik/. 1995/. "Support-Vector Networks"/. #emph[Machine Learning] 20 /(3): 273--97.
+Cortes, Corinna, and Vladimir Vapnik/. 1995/. “Support-Vector Networks”/. #emph[Machine Learning] 20 /(3): 273--97.
 ] <ref-cortes1995>
 #block[
-Dijkstra, Edsger W. 1968/. "Go to Statement Considered Harmful"/. #emph[Communications of the ACM] 11 /(3): 147--48.
+Dijkstra, Edsger W. 1968/. “Go to Statement Considered Harmful”/. #emph[Communications of the ACM] 11 /(3): 147--48.
 ] <ref-dijkstra1968>
 #block[
-Efron, Bradley/. 1979/. "Bootstrap Methods: Another Look at the Jackknife"/. #emph[The Annals of Statistics] 7 /(1): 1--26.
+Efron, Bradley/. 1979/. “Bootstrap Methods: Another Look at the Jackknife”/. #emph[The Annals of Statistics] 7 /(1): 1--26.
 ] <ref-efron1979>
 #block[
-Floyd, Robert W. 1967/. "Assigning Meanings to Programs"/. #emph[Proceedings of Symposia in Applied Mathematics] 19: 19--32.
+Floyd, Robert W. 1967/. “Assigning Meanings to Programs”/. #emph[Proceedings of Symposia in Applied Mathematics] 19: 19--32.
 ] <ref-floyd1967>
 #block[
-Hoare, C. A. R. 1978/. "Communicating Sequential Processes"/. #emph[Communications of the ACM] 21 /(8): 666--77.
+Hoare, C. A. R. 1978/. “Communicating Sequential Processes”/. #emph[Communications of the ACM] 21 /(8): 666--77.
 ] <ref-hoare1978>
 #block[
-Knuth, Donald E. 1984/. "Literate Programming"/. #emph[Comput. J.] 27 /(2): 97--111/. https:///doi.org/10.1093/comjnl/27.2.97.
+Knuth, Donald E. 1984/. “Literate Programming”/. #emph[Comput. J.] 27 /(2): 97--111/. https:///doi.org/10.1093/comjnl/27.2.97.
 ] <ref-knuth84>
 #block[
-Lamport, Leslie/. 1978/. "Time, Clocks, and the Ordering of Events in a Distributed System"/. #emph[Communications of the ACM] 21 /(7): 558--65.
+Lamport, Leslie/. 1978/. “Time, Clocks, and the Ordering of Events in a Distributed System”/. #emph[Communications of the ACM] 21 /(7): 558--65.
 ] <ref-lamport1978>
 #block[
-McCarthy, John/. 1960/. "Recursive Functions of Symbolic Expressions and Their Computation by Machine, Part I"/. #emph[Communications of the ACM] 3 /(4): 184--95.
+McCarthy, John/. 1960/. “Recursive Functions of Symbolic Expressions and Their Computation by Machine, Part I”/. #emph[Communications of the ACM] 3 /(4): 184--95.
 ] <ref-mccarthy1960>
 #block[
 Pearl, Judea/. 2009/. #emph[Causality: Models, Reasoning, and Inference]/. 2nd ed. Cambridge University Press.
 ] <ref-pearl2009>
 #block[
-Shannon, Claude E. 1948/. "A Mathematical Theory of Communication"/. #emph[Bell System Technical Journal] 27 /(3): 379--423.
+Shannon, Claude E. 1948/. “A Mathematical Theory of Communication”/. #emph[Bell System Technical Journal] 27 /(3): 379--423.
 ] <ref-shannon1948>
 #block[
-Tibshirani, Robert/. 1996/. "Regression Shrinkage and Selection via the Lasso"/. #emph[Journal of the Royal Statistical Society: Series B] 58 /(1): 267--88.
+Tibshirani, Robert/. 1996/. “Regression Shrinkage and Selection via the Lasso”/. #emph[Journal of the Royal Statistical Society: Series B] 58 /(1): 267--88.
 ] <ref-tibshirani1996>
 #block[
 Tukey, John W. 1977/. #emph[Exploratory Data Analysis]/. Addison-Wesley.
 ] <ref-tukey1977>
 #block[
-Turing, Alan M. 1950/. "Computing Machinery and Intelligence"/. #emph[Mind] 59 /(236): 433--60.
+Turing, Alan M. 1950/. “Computing Machinery and Intelligence”/. #emph[Mind] 59 /(236): 433--60.
 ] <ref-turing1950>
 #block[
-Wickham, Hadley/. 2014/. "Tidy Data"/. #emph[Journal of Statistical Software] 59 /(10): 1--23.
+Wickham, Hadley/. 2014/. “Tidy Data”/. #emph[Journal of Statistical Software] 59 /(10): 1--23.
 ] <ref-wickham2014>
 ] <refs>
 ] <quarto-appendix>
