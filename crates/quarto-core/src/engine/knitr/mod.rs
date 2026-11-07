@@ -28,10 +28,19 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+mod adapter;
+mod chunk_records;
+mod error_lines;
 pub mod error_parser;
 pub mod format;
+pub mod hash_rule;
+pub mod label_reinsert;
+pub mod pieces_map;
 pub mod preprocess;
+mod span_records;
+pub(crate) mod structured;
 pub mod subprocess;
+pub mod target_route;
 pub mod types;
 
 use std::path::{Path, PathBuf};
@@ -47,11 +56,61 @@ use crate::resources::ResourceBundle;
 #[allow(unused_imports)]
 pub use error_parser::{RErrorInfo, RErrorType, parse_r_error};
 pub use format::KnitrFormatConfig;
-pub use preprocess::resolve_inline_r_expressions;
+#[allow(unused_imports)]
+pub use preprocess::{resolve_inline_r_expressions, resolve_inline_r_expressions_with_ids};
 pub use subprocess::{
     CallROptions, call_r, determine_working_dir, find_rscript, find_rscript_call_count,
 };
 pub use types::{KnitrExecuteParams, KnitrExecuteResult, KnitrIncludes};
+
+/// EXR-11 Phase 11D: knitr reports "Quitting from lines X-Y" against the text q2 handed to
+/// R. Re-express the range as lines of the author's file; any failure to map leaves the
+/// error as it was.
+fn remap_error_lines(
+    err: crate::engine::error::ExecutionError,
+    ctx: &ExecutionContext,
+    engine_input: &str,
+    r_text: &str,
+) -> crate::engine::error::ExecutionError {
+    use crate::engine::error::ExecutionError;
+    let ExecutionError::ExecutionFailedAtLines {
+        engine,
+        message,
+        start_line,
+        end_line,
+    } = &err
+    else {
+        return err;
+    };
+    let mapped = error_lines::map_to_engine_lines(engine_input, r_text, *start_line..=*end_line)
+        // EXR-12: an inline expression that fails is on one line, outside every chunk.
+        .or_else(|| {
+            let line =
+                error_lines::map_span_line_to_engine_line(engine_input, r_text, *start_line)?;
+            Some(line..=line)
+        })
+        .and_then(|l| error_lines::engine_lines_to_document(ctx, engine_input, l));
+    match mapped {
+        Some(lines) => ExecutionError::execution_failed_at_lines(
+            engine.clone(),
+            message.clone(),
+            *lines.start(),
+            *lines.end(),
+        ),
+        None => err,
+    }
+}
+
+// What knitr claims is `super::knitr_claims`, defined outside this native-only module so the
+// replay engine can use it on `wasm32`.
+use super::knitr_claims;
+
+#[cfg(test)]
+mod capture_tests;
+#[cfg(test)]
+mod chunk_record_tests;
+#[cfg(test)]
+mod gating_tests;
 
 // ============================================================================
 // Embedded R Scripts
@@ -167,14 +226,34 @@ impl ExecutionEngine for KnitrEngine {
             ));
         }
 
+        // Step 1b (EXR-11): when a record is wanted, give every chunk knitr owns a
+        // `quarto-unit-id` option. This runs on the text the stage scanned, before the
+        // edits below change cell bodies (the label re-insertion adds option lines, which
+        // would stop `locate_units` matching those cells).
+        let engine_input = input;
+        let (input, expected_ids) = chunk_records::insert_unit_ids(input, ctx);
+        let input = input.as_str();
+
         // Step 2: Preprocess markdown (resolve inline R expressions)
         // Use has_inline_r_expressions as optimization to skip regex replacement
         // when there are no inline R expressions (common case).
+        //
+        // Step 2a (EXR-12): when a record is wanted, each owned brace span carries its
+        // unit id in the rewritten expression.
+        let span_plan = span_records::SpanPlan::new(input, ctx);
+        let span_ids = span_plan.expected.clone();
         let preprocessed = if preprocess::has_inline_r_expressions(input) {
-            resolve_inline_r_expressions(input)
+            span_plan.resolve(input)
         } else {
             input.to_string()
         };
+
+        // Step 2b (EXR-10): the stage hands over canonical text, with the
+        // crossref-consumed `label:` options lifted onto wrapper Divs. Put each
+        // chunk-header line back so knitr's label-based output naming
+        // (`fig-cars-1.svg`) sees the label. knitr never reads `source_info`,
+        // so the shifted offsets are harmless.
+        let preprocessed = label_reinsert::reinsert_labels(&preprocessed, &ctx.cell_options);
 
         // Step 3: Build format configuration
         let format_config = build_format_config(ctx);
@@ -187,6 +266,14 @@ impl ExecutionEngine for KnitrEngine {
         // Step 5: Determine working directory (renv-aware)
         let document_dir = ctx.source_path.parent().unwrap_or(&ctx.cwd).to_path_buf();
         let working_dir = determine_working_dir(&document_dir, ctx.project_dir.as_deref());
+
+        // Step 5b (KNR-3): ask R for pieces only on a structured route; a fallback route
+        // skips capture and says so once.
+        let capture_plan =
+            target_route::plan_capture(ctx.want_record, !ctx.units.is_empty(), &ctx.format);
+
+        // KNR-6: a captured run gets a nonce, so R returns markers for the units Rust presents.
+        let nonce = capture_plan.capture.then(super::skeleton::new_nonce);
 
         // Step 6: Build execute params
         let params = KnitrExecuteParams {
@@ -203,6 +290,8 @@ impl ExecutionEngine for KnitrEngine {
             // Populated from ExecutionContext so multi-engine sequences can extend
             // this set with languages owned by other engines.
             handled_languages: ctx.handled_languages.clone(),
+            capture: capture_plan.capture,
+            nonce: nonce.clone(),
         };
 
         // Step 7: Build call options
@@ -219,7 +308,8 @@ impl ExecutionEngine for KnitrEngine {
             &ctx.temp_dir,
             &working_dir,
             &call_options,
-        )?;
+        )
+        .map_err(|e| remap_error_lines(e, ctx, engine_input, &params.markdown))?;
 
         // Step 9: Post-process markdown (fix .rmarkdown references)
         let markdown = postprocess_markdown(&result.markdown, &ctx.source_path);
@@ -230,7 +320,7 @@ impl ExecutionEngine for KnitrEngine {
         let includes = convert_includes(&result.includes, self.name(), &mut warnings);
 
         // Step 11: Build and return result
-        Ok(ExecuteResult {
+        let mut execute_result = ExecuteResult {
             markdown,
             supporting_files: result.supporting.into_iter().map(PathBuf::from).collect(),
             filters: result.filters,
@@ -239,11 +329,130 @@ impl ExecutionEngine for KnitrEngine {
             html_dependencies: Vec::new(),
             warnings,
             ..Default::default()
-        })
+        };
+
+        execute_result.warnings.extend(capture_plan.diagnostic);
+        if !result.cache_disabled.is_empty() {
+            execute_result
+                .warnings
+                .push(super::diagnostics::knitr_cache_disabled_diagnostic(
+                    &result.cache_disabled,
+                ));
+        }
+        let child_labels: Vec<String> = result
+            .pieces
+            .iter()
+            .filter(|c| {
+                matches!(c.pieces.as_slice(),
+                    [types::KnitrPiece::Other { classes }] if classes.as_slice() == ["child"])
+            })
+            .map(|c| c.label.clone())
+            .collect();
+        if !child_labels.is_empty() {
+            execute_result
+                .warnings
+                .push(super::diagnostics::knitr_child_diagnostic(&child_labels));
+        }
+        if let Some((hook, label)) = result
+            .pieces
+            .iter()
+            .find_map(|c| Some((c.hook_override.as_deref()?, c.label.as_str())))
+        {
+            execute_result
+                .warnings
+                .push(super::diagnostics::knitr_hook_override_diagnostic(
+                    hook, label,
+                ));
+        }
+
+        // Step 12 (EXR-11): the record, a side product that never changes the markdown.
+        chunk_records::attach_records(
+            ctx,
+            &self.hash_definition(),
+            &expected_ids,
+            &result.chunks,
+            &chunk_records::Spans {
+                expected: &span_ids,
+                found: &result.spans,
+                location: &|id| span_records::span_location(ctx, engine_input, id),
+            },
+            // A captured run (KNR-3) carries the pieces; `target_route::plan_capture` decided
+            // whether R was asked for them.
+            (!result.pieces.is_empty()).then_some(&adapter::Captured {
+                pieces: &result.pieces,
+                known_options: result.known_options.as_deref(),
+                // knitr resolves a path the author wrote (`include_graphics`) against its working
+                // directory, but writes the figures it draws under the document\'s own directory
+                // (they differ in a project subdirectory), so look in both.
+                read_file: &|path| {
+                    std::fs::read(working_dir.join(path))
+                        .or_else(|_| std::fs::read(document_dir.join(path)))
+                        .ok()
+                },
+            }),
+            &mut execute_result,
+        );
+
+        // Step 13 (KNR-6): present the record over the skeleton. R returned a marker where
+        // each unit Rust presents belongs; whatever the presenter cannot fill is filled from
+        // the markdown R shipped for it, so the render never fails here.
+        if let Some(nonce) = nonce {
+            let shipped = super::skeleton::Shipped {
+                chunks: result
+                    .chunks
+                    .iter()
+                    .map(|c| (c.id.as_str(), c.markdown.as_str()))
+                    .collect(),
+                spans: result
+                    .spans
+                    .iter()
+                    .map(|s| (s.id.as_str(), s.markdown.as_str()))
+                    .collect(),
+            };
+            let units = super::units::units_for_engine(&ctx.units, engine_input);
+            let mut fig = crate::presenter::figures::FsFigureSink::new(&ctx.source_path);
+            let presented = super::skeleton::present_skeleton(
+                &execute_result.markdown,
+                &nonce,
+                execute_result.record.as_ref(),
+                &units,
+                ctx.execute_scope.as_ref(),
+                &ctx.format,
+                &shipped,
+                &mut fig,
+            );
+            if presented.fallbacks.total() > 0 {
+                tracing::debug!(fallbacks = ?presented.fallbacks, "knitr units rendered from shipped markdown");
+            }
+            execute_result
+                .warnings
+                .extend(presented.notes.iter().map(|note| {
+                    crate::engine::diagnostics::note_diagnostic(note, &presented.ranged_units, ctx)
+                }));
+            for file in presented.files_written {
+                if !execute_result.supporting_files.contains(&file) {
+                    execute_result.supporting_files.push(file);
+                }
+            }
+            execute_result.skeleton = Some(super::context::Skeleton {
+                text: presented.skeleton,
+                nonce,
+                fallbacks: presented.fallbacks,
+            });
+            execute_result.markdown = presented.markdown;
+        }
+        Ok(execute_result)
     }
 
     fn can_freeze(&self) -> bool {
         true
+    }
+
+    /// knitr's declaration (`hash_rule`): the default profile, used by fallback units that bake
+    /// presentation into finished markdown, counts every chunk option; the `structured` profile
+    /// leaves out a closed list of presentation-only options. Every `execute:` key counts in both.
+    fn hash_definition(&self) -> crate::record::HashDefinition {
+        hash_rule::knitr_hash_definition()
     }
 
     /// Deliberate q2 design choice: knitr claims `r` as Primary(1), and additionally
@@ -255,15 +464,7 @@ impl ExecutionEngine for KnitrEngine {
     /// (T2 explicit Fallback > T3 Interop). See `claude-notes/designs/engine-resolution.md`
     /// §3.1 and §4.4.
     fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
-        match language {
-            "r" => LanguageClaim::Primary(1),
-            // The Interop set is knitr's `knit_engines` in-session capability
-            // (reticulate/eng_sql/shell), ceded to a dedicated engine when one is
-            // present. Pinned, not guessed: Q1 ships verified knitr support for
-            // each of these (knitr-fixup.lua for sql, reticulate for python, etc.).
-            "python" | "sql" | "bash" | "sh" => LanguageClaim::Interop(0),
-            _ => LanguageClaim::None,
-        }
+        knitr_claims(language)
     }
 
     /// Pure Rust, always static. See `test_knitr_try_claims_language_answers_statically`.
@@ -424,6 +625,93 @@ fn convert_includes(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    // === EXR-4: hash declarations ===
+
+    fn opts(v: serde_json::Value) -> std::collections::BTreeMap<String, serde_json::Value> {
+        v.as_object().unwrap().clone().into_iter().collect()
+    }
+
+    fn unit_hash(def: &crate::record::HashDefinition, options: serde_json::Value) -> String {
+        use crate::record::{UnitHashInput, UnitKind, hash_unit};
+        let options = opts(options);
+        hash_unit(
+            def,
+            &UnitHashInput {
+                kind: UnitKind::Cell,
+                lang: "python",
+                code: "x = 1",
+                options: &options,
+                attr_tail: "",
+                profile: None,
+            },
+        )
+        .unwrap()
+    }
+
+    fn doc_hash(def: &crate::record::HashDefinition, metadata: serde_json::Value) -> String {
+        use crate::record::{UnitHashRef, hash_document};
+        hash_document(
+            def,
+            &opts(metadata),
+            &[UnitHashRef {
+                hash: "u",
+                profile: None,
+            }],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn knitr_declares_empty_exclusion_lists_and_the_knitr_key() {
+        let def = KnitrEngine { rscript_path: None }.hash_definition();
+        assert_eq!(def.id, "knitr");
+        assert_eq!(def.granularity, crate::record::Granularity::Unit);
+        assert!(def.presentation_cell_options.is_empty());
+        assert!(def.presentation_execute_keys.is_empty());
+        assert_eq!(def.document_keys, ["knitr"]);
+        // KNR-3: the default profile is still the all-options rule; fallback units use it. The
+        // `structured` profile is covered in `hash_rule`.
+        assert_eq!(def.profiles.len(), 1);
+        assert!(def.profiles.contains_key(hash_rule::STRUCTURED_PROFILE));
+    }
+
+    #[test]
+    fn toggling_execute_echo_moves_the_knitr_document_hash_and_not_the_jupyter_one() {
+        let knitr = KnitrEngine { rscript_path: None }.hash_definition();
+        let jupyter = crate::engine::jupyter::JupyterEngine::new().hash_definition();
+        let md = |echo: bool| serde_json::json!({"knitr": {"x": 1}, "jupyter": "python3", "execute": {"echo": echo}});
+        assert_ne!(doc_hash(&knitr, md(true)), doc_hash(&knitr, md(false)));
+        assert_eq!(doc_hash(&jupyter, md(true)), doc_hash(&jupyter, md(false)));
+        assert_ne!(doc_hash(&knitr, md(true)), doc_hash(&jupyter, md(true)));
+    }
+
+    #[test]
+    fn a_chunk_option_change_moves_the_knitr_unit_hash() {
+        let def = KnitrEngine { rscript_path: None }.hash_definition();
+        let base = unit_hash(&def, serde_json::json!({"fig-width": 7}));
+        assert_ne!(base, unit_hash(&def, serde_json::json!({"fig-width": 8})));
+        assert_ne!(
+            base,
+            unit_hash(&def, serde_json::json!({"fig-width": 7, "echo": false}))
+        );
+    }
+
+    /// Toggling the `record` opt-in (epic decision 24) never changes a hash.
+    #[test]
+    fn knitr_hash_ignores_the_record_key() {
+        let def = KnitrEngine { rscript_path: None }.hash_definition();
+        let md =
+            |record: serde_json::Value| serde_json::json!({"knitr": {"x": 1}, "record": record});
+        assert_eq!(
+            doc_hash(&def, md(serde_json::json!(true))),
+            doc_hash(&def, md(serde_json::json!(false)))
+        );
+        assert_eq!(
+            doc_hash(&def, md(serde_json::json!(true))),
+            doc_hash(&def, serde_json::json!({"knitr": {"x": 1}}))
+        );
+    }
 
     #[test]
     fn test_knitr_engine_name() {

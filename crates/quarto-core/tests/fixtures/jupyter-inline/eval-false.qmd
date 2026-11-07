@@ -1,0 +1,15 @@
+---
+title: t
+format: html
+jupyter: python3
+execute:
+  eval: false
+---
+
+```{python}
+#| echo: false
+from IPython.display import Markdown, HTML
+x = 1
+```
+
+Before `{python} 1 + 1` after.

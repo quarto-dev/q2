@@ -1,7 +1,7 @@
 {
   "code": "Q-2-33",
   "title": "Spaces in link targets",
-  "message": "Link targets cannot contain spaces. Replace spaces with %20.",
+  "message": "Link targets cannot contain spaces. Replace spaces with %20, or wrap the target in angle brackets: [text](<my file.png>).",
   "notes": [],
   "cases": [
     {

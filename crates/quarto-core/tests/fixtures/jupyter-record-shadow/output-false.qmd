@@ -1,0 +1,9 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+#| output: false
+print("no output")
+```

@@ -1,0 +1,55 @@
+---
+title: "Jupyter Kernel Not Named"
+description: "The document's `jupyter:` key is a map that names no kernel, or uses the `kernelspec:` object form; Quarto ignores it and picks the kernel from the first language in the document that has one."
+code: Q-18-4
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-4` — Jupyter Kernel Not Named
+
+> The document's `jupyter:` key is a map that names no kernel, or uses
+> the `kernelspec:` object form; Quarto ignores it and picks the kernel
+> from the first executable cell.
+
+## What this means
+
+`jupyter: python3` selects the kernel for the whole document, and so
+does `jupyter: {kernel: python3}`. Two other shapes name no kernel that
+Quarto can use:
+
+- a map with no `kernel` key, such as `jupyter: {python: python3}`;
+- Quarto 1's `jupyter: {kernelspec: {...}}` object form.
+
+Quarto 1 stops with "Invalid Jupyter kernelspec" for both. Quarto 2
+warns and continues: it uses `engine: [{jupyter: {kernel: ...}}]` if the
+document has it, and otherwise the kernel for the first language in the
+document that has an installed kernel.
+
+## How to fix
+
+Name the kernel directly:
+
+```yaml
+jupyter: python3
+```
+
+or
+
+```yaml
+jupyter:
+  kernel: python3
+```
+
+Use `--strict` to make this warning stop the render:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-18-3`](Q-18-3.qmd) — an engine's runtime could not be found.

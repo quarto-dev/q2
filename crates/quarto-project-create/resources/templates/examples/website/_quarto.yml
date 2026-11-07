@@ -1,4 +1,7 @@
 project:
+  render:
+    - "**/*.qmd"
+    - "**/*.md"
   type: website
   resources:
     - styles.css

@@ -193,14 +193,18 @@ export const CodeBlock = ({ node }: NodeArgs<CodeBlockType>) => {
     // structure to match the native writer in
     // `crates/pampa/src/writers/html.rs::write_highlighted_codeblock`.
     // The affordance attribute goes on the outer div (the root element).
-    if (spans !== null) {
+    // The attribute's presence — even an empty list — marks a
+    // source-code block (GH #1079: languages Pandoc knows but q2 has no
+    // grammar for get `[]`); `spans` decides only whether there is
+    // markup to nest inside `<code>`.
+    if (hlSpansRaw !== undefined) {
         const [language, ...extras] = classes;
         const divClassName = ['sourceCode', ...extras].join(' ');
         const codeContainerClass = language ? `sourceCode ${language}` : 'sourceCode';
         return (
             <div ref={anchorRef} className={divClassName} {...(id ? { id } : {})} {...affordanceAttr} {...dataLocProps(node)}>
                 <pre className={codeContainerClass} {...preDataAttrs}>
-                    <code className={codeContainerClass}>{renderHighlighted(code, spans)}</code>
+                    <code className={codeContainerClass}>{spans !== null ? renderHighlighted(code, spans) : code}</code>
                 </pre>
             </div>
         );

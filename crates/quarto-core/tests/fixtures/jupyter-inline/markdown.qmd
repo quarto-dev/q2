@@ -1,0 +1,14 @@
+---
+title: t
+format: html
+jupyter: python3
+
+---
+
+```{python}
+#| echo: false
+from IPython.display import Markdown, HTML
+x = 1
+```
+
+Before `{python} Markdown("**bold**")` after.

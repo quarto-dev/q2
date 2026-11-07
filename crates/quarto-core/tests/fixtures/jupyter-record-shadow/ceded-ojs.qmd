@@ -1,0 +1,12 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+x = 1
+```
+
+```{ojs}
+viewof a = Inputs.range([0, 1])
+```

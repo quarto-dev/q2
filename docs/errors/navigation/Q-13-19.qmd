@@ -1,0 +1,48 @@
+---
+title: "Invalid toc-expand value"
+description: "The `toc-expand` option has a value Quarto cannot use; the table of contents opens to the default depth."
+code: Q-13-19
+subsystem: navigation
+status: complete
+since: "99.9.9"
+categories:
+  - navigation
+---
+
+# `Q-13-19` — Invalid toc-expand value
+
+> The `toc-expand` option has a value Quarto cannot use. The table
+> of contents opens to the default depth of 1.
+
+## What this means
+
+`toc-expand` sets how much of the table of contents is open when
+the page loads (see [Following the reader](../../guides/authoring/navigation.qmd#following-the-reader)).
+It accepts:
+
+| value | behavior |
+|---|---|
+| `true` | every entry is always open |
+| `false` (or `0`) | nested entries open only while their section is current |
+| a number `N` of 1 or more | entries down to level `N` stay open |
+
+A number with a fractional part is rounded down: `2.5` behaves like
+`2`. Any other value is ignored, and this warning names it. The
+document still renders, and the table of contents behaves as if
+`toc-expand` were not set.
+
+## Why this happens
+
+- **A word instead of a number or boolean**, such as `all`, `none`,
+  or `deep`.
+- **A negative depth**, such as `-2`.
+
+## How to fix
+
+Use `true` to open everything, `false` to keep nested entries
+closed, or a depth such as `2`. Remove the option to get the
+default.
+
+## Related
+
+- `Q-13-8` — an unsupported `toc-location` value.

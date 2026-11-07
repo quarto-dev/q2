@@ -1,0 +1,4 @@
+```{r child_inner}
+child_value <- 41
+child_value + 1
+```

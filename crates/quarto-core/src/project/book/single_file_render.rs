@@ -1187,7 +1187,7 @@ Some chapter text.\n";
             &mut |_| {
                 (
                     PartialKind::Request {
-                        captures: Vec::new(),
+                        captures: Default::default(),
                     },
                     Vec::new(),
                 )

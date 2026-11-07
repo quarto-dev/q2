@@ -59,6 +59,12 @@ toc-expand: 2
 | `true`  | Every entry is always open                                 |
 | `false` | Nested entries are shown only while their section is current |
 
+`0` behaves like `false`, and a number with a fractional part is rounded
+down (`2.5` behaves like `2`). Any other value, such as a word or a
+negative depth, produces a warning
+([Q-13-19](../../errors/navigation/Q-13-19.qmd)) and the default depth
+is used.
+
 The tracking is a small script shipped with the page
 (`quarto-toc.js`). Without JavaScript the table of contents is a plain
 list with its first entry marked as current. On a page too short to

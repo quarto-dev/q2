@@ -19,6 +19,7 @@
  */
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use quarto_core::engine::jupyter::{JupyterEngine, find_jupyter_call_count};
 use quarto_core::engine::{
@@ -78,6 +79,35 @@ impl ExecutionEngine for StubJupyter {
     }
 }
 
+/// A registered jupyter that is unavailable and counts every availability
+/// check. Replay must never consult it (EXR-1b: no engine-availability probe).
+struct UnavailableJupyter {
+    availability_checks: Arc<AtomicUsize>,
+}
+
+impl ExecutionEngine for UnavailableJupyter {
+    fn name(&self) -> &str {
+        "jupyter"
+    }
+
+    fn is_available(&self) -> bool {
+        self.availability_checks.fetch_add(1, Ordering::SeqCst);
+        false
+    }
+
+    fn file_claims(&self) -> Vec<FileClaim> {
+        JupyterEngine::static_file_claims()
+    }
+
+    fn execute(
+        &self,
+        _input: &str,
+        _ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        panic!("replay must not execute the jupyter engine");
+    }
+}
+
 fn registry_with_stub_jupyter() -> Arc<EngineRegistry> {
     let mut registry = EngineRegistry::empty();
     registry.register(Arc::new(StubJupyter));
@@ -114,7 +144,7 @@ async fn preview_ast(
         &mut ctx,
         runtime,
         registry,
-        Vec::new(),
+        Vec::new().into(),
     )
     .await
     .unwrap_or_else(|e| panic!("notebook must render: {e}"))
@@ -190,6 +220,96 @@ async fn stored_stdout_replays_without_jupyter() {
         find_jupyter_call_count(),
         1,
         "replay must not probe for jupyter beyond the registry-construction cap"
+    );
+}
+
+/// Jupyter registered but unavailable, `.ipynb` input without `execute.enabled`:
+/// replay succeeds and the engine's availability check is never called.
+#[tokio::test]
+async fn replay_does_not_probe_engine_availability() {
+    let availability_checks = Arc::new(AtomicUsize::new(0));
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(UnavailableJupyter {
+        availability_checks: availability_checks.clone(),
+    }));
+
+    let out = preview_ast(STDOUT_NB, ExecutionPolicy::None, Some(Arc::new(registry))).await;
+
+    assert!(
+        out.ast_json.contains("hello from the notebook"),
+        "stored stdout must replay with jupyter unavailable, got: {}",
+        out.ast_json
+    );
+    assert_eq!(
+        availability_checks.load(Ordering::SeqCst),
+        0,
+        "replay must not consult the registered engine's availability"
+    );
+}
+
+/// EXR-4 Phase 6: a *record* (the engine execution record, written by `write_record`) is an
+/// nbformat 4 notebook, and presenting it needs no engine: with Jupyter registered but
+/// unavailable, its recorded outputs replay through the same path and the availability
+/// check is never called.
+#[tokio::test]
+async fn a_record_replays_without_probing_engine_availability() {
+    use quarto_core::engine::units::scan_units;
+    use quarto_core::record::{
+        AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, coalesce,
+        fill_ids, write_record,
+    };
+
+    let doc = "# Report\n\nProse.\n\n```{python}\nprint('recorded output')\n```\n";
+    let mut units = scan_units(doc);
+    let texts = AuthorTexts::from_scanned(&units);
+    fill_ids(&mut units, &texts).unwrap();
+    let def = HashDefinition::conservative("jupyter");
+    let mut builder = RecordBuilder::new("jupyter", &def, &units, &texts).unwrap();
+    builder
+        .push(
+            0,
+            UnitResult {
+                outputs: vec![serde_json::json!({
+                    "output_type": "stream", "name": "stdout", "text": ["ONLY-IN-THE-RECORD\n"]
+                })],
+                execution_count: Some(1),
+                kernel: Some("python3".into()),
+            },
+        )
+        .unwrap();
+    let entry = builder
+        .finish(EngineEntryInput {
+            owned_languages: vec!["python".into()],
+            ..Default::default()
+        })
+        .unwrap();
+    let record = coalesce(&[entry], &units).unwrap();
+    let bytes = write_record(&record).unwrap();
+    // The notebook converter takes the fence language from `metadata.kernelspec.language`
+    // (Q1 behavior), and a record carries a per-cell `quarto_lang` instead. Supply the
+    // kernelspec a consumer would derive from it; without one the cell converts to an empty
+    // `{}` fence and nothing replays (a finding for the code that presents records, EXR-13/14).
+    let mut notebook: serde_json::Value = serde_json::from_str(&bytes).unwrap();
+    notebook["metadata"]["kernelspec"] =
+        serde_json::json!({"name": "python3", "language": "python"});
+    let bytes = serde_json::to_string(&notebook).unwrap();
+
+    let availability_checks = Arc::new(AtomicUsize::new(0));
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(UnavailableJupyter {
+        availability_checks: availability_checks.clone(),
+    }));
+    let out = preview_ast(&bytes, ExecutionPolicy::None, Some(Arc::new(registry))).await;
+
+    assert!(
+        out.ast_json.contains("ONLY-IN-THE-RECORD") && out.ast_json.contains("cell-output-stdout"),
+        "the record's stored output (absent from its source) must be presented, got: {}",
+        out.ast_json
+    );
+    assert_eq!(
+        availability_checks.load(Ordering::SeqCst),
+        0,
+        "presenting a record must not consult any engine's availability"
     );
 }
 
@@ -297,7 +417,7 @@ async fn stored_png_output_written_as_figure_file() {
         &mut ctx,
         runtime,
         None,
-        Vec::new(),
+        Vec::new().into(),
     )
     .await
     .expect("png-output notebook must render");

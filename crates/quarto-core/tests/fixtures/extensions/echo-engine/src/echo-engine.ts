@@ -91,6 +91,12 @@ const echoEngine: ExecutionEngineDiscovery = {
         "FORMAT_JSON_END\n```\n"
       );
     };
+    // Plan 4d-D (JOL-4): echo the positive ownership set (`ownedLanguages`) back
+    // so the e2e can assert exactly which languages q2 assigned to THIS engine.
+    const ownedMarker = (opts: ExecuteOptions): string =>
+      "\n\n```\nOWNED_JSON_START" +
+      JSON.stringify(opts.ownedLanguages ?? null) +
+      "OWNED_JSON_END\n```\n";
     return {
       name: "echo",
       canFreeze: false,
@@ -222,10 +228,58 @@ const echoEngine: ExecutionEngineDiscovery = {
           "::: {.cell}\n::: {.cell-output .cell-output-stdout}\n" +
             "**ECHO_EXECUTED**\n:::\n:::",
         );
+        // EXR-7: front-matter-gated record branch (`echo-record: true`; a body sentinel does
+        // not survive the AST round trip, which escapes its underscores). Returns a small nbformat-4
+        // notebook with one cell per unit this engine owns (the q2-only `units`
+        // option, read by cast like `signal`), each naming its unit through
+        // `metadata.quarto_cell_id`, plus `recordInfo` carrying a
+        // `hashDefinition`. `echo-record-mismatch: true` drops the last cell so
+        // core sees fewer annotated units than the engine owns. Neither
+        // key is used by any other fixture, so this is dead code for them.
+        const recordExtras: Record<string, unknown> = {};
+        const meta = opts.format.metadata as Record<string, unknown>;
+        const wantsRecord = meta["echo-record"] === true;
+        if (wantsRecord) {
+          const units = ((opts as unknown as { units?: Array<{ id?: string; owned: boolean }> })
+            .units ?? []).filter((u) => u.owned);
+          const dropLast = meta["echo-record-mismatch"] === true;
+          const cells = units
+            .slice(0, dropLast ? Math.max(units.length - 1, 0) : units.length)
+            .map((u, i) => ({
+              cell_type: "code",
+              execution_count: i + 1,
+              metadata: { quarto_cell_id: u.id },
+              outputs: [
+                { output_type: "stream", name: "stdout", text: ["ECHO_RECORD_OUTPUT\n"] },
+              ],
+              source: ["engine-side text core must ignore\n"],
+            }));
+          recordExtras.notebook = {
+            nbformat: 4,
+            nbformat_minor: 5,
+            metadata: { kernelspec: { name: "echo-kernel" } },
+            cells,
+          };
+          recordExtras.recordInfo = {
+            version: 1,
+            granularity: "unit",
+            outputKind: "raw",
+            alignment: "ids",
+            hashDefinition: {
+              id: "echo",
+              version: 1,
+              granularity: "unit",
+              presentationCellOptions: ["echo"],
+              presentationExecuteKeys: [],
+              documentKeys: [],
+            },
+          };
+        }
         return {
-          markdown: executed + contextMarker() + formatMarker(opts),
+          markdown: executed + contextMarker() + formatMarker(opts) + ownedMarker(opts),
           supporting: [],
           filters: [],
+          ...recordExtras,
         };
       },
 

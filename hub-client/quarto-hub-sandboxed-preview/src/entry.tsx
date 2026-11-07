@@ -9,11 +9,10 @@
  * differences from the q2-preview entry, all consequences of running
  * cross-origin (GitHub Pages) instead of same-origin:
  *
- *  1. `UPDATE_THEME` carries the compiled CSS **text**, not a
- *     parent-minted blob URL — blob URLs are origin-scoped and
- *     unreachable from this frame. The entry mints its own blob URL
- *     (same-origin to itself) and swaps it into the
- *     `<link data-q2-theme>` element.
+ *  1. `UPDATE_THEME` carries the compiled CSS **text** (as in the
+ *     q2-preview entry), but before minting its own blob URL for the
+ *     `<link data-q2-theme>` element, this entry rewrites relative
+ *     `url()` refs to page URLs the service worker (2.) can proxy.
  *
  *  2. A service worker proxies document asset fetches (images, fonts
  *     referenced by theme CSS) back to the parent over postMessage —

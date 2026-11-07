@@ -1,0 +1,30 @@
+---
+title: "Extension Is Now Built In"
+description: "A `filters` entry names an extension whose feature is now part of Quarto, so the entry is ignored."
+code: Q-16-13
+subsystem: extension
+status: stub
+since: "99.9.9"
+categories:
+  - extension
+---
+
+# `Q-16-13` — Extension Is Now Built In
+
+> A `filters` entry names an extension whose feature is now part of
+> Quarto, so the entry is ignored.
+
+## What this means
+
+Some features started out as extensions in the `quarto-ext` organization
+and were later built into Quarto, such as
+[`quarto-ext/lightbox`](../../guides/formats/html/lightbox.qmd). A
+document that still lists such an extension under `filters` would run it
+on top of the built-in feature, so Quarto ignores the entry and uses the
+built-in feature instead.
+
+## How to fix
+
+Remove the entry from `filters` and delete the extension's folder,
+`_extensions/quarto-ext/<name>/`. Any options the extension read, such as
+`lightbox:`, keep working with the built-in feature.

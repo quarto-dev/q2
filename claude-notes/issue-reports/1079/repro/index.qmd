@@ -1,0 +1,37 @@
+---
+title: Code styling
+---
+
+```ini
+[Widget]
+; Turn the widget on.
+Enabled = true
+```
+
+```default
+/opt/widget/1.0/bin/widget
+```
+
+```bash
+echo "highlighted in both"
+```
+
+```conf
+key = value
+```
+
+```text
+not a language Quarto 1 knows
+```
+
+```{.cell-output .cell-output-stdout}
+[1] 2
+```
+
+```{.cell-code .toml}
+a = 1
+```
+
+```
+no language at all
+```

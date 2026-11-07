@@ -250,6 +250,8 @@ Quarto 1 embeds diagrams through executable cells — ```` ```{mermaid} ````
 — and Quarto 2 does not recognize that form: only the plain
 fence ```` ```mermaid ```` renders. To move a Quarto 1 document over, drop
 the braces; the diagram body and its `%%|` options need no other change.
+Quarto 2 warns about each brace-form cell
+([`Q-2-58`](../../errors/markdown/Q-2-58.qmd)).
 
 `fig-align` behaves differently. Quarto 1 accepts it on a diagram cell
 but aligns the diagram only in Reveal.js presentations and multi-panel

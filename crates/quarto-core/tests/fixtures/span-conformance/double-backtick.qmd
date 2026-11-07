@@ -1,0 +1,5 @@
+---
+title: "double"
+---
+
+Double ``{julia} 1 + 1`` span.

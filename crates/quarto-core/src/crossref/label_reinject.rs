@@ -65,6 +65,31 @@ pub fn strip(doc: &mut Pandoc, registry: Option<&RefTypeRegistry>) {
     for_each_wrapped_cell(&mut doc.blocks, registry, &mut strip_label);
 }
 
+/// Collect the crossref-consumed labels `inject` would re-add, as a map keyed
+/// by wrapper Div id, in document order. Does not modify `doc`.
+///
+/// One entry per wrapper Div: `try_desugar_code_block`'s `Float` wrapper wraps
+/// exactly one cell, so a Div directly wrapping several code blocks (which
+/// `inject` would label each of) does not arise from the desugar.
+pub fn collect(doc: &Pandoc, registry: Option<&RefTypeRegistry>) -> crate::engine::CellOptionsMap {
+    let Some(registry) = registry else {
+        return crate::engine::CellOptionsMap::default();
+    };
+    let mut entries: Vec<crate::engine::CellOption> = Vec::new();
+    // The walk is `&mut`-only (shared with `inject`/`strip`); run it over a
+    // clone of the blocks rather than duplicate the container recursion.
+    let mut blocks = doc.blocks.clone();
+    for_each_wrapped_cell(&mut blocks, registry, &mut |_cb, id| {
+        if entries.last().is_none_or(|e| e.div_id != id) {
+            entries.push(crate::engine::CellOption {
+                div_id: id.to_string(),
+                label: id.to_string(),
+            });
+        }
+    });
+    crate::engine::CellOptionsMap::new(entries)
+}
+
 /// Recurse over exactly the containers
 /// [`super::codeblock_shorthand::desugar_blocks`] recurses over, so this
 /// walk visits every position a wrapper Div could have been produced at,
@@ -146,7 +171,7 @@ fn inject_label(cb: &mut CodeBlock, id: &str) {
 /// key. Mirrors the option-line shape `crate::cell_options` parses
 /// closely enough for this guard — a whole-string scan, not a real
 /// parse, is enough since this only ever exists to avoid a double-insert.
-fn has_label_option(text: &str, syntax: &crate::cell_options::CommentSyntax) -> bool {
+pub(crate) fn has_label_option(text: &str, syntax: &crate::cell_options::CommentSyntax) -> bool {
     for line in text.lines() {
         let Some(rest) = line.strip_prefix(syntax.prefix) else {
             break;
@@ -300,5 +325,34 @@ mod tests {
             panic!("expected CodeBlock");
         };
         assert_eq!(cb.text, text);
+    }
+
+    #[test]
+    fn collect_returns_wrapper_div_ids_in_document_order() {
+        let mut doc = wrapped("fig-a", code_block("plot(a)\n"));
+        let Block::Div(nested) = Block::Div(Div {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            content: wrapped("tbl-b", code_block("head(b)\n")).blocks,
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        }) else {
+            unreachable!()
+        };
+        doc.blocks.push(Block::Div(nested));
+        let map = collect(&doc, Some(&registry()));
+        let ids: Vec<_> = map
+            .entries()
+            .iter()
+            .map(|e| (e.div_id.as_str(), e.label.as_str()))
+            .collect();
+        assert_eq!(ids, vec![("fig-a", "fig-a"), ("tbl-b", "tbl-b")]);
+    }
+
+    #[test]
+    fn collect_is_empty_for_unclassified_ids_and_no_registry() {
+        let doc = wrapped("not-a-reftype-prefix", code_block("x\n"));
+        assert!(collect(&doc, Some(&registry())).is_empty());
+        let doc = wrapped("fig-cars", code_block("x\n"));
+        assert!(collect(&doc, None).is_empty());
     }
 }

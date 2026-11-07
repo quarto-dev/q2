@@ -413,7 +413,7 @@ fn boot_renders_the_site_and_serves_it_with_the_client() {
         "site title present: {html}"
     );
     assert!(
-        html.contains("EventSource(\"/__q2-preview/events\")"),
+        html.contains("<script data-q2-root=\"./\">"),
         "client injected: {html}"
     );
     let about = server.get("/about.html");
@@ -605,7 +605,7 @@ fn single_file_outside_a_project_redirects_root_to_the_document() {
 
     let root = server.get("/");
     assert_eq!(root.status, 302, "{}", root.text());
-    assert_eq!(root.header("location"), Some("/doc.html"));
+    assert_eq!(root.header("location"), Some("./doc.html"));
     let page = server.get("/doc.html");
     assert_eq!(page.status, 200);
     assert!(page.text().contains("Standalone body."));

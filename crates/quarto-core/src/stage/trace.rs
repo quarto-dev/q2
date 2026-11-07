@@ -27,7 +27,7 @@ use quarto_trace::{RenderInfo, StageErrorInfo, StageStatus, TraceDocument, Trace
 use super::data::{PipelineData, PipelineDataKind};
 use super::error::PipelineError;
 use super::observer::{EventLevel, PipelineObserver};
-use super::stages::ENGINE_CAPTURE_KIND;
+use super::stages::{ENGINE_CAPTURE_KIND, ENGINE_CAPTURE_RECORD_KIND};
 
 // ─── JsonTraceObserver ───────────────────────────────────────────────────────
 
@@ -35,6 +35,10 @@ use super::stages::ENGINE_CAPTURE_KIND;
 #[derive(Debug)]
 struct JsonTraceState {
     doc: TraceDocument,
+    /// EXR-5: which `engine_captures` slot each engine `run_index` filled, so a
+    /// per-engine record event pairs with its own capture, never with the last
+    /// one pushed (a capture whose serialization failed is never pushed).
+    capture_slots: std::collections::HashMap<usize, usize>,
     /// When the current stage started (set in on_stage_start).
     stage_start: Option<Instant>,
     /// When the pipeline started (for total_duration_ms).
@@ -62,6 +66,7 @@ impl JsonTraceObserver {
         Self {
             state: Mutex::new(JsonTraceState {
                 doc: TraceDocument::new(render),
+                capture_slots: std::collections::HashMap::new(),
                 stage_start: None,
                 pipeline_start: None,
             }),
@@ -243,7 +248,9 @@ impl PipelineObserver for JsonTraceObserver {
                     // bd-5yff4: one capture per engine, in execution order.
                     // The stage emits these sequentially (run_index order),
                     // so push preserves order.
+                    let slot = state.doc.engine_captures.len();
                     state.doc.engine_captures.push(capture);
+                    state.capture_slots.insert(index, slot);
                     return;
                 }
                 Err(e) => {
@@ -255,6 +262,32 @@ impl PipelineObserver for JsonTraceObserver {
                     );
                 }
             }
+        }
+        // EXR-5 (D2): an engine's own record attaches to the capture its
+        // `run_index` filled, checked by engine name. A record that matches no
+        // capture, or names another engine, is dropped with a warning; it is
+        // never attached to the last pushed entry and never becomes a generic
+        // aux entry.
+        if kind == ENGINE_CAPTURE_RECORD_KIND {
+            let engine_name = data
+                .get("engine_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            match state.capture_slots.get(&index).copied() {
+                Some(slot) if state.doc.engine_captures[slot].engine_name == engine_name => {
+                    state.doc.engine_captures[slot].record = data.get("record").cloned();
+                }
+                Some(slot) => eprintln!(
+                    "Warning: execution record for engine run {index} names '{engine_name}' but \
+                     that run's capture is '{}'; record dropped",
+                    state.doc.engine_captures[slot].engine_name
+                ),
+                None => eprintln!(
+                    "Warning: execution record for engine run {index} ('{engine_name}') has no \
+                     capture; record dropped"
+                ),
+            }
+            return;
         }
         Self::push_entry(
             &mut state,
@@ -268,6 +301,14 @@ impl PipelineObserver for JsonTraceObserver {
                 error: None,
             },
         );
+    }
+
+    /// EXR-5: a trace carries each engine's record on its capture
+    /// (`engine_capture.record`), so `ReplayEngine` can replay from it after the
+    /// flip (EXR-6). Trace size grows by the base64 figures; accepted, the trace
+    /// is opt-in.
+    fn wants_execution_record(&self) -> bool {
+        true
     }
 
     fn on_pipeline_complete(&self) {
@@ -671,6 +712,60 @@ mod tests {
         assert_eq!(state.doc.pipeline[1].stage, "parse");
         assert_eq!(state.doc.pipeline[2].stage, "transform");
         assert_eq!(state.doc.render.input_path.as_deref(), Some("test.qmd"));
+    }
+
+    /// EXR-5 (D2): a per-engine record event attaches to the capture whose
+    /// `run_index` it names, never to the last pushed entry, and a record
+    /// whose engine name does not match that capture is dropped with a
+    /// warning. Events are interleaved on purpose.
+    #[test]
+    fn trace_record_pairs_by_run_index_not_last_pushed() {
+        use crate::stage::stages::ENGINE_CAPTURE_RECORD_KIND;
+
+        let observer =
+            JsonTraceObserver::new(PathBuf::from("/tmp/test-trace.json"), RenderInfo::default());
+        let capture = |name: &str| {
+            serde_json::json!({
+                "engine_name": name,
+                "input_qmd": "",
+                "result": { "markdown": "" },
+            })
+        };
+        let record = |name: &str| serde_json::json!({ "engine_name": name, "record": { "cells": [], "n": name } });
+
+        observer.on_auxiliary_data("engine-execution", 0, ENGINE_CAPTURE_KIND, &capture("a"));
+        observer.on_auxiliary_data("engine-execution", 1, ENGINE_CAPTURE_KIND, &capture("b"));
+        // Run 0's record arrives after run 1's capture: it must land on entry 0.
+        observer.on_auxiliary_data(
+            "engine-execution",
+            0,
+            ENGINE_CAPTURE_RECORD_KIND,
+            &record("a"),
+        );
+        // A name mismatch for run 1 is dropped.
+        observer.on_auxiliary_data(
+            "engine-execution",
+            1,
+            ENGINE_CAPTURE_RECORD_KIND,
+            &record("zzz"),
+        );
+        // An unknown run index is dropped, without panicking.
+        observer.on_auxiliary_data(
+            "engine-execution",
+            7,
+            ENGINE_CAPTURE_RECORD_KIND,
+            &record("a"),
+        );
+
+        let state = observer.state.lock().unwrap();
+        assert_eq!(state.doc.engine_captures.len(), 2);
+        assert_eq!(
+            state.doc.engine_captures[0].record,
+            Some(serde_json::json!({ "cells": [], "n": "a" }))
+        );
+        assert_eq!(state.doc.engine_captures[1].record, None);
+        // Record events never become generic pipeline aux entries either.
+        assert!(state.doc.pipeline.is_empty(), "{:?}", state.doc.pipeline);
     }
 
     /// bd-45yw: an `on_auxiliary_data` event with kind

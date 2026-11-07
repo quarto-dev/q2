@@ -18,6 +18,21 @@
   var BADGE_ID = "q2-preview-static-badge";
   var PANEL_ID = "q2-preview-static-panel";
 
+  // The site root, as a URL. The server writes the relative way back to
+  // it from this page (`./`, `../`, ...) into data-q2-root, so every URL
+  // below resolves under whatever prefix a path-stripping proxy put in
+  // front of the server (/p/<token>/, /user/<name>/proxy/<port>/, ...).
+  var script = document.currentScript;
+  var ROOT = new URL(
+    (script && script.getAttribute("data-q2-root")) || "/",
+    window.location.href
+  );
+
+  // The URL of a root-relative site path ("/a.html" or "a.html").
+  function siteUrl(path) {
+    return new URL(path.replace(/^\//, ""), ROOT);
+  }
+
   function setCss(el, css) {
     var st = el.style;
     st.cssText = css;
@@ -102,13 +117,14 @@
 
   // On the pdf.js viewer the page being shown is the PDF in ?file=, not the viewer's own URL.
   // Kept as one literal (server.rs pins it against VIEWER_PATH).
-  var VIEWER_PATH = "/__q2-preview/pdfjs/web/viewer.html";
+  var VIEWER_PATH = "__q2-preview/pdfjs/web/viewer.html";
   function shownPath() {
-    if (window.location.pathname === VIEWER_PATH) {
+    if (window.location.pathname === siteUrl(VIEWER_PATH).pathname) {
       var m = /[?&]file=([^&#]*)/.exec(window.location.search);
       if (m) {
         try {
-          return decodeURIComponent(m[1]);
+          // pdf.js resolves ?file= against the viewer page's own URL.
+          return new URL(decodeURIComponent(m[1]), window.location.href).pathname;
         } catch (err) {
           return window.location.pathname;
         }
@@ -127,7 +143,7 @@
 
   // Kept as one literal so the served HTML names its endpoint verbatim
   // (server.rs pins it against EVENTS_PATH).
-  var source = new EventSource("/__q2-preview/events");
+  var source = new EventSource(siteUrl("__q2-preview/events").href);
   var wasOpen = false;
 
   source.addEventListener("open", function () {
@@ -158,9 +174,11 @@
 
   source.addEventListener("reload", function (e) {
     var d = parse(e);
-    var target = d.target;
-    if (target && normalizePath(target) !== normalizePath(shownPath())) {
-      window.location.replace(target);
+    // A root-relative output path such as /posts/foo.html: re-anchor it
+    // on the site root before comparing or navigating.
+    var target = d.target ? siteUrl(d.target) : null;
+    if (target && normalizePath(target.pathname) !== normalizePath(shownPath())) {
+      window.location.replace(target.href);
     } else {
       window.location.reload();
     }

@@ -25,10 +25,6 @@ pub enum JupyterError {
         available: Vec<String>,
     },
 
-    /// No kernelspec matches the requested language.
-    #[error("no kernel found for language '{language}'")]
-    NoKernelForLanguage { language: String },
-
     /// Failed to allocate ports for kernel communication.
     #[error("failed to allocate ports: {0}")]
     PortAllocationFailed(String),
@@ -73,6 +69,11 @@ pub enum JupyterError {
     /// A cell's `#|` option lines are not valid YAML (bd-ohvl879u).
     #[error("{message}")]
     InvalidCellOptions { message: String },
+
+    /// The execution record could not be built (EXR-5): the stage's unit list
+    /// or author texts do not fit, an id is missing, or a hash failed.
+    #[error("could not build the execution record: {message}")]
+    RecordFailed { message: String },
 
     /// Error receiving message from kernel.
     #[error("failed to receive message: {0}")]

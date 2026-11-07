@@ -237,3 +237,15 @@ project:
 
 The `timeout` and `serve` keys from Quarto 1 are not supported. They are
 reported once at startup and otherwise ignored.
+
+## Behind a proxy
+
+Both modes work behind a reverse proxy that serves the preview under a
+path prefix and strips the prefix before forwarding, as Posit Workbench,
+JupyterHub (`/user/<name>/proxy/<port>/`) and code-server
+(`/proxy/<port>/`) do. There is nothing to configure: the page makes
+every request relative to its own URL, so the requests stay under the
+prefix. Open the preview with the trailing slash (`/proxy/4321/`, not
+`/proxy/4321`).
+
+The editor UI (`--ui editor`) does not support a path prefix yet.

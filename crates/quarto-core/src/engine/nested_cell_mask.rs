@@ -3,12 +3,13 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_pandoc_types::{Block, CodeBlock, Pandoc};
-use quarto_source_map::{Anchor, AnchorRole, By, SourceInfo};
+use quarto_pandoc_types::{Block, CodeBlock, ConfigValue, ConfigValueKind, Inline, Pandoc};
+use quarto_source_map::{Anchor, AnchorRole, By, FileId, SourceInfo};
 use regex::Regex;
 use smallvec::smallvec;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use yaml_rust2::Yaml;
 
 /// `by.kind` for every `SourceInfo::Generated` node this module produces
 /// (spec § Provenance, pinned normative string — T15/T17 assert it verbatim).
@@ -48,8 +49,15 @@ const MASK_MARKER: &str = "q2-nested-executable";
 /// trailing `\r` unconsumed, the line never matches, and masking silently
 /// becomes a no-op (T23).
 static MASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?mR)^([ \t]*)(`{3,})([ \t]*)\{([A-Za-z0-9_]+)([^}\r\n]*)\}([ \t]*)$")
-        .expect("MASK_OPENER_RE must compile")
+    // The language group stays `[A-Za-z0-9_]+` on purpose: a `.` or `-` token
+    // continuation lands in the verbatim tail (`ATTR_TAIL`), which `unmask`
+    // restores byte-exactly. Widening the group would move that text between
+    // the two captures for no gain.
+    Regex::new(&format!(
+        r"(?mR)^([ \t]*)(`{{3,}})([ \t]*)\{{([A-Za-z0-9_]+)({})\}}([ \t]*)$",
+        crate::engine::patterns::ATTR_TAIL
+    ))
+    .expect("MASK_OPENER_RE must compile")
 });
 
 /// Matches a masked opener anywhere in a string — **not** anchored to line
@@ -109,8 +117,9 @@ static UNMASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// The guard excludes only a backtick, **not** a backslash. That is a
 /// deliberate difference from `INLINE_R_PATTERN`, whose backslash exclusion
 /// defends against escaped backticks arriving from the YAML-markdown-error
-/// fallback — text this mask never sees, since it runs on a `CodeBlock`'s
-/// verbatim body and never on front matter. knitr does not exclude a
+/// fallback — text `mask` never sees, since it runs on a `CodeBlock`'s
+/// verbatim body (`mask_foreign_meta` does touch front matter, but only
+/// foreign values, and never has that fallback text). knitr does not exclude a
 /// backslash either, so excluding one here would open a hole rather than
 /// close one.
 ///
@@ -121,7 +130,7 @@ static UNMASK_OPENER_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// of a guard expressed as a consumed character rather than a lookbehind,
 /// which Rust's `regex` crate does not offer.
 static MASK_INLINE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(^|[^`])`((?:\{[A-Za-z0-9_]+\}|r)[ \t#][^`]+)`")
+    Regex::new(&crate::engine::patterns::mask_inline_pattern())
         .expect("MASK_INLINE_RE must compile")
 });
 
@@ -136,23 +145,19 @@ static MASK_INLINE_RE: LazyLock<Regex> = LazyLock::new(|| {
 ///
 /// ## Scope: the in-scope predicate (H2)
 ///
-/// A block is in scope for masking iff its attr classes are empty or exactly
-/// `["markdown"]`, **and** `engine_cell_lang(block).is_none()`
-/// (`capture_splice.rs`) — a block that is itself a genuine executable cell
-/// must never be masked.
+/// A block is in scope for masking iff it is a `CodeBlock` and
+/// `engine_cell_lang(block).is_none()` — a block that is itself a genuine
+/// executable cell must never be masked. EXR-2 Phase 2 widened this from
+/// "classes empty or exactly `[\"markdown\"]`" to **every non-cell code
+/// block**: a ` ```text `, ` ```r ` or ` ```python ` fence is as literal as a
+/// bare one, so a `{python}` opener or a `{python} expr` span inside it is an
+/// example, not a unit. Without this, the executor ran an opener shown in a
+/// ` ````text ` fence (the Phase 2 probe) and knitr evaluated an `r` span in
+/// one. Gordon, 2026-10-31: spans in fences are never claimed.
 ///
-/// The `engine_cell_lang` conjunct is, today, provably implied by the
-/// classes conjunct: `engine_cell_lang` returns `Some` only for a block
-/// carrying a brace-shaped class (`{lang}`), and neither "empty" nor
-/// `["markdown"]` can be brace-shaped. So no fixture can currently make the
-/// two conjuncts disagree (see T13's proof, in this module's test suite,
-/// and the plan's "Accepted untested" list). **It is kept anyway** — do not
-/// delete it as dead code. It becomes load-bearing the moment the
-/// display-class predicate widens past `["markdown"]` (e.g. to admit
-/// ` ```qmd `, a widening the plan calls out as a separate, undecided
-/// question) — at that point a widened classes conjunct could admit a real
-/// executable cell whose language happens to also be a display-class name,
-/// and only the `engine_cell_lang` check would still exclude it.
+/// The `engine_cell_lang` conjunct is now the *only* conjunct, and is
+/// load-bearing: it is what keeps a real `{r}` cell, whose block carries the
+/// brace-shaped class, from being masked.
 ///
 /// ## Known limitation
 ///
@@ -207,6 +212,110 @@ pub fn mask(doc: &mut Pandoc) -> Vec<usize> {
     changed
 }
 
+/// The mask the engine-facing bytes carry: nested display fences (`mask`) and
+/// spans in front-matter values the document does not own
+/// (`mask_foreign_meta`). The stage and `compute_input_qmd` both call this, so
+/// the staleness compare and the cache key see the bytes the engine does.
+/// Returns the changed top-level block indices, as `mask` does.
+pub fn mask_document(doc: &mut Pandoc) -> Vec<usize> {
+    let changed = mask(doc);
+    mask_foreign_meta(&mut doc.meta, DOCUMENT_FILE_ID);
+    changed
+}
+
+/// The document's own file id in the AST the engines serialize (the first
+/// file `ParseDocumentStage` registers; layer files carry hash ids). Pinned by
+/// `tests/integration/front_matter_provenance.rs`.
+const DOCUMENT_FILE_ID: FileId = FileId(0);
+
+/// Mask the inline-expression spans of every front-matter value that is not the
+/// document's own (EXR-2 decision 11). The merged metadata the stage serializes
+/// mixes project (`_quarto.yml`), `_metadata.yml`, extension and format values
+/// with the document's own; q1 evaluates only the own ones, so a span anywhere
+/// else must stay literal, take no counter number and reach the engine
+/// unchanged. Provenance decides: a leaf is the document's own only when its
+/// `SourceInfo` root file id is `own`. A leaf with no root file id (synthesized
+/// values such as `format:`) is not the document's.
+///
+/// Uses the same marker as `mask`, so `unmask` restores it: a string scalar
+/// gets the `MASK_INLINE_RE` rewrite, and a parsed `Code` inline (whose text
+/// has no backticks) gets the marker prefixed, which serializes to the same
+/// `` `MARKER {lang} expr` `` shape. Returns whether anything changed.
+pub fn mask_foreign_meta(meta: &mut ConfigValue, own: FileId) -> bool {
+    let is_own = meta.source_info.root_file_id() == Some(own);
+    match &mut meta.value {
+        ConfigValueKind::Map(entries) => {
+            let mut changed = false;
+            for e in entries {
+                changed |= mask_foreign_meta(&mut e.value, own);
+            }
+            changed
+        }
+        ConfigValueKind::Array(items) => {
+            let mut changed = false;
+            for item in items {
+                changed |= mask_foreign_meta(item, own);
+            }
+            changed
+        }
+        _ if is_own => false,
+        ConfigValueKind::Scalar {
+            yaml: Yaml::String(s),
+            ..
+        } => {
+            let replacement = format!("${{1}}`{MASK_MARKER} ${{2}}`");
+            let new = MASK_INLINE_RE.replace_all(s, replacement.as_str());
+            if new == *s {
+                false
+            } else {
+                *s = new.into_owned();
+                true
+            }
+        }
+        ConfigValueKind::PandocInlines(inlines) => mask_inlines(inlines),
+        ConfigValueKind::PandocBlocks(blocks) => {
+            // Blocks parsed from a foreign value carry spans as `Code` inlines
+            // inside paragraphs; reuse the block walker's container recursion
+            // would mask code blocks, which is not wanted here, so handle the
+            // common leaf containers only.
+            let mut changed = false;
+            for b in blocks {
+                match b {
+                    Block::Paragraph(p) => changed |= mask_inlines(&mut p.content),
+                    Block::Plain(p) => changed |= mask_inlines(&mut p.content),
+                    _ => {}
+                }
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn mask_inlines(inlines: &mut [Inline]) -> bool {
+    let mut changed = false;
+    for inline in inlines {
+        match inline {
+            Inline::Code(c) if MASK_INLINE_RE.is_match(&format!("`{}`", c.text)) => {
+                c.text = format!("{MASK_MARKER} {}", c.text);
+                changed = true;
+            }
+            Inline::Emph(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Strong(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Underline(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Strikeout(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Superscript(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Subscript(x) => changed |= mask_inlines(&mut x.content),
+            Inline::SmallCaps(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Quoted(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Link(x) => changed |= mask_inlines(&mut x.content),
+            Inline::Span(x) => changed |= mask_inlines(&mut x.content),
+            _ => {}
+        }
+    }
+    changed
+}
+
 /// Stamp `block`'s `SourceInfo` as `Generated`, anchored back at `original`
 /// (the block's pre-mask `SourceInfo`) via an `Other("nested-cell-mask/origin")`
 /// anchor. `Other` rather than `Invocation` is deliberate — see the module
@@ -246,17 +355,11 @@ fn inline_mask_prefix() -> String {
     format!("`{MASK_MARKER} ")
 }
 
-/// True iff `block` is a `CodeBlock` eligible for masking: attr classes
-/// empty or exactly `["markdown"]`, and not itself a genuine executable
-/// cell (H2). See the module doc for why the `engine_cell_lang` conjunct is
-/// kept even though it is currently implied by the classes conjunct.
+/// True iff `block` is a `CodeBlock` eligible for masking: any code block that
+/// is not itself a genuine executable cell (H2). See the module doc.
 fn is_in_scope_for_masking(block: &Block) -> bool {
-    let Block::CodeBlock(cb) = block else {
-        return false;
-    };
-    let classes = &cb.attr.1;
-    let classes_ok = classes.is_empty() || (classes.len() == 1 && classes[0] == "markdown");
-    classes_ok && crate::engine::capture_splice::engine_cell_lang(block).is_none()
+    matches!(block, Block::CodeBlock(_))
+        && crate::engine::cell_lang::engine_cell_lang(block).is_none()
 }
 
 /// Rewrite every masking-eligible fence opener in `cb.text`. Returns
@@ -420,6 +523,54 @@ mod tests {
 
     use pampa::readers::qmd;
 
+    // ── EXR-2 Phase 0: superset relation with the knitr inline scanner ──────
+
+    /// Every string the knitr inline scanner (`INLINE_R_PATTERN`) matches must
+    /// also be matched by `MASK_INLINE_RE`, or an `r` span in a display block
+    /// would be evaluated. Phase 2 extends this to the unit scanner's span
+    /// pattern.
+    #[test]
+    fn exr2_p0_mask_inline_is_superset_of_knitr_inline() {
+        use crate::engine::knitr::preprocess::has_inline_r_expressions;
+        let samples = [
+            "`{r} 1+1`",
+            "`r 1+1`",
+            "a `{r} x` b",
+            "`{r}\tx`",
+            "`r\tx`",
+            "`{r} x` and `r y`",
+            "see `{r} f(1, 2)`.",
+            "start\n`{r} x`\nend",
+            "`{r} x`",
+            "text`r x`",
+            "`{r} a`b`",
+        ];
+        let mut matched = 0;
+        for s in samples {
+            if has_inline_r_expressions(s) {
+                matched += 1;
+                assert!(
+                    MASK_INLINE_RE.is_match(s),
+                    "knitr scanner matches {s:?} but the mask does not"
+                );
+            }
+        }
+        assert!(
+            matched >= 8,
+            "vacuity guard: only {matched} samples matched"
+        );
+    }
+
+    /// EXR-2 Phase 1 (deliberate mask change, epic decision 13): spans whose
+    /// language token has a `.` or `-` are now masked, matching the unit
+    /// scanner's token class.
+    #[test]
+    fn exr2_p1_mask_inline_masks_dotted_and_hyphenated_spans() {
+        assert!(MASK_INLINE_RE.is_match("`{python} x`"), "control");
+        assert!(MASK_INLINE_RE.is_match("`{python.marimo} x`"));
+        assert!(MASK_INLINE_RE.is_match("`{py-thon} x`"));
+    }
+
     /// Parse a qmd fragment directly with pampa and return the raw
     /// Pandoc AST. Copied idiom from `document_profile.rs`'s test module.
     fn parse_qmd(qmd_text: &str) -> Pandoc {
@@ -461,6 +612,102 @@ mod tests {
         )
         .expect("parse qmd fixture");
         (ast, ast_context.source_context)
+    }
+
+    // ── EXR-2 Phase 2: property test, scanner spans vs the mask pattern ─────
+
+    mod prop {
+        use super::*;
+        use crate::engine::units::{Unit, scan_units};
+        use proptest::prelude::*;
+
+        fn piece() -> impl Strategy<Value = String> {
+            let lang = prop_oneof![
+                Just("python"),
+                Just("r"),
+                Just("python.marimo"),
+                Just("py-thon"),
+                Just("Python"),
+                Just("julia_1"),
+            ];
+            prop_oneof![
+                Just("prose words\n".to_string()),
+                Just("\n".to_string()),
+                (lang.clone(), "[a-z0-9 +*]{1,8}")
+                    .prop_map(|(l, e)| format!("text `{{{l}}} {e}` more\n")),
+                (lang.clone(), "[a-z0-9 +*]{1,8}").prop_map(|(l, e)| format!("`{{{l}}} {e}`\n")),
+                lang.clone()
+                    .prop_map(|l| format!("```{{{l}}}\nx = 1\n```\n")),
+                lang.prop_map(|l| format!("> ```{{{l}}}\n> x\n> ```\n")),
+                Just("````text\n`{python} 1`\n````\n".to_string()),
+                Just("<!-- `{python} 1` -->\n".to_string()),
+            ]
+        }
+
+        proptest! {
+            /// Every `Inline` unit lies inside a match of the mask's (widened)
+            /// inline pattern, and no unit overlaps another.
+            #[test]
+            fn exr2_p2_every_inline_unit_is_matched_by_the_mask_pattern(
+                pieces in proptest::collection::vec(piece(), 0..12)
+            ) {
+                let input: String = pieces.concat();
+                let units = scan_units(&input);
+                let matches: Vec<(usize, usize)> = MASK_INLINE_RE
+                    .find_iter(&input)
+                    .map(|m| (m.start(), m.end()))
+                    .collect();
+                let mut prev_end = 0;
+                for u in &units {
+                    let (s, e) = match u {
+                        Unit::Cell(c) => (c.start, c.end),
+                        Unit::Inline(i) => (i.start, i.end),
+                    };
+                    prop_assert!(s >= prev_end, "overlap at {} in {:?}", s, input);
+                    prop_assert!(e >= s);
+                    prev_end = e;
+                    if let Unit::Inline(i) = u {
+                        prop_assert!(
+                            matches.iter().any(|&(ms, me)| ms <= i.start && i.end <= me),
+                            "span {:?} at {} not matched by the mask pattern in {:?}",
+                            i.code, i.start, input
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // ── EXR-2 Phase 2, decision 11: foreign front-matter values ─────────────
+
+    const FM_DOC: &str = "---\ntitle: \"x `{python} 1` y\"\nsubtitle: plain\n---\n\nBody\n";
+
+    #[test]
+    fn exr2_p2_own_front_matter_span_is_not_masked() {
+        let doc = parse_qmd(FM_DOC);
+        let mut masked = doc.clone();
+        // Parsed from "test.qmd": every value's root is FileId(0).
+        assert!(!mask_foreign_meta(&mut masked.meta, FileId(0)));
+        assert_eq!(serialize(&masked), serialize(&doc));
+    }
+
+    #[test]
+    fn exr2_p2_foreign_front_matter_span_is_masked_and_restored() {
+        let doc = parse_qmd(FM_DOC);
+        let original = serialize(&doc);
+        let mut masked = doc.clone();
+        // Pretend the document's own file is some other id: every value is foreign.
+        assert!(mask_foreign_meta(&mut masked.meta, FileId(99)));
+        let text = serialize(&masked);
+        assert!(text.contains(MASK_MARKER), "marker missing:\n{text}");
+        assert_eq!(unmask(&text), original);
+    }
+
+    #[test]
+    fn exr2_p2_foreign_meta_without_a_span_is_untouched() {
+        let doc = parse_qmd("---\ntitle: no span here\n---\n\nBody\n");
+        let mut masked = doc.clone();
+        assert!(!mask_foreign_meta(&mut masked.meta, FileId(99)));
     }
 
     // ── T9 (H5): unmask replays whitespace / backtick-width exactly ────────
@@ -657,7 +904,7 @@ mod tests {
             doc.blocks
         );
         assert_eq!(
-            crate::engine::capture_splice::engine_cell_lang(&doc.blocks[0]),
+            crate::engine::cell_lang::engine_cell_lang(&doc.blocks[0]),
             Some("r"),
             "fixture must be a real, executable {{r}} cell"
         );
@@ -842,72 +1089,47 @@ mod tests {
         );
     }
 
-    // ── T18 (H2): reverting the in-scope predicate to "mask everything"
-    // changes the (offset_in_concat, length) pairs below, even though
-    // neither block is *itself* in scope. See spec's vacuity note 2 (as
-    // corrected — the original note conflated "a block an over-broad
-    // predicate would *scan*" with "a block whose scan would *change*
-    // something"): a bare, empty-bodied ` ```python ` block gives an
-    // over-broad predicate nothing to rewrite even when it wrongly scans
-    // it, so the piece pairs would stay identical either way and the test
-    // would pass under a reverted H2 too. The fixture below instead embeds
-    // a fence-opener-shaped substring (` ```{r} `) *inside* the python
-    // block's body text — same trick T13 uses for a real cell's own
-    // source, via a wider (4-backtick) outer fence so the embedded
-    // 3-backtick lines are literal text, not a fence boundary. Under a
-    // correct H2 the python block's classes (`["python"]`, neither empty
-    // nor `["markdown"]`) keep it out of scope, so the embedded substring
-    // is never touched and the pieces match. Under H2 reverted to "mask
-    // everything", the block *is* scanned, the embedded opener gets
-    // rewritten, and the piece pairs diverge — a real RED. ───────────────
+    // ── T18 (H2, widened in EXR-2 Phase 2): every non-cell code block is a
+    // display block, whatever its language. A ````python fence that shows a
+    // `{r}` opener must be masked (before Phase 2 only bare and `markdown`
+    // fences were, so the executor ran the shown opener), and a real `{r}`
+    // cell beside it must stay untouched. ───────────────────────────────────
     #[test]
-    fn t18_no_nested_fence_pieces_match_unmasked_run() {
+    fn t18_language_named_display_fence_is_masked_and_real_cell_is_not() {
         let qmd =
             "````python\nprint(\"hi\")\n```{r}\ncat(\"y\")\n```\n````\n\n```{r}\ncat(\"x\")\n```\n";
-        let (doc, _ctx) = parse_qmd_with_context(qmd);
+        assert_mask_unmask_roundtrip(qmd, "language-named display fence");
+
+        let doc = parse_qmd(qmd);
         assert_eq!(
-            crate::engine::capture_splice::engine_cell_lang(&doc.blocks[1]),
+            crate::engine::cell_lang::engine_cell_lang(&doc.blocks[1]),
             Some("r"),
             "fixture's second block must be a real, executable {{r}} cell"
         );
-
-        let (_before_buf, before_source_info) =
-            pampa::writers::qmd::write_with_source_info(&doc).expect("unmasked doc must serialize");
-
         let mut masked_doc = doc.clone();
-        let changed = mask(&mut masked_doc);
-        assert!(
-            changed.is_empty(),
-            "a document with no nested display fence must report no changed top-level blocks"
-        );
-
-        let (_after_buf, after_source_info) =
-            pampa::writers::qmd::write_with_source_info(&masked_doc)
-                .expect("masked doc must serialize");
-
-        let before_pieces = match &before_source_info {
-            quarto_source_map::SourceInfo::Concat { pieces } => pieces,
-            other => panic!("writer must produce a Concat SourceInfo, got: {other:?}"),
-        };
-        let after_pieces = match &after_source_info {
-            quarto_source_map::SourceInfo::Concat { pieces } => pieces,
-            other => panic!("writer must produce a Concat SourceInfo, got: {other:?}"),
-        };
-
-        let before_pairs: Vec<(usize, usize)> = before_pieces
-            .iter()
-            .map(|p| (p.offset_in_concat, p.length))
-            .collect();
-        let after_pairs: Vec<(usize, usize)> = after_pieces
-            .iter()
-            .map(|p| (p.offset_in_concat, p.length))
-            .collect();
-
         assert_eq!(
-            before_pairs, after_pairs,
-            "piece (offset_in_concat, length) pairs must be identical to the unmasked run \
-             when no block is in scope for masking"
+            mask(&mut masked_doc),
+            vec![0],
+            "only the python display fence changes; the real cell does not"
         );
+
+        // What a scanner sees after masking: exactly the one real cell.
+        let masked_text = serialize(&masked_doc);
+        let cells: Vec<_> = crate::engine::units::scan_units(&masked_text)
+            .into_iter()
+            .filter(|u| matches!(u, crate::engine::units::Unit::Cell(_)))
+            .collect();
+        assert_eq!(cells.len(), 1, "masked text:\n{masked_text}");
+    }
+
+    // The same widening covers inline expressions: a span shown in a `text`
+    // or `r` fence is masked, so no engine evaluates it.
+    #[test]
+    fn exr2_p2_span_in_language_named_fence_is_masked() {
+        for info in ["text", "r", "python"] {
+            let qmd = format!("```{info}\nsee `{{python}} 1 + 1` here\n```\n");
+            assert_mask_unmask_roundtrip(&qmd, info);
+        }
     }
 
     // ── T23 (MASK_OPENER_RE's `R` flag): a CRLF-authored display block must
@@ -1102,7 +1324,7 @@ mod tests {
         let qmd = "```{r}\ndf$`r value` <- 1\n```\n";
         let mut doc = parse_qmd(qmd);
         assert_eq!(
-            crate::engine::capture_splice::engine_cell_lang(&doc.blocks[0]),
+            crate::engine::cell_lang::engine_cell_lang(&doc.blocks[0]),
             Some("r"),
             "fixture's block must be a real, executable {{r}} cell"
         );

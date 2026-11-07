@@ -1,0 +1,41 @@
+```{r setup_engine, include=FALSE}
+knitr::knit_engines$set(listeng = function(options) {
+  out <- list(
+    structure(list(src = "listeng source"), class = "source"),
+    "listeng stdout text"
+  )
+  knitr::engine_output(options, out = out)
+})
+```
+
+```{r child_chunk, child='child.Rmd'}
+```
+
+```{bash shell_chunk}
+echo "from the shell"
+```
+
+```{r sql_conn, include=FALSE}
+con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+DBI::dbWriteTable(con, "t", data.frame(a = 1:2, b = c("x", "y")))
+```
+
+```{sql sql_chunk, connection=con}
+SELECT * FROM t
+```
+
+```{listeng list_engine_chunk}
+ignored
+```
+
+```{r plain_before_override}
+"before override"
+```
+
+```{r override_hook, include=FALSE}
+knitr::knit_hooks$set(output = function(x, options) paste0("OVERRIDDEN\n", x))
+```
+
+```{r plain_after_override}
+"after override"
+```

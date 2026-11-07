@@ -1,0 +1,9 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+from IPython.display import HTML
+HTML("<b>bold</b>")
+```

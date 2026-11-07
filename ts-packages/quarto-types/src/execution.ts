@@ -50,6 +50,12 @@ export interface ExecuteOptions {
   /** List of languages handled by cell language handlers */
   handledLanguages: string[];
 
+  /** Positive set: languages present in this render that q2 assigned to THIS
+   *  engine. Read `ownedLanguages.includes("L")` to ask "did q2 give me L?";
+   *  the complement of `handledLanguages` is ambiguous (it also contains
+   *  languages owned by nobody). q2 extension; Q1 does not send it. */
+  ownedLanguages: string[];
+
   /** Project context */
   project: EngineProjectContext;
 }

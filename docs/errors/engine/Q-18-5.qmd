@@ -1,0 +1,68 @@
+---
+title: "Owned Language Has No Runnable Kernel"
+description: "The Jupyter engine runs cells in a language, but no installed Jupyter kernel declares that language."
+code: Q-18-5
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-5` — Owned Language Has No Runnable Kernel
+
+> The Jupyter engine runs cells in a language, but no installed Jupyter
+> kernel declares that language.
+
+## What this means
+
+Quarto gives each `{language}` cell to an engine. The Jupyter engine runs
+the cells it is given on a Jupyter kernel, and finds the kernel by the
+`language` field of the installed kernelspecs, ignoring case. When no
+kernelspec declares the cell's language, Quarto cannot run it.
+
+What happens next depends on the document:
+
+- With an `engine:` list in the front matter, you said which engine runs
+  what, so this is an error and the render stops.
+- Without one, this is a warning. The cells are left as written and are
+  not run, and the render continues.
+
+Cells with `eval: false` never need a kernel and are not reported. A
+document that names its kernel (`jupyter: <kernel>`) sends every cell the
+Jupyter engine owns to that kernel, so nothing is checked against the
+installed kernelspecs.
+
+## How to fix
+
+Install a Jupyter kernel for the language. `jupyter kernelspec list`
+shows what Quarto can see. If the kernel is installed in another
+environment, run Quarto from a shell where `jupyter` resolves to that
+environment, or add its parent directory to `JUPYTER_PATH`.
+
+To run every cell on one multiplexing kernel such as SoS, name it for the
+whole document:
+
+```yaml
+jupyter: sos
+```
+
+If the cell is only meant to be shown, mark it `eval: false`:
+
+````markdown
+```{bash}
+#| eval: false
+ls
+```
+````
+
+Use `--strict` to make the warning stop the render:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-18-3`](Q-18-3.qmd) — an engine's runtime could not be found.
+- [`Q-18-4`](Q-18-4.qmd) — the `jupyter:` key names no kernel.

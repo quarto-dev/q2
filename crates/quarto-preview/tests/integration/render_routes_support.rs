@@ -185,14 +185,22 @@ pub fn capture_of(doc: &str, output: &str, plot: Option<&str>) -> EngineCapture 
             })
             .into_iter()
             .collect(),
+        record: None,
     }
 }
 
 /// Record `captures` in the hub's sidecar for `path`, as the eager driver would.
 pub async fn record_captures(server: &Server, path: &str, captures: &[EngineCapture]) {
-    let id = quarto_preview::capture_driver::write_capture_doc(&server.ctx, path, captures)
-        .await
-        .expect("write the capture doc");
+    let id = quarto_preview::capture_driver::write_capture_doc(
+        &server.ctx,
+        path,
+        &quarto_core::engine::preview_record::CaptureRun {
+            captures: captures.to_vec(),
+            record: None,
+        },
+    )
+    .await
+    .expect("write the capture doc");
     server
         .ctx
         .index()

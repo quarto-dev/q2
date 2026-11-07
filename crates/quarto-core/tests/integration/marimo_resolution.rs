@@ -459,3 +459,22 @@ fn sc17_first_occurrence_wins_v1_single_owner() {
          marimo (FIRST occurrence's first_class wins, v1 single-owner limitation)"
     );
 }
+
+// ── EXR-9 Phase 9A: a mixed tagged and bare `python` document ────────────────
+//
+// Marimo's class rule (`cellOwnedByMarimo`) claims only the `.marimo`-tagged cell, but the
+// resolver assigns ownership per language. This pins what the resolver says for a document
+// with both kinds of python cell, so the record's unit join can be designed around it.
+#[test]
+fn exr9_mixed_tagged_and_bare_python_resolves_python_to_marimo() {
+    let (_tmp, project) = setup_marimo_project();
+
+    let doc = "```{python .marimo}\n1 + 1\n```\n\n```{python}\n2 + 2\n```\n";
+    let resolution = resolve_doc(doc, &project);
+    assert_eq!(
+        resolution.ownership.get("python").map(String::as_str),
+        Some("marimo"),
+        "first_class is marimo for the document, so the whenClass claim applies to python \
+         as a language: the bare cell is owned by marimo at the language level"
+    );
+}

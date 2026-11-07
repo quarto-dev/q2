@@ -15,7 +15,7 @@
 
 // @vitest-environment jsdom
 
-import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { act } from '@testing-library/react';
 
 // RevealDeck (rendered when the AST is a slide deck) imports @revealjs/react
@@ -32,6 +32,13 @@ vi.mock('katex/dist/katex.min.css', () => ({}));
 beforeAll(async () => {
     // Side-effect import: registers the module-top message listener.
     await import('./entry');
+});
+
+beforeEach(() => {
+    // jsdom does not implement `URL.createObjectURL`; the iframe mints the
+    // theme URL from the posted CSS text, so stub it.
+    URL.createObjectURL = vi.fn(() => 'blob:slide-theme') as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
 });
 
 afterEach(() => {
@@ -71,7 +78,7 @@ describe('q2-preview/entry theme link on a slide deck', () => {
             //    entry.setDocIsSlides(true).
             await postMessageAndFlush({ type: 'UPDATE_AST', payload: { astJson: SLIDES_AST, currentFilePath: 'deck.qmd' } });
             // 2. Theme arrives for the (slide) document.
-            await postMessageAndFlush({ type: 'UPDATE_THEME', cssUrl: 'blob:slide-theme' });
+            await postMessageAndFlush({ type: 'UPDATE_THEME', cssText: '.reveal { color: red; }' });
 
             // The compiled theme MUST reach the deck (bd-y259zb57): one link
             // carrying the url. (Pre-fix: suppressed on slides → zero links.)

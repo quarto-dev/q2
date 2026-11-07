@@ -1,0 +1,21 @@
+- item
+
+  ```{python}
+  in_list = 1
+  ```
+
+> ```{python}
+> in_quote = 1
+> ```
+
+````{python}
+four = 1
+````
+
+  ```{python}
+  indented = 1
+  ```
+
+```{python}
+top = 1
+```

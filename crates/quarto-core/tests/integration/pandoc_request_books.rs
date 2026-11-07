@@ -141,7 +141,7 @@ fn input<'a>(
         format,
         project,
         source_date_epoch: Some(1_700_000_000),
-        captures: Vec::new(),
+        captures: Vec::new().into(),
         typst_available_fonts: None,
         // As the hub prelude installs it.
         resolver: Some(ResourceResolverContext::vfs_root(
@@ -1052,6 +1052,7 @@ fn capture_for(qmd: &str, cell: &str, out: &str, files: Vec<CaptureFile>) -> Eng
         input_qmd: qmd.to_string(),
         result: serde_json::json!({ "markdown": qmd.replace(&src, &result) }),
         files,
+        record: None,
     }
 }
 
@@ -1086,7 +1087,7 @@ fn render_with_captures(
         .iter()
         .map(|(k, v)| (k.to_string(), v.clone()))
         .collect();
-    request_input.captures = active_blob;
+    request_input.captures = active_blob.into();
     pollster::block_on(render_pandoc_request(request_input, runtime))
 }
 

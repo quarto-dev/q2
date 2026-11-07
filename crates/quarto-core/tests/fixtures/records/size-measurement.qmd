@@ -1,0 +1,22 @@
+---
+title: Record size measurement (bd-sr73)
+engine: jupyter
+---
+
+One matplotlib figure and one small table, the fixture EXR-4 Phase 0 measures.
+
+```{python}
+import matplotlib.pyplot as plt
+import numpy as np
+
+x = np.linspace(0, 2 * np.pi, 200)
+plt.plot(x, np.sin(x))
+plt.title("sin")
+plt.show()
+```
+
+```{python}
+import pandas as pd
+
+pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+```

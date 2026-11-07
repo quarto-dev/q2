@@ -504,6 +504,12 @@ pub struct RenderContext<'a> {
     /// per-chapter ones.
     pub defer_citeproc: bool,
 
+    /// Never install the JSON trace writer for this render, even when the document says
+    /// `trace: true` (KNR-6). Input-only, like `defer_citeproc`. The Pass-1 profile pass
+    /// sets it: it runs before the real render, which writes the trace, and its own trace
+    /// would replace the recording a replay is reading.
+    pub suppress_trace_output: bool,
+
     /// Host inputs to `PandocPrepareStage` (the wasm entry point sets the
     /// share root as temp root, a click-time `SOURCE_DATE_EPOCH` and
     /// `collect_resources`). `None` (native) means
@@ -641,6 +647,7 @@ impl<'a> RenderContext<'a> {
             document_profile: None,
             chapter_seed: None,
             defer_citeproc: false,
+            suppress_trace_output: false,
             prepare_options: None,
             pandoc_request: None,
             unexecuted_cells: 0,

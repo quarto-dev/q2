@@ -288,8 +288,7 @@ window.addEventListener('message', async (event) => {
         }
         updateAst(event.data.payload);
     } else if (event.data.type === 'UPDATE_THEME') {
-        lastThemeCssUrl = event.data.cssUrl;
-        reconcileThemeLink();
+        setThemeCssText(event.data.cssText);
     } else if (event.data.type === 'SET_SLIDE') {
         // Drive the reveal deck imperatively (no AST re-render). No-op when
         // the current preview isn't a slide deck (no navigator registered).
@@ -337,8 +336,22 @@ function applyTheme(cssUrl: string | null): void {
 // the centered/uppercase render↔preview divergence this strand fixes.)
 let lastThemeCssUrl: string | null = null;
 
-function reconcileThemeLink(): void {
+/**
+ * The parent posts the compiled theme as CSS **text**; mint the blob URL
+ * here, in the iframe's own origin. A parent-minted `blob:` URL only loads
+ * in the parent's origin, and when the host frames the preview with
+ * `sandbox="allow-scripts"` (no `allow-same-origin`) this frame gets a
+ * different opaque origin from the parent. Revoke the previous URL once
+ * the `<link>` no longer points at it.
+ */
+function setThemeCssText(cssText: string | null): void {
+    const previousUrl = lastThemeCssUrl;
+    lastThemeCssUrl =
+        cssText === null
+            ? null
+            : URL.createObjectURL(new Blob([cssText], { type: 'text/css' }));
     applyTheme(lastThemeCssUrl);
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
 }
 
 /**

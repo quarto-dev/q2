@@ -1,0 +1,61 @@
+---
+title: "Inline Expression Failed"
+description: "An inline expression could not be evaluated: the kernel raised an error, or the expression is a statement and produced no value."
+code: Q-18-10
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-10` — Inline Expression Failed
+
+> An inline expression could not be evaluated: the kernel raised an
+> error, or the expression is a statement and produced no value.
+
+## What this means
+
+An inline expression is code written in prose with the brace spelling,
+for example the Python form `{python} total * 2` inside backticks. Quarto
+runs it in the document's kernel and puts its value in the page.
+
+Three things stop the render:
+
+- the kernel raised an error while evaluating the expression (the message
+  names the error and the span's position in your file);
+- the expression produced no value, which happens when it is a statement
+  such as an assignment (`x = 1`) rather than an expression;
+- the expression is in a front matter value and its result cannot be written
+  back into the YAML string, for example because it contains a newline (the
+  message names the key).
+
+`error: true` does not apply to inline expressions: unlike a code cell,
+an inline expression that fails always stops the render.
+
+A third case is a warning, not an error: the kernel returned output, but
+none of it had a text representation Quarto can place in the page (for
+example, only a plot). The span stays in the document as written.
+
+## How to fix
+
+Make the span a single expression that raises no error. For a statement,
+move it into a code cell and refer to its value in the span:
+
+````markdown
+```{python}
+total = 21
+```
+
+The answer is `{python} total * 2`.
+````
+
+Use `--strict` to make the warning stop the render too:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-18-3`](Q-18-3.qmd) — an engine's runtime could not be found.

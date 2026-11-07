@@ -1906,6 +1906,38 @@ h6:hover > .anchorjs-link,
   opacity: 1;
 }
 
+// GLightbox theme overrides (bd-kcpkgftw). Ported from Q1's
+// `formats/html/glightbox/lightbox.css`, with Q1's `--quarto-body-bg` /
+// `--quarto-body-color` (not defined in Q2) replaced by Bootstrap's own
+// `--bs-body-bg` / `--bs-body-color`, which also follow dark mode. The
+// overlay is a scrim, so its alpha is intentional.
+body:not(.glightbox-mobile) div.gslide div.gslide-description,
+body:not(.glightbox-mobile) div.gslide-description .gslide-title,
+body:not(.glightbox-mobile) div.gslide-description .gslide-desc {
+  color: var(--bs-body-color);
+  background-color: var(--bs-body-bg);
+}
+
+body:not(.glightbox-mobile) div.gslide-media {
+  background-color: var(--bs-body-bg);
+}
+
+.goverlay {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+div.gslide-description .gslide-title {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+div.gslide-description .gslide-desc {
+  padding-bottom: 0.5em;
+  font-family: inherit;
+}
+
 // Diagram alignment (bd-2pmjmjmj). mermaid.js swaps a `pre.mermaid`'s
 // text for an inline <svg>; align that box with margins, as Q1's
 // `fixupAlignment` (core/svg.ts) does in revealjs. The class sits on the

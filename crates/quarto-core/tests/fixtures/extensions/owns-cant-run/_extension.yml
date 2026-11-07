@@ -1,0 +1,13 @@
+title: Owns Cant Run
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/owns-cant-run.js
+      name: owns-cant-run
+      claims:
+        synth:
+          kind: primary
+          priority: 1
+      file-extensions: []
+      claims-files: []

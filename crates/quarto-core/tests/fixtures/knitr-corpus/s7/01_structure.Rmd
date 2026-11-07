@@ -1,0 +1,41 @@
+```{r first_in_file}
+1
+```
+Prose after the first chunk.
+
+```{r adjacent_a}
+2
+```
+```{r adjacent_b}
+3
+```
+
+- list item before
+
+  ```{r in_list}
+  4
+  ```
+
+  ```{r in_list_hidden, include=FALSE}
+  x <- 5
+  ```
+
+  prose in the list item
+
+> quote before
+>
+> ```{r in_quote}
+> 6
+> ```
+
+```{r fb_fallback_chunk}
+7
+```
+
+```{r hidden_top, include=FALSE}
+y <- 8
+```
+
+```{r last_in_file}
+9
+```

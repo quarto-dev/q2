@@ -62,6 +62,7 @@ mod attribution_render;
 mod attribution_viewer;
 mod authors_normalize;
 mod book_cover_image;
+mod brace_diagram_cell_diagnostics;
 mod breadcrumbs_render;
 mod callout;
 mod callout_resolve;
@@ -88,6 +89,7 @@ mod footnotes;
 mod footnotes_resolve;
 mod format_css;
 mod heading_id;
+mod lightbox;
 mod link_external;
 mod link_resource_discovery;
 mod link_rewrite;
@@ -158,6 +160,7 @@ pub use attribution_render::AttributionRenderTransform;
 pub use attribution_viewer::AttributionViewerTransform;
 pub use authors_normalize::{AuthorsNormalizeTransform, normalize_authors_meta};
 pub use book_cover_image::BookCoverImageTransform;
+pub use brace_diagram_cell_diagnostics::BraceDiagramCellDiagnosticsTransform;
 pub use breadcrumbs_render::BreadcrumbsRenderTransform;
 pub use callout::CalloutTransform;
 pub use callout_resolve::CalloutResolveTransform;
@@ -193,6 +196,10 @@ pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 #[cfg(not(target_arch = "wasm32"))]
 pub use hephaestus::HephaestusRenderTransform;
 pub use image_alt_normalize::ImageAltNormalizeTransform;
+pub use lightbox::LightboxTransform;
+// Only `hephaestus-render` (native-only, see above) calls it.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use lightbox::sync_lightbox_hrefs;
 pub use link_external::LinkExternalTransform;
 pub use link_resource_discovery::{LinkResourceDiscoveryTransform, RESOURCE_DISCOVERY_KEY};
 pub use link_rewrite::LinkRewriteTransform;

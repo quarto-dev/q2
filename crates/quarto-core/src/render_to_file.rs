@@ -196,7 +196,7 @@ pub struct RenderToFileOptions {
     /// docx, ...) uses them. Their plot files are written into
     /// `capture_materialize_dir`, never beside the source. Empty (the
     /// default) splices nothing.
-    pub captures: Vec<quarto_trace::EngineCapture>,
+    pub captures: crate::pandoc_request::captures::CapturePayload,
 
     /// Per-render overlay (file overrides and runtime metadata; FR12).
     /// Data for whoever creates the render's runtime: the creator calls

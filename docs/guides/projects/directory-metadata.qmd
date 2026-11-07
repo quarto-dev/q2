@@ -1,0 +1,54 @@
+---
+title: "Directory metadata: `_metadata.yml`"
+---
+
+## Overview
+
+A `_metadata.yml` file sets options for every document in its directory
+and in the directories below it. It takes the same keys as `_quarto.yml`
+and as a document's front matter:
+
+```{.yaml filename="posts/_metadata.yml"}
+toc: true
+format:
+  html:
+    code-fold: true
+```
+
+Every document under `posts/` now gets a table of contents and folded
+code, without repeating either in its front matter. `_metadata.yaml`
+works too.
+
+A document that isn't in a project (no `_quarto.yml` in its directory or
+above it) gets only the `_metadata.yml` in its own directory.
+
+## Which files apply
+
+Quarto reads every `_metadata.yml` from the project root down to the
+document's own directory, and merges them with the project and the
+document. Later entries in this list override earlier ones:
+
+1. `_quarto.yml` (with any active [profile](profiles.qmd)).
+2. `_metadata.yml` in the project root, next to `_quarto.yml`.
+3. `_metadata.yml` in each subdirectory on the way to the document,
+   outermost first.
+4. The document's front matter.
+
+So for `posts/2026/launch.qmd`, the files that apply are `_quarto.yml`,
+`_metadata.yml`, `posts/_metadata.yml`, `posts/2026/_metadata.yml`, and
+the document, in that order. Any of the `_metadata.yml` files can be
+missing.
+
+## Paths
+
+A relative path in a `_metadata.yml` (a `theme:` SCSS file, a `css:`
+file, an `include-in-header:` file) is relative to the directory of that
+`_metadata.yml`, not to the document. See [Paths in websites](paths.qmd).
+
+## Differences from Quarto 1
+
+- In Quarto 1, a `_metadata.yml` in a subdirectory applies to the
+  documents in that directory and in all the directories below it, but a
+  `_metadata.yml` in the project root applies only to the documents
+  directly in the root. In Quarto 2, the root's file works like any
+  other: it applies to every document in the project.

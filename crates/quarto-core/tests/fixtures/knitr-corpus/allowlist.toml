@@ -1,0 +1,53 @@
+# KNR-2 Phase 2G: signed-off divergences between the knitr baseline presenter and knitr's own
+# finished markdown (the oracle). Read by `tests/integration/knitr_corpus_gate.rs`.
+#
+# Epic decision 26: the flip gate accepts `identical` and `syntax-level` only. A `semantic` or
+# `blocker` difference needs an entry here, and the entry is the sign-off. Fields:
+#   name     the fixture name, as in the corpus report
+#   formats  formats covered (absent: every format the fixture runs under)
+#   class    the class signed off: `semantic` or `blocker`. A case that moves to another class
+#            is flagged for re-review; a case that becomes accepted makes the entry stale.
+#   reason   one line, why the divergence is intended
+#
+# A document that overrides the `source` or `output` knitr hook (`setup-state/knit_hooks_override`)
+# is a fallback-unit rule, not an entry (epic decision 23).
+
+[[entry]]
+name = "structure/chunk_in_blockquote"
+class = "blocker"
+reason = "the baseline keeps blockquote continuation lines quoted, so blank lines inside the quote differ from knitr's (epic decision 23)"
+
+[[entry]]
+name = "s7/01_structure"
+class = "blocker"
+reason = "the baseline keeps blockquote continuation lines quoted, so blank lines inside the quote differ from knitr's (epic decision 23)"
+
+[[entry]]
+name = "markdown-stress/empty_output"
+class = "blocker"
+reason = "a chunk that prints nothing still renders its `.cell` wrapper, which is a box in the page (epic decision 23)"
+
+[[entry]]
+name = "s1/03_eval_false"
+class = "blocker"
+reason = "an empty chunk (the `blank` chunk has no code) still renders its `.cell` wrapper, which is a box in the page (epic decision 23)"
+
+[[entry]]
+name = "s8/01_setup_state"
+class = "blocker"
+reason = "same divergence as s1/03_eval_false: knitr writes an empty `.cell` div for a chunk that renders nothing (here `c_params`, eval false) and the presenter writes none; knitr's `.cell-code  code-fold` double space becomes one space, which is cosmetic (Gordon, 2026-11-02; epic decision 23 amended 2026-11-03)"
+
+[[entry]]
+name = "options/indent/header/00_empty"
+class = "blocker"
+reason = "live knitr indents the whole cell by the option's value (two spaces); the presenter ignores `indent`, because knitr sets it from the chunk's container indent and the splice re-applies container prefix and indent, so presenting it would double-indent a nested chunk (KNR-3 slice 7, D8: Gordon, 2026-11-03). KNR-6 decides what a header `indent` does once the skeleton marker's indent is known; `indent` is undocumented and unused in docs/ and the smoke tests"
+
+[[entry]]
+name = "options/indent/yaml/00_empty"
+class = "blocker"
+reason = "live knitr indents the whole cell by the option's value (two spaces); the presenter ignores `indent`, because knitr sets it from the chunk's container indent and the splice re-applies container prefix and indent, so presenting it would double-indent a nested chunk (KNR-3 slice 7, D8: Gordon, 2026-11-03). KNR-6 decides what a header `indent` does once the skeleton marker's indent is known; `indent` is undocumented and unused in docs/ and the smoke tests"
+
+[[entry]]
+name = "s5/01_odd_chunks"
+class = "blocker"
+reason = "the fixture's `listeng` chunk uses a custom knitr engine defined in a setup chunk. knitr runs it, and so does the product (a plain and a recorded `q2 render` of the same document are identical, and Quarto 1 runs it too), but `knitr_claims` claims no custom language, so the cell is unowned and this harness presents an unowned cell as the author's text, a raw fence. The harness presents through `present_document`, not the engine's skeleton path, so the difference is the harness's, not the product's (Gordon, 2026-11-05). Needs `RSQLite`; the case was unavailable until it was installed"

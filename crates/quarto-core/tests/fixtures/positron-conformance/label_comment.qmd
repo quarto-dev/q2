@@ -1,0 +1,4 @@
+```{python}
+#| label: fig-a
+x = 1
+```

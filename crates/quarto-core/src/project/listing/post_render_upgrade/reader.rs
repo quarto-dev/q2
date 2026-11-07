@@ -183,13 +183,17 @@ fn collect_text(elem: &scraper::ElementRef) -> String {
 
 /// Truncate `s` at a word boundary per Q1's
 /// `truncateText(s, n, "space")`, appending `…`. `Some(0)` and
-/// `None` disable truncation (Q1 treats 0 as missing). The exact
-/// cut semantics live in [`helpers::truncate_text_at_space`], the
-/// single truncator shared with the feed reader and the
-/// explicit-description record path.
+/// `None` disable truncation (Q1 treats 0 as missing). A string of
+/// at most `n` chars is kept whole: Q1's preview path
+/// (`truncateNode`) truncates only text *longer* than `maxLen`
+/// (GH #1068), unlike the strict `<` inside `truncateText` itself.
+/// The exact cut semantics live in
+/// [`helpers::truncate_text_at_space`], the single truncator shared
+/// with the feed reader and the explicit-description record path.
 fn maybe_truncate(s: &str, max_length: Option<usize>) -> String {
     match max_length {
         Some(0) | None => s.to_string(),
+        Some(n) if s.chars().count() <= n => s.to_string(),
         Some(n) => crate::project::listing::helpers::truncate_text_at_space(s, n),
     }
 }
@@ -324,7 +328,8 @@ mod tests {
     // `maybe_truncate` (bd-listing-ellipsis-no-matching-l963osy1).
     //
     // Reference: quarto-cli `src/core/text.ts` — `trimLength`
-    // (strict `<`, so an exactly-n-char string IS truncated), then
+    // (strict `<`, so an exactly-n-char string IS truncated — but
+    // `maybe_truncate` never passes one; see GH #1068), then
     // `trimAtSpace`: drop one char, cut at `lastIndexOf(' ')` when
     // that index is > 0, strip one trailing `,`/`/`/`:`, append `…`.
     // Deliberate divergence: we count Rust `char`s where JS counts
@@ -376,11 +381,33 @@ mod tests {
     }
 
     #[test]
-    fn maybe_truncate_exactly_max_is_truncated_q1_parity() {
-        // Q1's `trimLength` uses strict `<`: a string of exactly n
-        // chars is treated as too long and truncated. Quirky but
-        // Q1-observable; kept for parity.
-        assert_eq!(maybe_truncate("abc def", Some(7)), "abc…");
+    fn maybe_truncate_exactly_max_is_kept_whole_q1_parity() {
+        // Q1's preview path (`truncateNode` in
+        // `website-listing-shared.ts`) calls `truncateText` only when
+        // the text is *longer* than `maxLen`, so a string of exactly
+        // n chars is kept whole (GH #1068). One char more truncates.
+        assert_eq!(maybe_truncate("abc def", Some(7)), "abc def");
+        assert_eq!(maybe_truncate("abc defg", Some(7)), "abc…");
+    }
+
+    // GH #1068 repro: a 175-char first paragraph at the default
+    // `max-description-length` is kept whole; 176 chars truncates.
+    #[test]
+    fn extract_first_para_exactly_max_length_kept_whole() {
+        let para175 = "Every the quick widget passes every review before it ships to the next team the quick widget passes every review before it ships to the next team the quick widget passes ever.";
+        assert_eq!(para175.chars().count(), 175);
+        let html =
+            format!(r#"<html><body><main class="content"><p>{para175}</p></main></body></html>"#);
+        let result = extract_first_para(&parse(&html), &opts(Some(175)));
+        assert_eq!(result.as_deref(), Some(para175));
+
+        let para176 = format!("{}y.", &para175[..para175.len() - 1]);
+        assert_eq!(para176.chars().count(), 176);
+        let html =
+            format!(r#"<html><body><main class="content"><p>{para176}</p></main></body></html>"#);
+        let result = extract_first_para(&parse(&html), &opts(Some(175))).unwrap();
+        assert!(result.ends_with("the quick widget passes…"), "{result}");
+        assert_eq!(result.chars().count(), 170);
     }
 
     #[test]

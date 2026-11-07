@@ -1,0 +1,81 @@
+---
+title: "Quarto 1 diagram cell is not run"
+description: "Quarto 2 does not run Quarto 1 brace-form mermaid and dot cells; a plain mermaid fence draws a Mermaid diagram."
+code: Q-2-58
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+diagnostics:
+  # This page teaches the Quarto 1 brace form, so its "Bad input" example is a
+  # `{mermaid}` cell on purpose. Without this the page reports the very
+  # warning it documents.
+  Q-2-58:
+    level: off
+    reason: "This page documents the Quarto 1 brace-form diagram cell; its examples are deliberate."
+---
+
+# `Q-2-58` — Quarto 1 diagram cell is not run
+
+> Quarto 2 does not run `{mermaid}` or `{dot}` cells. The block renders as
+> a code block, not a diagram.
+
+## What this means
+
+Quarto 1 draws diagrams from executable cells, written with braces:
+```` ```{mermaid} ```` and ```` ```{dot} ````. Quarto 2 draws Mermaid
+diagrams from the plain fence ```` ```mermaid ````, and has no Graphviz
+support yet. A brace-form cell is left as a code block, so the reader sees
+the diagram's source instead of the diagram.
+
+## How to fix
+
+**For Mermaid**, drop the braces. The diagram body and its `%%|` options
+need no other change:
+
+`````markdown
+```mermaid
+flowchart LR
+  A[Draft] --> B[Review]
+```
+`````
+
+**For Graphviz (`{dot}`)**, there is no replacement yet. Pre-render the
+diagram to an image and include it, or write the diagram in Mermaid.
+
+**If an engine handles the brace form**, this warning does not apply to
+the cells it claims. If you still see it, or want it gone, turn it off in
+`_quarto.yml` or the document's front matter:
+
+```yaml
+diagnostics:
+  Q-2-58:
+    level: off
+    reason: "our engine renders {dot} cells"
+```
+
+## Example
+
+Bad input (Quarto 1 idiom):
+
+`````markdown
+```{mermaid}
+flowchart LR
+  A[Draft] --> B[Review]
+```
+`````
+
+Corrected:
+
+`````markdown
+```mermaid
+flowchart LR
+  A[Draft] --> B[Review]
+```
+`````
+
+## Related errors
+
+- [`Q-2-50`](Q-2-50.qmd) — Quarto 1's doubled-brace escape for displaying a
+  cell.

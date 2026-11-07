@@ -1,0 +1,7 @@
+```{r errhidden, error=TRUE, include=FALSE}
+stop("boom in hidden chunk")
+```
+
+```{r later}
+"later"
+```

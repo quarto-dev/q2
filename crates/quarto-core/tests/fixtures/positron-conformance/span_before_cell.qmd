@@ -1,0 +1,5 @@
+Value: `{python} 1 + 1`.
+
+```{python}
+x = 1
+```

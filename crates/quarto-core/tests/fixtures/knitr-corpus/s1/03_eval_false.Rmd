@@ -1,0 +1,11 @@
+```{r noeval, eval=FALSE}
+stop("never runs")
+1 + 1
+```
+
+```{r blank}
+```
+
+```{r after}
+"after"
+```

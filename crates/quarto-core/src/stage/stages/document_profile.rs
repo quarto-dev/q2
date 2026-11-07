@@ -27,7 +27,7 @@ use std::path::{Component, Path, PathBuf};
 use async_trait::async_trait;
 
 use crate::document_profile::{DocumentProfile, ProfileEngineResolution};
-use crate::engine::resolve_engines_pass1;
+use crate::engine::resolve_engines_pass1_for_document;
 use crate::stage::{
     DocumentAtProfile, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -162,11 +162,12 @@ impl PipelineStage for DocumentProfileStage {
         // recomputes the same load-free answer. `None` means the
         // document fell through to Pass-2's loading resolver; that is
         // advisory, not an error (see the field doc comment).
-        profile.engine_resolution = resolve_engines_pass1(
+        profile.engine_resolution = resolve_engines_pass1_for_document(
             &doc.ast.meta,
             &doc.ast,
             &ctx.registry,
             ctx.claimed_engine_name.as_deref(),
+            Some(crate::engine::DOCUMENT_OWN_FILE_ID),
         )
         .map(|res| ProfileEngineResolution {
             sequence: res.sequence.iter().map(|de| de.name.clone()).collect(),

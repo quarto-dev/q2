@@ -52,6 +52,7 @@ use super::LanguageClaim;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
+use super::units::Unit;
 
 /// A deterministic, file-backed test engine. See module docs.
 #[derive(Debug, Clone)]
@@ -74,7 +75,16 @@ pub struct FixtureEngine {
     /// [`execute`]: ExecutionEngine::execute
     /// [`received_inputs`]: FixtureEngine::received_inputs
     received_inputs: Arc<Mutex<Vec<String>>>,
+
+    /// Test-only: for every `execute` call, `(shared, located)`: the shared
+    /// unit list the stage put on the context, and the same list relocated
+    /// into the text this engine received (`units::units_for_engine`), which
+    /// is what a real engine works from. EXR-2 Phase 4.
+    received_units: ReceivedUnits,
 }
+
+/// See [`FixtureEngine::received_units`].
+pub type ReceivedUnits = Arc<Mutex<Vec<(Vec<Unit>, Vec<Unit>)>>>;
 
 impl FixtureEngine {
     /// Create a file-backed engine. Results are read at `execute` time
@@ -85,6 +95,7 @@ impl FixtureEngine {
             name: name.into(),
             results: None,
             received_inputs: Arc::new(Mutex::new(Vec::new())),
+            received_units: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -95,6 +106,7 @@ impl FixtureEngine {
             name: name.into(),
             results: Some(results),
             received_inputs: Arc::new(Mutex::new(Vec::new())),
+            received_units: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -106,6 +118,13 @@ impl FixtureEngine {
     /// `FixtureEngine`, not reset by them.
     pub fn received_inputs(&self) -> Arc<Mutex<Vec<String>>> {
         self.received_inputs.clone()
+    }
+
+    /// Test-only: a shared handle onto the `(shared, located)` unit lists of
+    /// every `execute` call so far. Take it before registering the engine,
+    /// like [`received_inputs`](FixtureEngine::received_inputs).
+    pub fn received_units(&self) -> ReceivedUnits {
+        self.received_units.clone()
     }
 
     /// Resolve the ordered results list: in-memory if present, else from
@@ -188,6 +207,13 @@ impl ExecutionEngine for FixtureEngine {
             .lock()
             .expect("received_inputs mutex poisoned")
             .push(input.to_string());
+        self.received_units
+            .lock()
+            .expect("received_units mutex poisoned")
+            .push((
+                ctx.units.clone(),
+                super::units::units_for_engine(&ctx.units, input),
+            ));
         let results = self.resolve_results(ctx)?;
         let output = splice_cells(input, &self.name, &results)
             .map_err(|msg| ExecutionError::execution_failed(&self.name, msg))?;

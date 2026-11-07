@@ -146,6 +146,7 @@ fn plot_capture(plot_path: &str) -> EngineCapture {
             path: plot_path.to_string(),
             contents_base64: base64::engine::general_purpose::STANDARD.encode(PNG),
         }],
+        record: None,
     }
 }
 
@@ -164,7 +165,7 @@ fn capture_plots_land_in_the_request_directory_and_typst_finds_them() {
             output_dir: Some(req.clone()),
             quiet: true,
             execution_policy: quarto_core::engine::ExecutionPolicy::None,
-            captures: vec![plot_capture(plot)],
+            captures: vec![plot_capture(plot)].into(),
             capture_materialize_dir: Some(req.clone()),
             ..Default::default()
         };
@@ -210,7 +211,7 @@ fn capture_plots_reach_a_docx_from_the_request_directory() {
         output_dir: Some(req.clone()),
         quiet: true,
         execution_policy: quarto_core::engine::ExecutionPolicy::None,
-        captures: vec![plot_capture("doc_files/cell-1.png")],
+        captures: vec![plot_capture("doc_files/cell-1.png")].into(),
         capture_materialize_dir: Some(req.clone()),
         ..Default::default()
     };
@@ -242,7 +243,7 @@ fn render_docx_unexecuted(
         output_dir: Some(root.join(".quarto/preview-out/t")),
         quiet: true,
         execution_policy: policy,
-        captures,
+        captures: captures.into(),
         ..Default::default()
     };
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
@@ -275,6 +276,7 @@ fn unexecuted_cells_are_counted_under_policy_none() {
         input_qmd: input,
         result: serde_json::json!({ "markdown":
             "---\ntitle: T\n---\n\n::: {.cell}\n::: {.cell-output .cell-output-stdout}\nOUT\n:::\n:::\n\n```{python}\n2\n```\n" }),
+        record: None,
         files: Vec::new(),
     };
     assert_eq!(

@@ -1,0 +1,7 @@
+---
+title: "escaped"
+---
+
+Escaped \`{julia} 1 + 1\` here.
+
+Body `{julia} 2 + 2`.

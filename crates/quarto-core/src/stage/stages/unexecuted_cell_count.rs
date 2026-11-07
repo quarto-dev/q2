@@ -10,7 +10,7 @@
 use async_trait::async_trait;
 use quarto_pandoc_types::block::{Block, Blocks};
 
-use crate::engine::capture_splice::engine_cell_lang;
+use crate::engine::cell_lang::engine_cell_lang;
 use crate::stage::{PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext};
 
 #[derive(Default)]

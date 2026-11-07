@@ -1,0 +1,5 @@
+Text `{python} a`
+```
+code
+```
+`{python} b` after.

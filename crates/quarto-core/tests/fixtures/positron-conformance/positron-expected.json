@@ -1,0 +1,204 @@
+{
+  "blockquote": {
+    "cells": [],
+    "divergence": "Positron matches only column-0 fences, so a blockquoted cell is invisible to it."
+  },
+  "brace_id": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-#bar",
+        "language": "python",
+        "label": "#bar",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      }
+    ],
+    "divergence": "Positron keeps `#bar` as the label; q2 reads no label from a brace id."
+  },
+  "brace_label_bare": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      }
+    ],
+    "divergence": "Same: q2 rejects `{python, fig-x}` with Q-2-36; Positron finds a cell and reads no label from it."
+  },
+  "brace_label_r": {
+    "cells": [
+      {
+        "id": "0-4390f678-unlabeled",
+        "language": "r",
+        "content_hash": "4390f67858f3f1c7",
+        "line": 1
+      }
+    ],
+    "divergence": "q2 rejects the document with parse error Q-2-36 (deliberate: a comma after the language is the old knitr header form, see docs/errors/markdown/Q-2-36.qmd), so it never has a cell; Positron finds a cell with no label."
+  },
+  "crlf": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      }
+    ]
+  },
+  "display_fence": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 2
+      }
+    ],
+    "divergence": "Phantom cell: Positron has no nesting rule, so a `{python}` line inside an unbraced display fence is a cell there."
+  },
+  "dotted_fence": {
+    "cells": []
+  },
+  "duplicate_pair": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      },
+      {
+        "id": "1-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 7
+      }
+    ]
+  },
+  "four_backtick": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 2
+      }
+    ],
+    "divergence": "Phantom cell: Positron matches the inner three-backtick fence inside a four-backtick fence."
+  },
+  "label_comment": {
+    "cells": [
+      {
+        "id": "0-e33bf28c-unlabeled",
+        "language": "python",
+        "content_hash": "e33bf28c906a4fcc",
+        "line": 1
+      }
+    ],
+    "divergence": "Positron's label is the first brace option, so a `#| label:` line is not read: q2 `fig-a`, Positron unlabeled."
+  },
+  "lang_case": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      }
+    ]
+  },
+  "list": {
+    "cells": [],
+    "divergence": "Positron matches only column-0 fences, so a cell in a list item is invisible to it."
+  },
+  "marimo_dotted": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-.marimo",
+        "language": "python",
+        "label": ".marimo",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      }
+    ],
+    "divergence": "Positron reads language `python` and label `.marimo`; q2 reads the single token `python.marimo` (owned by marimo)."
+  },
+  "marimo_spaced": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-.marimo",
+        "language": "python",
+        "label": ".marimo",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      }
+    ],
+    "divergence": "Positron's label is `.marimo`; q2 has language `python` with class `marimo` and no label."
+  },
+  "plain": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 1
+      }
+    ]
+  },
+  "raw_html": {
+    "cells": []
+  },
+  "span_before_cell": {
+    "cells": [
+      {
+        "id": "0-34bce5f7-unlabeled",
+        "language": "python",
+        "content_hash": "34bce5f775de97f5",
+        "line": 3
+      }
+    ]
+  },
+  "tilde_fence": {
+    "cells": []
+  },
+  "two_cells": {
+    "cells": [
+      {
+        "id": "0-b88f1ec0-unlabeled",
+        "language": "python",
+        "content_hash": "b88f1ec0c9fe96fd",
+        "line": 1
+      },
+      {
+        "id": "1-8d1c5324-unlabeled",
+        "language": "r",
+        "content_hash": "8d1c53241c425a9a",
+        "line": 7
+      }
+    ]
+  },
+  "unicode_cell": {
+    "cells": [
+      {
+        "id": "0-5b7585ae-unlabeled",
+        "language": "python",
+        "content_hash": "5b7585ae29761ec3",
+        "line": 1
+      }
+    ],
+    "divergence": "Same: the `#| label: fig-é` line is invisible to Positron's label."
+  },
+  "r_label_comment": {
+    "cells": [
+      {
+        "id": "0-c3756fd0-unlabeled",
+        "language": "r",
+        "content_hash": "c3756fd08b0e66fe",
+        "line": 1
+      }
+    ],
+    "divergence": "Same as label_comment for an R cell: Positron's label is the first brace option, so a `#| label:` line is not read: q2 `fig-r`, Positron unlabeled."
+  }
+}

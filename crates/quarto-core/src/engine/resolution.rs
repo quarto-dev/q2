@@ -49,6 +49,7 @@ use crate::extension::read::parse_claims_map;
 use crate::extension::types::{StaticLanguageClaim, combine_claims, lookup_static_claim};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::ConfigValueKind;
+use quarto_source_map::FileId;
 
 // ── Built-in engine ordering for deterministic resolution ────────────────────
 
@@ -133,7 +134,7 @@ fn walk_block_for_langs(
 ) {
     match block {
         Block::CodeBlock(_) => {
-            if let Some(lang) = super::capture_splice::engine_cell_lang(block) {
+            if let Some(lang) = super::cell_lang::engine_cell_lang(block) {
                 // Skip HANDLED_LANGUAGES (ojs, mermaid, dot — cell handlers).
                 if HANDLED_LANGUAGES.contains(&lang) {
                     return;
@@ -333,6 +334,52 @@ impl EngineResolution {
 
         result.into_iter().collect()
     }
+
+    /// Add the languages of inline spans no engine owns to a leave-alone set (EXR-8 B1b).
+    ///
+    /// `base` comes from [`handled_languages_for`], which runs before the stage's scan. A span
+    /// whose language is absent from `ownership` belongs to nobody, so an engine that would
+    /// otherwise evaluate every span (QuartoNotebookRunner) must cede it and leave it literal.
+    /// Spans another engine owns are already in `base`; cells are never added (epic decision
+    /// 42 covers spans only). The result is sorted and deduplicated.
+    pub fn with_unowned_span_languages(
+        &self,
+        base: Vec<String>,
+        units: &[crate::engine::units::Unit],
+    ) -> Vec<String> {
+        let mut result: std::collections::BTreeSet<String> = base.into_iter().collect();
+        for unit in units {
+            if let crate::engine::units::Unit::Inline(span) = unit {
+                let lang = span.lang.to_ascii_lowercase();
+                if !self.ownership.contains_key(&lang) {
+                    result.insert(lang);
+                }
+            }
+        }
+        result.into_iter().collect()
+    }
+
+    /// Compute the **positive ownership set** for `engine`: every language present
+    /// in this render that q2 assigned to `engine`.
+    ///
+    /// ```text
+    /// { lang : ownership[lang] == engine }
+    /// ```
+    ///
+    /// The exact complement of [`handled_languages_for`] restricted to present
+    /// languages, and **sorted** for deterministic output. Unlike the leave-alone
+    /// set, an engine's own name *is* the membership test — engines can read this
+    /// directly instead of inferring the complement. It is carried to TS engines
+    /// for engine-author convenience (Plan 4d) and read by the Jupyter engine (JOL-2b).
+    pub fn owned_languages_for(&self, engine: &str) -> Vec<String> {
+        let mut result: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (lang, owner) in &self.ownership {
+            if owner.as_str() == engine {
+                result.insert(lang.clone());
+            }
+        }
+        result.into_iter().collect()
+    }
 }
 
 // ── Core resolver ─────────────────────────────────────────────────────────────
@@ -369,7 +416,34 @@ pub fn resolve_engines(
     registry: &EngineRegistry,
     claimed: Option<&str>,
 ) -> EngineResolution {
-    let resolution = resolve_engines_inner(meta, ast, registry, claimed);
+    resolve_engines_for_document(meta, ast, registry, claimed, None)
+}
+
+/// The file id a parsed `.qmd`'s own front matter roots at: the parse
+/// context's dense `FileId(0)` (see `config_sources.rs`). Metadata layers
+/// (`_quarto.yml`, `_metadata.yml`) root at hash-based ids instead. Known
+/// gap: an `.ipynb` conversion roots at a virtual cell file, so a notebook
+/// declaration is not recognized as the document's own.
+pub const DOCUMENT_OWN_FILE_ID: FileId = FileId(0);
+
+/// [`resolve_engines`] plus the document's own file id.
+///
+/// With `own_file` set, a document with no computational cells whose **own
+/// front matter** declares a non-markdown engine (`engine:` or the top-level
+/// shorthand such as `jupyter:`) resolves to that engine, with an empty
+/// ownership map. "Own" is provenance: the declaring value must be rooted at
+/// `own_file`, so a declaration that came only from `_quarto.yml`,
+/// `_metadata.yml`, an extension or a format default does not count (q1 reads
+/// the engine from the document's own front matter only). With `None` the
+/// rule is off and a cell-less document resolves to an empty sequence.
+pub fn resolve_engines_for_document(
+    meta: &ConfigValue,
+    ast: &Pandoc,
+    registry: &EngineRegistry,
+    claimed: Option<&str>,
+    own_file: Option<FileId>,
+) -> EngineResolution {
+    let resolution = resolve_engines_inner(meta, ast, registry, claimed, own_file);
     // Net-new production observability (Plan 4H, consumed by Phase 4I / J9):
     // one INFO event marking resolution-complete. The engine-host spawn event
     // (`target: "engine_host"`, J8) must order AFTER this — engines resolve
@@ -401,9 +475,11 @@ pub fn resolve_engines(
 ///
 /// This is "what the author asked for", which is deliberately *not* the same
 /// question as [`resolve_engines`]'s result — resolution also derives owners
-/// from the languages present in the document, so a file that declares an
-/// engine but contains no code cells resolves to an empty sequence while
-/// still having declared one. `EngineExecutionStage`'s `.md` guard
+/// from the languages present in the document. With no code cells, a
+/// declaration only counts toward the sequence when the document's own front
+/// matter makes it (JOL-2a); one that lives only in a project, directory or
+/// extension layer resolves to an empty sequence while still having declared
+/// one. `EngineExecutionStage`'s `.md` guard
 /// (`Q-2-40`) needs the declared answer, which is why this is shared rather
 /// than inlined in [`prepare_resolution`].
 pub(crate) fn explicitly_declared_engines(
@@ -433,6 +509,34 @@ pub(crate) fn explicitly_declared_engines(
     Vec::new()
 }
 
+/// Whether the document's own front matter declares a non-markdown engine:
+/// the value that declares it (`engine:`, else the first matching top-level
+/// shorthand key) has `own_file` among its root file ids.
+fn declares_engine_in_file(
+    meta: &ConfigValue,
+    registry: &EngineRegistry,
+    own_file: FileId,
+) -> bool {
+    if explicitly_declared_engines(meta, registry).is_empty() {
+        return false;
+    }
+    let declaring = if meta.get("engine").is_some() {
+        meta.get("engine")
+    } else {
+        let mut names = registry.engine_names();
+        names.sort_unstable();
+        names
+            .into_iter()
+            .filter(|n| *n != "markdown")
+            .find_map(|n| meta.get(n))
+    };
+    declaring.is_some_and(|v| {
+        let mut ids = std::collections::HashSet::new();
+        v.source_info.collect_file_ids(&mut ids);
+        ids.contains(&own_file)
+    })
+}
+
 /// Per-engine claim tables built by [`prepare_resolution`] (Phase 3): engine
 /// name → language → claim Vec (the 4c0 multi-claim shape).
 type ClaimTables =
@@ -442,6 +546,10 @@ type ClaimTables =
 /// (claimed / empty-scan / explicit-markdown — all load-free by definition,
 /// P1-P3) apply.
 struct TierInputs {
+    /// No cells, and the document's own front matter declares an engine
+    /// (JOL-2a): the declared engines enter the sequence without owning a
+    /// language.
+    cellless_declared: bool,
     languages: Vec<(String, Option<String>)>,
     raw_explicit: Vec<DetectedEngine>,
     is_implicit: bool,
@@ -472,6 +580,7 @@ fn prepare_resolution(
     ast: &Pandoc,
     registry: &EngineRegistry,
     claimed: Option<&str>,
+    own_file: Option<FileId>,
 ) -> PrepOutcome {
     // --- CLAIMED SHORT-CIRCUIT (§8 / P1) ---
     // A file claimed by an engine resolves to exactly that engine.
@@ -488,7 +597,13 @@ fn prepare_resolution(
     // --- Step 0: scan languages (P2) ---
     let mut languages = computational_languages(ast);
 
-    if languages.is_empty() {
+    // A cell-less document whose own front matter declares a real engine
+    // resolves to that engine (JOL-2a); every other cell-less document is
+    // markdown passthrough (empty sequence).
+    let cellless_declared = languages.is_empty()
+        && own_file.is_some_and(|own| declares_engine_in_file(meta, registry, own));
+
+    if languages.is_empty() && !cellless_declared {
         // No computational languages → markdown passthrough (empty sequence).
         // `generated-languages` is intentionally NOT consulted above this
         // point: a cell-less doc stays markdown passthrough even if it
@@ -514,7 +629,9 @@ fn prepare_resolution(
     // than appended, mirroring `computational_languages`' first-occurrence-
     // wins dedup — appending it would let T1 recompute a fresh winner for
     // the duplicate tuple and clobber the real cell's `first_class`.
-    if let Some(generated) = meta.get("generated-languages").and_then(|v| v.as_array()) {
+    if !cellless_declared
+        && let Some(generated) = meta.get("generated-languages").and_then(|v| v.as_array())
+    {
         let mut seen: std::collections::HashSet<String> =
             languages.iter().map(|(lang, _)| lang.clone()).collect();
         for item in generated {
@@ -613,6 +730,7 @@ fn prepare_resolution(
     }
 
     PrepOutcome::NeedsTiers(TierInputs {
+        cellless_declared,
         languages,
         raw_explicit,
         is_implicit,
@@ -806,7 +924,10 @@ fn run_tiers(
     }
 
     for name in &candidates {
-        if !ownership.values().any(|owner| owner.as_str() == *name) {
+        let declared_cellless = inputs.cellless_declared
+            && raw_explicit.iter().any(|e| e.name == *name)
+            && registry.has_engine(name);
+        if !declared_cellless && !ownership.values().any(|owner| owner.as_str() == *name) {
             continue; // Engine owns nothing — not in the sequence.
         }
         if sequence_names.insert(name.to_string()) {
@@ -838,8 +959,9 @@ fn resolve_engines_inner(
     ast: &Pandoc,
     registry: &EngineRegistry,
     claimed: Option<&str>,
+    own_file: Option<FileId>,
 ) -> EngineResolution {
-    match prepare_resolution(meta, ast, registry, claimed) {
+    match prepare_resolution(meta, ast, registry, claimed, own_file) {
         PrepOutcome::Done(res) => res,
         PrepOutcome::NeedsTiers(inputs) => {
             // Pass-2: always answers, loading if it must — the tier loop
@@ -881,7 +1003,19 @@ pub fn resolve_engines_pass1(
     registry: &EngineRegistry,
     claimed: Option<&str>,
 ) -> Option<EngineResolution> {
-    let result = match prepare_resolution(meta, ast, registry, claimed) {
+    resolve_engines_pass1_for_document(meta, ast, registry, claimed, None)
+}
+
+/// [`resolve_engines_pass1`] plus the document's own file id; see
+/// [`resolve_engines_for_document`].
+pub fn resolve_engines_pass1_for_document(
+    meta: &ConfigValue,
+    ast: &Pandoc,
+    registry: &EngineRegistry,
+    claimed: Option<&str>,
+    own_file: Option<FileId>,
+) -> Option<EngineResolution> {
+    let result = match prepare_resolution(meta, ast, registry, claimed, own_file) {
         PrepOutcome::Done(res) => Some(res),
         PrepOutcome::NeedsTiers(inputs) => {
             let claim = |name: &str, lang: &str, fc: Option<&str>| {
@@ -1585,6 +1719,90 @@ mod tests {
         assert!(jupyter_handled.contains(&"r".to_string()));
         assert!(!jupyter_handled.contains(&"python".to_string()));
         assert!(!jupyter_handled.contains(&"sql".to_string()));
+    }
+
+    fn res_owning(pairs: &[(&str, &str)]) -> EngineResolution {
+        let mut ownership = LinkedHashMap::new();
+        for (l, o) in pairs {
+            ownership.insert(l.to_string(), o.to_string());
+        }
+        EngineResolution {
+            sequence: vec![],
+            ownership,
+            notes: vec![],
+        }
+    }
+
+    /// EXR-8 B1b: a span in a language no engine owns is added to the set, so QNR cedes it.
+    #[test]
+    fn unowned_span_language_is_added_to_handled_languages() {
+        let res = res_owning(&[("julia", "julia")]);
+        let units = crate::engine::units::scan_units(
+            "```{julia}\n1\n```\n\nSee `{klingon} qapla` and `{julia} 1`.\n",
+        );
+        let base = res.handled_languages_for("julia");
+        let out = res.with_unowned_span_languages(base.clone(), &units);
+        assert!(out.contains(&"klingon".to_string()));
+        assert!(!out.contains(&"julia".to_string()));
+        // sorted and deduplicated, a superset of the base
+        let mut sorted = out.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(out, sorted);
+        assert!(base.iter().all(|l| out.contains(l)));
+    }
+
+    /// EXR-8 B1b: a span another engine owns is already handled; an unowned CELL is not added.
+    #[test]
+    fn owned_span_language_is_not_added() {
+        let res = res_owning(&[("julia", "julia"), ("python", "jupyter")]);
+        let units = crate::engine::units::scan_units(
+            "```{klingon}\nx\n```\n\nA `{python} 1` and `{julia} 2`.\n",
+        );
+        let base = res.handled_languages_for("julia");
+        let out = res.with_unowned_span_languages(base.clone(), &units);
+        assert_eq!(
+            out, base,
+            "python is owned by jupyter (already in base); a cell is never added"
+        );
+    }
+
+    /// `owned_languages_for` returns { lang present in doc : owned by this engine }.
+    #[test]
+    fn test_owned_languages_for() {
+        let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![
+            engine_cell("r"),
+            engine_cell("python"),
+            engine_cell("sql"),
+        ]);
+        // Explicit [knitr, jupyter]: r→knitr (T1), python→jupyter (T2), sql→jupyter (T2).
+        let meta = map_config(vec![(
+            "engine",
+            array_config(vec![string_config("knitr"), string_config("jupyter")]),
+        )]);
+
+        let res = resolve_engines(&meta, &ast, &registry, None);
+
+        // Positive set: only this engine's owned, present languages.
+        assert_eq!(res.owned_languages_for("knitr"), vec!["r".to_string()]);
+        assert_eq!(
+            res.owned_languages_for("jupyter"),
+            vec!["python".to_string(), "sql".to_string()]
+        );
+        // HANDLED_LANGUAGES base is NOT in the owned set (it is not "owned" by anyone).
+        assert!(
+            !res.owned_languages_for("knitr")
+                .contains(&"ojs".to_string())
+        );
+        // Complement invariant: for present languages, owned ∩ handled == ∅.
+        let knitr_handled = res.handled_languages_for("knitr");
+        for l in res.owned_languages_for("knitr") {
+            assert!(
+                !knitr_handled.contains(&l),
+                "owned and handled must be disjoint: {l}"
+            );
+        }
     }
 
     /// Container recursion: cells nested in Divs and BulletLists are found.
@@ -3338,6 +3556,151 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["custom-claimer"]
         );
+        assert!(res.ownership.is_empty());
+    }
+
+    // ── Declared engine on a cell-less page (JOL-2a) ─────────────────────────
+
+    const OWN: quarto_source_map::FileId = quarto_source_map::FileId(0);
+    const FOREIGN: quarto_source_map::FileId = quarto_source_map::FileId(0x1234_5678);
+
+    fn rooted(file: quarto_source_map::FileId) -> SourceInfo {
+        SourceInfo::original(file, 0, 1)
+    }
+
+    /// A merged-metadata map with one top-level `key: value` whose value is
+    /// rooted at `file`.
+    fn meta_from(file: quarto_source_map::FileId, key: &str, value: &str) -> ConfigValue {
+        map_config(vec![(key, ConfigValue::new_string(value, rooted(file)))])
+    }
+
+    fn names(res: &EngineResolution) -> Vec<&str> {
+        res.sequence.iter().map(|e| e.name.as_str()).collect()
+    }
+
+    #[test]
+    fn declared_engine_without_cells_resolves_to_the_engine() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        for meta in [
+            meta_from(OWN, "engine", "jupyter"),
+            meta_from(OWN, "jupyter", "python3"),
+        ] {
+            let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+            assert_eq!(names(&res), vec!["jupyter"]);
+            assert!(res.ownership.is_empty());
+        }
+    }
+
+    #[test]
+    fn declared_engine_without_cells_needs_the_document_file_id() {
+        // The un-suffixed entry points pass no file id: behavior unchanged.
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        let meta = meta_from(OWN, "engine", "jupyter");
+        assert!(
+            resolve_engines(&meta, &ast, &registry, None)
+                .sequence
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn project_level_declared_engine_without_cells_stays_empty() {
+        let registry = mock_registry(vec![mock_knitr(), mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        for key in ["engine", "knitr"] {
+            let meta = meta_from(FOREIGN, key, "knitr");
+            let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+            assert!(res.sequence.is_empty(), "{key}: {:?}", names(&res));
+        }
+    }
+
+    /// EXR-18 (epic decisions 11, 42): a span-only document (spans, no cell) with no engine
+    /// key resolves no engine, so no kernel starts and its spans stay literal.
+    #[test]
+    fn e2e_span_only_document_without_engine_key_stays_literal() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        let meta = meta_from(OWN, "title", "t");
+        let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+        assert!(res.sequence.is_empty(), "{:?}", names(&res));
+    }
+
+    /// EXR-18 (JOL-2a): `engine: jupyter` only in `_quarto.yml` (a foreign file id) does not
+    /// make a cell-less page's spans run.
+    #[test]
+    fn e2e_span_only_page_with_project_level_engine_key_stays_literal() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        for key in ["engine", "jupyter"] {
+            let value = if key == "engine" {
+                "jupyter"
+            } else {
+                "python3"
+            };
+            let meta = meta_from(FOREIGN, key, value);
+            let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+            assert!(res.sequence.is_empty(), "{key}: {:?}", names(&res));
+        }
+    }
+
+    #[test]
+    fn engine_markdown_without_cells_stays_empty() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        let meta = meta_from(OWN, "engine", "markdown");
+        let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+        assert!(res.sequence.is_empty(), "{:?}", names(&res));
+    }
+
+    #[test]
+    fn declared_engine_with_claims_table_without_cells_strips_the_config() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        let config = map_config(vec![
+            ("kernel", ConfigValue::new_string("python3", rooted(OWN))),
+            ("claims", map_config(vec![])),
+        ]);
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "engine".to_string(),
+                key_source: rooted(OWN),
+                value: ConfigValue::new_array(
+                    vec![map_config(vec![("jupyter", config)])],
+                    rooted(OWN),
+                ),
+            }],
+            si(),
+        );
+        let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+        assert_eq!(names(&res), vec!["jupyter"]);
+        let cfg = res.sequence[0].config.as_ref().expect("config kept");
+        assert!(cfg.get("claims").is_none(), "claims must be stripped");
+        assert!(cfg.get("kernel").is_some());
+    }
+
+    #[test]
+    fn no_declaration_and_no_cells_stays_markdown_passthrough() {
+        let registry = mock_registry(vec![mock_jupyter()]);
+        let ast = ast_with_blocks(vec![]);
+        let meta = generated_languages_meta(vec!["python"]);
+        let res = resolve_engines_for_document(&meta, &ast, &registry, None, Some(OWN));
+        assert!(res.sequence.is_empty());
+    }
+
+    #[test]
+    fn pass1_lifts_declared_engine_without_cells() {
+        // A would-load engine is registered, but a declared engine on a
+        // cell-less page consults no claim, so Pass 1 still lifts.
+        let registry = mock_registry(vec![
+            MockEngine::new("jupyter", |_, _| LanguageClaim::Fallback(0)).with_would_load(),
+        ]);
+        let ast = ast_with_blocks(vec![]);
+        let meta = meta_from(OWN, "jupyter", "python3");
+        let res = resolve_engines_pass1_for_document(&meta, &ast, &registry, None, Some(OWN))
+            .expect("declared engine without cells must lift");
+        assert_eq!(names(&res), vec!["jupyter"]);
         assert!(res.ownership.is_empty());
     }
 

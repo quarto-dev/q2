@@ -1,0 +1,17 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+#| include: false
+import base64
+from IPython.display import Image
+png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+```
+
+A figure after a hidden cell keeps its cell number.
+
+```{python}
+Image(data=png, format="png")
+```

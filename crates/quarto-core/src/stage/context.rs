@@ -371,6 +371,10 @@ pub struct StageContext {
     /// `meta["filters"]`).
     pub defer_citeproc: bool,
 
+    /// Bridged one-way from [`crate::render::RenderContext::suppress_trace_output`]:
+    /// `trace: true` installs no JSON trace writer. `false` by default.
+    pub suppress_trace_output: bool,
+
     /// Input-only host options for [`crate::stage::stages::PandocPrepareStage`],
     /// bridged one way from [`crate::render::RenderContext::prepare_options`].
     /// When set, `run_pipeline` also pre-seeds this context's temp dir with
@@ -385,6 +389,19 @@ pub struct StageContext {
     /// [`crate::stage::stages::UnexecutedCellCountStage`] and restored into
     /// [`crate::render::RenderContext::unexecuted_cells`] by `run_pipeline`.
     pub unexecuted_cells: usize,
+
+    /// One entry per braced executable block, in document order, as
+    /// `PreEngineSugaringStage` saw it before rewriting anything: the author's
+    /// text and the text the engine sees (EXR-5; epic decision 36). The engine
+    /// stage aligns it with its unit scan to recover the author text crossref
+    /// sugaring strips (label and caption lines). Empty when the sugaring stage
+    /// did not run, in which case the scanned text stands in.
+    pub sugared_blocks: Vec<crate::record::SugaredBlock>,
+
+    /// What the record splice decided per unit (EXR-14): staleness for every document unit and
+    /// the record cells nothing matched. `None` until a record has been spliced. EXR-15 reads
+    /// it for the hub status surface.
+    pub record_splice_report: Option<crate::stage::stages::SpliceReport>,
 
     /// This chapter's harvested citation manifest (book-projects P6),
     /// set by [`crate::stage::stages::UserFiltersStage`] from the
@@ -508,9 +525,12 @@ impl StageContext {
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
             defer_citeproc: false,
+            suppress_trace_output: false,
             prepare_options: None,
             pandoc_request: None,
             unexecuted_cells: 0,
+            sugared_blocks: Vec::new(),
+            record_splice_report: None,
             chapter_seed: None,
             cross_chapter_crossref_registry: None,
             citation_manifest: None,
