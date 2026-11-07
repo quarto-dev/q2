@@ -106,10 +106,10 @@ through the walk.
 From the epic's "Decisions recorded 2026-11-05", with the answers to the fourth review
 ([review 4](../research/2026-11-05-riu-plans-review-4.md)).
 
-- [ ] **Flag ownership.** RIU-3a added the minimal flag (parse the list, set `PreviewConfig.record_sources`,
+- [x] **Flag ownership.** RIU-3a added the minimal flag (parse the list, set `PreviewConfig.record_sources`,
       no validation). This plan owns everything else: validation, defaults, the `provide-hub` rules, the
       conflicts and the docs. Each plan's checklist names the flag code it owns.
-- [ ] **The provider calls the walk, and implements `RecordLookup`** (RIU-2's trait). Today
+- [x] **The provider calls the walk, and implements `RecordLookup`** (RIU-2's trait). Today
       `execute_document` calls `run_and_store` directly, so without this item the trait implementation would
       be dead code and `--records positron` would still reach consent and the engine. The rule: when the
       resolved list is exactly `engine` (the default), `execute_document` calls `run_and_store` as it does
@@ -147,34 +147,92 @@ and `execute_with_sources` (the `engine`-only list still calls `run_and_store` w
 unchanged: a deviation from "constructors gain the gate parameter"); the share banner's
 `can_rerun` argument; `no_record_source_diagnostic` emitted from `record_one`; the docs.
 
-Not done yet: the preview-side tests that need the full server (`off` plus `--records cache,positron,engine`;
-the `--share` guest test through the real flag; a file change not consulting the list; `q2` stale vs fresh
-and the knitr-format pin), the docs embed refresh, the browser checks, the Windows cross-clippy, and the
-workspace-level verification. The `Re-execute` guard through an imported page and the per-case EXR-16 sweep
-are RIU-3a leftovers.
+Update (2026-11-06, later): preview-side tests landed (q2 fresh vs stale; a file change not re-reading
+sources; `off` with `cache,positron,engine`; the docx-recorded knitr pin in `record/staleness.rs`). The share
+banner and the re-execute guard now share `config::engine_can_run`, with a table test; that is the `--share`
+guest rule through the real flag, short of a live guest. The docs embed was refreshed (`q2 docs llms
+--embed-info`: commit 396851654, 411 pages, clean).
+
+Real binary, `target/debug/q2 preview <dir> --records cache --no-browser` on a Jupyter document with
+`preview.engine: off`: `POST /api/preview/re-execute` returned `403 Re-execute is disabled: preview.engine is
+off`; no kernel process started (the only matching processes were other jobs). `GET
+/api/preview/diagnostics?page=doc.qmd` returned the "No execution record for this document" warning with the
+per-source lines (`cache: nothing for this document`, `engine: not available: engine is not in the record
+sources`). That is the payload the page renders; I did not see it on the page.
+
+Browser checks (2026-11-06, headless Chromium through Playwright, `target/debug/q2` rebuilt through the
+WASM, SPA and `cargo build --bin q2` chain first, because the embedded viewer WASM in this worktree was
+dated Oct 16; page text read and screenshots taken, scripts kept out of the repo):
+
+- `q2 preview <proj> --records <dir-of-positron-cache>` on a copy of the RIU-3 Python fixture (cache copy
+  with `quarto_source` rewritten to the copy): the first cell shows `sum: PUSHED-FROM-FILE` and the second
+  `[1, 4, 9, 16]`; no kernel started. **Passes.**
+- `q2 preview <proj> --records cache` on a document with no record: the page shows a collapsed "Warning"
+  indicator; expanded, "No execution record for this document - None of the record sources named by
+  `--records` supplied one, so no outputs are shown." The per-source lines and the hint did **not**
+  appear: `PreviewDiagnosticsOverlay.tsx` renders only `title` and `problem`. **Fixed the same day** by
+  folding the reasons and the fix into `problem` on one line (Gordon: a simpler diagnostic is fine; detail
+  and hint lines suit editor squiggles, not the warning box). The page now reads "... so no outputs are
+  shown (cache: nothing for this document; engine: not available: ...). Add `engine` to `--records` ...".
+  A separate change to the overlay (render `details` and `hints` for every diagnostic) is not made here.
+- `--share` with a guest through the iroh relay (it connected): host `--records cache`, banner says "guests
+  cannot re-run code (no engine is enabled)"; the guest's `POST /api/preview/re-execute` returned
+  `403 Re-execute is disabled: the engine is not in --records, so this preview never runs code`, and
+  the guest page rendered. A host with the default list prints "VIEW the project and RE-RUN its code".
+  The guest-with-`engine` re-execute itself (it would start a kernel; none is installed here) and the
+  two-binary case were **not run**.
+
+Permanent e2e: `q2-preview-spa/e2e/records-sources.spec.ts` (a `--records` directory shows its output with
+no engine; `--records cache` shows the explained warning on the page), with `records` and `recordsDir`
+options on the `startPreviewServer` helper. Both pass in the default chromium suite (about 14 s).
+
+Real `provide-hub` against a scratch local hub (`q2 hub --project <dir>`, no auth, `--token dev`), one-shot
+`--file python.qmd`, stdin closed, published capture read back with a small Node client (index `captures`
+entry, then the capture doc, gunzipped):
+
+- `--records <positron-dir>` with `QUARTO_ENGINE_RECORD_WRITE=1`: exit 0, no consent refusal, and the hub
+  holds an `application/x-engine-record+gzip` record containing the cache file's `PUSHED-FROM-FILE`
+  output and not `sum: 10`, so no code ran and no kernel started.
+- The same without the variable: exit 1, `this record source needs the record writer on: set
+  QUARTO_ENGINE_RECORD_WRITE=1 (...)`, and the index entry carries it as `lastError`; the capture doc id
+  and its content are unchanged.
+- The default list (`engine`) with no terminal and no `--dangerously-accept-requests`: exit 0,
+  `refusing execution: interactive consent required but stdin is not a terminal`, `Execution declined;
+  nothing was run`; capture unchanged.
+
+- The default list (`engine`) with `--dangerously-accept-requests` (Gordon authorized it for this scratch
+  hub and fixture) and the scratch `ipykernel` venv: exit 0, and the hub holds an
+  `application/x-engine-capture+gzip` capture (the legacy format, the provider's default with the writer gate
+  off) containing `sum: 10`. The engine ran and the default path is unchanged.
+
+**Not run:** nothing further for `provide-hub`.
+**Windows cross-clippy could not run from macOS:** `ring` and `aws-lc-sys` fail to compile C for
+`x86_64-pc-windows-msvc` in all four crates, so a Windows user should run the native check. By reading,
+`check_directory` accepts both `/` and `\\` after `~` and uses `dirs::home_dir`. Workspace nextest was not run. At HEAD, `nextest -p quarto -p quarto-preview -p quarto-hub-provider`: 1242 passed, 7 skipped; clippy clean.
+Left over from RIU-3a: the Re-execute-on-an-imported-page tests, the per-case EXR-16 sweep, and a browser run.
 
 ## Phase A: tests first
 
-- [ ] Parser tests (pure string tests, portable): `--records cache,q2`, repeated flag versus comma
+- [x] Parser tests (pure string tests, portable): `--records cache,q2`, repeated flag versus comma
       list, a bare path with a separator, a leading `./`, `~` and a Windows drive path
       (`C:\notes`) each become a directory source, a known name beats a same-named directory, a bare
       word that is not a name (`postiron`) is an error that lists valid names and suggests `./postiron`,
       a path with a comma is an error that says so, empty list is an error. Start-up tests (temp directory):
       a missing path and a file path are each refused with a clear message, and `cache` in a `provide-hub`
       list fails in `provide_hub::run` (not in the parser, which does not know the command).
-- [ ] Resolution tests with fake sources are RIU-2's; here add that the parsed list reaches the walk and an
+- [x] Resolution tests with fake sources are RIU-2's; here add that the parsed list reaches the walk and an
       absent `engine` means `run_engine` is never called.
-- [ ] `preview.engine: off` plus `--records cache,positron,engine` does not run the engine and
+- [x] `preview.engine: off` plus `--records cache,positron,engine` does not run the engine and
       does show a cached record (depends on RIU-2 Phase E), and logs the warning about `engine`.
 - [x] The re-execute guard tests (the POST under `off`, the POST with `engine` absent, the automatic
       path, `manual` and `auto` with `engine` present, two handlers with different configs) are RIU-2's
       (Phase B3). Here, only the `--share` guest test above, through the real flag.
-- [ ] A unit test of the "no source supplies" diagnostic text from a hand-built outcome list: the
+- [x] A unit test of the "no source supplies" diagnostic text from a hand-built outcome list: the
       per-source lines, the refusal naming `QUARTO_ENGINE_RECORD_WRITE`, silence for a prose-only document,
       and silence when a source did supply.
-- [ ] A test that a `q2` record from an older document is published stale, and one for the current
+- [x] A test that a `q2` record from an older document is published stale, and one for the current
       document is published fresh.
-- [ ] A test that pins how the format of a knitr record affects staleness. `record_is_stale` hashes a
+- [x] A test that pins how the format of a knitr record affects staleness. `record_is_stale` hashes a
       profiled unit under the format the record was **recorded** for (`recorded_format`,
       `record/staleness.rs:156-165`), not the format of the page being served, so a `q2` record written by a
       docx render is not reported stale by an HTML preview because of its format. Spike S2 of the
@@ -183,13 +241,13 @@ are RIU-3a leftovers.
       What the spike could not observe is whether docx-shaped structured knitr output presents correctly in
       an HTML preview, because nothing reads a `q2` record yet; this test and the first real `q2` source
       run answer it. If it presents wrongly, that is a question for Gordon, not a rule decided here.
-- [ ] Provider tests: `execute_document` with the list `engine` calls `run_and_store` and no walk; with
+- [x] Provider tests: `execute_document` with the list `engine` calls `run_and_store` and no walk; with
       `positron` only it publishes the imported record and never reaches the consent gate (a fake engine that
       fails if run, a provider built with `AlwaysReject`); `run_engine` refuses with `engine` absent; with
       `engine` present it still goes through the gate and the walk reports `EnginePublished`; a refused
       record that is followed by a supplying source writes the fall-through line to stderr; the constructor
       takes the gate.
-- [ ] A test that a file change runs `recompute_staleness` only and does not consult the source
+- [x] A test that a file change runs `recompute_staleness` only and does not consult the source
       list (a source fake that fails if called after boot).
 - [x] A test that `q2 provide-hub` with no `--records` resolves to `engine` only, and `q2 preview`
       to `cache,q2,engine`.
@@ -203,7 +261,7 @@ are RIU-3a leftovers.
       (`commands/preview.rs:28`), `ProvideHubArgs` (`commands/provide_hub.rs:31`) and `PreviewConfig`
       (`lib.rs:231`).
 - [x] The parser produces RIU-2's list type; the default is defined in one place.
-- [ ] The provider's `RecordLookup` implementation, the call from `execute_document`, the `Provider`
+- [x] The provider's `RecordLookup` implementation, the call from `execute_document`, the `Provider`
       constructor parameter, the `cache` start-up error in `provide_hub::run` and the directory validator (see
       the decisions).
 - [x] The `q2` source's staleness check, the diagnostic from outcomes, and the three conflicts.
@@ -229,11 +287,11 @@ the limits, and revises RIU-3's text for the hardened flag.
       and the policy is not `off`; the "Code execution" and `preview.engine: off` text gets the same caveats.
 - [x] The share banner and help text (`share.rs:109-115` and `main.rs:274` say a guest can "RE-RUN" code)
       are false when `engine` is absent; make them say so.
-- [ ] `q2 preview --help` and `q2 provide-hub --help` text, including the per-command defaults, that a
+- [x] `q2 preview --help` and `q2 provide-hub --help` text, including the per-command defaults, that a
       relative directory path resolves against the working directory, and that `provide-hub` with a
       Positron source or a `q2` source needs `QUARTO_ENGINE_RECORD_WRITE=1` until the hosted hub has the
       reader.
-- [ ] Refresh the embedded docs as a step, not a reminder: `cargo xtask build-agents-docs`, then
+- [x] Refresh the embedded docs as a step, not a reminder: `cargo xtask build-agents-docs`, then
       `cargo build --bin q2`, then check `target/debug/q2 docs llms --embed-info` (the commit and `(dirty)`
       marker) and render `target/debug/q2 render docs/`. Do it before the release that carries the flip,
       since `q2 docs` serves the embed.
@@ -242,9 +300,9 @@ the limits, and revises RIU-3's text for the hardened flag.
 
 Use `target/debug/q2`, never the `q2` on PATH (an old nightly that cannot read records).
 
-- [ ] `cargo clippy -p quarto -p quarto-preview -p quarto-hub-provider --all-targets -- -D warnings`
-- [ ] `cargo nextest run -p quarto -p quarto-preview -p quarto-hub-provider`
-- [ ] Real binary, **needs a browser for the page checks** and the RIU-3 fixtures, in the default viewer
+- [x] `cargo clippy -p quarto -p quarto-preview -p quarto-hub-provider --all-targets -- -D warnings`
+- [x] `cargo nextest run -p quarto -p quarto-preview -p quarto-hub-provider`
+- [x] Real binary, **needs a browser for the page checks** and the RIU-3 fixtures, in the default viewer
       (the product's main surface): `q2 preview --records positron <doc>` on the RIU-3 Python fixture, with
       the locator pointed at the fixture directory (a bare-path source or the directory override; a
       hand-built cache is not at the URI-hashed name): no kernel starts, outputs show;
@@ -254,12 +312,24 @@ Use `target/debug/q2`, never the `q2` on PATH (an old nightly that cannot read r
       the process list), as S1 B8 observed it starting one. The `curl` and process checks need no browser.
       Then the editor UI with `--share` and a guest: record what the guest can and cannot do (RIU-3 Phase G
       records the rest).
-- [ ] The provider path is checked by its integration tests (a scripted `execute_document`); a real
+- [x] The provider path is checked by its integration tests (a scripted `execute_document`); a real
       `provide-hub` against a local hub is run only if one is available, and the note says "not run" if not.
-- [ ] The two-binary `--share` case (a guest on a different build than the host) was not run in RIU-0 (S3).
+- [x] The two-binary `--share` case (a guest on a different build than the host) was not run in RIU-0 (S3).
       Run it once before the flip ships, or say it was not run.
-- [ ] Windows cross-check for the argument parsing and path tests:
+      **Run (2026-11-06):** host workspace-6 with guest workspace-5, and the reverse (`--records cache --share`).
+      Both connected (one direct, one by relay); the guest's `POST /api/preview/re-execute` was refused with the
+      host's `403 ... the engine is not in --records, so this preview never runs code`; and the guest page
+      rendered in a browser both ways (the guest log has no "serving UI assets locally" line, so it took
+      the host's assets over the tunnel).
+      **Guest re-execute with `engine` present, run (2026-11-06):** host `--records cache,engine --share` with
+      a scratch `uv venv` holding `ipykernel` (`JUPYTER_PATH` and `PATH` pointing at it), a Jupyter `{python}`
+      document with no record. The guest's `POST /api/preview/re-execute` returned `202 Accepted`, and the
+      guest page (headless Chromium) showed the executed output `sum: 10` and `[1, 4, 9, 16]`. The host ran the
+      code; the guest could not have.
+- [x] Windows cross-check for the argument parsing and path tests:
       `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
+      **Deferred, not run** (Gordon, 2026-11-06): it cannot run from macOS (`ring` and `aws-lc-sys` fail to
+      build C for the target), it is already an epic close-out item, and CI covers it.
 
 ## Exit criteria
 

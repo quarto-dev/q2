@@ -293,8 +293,8 @@ pub fn engines_without_record_diagnostic(
 }
 
 /// The warning a page shows when no `--records` source supplied a record for a document that
-/// has code cells (RIU-4), built from the walk's outcomes: one detail line per source, so the
-/// reader sees why each one was passed over. `None` (silence) for a prose-only document and
+/// has code cells (RIU-4), built from the walk's outcomes: the problem names each source and why
+/// it was passed over, on one line. `None` (silence) for a prose-only document and
 /// when a source did supply.
 pub fn no_record_source_diagnostic(
     outcomes: &[crate::record::SourceOutcome],
@@ -307,21 +307,28 @@ pub fn no_record_source_diagnostic(
     {
         return None;
     }
-    let mut b = DiagnosticMessageBuilder::warning("No execution record for this document").problem(
-        "None of the record sources named by `--records` supplied one, so no outputs are shown.",
-    );
-    for o in outcomes {
-        let what = match &o.kind {
-            OutcomeKind::Supplied => unreachable!("checked above"),
-            OutcomeKind::Nothing => "nothing for this document".to_string(),
-            OutcomeKind::Refused(why) => format!("refused: {why}"),
-            OutcomeKind::Unavailable(why) => format!("not available: {why}"),
-            OutcomeKind::Failed(why) => format!("failed: {why}"),
-        };
-        b = b.add_detail(format!("{}: {what}", o.source.label()));
-    }
+    let reasons = outcomes
+        .iter()
+        .map(|o| {
+            let what = match &o.kind {
+                OutcomeKind::Supplied => unreachable!("checked above"),
+                OutcomeKind::Nothing => "nothing for this document".to_string(),
+                OutcomeKind::Refused(why) => format!("refused: {why}"),
+                OutcomeKind::Unavailable(why) => format!("not available: {why}"),
+                OutcomeKind::Failed(why) => format!("failed: {why}"),
+            };
+            format!("{}: {what}", o.source.label())
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    // One line, in `problem`: the viewer's warning box shows only the title and the problem.
     Some(
-        b.add_hint("Add `engine` to `--records` (and leave `preview.engine` on) to run the code.")
+        DiagnosticMessageBuilder::warning("No execution record for this document")
+            .problem(format!(
+                "None of the record sources named by `--records` supplied one, so no outputs \
+                 are shown ({reasons}). Add `engine` to `--records` (and leave `preview.engine` \
+                 on) to run the code."
+            ))
             .build(),
     )
 }
@@ -593,6 +600,33 @@ mod tests {
         assert!(text.contains("cache: nothing"), "{text}");
         assert!(text.contains("QUARTO_ENGINE_RECORD_WRITE"), "{text}");
         assert!(text.contains("engine: not available"), "{text}");
+    }
+
+    /// The viewer's overlay shows only a diagnostic's title and problem, so the per-source
+    /// reasons and the fix must be in `problem` itself, on one line (the overlay collapses
+    /// newlines).
+    #[test]
+    fn no_source_diagnostic_carries_the_reasons_and_the_fix_in_the_problem() {
+        use crate::record::{OutcomeKind as K, RecordSource as S};
+        let d = no_record_source_diagnostic(
+            &[
+                outcome(S::Cache, K::Nothing),
+                outcome(
+                    S::Engine,
+                    K::Unavailable("`engine` is not in --records".into()),
+                ),
+            ],
+            true,
+        )
+        .unwrap();
+        let problem = d.problem.as_ref().expect("a problem").as_str().to_string();
+        assert!(
+            problem.contains("cache: nothing for this document"),
+            "{problem}"
+        );
+        assert!(problem.contains("engine: not available"), "{problem}");
+        assert!(problem.contains("Add `engine` to `--records`"), "{problem}");
+        assert!(!problem.contains('\n'), "one line: {problem:?}");
     }
 
     #[test]

@@ -468,7 +468,7 @@ Every plan's verify step assumes this, so it is stated once.
 | RIU-1 | [Enablement and the writer flip](2026-11-02-riu-01-enablement-and-writer-flip.md) | 1 | ready; per-surface flip |
 | RIU-2 | [A provider seam; records replace the capture cache](2026-11-02-riu-02-provider-seam-records-replace-cache.md) | 4 to 5 | ready; the central piece (the record-only part is small, S2); also the source list, the walk and its outcomes, the refusal predicate and the resolver trait (in `quarto-core`), the cache split, the `describes_something` change, engine-only re-execute, the `ReExecuteConfig` that carries the gate, and the execution guard |
 | RIU-3 | [The Positron cache as a record source](2026-11-02-riu-03-positron-cache-as-record-source.md) | 4 to 6 | 3a landed 2026-11-06 (browser run, Re-execute tests and the EXR-16 sweep still open, see its plan); 3b ready; split: 3a conversion (with the unclaimed-cell count), locator and directory source, the provider publish method, the staleness function and a minimal `--records` flag; 3b the provenance stamp (spike P), the TypeScript side and the browser checks |
-| RIU-4 | [CLI surface for record sources](2026-11-02-riu-04-cli-surface-for-record-sources.md) | 1.5 to 2 | ready; hardens the flag (bare paths, no prefix), implements the resolver for the provider and wires it into `execute_document`, builds the diagnostics from outcomes, final docs |
+| RIU-4 | [CLI surface for record sources](2026-11-02-riu-04-cli-surface-for-record-sources.md) | 1.5 to 2 | landed 2026-11-06; hardens the flag (bare paths, no prefix), implements the resolver for the provider and wires it into `execute_document`, builds the diagnostics from outcomes, final docs. Windows cross-clippy and the workspace nextest are left to the exit criteria |
 | RIU-5 | [Export for Positron](2026-11-02-riu-05-export-for-positron.md) | 1 to 2 | ready; the function and `q2 record export-positron`; Julia and the representation rule (spike J) |
 | RIU-6 | [The Positron command demo](2026-11-02-riu-06-positron-command-demo.md) | 2 plus an early spike | ready; spike in the fork, mechanisms proven in S5 and S6; Phase 0 tests the viewer in Positron's preview pane and can run now; owns the closing reconciliation |
 | RIU-7 | [Flip the `provide-hub` writer default](2026-11-06-riu-07-provide-hub-flip.md) | under 1, plus the deploy | deferred; execute when everything else is in place and has settled; nothing waits on it |
@@ -560,9 +560,9 @@ column is as of 2026-11-06 and is ticked by the lane that lands the row.
 | RIU-2 Phase F (verify: Windows, workspace nextest, browser run) | RIU-2 Phases A to E | open |
 | RIU-3a (Phases A to D) | RIU-2 Phases A to E; RIU-1 for any browser check | landed 2026-11-06 (browser run, Re-execute tests and the EXR-16 sweep still open) |
 | RIU-3b (Phase E, F, and the 3b items of G) | RIU-3a landed | open |
-| RIU-4 (the `--records` hardening) | RIU-3a landed | open |
+| RIU-4 (the `--records` hardening) | RIU-3a landed | landed 2026-11-06 (Windows cross-clippy not run; no workspace nextest) |
 | RIU-5 Phases A and B (the export function) | nothing | landed 2026-11-06 |
-| RIU-5 Phase B2 (`q2 record export-positron`) | RIU-4 landed (see the open question) | open |
+| RIU-5 Phase B2 (`q2 record export-positron`) | RIU-4 landed | open; unblocked |
 | RIU-5 Phase C | RIU-5 B2 | open |
 | RIU-6 Phase 0 (the viewer in the preview pane) | nothing | landed 2026-11-06 (notes only) |
 | RIU-6 Phase A (vitest tests), command 1 | nothing; lives in the Positron fork | open |
