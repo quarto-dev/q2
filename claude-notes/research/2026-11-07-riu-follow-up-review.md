@@ -136,6 +136,15 @@ the tree (all verified by reading unless marked):
 - **Julia is already presented by core.** `b4d827186` (2026-11-01) flipped it (`core_presents` in
   `engine/ts_record.rs:500`: Julia, `want_record`, non-empty units). Epic decision 5 and one risk line still
   said otherwise; both are fixed in this commit.
+- **Correction to the import-and-export design (Gordon, same day).** Kernel equivalence is an *import* concern
+  (Positron's outputs get attributed to a q2 unit). On export the recorded output is q2's real output for the
+  cell, true whichever engine made it, so the export needs no engine gate. RIU-5's rules, one by one: inline
+  units (Positron skips them itself, S7), the owner and language gate (symmetry only), fallback cells (a q2
+  artifact, shown by Positron as raw text), duplicate groups (exist only because of the skips), array and JSON
+  stringifying (untested), one image representation (a real Positron display behavior, J8) and the metadata
+  reduction (Positron rewrites to three keys itself). Only the notebook-level validity and, as a decision, the
+  image rule remain candidates. The plan's Item 1 now starts with a raw-record experiment in the fork's e2e
+  harness. Not re-run: the S7 finding that an untransformed Jupyter Python record displays.
 - **Recommendation:** the single-mode presenter (inputs optional, capability = presence of the data, one declared
   flag for who enforces `warning` and `message`) is feasible but belongs in its own tests-first plan, because it
   touches the splice stage, `document.rs`, the option sweep and the byte-identical Jupyter goldens (decision 12

@@ -60,60 +60,84 @@ produced a record, printed `{"cells":0, "skipped":[3 x "engine is not jupyter or
 None is a fallback cell, so the owner rule is the only reason the export skips them. Not run: anything in a
 Positron window, the hash comparison, Ark's cache shapes.
 
+**Principle (Gordon, 2026-11-07).** q2 does nothing special for Positron. Where q2 produces a compatible
+execution record, Positron can show it; where it does not, Positron will not. Designing Positron-side features
+is out of scope. RIU-0 S7 found that a real q2 Jupyter Python record, **untransformed**, displayed the same as
+the export (RIU-5, "What S7 and spike J showed"; not re-run on 2026-11-07). So the export should shrink to what a
+*valid* cache file needs, and each rule that is a workaround for a Positron display behavior is a decision, not
+a default. The kernel-equivalence declaration below is an **import** concern only: on import, Positron's outputs
+are attributed to a q2 unit, and a unit owned by marimo or an extension engine may run something other than what
+Positron's kernel ran. On export the recorded output is q2's own real output for that cell, true whichever engine
+produced it. (This corrects the same day's earlier proposal of one declaration for both directions.)
+
 ### Phase A: characterize (spike, no product code) `[unattended]`
 
 - [x] Dump a knitr record and say, per cell, structured or fallback (done in the review, above).
-- [ ] Dump a larger knitr record that includes an `asis` chunk, a raw HTML chunk, a `results: hide` chunk, an
-      error chunk (`error: true`), a chunk with `fig-cap`, and an inline `` `r expr` `` span, and list each
-      cell's kind and outputs. This settles which cells stay skipped (Phase B's decision).
-- [ ] Read what Positron's R side (Ark) stores and shows for a `.qmd` (the same `quarto-inline-outputs` cache?),
-      and compare shapes with the knitr cells: data frame as text versus HTML, the message stream, an empty
-      `ename`, messages on stdout (RIU-3 lists these as KNR-5 presenter limits). Fork worktree:
-      `/Users/gordon/src/positron-riu6-a` (branch `spike/riu-6-phase-a`, tree clean at `99aa72fcb4`).
 - [x] ~~Check whether the content hash equals the knitr record's `quarto_content_hash`.~~ **Settled by
       reading, 2026-11-07:** `quarto_content_hash` is computed in core for every engine from the author's block
       text, `#|` lines included (`crates/quarto-core/src/record/ids.rs:3-26`); the `structured` profile only
       shapes `quarto_exec_hash`. The R fixture's hashes already equal q2's
       (`every_cached_hash_equals_the_one_q2_computes_through_the_splice_path`, `positron_source.rs:142`).
       (The earlier version of this box rested on a reviewer's wrong premise; see the review note, finding 3.)
+- [ ] **The raw-record experiment (replaces "dump and decide which cells to skip").** In the fork's e2e harness
+      (Playwright against the Positron dev build), push **unfiltered** records, exactly as `q2 render` with
+      `record: true` writes them, into open documents, and say what Positron shows: (a) a knitr R document with
+      a plain chunk, a plot, a message, a data frame, an error chunk, an `asis` chunk, a `results: hide` chunk and
+      a raw-HTML chunk; (b) a Julia document with a plot; (c) a Python document with an array-valued or
+      JSON-valued output; (d) a document with an inline span. Anything that fails to display is a finding about
+      Positron to report, not something q2 works around. Mark each case seen, Playwright, or not run.
+- [ ] Read what Positron's R side (Ark) stores and shows for a `.qmd` (the same `quarto-inline-outputs` cache?),
+      and compare shapes with the knitr cells: data frame as text versus HTML, the message stream, an empty
+      `ename`, messages on stdout (RIU-3 lists these as KNR-5 presenter limits). This matters for the import
+      direction. Fork worktree: `/Users/gordon/src/positron-riu6-a` (branch `spike/riu-6-phase-a`, tree clean at
+      `99aa72fcb4`).
 - [ ] `[Gordon]` What is left of the hash question is Positron-side only: does Positron's parser read `#|`
-      lines the same way for a Julia cell as for Python and R? Check in the fork
-      (`/Users/gordon/src/positron-riu6-a`), with one Julia `#|` cell.
-- [ ] **Design (agreed with Gordon 2026-11-07; read the review note's "Design findings after the review").**
-      Replace the name lists `EXPORT_OWNERS` and the `outputs_for` owner rule with data checks plus one declared
-      fact, **kernel equivalence**: for which languages is a unit this engine owns ordinary kernel code, so the
-      same text gives the same outputs in a plain Positron kernel? One declaration serves both directions.
-      (It replaces the earlier "structured languages" idea: structured versus fallback is a presentation detail,
-      not what the gates protect; they protect "Positron ran the same program the engine would run", which is
-      why `python.marimo` and other engines' units are excluded.) Shape: a trait method on `ExecutionEngine`
-      following `try_claims_language` (`engine/traits.rs:176-184`): `Option`, `None` means "would have to load",
-      and **`None` is not admitted** (undeclared engines are excluded). Jupyter and Julia declare any plain
-      language; knitr declares `r`. The data checks stay as safety on the cell: granularity `Unit`, no fallback
-      marker, syntactic language. Settled: engines outside today's lists are admitted only by declaration, and
-      each gets a test (Gordon: "we'll have to test"). Independent of Item 7.
-- [ ] Write the answers into a findings note with a verdict: the export can cover knitr as is, needs a
-      mapping (say which), or needs a change on the Positron side. "As is" is already ruled out by the owner
-      rule; with the hash question settled, the likeliest verdict is "a q2-side change to the gates".
-- [ ] **`[Gordon]` Gate: report the verdict and wait.** Do not start Phase B on the plan's say-so.
+      lines the same way for a Julia cell as for Python and R? Check in the fork, with one Julia `#|` cell
+      (the raw-record experiment can include it).
+- [ ] **Validity list.** From Positron's loader and the conformance mirror, write down exactly what a cache file
+      needs to avoid being deleted (notebook metadata such as `quarto_cache_version`, `outputs` always present,
+      and whatever else the loader checks). Everything outside that list is a candidate for removal from the
+      export.
+- [ ] **Design, import side (agreed with Gordon 2026-11-07).** Replace the `outputs_for` owner rule
+      (`jupyter`, `julia`, or `knitr` with token `r`) with one declared fact, **kernel equivalence**: for which
+      languages is a unit this engine owns ordinary kernel code, so the same text gives the same outputs in a
+      plain Positron kernel? Shape: a trait method on `ExecutionEngine` following `try_claims_language`
+      (`engine/traits.rs:176-184`): `Option`, `None` means "would have to load", and **`None` is not admitted**
+      (undeclared engines are excluded). Jupyter and Julia declare any plain language; knitr declares `r`. The
+      data checks stay on the cell: no fallback marker, syntactic language. Engines outside today's list are
+      admitted only by declaration, each with a test (Gordon: "we'll have to test"). Independent of Item 7.
+- [ ] Write the answers into a findings note with a verdict on what the export must still do. Likeliest: write
+      the record as a valid cache file and nothing else, with the image-representation rule an explicit decision.
+- [ ] **`[Gordon]` Gate: report the verdict and wait.** The raw-record experiment may show a Positron-side
+      problem; that is a decision for Gordon, not a q2 workaround.
 
 ### Phase B: tests first (after the gate)
 
-- [ ] Export unit tests for a knitr record: text output, a figure (one `image/png`), a message, a data frame,
-      an error, a chunk with options. Each fails on the current skip.
-- [ ] A test that a knitr unit in a language knitr does not present as a structured cell (bash, which becomes
-      a fallback unit; `python` under `engine: knitr` if it does too) **stays skipped** on both sides, export
-      and import, and that the two directions give the same answer for every language and engine in the
-      table. (Today the importer admits knitr only for the token `r` and the export has its own list.)
+- [ ] Export tests for a knitr record: text output, a figure (one `image/png`), a message, a data frame, an
+      error, a chunk with options. Each fails on the current skip (`EngineNotExportable`).
+- [ ] A test that the export no longer consults the engine or language: a cell owned by any engine, in any
+      language, appears in the output when the record has outputs for it (`marimo`-style `python.marimo` and
+      a fallback cell included, if the raw-record experiment showed they do no harm).
+- [ ] Import-side tests, one per engine in the table: a unit takes Positron outputs only when its engine
+      declares kernel equivalence for its language; an undeclared engine gets nothing.
 - [ ] A CLI test through the binary: `q2 record export-positron` on an `engine: knitr` fixture exits 0 and
       prints cells greater than 0. Keep the Python and Julia tests green.
-- [ ] **`[Gordon]`** Decide which knitr cells stay skipped (from the Phase A dump) and give each its own skip
-      reason in the JSON.
+- [ ] **`[Gordon]`** Decide the image-representation rule (RIU-5, "Output data (representations)": drop
+      `application/pdf`, prefer PNG over SVG, drop a `text/html` that only repeats a data-URI image). It is the one
+      remaining export rule that works around a Positron display behavior (J8: Positron renders every item of a
+      bundle, so Julia plots appeared twice with base64 text). Options: keep it in q2; drop it and report the
+      behavior to the Positron side, fixing it in the fork's view zone (`quartoOutputViewZone.ts`); or keep it
+      until the fork fixes it.
 
 ### Phase C: export
 
-- [ ] Replace `EngineNotExportable` and both name lists with the design the Phase A verdict settled (one rule
-      shared by export and import). Do not just add `knitr` to `EXPORT_OWNERS`. Update the subcommand help
-      text and the RIU-5 plan's rule list.
+- [ ] Remove `EngineNotExportable`, the inline-unit, extension-language, fallback and duplicate-group skips
+      and their `SkipReason` variants, as far as the raw-record experiment and the validity list allow; keep the
+      validity wrapper. Do not add `knitr` to `EXPORT_OWNERS`. Update the subcommand help text and the RIU-5
+      plan's rule list (that plan is landed; add a dated note there rather than rewriting its history).
+- [ ] The import gate: implement the kernel-equivalence declaration from the Phase A design and delete
+      `EXPORT_OWNERS`, `JUPYTER_ENGINE`, `JULIA_ENGINE`, `KNITR_ENGINE` and the `lang == "r"` literal as gate
+      inputs.
 - [ ] Gates on `quarto-core` and the `quarto` binary crate. Run the real binary on the fixture and read
       the JSON and the ipynb.
 
@@ -127,7 +151,8 @@ Positron window, the hash comparison, Ark's cache shapes.
 - [ ] `[Gordon]` Someone watches it once. Mark each step seen, Playwright, or not run.
 
 **Done when:** an R document shows its knitr outputs in the open editor after command 2, the preview
-shows them from the cache, and the findings note says which cell kinds are skipped and why.
+shows them from the cache, and the findings note says what Positron did with each kind of raw record and
+which of those are Positron-side findings.
 
 ## Item 2: the Julia e2e tests are slow and flaky
 
