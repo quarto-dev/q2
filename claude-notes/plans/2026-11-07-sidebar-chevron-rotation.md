@@ -41,16 +41,35 @@ Out of scope:
 
 ## Checklist
 
-- [ ] Test first: a compiled-CSS test in `crates/quarto-sass/src/compile.rs`
+- [x] Test first: a compiled-CSS test in `crates/quarto-sass/src/compile.rs`
   (next to `test_sidebar_stays_visible_at_lg_despite_collapse_class`) that
   asserts the default bundle has a rule whose selector targets
   `.sidebar-item-toggle[aria-expanded="true"] .bi-chevron-right::before`
   with `transform: rotate(90deg)`. Confirm that it fails.
-- [ ] Port the rules into the sidebar block of `_bootstrap-rules.scss`,
+- [x] Port the rules into the sidebar block of `_bootstrap-rules.scss`,
   with a provenance comment.
-- [ ] Test passes; `cargo clippy -p quarto-sass --all-targets -- -D warnings`.
-- [ ] End-to-end: render a website with nested sidebar sections; check the
+- [x] Test passes; `cargo clippy -p quarto-sass --all-targets -- -D warnings`.
+- [x] End-to-end: render a website with nested sidebar sections; check the
   compiled CSS and confirm in a headless browser that the expanded
   section's chevron `::before` computes to a rotated transform and the
   collapsed one does not.
-- [ ] `cargo xtask verify --skip-hub-build`; PR; monitor CI.
+- [x] `cargo xtask verify --skip-hub-build` (local failures are environment-only: pandoc 3.13 vs pinned 3.12.1, local R/cairo; the one real failure, the `phase5-single-doc-baseline` styles.css hash, was re-captured)
+- [ ] PR; monitor CI.
+
+## End-to-end verification (2026-11-07)
+
+Setup: a three-page website with `sidebar.collapse-level: 1` and two
+sections, rendered with `cargo run --bin q2 -- render <site>`. Inspected
+the output:
+
+- `a.html`: the toggle for the section holding the current page has
+  `aria-expanded="true"`; the other section has
+  `aria-expanded="false"` plus `collapsed`.
+- The compiled `site_libs/quarto/quarto-theme-*.css` contains
+  `.sidebar-item .sidebar-item-toggle[aria-expanded=true] .bi-chevron-right::before{transform:rotate(90deg)}`
+  and the `=false` / `transform:none` counterpart.
+- In headless Chrome, served over HTTP: the open section's chevron
+  `::before` computes to `matrix(0, 1, -1, 0, 0, 0)` (90 degrees) and
+  the closed one to `none`. Clicking the closed toggle makes Bootstrap
+  flip `aria-expanded` to `true`, and that chevron then rotates too. A
+  screenshot showed both chevrons pointing down after the click.
