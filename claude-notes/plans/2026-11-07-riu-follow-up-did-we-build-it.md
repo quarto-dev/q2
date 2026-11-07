@@ -232,15 +232,24 @@ release; each item is either fixed for the demo, or written down as a known issu
       covers timing and EPIPE only. Write down what q2 can say when it sees either.
 - [x] The preview banner text "this page reconnects automatically" is wrong for a one-shot server (epic
       decision 15 says no banner). *Gordon, 2026-11-07: don't care; left as is.*
-- [ ] `[Gordon]` Does pushing over existing outputs ask first? (Today it replaces them.)
+- [x] Does pushing over existing outputs ask first? *Gordon, 2026-11-07: no. Command 2 replaces the outputs of
+      each matched cell with no prompt (its job); say so in the run guide.* The push is
+      `_positronQuarto.pushOutputsFromFile` in the fork, which clears and re-adds a matched cell's outputs
+      (epic S5; `pushCells` was not read).
 - [ ] `[unattended]` **Not run in any window:** untitled document, "q2 too old" (exit 2), non-default profile,
       a dirty document. Wrong `q2.path` was run under Playwright and failed correctly (commands findings);
       change the box to say that. The first two can be added to the fork's e2e suite.
 
 **Polish or documentation**
 
-- [ ] `[Gordon]` **Edited cell loses syntax highlighting in the q2 preview** (RIU-3a question). Check against
-      the intent: is the preview meant to be editable? `[either]` the observation itself is a Playwright check.
+- [ ] `[either]` **An edited cell loses its syntax highlighting in the q2 preview** (commands findings, RIU-3a).
+      Not a question about editability (the preview is not edited; the document is, in Positron's editor). The
+      cell is edited, so it no longer matches its cached output and is shown with no output. What is not known is
+      whether the missing highlighting is expected for a cell with no output (compare an unexecuted `{python}`
+      cell in `q2 render` and in `q2 preview`) or a bug in how an unmatched cell is presented in a
+      records-only preview. A Playwright check against `q2 preview --records <dir>` settles which; file a box if it
+      is a bug. (Not run: the Jupyter runtime is not available in this checkout's environment, so a plain
+      `q2 render` comparison could not be done here.)
 - [ ] `[Gordon]` **Command 1 on Julia and R spans**, and whether values should persist. (Python only so far; the
       R half waits on Item 1.)
 - [ ] Command 2 does not change Positron's kernel state: a later cell that uses a variable from a pushed cell
@@ -262,8 +271,8 @@ release; each item is either fixed for the demo, or written down as a known issu
 - [ ] `[either]` **RIU-3 browser items never seen:** `--records positron,engine` running the engine, a cache
       older than the document shown in a browser, `--share --allow-edit` with a guest, "Clear results" clicked,
       a real click or scroll sync.
-- [ ] `[Gordon]` **Stamped cells carry no `data-loc`**, so a click inside a stamped cell maps to no source line.
-      This follows from decision 14 (stamped means not editable). Is that acceptable for the editor?
+- [x] **Stamped cells carry no `data-loc`**, so a click inside a stamped cell maps to no source line. This
+      follows from decision 14 (stamped means not editable). *Gordon, 2026-11-07: fine.*
 - [ ] `[unattended]` Decision 12 (a failed optional `record: true` copy fails soft) says "not re-verified
       against the code"; re-verify with the real binary.
 - [x] Fix the epic's "Closing reconciliation" (`records-in-use-epic.md`), which said RIU-3b never started,
