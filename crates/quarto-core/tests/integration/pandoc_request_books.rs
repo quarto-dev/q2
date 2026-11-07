@@ -655,11 +655,135 @@ fn the_same_book_requested_from_two_chapters_is_one_request() {
         "typst",
         Some(BookScope::Book),
     ));
+    // A mismatch has only ever shown up on Linux CI, never locally, so the
+    // failure says *what* differs (bd-9hzg79zn follow-up flake).
     assert_eq!(
-        a.job_id, b.job_id,
-        "the active chapter is not in the request"
+        a.job_id,
+        b.job_id,
+        "the active chapter is not in the request; differences:\n{}",
+        request_differences(&a, &b).join("\n")
     );
     assert_eq!(a.argv, b.argv);
+}
+
+/// Human-readable differences between two requests, for a failure message:
+/// argv, env (the filter params decoded), dirs, the share tree, and every
+/// file by path (JSON files compared structurally, down to the leaf).
+fn request_differences(a: &PandocRequest, b: &PandocRequest) -> Vec<String> {
+    use base64::Engine as _;
+    use std::collections::BTreeMap;
+
+    fn clip(s: &str) -> String {
+        let mut out: String = s.chars().take(300).collect();
+        if out.len() < s.len() {
+            out.push('…');
+        }
+        out
+    }
+    fn json_diff(x: &serde_json::Value, y: &serde_json::Value, at: &str, out: &mut Vec<String>) {
+        use serde_json::Value;
+        if out.len() >= 40 {
+            return;
+        }
+        match (x, y) {
+            (Value::Object(m), Value::Object(n)) => {
+                for key in m.keys().chain(n.keys().filter(|k| !m.contains_key(*k))) {
+                    match (m.get(key), n.get(key)) {
+                        (Some(u), Some(v)) => json_diff(u, v, &format!("{at}/{key}"), out),
+                        (u, v) => out.push(format!("{at}/{key}: {u:?} vs {v:?}")),
+                    }
+                }
+            }
+            (Value::Array(m), Value::Array(n)) => {
+                if m.len() != n.len() {
+                    out.push(format!("{at}: length {} vs {}", m.len(), n.len()));
+                }
+                for (i, (u, v)) in m.iter().zip(n).enumerate() {
+                    json_diff(u, v, &format!("{at}[{i}]"), out);
+                }
+            }
+            _ if x != y => out.push(format!(
+                "{at}: {} vs {}",
+                clip(&x.to_string()),
+                clip(&y.to_string())
+            )),
+            _ => {}
+        }
+    }
+    fn text_diff(name: &str, x: &[u8], y: &[u8], out: &mut Vec<String>) {
+        if x == y {
+            return;
+        }
+        let parsed = (
+            serde_json::from_slice::<serde_json::Value>(x),
+            serde_json::from_slice::<serde_json::Value>(y),
+        );
+        if let (Ok(u), Ok(v)) = parsed {
+            json_diff(&u, &v, name, out);
+        } else {
+            out.push(format!(
+                "{name}: {} vs {}",
+                clip(&String::from_utf8_lossy(x)),
+                clip(&String::from_utf8_lossy(y))
+            ));
+        }
+    }
+    let by_path = |list: &[quarto_core::pandoc_request::RequestFile]| -> BTreeMap<String, Vec<u8>> {
+        list.iter()
+            .map(|f| (f.path.clone(), f.bytes.clone()))
+            .collect()
+    };
+
+    let mut out = Vec::new();
+    if a.argv != b.argv {
+        out.push(format!("argv: {:?} vs {:?}", a.argv, b.argv));
+    }
+    for key in a
+        .env
+        .keys()
+        .chain(b.env.keys().filter(|k| !a.env.contains_key(*k)))
+    {
+        let decode = |v: &String| {
+            if key == "QUARTO_FILTER_PARAMS" {
+                base64::engine::general_purpose::STANDARD
+                    .decode(v)
+                    .unwrap_or_else(|_| v.clone().into_bytes())
+            } else {
+                v.clone().into_bytes()
+            }
+        };
+        match (a.env.get(key), b.env.get(key)) {
+            (Some(u), Some(v)) => {
+                text_diff(&format!("env {key}"), &decode(u), &decode(v), &mut out)
+            }
+            (u, v) => out.push(format!("env {key}: {u:?} vs {v:?}")),
+        }
+    }
+    if a.dirs != b.dirs {
+        out.push(format!("dirs: {:?} vs {:?}", a.dirs, b.dirs));
+    }
+    if a.share_tree_version != b.share_tree_version {
+        out.push("share_tree_version differs".to_string());
+    }
+    for (label, x, y) in [
+        ("file", by_path(&a.files), by_path(&b.files)),
+        (
+            "resource",
+            by_path(&a.resource_refs),
+            by_path(&b.resource_refs),
+        ),
+    ] {
+        for path in x.keys().chain(y.keys().filter(|k| !x.contains_key(*k))) {
+            match (x.get(path), y.get(path)) {
+                (Some(u), Some(v)) => text_diff(&format!("{label} {path}"), u, v, &mut out),
+                (u, _) => out.push(format!(
+                    "{label} {path}: only in {}",
+                    if u.is_some() { "a" } else { "b" }
+                )),
+            }
+        }
+    }
+    out
 }
 
 #[test]
