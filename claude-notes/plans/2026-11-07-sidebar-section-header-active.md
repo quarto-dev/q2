@@ -56,7 +56,7 @@ Root cause, in `crates/quarto-navigation`:
 - [x] End-to-end: render a small website with `cargo run --bin q2` and
   inspect the section-index pages' HTML.
 - [x] `cargo xtask verify --skip-hub-build`.
-- [ ] Open the PR and watch CI until it is green.
+- [x] Open the PR and watch CI until it is green (PR #1120). The first CI run failed: a fixture newly added on `main` (`navigation_active.rs`) lacked the `active` field. I merged `main` and fixed it; every check is green.
 
 ## Details
 
