@@ -192,21 +192,40 @@ pays startup and precompile time.
 
 ## Item 3: loose ends from RIU-6
 
-Ranked by whether they block shipping the commands. Each "Gordon" box is a decision, not an assumption.
+**This is still a demo (Gordon, 2026-11-07).** "Ship" means the demo in the fork, so nothing here blocks a
+release; each item is either fixed for the demo, or written down as a known issue in the demo's run guide
+(`extensions/q2-records-demo`'s demo folder). Each "Gordon" box is a decision, not an assumption.
 
-**Blocks shipping**
+**Fix or document for the demo**
 
-- [ ] `[Gordon]` **Positron's cache location from an API** instead of the sibling-of-`globalStorageUri`
-      guess (wrong for a non-default profile; commands 2 and 3 fail there with "does not exist").
-- [ ] `[Gordon]` **Viewer close button leaves q2 running** (leaks a process and a port; a Positron Viewer
-      change). Blocks command 3 only; decide whether to ship command 3 without it.
+- [ ] `[unattended]` **Positron's cache location: prototype a Positron feature, idiomatically** (Gordon,
+      2026-11-07: a Positron-side prototype is wanted here). Found so far, by a targeted grep of the fork, not
+      an exhaustive search: the extension takes `ctx.globalStorageUri`'s sibling
+      (`q2-records-demo/src/previewHelpers.ts:31-35`), which is profile-scoped, while Positron's cache service
+      always writes under `defaultProfile.globalStorageHome`
+      (`src/vs/workbench/contrib/positronQuarto/browser/quartoOutputCacheService.ts:133-136`). Positron's own
+      docs extension notes the same profile scoping (`extHostDocsNode.ts:229-234`). No existing setting or API
+      for the cache directory turned up. The precedent for an extension asking the workbench is the internal
+      command `_positronQuarto.pushOutputsFromFile` (`quartoPushOutputs.ts:29`). First step: investigate how
+      Positron exposes workbench-owned paths and settings to extensions (a public `positron.*` API, a
+      contributed setting, or an internal command) and pick the most idiomatic; the cache service already holds
+      `_cacheDir`, so a small command or API next to the push command is the likely shape. Then: tests first
+      (a vitest for the extension's use of it, and a check with a non-default profile), replace
+      `cacheDirFromGlobalStorage`, and make a missing answer an error that names the cause. Done when command 3
+      and command 2 work under a non-default profile.
+- [x] **Viewer big X leaves q2 running: document and ship** (Gordon, 2026-11-07). The extension already kills
+      q2 on `onDidRequestStop` and `onDidDispose` (`previewCommand.ts:93-94`) and on deactivation (`:113`);
+      closing the Viewer view evidently does not dispose the panel, which the findings attribute to Positron's
+      Viewer. The leak is bounded by the Positron session; Stop works.
+- [ ] `[unattended]` Write that limitation, and "use the Viewer's Stop", into the demo's run guide.
 - [ ] `[unattended]` **Command 2: progress and cancel.** The engine may run the whole document with no
-      progress or cancel. Confirm what the command shows today and write the gap down (a box if code is needed).
+      progress or cancel. Confirm what the command shows today and write the gap down (a box if code is needed,
+      otherwise a line in the run guide).
 - [ ] `[unattended]` **Dirty document wording.** Epic decision 7 says a dirty document exports from disk and the
       push skips changed cells with a report; the commands findings say "exported as saved, with a note". Check
       the actual behavior and make the two statements agree.
 
-**Should fix before shipping**
+**Should fix for the demo, or document**
 
 - [ ] `[unattended]` **Stale Julia servers and a missing Plots project** produce confusing results (`startpath
       must be non-empty`; an `ArgumentError` exported as an error output that looks like a working run). Item 2
