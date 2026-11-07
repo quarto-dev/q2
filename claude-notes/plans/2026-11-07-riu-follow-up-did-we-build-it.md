@@ -247,9 +247,13 @@ release; each item is either fixed for the demo, or written down as a known issu
       cell is edited, so it no longer matches its cached output and is shown with no output. What is not known is
       whether the missing highlighting is expected for a cell with no output (compare an unexecuted `{python}`
       cell in `q2 render` and in `q2 preview`) or a bug in how an unmatched cell is presented in a
-      records-only preview. A Playwright check against `q2 preview --records <dir>` settles which; file a box if it
-      is a bug. (Not run: the Jupyter runtime is not available in this checkout's environment, so a plain
-      `q2 render` comparison could not be done here.)
+      records-only preview. **`q2 render` comparison, 2026-11-07 (uv venv with ipykernel in the scratch
+      directory, `PATH` and `JUPYTER_PATH` pointing at it, `target/debug/q2`):** a `{python}` cell with
+      `#| eval: false` renders highlighted (`<pre class="sourceCode python">` with `hl-*` spans), as do an
+      executed cell and a plain ` ```python ` fence. So an unexecuted cell is highlighted in `q2 render`, and the
+      missing highlighting in the Positron preview is probably specific to how the records-only preview presents
+      an unmatched cell. Still to do: a Playwright check against `q2 preview --records <dir>` with an edited cell;
+      file a box if it is a bug.
 - [ ] `[Gordon]` **Command 1 on Julia and R spans**, and whether values should persist. (Python only so far; the
       R half waits on Item 1.)
 - [ ] Command 2 does not change Positron's kernel state: a later cell that uses a variable from a pushed cell
