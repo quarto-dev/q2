@@ -2,7 +2,7 @@
 title: 'RIU-5: export for Positron'
 date: 2026-11-02
 description: 'A Rust export_for_positron function that turns a q2 execution record into a cache file Positron accepts and displays: the S7 filter (a Jupyter Python record already loads unchanged), extended to Julia cells owned by the julia engine and with a rule that sends Positron one representation of an image instead of four, checked against the conformance mirror and real fixtures; and the q2 record export-positron subcommand that exposes it with defined exit codes, so the TypeScript commands do not reimplement it.'
-status: ready  # nothing started; written from RIU-0 S7 and RIU-0b spike J, checked against the tree on 2026-11-03; the representation rule is designed from a window run that showed the problem, not yet run in the window
+status: landed (B1 a6b719d11 and 4f0d96b8a, B2 d6954ccdf, 2026-11-06 and 2026-11-07); still open (the Windows cross-clippy and a person watching the Positron window)  # reconciled 2026-11-07; earlier: nothing started; written from RIU-0 S7 and RIU-0b spike J, checked against the tree on 2026-11-03; the representation rule is designed from a window run that showed the problem, not yet run in the window
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -185,7 +185,7 @@ for both Python and Julia unless `error: true` is set (RIU-0c spike 3).
 - [x] An older `q2` that lacks the subcommand exits non-zero with a usage error (code 2); the Positron
       command treats that as "q2 too old" (S6: the `q2` on PATH was an old nightly), so no capability
       probe is added.
-- [x] (Partial: the Julia error document was run by hand, not as a test, and the Julia plot document was not run.) Tests first through the real argument parser, including that `--records cache`, `positron` and a
+- [x] (The Julia plot document was later run through RIU-6's Playwright test: one image, 2026-11-07. The Julia error document was run by hand, not as a test.) Tests first through the real argument parser, including that `--records cache`, `positron` and a
       directory entry exit 2 with a message naming the two valid names; then run it on the S1 `basic.qmd` fixture with
       no `record: true` and on a Julia document, and inspect the file and the JSON line. Add the
       Windows cross-check (Phase C).
@@ -202,7 +202,7 @@ a plot needs Plots in the document's Julia project (add it with `JULIA_PKG_OFFLI
 - [ ] The Windows cross-check **not run**: `cargo clippy --target x86_64-pc-windows-msvc` cannot build `aws-lc-sys` from macOS (the caveat in `.claude/rules/cross-platform.md`). The new tests build their one path with `Path::join`; a Windows user should run the native clippy. (the subcommand takes paths and writes a file):
       `cargo clippy -p quarto-core -p quarto --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
 - [x] `cargo nextest run -p quarto-core -p quarto` 2026-11-07, `--no-fail-fast`: 8771 run, 8770 passed, 38 skipped, 1 failed. The failure is `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package`: this worktree\'s `node_modules` reveal.js `reset.css` differs from the vendored copy. Not touched by this change; not run on the base to confirm. The 13 B2 tests passed with a scratch venv on `PATH`; the full run had none, so its two engine tests skipped.
-- [ ] **NOT RUN (needs Gordon at the Positron dev build)** (the S7 method; the push command is the S5 spike or
+- [ ] **Partly run 2026-11-07, not watched:** RIU-6's Playwright tests pushed an exported Julia document (five outputs, the plot exactly one image) and a Python one into a real Positron window, and Gordon watched a Julia session of it. The array-valued-output case (a) was not run, and the absence of base64 text was not checked explicitly. Original text: **NOT RUN (needs Gordon at the Positron dev build)** (the S7 method; the push command is the S5 spike or
       RIU-6 command 2): push an exported file for (a) a document with an array-valued output, and (b) the
       Julia plot document, and confirm the plot shows **once**, with no base64 text. The Julia plot
       document and its old, unfiltered export are in `~/docs/inline-output/` (`s8-julia.qmd`,

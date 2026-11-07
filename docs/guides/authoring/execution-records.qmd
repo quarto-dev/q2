@@ -77,9 +77,12 @@ extra information in it is dropped; it is named after a hash of the document's
 location, which Quarto cannot reproduce; and it carries a timestamp that
 changes on every write, so its bytes are never stable.
 
-Quarto does not read Positron's cache when it renders. A render never changes
-or deletes Positron's cache. The preview can show those outputs when you ask
-for them, with `--records positron`, described next.
+`q2 render` does not read Positron's cache. Only a preview or `q2 provide-hub`
+does, and only when you ask for it with `--records positron` (or a directory
+of Positron cache files), described next. Quarto never writes to or deletes
+Positron's cache. Output shown from it is marked as generated, so the viewer
+does not offer to edit it; see
+[Outputs from an imported record](../projects/preview.qmd#outputs-from-an-imported-record).
 
 ## Choosing where a preview gets records
 

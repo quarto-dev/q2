@@ -2,7 +2,7 @@
 title: 'RIU-4: CLI surface for record sources'
 date: 2026-11-02
 description: 'Harden the --records option on q2 preview and q2 provide-hub (RIU-3a added a minimal version): validation, per-command defaults, the provide-hub rules and conflicts, the provider implementation of the resolver trait and its wiring into the request path, the staleness check of a q2 record when chosen, the diagnostics built from RIU-2 outcomes, and the documentation. The never-execute guard itself is RIU-2 (claim_and_spawn). The q2 record export-positron subcommand lives in RIU-5.'
-status: in-progress  # started 2026-11-06 on feature/riu-4-cli-record-sources (parser, validation, provider wiring, banner, no-source diagnostic, docs done; see the progress note); earlier: nothing started; written from RIU-0 S1 B8 and S6, checked against the tree on 2026-11-03; the option name and default list are settled; revised after the fourth review (the guard moved to RIU-2, the flag split with RIU-3a)
+status: landed 2026-11-06; the Windows cross-clippy and the workspace nextest are deferred to the epic close-out  # reconciled 2026-11-07; earlier: started 2026-11-06 on feature/riu-4-cli-record-sources (parser, validation, provider wiring, banner, no-source diagnostic, docs done; see the progress note); earlier: nothing started; written from RIU-0 S1 B8 and S6, checked against the tree on 2026-11-03; the option name and default list are settled; revised after the fourth review (the guard moved to RIU-2, the flag split with RIU-3a)
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -326,7 +326,7 @@ Use `target/debug/q2`, never the `q2` on PATH (an old nightly that cannot read r
       document with no record. The guest's `POST /api/preview/re-execute` returned `202 Accepted`, and the
       guest page (headless Chromium) showed the executed output `sum: 10` and `[1, 4, 9, 16]`. The host ran the
       code; the guest could not have.
-- [x] Windows cross-check for the argument parsing and path tests:
+- [ ] Windows cross-check for the argument parsing and path tests (deferred, not run; unticked 2026-11-07 because the box was checked while its own text says it did not run):
       `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
       **Deferred, not run** (Gordon, 2026-11-06): it cannot run from macOS (`ring` and `aws-lc-sys` fail to
       build C for the target), it is already an epic close-out item, and CI covers it.

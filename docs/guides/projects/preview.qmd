@@ -148,6 +148,28 @@ A guest can also re-run the document's code, but only when `engine` is in
 [Execution records](../authoring/execution-records.qmd)). Treat the join
 string like a password, as the `--share` help says.
 
+### Outputs from an imported record
+
+`--records positron`, or a directory of Positron cache files, shows the outputs
+Positron saved for a document without starting a kernel or an engine. Those
+outputs appear in the viewer like any other cell output, but they are marked as
+generated: you cannot edit them in place, and a cell that holds them has no
+edit handle. Edit the code instead.
+
+When you change a cell's code, its saved output no longer belongs to the code,
+so the page is marked stale. The viewer shows its Re-execute control, and in
+the editor UI the status bar reads "Showing executed output · code changed".
+Re-execute runs the code only when `engine` is in `--records` and
+`preview.engine` is not `off`; otherwise the request is refused and the page
+says so. A cell that Positron never ran is shown as source, and that alone
+does not mark the page stale.
+
+Quarto finds the cache file from the document's location. If that fails, it
+falls back to the cache file that shares the most cells with the document. In
+a shared preview (`--share`) that fallback can serve the host's Positron
+outputs to guests, and it can pick the cache of a different document with
+similar cells, so check the outputs before you share them.
+
 ## Static preview
 
 ``` {.bash filename="Terminal"}

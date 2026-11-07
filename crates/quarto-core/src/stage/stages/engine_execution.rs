@@ -941,6 +941,28 @@ pub(crate) fn merge_markdown_into_ast(
     ),
     PipelineError,
 > {
+    merge_markdown_into_ast_with_slot(ast, merged_context, markdown, intermediate_name)
+        .map(|(ast, warnings, plan, _slot)| (ast, warnings, plan))
+}
+
+/// [`merge_markdown_into_ast`], also returning the `FileId` slot the reparsed text was
+/// registered under. Nodes the reparse produced and reconcile kept carry that file id; nodes
+/// reconcile preserved from the document keep their own. The record splice (RIU-3b) uses the
+/// slot to tell its own output from the author's text.
+pub(crate) fn merge_markdown_into_ast_with_slot(
+    ast: quarto_pandoc_types::pandoc::Pandoc,
+    merged_context: &mut pampa::pandoc::ASTContext,
+    markdown: &str,
+    intermediate_name: String,
+) -> Result<
+    (
+        quarto_pandoc_types::pandoc::Pandoc,
+        Vec<quarto_error_reporting::DiagnosticMessage>,
+        quarto_ast_reconcile::ReconciliationPlan,
+        quarto_source_map::FileId,
+    ),
+    PipelineError,
+> {
     let (mut executed_ast, executed_ast_context, parse_warnings) = pampa::readers::qmd::read(
         markdown.as_bytes(),
         false, // loose mode
@@ -1027,7 +1049,12 @@ pub(crate) fn merge_markdown_into_ast(
     // keep/replace by content, so mixed provenance is fine.
     let (reconciled_ast, reconciliation_plan) = quarto_ast_reconcile::reconcile(ast, executed_ast);
 
-    Ok((reconciled_ast, parse_warnings, reconciliation_plan))
+    Ok((
+        reconciled_ast,
+        parse_warnings,
+        reconciliation_plan,
+        new_slot,
+    ))
 }
 
 /// EXR-5: the one scan, with every unit's id filled from the author text the

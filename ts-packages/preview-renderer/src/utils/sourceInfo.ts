@@ -56,4 +56,7 @@ export const ATOMIC_KINDS: ReadonlySet<string> = new Set<string>([
     'shortcode',
     'title-block',
     'tree-sitter-postprocess',
+    'citeproc',
+    // Spliced record output (RIU-3b): regenerated or imported, never edited in place.
+    'jupyter-output',
 ]);

@@ -2,7 +2,7 @@
 title: 'Epic: execution records in use (preview, hub, and records from other tools)'
 date: 2026-11-02
 description: 'Follow-up to the execution-records epic. The RIU-0 and RIU-0b spikes proved records through the real q2 preview and hub, Julia, and node-level provenance; the remaining plans make records a total substitute for the preview capture cache, flip the writer default per surface, add record sources that do not execute (starting with the Positron cache), and end with the Positron command demo.'
-status: ready-for-review  # RIU-0 and RIU-0b done 2026-11-03; third, fourth and fifth reviews answered 2026-11-05; rebased onto the knitr stack and re-checked by spikes 2026-11-05; nothing in RIU-1 to RIU-6 is implemented
+status: done except the deferred Windows run (RIU-3b landed 2026-11-07 on feature/riu-3b-stamping)  # reconciled against the tree 2026-11-07 (RIU-6 Phase E); follow-ups are in 2026-11-07-riu-follow-up-did-we-build-it.md
 ---
 
 **Branch:** `feature/records-in-use`, the third branch of a stack: `feature/execution-records-epic`, then
@@ -403,7 +403,7 @@ review are settled and written into the plans:
 
 - Hosted hub `q2_ref`: settled. The last recorded deploy predates the reader; the `provide-hub` flip
   is a deferred plan (see "Deferred plan: flipping `provide-hub`").
-- R through Ark: settled, not in this epic.
+- R through Ark: settled, not in this epic. Outcome 2026-11-07: R through knitr is not exported either (`q2 record export-positron` skips knitr cells, "engine is not jupyter or julia"), so no R case runs in the demo; follow-up plan Item 1.
 - Fail-soft for a failed `record: true` copy: settled, fail soft (decision 10 stands).
 - `Header` exemption: settled, keep it.
 - Mis-paired expanded cells: settled, an interim rule (the edit affordance refuses a `.cell` Div) because the
@@ -465,12 +465,12 @@ Every plan's verify step assumes this, so it is stated once.
 |---|---|---|---|
 | RIU-0 | [Spikes that settle the unknowns](2026-11-02-riu-00-spikes.md) | 6 to 7 | done 2026-11-03; [findings](../research/2026-11-03-riu-0-spikes-findings.md) |
 | RIU-0b | [Julia and node-level provenance spikes](2026-11-03-riu-0b-julia-and-provenance-spikes.md) | 1 | done 2026-11-03; [findings](../research/2026-11-03-riu-0b-findings.md) |
-| RIU-1 | [Enablement and the writer flip](2026-11-02-riu-01-enablement-and-writer-flip.md) | 1 | ready; per-surface flip |
-| RIU-2 | [A provider seam; records replace the capture cache](2026-11-02-riu-02-provider-seam-records-replace-cache.md) | 4 to 5 | ready; the central piece (the record-only part is small, S2); also the source list, the walk and its outcomes, the refusal predicate and the resolver trait (in `quarto-core`), the cache split, the `describes_something` change, engine-only re-execute, the `ReExecuteConfig` that carries the gate, and the execution guard |
-| RIU-3 | [The Positron cache as a record source](2026-11-02-riu-03-positron-cache-as-record-source.md) | 4 to 6 | 3a landed 2026-11-06 (browser run, Re-execute tests and the EXR-16 sweep still open, see its plan); 3b ready; split: 3a conversion (with the unclaimed-cell count), locator and directory source, the provider publish method, the staleness function and a minimal `--records` flag; 3b the provenance stamp (spike P), the TypeScript side and the browser checks |
+| RIU-1 | [Enablement and the writer flip](2026-11-02-riu-01-enablement-and-writer-flip.md) | 1 | landed 2026-11-06; per-surface flip; the Windows cross-check is deferred |
+| RIU-2 | [A provider seam; records replace the capture cache](2026-11-02-riu-02-provider-seam-records-replace-cache.md) | 4 to 5 | landed 2026-11-06 (Phases A to F; Windows deferred); the central piece (the record-only part is small, S2); also the source list, the walk and its outcomes, the refusal predicate and the resolver trait (in `quarto-core`), the cache split, the `describes_something` change, engine-only re-execute, the `ReExecuteConfig` that carries the gate, and the execution guard |
+| RIU-3 | [The Positron cache as a record source](2026-11-02-riu-03-positron-cache-as-record-source.md) | 4 to 6 | 3a landed 2026-11-06 (the browser run was done by RIU-6; the Re-execute-on-an-imported-page tests and the EXR-16 sweep are still open); **3b landed 2026-11-07** (stamp, `jupyter-output` in `ATOMIC_KINDS`, viewer regression and interim `.cell` tests; follow-up plan Item 5); split: 3a conversion (with the unclaimed-cell count), locator and directory source, the provider publish method, the staleness function and a minimal `--records` flag; 3b the provenance stamp (spike P), the TypeScript side and the browser checks |
 | RIU-4 | [CLI surface for record sources](2026-11-02-riu-04-cli-surface-for-record-sources.md) | 1.5 to 2 | landed 2026-11-06; hardens the flag (bare paths, no prefix), implements the resolver for the provider and wires it into `execute_document`, builds the diagnostics from outcomes, final docs. Windows cross-clippy and the workspace nextest are left to the exit criteria |
-| RIU-5 | [Export for Positron](2026-11-02-riu-05-export-for-positron.md) | 1 to 2 | ready; the function and `q2 record export-positron`; Julia and the representation rule (spike J) |
-| RIU-6 | [The Positron command demo](2026-11-02-riu-06-positron-command-demo.md) | 2 plus an early spike | ready; spike in the fork, mechanisms proven in S5 and S6; Phase 0 tests the viewer in Positron's preview pane and can run now; owns the closing reconciliation |
+| RIU-5 | [Export for Positron](2026-11-02-riu-05-export-for-positron.md) | 1 to 2 | landed 2026-11-06 and 2026-11-07 (the Windows cross-clippy is deferred; a person has not watched the push in the window, though RIU-6 ran it under Playwright); the function and `q2 record export-positron`; Julia and the representation rule (spike J) |
+| RIU-6 | [The Positron command demo](2026-11-02-riu-06-positron-command-demo.md) | 2 plus an early spike | three commands built in the fork and checked in real Positron windows (Gordon, Playwright), Python and Julia; findings in `research/2026-11-07-riu-6-commands-findings.md`; R is out (knitr cells are not exported yet, follow-up plan Item 1); owns the closing reconciliation, done 2026-11-07 |
 | RIU-7 | [Flip the `provide-hub` writer default](2026-11-06-riu-07-provide-hub-flip.md) | under 1, plus the deploy | deferred; execute when everything else is in place and has settled; nothing waits on it |
 
 The six remaining plans total about 13.5 to 18 sessions (1, 4 to 5, 4 to 6, 1.5 to 2, 1 to 2, 2), an
@@ -557,18 +557,18 @@ column is as of 2026-11-06 and is ticked by the lane that lands the row.
 |----|----|----|
 | RIU-1 (per-surface flip) | nothing | landed 2026-11-06 |
 | RIU-2 Phases A to E | nothing | landed; Phase F open |
-| RIU-2 Phase F (verify: Windows, workspace nextest, browser run) | RIU-2 Phases A to E | open |
+| RIU-2 Phase F (verify: Windows, workspace nextest, browser run) | RIU-2 Phases A to E | landed 2026-11-06 except the Windows run (deferred) |
 | RIU-3a (Phases A to D) | RIU-2 Phases A to E; RIU-1 for any browser check | landed 2026-11-06 (browser run, Re-execute tests and the EXR-16 sweep still open) |
-| RIU-3b (Phase E, F, and the 3b items of G) | RIU-3a landed | open |
+| RIU-3b (Phase E, F, and the 3b items of G) | RIU-3a landed | **done 2026-11-07** on `feature/riu-3b-stamping` (stamp, `ATOMIC_KINDS`, interim `.cell` rule, docs; browser: viewer DOM and editor status bar seen, share guest not seen) |
 | RIU-4 (the `--records` hardening) | RIU-3a landed | landed 2026-11-06 (Windows cross-clippy not run; no workspace nextest) |
 | RIU-5 Phases A and B (the export function) | nothing | landed 2026-11-06 |
 | RIU-5 Phase B2 (`q2 record export-positron`) | RIU-4 landed | landed 2026-11-07 |
 | RIU-5 Phase C | RIU-5 B2 | landed 2026-11-07 except the Windows cross-clippy and the real-window check (both not run) |
 | RIU-6 Phase 0 (the viewer in the preview pane) | nothing | landed 2026-11-06 (notes only) |
-| RIU-6 Phase A (vitest tests), command 1 | nothing; lives in the Positron fork | open |
-| RIU-6 command 3 | RIU-3a landed; RIU-2 guard; RIU-1 | open |
-| RIU-6 command 2 | RIU-5 B2 landed | open; unblocked |
-| RIU-6 Phases C to E | the commands | open |
+| RIU-6 Phase A (vitest tests), command 1 | nothing; lives in the Positron fork | landed in the fork 2026-11-07 (local branch, not pushed) |
+| RIU-6 command 3 | RIU-3a landed; RIU-2 guard; RIU-1 | landed in the fork 2026-11-07 |
+| RIU-6 command 2 | RIU-5 B2 landed | landed in the fork 2026-11-07 |
+| RIU-6 Phases C to E | the commands | C and D done (Python and Julia); E done 2026-11-07 (this reconciliation) |
 | RIU-7 (the `provide-hub` flip) | everything else settled; the hosted hub | deferred |
 
 Parallel runs are possible only at these points: RIU-2 Phase F beside RIU-3a; RIU-3b, RIU-4 and RIU-6
@@ -746,14 +746,25 @@ without executing. Partial execution is not possible in Positron, so the rule is
 - R through knitr is not in the first demo, and KNR-5's K-S2 cases (the Ark R document) stay KNR-5's; the
   RIU acceptance cases are Python and Julia.
 
+## Closing reconciliation (2026-11-07)
+
+RIU-6 Phase E re-read every plan against the tree (two read-only fact checks over the checkboxes, then edits).
+What changed: the RIU-2, RIU-4 and RIU-5 front-matter statuses said "ready" or "in-progress" although the work
+had landed; one box in RIU-0 was ticked; one checked box in RIU-4 (the Windows cross-check, which did not run)
+was unticked; the RIU-3 and RIU-5 window checks now say what RIU-6 ran. What the check found that the plans
+did not say: **RIU-3b never started**, so spliced record output is not stamped and the exit criterion for it
+is unmet. The Windows run is still the only item every plan defers. Everything still open is in
+[the follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md). Not verified by the checks: every ticked
+box (each plan was spot-checked, six to eight boxes, and none was contradicted except the RIU-4 Windows box).
+
 ## Exit criteria
 
 - With the writer default on, `q2 preview` and hub work from records alone, verified through
   the real binary and a browser (state plainly if any step could not be browser-tested).
-- A Positron cache supplies a document outputs to preview with no execution, for Python and Julia.
-- Spliced record output is stamped, with the tests in RIU-3 Phase E green.
-- The RIU-6 demo exists, or the notes say what blocked it.
-- Plan checklists are reconciled with what landed; RIU-6 Phase E owns this step.
+- A Positron cache supplies a document outputs to preview with no execution, for Python and Julia. **Met for Python (seen and Playwright) and Julia (Playwright, and a hand-built Julia fixture); Positron itself producing a Julia cache was not run.**
+- Spliced record output is stamped, with the tests in RIU-3 Phase E green. **Met 2026-11-07** (RIU-3b, `feature/riu-3b-stamping`).
+- The RIU-6 demo exists, or the notes say what blocked it. **Met (2026-11-07):** three commands in the fork, Python and Julia, in real windows; the notes list what was not run.
+- Plan checklists are reconciled with what landed; RIU-6 Phase E owns this step. **Met (2026-11-07).**
 - **Last step, after every plan's doc edits:** refresh the embedded docs once. Run
   `cargo xtask build-agents-docs`, then `cargo build --bin q2`, then check
   `target/debug/q2 docs llms --embed-info` (the commit, no `(dirty)` marker, the page count) and

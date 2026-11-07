@@ -32,7 +32,7 @@ pub use hash::{
     find_first_divergence, structural_eq_block, structural_eq_blocks, structural_eq_inline,
     structural_eq_inlines,
 };
-pub use remap::remap_file_ids;
+pub use remap::{SourceRole, remap_file_ids, walk_source_infos};
 pub use types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
     ListItemAlignment, ReconciliationPlan, ReconciliationStats, TableCellPosition,

@@ -2,7 +2,7 @@
 title: 'RIU-2: a provider seam; records replace the capture cache'
 date: 2026-11-02
 description: 'Factor one publish-a-capture-run function out of the preview and provide-hub copies (it refuses to publish an empty legacy list), split the cache wrapper so an ordered source list can consult the cache without running the engine, make a record-only entry valid everywhere the preview path assumes a legacy capture (six places and one test assertion, per spike S2 and the plan review), keep the cache where it is with no pointer, and read the .quarto copy as a record source outside the preview.engine off guard.'
-status: ready  # nothing started; written from RIU-0 S1, S2 and S4 and checked against the tree on 2026-11-03; revised after the second plan review (gate, cache files, re-execute, source-list home) and the fourth (resolver trait and per-source outcomes, the execution guard moved here)
+status: landed (Phases A to F, 2026-11-06); the Windows check is deferred to the epic close-out  # reconciled 2026-11-07; earlier: nothing started; written from RIU-0 S1, S2 and S4 and checked against the tree on 2026-11-03; revised after the second plan review (gate, cache files, re-execute, source-list home) and the fourth (resolver trait and per-source outcomes, the execution guard moved here)
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)

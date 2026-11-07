@@ -5,6 +5,7 @@ description: 'What each of the three Positron commands does, how each was checke
 ---
 
 **Plan:** [RIU-6: the Positron command demo](../plans/2026-11-02-riu-06-positron-command-demo.md)
+**Later:** the extension was renamed `q2-records-demo` and its text rewritten for readers on 2026-11-07 (fork `99aa72fcb4`).  
 **Earlier note:** [Phase 0 findings](2026-11-06-riu-6-positron-demo-findings.md)
 
 Every check below is marked **seen** (Gordon watched it in the window), **Playwright** (an automated test
@@ -20,8 +21,8 @@ All of it is in Gordon's Positron fork, worktree `/Users/gordon/src/positron-riu
 | Command | Id | Where | What it does |
 |----|----|----|----|
 | 1. Run Inline Expressions | `positronQuarto.runInlineExpressions` | workbench, `quartoRunInlineExpressions.ts` | Runs each `{lang} expr` span on the document's kernel (Interactive mode, no picker) and shows the value after the span. |
-| 2. Render with q2 and push | `q2.renderAndPush` | extension `q2-spike`, `exportCommand.ts` | Runs `q2 record export-positron` on the saved document (with a timeout), then pushes the exported outputs into the open editor through the internal command `_positronQuarto.pushOutputsFromFile`, and shows a one-line summary. |
-| 3. Preview from the Positron cache | `q2.previewFromCache` | extension `q2-spike`, `previewCommand.ts` | Runs `q2 preview <doc> --records <cache dir> --no-browser` as a child process and opens its page in the preview pane. The engine is not listed, so nothing executes. |
+| 2. Render with q2 and push | `q2.renderAndPush` | extension `q2-records-demo`, `exportCommand.ts` | Runs `q2 record export-positron` on the saved document (with a timeout), then pushes the exported outputs into the open editor through the internal command `_positronQuarto.pushOutputsFromFile`, and shows a one-line summary. |
+| 3. Preview from the Positron cache | `q2.previewFromCache` | extension `q2-records-demo`, `previewCommand.ts` | Runs `q2 preview <doc> --records <cache dir> --no-browser` as a child process and opens its page in the preview pane. The engine is not listed, so nothing executes. |
 
 The push matches each exported cell to an open cell by content hash: it prefers the open cell whose index
 equals the pushed cell's id, else the first cell with that hash. It can send two pushed cells to one open
@@ -40,7 +41,8 @@ cell when a document's duplicate cells changed; the demo accepts that.
 | Command 2, Python plot, data frame, warning, message | Playwright | Four inline outputs; the image is visible; the data frame's columns and the warning and message text are present. |
 | Command 2, Julia text, message, HTML, error, plot | Playwright | Five outputs; the plot is exactly one image (RIU-5 drops the other representations). |
 | Command 3 after command 2, Python | Playwright | The preview pane shows the pushed output, read from the cache. |
-| Command 3 after command 2, Julia | Playwright screenshot only | The pane showed the cell outputs, the vector and the plot. The automated test does not pass yet; see the Julia server problem below. |
+| Command 3 after command 2, Julia | Playwright | The pane shows the cell outputs, the vector and the plot. The test passed once the stale Julia server was gone, and passed in the full-file runs after a warm-up was added (5 of 5 twice). |
+| The whole e2e file after the rename to `q2-records-demo` | Playwright, and Gordon saw Python and Julia sessions in the window | 6 of 6 with the inline-expressions test. |
 | q2 export from the shell, Python and Julia | CLI | Exit 0, one JSON line, the stderr notice first; the Julia plot is one `image/png`. |
 
 ## Findings
@@ -66,7 +68,7 @@ A server started from a directory that later disappears (the e2e workspace is de
 run) makes the next export fail with `ArgumentError: startpath must be non-empty`, and nothing in the message
 points at the stale server. The shared server directory is `~/Library/Caches/quarto/julia`, used by every
 checkout on the machine, so one lane's test runs can break another's. This belongs to the Julia engine, not to
-these commands. It is the reason the Julia preview test does not pass yet.
+these commands. The server stops itself after 300 seconds idle, so a gap of more than five minutes means a cold start (about 20 seconds against 10 warm). The Julia tests now render a trivial document from a directory that is never deleted before they start, and allow 480 seconds. One unexplained observation: after a Positron-driven run the server log holds a broken-pipe error for the e2e document (the client hung up mid-run); the tests still passed. It is in the follow-up plan.
 
 **The dev build has to be assembled with care.** Symlinking the supervisor extension's compiled `out/` from
 another tree made the Positron Kernel Supervisor fail to activate ("MCP configuration providers must be
@@ -100,7 +102,8 @@ a following cell that uses a variable from a pushed cell would fail. The demo sh
 
 - Command 2 and command 3 watched by a person, other than command 3 on Python and the earlier checks marked
   seen.
-- The Julia preview test passing (a stale Julia server, pid 86369, blocks it; see the plan).
+- Anyone but this machine running the demo from its README (`extensions/q2-records-demo/demo/README.md`).
+- R through knitr: `q2 record export-positron` skips every knitr cell ("engine is not jupyter or julia"), so no R case exists; see the follow-up plan, Item 1.
 - Positron producing a Julia cache itself, and hashing a Julia cell that has `#|` lines (no Julia kernel in the
   dev build).
 - A wrong `q2.path`, an untitled or unsaved document, "q2 too old", and a non-default profile, for any command.
@@ -112,7 +115,7 @@ a following cell that uses a variable from a pushed cell would fail. The demo sh
 1. Build q2 from the integration branch with the full chain, in a checkout that has the commits:
    `(cd hub-client && npm run build:wasm) && cargo xtask build-q2-preview-spa && cargo build --bin q2`.
 2. Start Positron from the fork tree, not another tree:
-   `cd /Users/gordon/src/positron-riu6-a && ./scripts/code.sh --extensionDevelopmentPath=$PWD/extensions/q2-spike`.
+   `cd /Users/gordon/src/positron-riu6-a && ./scripts/code.sh --extensionDevelopmentPath=$PWD/extensions/q2-records-demo`.
 3. In settings, set `q2.path` to the `target/debug/q2` from step 1.
 4. Open `test/e2e/test-files/workspaces/quarto_inline_output/inline_exprs.qmd`. Run **Quarto: Run Inline
    Expressions**. Expect `42` and `3.0` after the two spans and no picker; run it again and the values replace.
