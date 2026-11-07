@@ -42,6 +42,34 @@ struct Cli {
 }
 
 #[derive(Subcommand)]
+enum RecordCommands {
+    /// Export a document's execution record as a Positron output-cache notebook.
+    ///
+    /// Prints one JSON line on stdout (cells exported, units skipped, representations
+    /// dropped). Exit codes: 0 success; 2 usage error; 10 no record and execution is
+    /// forbidden; 11 no exportable cells; 12 unreadable or invalid record; 13 engine
+    /// run failed.
+    ExportPositron {
+        /// The document to export.
+        doc: PathBuf,
+
+        /// Write the Positron cache file here.
+        #[arg(long)]
+        out: PathBuf,
+
+        /// Where to get the record: `q2` (the .quarto copy) and/or `engine` (run the
+        /// document). Default `q2,engine`. No other source is accepted.
+        #[arg(long, value_delimiter = ',', value_name = "SOURCES")]
+        records: Vec<quarto_core::record::RecordSource>,
+
+        /// Written to the cache file's `quarto_source` as given (default: the
+        /// document's absolute path).
+        #[arg(long, value_name = "URI")]
+        source_uri: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum Commands {
     /// Render files or projects to various document types
     Render {
@@ -417,6 +445,12 @@ enum Commands {
         /// `--ui editor`, `--join` or `--no-project`.
         #[arg(long, conflicts_with_all = ["join", "no_project"])]
         profile: Vec<String>,
+    },
+
+    /// Work with execution records
+    Record {
+        #[command(subcommand)]
+        command: RecordCommands,
     },
 
     /// Serve a Shiny interactive document
@@ -1991,6 +2025,23 @@ fn main() -> Result<()> {
                     profile,
                 })
             }
+        }
+        Commands::Record {
+            command:
+                RecordCommands::ExportPositron {
+                    doc,
+                    out,
+                    records,
+                    source_uri,
+                },
+        } => {
+            let code = commands::record::export_positron(commands::record::ExportPositronArgs {
+                doc,
+                out,
+                records,
+                source_uri,
+            });
+            std::process::exit(code)
         }
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create {

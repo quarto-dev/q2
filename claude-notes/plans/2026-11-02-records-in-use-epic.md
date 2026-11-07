@@ -562,12 +562,12 @@ column is as of 2026-11-06 and is ticked by the lane that lands the row.
 | RIU-3b (Phase E, F, and the 3b items of G) | RIU-3a landed | open |
 | RIU-4 (the `--records` hardening) | RIU-3a landed | landed 2026-11-06 (Windows cross-clippy not run; no workspace nextest) |
 | RIU-5 Phases A and B (the export function) | nothing | landed 2026-11-06 |
-| RIU-5 Phase B2 (`q2 record export-positron`) | RIU-4 landed | open; unblocked |
-| RIU-5 Phase C | RIU-5 B2 | open |
+| RIU-5 Phase B2 (`q2 record export-positron`) | RIU-4 landed | landed 2026-11-07 |
+| RIU-5 Phase C | RIU-5 B2 | landed 2026-11-07 except the Windows cross-clippy and the real-window check (both not run) |
 | RIU-6 Phase 0 (the viewer in the preview pane) | nothing | landed 2026-11-06 (notes only) |
 | RIU-6 Phase A (vitest tests), command 1 | nothing; lives in the Positron fork | open |
 | RIU-6 command 3 | RIU-3a landed; RIU-2 guard; RIU-1 | open |
-| RIU-6 command 2 | RIU-5 B2 landed | open |
+| RIU-6 command 2 | RIU-5 B2 landed | open; unblocked |
 | RIU-6 Phases C to E | the commands | open |
 | RIU-7 (the `provide-hub` flip) | everything else settled; the hosted hub | deferred |
 
