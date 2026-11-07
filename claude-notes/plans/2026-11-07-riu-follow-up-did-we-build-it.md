@@ -340,10 +340,8 @@ msvc cross-check from macOS). The review's targeted list, highest risk first:
       verbatim path on Windows; check the "outside the document directory" comparison.
 - [ ] `[Gordon]` `crates/quarto-core/src/positron_cache.rs:150` (`vscode_file_uri`) and the `%APPDATA%` rule:
       drive letter, `%3A` and non-ASCII are unverified.
-- [ ] `[unattended]` `crates/quarto/src/commands/record.rs:139`: without `--source-uri`, `quarto_source` is a
-      native (backslash) path in a wire format. Decide whether to use `quarto_util::to_forward_slashes`, or
-      require `--source-uri`. (A product fix, so it is a box here, not done in this review.)
-- [ ] `[Gordon]` `crates/quarto/tests/integration/record_export_positron_cli.rs`: `python3` at about `:250`, and
+- [ ] The `--source-uri` default (`record.rs:139`, native path in a wire format): decided in Item 8 (open there).
+- [ ] `[Gordon]` The CLI test file (`record_export_positron_cli.rs`, replaced by Item 8's test): `python3` at about `:250`, and
       the literal `/some/dir` at about `:113`.
 - [ ] `[Gordon]` `crates/quarto-core/tests/integration/julia_engine_e2e.rs:1075-1098`: `kill` and `pgrep` with no
       `cfg(unix)` gate; confirm they cannot run on Windows with Julia installed.
@@ -411,9 +409,12 @@ q2 convert <input> --to <format> [--from <format>] [-o <path>] [target options]
   the target), exit 2 for usage errors (so the extension's "q2 too old" detection still works: an older q2's
   `convert` has no `--to`). A `convert` that may run code is stated in its help text: Q1's never executed.
 - Not `-M`: `-M` is document metadata in `q2 render`, `preview` and `provide-hub`.
-- The `--source-uri` default (the document's native path) is written with forward slashes
-  (`quarto_util::to_forward_slashes`), per the cross-platform rule; `normalize_location` in `positron_cache.rs`
-  accepts both. A test builds its path with `Path::join`.
+- **Open, `[Gordon]`:** the `--source-uri` default. Today it is the document's native path
+  (`commands/record.rs:138-139`). Proposed, **not yet confirmed**: write it with forward slashes
+  (`quarto_util::to_forward_slashes`), per the cross-platform rule for paths in a wire format;
+  `normalize_location` in `positron_cache.rs` accepts both forms, and Positron ignores the field on load. The
+  alternatives are to require `--source-uri` (breaks hand use for no gain) or to build a `file://` URI in q2
+  (against epic decision 13). If confirmed, a test builds its path with `Path::join`.
 
 **Order:** independent of Item 1's gate changes (the library function is untouched), but do it before Phase B of
 Item 1 so the CLI test written there targets the new command. Item 1's references to `q2 record export-positron`
