@@ -91,6 +91,8 @@ pub fn gate(found: Option<&str>) -> Result<(), DiagnosticMessage> {
             if at_least(version_str, floor) {
                 Ok(())
             } else {
+                // `pandoc --version` is multi-line; its first line names the version.
+                let version_str = version_str.lines().next().unwrap_or_default().trim();
                 Err(DiagnosticMessageBuilder::error("Pandoc Version Too Old")
                     .with_code("Q-20-2")
                     .problem(format!(
@@ -141,6 +143,21 @@ mod tests {
 
         assert!(gate(Some("3.12")).is_ok());
         assert!(gate(Some(PANDOC_PIN)).is_ok());
+    }
+
+    /// The too-old message names the version line pandoc reported, not its
+    /// whole `--version` stdout (which is multi-line, and CRLF on Windows).
+    ///
+    /// Revert hunk: quoting `version_str` whole makes this RED.
+    #[test]
+    fn test_gate_too_old_message_shows_only_the_version_line() {
+        let stdout = "pandoc.exe 3.5\r\nFeatures: +server +lua\r\nScripting engine: Lua 5.4\r\n";
+        let err = gate(Some(stdout)).expect_err("3.5 is below the floor");
+        let problem = err.problem.as_ref().expect("a problem statement");
+        let problem = problem.as_str();
+        assert!(problem.contains("\"pandoc.exe 3.5\""), "got: {problem}");
+        assert!(!problem.contains("Features"), "got: {problem}");
+        assert!(!problem.contains('\r') && !problem.contains("\\r"), "got: {problem}");
     }
 
     /// T7.3: the `None` arm in `gate`, carrying a code distinct from the
