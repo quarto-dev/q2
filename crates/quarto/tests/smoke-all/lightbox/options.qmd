@@ -1,0 +1,24 @@
+---
+title: "Lightbox: options"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/options.qmd. The object form
+# turns on automatic mode with `match: auto` and feeds the GLightbox
+# constructor; option keys are emitted in Q1's stable order (#11124), with
+# `css-class` becoming GLightbox's `skin`.
+lightbox:
+  match: auto
+  effect: fade
+  desc-position: top
+  loop: true
+  css-class: cool-beans
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'a.lightbox[href="images/mv-0.png"] > img'
+        - []
+      ensureFileRegexMatches:
+        - - "GLightbox\\(\\{\"selector\":\".lightbox\",\"closeEffect\":\"fade\",\"openEffect\":\"fade\",\"descPosition\":\"top\",\"loop\":true,\"skin\":\"cool-beans\"\\}\\)"
+        - []
+---
+
+![Beach in Chilmark](images/mv-0.png)

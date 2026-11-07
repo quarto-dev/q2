@@ -36,6 +36,26 @@ pub struct ResolvedFilters {
     /// (`post-quarto`, `pre-render`, `post-render`, `pre-finalize`,
     /// `post-finalize`), so the bucket alone isn't enough information.
     pub post_entry_points: Vec<&'static str>,
+    /// Filter entries that named an extension Quarto now builds in
+    /// (`quarto-ext/lightbox`): dropped, as in Q1, with the entry's id
+    /// and location so the caller can tell the user to remove it.
+    pub superseded: Vec<(String, quarto_source_map::SourceInfo)>,
+}
+
+/// Extensions from the `quarto-ext` organization whose feature Quarto now
+/// provides itself. A filter entry resolving to one of them is dropped
+/// rather than run on top of the built-in (Q1 `kBuiltInExtNames`,
+/// `filterBuiltInExtensions` in `src/extension/extension.ts`).
+const SUPERSEDED_EXTENSIONS: &[(&str, &str)] = &[("quarto-ext", "lightbox")];
+
+/// The id of the superseded extension `name` resolves to, if any.
+fn superseded_extension(name: &str, extensions: &[Extension]) -> Option<String> {
+    let ext = find_extension(name, extensions)?;
+    let org = ext.id.organization.as_deref()?;
+    SUPERSEDED_EXTENSIONS
+        .iter()
+        .any(|(o, n)| *o == org && *n == ext.id.name)
+        .then(|| format!("{org}/{}", ext.id.name))
 }
 
 /// Whether the document renders citations as margin notes
@@ -241,6 +261,7 @@ pub fn resolve_filters(
     let default_after_idx = entry_point_index(DEFAULT_AFTER_SENTINEL).unwrap();
 
     let mut annotated: Vec<AnnotatedFilter> = Vec::new();
+    let mut superseded = Vec::new();
 
     for (i, item) in items.iter().enumerate() {
         if sentinel_index == Some(i) {
@@ -266,6 +287,10 @@ pub fn resolve_filters(
                 let candidate = resolve_filter_file(item, ctx, runtime);
                 let file_exists = candidate.as_ref().is_some_and(|c| c.exists);
                 resolved = candidate.map(|c| c.path);
+                if !file_exists && let Some(id) = superseded_extension(&s, extensions) {
+                    superseded.push((id, item.source_info.clone()));
+                    continue;
+                }
                 if !file_exists
                     && let Some(ext_filters) = try_resolve_extension_filter(&s, extensions)
                 {
@@ -294,6 +319,10 @@ pub fn resolve_filters(
             let candidate = resolve_filter_file(path_val, ctx, runtime);
             let file_exists = candidate.as_ref().is_some_and(|c| c.exists);
             resolved = candidate.map(|c| c.path);
+            if !file_exists && let Some(id) = superseded_extension(&path_str, extensions) {
+                superseded.push((id, item.source_info.clone()));
+                continue;
+            }
             if !file_exists
                 && let Some(ext_filters) = try_resolve_extension_filter(&path_str, extensions)
             {
@@ -331,7 +360,10 @@ pub fn resolve_filters(
     annotated.sort_by_key(|a| (a.entry_point_index, a.original_index));
 
     // Split into pre/post and resolve paths
-    let mut result = ResolvedFilters::default();
+    let mut result = ResolvedFilters {
+        superseded,
+        ..ResolvedFilters::default()
+    };
     for ann in annotated {
         let (entry_point, position) = ENTRY_POINTS[ann.entry_point_index];
         let spec = resolve_filter_path(ann.spec, ann.resolved);
@@ -1186,6 +1218,61 @@ mod tests {
             result.pre[0],
             FilterSpec::Lua(PathBuf::from("/project/_extensions/lightbox/lightbox.lua"))
         );
+    }
+
+    /// Q1 `kBuiltInExtNames`: `quarto-ext/lightbox` is built in now, so a
+    /// filter entry resolving to it is dropped (bd-kcpkgftw) and reported.
+    #[test]
+    fn superseded_quarto_ext_lightbox_is_dropped() {
+        let mut ext = make_extension(
+            "lightbox",
+            vec![ExtensionFilter {
+                path: PathBuf::from("/project/_extensions/quarto-ext/lightbox/lightbox.lua"),
+                at: None,
+            }],
+        );
+        ext.id = ExtensionId {
+            name: "lightbox".to_string(),
+            organization: Some("quarto-ext".to_string()),
+        };
+        let rt = TestRuntime::new();
+        for entry in [
+            cv_str("lightbox"),
+            cv_str("quarto-ext/lightbox"),
+            cv_map(vec![("path", cv_str("lightbox"))]),
+        ] {
+            let meta = meta_with_filters(cv_array(vec![entry, cv_str("other.lua")]));
+            let result = resolve(&meta, std::slice::from_ref(&ext), &rt);
+            assert_eq!(
+                result.pre,
+                [FilterSpec::Lua(doc_dir().join("other.lua"))],
+                "only the superseded entry is dropped"
+            );
+            assert_eq!(result.superseded.len(), 1);
+            assert_eq!(result.superseded[0].0, "quarto-ext/lightbox");
+        }
+    }
+
+    /// A `lightbox` extension from any other organization (or none) is the
+    /// user's own and still runs, as in Q1.
+    #[test]
+    fn other_lightbox_extensions_still_resolve() {
+        let mut ext = make_extension(
+            "lightbox",
+            vec![ExtensionFilter {
+                path: PathBuf::from("/ext/lightbox.lua"),
+                at: None,
+            }],
+        );
+        ext.id.organization = Some("someone".to_string());
+        let meta = meta_with_filters(cv_array(vec![cv_str("lightbox")]));
+        let rt = TestRuntime::new();
+        let result = resolve(&meta, &[ext], &rt);
+        assert_eq!(
+            result.pre,
+            [FilterSpec::Lua(PathBuf::from("/ext/lightbox.lua"))]
+        );
+        assert!(result.superseded.is_empty());
     }
 
     #[test]

@@ -121,6 +121,7 @@ pub mod knitr_label_reinject;
 pub mod language_catalog;
 pub mod language_pipeline;
 pub mod language_resolve;
+pub mod lightbox_pipeline;
 pub mod link_rewriting_pipeline;
 pub mod linked_resources;
 pub mod listing_custom_template_diagnostics;

@@ -80,6 +80,7 @@ website:
             - guides/publishing/index.qmd
             - guides/formats/html/anchor-sections.qmd
             - guides/formats/html/external-links.qmd
+            - guides/formats/html/lightbox.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd
             - guides/formats/pandoc/index.qmd
@@ -441,6 +442,7 @@ website:
             - errors/extension/Q-16-10.qmd
             - errors/extension/Q-16-11.qmd
             - errors/extension/Q-16-12.qmd
+            - errors/extension/Q-16-13.qmd
         - section: "engine"
           contents:
             - errors/engine/Q-18-1.qmd
@@ -456,6 +458,7 @@ website:
             - errors/image/Q-19-2.qmd
             - errors/image/Q-19-3.qmd
             - errors/image/Q-19-4.qmd
+            - errors/image/Q-19-5.qmd
         - section: "pandoc"
           contents:
             - errors/pandoc/Q-20-1.qmd

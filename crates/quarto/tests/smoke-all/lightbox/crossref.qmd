@@ -1,0 +1,21 @@
+---
+title: "Lightbox: cross-referenced figures"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/plot.qmd (static image in
+# place of the R plot). A cross-referenceable figure's lightbox title is
+# its numbered caption, "Figure 1: ...", like the figcaption.
+lightbox: true
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'a.lightbox[href="images/mv-0.png"] > img'
+        - []
+      ensureFileRegexMatches:
+        - - "title=\"Figure\u00a01: What is going on\\? A single chart\\.\""
+          - 'id="fig-single" class="quarto-float[^"]*"[\s\S]{0,200}?a href="images/mv-0\.png" class="lightbox"'
+        - []
+---
+
+![What is going on? A single chart.](images/mv-0.png){#fig-single}
+
+See @fig-single.

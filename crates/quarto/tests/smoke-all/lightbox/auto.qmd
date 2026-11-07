@@ -1,0 +1,58 @@
+---
+title: "Lightbox: automatic mode"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/example.qmd (minus the R
+# cells; see cell-options.qmd). `lightbox: auto` wraps every figure and
+# every image alone in its paragraph; inline images need the explicit
+# class; `.nolightbox` opts out; images already inside a link are skipped.
+lightbox: auto
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'a.lightbox[href="images/mv-0.png"][title="Beach in Chilmark"] > img'
+          - 'a.lightbox[data-gallery="elsewhere"][href="images/mv-1.png"] > img'
+          - 'a.lightbox[data-gallery="elsewhere"][href="images/mv-2.png"] > img'
+          - 'a.lightbox[data-gallery="elsewhere"][href="images/mv-3.png"] > img'
+          - 'p > a.lightbox[data-gallery="quarto-lightbox-gallery-5"][href="images/chunky.png"] > img'
+          - 'a.lightbox[title="A chunky image"][href="images/cool.png"] > img[width="30"]'
+          - 'a[href="https://example.com/ferry"] > img'
+          - 'img.nolightbox'
+        - - 'a.lightbox[href="images/ferry.png"]'
+          - 'a.lightbox > img.nolightbox'
+          - 'a.lightbox > img[width="31"]'
+      ensureFileRegexMatches:
+        - - 'script src="[^"]*glightbox/glightbox\.min\.js"'
+        - []
+---
+
+## Chilmark
+
+![Beach in Chilmark](images/mv-0.png)
+
+## Elsewhere
+
+::: {layout="[[1, 1], [1]]"}
+![Aquinnah](images/mv-1.png){group="elsewhere"}
+
+![Oak Bluffs](images/mv-3.png){group="elsewhere"}
+
+![Vineyard lighthouse](images/mv-2.png){group="elsewhere"}
+:::
+
+## Block image without a caption
+
+![](images/chunky.png)
+
+## Opt out
+
+![Opted out](images/mv-2.png){.nolightbox}
+
+## West Tisbury
+
+[![More about the ferry.](images/ferry.png)](https://example.com/ferry)
+
+## Inline images are ignored
+
+This image ![So cool](images/mv-3.png){width=31} is inline, so automatic
+mode skips it. This one ![A chunky image](images/cool.png){.lightbox width=30}
+carries the explicit class, so it is wrapped.

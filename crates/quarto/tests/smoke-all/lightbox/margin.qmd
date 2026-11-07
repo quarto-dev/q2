@@ -1,0 +1,21 @@
+---
+title: "Lightbox: margin figure"
+# bd-kcpkgftw. Port of Q1 smoke-all/lightbox/8697.qmd (#8697): wrapping a
+# margin image in a lightbox link must not lose its margin placement.
+format: html
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'a.lightbox[href="images/mv-0.png"] > img.column-margin'
+        - []
+      ensureFileRegexMatches:
+        - - 'class="quarto-figure quarto-figure-center column-margin">[\s\S]{0,100}?a href="images/mv-0\.png" class="lightbox"'
+        - []
+---
+
+## Lightbox
+
+![a caption](images/mv-0.png){.column-margin .lightbox}
+
+Some body text.

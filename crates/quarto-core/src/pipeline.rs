@@ -2718,6 +2718,14 @@ pub fn build_transform_pipeline(
     // the `quarto-float` wrapper Div; `table-bootstrap-class` (below)
     // normalizes the forwarded copies.
     pipeline.push(Box::new(TableFloatClassForwardTransform::new()));
+    // bd-kcpkgftw: wrap lightbox images in `<a class="lightbox">` and ship
+    // GLightbox (Q1 `lightbox`). Right *before* `crossref-render`, so a
+    // float is still a `FloatRefTarget` with its caption and number at
+    // hand for the slide title — the same shape the q2-preview pipeline
+    // (which never runs `crossref-render`) sees. The crossref renderer
+    // looks through `Link[Image]` for the figure's image. HTML render +
+    // preview; only the render ships the runtime.
+    pipeline.push(Box::new(crate::transforms::LightboxTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     // Example-embed render (bd-t3cert81). Runs right after
     // `CrossrefRenderTransform` so the per-`demo` `order` the index assigned
@@ -3029,6 +3037,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "table-bootstrap-class",
     "components-resolve",
     "anchor-sections",
+    "lightbox",
     // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
     // analog.
     "title-block",
@@ -3297,6 +3306,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Heading/figure/table hover anchors: `anchored` class + AnchorJS
     // (bd-5kf2dnw4). HTML-only presentation.
     ("anchor-sections", Bucket::B4),
+    // Wraps lightbox images in `<a class="lightbox">` and ships GLightbox
+    // (bd-kcpkgftw). HTML-only presentation; Pandoc formats exclude it.
+    ("lightbox", Bucket::B4),
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact —
     // an HTML-only presentation decision (sibling of `responsive-image`,
     // which it runs immediately before). No Pandoc-writer analog exists yet.
@@ -6885,6 +6897,7 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "crossref-render",
                 "example-embed-render",
                 "mermaid-render",
@@ -6985,6 +6998,7 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "crossref-render",
                 "example-embed-render",
                 "reveal-auto-stretch",
@@ -7364,6 +7378,7 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "example-embed-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
