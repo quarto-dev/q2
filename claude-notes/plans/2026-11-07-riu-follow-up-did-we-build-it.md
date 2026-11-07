@@ -147,7 +147,7 @@ produced it. (This corrects the same day's earlier proposal of one declaration f
 
 - [ ] Remove `EngineNotExportable`, the inline-unit, extension-language, fallback and duplicate-group skips
       and their `SkipReason` variants, as far as the raw-record experiment and the validity list allow; keep the
-      validity wrapper. Do not add `knitr` to `EXPORT_OWNERS`. Update the subcommand help text and the RIU-5
+      validity wrapper and the temporary image-representation rule. Do not add `knitr` to `EXPORT_OWNERS`. Update the subcommand help text and the RIU-5
       plan's rule list (that plan is landed; add a dated note there rather than rewriting its history).
 - [ ] The import gate: implement the kernel-equivalence declaration from the Phase A design and delete
       `EXPORT_OWNERS`, `JUPYTER_ENGINE`, `JULIA_ENGINE`, `KNITR_ENGINE` and the `lang == "r"` literal as gate
