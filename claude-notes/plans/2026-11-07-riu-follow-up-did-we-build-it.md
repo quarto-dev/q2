@@ -43,6 +43,8 @@ left R out of the demo; with the knitr stack landed, that is now a gap to close 
 4. **Item 3** boxes marked "blocks" come before anything ships; the rest in Gordon's order.
 5. **Item 5** (the two open boxes) and **Item 6** (Windows) are independent of everything else.
    Item 6 needs a Windows machine.
+6. **Item 7** (one presenter path) is a design decision for Gordon, independent of Item 1: Item 1 needs only
+   the gate change. Do not start it without that decision.
 
 ## Item 1: R through knitr
 
@@ -68,22 +70,35 @@ Positron window, the hash comparison, Ark's cache shapes.
       and compare shapes with the knitr cells: data frame as text versus HTML, the message stream, an empty
       `ename`, messages on stdout (RIU-3 lists these as KNR-5 presenter limits). Fork worktree:
       `/Users/gordon/src/positron-riu6-a` (branch `spike/riu-6-phase-a`, tree clean at `99aa72fcb4`).
-- [ ] Check whether the content hash Positron computes for an R cell equals the knitr record's
-      `quarto_content_hash`. The record's hash is computed under the `structured` profile (`quarto_hash_rule`);
-      header lines such as `#| label` and `#| fig-cap` are the likely mismatch. The Julia `#|` case is the same
-      question and still open (add one Julia `#|` cell to the check). State which fix a mismatch needs: q2
-      recomputes the hash at export (a q2-side mapping), or Positron changes.
+- [x] ~~Check whether the content hash equals the knitr record's `quarto_content_hash`.~~ **Settled by
+      reading, 2026-11-07:** `quarto_content_hash` is computed in core for every engine from the author's block
+      text, `#|` lines included (`crates/quarto-core/src/record/ids.rs:3-26`); the `structured` profile only
+      shapes `quarto_exec_hash`. The R fixture's hashes already equal q2's
+      (`every_cached_hash_equals_the_one_q2_computes_through_the_splice_path`, `positron_source.rs:142`).
+      (The earlier version of this box rested on a reviewer's wrong premise; see the review note, finding 3.)
+- [ ] `[Gordon]` What is left of the hash question is Positron-side only: does Positron's parser read `#|`
+      lines the same way for a Julia cell as for Python and R? Check in the fork
+      (`/Users/gordon/src/positron-riu6-a`), with one Julia `#|` cell.
+- [ ] **Design (read the review note's "Design findings after the review" first).** Replace the name lists
+      `EXPORT_OWNERS` and the `outputs_for` owner rule with data checks plus one declared fact, and write the
+      verdict in the findings note. Proposal: export admits a cell when the engine's granularity is `Unit`, the
+      cell is not a fallback cell (the `text/x-quarto-markdown` marker), and the language passes the syntactic
+      check; import needs an engine-declared `structured_languages` (jupyter and julia: any plain language,
+      knitr: `r`), carried in `EngineEntry` beside `hash_definition`. Check whether the other engines (marimo,
+      TS extension engines) meet the data checks, since no engine outside the lists was ever tried.
 - [ ] Write the answers into a findings note with a verdict: the export can cover knitr as is, needs a
-      mapping (say which), or needs a change on the Positron side. Note that "as is" is already ruled out
-      by the owner rule; the question is what has to change beyond it.
+      mapping (say which), or needs a change on the Positron side. "As is" is already ruled out by the owner
+      rule; with the hash question settled, the likeliest verdict is "a q2-side change to the gates".
 - [ ] **`[Gordon]` Gate: report the verdict and wait.** Do not start Phase B on the plan's say-so.
 
 ### Phase B: tests first (after the gate)
 
 - [ ] Export unit tests for a knitr record: text output, a figure (one `image/png`), a message, a data frame,
       an error, a chunk with options. Each fails on the current skip.
-- [ ] A test that a knitr-owned unit whose language is not `r` (for example `python` under `engine: knitr`)
-      **stays skipped**: the importer admits knitr only for the language token `r`, and the export must agree.
+- [ ] A test that a knitr unit in a language knitr does not present as a structured cell (bash, which becomes
+      a fallback unit; `python` under `engine: knitr` if it does too) **stays skipped** on both sides, export
+      and import, and that the two directions give the same answer for every language and engine in the
+      table. (Today the importer admits knitr only for the token `r` and the export has its own list.)
 - [ ] A CLI test through the binary: `q2 record export-positron` on an `engine: knitr` fixture exits 0 and
       prints cells greater than 0. Keep the Python and Julia tests green.
 - [ ] **`[Gordon]`** Decide which knitr cells stay skipped (from the Phase A dump) and give each its own skip
@@ -91,8 +106,9 @@ Positron window, the hash comparison, Ark's cache shapes.
 
 ### Phase C: export
 
-- [ ] Replace `EngineNotExportable` for knitr with the Phase A mapping. Do not add `knitr` to `EXPORT_OWNERS`
-      without the `r` language check. Update the subcommand help text and the RIU-5 plan's rule list.
+- [ ] Replace `EngineNotExportable` and both name lists with the design the Phase A verdict settled (one rule
+      shared by export and import). Do not just add `knitr` to `EXPORT_OWNERS`. Update the subcommand help
+      text and the RIU-5 plan's rule list.
 - [ ] Gates on `quarto-core` and the `quarto` binary crate. Run the real binary on the fixture and read
       the JSON and the ipynb.
 
@@ -201,8 +217,14 @@ Ranked by whether they block shipping the commands. Each "Gordon" box is a decis
       This follows from decision 14 (stamped means not editable). Is that acceptable for the editor?
 - [ ] `[unattended]` Decision 12 (a failed optional `record: true` copy fails soft) says "not re-verified
       against the code"; re-verify with the real binary.
-- [ ] `[unattended]` Fix the epic's "Closing reconciliation" (`records-in-use-epic.md:755`), which still says
-      RIU-3b never started, against its Exit criteria, which mark 3b met.
+- [x] Fix the epic's "Closing reconciliation" (`records-in-use-epic.md`), which said RIU-3b never started,
+      against its Exit criteria, which mark 3b met. *Done 2026-11-07.*
+- [x] Fix the stale Julia lines: the parent epic's decision 5 and its risk 2 said Julia was still presented by
+      the TS `toMarkdown`, but `b4d827186` (2026-11-01) flipped it; `exr-08-julia.md` got a pointer. *Done
+      2026-11-07.* `core_presents` (`engine/ts_record.rs:500`) is Julia with a record wanted and a non-empty
+      unit list; the TS path still runs otherwise.
+- [ ] `[unattended]` Fix the stale doc comment at `crates/quarto-core/src/presenter/options.rs:237` ("read
+      under knitr's dotted names only"; the code reads the canonical dashed `fig-cap` for both front ends).
 
 ## Item 5: RIU-3b (landed 2026-11-07) and the 3a leftovers
 
@@ -250,3 +272,27 @@ msvc cross-check from macOS). The review's targeted list, highest risk first:
 - [ ] `[Gordon]` Then the epic's command, once: `cargo clippy -p quarto -p quarto-core -p quarto-preview
       -p quarto-hub -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings` and
       `cargo nextest run` for the same crates.
+
+## Item 7: one presenter path (a separate plan, not part of Item 1)
+
+**Intended (knitr epic decision 4, "one presenter"; parent epic decision 5):** the shared Rust presenter gives
+every engine the same cell semantics, so knitr's features are open to other engines. **Found 2026-11-07 (see the
+review note's "Design findings after the review"):** the presenter is already one renderer
+(`render_cell_whole`, one option reader `CellOptions::from_lookup`), but `present_cell` branches on whether a
+cell carries `quarto_resolved_options`, and the knitr branch has its own option layering, its own visibility
+function and four capture-side inputs (output anchors, expression starts, output kinds, the plot count) that
+no other engine supplies. Julia already goes through the Rust presenter (`b4d827186`).
+
+- [ ] `[Gordon]` Decide whether to make this a plan: one `present_cell` with the capture-side inputs optional
+      (each feature already degrades when its input is missing), engine capability meaning the presence of that
+      data on a cell, and one declared flag for who enforces `warning` and `message` (R at capture for knitr,
+      the presenter for Jupyter). It touches the splice stage, `presenter/document.rs`, the Jupyter option
+      sweep and the byte-identical Jupyter goldens (knitr epic decision 12), so it needs its own tests-first plan.
+- [ ] If yes, the plan's first questions: is layering the document scope under a knitr record's options a no-op
+      when the record is fresh (for Jupyter the presenter layers it, because the hash excludes presentation
+      `execute:` keys; for knitr every `execute:` key counts in the hash); what Julia's annotated notebook
+      carries of the knitr inputs; and whether the `want_record`-false path to the TS `toMarkdown` is still
+      reachable in a normal render.
+- [ ] Jupyter cannot supply anchors or expression starts today (an `execute_request` reports no per-line
+      positions), so those features stay knitr-only until an engine's capture reports them. That is new
+      capture work, outside this item.

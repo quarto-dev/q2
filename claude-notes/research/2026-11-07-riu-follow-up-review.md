@@ -28,11 +28,14 @@ Anything else is "reported" by a reviewer. Tags: **blocking**, **should-fix**, *
    `{"cells":0, ... 3 x "engine is not jupyter or julia"}`, then `error: the record has no cells Positron can
    display`. The plan said exit 11; I did not capture the exit code (my pipeline reported the exit of `tail`, not of q2), so I leave that
    figure alone.
-3. **A hash mismatch is the likeliest "needs more than a mapping" outcome, and the plan did not say what that
-   means.** (Reported, from `engine/knitr/hash_rule.rs` and the plan's own line about `#|` lines.) A knitr
-   record's `quarto_content_hash` uses the `structured` hash profile, and Positron hashes the cell text including
-   `#|` lines. If they differ, either q2 recomputes the hash at export (a q2-side mapping) or Positron changes.
-   Gordon should hear which before Phase B. The Julia `#|` question is the same one; fold it into Phase A.
+3. **~~A hash mismatch is the likeliest "needs more than a mapping" outcome.~~ Retracted (verified later the
+   same day).** The reviewer's premise was wrong: `quarto_content_hash` is not an engine-declared hash.
+   Core computes it for every engine from the block text between the fences, `#|` lines included, as
+   SHA-1 over LF-normalized lines truncated to 16 hex characters (`crates/quarto-core/src/record/ids.rs:3-26`,
+   "follows Positron exactly"). The `structured` profile in `engine/knitr/hash_rule.rs` shapes
+   `quarto_exec_hash`, the staleness hash, which Positron never sees. What stays open is only the Julia `#|`
+   case on the Positron side (does Positron's parser read `#|` lines for Julia the same way?). See "Design
+   findings after the review" below.
 4. **No gate between the Phase A verdict and Phase B.** (Reported.) Phase B's first decision point comes after a
    verdict that may already be "needs a Positron-side change". Add an explicit "ask Gordon" step after Phase A.
 
@@ -96,6 +99,48 @@ Anything else is "reported" by a reviewer. Tags: **blocking**, **should-fix**, *
 - **Stamped cells carry no `data-loc`**, so a click inside a stamped cell maps to no source line. That follows from
   decision 14 (stamped means not editable) but no one has said it is acceptable for the editor.
 - Decision 12 (the failed optional copy is soft) says "not re-verified against the code".
+
+## Design findings after the review
+
+Gordon asked whether q2 should name engines and languages in this area at all. Findings, in order, from reading
+the tree (all verified by reading unless marked):
+
+- **The gates are two hand-synchronized name lists.** `EXPORT_OWNERS = ["jupyter","julia"]`
+  (`record/positron_export.rs:101`) and the admit rule in `PositronImport::outputs_for`
+  (`record/positron_import.rs`, owner jupyter or julia with a plain language, or owner knitr with token `r`).
+  The language side is already syntactic (`is_plain_language`, `\w+`; the export rejects a token containing `.`).
+- **The record already carries what an export gate needs, as data:** `granularity` (`Unit` or `Document`,
+  `HashDefinition`), the `text/x-quarto-markdown` marker for fallback cells, `quarto_lang`, `owned_languages`.
+  So the export gate needs no engine list. Nothing was shown to break for an engine outside the list; those
+  engines were never tried (not verified for marimo or TS extension engines).
+- **The import gate needs one engine-declared fact,** and only because the unit has not run yet: which
+  languages the engine presents as structured cells. The `r` literal is a proxy for it (RIU-3, "The `fallback`
+  argument at conversion"): knitr structures `r` chunks, and turns a bash chunk into a fallback unit.
+  Proposal (not decided): `structured_languages` on the engine, carried in `EngineEntry` beside `hash_definition`.
+- **There is one presenter, not two modes.** `present_cell` (`stage/stages/record_splice.rs:431`) and
+  `presenter/document.rs` try `present_knitr_cell`, which returns `Some` only when a cell carries
+  `quarto_resolved_options`, then fall through to `render_cell_with`. Both end in `render_cell_whole`, and
+  `CellOptions::from_lookup` is the one place that gives each option its meaning; `from_config` (Jupyter) and
+  `from_knitr` are two front ends. My earlier "recorded versus applied-by-presenter" distinction was wrong
+  and is dropped.
+- **What really differs:** where option resolution happens (R at capture for knitr, the presenter for Jupyter),
+  who enforces `warning` and `message` (`knitr_visibility` versus `CellVisibility::resolve`), the code shown
+  (echoed versus authored), and the capture-side inputs only knitr supplies: output anchors, expression starts,
+  output kinds, `known_options` and the plot count. Each feature degrades when its input is absent
+  (`render_cell_interleaved`). Jupyter has no anchors because an `execute_request` reports no per-line positions.
+- **`fig-cap` versus `fig.cap` is not a conflict.** Dashed wins when both are present (`canonicalize_options`,
+  `options.rs:151`), and Q1's `normalize_options` (`hooks.R:847`) also lets the dashed name replace the dotted
+  one (from knitr 1.44 knitr itself normalizes; its precedence was not read). Both front ends read the canonical
+  `fig-cap`; the presenter emits a caption only when `figure_count` is `Some`, which only the knitr path sets.
+  The doc comment at `options.rs:237` ("dotted names only") is stale.
+- **Julia is already presented by core.** `b4d827186` (2026-11-01) flipped it (`core_presents` in
+  `engine/ts_record.rs:500`: Julia, `want_record`, non-empty units). Epic decision 5 and one risk line still
+  said otherwise; both are fixed in this commit.
+- **Recommendation:** the single-mode presenter (inputs optional, capability = presence of the data, one declared
+  flag for who enforces `warning` and `message`) is feasible but belongs in its own tests-first plan, because it
+  touches the splice stage, `document.rs`, the option sweep and the byte-identical Jupyter goldens (decision 12
+  of the knitr epic). Item 1 needs only the exporter change. Not verified: whether layering the document scope
+  under a knitr record's options is a no-op when fresh, and how tightly the goldens constrain a merge.
 
 ## Item 2 (Julia slowness and EPIPE): what the code supports
 
@@ -178,9 +223,13 @@ Suggested run (on Windows): the epic's own command, which already names `quarto`
 
 ## What changed in the plan
 
-Nothing was deleted without a note here. Item 1: new Phase A boxes (dump the record, hash rule and the exit-time
-Gordon gate, language check, Julia `#|`); Phase C box rewritten for the language check. Item 2: the "uncommitted"
+Nothing was deleted without a note here. Item 1: new Phase A boxes (dump the record, Julia `#|` only, the exit-time
+Gordon gate, language check); Phase C box rewritten for the language check. Item 2: the "uncommitted"
 statement corrected, the EPIPE box split into the experiment. Item 3: boxes ranked and four added. Item 4: the
 second box points here and lists the uncovered intent as new boxes. Item 5: rewritten as "landed" with two exact
 open boxes (the 21-case sweep; the labeled `fig-cap` splice case). New Item 6 for the Windows run. Order section
 rewritten with dependencies and who runs what. Status line and Overview corrected.
+
+**Amended later the same day** (Gordon's design questions): finding 3 retracted; the design findings above
+added; Item 1 Phase A, B and C and a new Item 7 (presenter unification) rewritten in the plan; the stale Julia and
+3b lines in the parent epic, `exr-08-julia.md` and the RIU epic fixed.

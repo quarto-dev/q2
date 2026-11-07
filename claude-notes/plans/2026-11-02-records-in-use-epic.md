@@ -752,8 +752,9 @@ RIU-6 Phase E re-read every plan against the tree (two read-only fact checks ove
 What changed: the RIU-2, RIU-4 and RIU-5 front-matter statuses said "ready" or "in-progress" although the work
 had landed; one box in RIU-0 was ticked; one checked box in RIU-4 (the Windows cross-check, which did not run)
 was unticked; the RIU-3 and RIU-5 window checks now say what RIU-6 ran. What the check found that the plans
-did not say: **RIU-3b never started**, so spliced record output is not stamped and the exit criterion for it
-is unmet. The Windows run is still the only item every plan defers. Everything still open is in
+did not say: **RIU-3b had not started**, so spliced record output was not stamped and the exit criterion for it
+was unmet. (**Superseded the same day:** 3b landed on `feature/riu-3b-stamping`, `3f0c55a6d`; the Exit
+criteria below mark it met.) The Windows run is still the only item every plan defers. Everything still open is in
 [the follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md). Not verified by the checks: every ticked
 box (each plan was spot-checked, six to eight boxes, and none was contradicted except the RIU-4 Windows box).
 

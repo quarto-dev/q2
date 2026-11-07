@@ -90,8 +90,11 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
    and versioned; the Quarto API is not published to npm (bd-ixz93hjp, retitled
    2026-10-28: the packages go to npm, not JSR) until Jupyter, Julia and knitr
    have exercised the contract. The Rust presenter is the long-term single
-   presenter; Julia stays presented by the TS `toMarkdown` until a parity suite
-   shows they match.
+   presenter; Julia stayed presented by the TS `toMarkdown` until a parity suite
+   showed they match. **Done:** the parity suite landed (EXR-8 B3) and Julia flipped to core
+   presentation on 2026-11-01 (`b4d827186`; `core_presents` in `engine/ts_record.rs`: Julia, with a
+   record wanted and a non-empty unit list). The TS `toMarkdown` path still runs when either condition
+   fails.
 6. **knitr stores rendered chunk markdown, in this epic.** `text/x-quarto-markdown`
    as a `display_data` output plus files. Structured outputs (the old K3) are
    not part of this epic: the design here assumed they would require knitr to
@@ -742,7 +745,7 @@ Notified: <lanes messaged at a gate merge, and any lane not found> | none
 2. **Presenter parity.** The Rust presenter and the TS `toMarkdown` both turn
    nbformat into markdown. Golden tests on existing fixtures before anything
    builds on the extraction (EXR-1); a Julia parity suite before Julia flips
-   (EXR-8). Keep the `.cell` wrapper shape until the legacy splice retires
+   (EXR-8; both done, the flip is `b4d827186`, 2026-11-01). Keep the `.cell` wrapper shape until the legacy splice retires
    (`2026-07-01-bd-gthycd33-jupyter-cell-wrapper.md`).
 3. **Hub schema transition.** Deployed docs, admin tooling and guests: readers
    first; old docs untouched; `classify.rs` updated.
