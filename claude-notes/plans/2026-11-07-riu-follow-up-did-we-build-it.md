@@ -254,8 +254,19 @@ release; each item is either fixed for the demo, or written down as a known issu
       missing highlighting in the Positron preview is probably specific to how the records-only preview presents
       an unmatched cell. Still to do: a Playwright check against `q2 preview --records <dir>` with an edited cell;
       file a box if it is a bug.
-- [ ] `[Gordon]` **Command 1 on Julia and R spans**, and whether values should persist. (Python only so far; the
-      R half waits on Item 1.)
+- [ ] `[unattended]` **Command 1 on Julia and R spans.** Command 1 (`positronQuarto.runInlineExpressions`,
+      `quartoRunInlineExpressions.ts` in the fork) is Positron-only and never calls q2. Its span detector takes the
+      document's primary kernel language (`findInlineExprSpans(lines, language)`, `quartoInlineExpr.ts:35`; other
+      languages' spans are ignored) and runs each span on the document's kernel; nothing in
+      `quartoInlineExprExecutor.ts` is Python-specific. Only Python was run (42 and 3.0, also under
+      Playwright), so Julia and R are untested, not known broken. Add a Julia and an R document to the fork's e2e
+      for command 1. Independent of Item 1.
+- [x] **Command 1 values do not persist** (Gordon decides; read 2026-11-07). The values are editor decorations
+      only (`createDecorationsCollection` with injected `after` text, `quartoRunInlineExpressions.ts:62-82`); no
+      file under the command writes the output cache (`saveOutput`, the cache service and `persist` do not
+      appear in it), so they vanish on reload and command 3 cannot show them. For the demo: say so in the run
+      guide. Persisting them would be a new Positron feature (writing span outputs into the cache), not needed
+      for the demo. *Open for Gordon if the demo story needs spans to round-trip through command 3.*
 - [ ] Command 2 does not change Positron's kernel state: a later cell that uses a variable from a pushed cell
       fails. Say so in the user-facing text before it ships.
 
