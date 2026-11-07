@@ -83,11 +83,24 @@ once (the five-output case and the preview), then timed out at 120 seconds on a 
 (`.quarto-inline-output` count stayed 0 while waiting for 5). A first run after a Julia server restart
 pays startup and precompile time.
 
-- [ ] Find the real cost: time `q2 record export-positron` on the Julia fixture cold and warm; set the
-      test timeout from that, not from a guess.
-- [ ] Decide whether the test should start from no Julia server, and whether it can stop its own
-      (the shared server directory is `~/Library/Caches/quarto/julia`).
-- [ ] Re-run the whole file three times and report pass counts.
+- [x] Time the export cold and warm (CLI, 2026-11-07, Julia fixture, scratch directory): cold 20 s, warm
+      10 to 12 s. The engine is Quarto 1's `julia-engine` extension: a detached server, a transport file in
+      `~/Library/Caches/quarto/julia`, reused by the next render. The launcher starts it with
+      `serve(; timeout = 300)`, and the server log showed "Server stopped" mid-run, so a gap of more than
+      five minutes means a cold start. `q2 call` has no `julia` subcommand, so `status` and `stop` are not
+      reachable from q2.
+- [x] With a warm server both Julia tests pass (2 passed, 2.9 min). On a full-file run they twice timed
+      out at the default 120 s with 0 outputs; the failing run's server log was overwritten before I read
+      it, so the cause (cold server, versus a stale server) is likely but not proven.
+- [x] Change (fork, uncommitted until the three runs below finish): a `warmJuliaServer` helper renders a
+      trivial Julia document from `os.tmpdir()/q2-julia-warmup` (never deleted) before each Julia test,
+      and the Julia tests set a 480 s test timeout (their expectations already wait up to 300 s).
+- [ ] Re-run the whole file three times and report pass counts (running 2026-11-07).
+- [ ] **Open observation, unexplained:** after a Positron-driven run the Julia server log holds
+      `Failed to run notebook ... IOError: write: broken pipe (EPIPE)` for the e2e workspace document,
+      raised while the server wrote a chunk-progress message to the client socket, so the client (q2) had
+      closed the connection mid-run. It does not happen in CLI runs, and the tests still passed. Find out
+      who closes the connection (the extension's timeout kill? the window closing at test end?).
 
 ## Item 3: loose ends from RIU-6
 
