@@ -2,13 +2,13 @@
 title: "CommonMark parity for loose vs tight lists"
 date: 2026-11-06
 description: "Spec study, a generated conformance corpus checked against a CommonMark oracle, and a rewrite of the loose/tight decision in the CST-to-AST traversal."
-status: in-review
+status: done
 braid:
   strand: bd-az53ojvo
   priority: P2
 ---
 
-Strand: `bd-az53ojvo`. PR: <https://github.com/quarto-dev/q2/pull/1098>. Related: `bd-25ezfgs8` (whitespace-only separator
+Strand: `bd-az53ojvo` (closed). PR: <https://github.com/quarto-dev/q2/pull/1098>, merged 2026-11-07. Related: `bd-25ezfgs8` (whitespace-only separator
 lines make lists tight), `bd-i4xrcdqx` (whitespace-only blank line before
 `:::` in a list item makes the list tight), `bd-2gc9` (closed: nested tight
 lists marked loose), `bd-nrywksil` (preview parity for list items).
@@ -379,7 +379,7 @@ bd-nrywksil if the include case was a reader-side Plain/Para issue.
       empty on the enumerated corpus and on repeated 5,000-case samples.
 - [x] bd-25ezfgs8 pinned expectations updated (repro A and control B now
       both loose, as pandoc says). bd-25ezfgs8 and bd-i4xrcdqx shapes are
-      in the corpus and pass; close both when this lands.
+      in the corpus and pass; both closed with the merge.
 
 ### Phase 4: round-trip and verification
 
