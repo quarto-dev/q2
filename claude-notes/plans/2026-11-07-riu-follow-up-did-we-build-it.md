@@ -135,12 +135,13 @@ produced it. (This corrects the same day's earlier proposal of one declaration f
       declares kernel equivalence for its language; an undeclared engine gets nothing.
 - [ ] A CLI test through the binary: `q2 record export-positron` on an `engine: knitr` fixture exits 0 and
       prints cells greater than 0. Keep the Python and Julia tests green.
-- [ ] **`[Gordon]`** Decide the image-representation rule (RIU-5, "Output data (representations)": drop
-      `application/pdf`, prefer PNG over SVG, drop a `text/html` that only repeats a data-URI image). It is the one
-      remaining export rule that works around a Positron display behavior (J8: Positron renders every item of a
-      bundle, so Julia plots appeared twice with base64 text). Options: keep it in q2; drop it and report the
-      behavior to the Positron side, fixing it in the fork's view zone (`quartoOutputViewZone.ts`); or keep it
-      until the fork fixes it.
+- [x] **Image-representation rule: keep it for now, remove it when the fork fixes the view zone** (Gordon approved
+      2026-11-07). The rule (RIU-5, "Output data (representations)": drop `application/pdf`, prefer PNG over SVG,
+      drop a `text/html` that only repeats a data-URI image) works around a Positron display behavior (J8:
+      Positron renders every item of a bundle, so Julia plots appeared twice with base64 text). It stays in the
+      export, commented as temporary, until the fork's `quartoOutputViewZone.ts` chooses one representation.
+- [ ] `[unattended]` Track the removal: when the fork's view zone picks one representation, delete the rule and
+      its tests (a box here, not a strand: it belongs to this plan).
 
 ### Phase C: export
 

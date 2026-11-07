@@ -65,9 +65,10 @@ supply is read from the data on its cells, not from its name.
    `toMarkdown` still reachable in a normal render?
 6. How many plans does this need, and in what order? Settle this in the review session.
 
-## Proposed spikes (not approved; Gordon decides which)
+## Spikes (approved by Gordon, 2026-11-07)
 
-All read-only or throwaway-branch; none changes product code.
+All five are approved. Read-only or throwaway-branch; none changes product code. Results go in a research note,
+and the epic is then rewritten from them.
 
 - **S1. Option-front-end diff.** For every option key that appears in both the Jupyter sweep and the knitr option
   sweep, build `CellOptions` through `from_config` and through `from_knitr` and list where they differ. Answers
