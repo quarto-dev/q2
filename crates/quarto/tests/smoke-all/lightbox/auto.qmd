@@ -9,18 +9,20 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'script[src$="glightbox/glightbox.min.js"]'
-          - 'figure a.lightbox[title="Beach in Chilmark"] > img[src="images/mv-0.png"]'
-          - 'a.lightbox[data-gallery="elsewhere"] > img[src="images/mv-1.png"]'
-          - 'a.lightbox[data-gallery="elsewhere"] > img[src="images/mv-2.png"]'
-          - 'a.lightbox[data-gallery="elsewhere"] > img[src="images/mv-3.png"]'
-          - 'p > a.lightbox[data-gallery="quarto-lightbox-gallery-5"] > img[src="images/chunky.png"]'
-          - 'a.lightbox[title="A chunky image"] > img[src="images/cool.png"][width="30"]'
-          - 'a[href="https://example.com/ferry"] > img[src="images/ferry.png"]'
-          - 'img.nolightbox[src="images/mv-2.png"]'
-        - - 'a.lightbox > img[src="images/ferry.png"]'
+        - - 'a.lightbox[href="images/mv-0.png"][title="Beach in Chilmark"] > img'
+          - 'a.lightbox[data-gallery="elsewhere"][href="images/mv-1.png"] > img'
+          - 'a.lightbox[data-gallery="elsewhere"][href="images/mv-2.png"] > img'
+          - 'a.lightbox[data-gallery="elsewhere"][href="images/mv-3.png"] > img'
+          - 'p > a.lightbox[data-gallery="quarto-lightbox-gallery-5"][href="images/chunky.png"] > img'
+          - 'a.lightbox[title="A chunky image"][href="images/cool.png"] > img[width="30"]'
+          - 'a[href="https://example.com/ferry"] > img'
+          - 'img.nolightbox'
+        - - 'a.lightbox[href="images/ferry.png"]'
           - 'a.lightbox > img.nolightbox'
-          - 'a.lightbox > img[src="images/mv-3.png"][width="31"]'
+          - 'a.lightbox > img[width="31"]'
+      ensureFileRegexMatches:
+        - - 'script src="[^"]*glightbox/glightbox\.min\.js"'
+        - []
 ---
 
 ## Chilmark

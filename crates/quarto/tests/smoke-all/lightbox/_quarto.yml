@@ -1,2 +1,8 @@
+# bd-kcpkgftw lightbox fixtures. The hub-client E2E runner checks
+# `ensureHtmlElements` against the q2-preview iframe, where images have
+# blob: srcs, there are no figure wrappers and GLightbox is not loaded, so
+# selectors key on the lightbox link's href; render-only structure (the
+# GLightbox script/link tags, figure wrappers) is asserted with
+# `ensureFileRegexMatches` over the rendered HTML instead.
 project:
   title: Lightbox Tests

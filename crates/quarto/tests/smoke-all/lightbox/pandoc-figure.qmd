@@ -8,8 +8,11 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'script[src$="glightbox/glightbox.min.js"]'
-          - 'div.quarto-figure figure a.lightbox[title="A Lovely Image"] > img'
+        - - 'a.lightbox[title="A Lovely Image"][href="images/mv-0.png"] > img'
+        - []
+      ensureFileRegexMatches:
+        - - 'script src="[^"]*glightbox/glightbox\.min\.js"'
+          - 'class="quarto-figure quarto-figure-center">\s*.figure>\s*.a href="images/mv-0\.png" class="lightbox"'
         - []
 ---
 

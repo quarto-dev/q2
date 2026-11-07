@@ -12,16 +12,16 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'div.cell a.lightbox[data-gallery="r-graph"] > img[src="images/mv-0.png"]'
-          - 'div.cell a.lightbox[data-gallery="cars"] > img[src="images/mv-1.png"]'
-          - 'div.cell a.lightbox[data-gallery="cars"] > img[src="images/mv-2.png"]'
-          - 'div.cell img.nolightbox[src="images/mv-3.png"]'
+        - - 'div.cell a.lightbox[data-gallery="r-graph"][href="images/mv-0.png"] > img'
+          - 'div.cell a.lightbox[data-gallery="cars"][href="images/mv-1.png"] > img'
+          - 'div.cell a.lightbox[data-gallery="cars"][href="images/mv-2.png"] > img'
+          - 'div.cell img.nolightbox'
           - 'div.glightbox-desc.lightbox-desc-1'
           - 'div.glightbox-desc.lightbox-desc-2'
           - 'div.glightbox-desc.lightbox-desc-3'
         - - 'div.cell[data-lightbox]'
           - 'div.cell[lightbox]'
-          - 'a.lightbox > img[src="images/mv-3.png"]'
+          - 'a.lightbox[href="images/mv-3.png"]'
       ensureFileRegexMatches:
         - - "This is 1 to 10 plot"
           - "First description"

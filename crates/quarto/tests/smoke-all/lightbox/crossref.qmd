@@ -8,10 +8,11 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'div#fig-single.quarto-float a.lightbox > img[src="images/mv-0.png"]'
+        - - 'a.lightbox[href="images/mv-0.png"] > img'
         - []
       ensureFileRegexMatches:
-        - - "title=\"Figure 1: What is going on\\? A single chart\\.\""
+        - - "title=\"Figure\u00a01: What is going on\\? A single chart\\.\""
+          - 'id="fig-single" class="quarto-float[^"]*"[\s\S]{0,200}?a href="images/mv-0\.png" class="lightbox"'
         - []
 ---
 

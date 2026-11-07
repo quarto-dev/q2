@@ -9,13 +9,13 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'figure img[src="images/mv-0.png"]'
+        - - 'img[alt="Beach in Chilmark"]'
+          - 'img.lightbox[alt="Explicit, but off"]'
         - - 'a.lightbox'
           - 'script[src$="glightbox/glightbox.min.js"]'
-          - 'link[href$="glightbox/glightbox.min.css"]'
       ensureFileRegexMatches:
-        - []
-        - ["GLightbox"]
+        - - '.figure>\s*.img src="images/mv-0\.png"'
+        - ["GLightbox", "glightbox\\.min"]
 ---
 
 ![Beach in Chilmark](images/mv-0.png)

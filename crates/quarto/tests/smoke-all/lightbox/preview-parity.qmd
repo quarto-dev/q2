@@ -10,8 +10,8 @@ _quarto:
     html:
       dom-parity: true
       ensureHtmlElements:
-        - - 'p > a.lightbox[data-gallery="quarto-lightbox-gallery-1"] > img[src="images/mv-0.png"]'
-          - 'p > a.lightbox[data-gallery="g"][data-desc-position="left"] > img[src="images/mv-1.png"]'
+        - - 'p > a.lightbox[data-gallery="quarto-lightbox-gallery-1"][href="images/mv-0.png"] > img'
+          - 'p > a.lightbox[data-gallery="g"][data-desc-position="left"][href="images/mv-1.png"] > img'
         - []
 ---
 

@@ -14,7 +14,7 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'a.lightbox > img[src="images/mv-0.png"]'
+        - - 'a.lightbox[href="images/mv-0.png"] > img'
         - []
       ensureFileRegexMatches:
         - - "GLightbox\\(\\{\"selector\":\".lightbox\",\"closeEffect\":\"fade\",\"openEffect\":\"fade\",\"descPosition\":\"top\",\"loop\":true,\"skin\":\"cool-beans\"\\}\\)"

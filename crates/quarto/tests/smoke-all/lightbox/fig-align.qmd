@@ -9,12 +9,16 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'div.quarto-figure-right figure a.lightbox > img[src="images/mv-0.png"]'
-          - 'div#fig-placeholder.quarto-figure-right a.lightbox > img[src="images/mv-1.png"]'
-          - 'div.quarto-figure-left a.lightbox > img[src="images/mv-2.png"]'
-        - - 'div.quarto-figure-center'
-          - 'img[fig-align]'
+        - - 'a.lightbox[href="images/mv-0.png"] > img'
+          - 'a.lightbox[href="images/mv-1.png"] > img'
+          - 'a.lightbox[href="images/mv-2.png"] > img'
+        - - 'img[fig-align]'
           - 'img[data-fig-align]'
+      ensureFileRegexMatches:
+        - - 'class="quarto-figure quarto-figure-right">\s*.figure>\s*.a href="images/mv-0\.png" class="lightbox"'
+          - 'id="fig-placeholder" class="[^"]*quarto-figure-right[^"]*"[\s\S]{0,200}?a href="images/mv-1\.png" class="lightbox"'
+          - 'class="quarto-figure quarto-figure-left">\s*.figure>\s*.a href="images/mv-2\.png" class="lightbox"'
+        - - 'quarto-figure-center'
 ---
 
 ![A placeholder image](images/mv-0.png){fig-alt="A placeholder image." fig-align="right" width=20%}

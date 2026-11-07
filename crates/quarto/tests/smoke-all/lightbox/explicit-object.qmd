@@ -8,8 +8,8 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'a.lightbox > img[src="images/mv-1.png"]'
-        - - 'a.lightbox > img[src="images/mv-0.png"]'
+        - - 'a.lightbox[href="images/mv-1.png"] > img'
+        - - 'a.lightbox[href="images/mv-0.png"]'
       ensureFileRegexMatches:
         - - "\"closeEffect\":\"none\",\"openEffect\":\"none\""
         - []

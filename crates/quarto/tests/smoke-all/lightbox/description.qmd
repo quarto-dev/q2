@@ -10,12 +10,12 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'div.hidden[aria-hidden="true"] > div.glightbox-desc.lightbox-desc-1'
+        - - 'div.hidden > div.glightbox-desc.lightbox-desc-1'
           - 'div.glightbox-desc.lightbox-desc-1 em'
           - 'div.glightbox-desc.lightbox-desc-1 a[href="https://unsplash.com/photos/VBDJGOMCwps"]'
           - 'div.glightbox-desc.lightbox-desc-3'
-          - 'a.lightbox[data-desc-position="left"] > img[src="images/mv-0.png"]'
-          - 'a.lightbox[data-gallery="elsewhere"] > img[src="images/mv-1.png"]'
+          - 'a.lightbox[data-desc-position="left"][href="images/mv-0.png"] > img'
+          - 'a.lightbox[data-gallery="elsewhere"][href="images/mv-1.png"] > img'
         - - 'img[description]'
           - 'img[data-description]'
           - 'img[data-desc-position]'
@@ -23,6 +23,7 @@ _quarto:
       ensureFileRegexMatches:
         - - "data-glightbox=\"description: .lightbox-desc-1;title:Beach in Chilmark;\""
           - "data-glightbox=\"description: .lightbox-desc-3;title:Oak Bluffs;\""
+          - 'div class="hidden" aria-hidden="true"'
         - []
 ---
 

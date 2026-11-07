@@ -15,7 +15,7 @@ _quarto:
         level: WARN
         regex: "Extension is now built in"
       ensureHtmlElements:
-        - - 'a.lightbox > img[src="images/mv-0.png"]'
+        - - 'a.lightbox[href="images/mv-0.png"] > img'
         - - 'img.legacy-extension-ran'
 ---
 

@@ -9,16 +9,15 @@ _quarto:
   tests:
     html:
       ensureHtmlElements:
-        - - 'script[src$="glightbox/glightbox.min.js"]'
-          - 'link[href$="glightbox/glightbox.min.css"]'
-          - 'a.lightbox[href="images/mv-0.png"] > img[src="images/mv-0.png"]'
-          - 'a.lightbox[data-gallery="quarto-lightbox-gallery-1"]'
+        - - 'a.lightbox[href="images/mv-0.png"][data-gallery="quarto-lightbox-gallery-1"] > img'
           - 'a[href="https://example.com/ferry"] > img'
         - - 'img.lightbox'
-          - 'a.lightbox img[src="images/mv-1.png"]'
-          - 'a.lightbox img[src="images/ferry.png"]'
+          - 'a.lightbox[href="images/mv-1.png"]'
+          - 'a.lightbox[href="images/ferry.png"]'
       ensureFileRegexMatches:
-        - - "GLightbox\\(\\{\"selector\":\".lightbox\",\"closeEffect\":\"zoom\",\"openEffect\":\"zoom\",\"descPosition\":\"bottom\",\"loop\":false\\}\\)"
+        - - 'script src="[^"]*glightbox/glightbox\.min\.js"'
+          - 'link rel="stylesheet" href="[^"]*glightbox/glightbox\.min\.css"'
+          - "GLightbox\\(\\{\"selector\":\".lightbox\",\"closeEffect\":\"zoom\",\"openEffect\":\"zoom\",\"descPosition\":\"bottom\",\"loop\":false\\}\\)"
         - []
 ---
 
