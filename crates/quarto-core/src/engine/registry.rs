@@ -315,8 +315,9 @@ impl EngineRegistry {
     /// order the document's `engine:` sequence declares — which must match
     /// the recording. Each replay engine validates its own `input_qmd`.
     ///
-    /// Captures whose `engine_name` is not also in the document's engine
-    /// sequence simply never run; extra real engines (those without a
+    /// A capture whose engine does not run is an error (KNR-6): the engine stage fails the
+    /// render naming it, because the replay would otherwise ignore its own recording
+    /// (see [`Self::unused_replay_engines`]). Extra real engines (those without a
     /// matching capture) keep their default implementations.
     pub fn with_replay_many(captures: Vec<quarto_trace::EngineCapture>) -> Self {
         let mut registry = Self {
@@ -337,6 +338,26 @@ impl EngineRegistry {
             registry.register(Arc::new(super::ReplayEngine::new(capture)));
         }
         registry
+    }
+
+    /// Whether this registry replays a recorded capture (KNR-6). A replaying render does not
+    /// write a trace: the document may still say `trace: true`, and the default trace path is
+    /// where the recording being replayed usually lives.
+    pub fn is_replaying(&self) -> bool {
+        self.engines.values().any(|e| e.is_replay())
+    }
+
+    /// The names of replay engines that never executed (KNR-6), sorted. Empty for a registry
+    /// with no replay captures. The engine stage fails a render that ends with any.
+    pub fn unused_replay_engines(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .engines
+            .iter()
+            .filter(|(_, e)| e.is_unused_replay())
+            .map(|(name, _)| name.clone())
+            .collect();
+        names.sort();
+        names
     }
 
     /// Accessor for the alias map (for `TsEngine` lazy init and Plan 1c

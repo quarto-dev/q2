@@ -42,6 +42,6 @@ Q2_POSITRON_FIXTURES=<abs path to this directory> \
 ```
 
 Last observed against Positron `f854bb8e66` (2026-11-01): hashes agree on every cell both
-parsers see; ids differ in 11 of 20 cases (see the `divergence` notes).
+parsers see; ids differ in 12 of 21 cases (`r_label_comment` added and observed 2026-11-05) (see the `divergence` notes).
 
 Nothing here is sent to the Positron project.

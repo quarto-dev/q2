@@ -21,7 +21,16 @@ use quarto_core::ProjectContext;
 use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
-use crate::engine_stage_driver::{AuxRecorder, run_engine_stage, run_engine_stage_ast};
+use crate::engine_stage_driver::{
+    AuxRecorder, run_engine_stage, run_engine_stage_as, run_engine_stage_ast_as,
+};
+
+/// The record tests below pin the fallback unit: one finished-markdown block per chunk, which
+/// is what knitr writes for a target the structured capture does not cover (KNR-3 slice 3).
+/// On `html`, `typst`, `docx` and `gfm` the same chunks are structured cells with no stored
+/// markdown; that shape is covered by `engine::knitr::adapter`, `engine::knitr::gating_tests`
+/// and the corpus shadow gate, so `place` (which splices stored markdown) cannot check it.
+const FALLBACK_FORMAT: &str = "pdf";
 
 fn knitr_render_available() -> bool {
     Command::new("Rscript")
@@ -88,7 +97,8 @@ fn record_for(tmp: &TempDir, source: &str) -> quarto_core::record::Record {
     let input = tmp.path().join("doc.qmd");
     std::fs::write(&input, source).unwrap();
     let observer = AuxRecorder::arc(true);
-    run_engine_stage(&input, observer.clone(), None).expect("the engine stage succeeds");
+    run_engine_stage_as(&input, FALLBACK_FORMAT, observer.clone(), None)
+        .expect("the engine stage succeeds");
     observer.record()
 }
 
@@ -123,7 +133,7 @@ fn knitr_chunk_records_one_per_owned_chunk() {
     assert_eq!(unique.len(), 4, "distinct stage ids: {ids:?}");
     for c in &record.cells {
         assert_eq!(c.metadata.quarto_engine.as_deref(), Some("knitr"));
-        assert_eq!(c.outputs[0]["metadata"]["quarto_format"], "html");
+        assert_eq!(c.outputs[0]["metadata"]["quarto_format"], FALLBACK_FORMAT);
     }
     assert!(markdown_of(&record.cells[0]).contains("[1] 2"));
     assert_eq!(
@@ -133,6 +143,44 @@ fn knitr_chunk_records_one_per_owned_chunk() {
     );
     assert!(markdown_of(&record.cells[3]).contains("fig-a"));
     assert!(!markdown_of(&record.cells[3]).contains("quarto-unit-id"));
+}
+
+/// On a structured target (HTML) the same chunks are structured cells: pieces, no stored
+/// markdown, and the resolved options the presenter reads (KNR-3 slice 3).
+#[test]
+fn knitr_html_records_are_structured_cells() {
+    if skip("knitr_html_records_are_structured_cells") {
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("doc.qmd");
+    std::fs::write(
+        &input,
+        "---\nengine: knitr\n---\n\n```{r}\n1 + 1\n```\n\n```{r}\n#| label: fig-a\nplot(1)\n```\n",
+    )
+    .unwrap();
+    let observer = AuxRecorder::arc(true);
+    run_engine_stage(&input, observer.clone(), None).expect("the engine stage succeeds");
+    let record = observer.record();
+    assert_eq!(record.cells.len(), 2);
+    for c in &record.cells {
+        assert!(c.metadata.extra.contains_key("quarto_resolved_options"));
+        assert!(
+            c.outputs
+                .iter()
+                .all(|o| o["data"].get("text/x-quarto-markdown").is_none()),
+            "{:?}",
+            c.outputs
+        );
+    }
+    assert!(
+        record.cells[1]
+            .outputs
+            .iter()
+            .any(|o| o["data"].get("image/png").is_some()),
+        "{:?}",
+        record.cells[1].outputs
+    );
 }
 
 /// Each figure file is attributed to its chunk, and the bytes arrive through the
@@ -211,10 +259,11 @@ fn knitr_stage_shadow_equality() {
         std::fs::write(&input, source).unwrap();
 
         let recording = AuxRecorder::arc(true);
-        run_engine_stage(&input, recording.clone(), None).expect("record run");
+        run_engine_stage_as(&input, FALLBACK_FORMAT, recording.clone(), None).expect("record run");
         let record = recording.record();
         let mut live =
-            run_engine_stage_ast(&input, AuxRecorder::arc(false), None).expect("live run");
+            run_engine_stage_ast_as(&input, FALLBACK_FORMAT, AuxRecorder::arc(false), None)
+                .expect("live run");
 
         // `place` runs on the canonical text the stage handed to the engine (crossref
         // wrapper Divs, `label:` lines lifted off the chunk). Its units get the ids of
@@ -243,7 +292,7 @@ fn knitr_stage_shadow_equality() {
                 _ => panic!("{what}: cells only"),
             }
         }
-        let placed = quarto_core::record::place(&record, &units, &canonical, "html");
+        let placed = quarto_core::record::place(&record, &units, &canonical, FALLBACK_FORMAT);
         assert!(placed.notes.is_empty(), "{what}: {:?}", placed.notes);
         let (shadow, _, _) = pampa::readers::qmd::read(
             placed.text.as_bytes(),

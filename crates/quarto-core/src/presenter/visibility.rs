@@ -22,14 +22,20 @@ pub fn resolve_cell_options(
     doc_scope: Option<&ConfigValue>,
     options: Option<quarto_yaml::YamlWithSourceInfo>,
 ) -> Option<ConfigValue> {
-    let cell_config = options.map(|o| {
+    let cell_config = cell_config(options);
+    merge_cell_over_scope(doc_scope, cell_config.as_ref())
+}
+
+/// The cell\'s own `#|` options as a config, without the document scope under them. Options
+/// that nothing handles are forwarded from this, not from the merged scope (Phase 7g).
+pub fn cell_config(options: Option<quarto_yaml::YamlWithSourceInfo>) -> Option<ConfigValue> {
+    options.map(|o| {
         let (config, diagnostics) = options_to_config(o);
         for d in diagnostics {
             tracing::warn!("cell option conversion diagnostic: {d:?}");
         }
         config
-    });
-    merge_cell_over_scope(doc_scope, cell_config.as_ref())
+    })
 }
 
 /// Read a boolean option out of resolved cell options, falling back to
@@ -96,6 +102,24 @@ impl CellVisibility {
             warning: resolved_flag(resolved, "warning", true)
                 && resolved_flag(resolved, "output", true),
         }
+    }
+}
+
+/// The presenter's visibility from a knitr chunk's recorded options. Only `include`, `output` and
+/// logical `echo` count here. `warning` and `message` are enforced by R at capture, because
+/// they change what runs, so the presenter must not drop stderr for them (a `warning = FALSE`
+/// chunk still shows its messages); numeric `echo` is applied by the presenter itself
+/// (`CellOptions::echo_selection`), so it shows the source here.
+pub fn knitr_visibility(options: &serde_json::Value) -> CellVisibility {
+    let flag = |key: &str| options.get(key).and_then(serde_json::Value::as_bool);
+    if flag("include") == Some(false) {
+        return CellVisibility::HIDDEN;
+    }
+    let output = flag("output") != Some(false);
+    CellVisibility {
+        echo: flag("echo") != Some(false),
+        output,
+        warning: output,
     }
 }
 

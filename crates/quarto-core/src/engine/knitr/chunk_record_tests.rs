@@ -44,6 +44,8 @@ fn execute(markdown: &str) -> KnitrExecuteResult {
         params: None,
         resource_dir: KNITR_RESOURCES.path().unwrap().to_path_buf(),
         handled_languages: vec![],
+        capture: false,
+        nonce: None,
     };
     call_r("execute", &params, path, path, &CallROptions::quiet()).expect("R execution failed")
 }

@@ -280,6 +280,20 @@ const DISPLAY_ONLY_KEYS: &[&str] = &[
     "layout-nrow",
     "layout-align",
     "layout-valign",
+    // Cell wrapper attributes the presenter writes (KNR-3 slice 7, D10).
+    "panel",
+    "column",
+    "keep-hidden",
+    // Image attributes the presenter writes (KNR-3 slice 7, D6, D10).
+    "fig-env",
+    "fig-pos",
+    "out-width",
+    "out-height",
+    "out-extra",
+    // Cell classes the presenter writes (KNR-3 slice 7, D10).
+    "classes",
+    "fig-column",
+    "tbl-column",
 ];
 
 /// The Jupyter engine's hash declaration (`ExecutionEngine::hash_definition`): the

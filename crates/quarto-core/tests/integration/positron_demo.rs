@@ -105,7 +105,7 @@ fn reports_a_positron_cache() {
     for (u, a) in units.iter().zip(&texts.0) {
         let occ = seen.entry(a.content_hash.clone()).or_default();
         let lang = u.lang();
-        let found = import.outputs_for(&a.content_hash, *occ, JUPYTER_ENGINE, lang);
+        let found = import.outputs_for(&a.content_hash, *occ, JUPYTER_ENGINE, lang, false);
         *occ += 1;
         let what = match found {
             None => "no match".to_string(),

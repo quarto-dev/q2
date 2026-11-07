@@ -73,7 +73,7 @@ pub fn place(record: &Record, units: &[Unit], document_text: &str, format: &str)
             });
             continue;
         }
-        edits.push(replacement(unit, document_text, &markdown));
+        edits.push(placed_replacement(cell, unit, document_text, &markdown));
     }
 
     let mut text = document_text.to_string();
@@ -117,6 +117,30 @@ pub(crate) fn stored_markdown(cell: &RecordCell) -> Option<(String, Option<Strin
         .and_then(Value::as_str)
         .map(str::to_string);
     Some((markdown, format))
+}
+
+/// Metadata key on a stored-markdown output: the markdown is inserted exactly as stored, even
+/// for an inline unit (whose trailing newlines are otherwise trimmed). knitr sets it on a span,
+/// whose live value is inserted verbatim (KNR-4).
+pub const VERBATIM_KEY: &str = "quarto_verbatim";
+
+/// [`replacement`], except that an inline unit whose stored output is marked verbatim keeps
+/// every character of the stored markdown.
+pub(crate) fn placed_replacement(
+    cell: &RecordCell,
+    unit: &Unit,
+    text: &str,
+    markdown: &str,
+) -> (usize, usize, String) {
+    let verbatim = cell
+        .outputs
+        .first()
+        .and_then(|o| o.get("metadata")?.get(VERBATIM_KEY)?.as_bool())
+        .unwrap_or(false);
+    match unit {
+        Unit::Inline(i) if verbatim => (i.start, i.end, markdown.to_string()),
+        _ => replacement(unit, text, markdown),
+    }
 }
 
 /// The edit for one unit. A fenced cell keeps its trailing newline and carries its blockquote

@@ -69,6 +69,8 @@ pub struct EngineEntryInput {
     pub metadata: Option<BTreeMap<String, Value>>,
     pub resource_files: Vec<String>,
     pub warnings: Vec<Value>,
+    /// The option names the engine knows (see `EngineEntry::known_options`).
+    pub known_options: Option<Vec<String>>,
 }
 
 /// Builds one engine's [`EngineRecord`] from the stage's units.
@@ -214,6 +216,7 @@ impl<'a> RecordBuilder<'a> {
                 metadata: input.metadata,
                 resource_files: input.resource_files,
                 warnings: input.warnings,
+                known_options: input.known_options,
                 extra: BTreeMap::new(),
             },
             cells,

@@ -61,7 +61,7 @@ smaller contract for engine authors, and a natural base for single-cell executio
 5. **Runtime-generated units** (computed `child=`, `knit_child()`, `knit_expand()`) are nested
    sub-units: ids scoped under the parent unit, outputs kept as real nbformat outputs, grouped by
    a cell-metadata side table. Core\'s top-level ids and count check stay untouched. Subject to
-   S2 and S5.
+   S2 (S5 is done: the table works, and its row shape is in the S5 result below).
 
 ## Phase 0: spikes
 
@@ -120,6 +120,24 @@ dependency is named; S6 goes first because it shapes the rest.
   cache reader, to check that the cell stays valid and the grouping is simply ignored.
 - **Settles:** the sub-unit record shape. **Depends on:** KNR-2\'s group type (landed at
   `59390f4f5` on `knr-2-presenter`; confirm it is on the knitr epic branch).
+- **Result (2026-11-03, [research note](../research/2026-11-03-units-only-s5-subunit-encoding.md)):**
+  the encoding works, and a sub-unit needs no new presenter code.
+  - (a) `stream` and `error` outputs have no `metadata` field in the 4.5 schema (confirmed, with
+    a rejected negative control), so per-output tagging is impossible for text outputs and the
+    side table is the only uniform carrier.
+  - (b, c) A table row presents through the existing `present_knitr_cell` once it is turned
+    into a flat cell: the row\'s own `source`, the slice of the parent\'s outputs and kinds its
+    range names, and its `options`, `anchors` and `starts` under the existing cell keys. The
+    interleaving came out right for two sub-units. A row\'s `source` is the sub-unit\'s own code,
+    so its anchors and starts are relative to that source, not to the parent\'s.
+  - (d) The cell is valid nbformat 4.5. Positron\'s cache reader (read as source, not run) takes
+    named fields and ignores other cell metadata, so the table would be ignored.
+  - **Row shape:** `{id, label, options, hash, source, outputs: [start, end), anchors, starts}`.
+    The sketch above lacked `starts`, which `prompt` needs. Kinds stay in the parent\'s flat
+    `quarto_output_kinds`, sliced by the range.
+  - **Not shown:** real capture (S2), parent outputs that fall outside every range, holds across
+    sub-units, read-time validation of the table (ranges sorted, disjoint and in bounds), and
+    how `parent/N` ids meet the unit count check.
 
 ### S3: static indirection and the meaning of a unit\'s code
 
@@ -234,7 +252,9 @@ which sub-units reuse per group.
 - [ ] S6: callers of the markdown and the additive capability shape (research note)
 - [ ] S1: knitr per-chunk execution without `knit()` (research note; gates UNI-6)
 - [ ] S2: runtime-generated knitr units (research note)
-- [ ] S5: sub-unit encoding in nbformat (research note and a hand-built record)
+- [x] S5: sub-unit encoding in nbformat (research note and a hand-built record). *Done
+  (2026-11-03): [note](../research/2026-11-03-units-only-s5-subunit-encoding.md). The hand-built
+  record lives in the note, not as a fixture; the prototype test was temporary.*
 - [ ] S3: static indirection and the meaning of a unit\'s code (research note)
 - [ ] S4: which option values need R (research note with corpus counts)
 - [ ] S7: QuartoNotebookRunner cell-list entry point (research note)

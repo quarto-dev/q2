@@ -189,5 +189,16 @@
       }
     ],
     "divergence": "Same: the `#| label: fig-é` line is invisible to Positron's label."
+  },
+  "r_label_comment": {
+    "cells": [
+      {
+        "id": "0-c3756fd0-unlabeled",
+        "language": "r",
+        "content_hash": "c3756fd08b0e66fe",
+        "line": 1
+      }
+    ],
+    "divergence": "Same as label_comment for an R cell: Positron's label is the first brace option, so a `#| label:` line is not read: q2 `fig-r`, Positron unlabeled."
   }
 }
