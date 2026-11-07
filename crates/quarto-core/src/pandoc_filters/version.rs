@@ -157,7 +157,10 @@ mod tests {
         let problem = problem.as_str();
         assert!(problem.contains("\"pandoc.exe 3.5\""), "got: {problem}");
         assert!(!problem.contains("Features"), "got: {problem}");
-        assert!(!problem.contains('\r') && !problem.contains("\\r"), "got: {problem}");
+        assert!(
+            !problem.contains('\r') && !problem.contains("\\r"),
+            "got: {problem}"
+        );
     }
 
     /// T7.3: the `None` arm in `gate`, carrying a code distinct from the
