@@ -25,6 +25,7 @@ pub mod preview;
 pub mod preview_static;
 pub mod provide_hub;
 pub mod publish;
+pub mod record;
 pub mod remove;
 pub mod render;
 pub mod run;

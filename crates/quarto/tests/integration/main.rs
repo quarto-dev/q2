@@ -41,6 +41,7 @@ pub mod preview_cli;
 pub mod preview_static_e2e;
 pub mod project_pandoc_gate_e2e;
 pub mod project_profile_cli;
+pub mod record_export_positron_cli;
 pub mod render_cli_e2e;
 pub mod render_exit_codes;
 pub mod render_integration;

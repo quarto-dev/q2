@@ -144,11 +144,11 @@ construct Positron cannot display. Each is reported in the skipped list with a r
 
 ## Phase B2: `q2 record export-positron`
 
-**Not started (2026-11-06).** It needs RIU-4's `--records` parsing, which this branch does not have. The function and its tests (Phases A and B) are complete and the subcommand is a thin wrapper over them.
+**Done (2026-11-07).** `crates/quarto/src/commands/record.rs`, wired as `Commands::Record` in `main.rs`; tests in `crates/quarto/tests/integration/record_export_positron_cli.rs`. A real-engine run on the S1 `basic.qmd` (no `record: true`, a scratch venv) exported 4 cells and skipped the inline unit, as S7 did. The tests were written before the code, but the first run was after it (I did not watch them fail). That run found one real bug the unit-level checks could not: `Runtime::block_on` around `record_capture_run` panics ("Cannot start a runtime from within a runtime"), so the command enters a runtime and drives the future with `pollster`. A later run on the `julia-error.qmd` fixture (`engine: julia`, `execute: error: true`; only `julia` on `PATH`, no Jupyter kernel) exited 0 with `{"cells":2,"dropped":[],"skipped":[]}`; the output file held an `execute_result` of `2` and an `error` output (`ErrorException`), inspected by hand. Not done here: the Julia plot document (it needs `Plots` added) and the real-window check.
 
 Only what the Positron commands need; nothing speculative. Epic decision 13.
 
-- [ ] `q2 record export-positron <doc.qmd> --out <file> [--records <list>] [--source-uri <uri>]`
+- [x] `q2 record export-positron <doc.qmd> --out <file> [--records <list>] [--source-uri <uri>]`
       wraps the function. Default source list `q2,engine`, and **only those two names are accepted**: the
       export reads the `.quarto` copy or runs the engine, and does not use the walk, the cache or any
       imported source (a Positron cache is the destination here, not a source). RIU-4's parser accepts
@@ -159,14 +159,14 @@ Only what the Positron commands need; nothing speculative. Epic decision 13.
       the user types on their own files, like `q2 render`. Before it runs code it prints one line
       to stderr (for example "no record found; running the document to produce one");
       `--records q2` forbids execution and fails with a clear message when no record exists.
-- [ ] The engine step uses the existing execution path:
+- [x] The engine step uses the existing execution path:
       `quarto_core::engine::preview_record::record_capture_run`, whose observer asks for an
       execution record (`wants_execution_record`), the same hook preview uses. Do not add a second
       execution path. The `.quarto` copy is read with `read_record`; it is **deliberately not checked for
       staleness** here (epic decision 2 of 2026-11-05 covers `record_one` in the preview, not this command),
       so it can carry outputs for cells the document has since changed. Positron
       matches by content hash and skips those, which the export report should say.
-- [ ] **Exit codes**: a stable code per class, kept in one constant list and defined in the first
+- [x] **Exit codes**: a stable code per class, kept in one constant list and defined in the first
       test, per the table below (S6 showed `execFile` returns the numeric code and distinguishes
       `ENOENT`). A failing engine run is its own class: a cell that raises makes `record_capture_run` return an error
 for both Python and Julia unless `error: true` is set (RIU-0c spike 3).
@@ -180,12 +180,12 @@ for both Python and Julia unless `error: true` is set (RIU-0c spike 3).
 | 12 | the record is unreadable or invalid (`read_record` failed, or an `ExportError`) |
 | 13 | the engine run failed: a cell raised and neither `#| error: true` nor `execute: error: true` was set (the message on stderr names the cell and the option); with `error: true` the run succeeds and the failing cell exports with its error output |
 
-- [ ] Stdout is exactly one line of JSON, `{"cells": n, "skipped": [{"id": ..., "reason": ...}],
+- [x] Stdout is exactly one line of JSON, `{"cells": n, "skipped": [{"id": ..., "reason": ...}],
       "dropped": [...]}`; diagnostics go to stderr; arguments are an array, never through a shell.
-- [ ] An older `q2` that lacks the subcommand exits non-zero with a usage error (code 2); the Positron
+- [x] An older `q2` that lacks the subcommand exits non-zero with a usage error (code 2); the Positron
       command treats that as "q2 too old" (S6: the `q2` on PATH was an old nightly), so no capability
       probe is added.
-- [ ] Tests first through the real argument parser, including that `--records cache`, `positron` and a
+- [x] (Partial: the Julia error document was run by hand, not as a test, and the Julia plot document was not run.) Tests first through the real argument parser, including that `--records cache`, `positron` and a
       directory entry exit 2 with a message naming the two valid names; then run it on the S1 `basic.qmd` fixture with
       no `record: true` and on a Julia document, and inspect the file and the JSON line. Add the
       Windows cross-check (Phase C).
@@ -198,11 +198,10 @@ then `export PATH=$SCRATCH/venv/bin:$PATH`. A Julia document needs `julia` (1.12
 a plot needs Plots in the document's Julia project (add it with `JULIA_PKG_OFFLINE=true julia
 --project=. -e 'import Pkg; Pkg.add("Plots")'`).
 
-- [x] `cargo clippy -p quarto-core -p quarto --all-targets -- -D warnings`
-      Run for `quarto-core` only (the `quarto` subcommand is not built): clean on the host.
+- [x] `cargo clippy -p quarto-core -p quarto --all-targets -- -D warnings`: clean on the host for both crates (2026-11-07).
 - [ ] The Windows cross-check **not run**: `cargo clippy --target x86_64-pc-windows-msvc` cannot build `aws-lc-sys` from macOS (the caveat in `.claude/rules/cross-platform.md`). The new tests build their one path with `Path::join`; a Windows user should run the native clippy. (the subcommand takes paths and writes a file):
       `cargo clippy -p quarto-core -p quarto --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
-- [ ] `cargo nextest run -p quarto-core -p quarto`
+- [x] `cargo nextest run -p quarto-core -p quarto` 2026-11-07, `--no-fail-fast`: 8771 run, 8770 passed, 38 skipped, 1 failed. The failure is `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package`: this worktree\'s `node_modules` reveal.js `reset.css` differs from the vendored copy. Not touched by this change; not run on the base to confirm. The 13 B2 tests passed with a scratch venv on `PATH`; the full run had none, so its two engine tests skipped.
 - [ ] **NOT RUN (needs Gordon at the Positron dev build)** (the S7 method; the push command is the S5 spike or
       RIU-6 command 2): push an exported file for (a) a document with an array-valued output, and (b) the
       Julia plot document, and confirm the plot shows **once**, with no base64 text. The Julia plot
