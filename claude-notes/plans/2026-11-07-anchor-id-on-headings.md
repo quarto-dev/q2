@@ -124,4 +124,4 @@ the "deliberate deviations" header comment.
       (evaluate 1.0.5 / knitr 1.51 / rlang 1.2.0). This change touches no
       knitr code.
 - [x] `cargo xtask verify --skip-hub-build --skip-rust-tests`: all steps pass. Windows clippy cross-check cannot build `aws-lc-sys` from macOS; the change has no platform-specific code.
-- [ ] PR, CI green
+- [x] PR #1123, CI green (all 15 checks, including Windows clippy and the macOS/Ubuntu test suites; the local-only knitr failure does not reproduce in CI)
