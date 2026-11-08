@@ -10,7 +10,7 @@
 //! GH #1058).
 //!
 //! Quarto 1 shows a link icon when the reader hovers a section heading, so
-//! the link to that section can be copied. It has three parts, and this
+//! the link to that section can be copied. It has four parts, and this
 //! transform supplies all of them for Bootstrap-themed HTML pages:
 //!
 //! 1. **Mark.** Add the class `anchored` to every `h2`–`h6`, every
@@ -27,6 +27,28 @@
 //! 3. **Initialise it.** A small inline script in `after-body` calls
 //!    `new AnchorJS().add('.anchored')` on `DOMContentLoaded`, with the
 //!    options Q1 uses (`placement: 'right'`, default icon).
+//! 4. **Name the target** (bd-d5gss9pz). sectionize moves a heading's id
+//!    onto its `<section>`, as Pandoc's `--section-divs` does. AnchorJS
+//!    reads the anchor from the heading's `id`, then its
+//!    `data-anchor-id`; with neither, it urlifies the heading text and
+//!    de-duplicates it against the ids already on the page. So `## Overview`
+//!    linked to `#overview-1`, a fragment that exists only after AnchorJS
+//!    runs and that disagrees with the TOC. Q1's Bootstrap postprocessor
+//!    (`format-html-bootstrap.ts:534-544`) copies each section's id back
+//!    onto its heading as `data-anchor-id`; so does this transform. Q1
+//!    takes the first `h2`…`h6` of each `section[class^="level"]` in
+//!    document order, letting nested sections overwrite, which leaves each
+//!    section's own heading carrying its id. sectionize puts that heading
+//!    first, so here only a section's leading `Header` (levels 2–6) is
+//!    written, with no overwrite. Like Q1, this ignores `anchor-sections:
+//!    false` and `.no-anchor` (the attribute is inert without AnchorJS);
+//!    unlike Q1, an empty section id writes nothing rather than `""`.
+//!    Also unlike Q1, any `section`-class Div qualifies, not only
+//!    `level*` ones: Q1's `[class^="level"]` misses appendix sections such
+//!    as `section#footnotes.footnotes`, so its Footnotes heading anchors
+//!    to an invented `#footnotes-1`. Here it anchors to `#footnotes`.
+//!    `quarto-toc.js` also reads the attribute, to reveal a heading's link
+//!    when its TOC entry is clicked.
 //!
 //! The `.anchorjs-link` styling lives in
 //! `resources/scss/bootstrap/_bootstrap-rules.scss`.
@@ -85,6 +107,11 @@ const ANCHORED: &str = "anchored";
 /// Opt-out class (Q1: `.no-anchor`).
 const NO_ANCHOR: &str = "no-anchor";
 
+/// The attribute AnchorJS reads a heading's anchor from when the heading
+/// has no `id` (sectionize moved it to the `<section>`). The HTML writer
+/// emits `data-*` keys verbatim.
+const ANCHOR_ID_ATTR: &str = "data-anchor-id";
+
 /// Sentinel making a re-run append the init only once.
 const INIT_SENTINEL: &str = "<!-- quarto-anchor-sections -->";
 
@@ -136,11 +163,19 @@ impl AstTransform for AnchorSectionsTransform {
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         let render = ctx.pipeline_profile == PipelineProfile::HtmlRender;
         let preview = ctx.pipeline_profile == PipelineProfile::HtmlPreview;
-        if !(render || preview) || is_minimal_html(&ast.meta) || !anchors_enabled(&ast.meta) {
+        if !(render || preview) || is_minimal_html(&ast.meta) {
             return Ok(());
         }
 
-        mark_blocks(&mut ast.blocks);
+        // Q1 writes `data-anchor-id` on every Bootstrap page, before and
+        // independent of the `anchor-sections` switch (module docs, item 4).
+        walk_blocks(&mut ast.blocks, &mut anchor_section_heading);
+
+        if !anchors_enabled(&ast.meta) {
+            return Ok(());
+        }
+
+        walk_blocks(&mut ast.blocks, &mut mark_block);
 
         // The runtime is render-only: the preview has no `ApplyTemplateStage`
         // to turn the artifact into a `<script>`, and renders through React.
@@ -178,34 +213,56 @@ fn is_anchorable_div(id: &str, classes: &[String]) -> bool {
     !id.is_empty() && (classes.iter().any(|c| c == "quarto-figure") || id.starts_with("tbl-"))
 }
 
-/// Walk every container that can hold a heading, figure or table wrapper
-/// (the same set `MermaidRenderTransform` descends into).
-fn mark_blocks(blocks: &mut Blocks) {
+/// Mark one block (not its children) per item 1 of the module docs.
+fn mark_block(block: &mut Block) {
+    match block {
+        Block::Header(h) if (2..=6).contains(&h.level) => mark(&mut h.attr.1),
+        Block::Div(div) if is_anchorable_div(&div.attr.0, &div.attr.1) => mark(&mut div.attr.1),
+        _ => {}
+    }
+}
+
+/// Give a sectionize section's own heading the section's id as
+/// `data-anchor-id` (item 4 of the module docs). sectionize puts that
+/// heading first, so only the leading block is considered.
+fn anchor_section_heading(block: &mut Block) {
+    let Block::Div(div) = block else { return };
+    let (id, classes, _) = &div.attr;
+    if id.is_empty() || !classes.iter().any(|c| c == "section") {
+        return;
+    }
+    let id = id.clone();
+    if let Some(Block::Header(h)) = div.content.first_mut()
+        && (2..=6).contains(&h.level)
+    {
+        h.attr.2.insert(ANCHOR_ID_ATTR.to_string(), id);
+    }
+}
+
+/// Apply `f` to every block, pre-order, descending into every container
+/// that can hold a heading, figure or table wrapper (the same set
+/// `MermaidRenderTransform` descends into).
+fn walk_blocks(blocks: &mut Blocks, f: &mut impl FnMut(&mut Block)) {
     for block in blocks.iter_mut() {
+        f(block);
         match block {
-            Block::Header(h) if (2..=6).contains(&h.level) => mark(&mut h.attr.1),
-            Block::Div(div) => {
-                if is_anchorable_div(&div.attr.0, &div.attr.1) {
-                    mark(&mut div.attr.1);
-                }
-                mark_blocks(&mut div.content);
-            }
-            Block::BlockQuote(bq) => mark_blocks(&mut bq.content),
-            Block::Figure(fig) => mark_blocks(&mut fig.content),
+            Block::Div(div) => walk_blocks(&mut div.content, f),
+            Block::BlockQuote(bq) => walk_blocks(&mut bq.content, f),
+            Block::Figure(fig) => walk_blocks(&mut fig.content, f),
             Block::OrderedList(list) => {
                 for item in list.content.iter_mut() {
-                    mark_blocks(item);
+                    walk_blocks(item, f);
                 }
             }
             Block::BulletList(list) => {
                 for item in list.content.iter_mut() {
-                    mark_blocks(item);
+                    walk_blocks(item, f);
                 }
             }
             Block::DefinitionList(dl) => {
                 for (_term, defs) in dl.content.iter_mut() {
                     for def in defs.iter_mut() {
-                        mark_blocks(def);
+                        walk_blocks(def, f);
                     }
                 }
             }
@@ -460,6 +517,133 @@ mod tests {
         let keys = run(&mut ast, Format::pdf()).await;
         assert!(classes(&ast.blocks[1]).is_empty());
         assert!(keys.is_empty());
+    }
+
+    /// A sectionize-shaped section Div: `#id .section .levelN`, its own
+    /// (id-less) header first, then `rest`.
+    fn section(id: &str, level: usize, header_classes: &[&str], rest: Blocks) -> Block {
+        let mut content = vec![header(level, "", header_classes)];
+        content.extend(rest);
+        div(id, &["section", &format!("level{level}")], content)
+    }
+
+    fn anchor_id(b: &Block) -> Option<String> {
+        match b {
+            Block::Header(h) => h.attr.2.get(ANCHOR_ID_ATTR).cloned(),
+            other => panic!("expected a header, got {other:?}"),
+        }
+    }
+
+    /// The `i`-th block of section Div `b`.
+    fn child(b: &Block, i: usize) -> &Block {
+        let Block::Div(d) = b else {
+            panic!("expected a div, got {b:?}")
+        };
+        &d.content[i]
+    }
+
+    /// Each section's own heading carries the section id as
+    /// `data-anchor-id` (Q1 format-html-bootstrap.ts:534-544), so AnchorJS
+    /// links to `#overview` instead of inventing `#overview-1`.
+    #[tokio::test]
+    async fn section_headings_get_data_anchor_id() {
+        let mut ast = Pandoc {
+            meta: meta(vec![]),
+            blocks: vec![section(
+                "overview",
+                2,
+                &[],
+                vec![section("details", 3, &[], vec![])],
+            )],
+        };
+        run(&mut ast, Format::html()).await;
+        let outer = &ast.blocks[0];
+        assert_eq!(anchor_id(child(outer, 0)).as_deref(), Some("overview"));
+        let inner = child(outer, 1);
+        assert_eq!(anchor_id(child(inner, 0)).as_deref(), Some("details"));
+    }
+
+    /// A level-1 section's `h1` is not an AnchorJS target and gets
+    /// nothing; its nested `h2` gets its own section's id, not the h1's.
+    #[tokio::test]
+    async fn h1_section_is_skipped_and_nested_h2_keeps_its_own_id() {
+        let mut ast = Pandoc {
+            meta: meta(vec![]),
+            blocks: vec![section("top", 1, &[], vec![section("sub", 2, &[], vec![])])],
+        };
+        run(&mut ast, Format::html()).await;
+        let top = &ast.blocks[0];
+        assert_eq!(anchor_id(child(top, 0)), None);
+        assert_eq!(anchor_id(child(child(top, 1), 0)).as_deref(), Some("sub"));
+    }
+
+    /// Q1 writes the attribute on every Bootstrap page, whatever
+    /// `anchor-sections` or `.no-anchor` say.
+    #[tokio::test]
+    async fn data_anchor_id_ignores_no_anchor_and_anchor_sections_false() {
+        let mut ast = Pandoc {
+            meta: meta(vec![(
+                "anchor-sections",
+                ConfigValue::new_bool(false, SourceInfo::for_test()),
+            )]),
+            blocks: vec![section("quiet", 2, &["no-anchor"], vec![])],
+        };
+        run(&mut ast, Format::html()).await;
+        let h = child(&ast.blocks[0], 0);
+        assert_eq!(anchor_id(h).as_deref(), Some("quiet"));
+        assert_eq!(classes(h), ["no-anchor"], "but no anchored class");
+    }
+
+    #[tokio::test]
+    async fn data_anchor_id_skips_empty_ids_and_is_idempotent() {
+        let mut ast = Pandoc {
+            meta: meta(vec![]),
+            blocks: vec![section("", 2, &[], vec![]), section("a", 2, &[], vec![])],
+        };
+        run(&mut ast, Format::html()).await;
+        run(&mut ast, Format::html()).await;
+        assert_eq!(anchor_id(child(&ast.blocks[0], 0)), None);
+        let Block::Header(h) = child(&ast.blocks[1], 0) else {
+            panic!()
+        };
+        assert_eq!(h.attr.2.len(), 1, "{:?}", h.attr.2);
+        assert_eq!(h.attr.2.get(ANCHOR_ID_ATTR).map(String::as_str), Some("a"));
+    }
+
+    /// Only the section's leading block counts: a section that does not
+    /// open with its heading (not sectionize-shaped) is left alone.
+    #[tokio::test]
+    async fn data_anchor_id_only_on_leading_header() {
+        let mut ast = Pandoc {
+            meta: meta(vec![]),
+            blocks: vec![div(
+                "s",
+                &["section", "level2"],
+                vec![div("", &["callout"], vec![]), header(2, "", &[])],
+            )],
+        };
+        run(&mut ast, Format::html()).await;
+        assert_eq!(anchor_id(child(&ast.blocks[0], 1)), None);
+    }
+
+    #[tokio::test]
+    async fn data_anchor_id_not_written_for_pdf_or_minimal() {
+        let mut ast = Pandoc {
+            meta: meta(vec![]),
+            blocks: vec![section("a", 2, &[], vec![])],
+        };
+        run(&mut ast, Format::pdf()).await;
+        assert_eq!(anchor_id(child(&ast.blocks[0], 0)), None);
+
+        let mut ast = Pandoc {
+            meta: meta(vec![(
+                "minimal",
+                ConfigValue::new_bool(true, SourceInfo::for_test()),
+            )]),
+            blocks: vec![section("a", 2, &[], vec![])],
+        };
+        run(&mut ast, Format::html()).await;
+        assert_eq!(anchor_id(child(&ast.blocks[0], 0)), None);
     }
 
     #[test]
