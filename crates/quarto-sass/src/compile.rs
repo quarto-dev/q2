@@ -784,7 +784,7 @@ mod tests {
     /// bd-rl7r38pw: an expanded sidebar section must show a rotated
     /// (down-pointing) chevron, a collapsed one a right-pointing one.
     /// Bootstrap's collapse plugin keeps `aria-expanded` on the
-    /// `a.sidebar-item-toggle` in sync; the theme has to key the
+    /// `.sidebar-item-toggle` button in sync; the theme has to key the
     /// rotation off it (Q1 `quarto-nav.scss:418-432`). The markup is
     /// correct either way, so only the compiled CSS can show the bug.
     #[test]
@@ -821,6 +821,62 @@ mod tests {
         assert!(
             collapsed.contains("transform:none"),
             "collapsed chevron rule should reset transform: {collapsed}"
+        );
+    }
+
+    /// bd-3bg8h1rx: sidebar section toggles are `<button>`s (Q1 #14826).
+    /// Without the reset they render with the browser's native button
+    /// chrome; without the flex layout an unlinked section's single
+    /// label+chevron button loses the chevron's right alignment.
+    #[test]
+    fn test_sidebar_toggle_buttons_are_reset_and_laid_out() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+        let all = rules(&css);
+
+        let reset = all
+            .iter()
+            .find(|(sel, _)| {
+                sel.contains(".sidebar-item .sidebar-item-toggle")
+                    && sel.contains(".sidebar-item button.sidebar-item-text")
+            })
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no button-reset rule for sidebar toggles. Port Q1 quarto-nav.scss:378-393.");
+        for decl in [
+            "background:none",
+            "border:none",
+            "padding:0",
+            "font:inherit",
+            "color:inherit",
+            "text-align:inherit",
+        ] {
+            assert!(reset.contains(decl), "reset rule lacks `{decl}`: {reset}");
+        }
+
+        let layout = all
+            .iter()
+            .find(|(sel, _)| sel.trim() == ".sidebar-item button.sidebar-item-text")
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no layout rule for `.sidebar-item button.sidebar-item-text`");
+        for decl in ["display:flex", "align-items:baseline", "width:100%"] {
+            assert!(
+                layout.contains(decl),
+                "layout rule lacks `{decl}`: {layout}"
+            );
+        }
+
+        let chevron = all
+            .iter()
+            .find(|(sel, _)| {
+                sel.contains("button.sidebar-item-text")
+                    && sel.contains(".bi-chevron-right")
+                    && !sel.contains("::before")
+            })
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no rule pushing the in-button chevron right");
+        assert!(
+            chevron.contains("margin-left:auto"),
+            "in-button chevron must sit hard right: {chevron}"
         );
     }
 
