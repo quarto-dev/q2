@@ -139,7 +139,7 @@ than counter-based. That difference is intentional and is kept.
   `--skip-rust-tests`. Hub-client `test:wasm` first failed on
   unrelated fixtures because the WASM bundle was stale; after
   `npm run build:wasm`, all hub-client suites pass.
-- [ ] Open the PR and watch CI until it is green.
+- [x] Open the PR and watch CI until it is green (PR #1121). Every check passed on the first run, including Clippy (Windows).
 
 ## Details
 
