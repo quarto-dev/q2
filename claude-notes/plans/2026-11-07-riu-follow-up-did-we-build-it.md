@@ -368,6 +368,13 @@ q2 convert <input> --to <format> [--from <format>] [-o <path>] [target options]
 
 ## Item 9: rename `--records` to `--execution-records`
 
+> **Update 2026-11-08 (Gordon):** this item is to be folded into a new consolidation plan in the
+> [one-presenter epic](2026-11-07-one-presenter-path-epic.md): one shared definition of the flag's grammar and
+> handling for `preview`, `provide-hub`, `convert` and the new `q2 render --execution-records`. The fold depends
+> on the research into whether the source list could be a metadata key instead of a flag
+> ([decisions note](../research/2026-11-08-one-presenter-review-decisions.md), R5). Until the epic's plan list is
+> written, the boxes below stay as they are.
+
 **Intended (Gordon, 2026-11-07):** the flag that names where a document's execution record comes from is spelled
 `--execution-records`. **Unreleased, so no alias and no deprecation period:** neither `v0.42.0` nor `main` has the
 flag (`git grep -e '--records' v0.42.0 -- crates/quarto/src/main.rs docs`: no matches). The grammar is unchanged: a

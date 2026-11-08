@@ -2,7 +2,7 @@
 title: 'Epic: one presenter path for every engine'
 date: 2026-11-07
 description: 'The shared Rust presenter was meant to give every engine the same cell semantics, so knitr features reach Jupyter and Julia. The five spikes are done: the option readers are one reader plus a rename, the Jupyter goldens survive the knitr entry path except for warning enforcement, the document scope is not layered on the knitr path, and Julia and knitr reach the Rust presenter only when a record is wanted. The design questions are sharpened for the review with Gordon; the plan list and exit criteria are not written.'
-status: spikes done; design questions open for the review session with Gordon; no plan written  # 2026-11-07
+status: spikes done; questions 1, 3, 4 and 7 decided 2026-11-08 (2 and 6 wait for the review sub-agents); no plan list written yet  # 2026-11-08
 ---
 
 **Follows from:** [the RIU follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md), Item 7, and
@@ -76,6 +76,24 @@ The complete feature-by-input table is in the spike note (S5). In short: interle
 numeric `echo` need expression starts (without them `prompt` treats the code as one expression, which is wrong
 for a multi-expression cell, and numeric `echo` is ignored); numeric `warning` and `message` need output kinds;
 figure captions need the plot count; echoed code needs `quarto_echoed_code`.
+
+## Decided in the review session (2026-11-08)
+
+Full record, with Gordon's words: [the decisions note](../research/2026-11-08-one-presenter-review-decisions.md).
+
+- **Question 1:** one `present_cell` takes a struct of optional inputs; `quarto_resolved_options` becomes one field.
+- **Question 3:** the presenter enforces an option exactly when the record's hash definition lists it as display-only.
+- **Question 4:** Julia is in scope for supplying anchors, expression starts and output kinds. Jupyter waits for what
+  the protocol can supply.
+- **Question 7:** the plain-render route of Julia and knitr is **in scope**. This reopens knitr decision 24 (the
+  retained fallback) and makes the cost of an in-memory record the central implementation question.
+- **New, `q2 render --execution-records`:** read only; default `engine`; a document no source supplies warns and
+  stays inert; a stale record counts as not supplied; `--no-execute` vetoes `engine`; `--replay` conflicts.
+  Whether the source list is a metadata key instead of a flag is open (needs research).
+- **New, consolidation:** one shared definition of the grammar and handling for `preview`, `provide-hub`, `convert`
+  and `render`, with the rename (follow-up Item 9) folded in. It depends on the metadata-key research.
+
+The sections below are the questions as they stood before the discussion. Questions 2 and 6 remain open.
 
 ## Open design questions (for the review session with Gordon)
 
