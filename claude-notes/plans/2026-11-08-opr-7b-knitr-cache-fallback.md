@@ -2,7 +2,7 @@
 title: 'OPR-7b: cached knitr chunks use the markdown fallback and emit no record'
 date: 2026-11-08
 description: 'Gordon decided (2026-11-08): a knitr chunk that asks for the cache keeps knitr''s cache and its finished markdown, and emits no structured record; it degrades quietly. Reverses the S4 rule (cache off while recording). OPR-0c found that a record merely missing the chunk is dropped whole by the unit-count check, so cached units are excluded from the expected count. Retires the Q-18-12 message and updates the test and the knitr plan note that pinned the old rule.'
-status: ready
+status: in-progress
 depends-on: [opr-0c]
 lane: B
 ---
