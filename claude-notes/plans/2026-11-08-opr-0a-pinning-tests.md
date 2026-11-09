@@ -2,7 +2,7 @@
 title: 'OPR-0a: pinning tests for the presenter loops, scope, spans and entry paths'
 date: 2026-11-08
 description: 'Tests first for the one-presenter epic. Pins what the two presenter loops, the document execute scope, the span routines and the knitr and Jupyter entry paths do today, so OPR-1a and OPR-1b can prove they changed only what the epic decided. No product code changes.'
-status: ready
+status: in-progress
 depends-on: []
 lane: A
 ---
