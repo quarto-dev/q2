@@ -210,7 +210,7 @@ fn write(root: &Path, rel: &str, text: &str) {
 /// chapter.
 fn book() -> (tempfile::TempDir, ProjectContext, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
-    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let root = quarto_system_runtime::canonicalize(dir.path()).unwrap();
     write(
         &root,
         "_quarto.yml",
@@ -303,7 +303,7 @@ fn a_non_member_renders_alone_for_every_request_and_format() {
 #[test]
 fn a_project_that_is_not_a_book_is_no_book_and_silent() {
     let dir = tempfile::tempdir().unwrap();
-    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let root = quarto_system_runtime::canonicalize(dir.path()).unwrap();
     write(&root, "_quarto.yml", "project:\n  type: default\n");
     write(&root, "a.qmd", "# A\n");
     let project = ProjectContext::discover(root.join("a.qmd"), &NativeRuntime::new()).unwrap();
