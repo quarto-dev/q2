@@ -114,12 +114,15 @@ fn render_to(name: &str, format: &str, ext: &str) -> (String, String) {
 fn normalize(stderr: &str, dir: &Path, name: &str) -> String {
     let mut out = stderr.to_string();
     let raw = dir.to_string_lossy().to_string();
-    let canonical = dir
-        .canonicalize()
+    // Plain-form canonical (no `\\?\` verbatim prefix), which is how the binary
+    // spells paths in its diagnostics; `raw` may be an 8.3 short name on Windows.
+    let canonical = quarto_system_runtime::canonicalize(dir)
         .map_or_else(|_| raw.clone(), |p| p.to_string_lossy().to_string());
     for d in [&canonical, &raw] {
         out = out.replace(d, "<dir>");
     }
+    // Native diagnostics join with `\` on Windows; the snapshots use `/`.
+    out = out.replace("<dir>\\", "<dir>/");
     // Lua's abbreviated chunk name, `...<tail of dir>/<file>:`, becomes
     // `<dir>/<file>:`. The scratch directory's own last component marks
     // where the tail ends (so a module under `modules/` keeps its relative
