@@ -55,7 +55,7 @@ capture splice and is not part of this epic.
   structured record, quietly (OPR-0c, 2026-11-09: the record must not simply lack the chunk, because the unit count check drops
   the whole record; OPR-7b excludes cached units from the expected count instead). The LaTeX family, `pptx`, `context` and unknown knitr targets stay on the engine route, quietly
   (strands `bd-4y5scdhp`, `bd-lo1cs7u5`, `bd-ka76vcrp` track widening; LaTeX notes live in the LaTeX plan on
-  `explore/pandoc-hybrid-latex`). Decided 2026-11-09 (Gordon): the retained knitr fallback survives for plain render, and there is **no opt-out control** (recorded in OPR-7d).
+  `explore/pandoc-hybrid-latex`). Decided 2026-11-09 (Gordon): the retained knitr fallback survives for plain render, and there is **no opt-out control** (recorded in OPR-7d). **Amended 2026-11-09 (Gordon, [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md)):** a cached chunk should be a record cell if that can be done without changing knitr. OPR-7e runs a spike first and implements level 3 (`cache=TRUE`); level 1 is an optional second slice and level 2 is out of scope. Whatever it does not build stays as written here, and OPR-7d does not wait for it (7e decision 5).
 - **D6. `render` reads `execute: record-sources`** (updated by R5, 2026-11-09; there is no render option). Read only
   (writing stays with `execute: record: true`); default `engine`; `cache` is ignored with an info line; the list is
   resolved **per document**; no source and no `engine` warns and leaves cells inert (`--strict` errors; prose-only
@@ -145,7 +145,9 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-7a](2026-11-08-opr-7a-presentation-handshake-and-record.md) | OPR | Handshake and record without the extra cost, behind a control | 1b, 3, 6 | C | ready |
 | [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md) | OPR | Cached knitr chunks fall back, no record | 0c | B | ready |
 | [OPR-7c](2026-11-08-opr-7c-run-the-parity-gate.md) | OPR | Run the parity gate, fix or propose the allowlist | 0b, 1b, 2, 7b, 4d resolved | D | ready |
-| [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, Gordon\'s decisions | D | blocked-on-gordon |
+| [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md) | OPR | A cached knitr chunk (`cache=TRUE`) is recorded and presented like any other (spike first); better before 7d, which does not wait for it | 7b | B | ready |
+| [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) | OPR | Engines control the attributes and file names the presenter writes (a general `attrs` channel); Julia uses it and `quarto_file_path`, so five of the 7c Julia allowlist entries go | 4d, 7a, 7c | C | ready |
+| [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, 7f, Gordon\'s decisions | D | blocked-on-gordon |
 | [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved, RFU-8 | D | ready |
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
 | [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | RFU | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
@@ -161,8 +163,8 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | Lane | Workspace | Plans, in order |
 |---|---|---|
 | A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3, **RFU-7** (moved from C) |
-| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C) |
-| C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a |
+| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, **OPR-7e**, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C) |
+| C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a, **OPR-7f** |
 | D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, OPR-7d, OPR-8 |
 
 > **Lane change, 2026-11-09.** Lanes A and B went idle (all their plans complete) while C and D still held startable plans, so three plans were **reassigned**: RFU-7 from lane C to **lane A** (`workspace-3`), RFU-4 from lane C to **lane B** (`workspace-4`), and RFU-8 from lane D to **lane B** (`workspace-4`). Dependencies are unchanged. The Lane column and lane lists below show the new lanes; the plan files and the lanes diagram carry the same change.

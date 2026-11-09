@@ -63,7 +63,7 @@ it for each page you edit.
   for the rest); and the new `q2 render` behavior (read only, default `engine`, stale or format-mismatched records count
   as not supplied, a document with no source warns and stays inert, `--strict`), the fact that
   a plain render of Julia and knitr now presents from an in-memory record and writes nothing, and the `cache:
-  true` chunk behavior.
+  true` chunk behavior (see the caching item below).
 - `docs/guides/projects/preview.qmd`: the rename (about lines 147, 153, 162, 247), and the difference that preview
   shows a stale record while render treats it as not supplied; `preview.engine` is preview-only.
 - The render options page (`docs/guides/projects/render-options.qmd`): there is no new flag; point to `execute: record-sources` and the `-M` spelling.
@@ -73,7 +73,11 @@ it for each page you edit.
   (OPR-0c, ran, same on Quarto 1). Do not document the unresolved subfigure-group references as intended behavior; link
   `bd-gbaykhth` in the notes if still open.
 - A knitr page or note about caching, only if a page describes it today (`git grep -n -i 'cache' docs/guides`);
-  say that chunks with `cache: true` keep knitr\'s cache and are not part of the execution record.
+  say that chunks with `cache: true` keep knitr\'s cache. If [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md) is
+  `complete`, say that a cache hit presents like any other chunk and that a stale cached output is knitr\'s usual cache
+  caveat (adding code above a cached chunk re-runs it, because the chunk\'s identity includes its position); mention the
+  legacy-entry case from 7e\'s notes. If 7e is blocked or not done, say that such chunks are not part of the execution
+  record (OPR-7b).
 
 ## Checklist (every box is `[unattended]`)
 

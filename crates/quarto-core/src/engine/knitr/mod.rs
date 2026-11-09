@@ -337,7 +337,8 @@ impl ExecutionEngine for KnitrEngine {
         };
 
         execute_result.warnings.extend(capture_plan.diagnostic);
-        // OPR-7b: a chunk that asked for knitr\'s cache keeps it and is not recorded, so it is
+        // OPR-7b: a chunk that asked for knitr\'s cache keeps it; one that ends the run unrecorded (OPR-7e
+        // records level 3 from a sidecar) is
         // not one of the units the record is checked against; its finished markdown is already
         // in place in the skeleton.
         let expected_ids: Vec<String> = expected_ids

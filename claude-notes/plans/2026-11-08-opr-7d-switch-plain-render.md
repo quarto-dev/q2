@@ -3,7 +3,7 @@ title: 'OPR-7d: switch plain render of Julia and knitr to the recorded route'
 date: 2026-11-08
 description: 'Turns the internal present_from_record control on by default, so a plain q2 render of a Julia or knitr document is presented by the Rust presenter from an in-memory record, writing nothing to .quarto. Keeps the LaTeX family and uncovered targets on the engine route, quietly. Applies Gordon''s decisions on the retained knitr fallback and on an opt-out control.'
 status: blocked-on-gordon
-depends-on: [opr-7a, opr-7b, opr-7c]
+depends-on: [opr-7a, opr-7b, opr-7c, opr-7f]
 lane: D
 ---
 
@@ -57,7 +57,9 @@ presenter, as a recorded render does. Concretely:
   knitr, **quietly**: `plan_capture` (`engine/knitr/target_route.rs`) says its info diagnostic once per document
   whenever a record is wanted; on a plain render that would fire on every such render, so it must not (Gordon:
   degrade quietly, as other fallbacks do). An explicit record request keeps the diagnostic.
-- Cached knitr chunks fall back with no record (OPR-7b).
+- Cached knitr chunks fall back with no record (OPR-7b). If [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md) is
+  `complete`, a `cache=TRUE` chunk is a record cell on a hit as well as on a miss, and levels 1 and 2 still fall back;
+  read its notes. If 7e is blocked or not done, proceed as in 7b: this plan does not wait for it (7e decision 5).
 - Marimo is a documented exception and stays on its legacy path (decision D12).
 
 ## Checklist (tests first; every box is `[unattended]`)

@@ -34,7 +34,7 @@ This is a demo (Gordon): a result is either fixed, or written down as a known is
 
 ## Checklist (every box is `[unattended]` unless marked)
 
-- [x] **Hub verification (recorded as NOT RUN, with the reason; see the note).** The records-in-use epic\'s exit criterion 1 says preview and hub work from records alone,
+- [x] **Hub verification (ran: provide-hub one-shot with the unattended flag Gordon approved, output seen in a browser; see the note).** The records-in-use epic\'s exit criterion 1 says preview and hub work from records alone,
       "verified through the real binary and a browser". Find where the hub half was verified and cite it, or run it:
       `q2 provide-hub` with the writer gate on (`QUARTO_ENGINE_RECORD_WRITE=1`) and a hub client. Record the invocations
       and what you saw; say what was automated and what was not seen by a person.
@@ -69,9 +69,7 @@ Ran on `target/debug/q2` after rebuilding the whole embed chain (hub-client WASM
 highlighting on an edited cell (a bug, left unfixed); the stale Julia server (`startpath` must be non-empty) and the missing-Plots errors
 reproduce and the note says where q2 could add a hint (`engine/ts_process.rs`, `execution_failed`); the RIU-3 browser items that
 Playwright can drive were run (output shown, Re-execute overlay, `positron,engine` with `preview.engine: auto`, Clear results); a cache
-older than the document is not flagged for a directory record (the rule is for a Positron import, not tested). **Not run:** the hub
-verification (the consent gate needs a terminal and the unattended flag `--dangerously-accept-requests` was refused by the tool
-permissions; the note gives the by-hand steps), `--share --allow-edit` with a guest, and click and scroll sync. No code changed.
+older than the document is not flagged for a directory record (the rule is for a Positron import, not tested). The hub verification was run after Gordon approved `--dangerously-accept-requests` for it: exit 0, and a browser client showed both cell outputs. **Not run:** `--share --allow-edit` with a guest, click and scroll sync, `provide-hub --watch`. No code changed.
 
 ## Notes from an earlier attempt
 

@@ -52,6 +52,23 @@ fn execute_in(
     files: &[(&str, &str)],
     capture: bool,
 ) -> KnitrExecuteResult {
+    execute_with_format(
+        path,
+        markdown,
+        files,
+        capture,
+        KnitrFormatConfig::with_defaults("html"),
+    )
+}
+
+/// [`execute_in`] with the document\'s format (its `execute:` scope) chosen by the caller.
+fn execute_with_format(
+    path: &std::path::Path,
+    markdown: &str,
+    files: &[(&str, &str)],
+    capture: bool,
+    format: KnitrFormatConfig,
+) -> KnitrExecuteResult {
     let qmd = path.join("doc.qmd");
     std::fs::write(&qmd, markdown).unwrap();
     for (name, text) in files {
@@ -60,7 +77,7 @@ fn execute_in(
     let params = KnitrExecuteParams {
         input: qmd,
         markdown: markdown.to_string(),
-        format: KnitrFormatConfig::with_defaults("html"),
+        format,
         temp_dir: path.to_path_buf(),
         lib_dir: None,
         dependencies: true,
@@ -412,7 +429,8 @@ fn capture_names_the_units_that_asked_for_the_cache() {
     if !r_available("capture_names_the_units_that_asked_for_the_cache") {
         return;
     }
-    let doc = id_chunk("cached", "u1", "#| cache: true\n", "1") + &id_chunk("plain", "u2", "", "2");
+    // level 1: a level-3 chunk is recorded since OPR-7e and is not an unrecorded cached unit
+    let doc = id_chunk("cached", "u1", "#| cache: 1\n", "1") + &id_chunk("plain", "u2", "", "2");
     let (result, _dir) = execute(&doc, true);
     assert_eq!(result.cached_units, ["u1"]);
     // the cached chunk is not recorded; the plain one is
@@ -575,34 +593,223 @@ fn a_cache_written_without_capture_is_replayed_by_a_recorded_run() {
     assert_eq!(recorded.markdown, plain.markdown);
 }
 
-/// OPR-0c follow-up 3, pinned: on a cache hit knitr runs `opts_hooks$cache` for every chunk and
-/// `evaluate` for none of the cached ones; the `chunk` hook still runs for levels 1 and 2 but not
-/// for level 3. Whatever knitr does, the recorder adds nothing for a cached chunk, and a hit
-/// gives the same document as the miss.
+/// OPR-0c follow-up 3, pinned for levels 1 and 2 (OPR-7e records level 3 only): on a cache hit
+/// knitr runs `opts_hooks$cache` for every chunk and `evaluate` for none of the cached ones. The
+/// recorder adds nothing for a level-1 or level-2 chunk, and a hit gives the same document as
+/// the miss.
 #[test]
-fn a_cache_hit_records_nothing_for_a_cached_chunk_at_any_level() {
-    if !r_available("a_cache_hit_records_nothing_for_a_cached_chunk_at_any_level") {
+fn a_level_1_or_2_cache_hit_records_nothing_for_the_cached_chunk() {
+    if !r_available("a_level_1_or_2_cache_hit_records_nothing_for_the_cached_chunk") {
         return;
     }
     let doc = id_chunk("l1", "u1", "#| cache: 1\n", "1")
         + &id_chunk("l2", "u2", "#| cache: 2\n", "2")
-        + &id_chunk("l3", "u3", "#| cache: true\n", "3")
         + &id_chunk("live", "u4", "", "4");
     let dir = tempfile::tempdir().unwrap();
     let miss = execute_in(dir.path(), &doc, &[], true);
     let hit = execute_in(dir.path(), &doc, &[], true);
     for (name, run) in [("miss", &miss), ("hit", &hit)] {
-        assert_eq!(run.cached_units, ["u1", "u2", "u3"], "{name}");
-        let ids: Vec<&str> = run
-            .pieces
-            .iter()
-            .filter_map(|c| c.options.get("quarto-unit-id")?.as_str())
-            .collect();
-        assert_eq!(ids, ["u4"], "{name}: only the uncached chunk is recorded");
+        assert_eq!(run.cached_units, ["u1", "u2"], "{name}");
+        assert_eq!(
+            unit_ids(run),
+            ["u4"],
+            "{name}: only the uncached chunk is recorded"
+        );
         assert_eq!(
             run.pieces[0].ordinal, 1,
             "{name}: ordinals skip cached chunks"
         );
     }
     assert_eq!(miss.markdown, hit.markdown);
+}
+
+fn unit_ids(result: &KnitrExecuteResult) -> Vec<&str> {
+    result
+        .pieces
+        .iter()
+        .filter_map(|c| c.options.get("quarto-unit-id")?.as_str())
+        .collect()
+}
+
+/// Every `*.q2rec.json` under `dir` (the sidecars OPR-7e writes beside knitr\'s cache entries).
+fn sidecars(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.to_string_lossy().ends_with(".q2rec.json") {
+                found.push(p);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// A record\'s comparable shape: everything but the run-local ordinal.
+fn shape(result: &KnitrExecuteResult, id: &str) -> (String, String) {
+    let piece = result
+        .pieces
+        .iter()
+        .find(|c| c.options.get("quarto-unit-id").and_then(|v| v.as_str()) == Some(id))
+        .unwrap_or_else(|| panic!("no record for {id}"));
+    let chunk = result.chunks.iter().find(|c| c.id == id).unwrap();
+    (
+        format!(
+            "{} {} {:?} {:?} {:?}",
+            piece.label, piece.code, piece.options, piece.pieces, piece.files
+        ),
+        format!("{chunk:?}"),
+    )
+}
+
+/// OPR-7e: a level-3 hit is recorded like the miss (the sidecar written beside the entry carries
+/// the record), the ids come back in document order, and the document is unchanged.
+#[test]
+fn a_level_3_cache_hit_is_recorded_like_the_miss() {
+    if !r_available("a_level_3_cache_hit_is_recorded_like_the_miss") {
+        return;
+    }
+    let doc = id_chunk("a", "u1", "", "1")
+        + &id_chunk("c", "u2", "#| cache: true\n", "x <- 2\nx")
+        + &id_chunk("b", "u3", "", "3");
+    let dir = tempfile::tempdir().unwrap();
+    let miss = execute_in(dir.path(), &doc, &[], true);
+    assert!(!sidecars(dir.path()).is_empty(), "the miss wrote a sidecar");
+    let hit = execute_in(dir.path(), &doc, &[], true);
+    for (name, run) in [("miss", &miss), ("hit", &hit)] {
+        assert!(
+            run.cached_units.is_empty(),
+            "{name}: {:?}",
+            run.cached_units
+        );
+        assert_eq!(unit_ids(run), ["u1", "u2", "u3"], "{name}: document order");
+        let ordinals: Vec<u32> = run.pieces.iter().map(|c| c.ordinal).collect();
+        assert_eq!(ordinals, [1, 2, 3], "{name}");
+    }
+    assert_eq!(shape(&miss, "u2"), shape(&hit, "u2"));
+    assert_eq!(miss.markdown, hit.markdown);
+}
+
+/// The same inside a blockquote and a list item: the chunk record keeps knitr\'s indent.
+#[test]
+fn a_level_3_cache_hit_in_a_blockquote_and_a_list_item_is_recorded() {
+    if !r_available("a_level_3_cache_hit_in_a_blockquote_and_a_list_item_is_recorded") {
+        return;
+    }
+    let doc = "> ```{r q}\n> #| quarto-unit-id: \"u1\"\n> #| cache: true\n> 1\n> ```\n\n\
+               - item\n\n  ```{r l}\n  #| quarto-unit-id: \"u2\"\n  #| cache: true\n  2\n  ```\n";
+    let dir = tempfile::tempdir().unwrap();
+    let miss = execute_in(dir.path(), doc, &[], true);
+    let hit = execute_in(dir.path(), doc, &[], true);
+    assert_eq!(unit_ids(&hit), ["u1", "u2"]);
+    assert_eq!(shape(&miss, "u1"), shape(&hit, "u1"));
+    assert_eq!(shape(&miss, "u2"), shape(&hit, "u2"));
+    assert_eq!(miss.markdown, hit.markdown);
+}
+
+/// A hit with capture off (the sidecar is neither read nor written) gives an uncached render.
+#[test]
+fn a_level_3_cache_hit_with_capture_off_equals_an_uncached_render() {
+    if !r_available("a_level_3_cache_hit_with_capture_off_equals_an_uncached_render") {
+        return;
+    }
+    let cached = id_chunk("c", "u1", "#| cache: true\n", "1 + 1");
+    let uncached = id_chunk("c", "u1", "", "1 + 1");
+    let dir = tempfile::tempdir().unwrap();
+    let _ = execute_in(dir.path(), &cached, &[], false);
+    let hit = execute_in(dir.path(), &cached, &[], false);
+    let (plain, _d) = execute(&uncached, false);
+    assert_eq!(hit.markdown, plain.markdown);
+    assert!(
+        sidecars(dir.path()).is_empty(),
+        "capture off writes no sidecar"
+    );
+}
+
+/// knitr returns before the cache lookup for `include=FALSE`: recorded on the miss, absent on the
+/// hit (and reported as an unrecorded cached unit, so Rust does not expect it).
+#[test]
+fn an_include_false_level_3_chunk_is_recorded_on_a_miss_and_absent_on_a_hit() {
+    if !r_available("an_include_false_level_3_chunk_is_recorded_on_a_miss_and_absent_on_a_hit") {
+        return;
+    }
+    let doc = id_chunk("h", "u1", "#| cache: true\n#| include: false\n", "y <- 3")
+        + &id_chunk("v", "u2", "", "2");
+    let dir = tempfile::tempdir().unwrap();
+    let miss = execute_in(dir.path(), &doc, &[], true);
+    let hit = execute_in(dir.path(), &doc, &[], true);
+    assert_eq!(unit_ids(&miss), ["u1", "u2"]);
+    assert!(miss.cached_units.is_empty(), "{:?}", miss.cached_units);
+    assert_eq!(unit_ids(&hit), ["u2"]);
+    assert_eq!(hit.cached_units, ["u1"]);
+}
+
+/// `include` is not in knitr\'s cache key, and a document-level `execute: include` is not part of
+/// the chunk text either: flipping it from false to true hits the old entry. The stored record
+/// was made for `include: false`, so it must not come back as a hidden cell.
+#[test]
+fn a_level_3_hit_whose_include_changed_is_absent_not_a_hidden_cell() {
+    if !r_available("a_level_3_hit_whose_include_changed_is_absent_not_a_hidden_cell") {
+        return;
+    }
+    let doc = id_chunk("h", "u1", "#| cache: true\n", "1");
+    let with_include = |include: bool| {
+        let mut format = KnitrFormatConfig::with_defaults("html");
+        format.execute.include = Some(include);
+        format
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let miss = execute_with_format(dir.path(), &doc, &[], true, with_include(false));
+    assert_eq!(unit_ids(&miss), ["u1"], "recorded on the miss");
+    let hit = execute_with_format(dir.path(), &doc, &[], true, with_include(true));
+    assert!(unit_ids(&hit).is_empty(), "{:?}", unit_ids(&hit));
+    assert_eq!(hit.cached_units, ["u1"]);
+}
+
+/// A sidecar that fails a check (corrupt JSON, another version, a digest that does not match the
+/// stored markdown) is absent and quiet: the chunk keeps knitr\'s markdown and the run succeeds.
+#[test]
+fn a_sidecar_that_fails_a_check_degrades_the_chunk_to_absent() {
+    if !r_available("a_sidecar_that_fails_a_check_degrades_the_chunk_to_absent") {
+        return;
+    }
+    let doc = id_chunk("c", "u1", "#| cache: true\n", "1 + 1") + &id_chunk("l", "u2", "", "2");
+    type Tamper = fn(&mut serde_json::Value) -> Option<String>;
+    let tampers: [(&str, Tamper); 4] = [
+        ("corrupt json", |_| Some("{ not json".to_string())),
+        ("wrong version", |v| {
+            v["version"] = serde_json::json!(999);
+            None
+        }),
+        ("wrong digest", |v| {
+            v["digest"] = serde_json::json!("0000");
+            None
+        }),
+        ("wrong id", |v| {
+            v["record"]["options"]["quarto-unit-id"] = serde_json::json!("u9");
+            v["chunk"]["id"] = serde_json::json!("u9");
+            None
+        }),
+    ];
+    for (what, tamper) in tampers {
+        let dir = tempfile::tempdir().unwrap();
+        let miss = execute_in(dir.path(), &doc, &[], true);
+        let files = sidecars(dir.path());
+        assert_eq!(files.len(), 1, "{what}");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&files[0]).unwrap()).unwrap();
+        let text = tamper(&mut v).unwrap_or_else(|| v.to_string());
+        std::fs::write(&files[0], text).unwrap();
+        let hit = execute_in(dir.path(), &doc, &[], true);
+        assert_eq!(unit_ids(&hit), ["u2"], "{what}");
+        assert_eq!(hit.cached_units, ["u1"], "{what}");
+        assert_eq!(hit.markdown, miss.markdown, "{what}");
+    }
 }

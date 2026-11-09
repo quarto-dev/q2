@@ -21,7 +21,10 @@ quarto_capture$slot <- NULL
 quarto_capture$ordinal <- 0L
 quarto_capture$hooks_at_start <- NULL
 quarto_capture$hook_override <- NULL
-quarto_capture$cached_units <- character()
+quarto_capture$cache_asked <- character()
+quarto_capture$active <- FALSE
+quarto_capture$pending <- NULL
+quarto_capture$orig_cache <- NULL
 
 # The knit hooks whose replacement silently changes the markdown the presenter would not see
 # (KNR-1 S5). `chunk`, `document` and `inline` are Quarto's own.
@@ -317,13 +320,170 @@ capture_marker <- function(id) {
   paste0("<!-- q2:", quarto_capture$nonce, ":", id, " -->")
 }
 
+# A chunk asking for `cache = TRUE` (knitr's level 3, the one that stores the chunk hook's
+# output). Levels 1 and 2 store the evaluate() list and are not recorded (OPR-7e).
+# knitr normalizes TRUE to 3 only after the cache lookup, so a hit still sees TRUE.
+capture_is_level3 <- function(options) {
+  isTRUE(options$cache) || isTRUE(as.numeric(options$cache) == 3)
+}
+
+# The chunk record hooks.R made for `id` (the last one: a chunk id is unique in a run).
+capture_find_chunk_record <- function(id) {
+  recs <- quarto_chunk_records$records
+  for (i in rev(seq_along(recs))) {
+    if (identical(recs[[i]]$id, id)) {
+      return(recs[[i]])
+    }
+  }
+  NULL
+}
+
+# Units that asked for the cache and ended the run with no record: level-1 and level-2 chunks,
+# an `include: false` level-3 hit, and a level-3 hit whose sidecar is missing or fails a check.
+# Rust leaves them out of the expected unit count.
+capture_cached_units <- function() {
+  recorded <- vapply(
+    quarto_capture$records,
+    function(r) as.character(r$options[["quarto-unit-id"]] %||% ""),
+    ""
+  )
+  setdiff(quarto_capture$cache_asked, recorded)
+}
+
+# --- level-3 sidecar (OPR-7e) -----------------------------------------------------------
+# knitr keeps a cache entry's chunk output as a string and returns it on a hit without calling
+# any hook, so the capture record is saved in a file beside the entry (`<hash>.q2rec.json`) and
+# read back on a hit. Only `cache$save` and `cache$output` are wrapped, in the knitr namespace.
+# A sidecar is a hint: a missing file, another version, another id, a changed `include` or a
+# digest that does not match the stored markdown leaves the chunk unrecorded, with knitr's own
+# markdown in the document (OPR-7b's behavior). knitr's own invalidation (cache.rebuild,
+# dependson) removes only the entry's data files, so a stale sidecar is possible; the digest
+# check makes it harmless.
+
+capture_sidecar_version <- 1L
+
+capture_sidecar_path <- function(hash) paste0(hash, ".q2rec.json")
+
+# jsonlite writes an NA option (`comment = NA`) as null and reads null back as NULL, which it
+# would write as {}; the records never hold a NULL (capture_options drops them), so every null
+# in a sidecar was an NA.
+capture_nulls_to_na <- function(x) {
+  if (is.null(x)) {
+    return(NA)
+  }
+  if (is.list(x)) {
+    return(lapply(x, capture_nulls_to_na))
+  }
+  x
+}
+
+capture_digest <- function(text) {
+  f <- tempfile()
+  on.exit(unlink(f))
+  writeBin(charToRaw(enc2utf8(text)), f)
+  unname(tools::md5sum(f))
+}
+
+capture_cache_save <- function(keys, outname, hash, lazy = TRUE) {
+  orig <- quarto_capture$orig_cache
+  pending <- quarto_capture$pending
+  options <- knitr::opts_current$get()
+  quarto_capture$pending <- NULL
+  if (
+    isTRUE(quarto_capture$active) &&
+      !is.null(pending) &&
+      identical(pending$id, options[["quarto-unit-id"]]) &&
+      !is.null(pending$chunk)
+  ) {
+    # knitr stores what the chunk hook returned, which with a nonce is this run's marker line;
+    # store the finished markdown instead, so a later run can put its own marker in its place
+    assign(outname, pending$markdown, envir = knitr::knit_global())
+    side <- list(
+      version = capture_sidecar_version,
+      id = pending$id,
+      include = pending$include,
+      digest = capture_digest(pending$markdown),
+      record = pending$record,
+      chunk = pending$chunk
+    )
+    tryCatch(
+      writeLines(
+        jsonlite::toJSON(side, auto_unbox = TRUE, null = "null", digits = NA, force = TRUE),
+        capture_sidecar_path(hash)
+      ),
+      error = function(e) NULL
+    )
+  }
+  orig$save(keys, outname, hash, lazy = lazy)
+}
+
+# The stored markdown of a level-3 hit, with the chunk recorded from its sidecar. Returns the
+# string knitr should put in the document, or NULL to leave the chunk unrecorded.
+capture_adopt_hit <- function(hash, stored) {
+  options <- knitr::opts_current$get()
+  id <- options[["quarto-unit-id"]]
+  path <- capture_sidecar_path(hash)
+  if (is.null(id) || !capture_is_level3(options) || !file.exists(path)) {
+    return(NULL)
+  }
+  side <- capture_nulls_to_na(jsonlite::fromJSON(path, simplifyVector = FALSE))
+  markdown <- paste(stored, collapse = "")
+  capture_check_hooks()
+  ok <- identical(side$version, capture_sidecar_version) &&
+    identical(side$id, id) &&
+    identical(side$chunk$id, id) &&
+    identical(side$record$options[["quarto-unit-id"]], id) &&
+    identical(side$include, isTRUE(options$include)) &&
+    identical(side$digest, capture_digest(markdown)) &&
+    is.null(side$record$hook_override) &&
+    is.null(quarto_capture$hook_override)
+  if (!isTRUE(ok)) {
+    return(NULL)
+  }
+  quarto_capture$ordinal <- quarto_capture$ordinal + 1L
+  record <- side$record
+  record$ordinal <- quarto_capture$ordinal
+  quarto_capture$records[[length(quarto_capture$records) + 1L]] <- record
+  quarto_chunk_records$records[[length(quarto_chunk_records$records) + 1L]] <- side$chunk
+  if (!is.null(quarto_capture$nonce)) {
+    return(paste0(options[["indent"]], capture_marker(id), "\n"))
+  }
+  stored
+}
+
+capture_cache_output <- function(hash, mode = "character") {
+  orig <- quarto_capture$orig_cache
+  out <- orig$output(hash, mode)
+  if (!isTRUE(quarto_capture$active) || !identical(mode, "character")) {
+    return(out)
+  }
+  adopted <- tryCatch(capture_adopt_hit(hash, out), error = function(e) NULL)
+  if (is.null(adopted)) out else adopted
+}
+
+# Wrap `cache$save` and `cache$output` in knitr's namespace. Idempotent (the pristine list is
+# kept once), and the wrappers do nothing unless `quarto_capture$active`. The engine runs one
+# Rscript per call, so the patch dies with the process.
+capture_patch_cache <- function() {
+  ns <- asNamespace("knitr")
+  if (is.null(quarto_capture$orig_cache)) {
+    quarto_capture$orig_cache <- get("cache", envir = ns)
+  }
+  patched <- quarto_capture$orig_cache
+  patched$save <- capture_cache_save
+  patched$output <- capture_cache_output
+  assignInNamespace("cache", patched, ns)
+}
+
 capture_chunk_hook <- function(prev) {
   function(x, options) {
     out <- prev(x, options)
     id <- options[["quarto-unit-id"]]
-    if (!is.null(id) && id %in% quarto_capture$cached_units) {
-      # a cached chunk (OPR-7b): not recorded, and knitr's own markdown stays in the skeleton.
-      # On a level-1 or level-2 hit this hook runs with no `evaluate` behind it.
+    level3 <- capture_is_level3(options)
+    if (!is.null(id) && !level3 && id %in% quarto_capture$cache_asked) {
+      # a level-1 or level-2 cached chunk (OPR-7b): not recorded, and knitr's own markdown stays
+      # in the skeleton. On a hit this hook runs with no `evaluate` behind it. (A level-3 hit
+      # never reaches this hook: `capture_cache_output` records it from its sidecar, OPR-7e.)
       quarto_capture$slot <- NULL
       return(out)
     }
@@ -382,6 +542,17 @@ capture_chunk_hook <- function(prev) {
       record$hook_override <- quarto_capture$hook_override
     }
     quarto_capture$records[[length(quarto_capture$records) + 1L]] <- record
+    quarto_capture$pending <- NULL
+    if (level3 && !is.null(id) && capture_is_r_engine(options)) {
+      # the sidecar `capture_cache_save` writes when knitr stores this chunk's output (OPR-7e)
+      quarto_capture$pending <- list(
+        id = id,
+        record = record,
+        chunk = capture_find_chunk_record(id),
+        include = isTRUE(options$include),
+        markdown = paste(out, collapse = "")
+      )
+    }
     # KNR-6: with a nonce, a chunk Rust may present returns a marker line instead of its
     # markdown (the markdown still travels in `chunks`, keyed by unit id, hooks.R). The same
     # trailing newline as the hook's own output keeps the skeleton's line structure, so Rust
@@ -444,7 +615,7 @@ capture_known_options <- function(format_opts_chunk = list()) {
 
 # Return `knitr` (the options list execute() builds) with the capture wrappers
 # installed. A chunk that asks for knitr's cache keeps it (OPR-7b, reversing S4): its unit id is
-# noted in `quarto_capture$cached_units` and the chunk hook leaves it unrecorded, with knitr's real
+# noted in `quarto_capture$cache_asked` and the chunk hook leaves it unrecorded, with knitr's real
 # markdown in place; Rust excludes those ids from the expected unit count.
 capture_install <- function(knitr, nonce = NULL) {
   quarto_capture$nonce <- nonce
@@ -453,7 +624,10 @@ capture_install <- function(knitr, nonce = NULL) {
   quarto_capture$ordinal <- 0L
   quarto_capture$hooks_at_start <- NULL
   quarto_capture$hook_override <- NULL
-  quarto_capture$cached_units <- character()
+  quarto_capture$cache_asked <- character()
+  quarto_capture$pending <- NULL
+  quarto_capture$active <- TRUE
+  capture_patch_cache()
   quarto_capture$known_options <- capture_known_options(knitr$opts_chunk)
   hooks <- knitr$knit_hooks
   evaluate <- if (is.null(hooks[["evaluate"]])) {
@@ -484,7 +658,7 @@ capture_install <- function(knitr, nonce = NULL) {
         !isFALSE(options$cache) &&
         !identical(options$cache, 0)
     ) {
-      quarto_capture$cached_units <- unique(c(quarto_capture$cached_units, as.character(id)))
+      quarto_capture$cache_asked <- unique(c(quarto_capture$cache_asked, as.character(id)))
     }
     options
   }

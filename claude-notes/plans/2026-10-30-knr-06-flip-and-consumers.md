@@ -467,6 +467,9 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
    the cache now keeps it, is not recorded, and is left out of the expected unit count; Q-18-12 is no
    longer emitted; the pinned test became `a_cache_written_without_capture_is_replayed_by_a_recorded_run`.
 
+   **Narrowed 2026-11-09 by [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md):** a `cache=TRUE`
+   chunk is recorded on a hit as well as on a miss (levels 1 and 2 stay as OPR-7b leaves them).
+
 ## References
 
 - [EXR-6](2026-10-28-exr-06-jupyter-flip.md), [EXR-14](2026-10-28-exr-14-preview-splice.md),
