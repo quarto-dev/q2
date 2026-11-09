@@ -362,6 +362,11 @@ impl ExecutionEngine for JupyterEngine {
         Some(self.claims_language(language, first_class))
     }
 
+    /// A Jupyter kernel is what Positron runs: any plain language gives the same outputs.
+    fn kernel_equivalence(&self, _language: &str) -> Option<bool> {
+        Some(true)
+    }
+
     fn is_available(&self) -> bool {
         // Path presence alone is not enough: probe that the binary
         // actually runs so a broken jupyter reports unavailable and

@@ -480,6 +480,12 @@ impl ExecutionEngine for KnitrEngine {
         Some(self.claims_language(language, first_class))
     }
 
+    /// R code under knitr gives the same outputs in Positron's R kernel (the hash agrees; only
+    /// the display shape differs, which RIU-3 accepted). Exactly `r`: not `R`, not `r.x`.
+    fn kernel_equivalence(&self, language: &str) -> Option<bool> {
+        Some(language == "r")
+    }
+
     fn is_available(&self) -> bool {
         self.rscript_path.is_some()
     }

@@ -1646,6 +1646,7 @@ fn build_engine_registry(
                         claims,
                         file_extensions,
                         claims_files,
+                        kernel_equivalence,
                     } => {
                         // Step 4a: Bundle-exists check
                         if !path.exists() {
@@ -1696,6 +1697,8 @@ fn build_engine_registry(
                         // `_extension.yml` path for the fall-through warning
                         // and the Pass-1 cache key.
                         engine.set_extension_yml_path(extension_yml_path.clone());
+                        // RFU-2: the manifest's `kernel-equivalence:` declaration.
+                        engine.set_kernel_equivalence(kernel_equivalence.clone());
                         registry.register(Arc::new(engine));
                         key_to_contributor.insert(key.clone(), ext_label.clone());
 
@@ -3422,6 +3425,7 @@ mod tests {
                 claims: Some(HashMap::new()),
                 file_extensions: Some(vec![]),
                 claims_files: Some(vec![]),
+                kernel_equivalence: None,
             }]);
             assert!(any_external_engine(&[ext]));
         }
@@ -3440,6 +3444,7 @@ mod tests {
                     claims: None,
                     file_extensions: None,
                     claims_files: None,
+                    kernel_equivalence: None,
                 },
             ]);
             assert!(any_external_engine(&[ext]));

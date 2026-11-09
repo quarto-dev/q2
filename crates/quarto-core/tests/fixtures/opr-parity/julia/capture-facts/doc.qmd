@@ -1,0 +1,30 @@
+---
+title: Julia capture facts
+engine: julia
+---
+
+A cell with several expressions, `prompt`, and a numeric `echo`.
+
+```{julia}
+#| prompt: true
+x = 1
+println("first")
+y = x + 1
+```
+
+```{julia}
+#| echo: [2]
+a = 1
+b = 2
+b
+```
+
+`warning: false` keeps the message and the raw stderr write and drops the warning.
+
+```{julia}
+#| warning: false
+@info "keepme"
+@warn "dropme"
+println(stderr, "rawstderr")
+1
+```

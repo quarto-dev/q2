@@ -800,8 +800,19 @@ fn format_outputs_with(
         // "stream" with name "stderr") before emitting anything.
         // Errors are a separate output kind and are never dropped
         // here; the error *policy* decides those.
-        if !show_warnings && is_warning_output(cell_output) {
-            continue;
+        //
+        // When the record says what kind each output is (Julia: `output_kinds`), only the
+        // outputs of kind `Warning` go, so `@info` and a raw `println(stderr, ...)` stay
+        // (OPR-4d). With no kind for this output (Jupyter, or a record without the fact),
+        // every stderr stream goes, as above.
+        if !show_warnings {
+            let is_warning = match options.output_kinds().get(first + n) {
+                Some(kind) => *kind == Some(OutputKind::Warning),
+                None => is_warning_output(cell_output),
+            };
+            if is_warning {
+                continue;
+            }
         }
         // knitr `fig.show = "hide"`: the plot stays a piece (it still splits the source) but
         // writes nothing.
@@ -3230,6 +3241,52 @@ mod option_tests {
         let options = CellOptions::from_knitr(&serde_json::json!({"warning": false}))
             .with_output_kinds(vec![Some(Warning)]);
         assert_eq!(options.warning_selection(), None);
+    }
+    // ---- OPR-4d: `warning: false` with output kinds hides only the warnings ------------------
+
+    fn warnings_off() -> CellVisibility {
+        CellVisibility {
+            warning: false,
+            ..CellVisibility::VISIBLE
+        }
+    }
+
+    /// With the runner\'s kinds (Julia), `warning: false` drops the `@warn` and keeps the
+    /// `@info` and the raw stderr write, whose kind is `null`.
+    #[test]
+    fn warning_false_with_kinds_hides_only_the_warning_outputs() {
+        let md = render_cell_with(
+            "r",
+            "x",
+            &result(vec![
+                stderr("a message"),
+                stderr("Warning: w"),
+                stderr("plain"),
+            ]),
+            &kinded(),
+            &mut fig(),
+            warnings_off(),
+        );
+        assert!(md.contains("a message") && md.contains("plain"), "{md}");
+        assert!(!md.contains("Warning: w"), "{md}");
+    }
+
+    /// Without kinds (Jupyter) every stderr stream is dropped, as before.
+    #[test]
+    fn warning_false_without_kinds_hides_all_stderr() {
+        let opts = CellOptions::from_knitr(&serde_json::json!({}));
+        let md = render_cell_with(
+            "r",
+            "x",
+            &result(vec![stderr("a message"), stderr("Warning: w")]),
+            &opts,
+            &mut fig(),
+            warnings_off(),
+        );
+        assert!(
+            !md.contains("a message") && !md.contains("Warning: w"),
+            "{md}"
+        );
     }
 }
 

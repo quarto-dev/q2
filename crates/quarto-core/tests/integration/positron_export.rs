@@ -11,6 +11,16 @@ use serde_json::Value;
 
 use super::positron_conformance::{LoaderVerdict, positron_loader};
 
+/// The kernel-equivalence declaration of the real engine named `owner` (RFU-2).
+fn declared(owner: &str, lang: &str) -> Option<bool> {
+    use quarto_core::engine::{ExecutionEngine, JupyterEngine, KnitrEngine};
+    match owner {
+        "knitr" => KnitrEngine::new().kernel_equivalence(lang),
+        "jupyter" => JupyterEngine::new().kernel_equivalence(lang),
+        _ => None,
+    }
+}
+
 fn fixture(name: &str) -> Record {
     let text = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -51,7 +61,13 @@ fn round_trip(record: &Record, owner: &str) -> ExportedCache {
         let hash = &cell.metadata.quarto_content_hash;
         let occurrence = seen.entry(hash.clone()).or_default();
         let got = import
-            .outputs_for(hash, *occurrence, owner, &cell.metadata.quarto_lang, false)
+            .outputs_for(
+                hash,
+                *occurrence,
+                declared(owner, &cell.metadata.quarto_lang),
+                &cell.metadata.quarto_lang,
+                false,
+            )
             .unwrap_or_else(|| panic!("no outputs back for {}", cell.metadata.quarto_cell_id));
         *occurrence += 1;
         assert_eq!(
@@ -100,6 +116,23 @@ fn the_dup_record_exports_all_three_cells_in_order() {
     assert_ne!(hashes[1], hashes[2]);
     assert_eq!(file["cells"][2]["metadata"]["quarto_label"], "lbl-one");
     round_trip(&record, "jupyter");
+}
+
+/// RFU-2: a real knitr record (rendered once through `q2`, five chunks) exports like a Python
+/// one, the mirror accepts it, and the `knitr` owner takes every output back.
+#[test]
+fn the_knitr_record_exports_all_five_chunks_and_round_trips() {
+    let record = fixture("knitr.ipynb");
+    let (file, cache) = export(&record);
+    assert_eq!(cache.cells, 5);
+    assert!(cache.skipped.is_empty());
+    assert!(cache.dropped.is_empty());
+    assert_eq!(positron_loader(&file), LoaderVerdict::Keeps);
+    let all = file.to_string();
+    // Gordon's Phase A verdict: `results: hide` and `asis` output stay in the file.
+    assert!(all.contains("hidden") && all.contains("**bold**"));
+    assert!(all.contains("image/png"));
+    round_trip(&record, "knitr");
 }
 
 /// The mirror deletes a file whose code cell lacks `outputs`; the export never produces one.

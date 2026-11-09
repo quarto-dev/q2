@@ -243,3 +243,12 @@ a plot needs Plots in the document's Julia project (add it with `JULIA_PKG_OFFLI
 (plan [RFU-1](2026-11-08-rfu-1-convert-command.md)). Read the command references above with that substitution: `--out`
 is `-o`, `--records` is gone (the source list is fixed at `q2,engine` until OPR-5 reads it from metadata), and
 `-M KEY:VALUE` is new. The exit codes and the one-line JSON report are unchanged.
+
+## Note (2026-11-09, RFU-2)
+
+The engine filter is gone: `EXPORT_OWNERS` and `SkipReason::EngineNotExportable` were removed, so a knitr record
+exports like a Python or Julia one (plan [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md)). The remaining skips
+are an inline unit, an extension language (so a marimo cell), a fallback cell (rendered quarto-markdown output) and a
+duplicate-hash group with a skipped member. The "rendered and fallback units are skipped, so an R document exports
+little" risk above no longer applies to knitr chunks that carry ordinary outputs. Nothing the document says to hide is
+dropped (Gordon's Phase A verdict).

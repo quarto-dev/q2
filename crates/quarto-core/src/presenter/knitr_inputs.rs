@@ -1189,4 +1189,26 @@ mod tests {
         let md = step_with_scope(vec![(RESOLVED_OPTIONS_KEY, json!(null))]);
         assert!(!md.contains("cell-code") && md.contains("OUT"), "{md}");
     }
+    // ---- OPR-4d: a Julia-shaped cell (the three keys, no resolved options) -------------------
+
+    /// What `engine/ts_record.rs` writes for a Julia cell: the facts and nothing else. The
+    /// step must interleave on the anchors with no engine test and no `quarto_resolved_options`.
+    #[test]
+    fn a_julia_shaped_cell_with_only_the_facts_interleaves_per_expression() {
+        let c = cell(
+            "a\nb\n",
+            vec![stream("stdout", "1"), stream("stdout", "2")],
+            vec![
+                (EXPRESSION_STARTS_KEY, json!([0, 1])),
+                (OUTPUT_ANCHORS_KEY, json!([1, 2])),
+                (OUTPUT_KINDS_KEY, json!([null, null])),
+            ],
+        );
+        let md = present("a\nb\n", &c, None, None).unwrap();
+        assert_eq!(md.matches("cell-code").count(), 2, "{md}");
+        assert!(
+            md.find("cell-output").unwrap() < md.rfind("cell-code").unwrap(),
+            "{md}"
+        );
+    }
 }

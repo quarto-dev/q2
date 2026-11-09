@@ -59,8 +59,8 @@ pub use positron_export::{
     SkippedUnit, export_for_positron,
 };
 pub use positron_import::{
-    DisplayOnlyOutputs, ImportError, JULIA_ENGINE, JUPYTER_ENGINE, KNITR_ENGINE,
-    POSITRON_CACHE_VERSION, PositronImport, Provenance, import_positron_cache,
+    DisplayOnlyOutputs, ImportError, POSITRON_CACHE_VERSION, PositronImport, Provenance,
+    import_positron_cache,
 };
 pub use positron_record::{
     PROVENANCE_KEY, PROVENANCE_POSITRON, UNCLAIMED_KEY, import_record_source,

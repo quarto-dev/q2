@@ -25,14 +25,15 @@
 //! is the unit's wire `id`. The kernel is the cell's `metadata.quarto_kernel`,
 //! else the notebook's `metadata.kernelspec.name`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::diagnostics::{EngineRecordProblem, engine_record_diagnostic};
 use crate::engine::ts_protocol::{TsAlignment, TsCoverage, TsRecordInfo, TsUnit, TsUnitKind};
 use crate::engine::units::{Unit, line_at, locate_units, view_for_engine};
+use crate::presenter::knitr_inputs::{EXPRESSION_STARTS_KEY, OUTPUT_ANCHORS_KEY, OUTPUT_KINDS_KEY};
 use crate::record::{BuildError, EngineEntryInput, RecordBuilder, UnitResult};
 
 /// Whether `owned_languages` contains `lang`, case-insensitively (the same rule
@@ -105,15 +106,14 @@ struct QuartoAnnotation {
     /// `inline`: one entry per span evaluated in a markdown cell, in order.
     inline: Vec<InlineEntry>,
     /// The runner's capture facts, present only for a runner built with them (OPR-4b).
-    // Read by OPR-4d, which maps them onto the knitr cell-metadata keys; nothing consumes them yet.
-    #[allow(dead_code)]
+    /// Written onto the record cell under the knitr keys ([`facts_as_cell_metadata`], OPR-4d).
     facts: CaptureFacts,
 }
 
 /// The three optional keys QuartoNotebookRunner adds to `metadata.quarto` for the presenter
 /// (OPR-4a spike, wire table): where each expression starts, where each output anchors, and what
 /// kind each output is. All `None` when the runner does not write them.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct CaptureFacts {
     /// `expression_starts`: the 0-based line of the cell code at which each expression starts.
     expression_starts: Option<Vec<u64>>,
@@ -156,6 +156,23 @@ fn read_capture_facts(quarto: &Value) -> Result<CaptureFacts, String> {
         output_anchors: read_u64_array(quarto, "output_anchors")?,
         output_kinds,
     })
+}
+
+/// The facts the runner supplied, as record cell metadata under the names knitr uses, so the one
+/// per-cell step reads them with no engine test (OPR-4d, decision D4). Only the keys present
+/// are written; a cell with none gets none, and its output is as before.
+fn facts_as_cell_metadata(facts: &CaptureFacts) -> BTreeMap<String, Value> {
+    let mut extra = BTreeMap::new();
+    if let Some(starts) = &facts.expression_starts {
+        extra.insert(EXPRESSION_STARTS_KEY.to_string(), json!(starts));
+    }
+    if let Some(anchors) = &facts.output_anchors {
+        extra.insert(OUTPUT_ANCHORS_KEY.to_string(), json!(anchors));
+    }
+    if let Some(kinds) = &facts.output_kinds {
+        extra.insert(OUTPUT_KINDS_KEY.to_string(), json!(kinds));
+    }
+    extra
 }
 
 struct InlineEntry {
@@ -301,6 +318,9 @@ struct Slot {
 struct QnrResult {
     key: UnitKey,
     result: UnitResult,
+    /// The cell's capture facts; `None` for a span and for an expanded cell, whose outputs are
+    /// the expansions' and so do not line up with one cell's anchors.
+    facts: Option<CaptureFacts>,
 }
 
 /// Attach the `m`-th expansion of a unit to its result, as extra outputs. A marker
@@ -359,6 +379,8 @@ fn build_record(
 
     // (stage unit index, engine result) for every cell that lines up with a unit.
     let mut pairs: Vec<(usize, UnitResult)> = Vec::new();
+    // The capture facts of the cells that carried them, by stage unit index.
+    let mut facts: BTreeMap<usize, CaptureFacts> = BTreeMap::new();
     match info.alignment {
         TsAlignment::Ids => {
             let expected = owned.iter().flatten().count();
@@ -383,6 +405,9 @@ fn build_record(
                     return Err(EngineRecordProblem::DuplicateUnitId { id: id.to_string() });
                 }
                 pairs.push((index, cell.result.clone()));
+                if let Some(q) = &cell.quarto {
+                    facts.insert(index, q.facts.clone());
+                }
             }
         }
         TsAlignment::Positional if info.coverage == TsCoverage::Subset => {
@@ -456,6 +481,7 @@ fn build_record(
                                     code: cell.source.trim().to_string(),
                                 },
                                 result: cell.result.clone(),
+                                facts: (!expanding).then(|| q.facts.clone()),
                             });
                         }
                     }
@@ -470,6 +496,7 @@ fn build_record(
                                 code: e.code.trim().to_string(),
                             },
                             result: e.result.clone(),
+                            facts: None,
                         }),
                 );
             }
@@ -482,6 +509,9 @@ fn build_record(
                 if let Some(offset) = slots[next..].iter().position(|s| s.key == r.key) {
                     if let Some(index) = slots[next + offset].index {
                         pairs.push((index, r.result));
+                        if let Some(f) = r.facts {
+                            facts.insert(index, f);
+                        }
                     }
                     next += offset + 1;
                 }
@@ -498,6 +528,9 @@ fn build_record(
             for (slot, cell) in owned.iter().zip(code) {
                 if let Some(index) = slot {
                     pairs.push((*index, cell.result.clone()));
+                    if let Some(q) = &cell.quarto {
+                        facts.insert(*index, q.facts.clone());
+                    }
                 }
             }
         }
@@ -512,14 +545,28 @@ fn build_record(
     for (index, result) in pairs {
         builder.push(index, result).map_err(build)?;
     }
-    builder
+    let mut record = builder
         .finish(EngineEntryInput {
             can_freeze,
             owned_languages: ctx.owned_languages.clone(),
             document_metadata: ctx.document_metadata_json(),
             ..Default::default()
         })
-        .map_err(build)
+        .map_err(build)?;
+    // The `quarto_` keys are outside the unit hash, so this changes nothing the record hashes.
+    for (index, f) in &facts {
+        let Some(id) = unit_id(&ctx.units[*index]) else {
+            continue;
+        };
+        if let Some(cell) = record
+            .cells
+            .iter_mut()
+            .find(|c| c.metadata.quarto_cell_id == id)
+        {
+            cell.metadata.extra.extend(facts_as_cell_metadata(f));
+        }
+    }
+    Ok(record)
 }
 
 /// Turn the engine's returned notebook into `result.record`, or push a warning
@@ -1841,5 +1888,96 @@ fenced = 1
             let err = read_engine_notebook(&nb).err().expect(key);
             assert!(err.contains(key), "{err}");
         }
+    }
+    // ---- OPR-4d: the capture facts become cell metadata under the knitr names ----
+
+    /// `qnr_code` with capture facts added to `metadata.quarto`.
+    fn qnr_code_with_facts(
+        unit: u64,
+        line: u64,
+        code: &str,
+        outputs: Vec<Value>,
+        facts: Value,
+    ) -> Value {
+        let mut cell = qnr_code(unit, "julia", line, code, outputs, 1);
+        for (k, v) in facts.as_object().unwrap() {
+            cell["metadata"]["quarto"][k] = v.clone();
+        }
+        cell
+    }
+
+    fn julia_nb_with(cell1: Value) -> Vec<Value> {
+        let mut nb = julia_nb();
+        nb[1] = cell1;
+        nb
+    }
+
+    #[test]
+    fn julia_capture_facts_become_cell_metadata_under_the_knitr_keys() {
+        let ctx = ctx_for(JDOC, &["julia"], true);
+        let facts = json!({
+            "expression_starts": [0, 1],
+            "output_anchors": [1, 2],
+            "output_kinds": ["message", null],
+        });
+        let nb = julia_nb_with(qnr_code_with_facts(
+            1,
+            7,
+            "x = 1",
+            vec![out("a\n"), out("b\n")],
+            facts,
+        ));
+        let result = run_julia(&ctx, nb);
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let record = result.record.expect("a record");
+        let extra = &record.cells[1].metadata.extra;
+        assert_eq!(extra[EXPRESSION_STARTS_KEY], json!([0, 1]));
+        assert_eq!(extra[OUTPUT_ANCHORS_KEY], json!([1, 2]));
+        assert_eq!(extra[OUTPUT_KINDS_KEY], json!(["message", null]));
+        // Only the cell that carried facts has the keys; the span and the `eval: false` cell do not.
+        for i in [0, 2] {
+            assert!(
+                !record.cells[i]
+                    .metadata
+                    .extra
+                    .contains_key(OUTPUT_ANCHORS_KEY)
+            );
+        }
+    }
+
+    #[test]
+    fn julia_keys_present_are_mapped_and_absent_ones_are_left_out() {
+        let ctx = ctx_for(JDOC, &["julia"], true);
+        let nb = julia_nb_with(qnr_code_with_facts(
+            1,
+            7,
+            "x = 1",
+            vec![out("x\n")],
+            json!({"expression_starts": [0]}),
+        ));
+        let record = run_julia(&ctx, nb).record.expect("a record");
+        let extra = &record.cells[1].metadata.extra;
+        assert_eq!(extra[EXPRESSION_STARTS_KEY], json!([0]));
+        assert!(!extra.contains_key(OUTPUT_ANCHORS_KEY));
+        assert!(!extra.contains_key(OUTPUT_KINDS_KEY));
+    }
+
+    /// Facts do not change what is hashed: the `quarto_` keys are outside the unit hash.
+    #[test]
+    fn julia_capture_facts_leave_the_exec_hash_alone() {
+        let ctx = ctx_for(JDOC, &["julia"], true);
+        let plain = run_julia(&ctx, julia_nb()).record.expect("a record");
+        let nb = julia_nb_with(qnr_code_with_facts(
+            1,
+            7,
+            "x = 1",
+            vec![out("x\n")],
+            json!({"expression_starts": [0], "output_anchors": [1], "output_kinds": [null]}),
+        ));
+        let with = run_julia(&ctx, nb).record.expect("a record");
+        assert_eq!(
+            plain.cells[1].metadata.quarto_exec_hash,
+            with.cells[1].metadata.quarto_exec_hash
+        );
     }
 }

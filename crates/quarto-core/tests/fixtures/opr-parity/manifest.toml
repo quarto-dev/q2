@@ -78,6 +78,14 @@ formats = ["html"]
 note = "the Julia chunk of docs/index.qmd, as a fixture copy"
 
 [[document]]
+name = "julia/capture-facts"
+dir = "julia/capture-facts"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "OPR-4d: interleaved output, exact prompt, numeric echo and warning: false by kind. The recorded route differs from plain render by design (Julia never interleaved in Quarto 1), so a diff here is the new behavior, not a regression"
+
+[[document]]
 name = "julia/engine-error"
 dir = "julia/engine-error"
 file = "error.qmd"
