@@ -530,18 +530,32 @@ impl StorageManager {
         let lock_path = hub_dir.join("hub.lock");
         debug!(?lock_path, "Acquiring lockfile");
 
-        let mut lock_file = File::create(&lock_path).map_err(Error::LockfileAcquire)?;
+        // Do not truncate on open: a second hub opening the file would otherwise
+        // blank the running hub's PID before it learns the lock is taken (and on
+        // Windows the truncate can fail on the locked range).
+        let mut lock_file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(Error::LockfileAcquire)?;
 
-        // Try to acquire exclusive lock (non-blocking)
+        // Try to acquire exclusive lock (non-blocking). Contention is
+        // `WouldBlock` on Unix but ERROR_LOCK_VIOLATION on Windows, which Rust
+        // does not map to `WouldBlock`, so compare against fs2's platform error.
         lock_file.try_lock_exclusive().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::WouldBlock {
+            let contended = fs2::lock_contended_error();
+            if e.kind() == std::io::ErrorKind::WouldBlock
+                || e.raw_os_error().is_some() && e.raw_os_error() == contended.raw_os_error()
+            {
                 Error::HubAlreadyRunning
             } else {
                 Error::LockfileAcquire(e)
             }
         })?;
 
-        // Write PID to lockfile for debugging
+        // Write PID to lockfile for debugging (we hold the lock, so truncating is safe)
+        lock_file.set_len(0)?;
         writeln!(lock_file, "{}", std::process::id())?;
 
         // Load or create hub config
