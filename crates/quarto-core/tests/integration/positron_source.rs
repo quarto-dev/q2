@@ -27,6 +27,7 @@ async fn the_real_registry_owns_python_with_jupyter_and_julia_with_julia() {
         SourceInputsOptions {
             ownership: true,
             registry: None,
+            ..Default::default()
         },
     )
     .await
@@ -84,6 +85,7 @@ async fn import_fixture(stem: &str) -> (Record, tempfile::TempDir, std::path::Pa
         SourceInputsOptions {
             ownership: true,
             registry: None,
+            ..Default::default()
         },
     )
     .await

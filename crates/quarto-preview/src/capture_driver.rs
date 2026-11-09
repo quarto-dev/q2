@@ -212,6 +212,7 @@ async fn record_one(
         SourceInputsOptions {
             ownership: wants_import,
             registry: None,
+            ..Default::default()
         },
     )
     .await

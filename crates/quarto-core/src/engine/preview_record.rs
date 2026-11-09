@@ -319,6 +319,11 @@ pub struct SourceInputsOptions {
     /// provider pass `None` and use the project's discovered registry, which is what a real
     /// run uses). It reaches the resolution through `StageContext::registry`.
     pub registry: Option<Arc<crate::engine::EngineRegistry>>,
+    /// The format the metadata is merged for. `None` is the preview's `q2-preview` pseudo-format.
+    /// A render passes its own (`html`): an engine whose hash declaration counts the `format` key
+    /// (Julia's does) otherwise sees `q2-preview` here and `html` in the record it wrote, and
+    /// every one of its records reads as stale (OPR-6).
+    pub format: Option<String>,
 }
 
 /// [`compute_input_qmd`] plus the merged metadata, from one pre-engine run.
@@ -346,8 +351,9 @@ pub async fn compute_source_inputs_with(
         .map_err(|e| PipelineError::other(format!("Failed to read {}: {}", path.display(), e)))?;
 
     let document = DocumentInfo::from_path(path);
-    let format = Format::from_format_string("q2-preview").map_err(|e| {
-        PipelineError::other(format!("Failed to construct q2-preview format: {}", e))
+    let format_name = options.format.as_deref().unwrap_or("q2-preview");
+    let format = Format::from_format_string(format_name).map_err(|e| {
+        PipelineError::other(format!("Failed to construct {format_name} format: {e}"))
     })?;
 
     let mut ctx = StageContext::new(runtime, format, project.clone(), document)?;
@@ -513,6 +519,41 @@ mod tests {
         let project = ProjectContext::discover(&qmd_path, runtime.as_ref())
             .expect("discover single-file project");
         (dir, qmd_path, project, runtime)
+    }
+
+    /// OPR-6: the staleness inputs are merged for the format the caller names, so an engine whose
+    /// hash declaration counts the `format` key sees what the record writer saw, not
+    /// `q2-preview`.
+    #[tokio::test]
+    async fn source_inputs_merge_metadata_for_the_requested_format() {
+        let (_tmp, path, project, runtime) = fixture("---\ntitle: T\n---\n\nprose\n");
+        let format_of = |format: Option<&str>| {
+            let project = project.clone();
+            let runtime = runtime.clone();
+            let path = path.clone();
+            let format = format.map(str::to_string);
+            async move {
+                compute_source_inputs_with(
+                    &path,
+                    &project,
+                    runtime,
+                    SourceInputsOptions {
+                        format,
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap()
+                .metadata
+                .get("format")
+                .cloned()
+            }
+        };
+        assert_eq!(format_of(None).await, Some(serde_json::json!("q2-preview")));
+        assert_eq!(
+            format_of(Some("html")).await,
+            Some(serde_json::json!("html"))
+        );
     }
 
     #[tokio::test]

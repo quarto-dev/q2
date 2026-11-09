@@ -218,6 +218,8 @@ pub async fn select_render_record(inp: SelectInputs<'_>) -> Result<RenderSelecti
                 SourceInputsOptions {
                     ownership: wants_import,
                     registry: inp.registry.clone(),
+                    format: Some(inp.target_format.to_string()),
+                    ..Default::default()
                 },
             )
             .await
