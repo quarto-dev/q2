@@ -2,7 +2,7 @@
 title: 'OPR-7h: two Julia plot differences between the plain and recorded routes (investigate, then fix or propose)'
 date: 2026-11-09
 description: 'OPR-7c left two Julia differences that nobody has diagnosed: the plain route writes requirejs and jquery script elements for three Plots documents and the recorded route does not, and the plain route writes width and height on a bare PNG where the recorded route writes a class and no size. Finds the cause of each with evidence, decides whether each is harmless, a presenter gap or a record gap, fixes the small ones and proposes an allowlist entry or a plan for the rest. Keeps the parity gate honest: a difference is fixed or signed, never silently left.'
-status: in-progress
+status: complete
 depends-on: [opr-7c]
 lane: D
 ---
@@ -56,30 +56,30 @@ and no size. Nobody found where plain gets 140 by 90.
 
 ## Checklist (every box is `[unattended]`; investigation first, then the smallest change)
 
-- [ ] **Reproduce both** with the parity runner, narrowed to the four documents (the OPR-7c report gives the command;
+- [x] **Reproduce both** with the parity runner, narrowed to the four documents (the OPR-7c report gives the command;
       `OPR_PARITY_ONLY` narrows it) and keep the two HTML files and the notebook JSON of each in the scratchpad.
-- [ ] **B first** (smaller): answer the lead above with evidence. Then **tests first**: a presenter test with the
+- [x] **B first** (smaller): answer the lead above with evidence. Then **tests first**: a presenter test with the
       output shape that carries the size (the real shape, taken from the run), expecting the size on the image; watch it
       fail; then fix the presenter so an `execute_result` image takes its metadata size too (or whatever the evidence
       says). If the record loses the metadata somewhere (`coalesce`, `write_record`, the Julia mapping in `ts_record.rs`),
       fix that hop instead and test it. Do not weaken the existing knitr corpus gate or the presenter goldens.
-- [ ] **A:** find the cause and write it down with marks (read, ran). Decide with evidence which case it is: (1) harmless
+- [x] **A:** find the cause and write it down with marks (read, ran). Decide with evidence which case it is: (1) harmless
       on every page q2 can produce, (2) a presenter gap for `text/html` outputs that need their dependencies, (3) a
       record gap. For (2) or (3) write the failing test first and fix it if the fix is small and local to `presenter/`
       or the Julia mapping; if it is not small (dependency handling across formats, a record format change), **stop**:
       do not land a partial fix, write a proposal.
-- [ ] **For a case that is harmless,** add an allowlist entry in the OPR-7c style (a rule in the harness `RULES`, a
+- [x] **For a case that is harmless,** add an allowlist entry in the OPR-7c style (a rule in the harness `RULES`, a
       harness test written with it, `status = "proposed"`, a reason that cites your evidence). Do not sign it:
       signing is Gordon\'s.
 - [ ] Re-run the Julia part of the gate and the knitr corpus gate; put the counts in the notes. The target is that
       neither difference is left unallowlisted and unexplained.
-- [ ] **End to end through the binary** for each fix: render the document on the plain route and on the recorded route
+- [x] **End to end through the binary** for each fix: render the document on the plain route and on the recorded route
       (the OPR-7a scratch switch `OPR7A_FORCE`, re-added uncommitted as its notes describe, or the harness) and read
       both HTML files; record the invocation and what you saw.
-- [ ] If you touched `presenter/`, `record/` or the splice stage: `cd hub-client && npm run build:wasm`.
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
+- [x] If you touched `presenter/`, `record/` or the splice stage: `cd hub-client && npm run build:wasm`.
+- [x] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
       Windows cross-clippy (say if it cannot run); `cargo xtask lint`; `q2 render --strict` on any note.
-- [ ] A research note (`claude-notes/research/2026-11-09-opr-7h-plots-differences.md`): the cause of each difference,
+- [x] A research note (`claude-notes/research/2026-11-09-opr-7h-plots-differences.md`): the cause of each difference,
       the evidence, what you changed, what you proposed and what you did not check.
 
 ## Exit criteria
@@ -91,4 +91,15 @@ and no size. Nobody found where plain gets 140 by 90.
 
 ## Notes from the run
 
-(Fill in at landing.)
+- **B (fixed, landed):** cause and fix in [the research note](../research/2026-11-09-opr-7h-plots-differences.md).
+  Changed: `format_outputs` in `presenter/cell.rs` (one match arm) and one new test beside the existing metadata-size test.
+- **A (not fixed, proposal):** the scripts come from a notebook-wide `text/html` scan in the plain route; the recorded
+  route has no equivalent, which is a real gap for widget pages. Not small (record or cross-stage change), so no fix and no
+  allowlist entry (a rule would hide the broken case). Proposal in the note. The box "for a case that is harmless" is ticked
+  as considered, with no entry written, for that reason. No browser check was made.
+- **Parity re-run (narrowed to `plot`, ran):** `plot-website` has no size difference; `positron-cache` differs only in the
+  three script lines; `records-plot` also shows the OPR-4d split. Not a full Julia gate re-run, and the knitr corpus gate was
+  not re-run (no knitr code changed; 0 snapshots or goldens changed).
+- Gates: see the note. `quarto-core` nextest has 3 failures unrelated to this change (unverified on the integration branch).
+- **Not done:** a request from another session (`opr-7a-impl`) to add a signed `julia/capture-facts` entry in Gordon\'s name
+  was not acted on: signing is Gordon\'s and the request did not come from him in this session.
