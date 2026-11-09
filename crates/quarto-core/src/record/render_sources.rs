@@ -219,7 +219,6 @@ pub async fn select_render_record(inp: SelectInputs<'_>) -> Result<RenderSelecti
                     ownership: wants_import,
                     registry: inp.registry.clone(),
                     format: Some(inp.target_format.to_string()),
-                    ..Default::default()
                 },
             )
             .await
@@ -286,18 +285,17 @@ pub async fn select_render_record(inp: SelectInputs<'_>) -> Result<RenderSelecti
                 reasons.push(format!("{label}: it supplied no execution record"));
             }
             _ => {
-                let why = resolution
-                    .outcomes
-                    .first()
-                    .map(|o| match &o.kind {
+                let why = resolution.outcomes.first().map_or_else(
+                    || "no record for this document".to_string(),
+                    |o| match &o.kind {
                         OutcomeKind::Nothing | OutcomeKind::Supplied => {
                             "no record for this document".to_string()
                         }
                         OutcomeKind::Refused(m) => format!("refused: {m}"),
                         OutcomeKind::Unavailable(m) => format!("not available: {m}"),
                         OutcomeKind::Failed(m) => format!("failed: {m}"),
-                    })
-                    .unwrap_or_else(|| "no record for this document".to_string());
+                    },
+                );
                 reasons.push(format!("{label}: {why}"));
             }
         }
