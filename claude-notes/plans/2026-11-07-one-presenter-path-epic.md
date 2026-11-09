@@ -146,7 +146,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md) | OPR | Cached knitr chunks fall back, no record | 0c | B | ready |
 | [OPR-7c](2026-11-08-opr-7c-run-the-parity-gate.md) | OPR | Run the parity gate, fix or propose the allowlist | 0b, 1b, 2, 7b, 4d resolved | D | ready |
 | [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md) | OPR | A cached knitr chunk (`cache=TRUE`) is recorded and presented like any other (spike first); better before 7d, which does not wait for it | 7b | B | ready |
-| [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) | OPR | Engines control the attributes and file names the presenter writes (a general `attrs` channel); Julia uses it and `quarto_file_path`, so four of the 7c Julia allowlist entries go | 4d, 7a, 7c | C | ready |
+| [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) | OPR | Engines control the attributes and file names the presenter writes (a general `attrs` channel); Julia uses it and `quarto_file_path`, so five of the 7c Julia allowlist entries go | 4d, 7a, 7c | C | ready |
 | [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, 7f, Gordon\'s decisions | D | blocked-on-gordon |
 | [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved, RFU-8 | D | ready |
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
