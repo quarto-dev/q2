@@ -140,9 +140,8 @@ dir = "knitr/cache-mixed"
 file = "doc.qmd"
 requires = ["r"]
 formats = ["html"]
-pending = "OPR-7b"
 renders = 2
-note = "two live and two cache: true chunks; rendered twice (miss, then hit); its expected result changes in OPR-7b"
+note = "two live and two cache: true chunks; rendered twice (miss, then hit); identical on both (OPR-7c, after OPR-7b: cached units use the markdown fallback)"
 
 [[document]]
 name = "knitr/fig-subcap"

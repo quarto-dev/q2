@@ -1,6 +1,6 @@
 # OPR-0b: PROPOSED divergences between a plain render and a recorded render (the recorded route is
 # the presenter's, which OPR-7a makes the plain route for Julia and knitr). Read by
-# `tests/integration/opr_parity_harness.rs`. Gordon signs each entry off in OPR-7c; until then every
+# `tests/integration/opr_parity_harness.rs`. Gordon signs each entry after OPR-7c lands (`proposed` to `signed`); until then every
 # entry is `status = "proposed"` and the baseline report lists the differences each one explains.
 #
 # Fields:
@@ -8,7 +8,7 @@
 #   rule    a built-in normalization applied to BOTH sides (`RULES` in the harness): it hides the
 #           difference it names and nothing else
 #   scope   a document-name prefix the entry covers (`julia/`)
-#   status  `proposed` or `signed-off`
+#   status  `proposed` or `signed`
 #   reason  why the divergence is intended, with the evidence
 #
 # Not an entry, on purpose: the references to a `fig-subcap` group. The recorded Julia route leaves
@@ -56,3 +56,17 @@ rule = "knitr-empty-cell-wrapper"
 scope = "knitr"
 status = "proposed"
 reason = "R writes an empty .cell div for a chunk that renders nothing (a setup chunk, include false); the presenter writes none. The same divergence is already signed off for the knitr baseline (knitr allowlist.toml, s1/03_eval_false and markdown-stress/empty_output; epic decision 23), so Gordon carries it into the plain-render switch in OPR-7c"
+
+[[entry]]
+name = "knitr split blockquote"
+rule = "knitr-adjacent-blockquotes"
+scope = "knitr"
+status = "proposed"
+reason = "R's markdown puts a blank line inside a quoted chunk, so the quote renders as two adjacent blockquotes; the presenter renders one. The same divergence is already a blocker-class entry in the knitr allowlist.toml (structure/chunk_in_blockquote, epic decision 23), seen here at page level (OPR-7c)"
+
+[[entry]]
+name = "julia code block leading newline"
+rule = "julia-code-leading-newline"
+scope = "julia/"
+status = "proposed"
+reason = "the engine route keeps a blank first line of a code block (a newline right after the opening code tag); the presenter trims it. A browser ignores a newline at the start of a pre, so nothing visible changes (OPR-7c, julia/docs-index-chunk)"

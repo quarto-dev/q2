@@ -113,6 +113,8 @@ pub const RULES: &[&str] = &[
     "julia-cell-output-class",
     "julia-figure-names",
     "knitr-empty-cell-wrapper",
+    "knitr-adjacent-blockquotes",
+    "julia-code-leading-newline",
 ];
 
 /// Apply the named normalization to one side. Unknown names are a bug in the allowlist file.
@@ -148,6 +150,13 @@ pub fn apply_rule(rule: &str, side: &mut Side) -> Result<(), String> {
         // R writes an empty `.cell` div for a chunk that renders nothing; the presenter writes none
         // (knitr epic decision 23, signed off for the knitr baseline presenter).
         "knitr-empty-cell-wrapper" => sub(r#"<div class="cell">\s*</div>\s*"#, "", side),
+        // R's markdown puts a blank line inside a quoted chunk, which splits the quote in two; the
+        // presenter keeps one blockquote (knitr epic decision 23, the baseline's blocker-class
+        // entry for structure/chunk_in_blockquote). Joining adjacent quotes hides exactly that.
+        "knitr-adjacent-blockquotes" => sub(r"</blockquote>\s*<blockquote>\s*", "", side),
+        // The engine route keeps a code block's leading blank line (a newline right after the
+        // opening `code` tag); the presenter trims it. A browser drops it anyway.
+        "julia-code-leading-newline" => sub(r#"(<code class="sourceCode julia">)\n"#, "$1", side),
         other => return Err(format!("unknown rule `{other}`")),
     }
     Ok(())
@@ -527,6 +536,48 @@ reason = "different counters on the two routes"
         );
         assert!(matches!(
             compare("knitr-corpus/x", &full, &rec, &list),
+            Verdict::Blocker { .. }
+        ));
+    }
+
+    #[test]
+    fn the_adjacent_blockquotes_rule_hides_only_a_split_quote() {
+        let list = Allowlist::parse(
+            "[[entry]]\nname='b'\nrule='knitr-adjacent-blockquotes'\nscope='knitr'\nstatus='proposed'\nreason='r'\n",
+        )
+        .unwrap();
+        let plain = side(
+            "<blockquote>\n<p>a</p>\n</blockquote>\n<blockquote>\n<p>b</p>\n</blockquote>",
+            &[],
+        );
+        let rec = side("<blockquote>\n<p>a</p>\n<p>b</p>\n</blockquote>", &[]);
+        assert!(matches!(
+            compare("knitr-corpus/x", &plain, &rec, &list),
+            Verdict::Allowlisted { .. }
+        ));
+        let other = side("<blockquote>\n<p>a</p>\n<p>c</p>\n</blockquote>", &[]);
+        assert!(matches!(
+            compare("knitr-corpus/x", &plain, &other, &list),
+            Verdict::Blocker { .. }
+        ));
+    }
+
+    #[test]
+    fn the_leading_newline_rule_hides_only_that_newline() {
+        let list = Allowlist::parse(
+            "[[entry]]\nname='n'\nrule='julia-code-leading-newline'\nscope='julia/'\nstatus='proposed'\nreason='r'\n",
+        )
+        .unwrap();
+        let open = "<code class=\"sourceCode julia\">";
+        let plain = side(&format!("{open}\nusing Plots</code>"), &[]);
+        let rec = side(&format!("{open}using Plots</code>"), &[]);
+        assert!(matches!(
+            compare("julia/x", &plain, &rec, &list),
+            Verdict::Allowlisted { .. }
+        ));
+        let other = side(&format!("{open}using Other</code>"), &[]);
+        assert!(matches!(
+            compare("julia/x", &plain, &other, &list),
             Verdict::Blocker { .. }
         ));
     }
