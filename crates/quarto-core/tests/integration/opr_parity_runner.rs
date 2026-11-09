@@ -417,7 +417,7 @@ fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist)
     out.push_str("## Counts\n\n| Class | Cases |\n|---|---:|\n");
     out.push_str(&format!("| identical | {} |\n", identical.len()));
     out.push_str(&format!(
-        "| allowlisted (proposed entries) | {} |\n",
+        "| allowlisted (proposed or signed entries) | {} |\n",
         allowlisted.len()
     ));
     out.push_str(&format!(
@@ -468,7 +468,7 @@ fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist)
         ));
     }
 
-    out.push_str("## Allowlisted (proposed entries)\n\n");
+    out.push_str("## Allowlisted (proposed or signed entries)\n\n");
     for entry in &allowlist.entries {
         let n = allowlisted
             .iter()
@@ -594,10 +594,37 @@ mod tests {
     }
 
     #[test]
-    fn the_seeded_allowlist_parses_and_every_entry_is_proposed() {
+    fn the_seeded_allowlist_parses_and_each_entry_is_proposed_or_signed() {
         let list = Allowlist::load(&corpus_root().join("opr-parity-allowlist.toml")).unwrap();
-        assert_eq!(list.entries.len(), 6);
-        assert!(list.entries.iter().all(|e| e.status == "proposed"));
+        assert_eq!(list.entries.len(), 8);
+        assert!(
+            list.entries
+                .iter()
+                .all(|e| e.status == "proposed" || e.status == "signed")
+        );
+        // Gordon signed these three on 2026-11-09 (OPR-7d start condition); a signed entry says
+        // who signed it and when, in its reason.
+        let mut signed: Vec<&str> = list
+            .entries
+            .iter()
+            .filter(|e| e.status == "signed")
+            .map(|e| e.rule.as_str())
+            .collect();
+        signed.sort_unstable();
+        assert_eq!(
+            signed,
+            [
+                "julia-code-leading-newline",
+                "knitr-adjacent-blockquotes",
+                "knitr-empty-cell-wrapper"
+            ]
+        );
+        assert!(
+            list.entries
+                .iter()
+                .filter(|e| e.status == "signed")
+                .all(|e| e.reason.contains("Signed: Gordon, 2026-11-09"))
+        );
         // The subfigure-group references are a blocker, not an allowlist candidate.
         assert!(
             list.entries

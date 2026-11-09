@@ -813,3 +813,232 @@ fn a_sidecar_that_fails_a_check_degrades_the_chunk_to_absent() {
         assert_eq!(hit.markdown, miss.markdown, "{what}");
     }
 }
+
+// ---- OPR-7e follow-up (S5): the cache options and placements the 7e tests did not reach, each a
+// miss then a hit in fresh R processes (every `call_r` is its own `Rscript`).
+
+/// What a hit did to each unit the miss recorded: `Some(true)` recorded and equal to the miss,
+/// `Some(false)` recorded and different (a bug), `None` absent. Also checks the two invariants that
+/// hold for every case: the document is identical, and an absent unit is named in `cached_units`.
+fn hit_vs_miss(
+    miss: &KnitrExecuteResult,
+    hit: &KnitrExecuteResult,
+    what: &str,
+) -> Vec<(String, Option<bool>)> {
+    assert_eq!(miss.markdown, hit.markdown, "{what}: the document differs");
+    let hit_ids = unit_ids(hit);
+    let mut out = Vec::new();
+    for id in unit_ids(miss) {
+        if hit_ids.contains(&id) {
+            out.push((id.to_string(), Some(shape(miss, id) == shape(hit, id))));
+        } else {
+            assert!(
+                hit.cached_units.iter().any(|u| u == id),
+                "{what}: {id} is neither recorded nor named in cached_units: {:?}",
+                hit.cached_units
+            );
+            out.push((id.to_string(), None));
+        }
+    }
+    for (id, same) in &out {
+        assert_ne!(*same, Some(false), "{what}: the record of {id} differs");
+    }
+    out
+}
+
+fn miss_then_hit(
+    doc: &str,
+    files: &[(&str, &str)],
+) -> (KnitrExecuteResult, KnitrExecuteResult, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let miss = execute_in(dir.path(), doc, files, true);
+    let hit = execute_in(dir.path(), doc, files, true);
+    (miss, hit, dir)
+}
+
+#[test]
+fn s5_dependson_hit_is_recorded_like_the_miss() {
+    if !r_available("s5_dependson_hit_is_recorded_like_the_miss") {
+        return;
+    }
+    let doc = id_chunk("a", "u1", "#| cache: true\n", "x <- 1\nx")
+        + &id_chunk(
+            "b",
+            "u2",
+            "#| cache: true\n#| dependson: a\n",
+            "y <- x + 1\ny",
+        );
+    let (miss, hit, _d) = miss_then_hit(&doc, &[]);
+    let r = hit_vs_miss(&miss, &hit, "dependson");
+    assert_eq!(r, [("u1".into(), Some(true)), ("u2".into(), Some(true))]);
+}
+
+#[test]
+fn s5_autodep_hit_is_recorded_like_the_miss() {
+    if !r_available("s5_autodep_hit_is_recorded_like_the_miss") {
+        return;
+    }
+    let doc = id_chunk("a", "u1", "#| cache: true\n#| autodep: true\n", "x <- 1\nx")
+        + &id_chunk(
+            "b",
+            "u2",
+            "#| cache: true\n#| autodep: true\n",
+            "y <- x + 1\ny",
+        );
+    let (miss, hit, _d) = miss_then_hit(&doc, &[]);
+    let r = hit_vs_miss(&miss, &hit, "autodep");
+    assert_eq!(r, [("u1".into(), Some(true)), ("u2".into(), Some(true))]);
+}
+
+#[test]
+fn s5_cache_lazy_false_hit_is_recorded_like_the_miss() {
+    if !r_available("s5_cache_lazy_false_hit_is_recorded_like_the_miss") {
+        return;
+    }
+    let doc = id_chunk(
+        "a",
+        "u1",
+        "#| cache: true\n#| cache.lazy: false\n",
+        "x <- 1\nx",
+    ) + &id_chunk("b", "u2", "", "x + 1");
+    let (miss, hit, _d) = miss_then_hit(&doc, &[]);
+    let r = hit_vs_miss(&miss, &hit, "cache.lazy");
+    assert_eq!(r, [("u1".into(), Some(true)), ("u2".into(), Some(true))]);
+}
+
+/// `cache.rebuild: true` makes knitr re-run the chunk on every render, so it is a live (miss)
+/// record on the second run too, and it rewrites its sidecar.
+#[test]
+fn s5_cache_rebuild_runs_again_and_is_recorded_live() {
+    if !r_available("s5_cache_rebuild_runs_again_and_is_recorded_live") {
+        return;
+    }
+    let doc = id_chunk(
+        "a",
+        "u1",
+        "#| cache: true\n#| cache.rebuild: true\n",
+        "n <- length(list.files('.', pattern = '^ran_'))\nfile.create(paste0('ran_', n))\nn",
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let _miss = execute_in(dir.path(), &doc, &[], true);
+    let again = execute_in(dir.path(), &doc, &[], true);
+    assert!(dir.path().join("ran_1").exists(), "the chunk ran again");
+    assert_eq!(unit_ids(&again), ["u1"]);
+    assert!(again.cached_units.is_empty());
+}
+
+#[test]
+fn s5_cached_chunk_in_a_callout_is_recorded_like_the_miss() {
+    if !r_available("s5_cached_chunk_in_a_callout_is_recorded_like_the_miss") {
+        return;
+    }
+    let doc = format!(
+        "::: {{.callout-note}}\n\n{}:::\n\n",
+        id_chunk("c", "u1", "#| cache: true\n", "1 + 1")
+    );
+    let (miss, hit, _d) = miss_then_hit(&doc, &[]);
+    let r = hit_vs_miss(&miss, &hit, "callout");
+    assert_eq!(r, [("u1".into(), Some(true))]);
+}
+
+/// A cached chunk whose `child=` document holds a cached chunk. The child chunk record holds the
+/// child\'s markdown; its inner chunk has no id, so it is never a unit of its own.
+#[test]
+fn s5_child_chunk_hit_is_recorded_like_the_miss_or_absent() {
+    if !r_available("s5_child_chunk_hit_is_recorded_like_the_miss_or_absent") {
+        return;
+    }
+    let doc = "```{r child_chunk, child='child.Rmd'}\n#| quarto-unit-id: \"u1\"\n#| cache: true\n```\n\n\
+               ```{r after}\n#| quarto-unit-id: \"u2\"\n2\n```\n";
+    let child = (
+        "child.Rmd",
+        "Child text.\n\n```{r inner}\n#| cache: true\n1 + 1\n```\n",
+    );
+    let (miss, hit, _d) = miss_then_hit(doc, &[child]);
+    let r = hit_vs_miss(&miss, &hit, "child");
+    assert_eq!(r[1], ("u2".into(), Some(true)));
+}
+
+/// `<doc>_files` (figures) deleted while the cache is kept.
+#[test]
+fn s5_files_dir_deleted_with_the_cache_kept() {
+    if !r_available("s5_files_dir_deleted_with_the_cache_kept") {
+        return;
+    }
+    let doc = id_chunk("p", "u1", "#| cache: true\n", "plot(1)") + &id_chunk("q", "u2", "", "2");
+    let dir = tempfile::tempdir().unwrap();
+    let miss = execute_in(dir.path(), &doc, &[], true);
+    let files_dir: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir() && p.to_string_lossy().ends_with("_files"))
+        .collect();
+    assert_eq!(files_dir.len(), 1, "{files_dir:?}");
+    for d in &files_dir {
+        std::fs::remove_dir_all(d).unwrap();
+    }
+    let hit = execute_in(dir.path(), &doc, &[], true);
+    let r = hit_vs_miss(&miss, &hit, "_files deleted");
+    // knitr does not regenerate a figure on a hit, so the file stays missing, exactly as in an
+    // unrecorded run (the render then warns Q-5-6 and goes on). The record is still the miss\'s.
+    assert!(!dir.path().join("doc_files/figure-html/p-1.png").exists());
+    assert_eq!(r, [("u1".into(), Some(true)), ("u2".into(), Some(true))]);
+}
+
+/// [`execute_in`] for a capture run that carries a nonce, as the engine\'s own path does: R puts
+/// `<!-- q2:NONCE:ID -->` in the document where a recorded unit goes.
+fn execute_with_nonce(path: &std::path::Path, markdown: &str, nonce: &str) -> KnitrExecuteResult {
+    let qmd = path.join("doc.qmd");
+    std::fs::write(&qmd, markdown).unwrap();
+    let params = KnitrExecuteParams {
+        input: qmd,
+        markdown: markdown.to_string(),
+        format: KnitrFormatConfig::with_defaults("html"),
+        temp_dir: path.to_path_buf(),
+        lib_dir: None,
+        dependencies: true,
+        cwd: path.to_path_buf(),
+        params: None,
+        resource_dir: KNITR_RESOURCES.path().unwrap().to_path_buf(),
+        handled_languages: vec![],
+        capture: true,
+        nonce: Some(nonce.to_string()),
+    };
+    call_r("execute", &params, path, path, &CallROptions::quiet()).expect("R execution failed")
+}
+
+/// OPR-7e follow-up: on a level-3 hit with capture on, the skeleton marker in the document
+/// carries THIS run\'s nonce, not the nonce the entry was written under, and keeps knitr\'s indent
+/// (a blockquote prefix). A stale nonce would make the skeleton reader treat the unit as missing.
+#[test]
+fn a_level_3_hit_puts_this_runs_nonce_in_the_skeleton_marker() {
+    if !r_available("a_level_3_hit_puts_this_runs_nonce_in_the_skeleton_marker") {
+        return;
+    }
+    let doc = id_chunk("c", "u1", "#| cache: true\n", "1 + 1")
+        + "> ```{r q}\n> #| quarto-unit-id: \"u2\"\n> #| cache: true\n> 2\n> ```\n";
+    let dir = tempfile::tempdir().unwrap();
+    let miss = execute_with_nonce(dir.path(), &doc, "nonceA");
+    for id in ["u1", "u2"] {
+        let marker = format!("<!-- q2:nonceA:{id} -->");
+        assert!(miss.markdown.contains(&marker), "miss: {}", miss.markdown);
+    }
+    let hit = execute_with_nonce(dir.path(), &doc, "nonceB");
+    assert_eq!(unit_ids(&hit), ["u1", "u2"], "both are recorded on the hit");
+    assert!(
+        !hit.markdown.contains("nonceA"),
+        "the old nonce leaked into the hit: {}",
+        hit.markdown
+    );
+    assert!(
+        hit.markdown.contains("<!-- q2:nonceB:u1 -->"),
+        "{}",
+        hit.markdown
+    );
+    assert!(
+        hit.markdown.contains("> <!-- q2:nonceB:u2 -->"),
+        "the blockquote prefix is kept: {}",
+        hit.markdown
+    );
+}

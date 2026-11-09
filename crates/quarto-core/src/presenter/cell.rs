@@ -948,9 +948,11 @@ fn format_outputs_with(
                     let alt = options.figure_cap(*figures);
                     // A stored output may carry the image\'s size in its metadata (nbformat).
                     let (width, height) = match (cell_output, image_entry) {
-                        (CellOutput::DisplayData { metadata, .. }, Some((mime, _))) => {
-                            metadata_size(metadata, mime)
-                        }
+                        (
+                            CellOutput::DisplayData { metadata, .. }
+                            | CellOutput::ExecuteResult { metadata, .. },
+                            Some((mime, _)),
+                        ) => metadata_size(metadata, mime),
                         _ => (None, None),
                     };
                     let attrs = options.plot_image_attrs(*figures, width, height);
@@ -2521,6 +2523,23 @@ mod option_tests {
                 vec![image()]
             ),
             ["![](P){width=50% height=200}"]
+        );
+    }
+
+    /// OPR-7h: QuartoNotebookRunner puts the PNG size in the metadata of the last value, which
+    /// arrives as an `execute_result`, not a `display_data`. The plain route reads it from both.
+    #[test]
+    fn an_execute_result_image_takes_its_size_from_the_output_metadata_too() {
+        let mut data = crate::presenter::output::MimeBundle::new();
+        data.insert("image/png".to_string(), serde_json::json!(PNG));
+        let image = CellOutput::ExecuteResult {
+            execution_count: 1,
+            data,
+            metadata: serde_json::json!({"image/png": {"width": 140, "height": 90}}),
+        };
+        assert_eq!(
+            images(&CellOptions::default(), vec![image]),
+            ["![](P){width=140 height=90}"]
         );
     }
 

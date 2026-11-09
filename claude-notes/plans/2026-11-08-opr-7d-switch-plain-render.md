@@ -3,7 +3,7 @@ title: 'OPR-7d: switch plain render of Julia and knitr to the recorded route'
 date: 2026-11-08
 description: 'Turns the internal present_from_record control on by default, so a plain q2 render of a Julia or knitr document is presented by the Rust presenter from an in-memory record, writing nothing to .quarto. Keeps the LaTeX family and uncovered targets on the engine route, quietly. Applies Gordon''s decisions on the retained knitr fallback and on an opt-out control.'
 status: blocked-on-gordon
-depends-on: [opr-7a, opr-7b, opr-7c, opr-7f]
+depends-on: [opr-7a, opr-7b, opr-7c, opr-7f, opr-7g, opr-7h]
 lane: D
 ---
 
@@ -14,8 +14,14 @@ lane: D
 
 ## Start condition
 
-`status` is `blocked-on-gordon` until Gordon has signed the allowlist (OPR-7c) and flipped this plan to `ready`; both
+`status` is `blocked-on-gordon` until Gordon has signed the allowlist (OPR-7c) and flipped this plan to `ready`; the
 decisions below are recorded (2026-11-09). If the allowlist is unsigned or the status is not `ready`, stop and report.
+
+**Allowlist state (2026-11-09).** Gordon signed the three non-Julia entries in
+`crates/quarto-core/tests/fixtures/opr-parity/opr-parity-allowlist.toml` (`knitr-empty-cell-wrapper`,
+`knitr-adjacent-blockquotes`, `julia-code-leading-newline`; each reason ends "Signed: Gordon, 2026-11-09"). The five
+Julia markup entries are not signed: [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) removes them.
+Anything OPR-7h proposes is `proposed` until Gordon signs it. The flip to `ready` still waits on 7f, 7g and 7h.
 
 ## Decisions by Gordon (2026-11-09)
 
@@ -29,10 +35,20 @@ variable, document key or other user-facing way back. Reason: Gordon chose the r
 unallowlisted differences, OPR-7c) is the safety, and a control would be a user surface to document and later retire. A bad
 case is fixed in q2, not worked around. OPR-7a\'s "behind a control" means this internal flag only, which agrees.
 
-**3. Julia subfigure groups on the flip (added 2026-11-09 from OPR-0c; needs Gordon).** Today plain Julia resolves a
-`fig-subcap` group\'s references with wrong numbers; the recorded route leaves them unresolved (`bd-gbaykhth`, same
-failure as a stored notebook). Flipping Julia changes wrong to unresolved. Choose: (accept it and record the regression
-against `bd-gbaykhth` / flip knitr and Julia together / flip knitr first and hold Julia until the group resolves).
+**3. Julia subfigure groups on the flip: accepted (Gordon, 2026-11-09).** Today plain Julia resolves a `fig-subcap`
+group\'s references with wrong numbers; the recorded route leaves them unresolved. Flipping Julia changes wrong to
+unresolved for figures, and changes nothing for tables (a 2026-11-09 probe: both routes leave the panel references
+unresolved and drop the parent caption). Gordon accepted this: subfloat support was deferred by design and needs its
+own plan, and the flip does not make it meaningfully worse. Cite the strands, not a plan: `bd-plcqhfcn` (the umbrella:
+subfloat index and numbering), `bd-gbaykhth` (no panel synthesis in the Jupyter family and the Julia TS route; the
+Julia findings are in its comment of 2026-11-09) and `bd-au5gts6e` (knitr numbering). Nothing in this plan fixes them.
+
+**4. Julia interleaving on the flip: accepted as an intended improvement (Gordon, 2026-11-09).** For a Julia cell with
+several expressions the plain route runs the whole cell as one block; the recorded route splits it per expression,
+with exact `prompt`, numeric `echo` and `warning: false` by kind (OPR-4d; Quarto 1 never interleaved Julia). The parity
+gate\'s case `julia/capture-facts` is that behavior change, not a regression. Record it in the gate report and the
+allowlist as an accepted whole-document difference (the harness has no whole-document form today: add the smallest one,
+or normalize the interleaving, and say which), and mention it in the migration notes written by OPR-8.
 
 ## Branch and land (explicit)
 
