@@ -77,7 +77,7 @@ These live in repo settings and rarely change. Verify with
 | `QUARTO_HUB_MCP_CLIENT_ID` | secret | Bundled Google OAuth client id (public client; secret only to dodge `GOCSPX-` scanners). |
 | `QUARTO_HUB_MCP_CLIENT_SECRET` | secret | Bundled client secret (same). |
 | `QUARTO_HUB_SERVER` | variable | `wss://quarto-hub.com/ws`. |
-| `HOMEBREW_TAP_TOKEN` | secret | Fine-grained token, Contents read/write on `quarto-dev/homebrew-q2` only. The `homebrew-tap` job pushes the formula with it; unset, the job skips. |
+| `HOMEBREW_TAP_TOKEN` | secret | Fine-grained token, Contents read/write on `quarto-dev/homebrew-tap` only. The `homebrew-tap` job pushes the formula with it; unset, that job skips (the `homebrew-formula` and `homebrew-test` jobs still run). |
 
 The signing **secret key** lives only in the repo secret and the team
 password manager. If it is ever rotated: regenerate with

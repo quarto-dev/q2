@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Render the Homebrew formula (Formula/q2.rb in quarto-dev/homebrew-q2)
+# Render the Homebrew formula (Formula/q2.rb in quarto-dev/homebrew-tap)
 # for a stable release, from the release's combined checksums file:
 #
 #   scripts/homebrew-formula.sh 0.42.0 checksums.sha256 > q2.rb
 #
-# Run by the `homebrew-tap` job in .github/workflows/release-pipeline.yml.
+# Run by the homebrew-* jobs in .github/workflows/release-pipeline.yml,
+# which also `brew audit --strict`, install and test the result.
+#
+# The heredoc below is unquoted (it interpolates the version and the
+# url/sha256 lines), so the Ruby it emits must not contain backticks or
+# `$` — the shell would expand them.
 # Tests: crates/quarto/tests/integration/homebrew_formula.rs.
 
 set -euo pipefail
@@ -40,7 +45,6 @@ cat <<EOF
 class Q2 < Formula
   desc "Quarto 2: scientific and technical publishing system"
   homepage "https://github.com/quarto-dev/q2"
-  version "${version}"
   license "MIT"
 
   on_macos do
@@ -65,8 +69,40 @@ ${linux_amd64}
     bin.install "q2"
   end
 
+  def caveats
+    <<~EOS
+      The q2 mcp command requires Node.js 24 or newer on your PATH.
+      Everything else in q2 works without Node.js.
+    EOS
+  end
+
   test do
     assert_match version.to_s, shell_output("#{bin}/q2 --version")
+
+    # A cross-reference and a callout exercise more of the render
+    # pipeline than --version does.
+    (testpath/"test.qmd").write <<~MARKDOWN
+      ---
+      title: Homebrew test
+      ---
+
+      See @tbl-numbers.
+
+      | A | B |
+      |---|---|
+      | 1 | 2 |
+
+      : Numbers {#tbl-numbers}
+
+      ::: {.callout-note}
+      q2 rendered this callout.
+      :::
+    MARKDOWN
+
+    system bin/"q2", "render", "test.qmd", "--to", "html"
+    html = (testpath/"test.html").read
+    assert_match "href=\"#tbl-numbers\"", html
+    assert_match "callout-note", html
   end
 end
 EOF

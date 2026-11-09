@@ -54,7 +54,17 @@ fn renders_each_platform_url_with_its_sha() {
         String::from_utf8_lossy(&out.stderr)
     );
     let formula = String::from_utf8(out.stdout).unwrap();
-    assert!(formula.contains("version \"1.2.3\""), "{formula}");
+    // No `version` stanza: Homebrew scans it from the URL, and
+    // `brew audit --strict` rejects a redundant one.
+    assert!(!formula.contains("\n  version "), "{formula}");
+    // `q2 mcp` needs node at runtime, so the formula says so.
+    assert!(formula.contains("def caveats"), "{formula}");
+    assert!(formula.contains("Node.js 24"), "{formula}");
+    // The test block renders a document rather than only `--version`.
+    assert!(
+        formula.contains("system bin/\"q2\", \"render\""),
+        "{formula}"
+    );
 
     let mut last = formula.find("on_macos do").unwrap();
     for (i, p) in PLATFORMS.iter().enumerate() {

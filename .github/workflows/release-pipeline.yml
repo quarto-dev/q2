@@ -1070,6 +1070,15 @@ jobs:
           sha256sum -c checksums.sha256
           cat checksums.sha256
 
+      # The verified checksums, for the homebrew-* jobs below: they render
+      # the formula from these rather than from the published release.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-checksums
+          path: artifacts/checksums.sha256
+          retention-days: 7
+          if-no-files-found: error
+
       # Fail closed on a truncated or mispackaged satellite WASM asset:
       # the four pkg files must sit at their repo-relative paths (the
       # extraction contract documented in the notes below).
@@ -1282,40 +1291,112 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # After a stable release, publish its Homebrew formula to the
-  # quarto-dev/homebrew-q2 tap (`brew install quarto-dev/q2/q2`).
-  # HOMEBREW_TAP_TOKEN is a fine-grained token with contents:write on the
-  # tap only; until it is set, the job skips itself.
-  homebrew-tap:
-    name: Update Homebrew tap
+  # Homebrew (stable releases only). Renders Formula/q2.rb for the
+  # quarto-dev/homebrew-tap tap (`brew install quarto-dev/tap/q2`), checks
+  # it with brew on Linux and macOS, then pushes it to the tap.
+  #
+  # The checksums come from the release job's `release-checksums`
+  # artifact (the set it verified with `sha256sum -c` and then signed),
+  # not from the published release. So `brew install` in homebrew-test,
+  # which downloads the published archives and checks them against the
+  # formula, also checks that the release assets are the bytes this run
+  # built.
+  #
+  # All three jobs run after `release`, so a failure here cannot block or
+  # undo a release.
+  homebrew-formula:
+    name: Render Homebrew formula
     needs: [release]
     if: inputs.publish && inputs.channel == 'release' && !contains(inputs.version, '-')
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    env:
-      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Render formula and push to the tap
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-checksums
+          path: ${{ runner.temp }}/checksums
+
+      - name: Render formula
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/formula"
+          scripts/homebrew-formula.sh "$VERSION" "$RUNNER_TEMP/checksums/checksums.sha256" \
+            > "$RUNNER_TEMP/formula/q2.rb"
+          cat "$RUNNER_TEMP/formula/q2.rb"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: homebrew-formula
+          path: ${{ runner.temp }}/formula/q2.rb
+          retention-days: 7
+          if-no-files-found: error
+
+  # Linux tests the linux_amd64 archive and macOS the darwin_arm64 one.
+  homebrew-test:
+    name: Test Homebrew formula (${{ matrix.os }})
+    needs: [homebrew-formula]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ENV_HINTS: 1
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: homebrew-formula
+          path: ${{ runner.temp }}/formula
+
+      - name: brew style, audit, install and test
+        run: |
+          # The ubuntu runners ship Homebrew but leave it off PATH.
+          if ! command -v brew >/dev/null; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
+          brew tap-new --no-git local/q2-ci
+          cp "$RUNNER_TEMP/formula/q2.rb" "$(brew --repository local/q2-ci)/Formula/q2.rb"
+          brew style local/q2-ci/q2
+          brew audit --strict --online local/q2-ci/q2
+          brew install local/q2-ci/q2
+          brew test --verbose local/q2-ci/q2
+
+  # HOMEBREW_TAP_TOKEN is a fine-grained token with contents:write on the
+  # tap only. Until it is set, this job skips itself (the two jobs above
+  # still run, so the formula is checked either way).
+  homebrew-tap:
+    name: Push formula to Homebrew tap
+    needs: [homebrew-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: homebrew-formula
+          path: ${{ runner.temp }}/formula
+
+      - name: Push formula to the tap
+        env:
           VERSION: ${{ inputs.version }}
         run: |
           if [ -z "$TAP_TOKEN" ]; then
             echo "::notice::HOMEBREW_TAP_TOKEN is not set; skipping the Homebrew tap."
             exit 0
           fi
-          gh release download "$TAG" -p checksums.sha256 -D "$RUNNER_TEMP"
-          scripts/homebrew-formula.sh "$VERSION" "$RUNNER_TEMP/checksums.sha256" > "$RUNNER_TEMP/q2.rb"
-          ruby -c "$RUNNER_TEMP/q2.rb"
-          git clone "https://x-access-token:${TAP_TOKEN}@github.com/quarto-dev/homebrew-q2.git" "$RUNNER_TEMP/tap"
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/quarto-dev/homebrew-tap.git" "$RUNNER_TEMP/tap"
           cd "$RUNNER_TEMP/tap"
           mkdir -p Formula
-          cp "$RUNNER_TEMP/q2.rb" Formula/q2.rb
+          cp "$RUNNER_TEMP/formula/q2.rb" Formula/q2.rb
           git add Formula/q2.rb
           git diff --cached --quiet && exit 0
           git -c user.name='github-actions[bot]' \
