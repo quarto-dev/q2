@@ -2,7 +2,7 @@
 title: 'OPR-6: q2 render reads execute: record-sources'
 date: 2026-11-08
 description: 'Makes q2 render and q2 preview --static read the execute: record-sources key (OPR-5), per document, with no new option: read only, default engine, a stale or format-mismatched record counts as not supplied, a document no source supplies warns and stays inert, a skip guard keeps the engine from starting after a record is spliced. The preview render routes use the host ceiling under --share.'
-status: ready
+status: in-progress
 depends-on: [opr-5, opr-1b]
 lane: C
 ---
