@@ -66,6 +66,10 @@ pub(super) fn verify_patterns(
     description: &str,
 ) -> Result<()> {
     let mut failures = Vec::new();
+    // Pandoc writes native line endings (`--eol=native`): CRLF on Windows, where a `$` in a
+    // multiline pattern would not match before the `\r`. Q1's patterns assume LF.
+    let content = content.replace("\r\n", "\n");
+    let content = content.as_str();
 
     for (regex, pattern) in matches.iter().zip(match_patterns) {
         if !regex.is_match(content) {
@@ -94,6 +98,20 @@ pub(super) fn verify_patterns(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verify_patterns_treats_crlf_like_lf() {
+        let (m, n) = compile_patterns(&["^#set text\\(\\)$".to_string()], &[]).unwrap();
+        verify_patterns(
+            "a\r\n#set text()\r\nb\r\n",
+            &m,
+            &n,
+            &["^#set text\\(\\)$".to_string()],
+            &[],
+            "x",
+        )
+        .unwrap();
+    }
 
     #[test]
     fn normalize_pdf_text_replaces_non_breaking_space_with_regular_space() {
