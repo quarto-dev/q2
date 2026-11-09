@@ -349,4 +349,6 @@ say so in the notes; do not leave it half built.
 
 ## Notes from the run
 
-(empty)
+**Spike outcome (Phase A, 2026-11-09):** level 3 holds; Phase C builds the **sidecar** (tie-break, decision 3). See [the spike note](../research/2026-11-09-opr-7e-cache-record-spike.md). The span was never needed. Items run only in plain R, not through `capture.R`, are marked in the note.
+
+(rest empty until landing)
