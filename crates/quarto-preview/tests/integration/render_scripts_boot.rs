@@ -132,7 +132,10 @@ async fn pre_render_scripts_run_once_at_boot() {
     // 1. The pre-render script ran at boot, with the full-render env.
     let log_path = project_dir.join("boot.log");
     wait_for_file(&log_path, "boot.log").await;
-    let log = std::fs::read_to_string(&log_path).unwrap();
+    // Python writes in text mode, so the newline is CRLF on Windows.
+    let log = std::fs::read_to_string(&log_path)
+        .unwrap()
+        .replace("\r\n", "\n");
     assert_eq!(
         log, "1\n",
         "pre-render script should run exactly once at boot with QUARTO_PROJECT_RENDER_ALL=1"
@@ -147,7 +150,10 @@ async fn pre_render_scripts_run_once_at_boot() {
     )
     .unwrap();
     tokio::time::sleep(Duration::from_millis(1500)).await;
-    let log = std::fs::read_to_string(&log_path).unwrap();
+    // Python writes in text mode, so the newline is CRLF on Windows.
+    let log = std::fs::read_to_string(&log_path)
+        .unwrap()
+        .replace("\r\n", "\n");
     assert_eq!(
         log, "1\n",
         "pre-render scripts must not re-run on file changes"
