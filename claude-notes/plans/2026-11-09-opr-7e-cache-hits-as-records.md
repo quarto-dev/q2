@@ -12,6 +12,8 @@ lane: B
 **Branch:** `opr/7e-cache-hits-as-records` · **Lane B** (`workspace-4`) · **Blocks:** nothing hard. It should land before
 OPR-7d, because after 7d every plain render writes cache entries, and entries written before this plan carry no record
 payload (see "Cache entries written before this plan").
+**Review:** [plan review, 2026-11-09](../research/2026-11-09-opr-7e-plan-review.md) (approve with changes; read it before
+Phase A: it proposes design edits that Gordon has not decided yet).
 **Needs:** R 4.3 with knitr, at the minimum knitr q2 supports (1.44) and at the newest installed. The tests that need R
 skip without it, but this plan cannot be verified without R.
 
@@ -95,8 +97,9 @@ exclusion from the expected count (`engine/knitr/mod.rs`, the `cached_units` fil
 
 A level-3 entry written by an earlier q2 (or by a render with capture off) holds plain markdown and no payload. In a
 capture run its chunk stays absent from the record, as in OPR-7b: correct, quiet, and gone once the entry is rebuilt.
-**Default: do not salt the cache key** to force a rebuild (that would make capture-on and capture-off runs invalidate
-each other\'s entries). The spike measures what a salt would cost; the decision is the agent\'s, recorded in the notes.
+**Default: do not salt the cache key** to force a rebuild. (Correction from the review, read: a plain run carries no
+`quarto-unit-id`, so its level-3 keys already differ from a record run\'s and the two never share an entry; a salt would
+not change that. The spike confirms it; see the review note, finding 1.) The decision is the agent\'s, recorded in the notes.
 
 ## Decision rules (what the spike\'s result changes)
 
