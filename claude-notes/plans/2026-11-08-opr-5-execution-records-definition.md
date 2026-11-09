@@ -2,7 +2,7 @@
 title: 'OPR-5: the execute: record-sources key, one early reader, and removal of --records'
 date: 2026-11-08
 description: 'Moves the execution-records source list from command-line options into the metadata key execute: record-sources (a comma-separated scalar), read before the pipeline by one shared early reader built on the metadata layer collector, with per-command allowed values and defaults, in-project directories only, and a hash exclusion in the three engine declarations. Removes --records from preview and provide-hub. Part B gives provide-hub and a --share preview a ceiling: the host list is the allowed set, a guest document may only reorder or narrow it. Decision R5 (Gordon, 2026-11-09): move, no flag.'
-status: ready
+status: in-progress
 depends-on: [opr-0d, rfu-1, opr-3]
 lane: C
 ---

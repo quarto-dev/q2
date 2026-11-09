@@ -160,6 +160,8 @@ pub mod navbar_footer_pipeline;
 pub mod navigation_e2e;
 pub mod navigation_merge;
 pub mod nested_cell_mask_render;
+pub mod opr_parity_harness;
+pub mod opr_parity_runner;
 pub mod orange_book_lua;
 pub mod output_outside_source_images;
 pub mod own_file_provenance;

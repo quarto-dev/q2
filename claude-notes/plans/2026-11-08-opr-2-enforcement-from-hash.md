@@ -2,7 +2,7 @@
 title: 'OPR-2: who enforces warning and message, derived from the hash definition'
 date: 2026-11-08
 description: 'One rule replaces knitr_visibility and CellVisibility::resolve: the presenter enforces warning and message exactly when the record declares them display-only for the cell engine; echo, output and include stay always presenter-enforced; an engine with no usable declaration, and an imported record, get presenter enforcement. Includes an audit of what each engine really enforces at capture.'
-status: ready
+status: in-progress
 depends-on: [opr-1b, opr-3]
 lane: A
 ---

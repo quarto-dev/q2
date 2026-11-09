@@ -30,13 +30,12 @@ use quarto_source_map::{FileId, SourceInfo};
 use serde_json::Value;
 
 use crate::engine::units::Unit;
-use crate::presenter::cell_step::{present_cell_step, record_engine_entry};
+use crate::presenter::document::{Edit, PresentInput, UnitOutcome, apply_edits, present_units};
 use crate::presenter::figures::{FigureSink, RuntimeFigureSink};
-use crate::presenter::inline::{InlineTarget, render_inline};
-use crate::presenter::output::{CellOutput, CellResult};
+use crate::presenter::inline::InlineTarget;
 use crate::record::{
     EngineEntry, Record, UnitKey, UnitKind, UnitLocation, UnitStaleness, lost_header_keys,
-    match_units, replacement, stored_markdown,
+    match_units,
 };
 use crate::stage::data::DocumentAst;
 use crate::stage::stages::engine_execution::{
@@ -222,36 +221,32 @@ fn splice_units(
         ctx.runtime.clone(),
         &doc_dir.join(doc.path.file_name().unwrap_or_default()),
     ));
-    let target = InlineTarget::from_format(&format);
-    let mut edits: Vec<(usize, usize, String, String)> = Vec::new();
-    for (i, unit) in units.iter().enumerate() {
-        let Some(cell_index) = matching.assignment[i] else {
-            continue;
-        };
-        let cell = &record.cells[cell_index];
-        if matches!(unit, Unit::Inline(u) if u.in_front_matter)
-            || cell.metadata.quarto_location == Some(UnitLocation::Metadata)
+    // The pairs the splice presents: a matched unit, except a cell recorded for the metadata.
+    let matched: Vec<(usize, &crate::record::RecordCell)> = matching
+        .assignment
+        .iter()
+        .enumerate()
+        .filter_map(|(i, a)| a.map(|ci| (i, &record.cells[ci])))
+        .filter(|(_, cell)| cell.metadata.quarto_location != Some(UnitLocation::Metadata))
+        .collect();
+    let input = PresentInput {
+        text: &qmd,
+        units: &units,
+        author_texts: &texts,
+        scope: doc_scope.as_ref(),
+        target: InlineTarget::from_format(&format),
+        format: &format,
+        engines: &record.metadata.quarto_engines,
+    };
+    // The splice keeps the source on every skip and every error, and ignores a front-matter span.
+    let mut edits: Vec<Edit> = Vec::new();
+    let mut edit_units: Vec<usize> = Vec::new();
+    for report in present_units(&input, &matched, fig.as_mut()) {
+        if let UnitOutcome::Replace(edit) = report.outcome
+            && !edit.front_matter
         {
-            continue;
-        }
-        let markdown = match unit {
-            Unit::Cell(_) => {
-                fig.begin_cell();
-                present_cell(
-                    unit,
-                    &texts.0[i].text,
-                    cell,
-                    doc_scope.as_ref(),
-                    fig.as_mut(),
-                    &format,
-                    record_engine_entry(record, cell),
-                )
-            }
-            Unit::Inline(_) => present_span(cell, target),
-        };
-        if let Some(markdown) = markdown {
-            let (start, end, replaced) = replacement(unit, &qmd, &markdown);
-            edits.push((start, end, replaced, unit_id(unit)));
+            edit_units.push(report.unit);
+            edits.push(edit);
         }
     }
     if edits.is_empty() {
@@ -262,24 +257,22 @@ fn splice_units(
     // reconcile: splice never edits front matter, so every value should
     // come back as it was (bd-8svy3p89).
     let baseline = crate::engine::nested_cell_mask::unmask(&qmd);
-    let mut text = qmd;
-    edits.sort_by_key(|e| e.0);
     // Where each unit's presented markdown lands in the final text, before the unmask.
-    let mut spans: Vec<StampSpan> = Vec::new();
-    let mut delta: isize = 0;
-    for (start, end, replaced, id) in &edits {
-        let new_start = (*start as isize + delta) as usize;
-        let new_end = new_start + replaced.len();
-        delta += replaced.len() as isize - (*end - *start) as isize;
-        spans.push(StampSpan {
-            start: new_start,
-            end: new_end,
-            unit: id.clone(),
-        });
-    }
-    for (start, end, replaced, _) in edits.into_iter().rev() {
-        text.replace_range(start..end, &replaced);
-    }
+    let unit_ids_by_start: std::collections::HashMap<usize, String> = edits
+        .iter()
+        .zip(&edit_units)
+        .map(|(edit, &u)| (edit.start, unit_id(&units[u])))
+        .collect();
+    let (text, sorted, ranges) = apply_edits(&qmd, edits);
+    let mut spans: Vec<StampSpan> = sorted
+        .iter()
+        .zip(ranges)
+        .map(|(edit, range)| StampSpan {
+            start: range.start,
+            end: range.end,
+            unit: unit_ids_by_start[&edit.start].clone(),
+        })
+        .collect();
     // Unmasking changes lengths outside the units too; carry each span through it.
     for span in &mut spans {
         span.start = crate::engine::nested_cell_mask::unmask(&text[..span.start]).len();
@@ -412,57 +405,6 @@ fn stamp_spliced_output(
             *si = SourceInfo::generated(record_output_by(source, &span.unit));
         }
     });
-}
-
-/// A record cell's stored nbformat outputs as the kernel result shape [`render_cell_with`] consumes.
-fn stored_result_for_cell(cell: &Value) -> CellResult {
-    let outputs = cell
-        .get("outputs")
-        .and_then(|v| v.as_array())
-        .map_or(&[][..], Vec::as_slice);
-    CellResult::from_nbformat(
-        outputs,
-        cell.get("execution_count").and_then(|v| v.as_u64()),
-    )
-}
-
-/// A fenced cell: stored markdown is placed as it is; anything else is presented with the
-/// current cell's options layered over the document scope.
-fn present_cell(
-    unit: &Unit,
-    author_text: &str,
-    cell: &crate::record::RecordCell,
-    doc_scope: Option<&quarto_pandoc_types::ConfigValue>,
-    fig: &mut dyn FigureSink,
-    format: &str,
-    engine: Option<&crate::record::EngineEntry>,
-) -> Option<String> {
-    if let Some((markdown, stored_format)) = stored_markdown(cell) {
-        return (stored_format.as_deref() == Some(format)).then_some(markdown);
-    }
-    let Unit::Cell(u) = unit else {
-        return None;
-    };
-    present_cell_step(
-        &u.lang,
-        &u.attr_tail,
-        author_text,
-        cell,
-        engine,
-        doc_scope,
-        fig,
-    )
-    .ok()
-}
-
-/// A span: its first output that carries data, as an inline value. `None` keeps the source.
-fn present_span(cell: &crate::record::RecordCell, target: InlineTarget) -> Option<String> {
-    let result = stored_result_for_cell(&serde_json::to_value(cell).ok()?);
-    let bundle = result.outputs.iter().find_map(|o| match o {
-        CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => Some(data),
-        _ => None,
-    })?;
-    render_inline(bundle, target).filter(|s| !s.is_empty())
 }
 
 /// Write the record's embedded files beside the document.

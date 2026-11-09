@@ -259,27 +259,25 @@ fn span_cases_through_both_routines() {
             Some("42"),
             Some("42"),
         ),
-        // OPR-1b: the splice takes the last text-bearing output too (`classify_inline_result`):
-        // `Some("2")`.
+        // OPR-1b (done, D9): both surfaces use `classify_inline_result`: the last text-bearing
+        // output wins, an error wins over everything, an image-only bundle is skipped.
         (
             "two text values: last versus first",
             vec![value_out("1"), display_out("2")],
             Some("2"),
-            Some("1"),
+            Some("2"),
         ),
-        // OPR-1b: the splice keeps the span source too (an error wins): `None`.
         (
             "an error then a value",
             vec![error_out("boom"), value_out("7")],
             None,
-            Some("7"),
+            None,
         ),
-        // OPR-1b: the splice presents the last text value: `Some("5")`.
         (
             "an image-only bundle then a text value",
             vec![png_only(), value_out("5")],
             Some("5"),
-            None,
+            Some("5"),
         ),
         ("an empty result", vec![], None, None),
     ];

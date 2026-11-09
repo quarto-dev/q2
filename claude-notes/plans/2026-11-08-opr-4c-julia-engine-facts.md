@@ -2,7 +2,7 @@
 title: 'OPR-4c: the runner pin moves and the Julia engine carries the capture facts through'
 date: 2026-11-08
 description: 'Conditional. Moves the pinned QuartoNotebookRunner revision to the one Gordon pushed and shows the three facts reach q2 in the cell metadata of the notebook the engine already returns, with output unchanged for every existing document. Per the OPR-4a spike no new request field and no ts_protocol.rs change are expected; this plan confirms that by running, and adds only what the confirmation shows is missing.'
-status: conditional
+status: ready
 depends-on: [opr-4b, opr-3]
 lane: B
 ---
@@ -18,7 +18,7 @@ lane: B
 Start only when this plan\'s `status` is `ready` on the integration branch **and** the line below is filled in by
 Gordon. If it is empty, stop and report.
 
-**Runner revision pushed by Gordon:** (empty)
+**Runner revision pushed by Gordon:** `ffe5dab72066ddd91bad480fc30f861749e305d4` (branch `q2/opr-expression-facts` on `gordonwoodhull/QuartoNotebookRunner.jl`, pushed 2026-11-09; three commits on `5e04284`).
 
 ## Branch and land (explicit)
 
