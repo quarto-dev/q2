@@ -84,6 +84,9 @@ Positron's cache. Output shown from it is marked as generated, so the viewer
 does not offer to edit it; see
 [Outputs from an imported record](../projects/preview.qmd#outputs-from-an-imported-record).
 
+To go the other way and give Positron a cache file built from a document's
+record, use [`q2 convert`](convert.qmd).
+
 ## Choosing where a preview gets records
 
 `q2 preview` and `q2 provide-hub` take `--records`, a list of the places to
@@ -145,8 +148,10 @@ list again.
   old one: the older version records the file again. Edits made in the
   `--ui editor` session are not written to your files unless you pass
   `--allow-edit`, so save anything you want to keep first.
-- A record from the knitr engine can be stored, but Positron cannot present
-  rendered knitr output yet.
+- A record from a knitr document can be exported with
+  [`q2 convert`](convert.qmd), and a preview reads Positron's outputs for its R
+  cells. Cells in other languages of a knitr document do not take outputs from
+  Positron's cache.
 - To run cells in a kernel other than Python, see
   [Running other languages with Jupyter kernels](jupyter-kernels.qmd), which
   also covers choosing a kernel and what happens when one is missing.
