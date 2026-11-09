@@ -118,6 +118,23 @@ fn the_dup_record_exports_all_three_cells_in_order() {
     round_trip(&record, "jupyter");
 }
 
+/// RFU-2: a real knitr record (rendered once through `q2`, five chunks) exports like a Python
+/// one, the mirror accepts it, and the `knitr` owner takes every output back.
+#[test]
+fn the_knitr_record_exports_all_five_chunks_and_round_trips() {
+    let record = fixture("knitr.ipynb");
+    let (file, cache) = export(&record);
+    assert_eq!(cache.cells, 5);
+    assert!(cache.skipped.is_empty());
+    assert!(cache.dropped.is_empty());
+    assert_eq!(positron_loader(&file), LoaderVerdict::Keeps);
+    let all = file.to_string();
+    // Gordon's Phase A verdict: `results: hide` and `asis` output stay in the file.
+    assert!(all.contains("hidden") && all.contains("**bold**"));
+    assert!(all.contains("image/png"));
+    round_trip(&record, "knitr");
+}
+
 /// The mirror deletes a file whose code cell lacks `outputs`; the export never produces one.
 /// The bad case is built by mutating the output, not the function.
 #[test]

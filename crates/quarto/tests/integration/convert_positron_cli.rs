@@ -133,6 +133,22 @@ fn exports_the_dot_quarto_copy_with_one_json_line_and_no_execution_notice() {
     assert_eq!(nb["metadata"]["quarto_source"], "file:///x/doc.qmd");
 }
 
+/// RFU-2: a knitr record (R is not needed: the record is checked in) exports, with the same
+/// report shape as a Python one.
+#[test]
+fn a_knitr_record_exports_with_cells_greater_than_zero() {
+    let record = std::fs::read_to_string(fixtures().join("knitr.ipynb")).unwrap();
+    let d = doc("---\ntitle: x\n---\n", Some(&record));
+    let out = run(&d, &[]);
+    assert_eq!(code(&out), OK, "{}", stderr(&out));
+    let v: serde_json::Value = serde_json::from_str(stdout(&out).trim_end()).unwrap();
+    assert_eq!(v["cells"], 5);
+    assert_eq!(v["skipped"].as_array().unwrap().len(), 0);
+    let nb: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&d.out).unwrap()).unwrap();
+    assert_eq!(nb["cells"].as_array().unwrap().len(), 5);
+}
+
 #[test]
 fn the_default_q2_engine_list_uses_the_copy_first() {
     let d = doc("---\ntitle: x\n---\n", Some(&basic_record()));
