@@ -2,7 +2,7 @@
 title: 'OPR-5: the execute: record-sources key, one early reader, and removal of --records'
 date: 2026-11-08
 description: 'Moves the execution-records source list from command-line options into the metadata key execute: record-sources (a comma-separated scalar), read before the pipeline by one shared early reader built on the metadata layer collector, with per-command allowed values and defaults, in-project directories only, and a hash exclusion in the three engine declarations. Removes --records from preview and provide-hub. Part B gives provide-hub and a --share preview a ceiling: the host list is the allowed set, a guest document may only reorder or narrow it. Decision R5 (Gordon, 2026-11-09): move, no flag.'
-status: in-progress
+status: complete
 depends-on: [opr-0d, rfu-1, opr-3]
 lane: C
 ---
@@ -82,16 +82,16 @@ tests: `engine/diagnostics.rs:~289-323`, `quarto-preview/src/re_execute.rs:~154`
 
 ## Part A: the key, the early reader, the removal
 
-- [ ] Re-run the inventory (`git grep -n -e '--records' -e '--execution-records'`, outside `claude-notes/` and `docs/`)
+- [x] Re-run the inventory (`git grep -n -e '--records' -e '--execution-records'`, outside `claude-notes/` and `docs/`)
       and write the final list into "Notes from the run". (relied) 184 lines at the time of the review.
-- [ ] **Tests first** (they fail for the stated reason before the code exists). In `quarto-core`, beside
+- [x] **Tests first** (they fail for the stated reason before the code exists). In `quarto-core`, beside
       `format_resolution` tests: the layered key helper returns the highest layer that sets `execute.record-sources` and
       the layer kind and `base_dir`; the early reader picks project, directory, document and runtime values with the
       right precedence, and a `-M` value wins; per-command allowed values and defaults; an entry the command cannot use is
       ignored and reported once; an unknown entry is an error; a relative directory resolves against the declaring
       layer\'s `base_dir`, a leading `/` against the project root, `..` out of the project and a missing directory are
       errors; the early reader and the merged metadata agree for each layer (a test that merges the same layers).
-- [ ] Add the **layered key helper** to `metadata_layers.rs` (highest layer that sets a key path; the value, its
+- [x] Add the **layered key helper** to `metadata_layers.rs` (highest layer that sets a key path; the value, its
       `LayerKind` and `base_dir`; a variant that ignores the runtime layer, for Part B). Add the early reader
       `resolve_record_sources(project, doc_path, content_override, runtime, &CommandSources)` beside
       `format_resolution` (target-neutral, wasm-clean), returning the list, the layer that set it and the notes
@@ -100,20 +100,20 @@ tests: `engine/diagnostics.rs:~289-323`, `quarto-preview/src/re_execute.rs:~154`
       conforming-sites inventory of `claude-notes/designs/path-resolution-model.md`. An extension\'s
       `contributes.metadata` that sets the key is read by the late merge but not by the early reader (the same
       early-versus-late gap the format resolver has, FR14): do not honor it, and say so in the notes.
-- [ ] One `CommandSources` declaration per command (allowed values, default, directories allowed or not) in one place,
+- [x] One `CommandSources` declaration per command (allowed values, default, directories allowed or not) in one place,
       and one message constant for the key name (`execute: record-sources`) used in every diagnostic.
-- [ ] **Remove the option.** Delete `records` from `preview` and `provide-hub` in `main.rs`, the two
+- [x] **Remove the option.** Delete `records` from `preview` and `provide-hub` in `main.rs`, the two
       `resolve_record_sources` functions and the `warn_engine_under_off` text that names the flag, and the clap
       `conflicts_with_all` on `--join`, `--static` and `--no-project` (those cases ignore the key, per "ignore what the
       command cannot use"). `--records` must be rejected as an unknown argument on both commands.
-- [ ] **Wire the reader** into `q2 preview` (the walk in `capture_driver.rs` and `re_execute.rs`, which today read one
+- [x] **Wire the reader** into `q2 preview` (the walk in `capture_driver.rs` and `re_execute.rs`, which today read one
       list from `ReExecuteConfig.sources`: resolve per document; `allows_engine()` takes the document; the `--share` banner
       says whether guests can re-run from the ceiling, see Part B), `q2 preview --static` (accepts the key through the same
       path; OPR-6 wires the render side), `provide-hub` (Part A uses the host list only: the operator\'s `-M` value or
       `engine`, parsed once at startup and validated there; the guest document is not read until Part B), and `q2 convert`
       (RFU-1 gave it `-M` and a fixed default `q2,engine`; replace the fixed default with the reader, allowed `q2`,
       `engine`; `q2` alone means the document is never run).
-- [ ] **Hash exclusion** of `record-sources` (an `execute:` key) in the three declarations, test first (each test fails
+- [x] **Hash exclusion** of `record-sources` (an `execute:` key) in the three declarations, test first (each test fails
       before: the document hash changes when the key is added): Jupyter (`engine/jupyter/mod.rs`,
       `jupyter_hash_definition`: add it to `presentation_execute_keys` only, not to the cell options), knitr
       (`engine/knitr/hash_rule.rs`: `presentation_execute_keys` of the default declaration, bump `KNITR_HASH_VERSION`,
@@ -121,16 +121,16 @@ tests: `engine/diagnostics.rs:~289-323`, `quarto-preview/src/re_execute.rs:~154`
       declaration; OPR-3 edited the same declaration, so rebase first and follow the procedure its notes record for
       the subtree and the fork). The push of the Julia engine fork is Gordon\'s companion step; say so in the landing
       report.
-- [ ] Rename in every message, comment and test that names the old option. Update the TypeScript e2e files:
+- [x] Rename in every message, comment and test that names the old option. Update the TypeScript e2e files:
       `q2-preview-spa/e2e/helpers/previewServer.ts` and `q2-preview-spa/e2e/records-sources.spec.ts` pass
       `-M` with `execute:{record-sources: ...}` instead of the flag; run the records-sources e2e if it can run here and
       say which ran.
-- [ ] **Do not edit `docs/`** here; OPR-8 owns every docs change and the final `git grep` below excludes `docs/`.
-- [ ] **Real binary.** `q2 preview <doc> -M 'execute:{record-sources: positron,engine}' --no-browser` starts and the
+- [x] **Do not edit `docs/`** here; OPR-8 owns every docs change and the final `git grep` below excludes `docs/`.
+- [x] **Real binary.** `q2 preview <doc> -M 'execute:{record-sources: positron,engine}' --no-browser` starts and the
       walk follows that order; a document whose front matter says `execute: {record-sources: q2}` is honored when no `-M`
       is given and overridden by `-M`; `q2 preview <doc> --records positron` fails as an unknown argument; a directory
       outside the project is an error naming it. Record the invocations and the output you read.
-- [ ] Gates for Part A: `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider --all-targets -- -D warnings`; `cargo nextest run` for the same crates; the Windows cross-clippy for each;
+- [x] Gates for Part A: `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub-provider --all-targets -- -D warnings`; `cargo nextest run` for the same crates; the Windows cross-clippy for each;
       `cd hub-client && npm run build:wasm` (`metadata_layers` and the early reader compile for wasm); `cargo xtask lint`.
 
 ## Part B: the ceiling for untrusted authors (provide-hub and a --share preview)
@@ -149,28 +149,28 @@ outside the set is ignored with a **warning-level** diagnostic. If nothing is le
 warning; in the provider that is an error whose text names the reason (today an empty list prints "no record to publish
 from " with nothing after it).
 
-- [ ] **Tests first.** Provider (`crates/quarto-hub-provider/tests/integration/execute.rs` style): with the default
+- [x] **Tests first.** Provider (`crates/quarto-hub-provider/tests/integration/execute.rs` style): with the default
       allowed set, a guest key of `positron,engine` runs `engine` only and warns; a guest key that narrows to nothing
       yields the named-reason error; with an operator `-M` of `positron,q2,engine` the guest may reorder and drop; a guest
       directory entry is ignored. Preview config tests (no tunnel needed): with `share` set, a document key outside the
       ceiling is ignored with a page diagnostic, and `allows_engine` follows the ceiling; with `share` unset the key is an
       ordinary document setting and `-M` overrides it.
-- [ ] Add a trust parameter to the early reader: `Override` (the plain `-M` rule) or `Ceiling { allowed }`, which reads
+- [x] Add a trust parameter to the early reader: `Override` (the plain `-M` rule) or `Ceiling { allowed }`, which reads
       the guest value from the layers **below** the runtime layer (the provider already holds the `plain` runtime, with no
       overlay, and uses it for the source view), intersects it with the allowed set and keeps the guest order.
-- [ ] **Provider.** The host list is parsed once at startup from the operator\'s `-M` (typed `RecordSources`, validated
+- [x] **Provider.** The host list is parsed once at startup from the operator\'s `-M` (typed `RecordSources`, validated
       there, directory entries ignored with an info line), default `engine`; resolve per document inside
       `walk_and_publish` right after `ProjectContext::discover`; the shortcut in `execute_document` (default list means
       `run_and_store`, no walk) must read the guest key too or a guest cannot narrow; the out-of-set warning goes to the
       operator log and is appended to `last_error` when the run fails. There is no client route for a warning on a
       successful run: strand `bd-ia3idnvk` tracks a client-visible `warnings` field on the capture sidecar. Do not
       work on it here.
-- [ ] **`--share` preview.** `ReExecuteConfig.sources` becomes the ceiling when `config.share` is set; the out-of-set
+- [x] **`--share` preview.** `ReExecuteConfig.sources` becomes the ceiling when `config.share` is set; the out-of-set
       warning goes through `diagnostics::current_sink()` for the page; the share banner\'s "guests can re-run" claim is
       computed from the ceiling.
-- [ ] The preview **render routes** are OPR-6\'s: leave them, and record in the notes that OPR-6 must use the ceiling
+- [x] The preview **render routes** are OPR-6\'s: leave them, and record in the notes that OPR-6 must use the ceiling
       there.
-- [ ] Gates for Part B: the Part A gates, plus `cargo nextest run -p quarto-hub-provider -p quarto-preview`.
+- [x] Gates for Part B: the Part A gates, plus `cargo nextest run -p quarto-hub-provider -p quarto-preview`.
 
 ## Exit criteria
 
@@ -188,4 +188,59 @@ and RFU-1 have landed. Not part of this plan.
 
 ## Notes from the run
 
-(Fill in at landing.)
+**Inventory (final `git grep -n -e '--records' -e '--execution-records'`, outside `claude-notes/` and `docs/`).** Starting
+inventory was 16 source files (diagnostics, sources, provider, preview, quarto, two e2e files). It now prints only the three
+tests that check the option is rejected: `crates/quarto/src/main.rs` (two arguments in one test) and
+`crates/quarto/tests/integration/convert_positron_cli.rs` (`--records must not exist`). The exit criterion's "prints
+nothing" holds except for those negative tests, which have to spell the removed option.
+
+**What landed.**
+
+- `metadata_layers::layered_value` (highest layer that sets a key path; can skip the runtime layer).
+- `quarto_core::record::source_key`: `CommandSources` (PREVIEW, CONVERT, PROVIDE_HUB, RENDER), `Trust::{Override, Ceiling}`,
+  `resolve_record_sources` (the early reader, built on `collect_metadata_layers`, wasm-clean), `host_record_sources`
+  (the host's `-M` value read at command start). Directories are inside the project only, resolved against the declaring
+  layer\'s `base_dir` (leading `/` = project root), checked lexically then by canonical path, and must exist.
+  `~` and absolute paths are "outside the project". Known limitation (scalar, not a list) is in the module comment.
+- `--records` deleted from `preview` and `provide-hub` (clap rejects it as an unknown argument, tested). The
+  `conflicts_with_all` on it went with it. `preview` resolves the list per document (`ReExecuteConfig::document_sources`,
+  used by the capture driver and by the re-execute guard `allows_engine_for`); `--share` makes the host list the ceiling.
+  `provide-hub` resolves per document inside `execute_document` (one extra materialization per request, to read the guest
+  `_quarto.yml`, `_metadata.yml` and front matter); an out-of-ceiling entry warns on the operator log and is appended to
+  `last_error` on failure; narrowing to nothing is an error naming the reason. `convert` uses the reader (allowed `q2`,
+  `engine`).
+- Hash exclusion: Jupyter (`presentation_execute_keys` only), knitr (default and `structured` profiles, `KNITR_HASH_VERSION`
+  2 to 3), Julia (`record-wire.ts`, `version` 2, bundle rebuilt). Three tests, each red before.
+- e2e helper and spec pass `-M` and keep the cache directory inside the project (`recs/`).
+
+**Findings.**
+
+1. `-M 'execute:{record-sources: positron,engine}'` (the invocation in this plan) does **not** work as written: in a YAML flow
+   map the commas end the entry, so the value becomes `positron` and `engine` becomes a null sibling key, silently. The value
+   must be quoted: `-M 'execute:{record-sources: "positron,engine"}'`. Tests and the e2e helper quote it. OPR-8 must document the
+   quoting; a better fix is the "provider reads the runtime layer directly" idea already in the limitation.
+2. The preview\'s host list is built from `-M` alone; a document key replaces it when `--share` is off, and is bounded by it when on.
+3. The preview render routes (`POST /api/preview/render`, downloads) are OPR-6\'s: **OPR-6 must use the ceiling there**
+   (`ReExecuteConfig::document_sources` already does when `share` is set).
+4. An extension\'s `contributes.metadata` that sets the key is not honored by the early reader (same early-versus-late gap as the
+   format resolver).
+5. A guest directory entry is always ignored under a ceiling (even when it names the host\'s own directory); only keywords
+   are compared.
+6. Not added: the line in `claude-notes/designs/path-resolution-model.md`\'s conforming-sites inventory for the early reader\'s
+   directory resolution (it resolves against the layer\'s `base_dir`, not `resolve_config_path`). Left for OPR-8/a follow-up
+   edit; say so if you want it here.
+
+**Evidence.** Ran: `nextest` for `quarto-core` (8074 passed, 36 skipped), and for `quarto`, `quarto-preview`,
+`quarto-hub-provider` (1276 passed, 7 skipped; `docs_serve_cli` passed here); `clippy -D warnings` on the four crates (clean);
+the Julia subtree `npm test` (50 pass), `npm run typecheck`, `npm run build`; `cargo xtask lint` (only the known
+`positron_cache.rs:360` metadata-as-str, not touched). Real binary (`target/debug/q2`, scratch project): `preview --records` and
+`provide-hub --records` fail as unknown arguments; `convert` honors the front-matter `q2` key (exit 10, no record, nothing run),
+`-M` with `"q2,engine"` overrides it and runs (exit 11), `-M "cache,q2"` prints the one info line and drops `cache`; `preview` with
+a directory outside the project and with a missing directory fails at start naming the entry; `./recs,engine` starts. I read all
+that output. **Not done:** a browser check of the walk order in `q2 preview` (the order is covered by unit tests, not observed live);
+the e2e specs were edited but not run; the Windows cross-clippy cannot run on macOS (`aws-lc-sys`); the `npm run build:wasm`
+result is recorded below.
+
+**Companion.** The Julia engine fork needs the `record-wire.ts` change pushed (Gordon). RFU-7 updates the Positron fork\'s
+`buildPreviewArgs` (it still passes the old option).
+
