@@ -1317,6 +1317,31 @@ mod tests {
             },
         );
 
+        // Name the step that fails: the entry must be readable under the key, and `record_one`
+        // (which asks for language ownership too) must derive the same key.
+        let key = crate::cache::compute_key(&input_qmd);
+        assert!(
+            crate::cache::lookup_cached_run(&cache_dir, &key).is_some(),
+            "stored entry unreadable under key {key} in {}",
+            cache_dir.display()
+        );
+        let with_ownership = quarto_core::engine::preview_record::compute_source_inputs_with(
+            &abs,
+            &project,
+            runtime.clone(),
+            quarto_core::engine::preview_record::SourceInputsOptions {
+                ownership: true,
+                registry: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            crate::cache::compute_key(&with_ownership.input_qmd),
+            key,
+            "the key must not depend on the ownership option"
+        );
+
         let wrote = record_one(
             &abs,
             "doc.qmd",
