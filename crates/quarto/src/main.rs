@@ -67,34 +67,6 @@ impl From<ColorArg> for quarto_util::output_style::ColorFlag {
 }
 
 #[derive(Subcommand)]
-enum RecordCommands {
-    /// Export a document's execution record as a Positron output-cache notebook.
-    ///
-    /// Prints one JSON line on stdout (cells exported, units skipped, representations
-    /// dropped). Exit codes: 0 success; 2 usage error; 10 no record and execution is
-    /// forbidden; 11 no exportable cells; 12 unreadable or invalid record; 13 engine
-    /// run failed.
-    ExportPositron {
-        /// The document to export.
-        doc: PathBuf,
-
-        /// Write the Positron cache file here.
-        #[arg(long)]
-        out: PathBuf,
-
-        /// Where to get the record: `q2` (the .quarto copy) and/or `engine` (run the
-        /// document). Default `q2,engine`. No other source is accepted.
-        #[arg(long, value_delimiter = ',', value_name = "SOURCES")]
-        records: Vec<quarto_core::record::RecordSource>,
-
-        /// Written to the cache file's `quarto_source` as given (default: the
-        /// document's absolute path).
-        #[arg(long, value_name = "URI")]
-        source_uri: Option<String>,
-    },
-}
-
-#[derive(Subcommand)]
 enum Commands {
     /// Render files or projects to various document types
     Render {
@@ -472,12 +444,6 @@ enum Commands {
         profile: Vec<String>,
     },
 
-    /// Work with execution records
-    Record {
-        #[command(subcommand)]
-        command: RecordCommands,
-    },
-
     /// Serve a Shiny interactive document
     Serve {
         /// Input file to serve
@@ -582,14 +548,49 @@ enum Commands {
         target: Vec<String>,
     },
 
-    /// Convert documents to alternate representations
+    /// Convert a document to another representation.
+    ///
+    /// The output format is always explicit (`--to`); the input format is inferred
+    /// from the extension (`.qmd` and `.md` are qmd) unless `--from` is given.
+    /// Supported: `--from qmd --to positron-ipynb`, a Positron output-cache
+    /// notebook built from the document's execution record. `--to ipynb` and
+    /// `--from ipynb` are reserved and not implemented yet.
+    ///
+    /// For `positron-ipynb`: `-o <path>` is required (`-o -` writes the notebook
+    /// to stdout and the JSON report to stderr; otherwise the report is one JSON
+    /// line on stdout, and an existing file is overwritten). The record is the
+    /// `.quarto` copy if there is one, else the document is RUN to produce one,
+    /// so this command may execute code. Exit codes: 0 success; 2 usage error; 10
+    /// no record and execution is forbidden; 11 no exportable cells; 12 unreadable
+    /// or invalid record; 13 engine run failed.
     Convert {
         /// Input file to convert
-        input: String,
+        input: PathBuf,
 
-        /// Output format
+        /// Output format: `positron-ipynb`
         #[arg(long)]
-        output: Option<String>,
+        to: String,
+
+        /// Input format (default: from the extension): `qmd`
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Where to write the result (`-` for stdout). Required for
+        /// `positron-ipynb`.
+        #[arg(short = 'o', long, value_name = "PATH")]
+        output: Option<PathBuf>,
+
+        /// Metadata value (KEY:VALUE, or KEY=VALUE; repeatable), as
+        /// `q2 render -M`, for the document run that produces a record. The value
+        /// is parsed as YAML; the first `=` or `:` separates key and value, and
+        /// dotted keys are not expanded.
+        #[arg(short = 'M', long)]
+        metadata: Vec<String>,
+
+        /// `positron-ipynb` only: written to the notebook's `quarto_source` as given
+        /// (default: the document's absolute path, with forward slashes).
+        #[arg(long, value_name = "URI")]
+        source_uri: Option<String>,
     },
 
     /// Run the version of Pandoc embedded within Quarto
@@ -2076,23 +2077,6 @@ fn run() -> Result<()> {
                 })
             }
         }
-        Commands::Record {
-            command:
-                RecordCommands::ExportPositron {
-                    doc,
-                    out,
-                    records,
-                    source_uri,
-                },
-        } => {
-            let code = commands::record::export_positron(commands::record::ExportPositronArgs {
-                doc,
-                out,
-                records,
-                source_uri,
-            });
-            std::process::exit(code)
-        }
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create {
             type_,
@@ -2138,7 +2122,24 @@ fn run() -> Result<()> {
         }),
         Commands::Update { .. } => commands::update::execute(),
         Commands::Remove { .. } => commands::remove::execute(),
-        Commands::Convert { .. } => commands::convert::execute(),
+        Commands::Convert {
+            input,
+            to,
+            from,
+            output,
+            metadata,
+            source_uri,
+        } => {
+            let code = commands::convert::execute(commands::convert::ConvertArgs {
+                input,
+                from,
+                to,
+                output,
+                metadata,
+                source_uri,
+            });
+            std::process::exit(code)
+        }
         Commands::Pandoc { .. } => commands::pandoc::execute(),
         Commands::Typst { .. } => commands::typst::execute(),
         Commands::Run { .. } => commands::run::execute(),

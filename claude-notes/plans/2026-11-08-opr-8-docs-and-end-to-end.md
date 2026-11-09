@@ -68,6 +68,10 @@ it for each page you edit.
   shows a stale record while render treats it as not supplied; `preview.engine` is preview-only.
 - The render options page (`docs/guides/projects/render-options.qmd`): there is no new flag; point to `execute: record-sources` and the `-M` spelling.
 - Search for any other page that mentions `--records` or `--execution-records`: `git grep -n -e '--records' -e '--execution-records' docs/`; the result must be empty.
+- If OPR-7c/7d changed Julia figure file names or the figure div classes, say so in the Julia engine page (user links to
+  `<stem>_files/figure-html/cell-N-output-M.png` change); and that `fig-format` does not change what Julia writes
+  (OPR-0c, ran, same on Quarto 1). Do not document the unresolved subfigure-group references as intended behavior; link
+  `bd-gbaykhth` in the notes if still open.
 - A knitr page or note about caching, only if a page describes it today (`git grep -n -i 'cache' docs/guides`);
   say that chunks with `cache: true` keep knitr\'s cache and are not part of the execution record.
 

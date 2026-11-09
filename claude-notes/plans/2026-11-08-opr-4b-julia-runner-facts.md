@@ -2,7 +2,7 @@
 title: 'OPR-4b: the Julia runner reports expression starts, anchors and output kinds'
 date: 2026-11-08
 description: 'Conditional on Gordon''s go. The OPR-4a spike showed all three facts are feasible with one runner change, gated on the existing emitUnits option, and found that the runner drops all stderr under warning: false. This plan implements both in a local branch of the QuartoNotebookRunner fork. The work happens in another repository; q2 lands only a note. Gordon pushes the runner branch and records the pinned revision, which unblocks OPR-4c.'
-status: in-progress
+status: complete
 depends-on: [opr-4a]
 lane: B
 ---
@@ -80,31 +80,31 @@ prefers the other fix (remove `warning` from Julia\'s display-only list), he say
 
 ## Checklist (every box is `[unattended]` unless marked)
 
-- [ ] Create a worktree of the runner repo on a new branch `q2/opr-expression-facts` from the revision pinned today
+- [x] Create a worktree of the runner repo on a new branch `q2/opr-expression-facts` from the revision pinned today
       in the engine (`resources/extension-subtrees/julia-engine/_extensions/julia-engine/Project.toml`; the spike read it
       as `5e04284`, an ancestor of the checkout\'s `5aa4bd7`). Never modify the runner checkout\'s own branch. Do not push.
-- [ ] **Tests first** in the runner\'s `test/testsets/` (see its README), failing for the stated reason: with
+- [x] **Tests first** in the runner\'s `test/testsets/` (see its README), failing for the stated reason: with
       `emitUnits` off, results are byte-identical to today on the existing testsets; with it on, the 12-expression
       demonstration cell from the spike note gives `expression_starts=[0..11]`,
       `output_expressions=[1,4,8,9,10,11,12]` and `output_kinds=[null,"warning",null,"message",null,null,null]`; a cell
       with `#|` options, a comment and multi-line expressions gives starts relative to the code after the options
       (the spike\'s case: `[1,8,10,11,12,13,14,16]` against 17 lines); a subprocess write and a late `@async` print
       are attributed to the running expression; `warning: false` with `emitUnits` keeps `@info` and raw stderr.
-- [ ] Implement, starting from the prototype diff (it touches `InlineDisplay.jl`, `render_io.jl`, `render_code.jl`,
+- [x] Implement, starting from the prototype diff (it touches `InlineDisplay.jl`, `render_io.jl`, `render_code.jl`,
       `render.jl`, `protocol.jl`, `precompile.jl`, `evaluation.jl`). **Gate stream-run splitting on `emitUnits`**: the
       prototype splits unconditionally.
-- [ ] **Update the runner tests the prototype breaks.** The prototype changes the `streams` tuple shape, so
+- [x] **Update the runner tests the prototype breaks.** The prototype changes the `streams` tuple shape, so
       `QuartoNotebookWorker/test/streams_test.jl` and `protocol_test.jl` must change; the spike did not run the runner\'s
       suite. Run the **full** suite and record the result. Do not weaken an assertion: change a shape only where
       the wire changed on purpose, and say which in the note.
-- [ ] A figure: add one Plots.jl (or other real figure) cell to the tests; the spike used only a custom `display`.
-- [ ] Re-time the 1200-expression cell (spike: median 4.22 s baseline, 4.10 s prototype) with `emitUnits` on and off.
-- [ ] Commit in the runner worktree with clear messages. Write the list of commits (hashes and subjects) into
+- [x] A figure: add one Plots.jl (or other real figure) cell to the tests; the spike used only a custom `display`.
+- [x] Re-time the 1200-expression cell (spike: median 4.22 s baseline, 4.10 s prototype) with `emitUnits` on and off.
+- [x] Commit in the runner worktree with clear messages. Write the list of commits (hashes and subjects) into
       "Notes from the run", and put a `git format-patch` of them under the note\'s directory in this repository if it
       is small (under 200 lines); otherwise name the runner branch only.
-- [ ] Land in q2 **only** a note `claude-notes/research/2026-11-xx-opr-julia-runner-facts.md` (what changed, how to
+- [x] Land in q2 **only** a note `claude-notes/research/2026-11-xx-opr-julia-runner-facts.md` (what changed, how to
       reproduce, the test results) plus the plan\'s own status change. No q2 product code changes in this plan.
-- [ ] Render-check the note (`target/debug/q2 render --strict <file>`).
+- [x] Render-check the note (`target/debug/q2 render --strict <file>`).
 
 ## Exit criteria
 
@@ -115,4 +115,24 @@ prefers the other fix (remove `warning` from Julia\'s display-only list), he say
 
 ## Notes from the run
 
-(Fill in at landing.)
+Full record: [runner facts note](../research/2026-11-09-opr-julia-runner-facts.md).
+
+- **Runner branch:** `q2/opr-expression-facts` in the runner repository, from `5e04284`; commits `1551a78` (tests, red),
+  `b3724f6` (feature), `ffe5dab` (formatting). Not pushed. The patch series is about 1100 lines, so it is not copied here.
+- **Gate:** a `trace` flag on the worker `RenderRequest`, set when the notebook runs with `emitUnits`; stream-run splitting, the
+  `KindLogger` and the stderr keep under `warning: false` all depend on it. Without `emitUnits` the output is unchanged (a test
+  pins it, including unsplit stream runs).
+- **Tests:** new `expression_facts_test.jl` (27 assertions), two items in the worker `streams_test.jl`, a Plots.jl figure item in
+  `plots_test.jl`. Existing `streams`-tuple expectations changed only for the two added fields; `protocol_test.jl` assertions
+  grew stronger.
+- **Results:** main suite 1152 pass, 1 fail, 4 error of 1157; all five are `julia +channel` items that a plain `julia` symlink cannot run
+  (inferred from the messages, not re-run on the base revision). Worker suite 248/248 in a reduced environment (CairoMakie, PlotlyBase,
+  RemoteREPL, SymPy, PythonCall, RCall items skipped; the worker\'s own `Pkg.test` cannot resolve offline).
+- **Timing:** 1200-output cell, medians 9.28 s with `emitUnits` and 9.47 s without; within noise. Absolute times are not
+  comparable with the spike\'s (different cell, shared machine).
+- **Surprises:** (1) the plan\'s expected starts for the options cell counted a blank line the worker does not count; the worker
+  counts from the first line of code after `#|` options and blank lines, which matches the spike\'s case. (2) A throwing cell
+  records starts only for expressions that ran. Both are now pinned.
+- **Not done:** a q2 render through the changed runner (OPR-4c); the five juliaup-channel items on the base revision; the
+  worker items listed above; a push.
+- **Gordon, still owed:** push the runner branch, write the pushed revision into OPR-4c, and set OPR-4c to `ready`.

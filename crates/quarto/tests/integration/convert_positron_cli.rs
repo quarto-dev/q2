@@ -1,4 +1,5 @@
-//! RIU-5 Phase B2: `q2 record export-positron`, driven through the real binary.
+//! RIU-5 Phase B2 / RFU-1: `q2 convert --to positron-ipynb`, driven through the real binary.
+//! (Moved from the old `record` CLI test; `q2 record` is gone.)
 //!
 //! The contract is in `claude-notes/plans/2026-11-02-riu-05-export-for-positron.md`
 //! (Phase B2). The exit-code table below is the single list the plan asks for; the
@@ -23,7 +24,6 @@ const EXIT_CODES: [(i32, &str); 6] = [
 
 const OK: i32 = EXIT_CODES[0].0;
 const USAGE: i32 = EXIT_CODES[1].0;
-const NO_RECORD: i32 = EXIT_CODES[2].0;
 const NO_CELLS: i32 = EXIT_CODES[3].0;
 const BAD_RECORD: i32 = EXIT_CODES[4].0;
 
@@ -78,9 +78,10 @@ fn doc(qmd_text: &str, record: Option<&str>) -> Doc {
 fn run(d: &Doc, extra: &[&str]) -> Output {
     Command::new(Q2_BIN)
         .current_dir(&d.dir)
-        .args(["record", "export-positron"])
+        .args(["convert"])
         .arg(&d.qmd)
-        .arg("--out")
+        .args(["--to", "positron-ipynb"])
+        .arg("-o")
         .arg(&d.out)
         .args(extra)
         .output()
@@ -101,48 +102,6 @@ fn exit_code_table_is_stable_and_unique() {
     sorted.dedup();
     assert_eq!(sorted.len(), codes.len());
     assert_eq!(codes, vec![0, 2, 10, 11, 12, 13]);
-}
-
-#[test]
-fn records_cache_positron_and_directory_exit_2_naming_the_two_valid_names() {
-    let d = doc(PROSE_ONLY, None);
-    for bad in [
-        "cache",
-        "positron",
-        "q2,positron",
-        "/some/dir",
-        "engine,cache",
-    ] {
-        let out = run(&d, &["--records", bad]);
-        assert_eq!(code(&out), USAGE, "--records {bad}");
-        let err = stderr(&out);
-        assert!(
-            err.contains("q2") && err.contains("engine"),
-            "message must name the valid names for {bad}: {err}"
-        );
-        assert!(stdout(&out).is_empty(), "no stdout on usage error");
-        assert!(!d.out.exists());
-    }
-}
-
-#[test]
-fn unknown_records_entry_is_a_usage_error() {
-    let d = doc(PROSE_ONLY, None);
-    let out = run(&d, &["--records", "bogus"]);
-    assert_eq!(code(&out), USAGE);
-}
-
-#[test]
-fn q2_only_with_no_record_exits_10_and_runs_nothing() {
-    let d = doc(PROSE_ONLY, None);
-    let out = run(&d, &["--records", "q2"]);
-    assert_eq!(code(&out), NO_RECORD, "{}", stderr(&out));
-    assert!(stdout(&out).is_empty());
-    assert!(!d.out.exists());
-    assert!(
-        !stderr(&out).contains("running the document to produce one"),
-        "must not announce execution it will not do"
-    );
 }
 
 #[test]
@@ -175,9 +134,9 @@ fn exports_the_dot_quarto_copy_with_one_json_line_and_no_execution_notice() {
 }
 
 #[test]
-fn explicit_q2_engine_list_uses_the_copy_first() {
+fn the_default_q2_engine_list_uses_the_copy_first() {
     let d = doc("---\ntitle: x\n---\n", Some(&basic_record()));
-    let out = run(&d, &["--records", "q2,engine"]);
+    let out = run(&d, &[]);
     assert_eq!(code(&out), OK, "{}", stderr(&out));
 }
 
@@ -201,7 +160,7 @@ fn a_record_with_a_cell_missing_its_hash_exits_12() {
         }
     }
     let d = doc(PROSE_ONLY, Some(&nb.to_string()));
-    let out = run(&d, &["--records", "q2"]);
+    let out = run(&d, &[]);
     assert_eq!(code(&out), BAD_RECORD, "{}", stderr(&out));
 }
 
@@ -210,7 +169,7 @@ fn a_record_with_no_exportable_cells_exits_11_but_still_prints_the_json_line() {
     let mut nb: serde_json::Value = serde_json::from_str(&basic_record()).unwrap();
     nb["cells"] = serde_json::json!([]);
     let d = doc(PROSE_ONLY, Some(&nb.to_string()));
-    let out = run(&d, &["--records", "q2"]);
+    let out = run(&d, &[]);
     assert_eq!(code(&out), NO_CELLS, "{}", stderr(&out));
     let so = stdout(&out);
     assert_eq!(so.lines().count(), 1);
@@ -235,14 +194,6 @@ fn no_record_falls_back_to_the_engine_with_one_stderr_line_first() {
         "exactly one notice: {err}"
     );
     assert_eq!(code(&out), NO_CELLS, "{err}");
-}
-
-#[test]
-fn engine_only_ignores_an_existing_dot_quarto_copy() {
-    // `--records engine` never reads the copy: a corrupt copy is not an error.
-    let d = doc(PROSE_ONLY, Some("this is not json"));
-    let out = run(&d, &["--records", "engine"]);
-    assert_ne!(code(&out), BAD_RECORD, "{}", stderr(&out));
 }
 
 /// The engine tests need a Python kernel; skip (loudly) when `python3` has no ipykernel.
@@ -289,4 +240,234 @@ fn runs_the_engine_when_there_is_no_record_and_the_document_has_no_record_true()
     let v: serde_json::Value = serde_json::from_str(stdout(&out).trim_end()).unwrap();
     assert_eq!(v["cells"], 2);
     assert!(d.out.exists());
+}
+
+// ---- RFU-1: the `convert` surface -------------------------------------------------
+
+fn raw(args: &[&str], cwd: &Path) -> Output {
+    Command::new(Q2_BIN)
+        .current_dir(cwd)
+        .arg("convert")
+        .args(args)
+        .output()
+        .expect("spawn q2")
+}
+
+#[test]
+fn missing_to_is_a_usage_error() {
+    let d = doc(PROSE_ONLY, None);
+    let out = raw(
+        &[d.qmd.to_str().unwrap(), "-o", d.out.to_str().unwrap()],
+        &d.dir,
+    );
+    assert_eq!(code(&out), USAGE, "{}", stderr(&out));
+    assert!(stderr(&out).contains("--to"), "{}", stderr(&out));
+    assert!(stdout(&out).is_empty());
+}
+
+#[test]
+fn an_unsupported_target_lists_the_supported_pairs() {
+    let d = doc(PROSE_ONLY, None);
+    for to in ["ipynb", "docx"] {
+        let out = raw(
+            &[
+                d.qmd.to_str().unwrap(),
+                "--to",
+                to,
+                "-o",
+                d.out.to_str().unwrap(),
+            ],
+            &d.dir,
+        );
+        assert_eq!(code(&out), USAGE, "--to {to}: {}", stderr(&out));
+        let err = stderr(&out);
+        assert!(
+            err.contains("qmd") && err.contains("positron-ipynb"),
+            "{err}"
+        );
+        assert!(!d.out.exists());
+    }
+}
+
+#[test]
+fn from_is_inferred_from_the_extension_and_an_unknown_extension_errors() {
+    let d = doc(PROSE_ONLY, None);
+    let txt = d.dir.join("doc.txt");
+    std::fs::write(&txt, PROSE_ONLY).unwrap();
+    let out = raw(
+        &[
+            txt.to_str().unwrap(),
+            "--to",
+            "positron-ipynb",
+            "-o",
+            d.out.to_str().unwrap(),
+        ],
+        &d.dir,
+    );
+    assert_eq!(code(&out), USAGE, "{}", stderr(&out));
+    assert!(stderr(&out).contains("--from"), "{}", stderr(&out));
+    // `.md` is qmd, and an explicit `--from qmd` works on any extension.
+    let out = raw(
+        &[
+            txt.to_str().unwrap(),
+            "--from",
+            "qmd",
+            "--to",
+            "positron-ipynb",
+            "-o",
+            d.out.to_str().unwrap(),
+        ],
+        &d.dir,
+    );
+    assert_ne!(code(&out), USAGE, "{}", stderr(&out));
+    let md = d.dir.join("doc.md");
+    std::fs::write(&md, PROSE_ONLY).unwrap();
+    let out = raw(
+        &[
+            md.to_str().unwrap(),
+            "--to",
+            "positron-ipynb",
+            "-o",
+            d.out.to_str().unwrap(),
+        ],
+        &d.dir,
+    );
+    assert_ne!(code(&out), USAGE, "{}", stderr(&out));
+}
+
+#[test]
+fn an_ipynb_input_is_reserved_not_implemented() {
+    let d = doc(PROSE_ONLY, None);
+    let nb = d.dir.join("in.ipynb");
+    std::fs::write(&nb, "{}").unwrap();
+    let out = raw(
+        &[
+            nb.to_str().unwrap(),
+            "--to",
+            "positron-ipynb",
+            "-o",
+            d.out.to_str().unwrap(),
+        ],
+        &d.dir,
+    );
+    assert_eq!(code(&out), USAGE, "{}", stderr(&out));
+    assert!(stderr(&out).contains("qmd"), "{}", stderr(&out));
+}
+
+#[test]
+fn positron_ipynb_requires_an_output_path() {
+    let d = doc(PROSE_ONLY, None);
+    let out = raw(&[d.qmd.to_str().unwrap(), "--to", "positron-ipynb"], &d.dir);
+    assert_eq!(code(&out), USAGE, "{}", stderr(&out));
+    assert!(stderr(&out).contains("-o"), "{}", stderr(&out));
+}
+
+#[test]
+fn records_is_gone_and_source_uri_is_only_for_positron_ipynb() {
+    let d = doc(PROSE_ONLY, None);
+    let out = run(&d, &["--records", "q2"]);
+    assert_eq!(
+        code(&out),
+        USAGE,
+        "--records must not exist: {}",
+        stderr(&out)
+    );
+    let out = raw(
+        &[
+            d.qmd.to_str().unwrap(),
+            "--to",
+            "ipynb",
+            "-o",
+            d.out.to_str().unwrap(),
+            "--source-uri",
+            "file:///x",
+        ],
+        &d.dir,
+    );
+    assert_eq!(code(&out), USAGE, "{}", stderr(&out));
+}
+
+#[test]
+fn q2_record_is_gone() {
+    let out = Command::new(Q2_BIN).args(["record"]).output().unwrap();
+    assert_eq!(code(&out), USAGE);
+}
+
+#[test]
+fn a_malformed_metadata_flag_is_a_usage_error_and_a_good_one_is_accepted() {
+    let d = doc("---\ntitle: x\n---\n", Some(&basic_record()));
+    let out = run(&d, &["-M", "no-separator"]);
+    assert_eq!(code(&out), USAGE, "{}", stderr(&out));
+    let out = run(&d, &["-M", "execute:{error: true}"]);
+    assert_eq!(code(&out), OK, "{}", stderr(&out));
+}
+
+#[test]
+fn dash_o_dash_writes_the_notebook_to_stdout_and_the_report_to_stderr() {
+    let d = doc("---\ntitle: x\n---\n", Some(&basic_record()));
+    let out = raw(
+        &[
+            d.qmd.to_str().unwrap(),
+            "--to",
+            "positron-ipynb",
+            "-o",
+            "-",
+            "--source-uri",
+            "file:///x/doc.qmd",
+        ],
+        &d.dir,
+    );
+    assert_eq!(code(&out), OK, "{}", stderr(&out));
+    let nb: serde_json::Value =
+        serde_json::from_str(&stdout(&out)).expect("stdout is the notebook");
+    assert_eq!(nb["nbformat"], 4);
+    let report = stderr(&out);
+    let line = report
+        .lines()
+        .find(|l| l.starts_with('{'))
+        .expect("JSON report on stderr");
+    let v: serde_json::Value = serde_json::from_str(line).unwrap();
+    assert_eq!(v["cells"], 4);
+    assert!(!d.out.exists());
+}
+
+#[test]
+fn an_existing_output_is_overwritten_with_an_info_line_naming_it() {
+    let d = doc("---\ntitle: x\n---\n", Some(&basic_record()));
+    std::fs::write(&d.out, "old").unwrap();
+    let out = run(&d, &[]);
+    assert_eq!(code(&out), OK, "{}", stderr(&out));
+    assert!(stderr(&out).contains("overwriting"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("export.ipynb"), "{}", stderr(&out));
+    assert!(
+        std::fs::read_to_string(&d.out)
+            .unwrap()
+            .contains("nbformat")
+    );
+}
+
+#[test]
+fn the_source_uri_default_is_the_documents_path_with_forward_slashes() {
+    let d = doc("---\ntitle: x\n---\n", Some(&basic_record()));
+    let out = run(&d, &[]);
+    assert_eq!(code(&out), OK, "{}", stderr(&out));
+    let nb: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&d.out).unwrap()).unwrap();
+    let expected = quarto_util::to_forward_slashes(&d.dir.join("doc.qmd"));
+    assert_eq!(nb["metadata"]["quarto_source"], expected.as_str());
+}
+
+#[test]
+fn a_metadata_overlay_reaches_the_engine_run() {
+    if !python_kernel_available() {
+        return;
+    }
+    let d = doc(
+        "---\ntitle: x\njupyter: python3\n---\n\n```{python}\nraise ValueError(\"boom\")\n```\n",
+        None,
+    );
+    let out = run(&d, &[]);
+    assert_eq!(code(&out), ENGINE_FAILED, "{}", stderr(&out));
+    let out = run(&d, &["-M", "execute:{error: true}"]);
+    assert_eq!(code(&out), OK, "-M must change the run: {}", stderr(&out));
 }

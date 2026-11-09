@@ -52,7 +52,8 @@ capture splice and is not part of this epic.
   layer it; if it carries none (Jupyter, Julia, imported, fallback), the presenter layers it at present time.
 - **D4. Julia is in scope; the OPR-4a spike (2026-11-09) found it feasible.** Starts, anchors and kinds come from one runner change (OPR-4b), ride in the cell `metadata.quarto` under `emitUnits`, and are mapped to the knitr keys in OPR-4d. Julia shows only the last value, so it never interleaves like knitr. Jupyter positions are a follow-up, not part of this epic.
 - **D5. Plain render is in scope.** A cached knitr chunk keeps knitr\'s cache and uses the markdown fallback with no
-  record, quietly. The LaTeX family, `pptx`, `context` and unknown knitr targets stay on the engine route, quietly
+  structured record, quietly (OPR-0c, 2026-11-09: the record must not simply lack the chunk, because the unit count check drops
+  the whole record; OPR-7b excludes cached units from the expected count instead). The LaTeX family, `pptx`, `context` and unknown knitr targets stay on the engine route, quietly
   (strands `bd-4y5scdhp`, `bd-lo1cs7u5`, `bd-ka76vcrp` track widening; LaTeX notes live in the LaTeX plan on
   `explore/pandoc-hybrid-latex`). Decided 2026-11-09 (Gordon): the retained knitr fallback survives for plain render, and there is **no opt-out control** (recorded in OPR-7d).
 - **D6. `render` reads `execute: record-sources`** (updated by R5, 2026-11-09; there is no render option). Read only
@@ -103,6 +104,18 @@ verified. Line numbers are for `94906556f`; each plan says (read), (ran) or (rel
   (`bd-gbaykhth`) and numbered "Figure 3, 1, 2" on both knitr routes against Quarto 1\'s "Figure 1, 1 (a), 1 (b)"
   (`bd-au5gts6e`); the plain and recorded knitr routes were byte-identical for it (ran, one document).
 - A tiny Julia document differs between routes: `id="cell-1"` and `data-quarto` on the wrapper and figure names (relied).
+  **Updated 2026-11-09 by the OPR-0c follow-up ([note](../research/2026-11-09-opr-measurements.md), ran):** for a cell that
+  emits a bare PNG (Plots emits an inline `text/html` bundle instead, so its figures are inline on both routes), plain
+  and recorded Julia name the files differently (plain `cell-2-output-1.png`, recorded `cell-1-output-1.png` for the first
+  code cell after a prose block; Quarto 1 names the unlabeled one `cell-2-output-1.png` like plain and a labeled one by its
+  label, `fig-b-output-1.png`, which neither q2 route does), and the recorded route drops the generic `cell-output` class
+  from the figure's output div. Nothing in `crates/`, `ts-packages/`, `hub-client/src` or `resources/` reads `id="cell-N"`,
+  `data-quarto` or `data-execution_count` (grep, read). `fig-format: svg` or `pdf` changes nothing on either q2 route or
+  Quarto 1 for these cells (ran).
+- **Correction, 2026-11-09 (ran):** a stored `.ipynb` with a labeled figure, a `fig-subcap` group and a labeled table
+  resolves the single figure and the table on q2; only the group (`@fig-two`, `-1`, `-2`) is unresolved
+  (`bd-gbaykhth`). Julia on the recorded route fails the same way; Julia on the plain route resolves the group with wrong
+  numbers. So the flip moves Julia group references from wrong to unresolved.
 
 ## Plans, lanes and dependencies
 
@@ -184,7 +197,7 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 |---|---|---|
 | OPR-0d, R5 | **decided 2026-11-09: metadata only** | recorded in OPR-5 (key, early reader, hash exclusions in the Jupyter, knitr and Julia declarations, ceiling), OPR-6, RFU-1 and the docs plans |
 | OPR-0c, cost | expensive | OPR-7a grows into a new seam (its own plan) |
-| OPR-0c, cache spike | a mixed document is wrong | OPR-7b needs Gordon (blocked) and may grow |
+| OPR-0c, cache spike | a mixed document is wrong | OPR-7b needs Gordon (blocked) and may grow. **Came back 2026-11-09:** the document is right but only through whole-document fallback; the plan\'s design was sharpened (cached units excluded from the expected count; hook behavior on a hit measured), no Gordon decision needed |
 | OPR-7c, parity | blockers beyond the known Julia three | fix plans appear before OPR-7d |
 | OPR-2, audit | a capture gap in an engine | a capture-side plan, coupled to lane B |
 | OPR-0a, loop divergence | more than the table | OPR-1a or OPR-1b splits again |

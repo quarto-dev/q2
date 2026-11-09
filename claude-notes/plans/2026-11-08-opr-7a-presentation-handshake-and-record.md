@@ -11,7 +11,7 @@ lane: C
 **Protocol:** [agent protocol](2026-11-08-opr-agent-protocol.md) (read it first).
 **Branch:** `opr/7a-presentation-handshake` · **Lane C** (`workspace-5`) · **Blocks:** OPR-7d.
 **Needs:** R 4.3 with knitr and Julia 1.12 for checks (they skip when absent); read OPR-0c\'s note if it has landed
-(`claude-notes/research/`, cost measurements).
+(`claude-notes/research/`, cost measurements: [OPR-0c note](../research/2026-11-09-opr-measurements.md) section 3).
 
 ## Branch and land (explicit)
 
@@ -53,6 +53,22 @@ explicit record request, caused the capture (change the diagnostic\'s condition,
 is set (the pipeline config) is OPR-7d\'s work; **there is no user-facing opt-out** (Gordon, 2026-11-09, recorded in OPR-7d),
 so the flag stays internal; here only the mechanism and its tests exist.
 
+## Findings from OPR-0c that shape this plan (2026-11-09)
+
+- **Cost** (ran; debug and release builds are both in the note, section 3; release is the baseline, since debug
+  exaggerated it: knitr +0.9 s, +18% at 100 cells, no distinguishable Julia delta): in the debug build a recorded knitr render cost +42% at 100 cells
+  (about 18 ms a cell) and Julia looked like +47% at 100 cells, which the release rerun showed to be noise. The
+  record run does both the full `serde_json::to_value` copy and the file write, and no setting separated them, so the
+  note could not say which part costs. This plan introduces the separate flag, so **measure three modes** at 1, 10 and 100
+  cells and put the numbers in the notes: plain today, `present_from_record` alone (no observer, no file), and
+  `record: true`. That finally separates the serialization from the write.
+- **Marimo has no presenter route** (`core_presents` is Julia-only; marimo uses `CapturePayload::Legacy`); marimo renders
+  here, and plain and recorded HTML are identical (ran). Keep `cargo nextest run -p quarto-core -E 'binary(integration) &
+  test(marimo_engine_e2e::)'` (8 tests, pass on the lane machine) in the gates: it needs `uv` and `node` and runs, so a
+  skip is a signal. A marimo engine that does not acknowledge the offer must be byte-identical to today.
+- The route differences a user would see when the flag is on (Julia figure file names, the dropped `cell-output` class on
+  figure divs, group references) belong to OPR-7c and OPR-7d, not here: this plan keeps the flag off.
+
 ## Checklist (tests first; every box is `[unattended]`)
 
 - [ ] **Tests first:** (1) a mock TS engine that acknowledges is presented by core; (2) a mock that does not
@@ -68,8 +84,10 @@ so the flag stays internal; here only the mechanism and its tests exist.
 - [ ] **End-to-end** with the flag forced on in a test harness or a scratch build switch **that is not committed**:
       render a Julia and a knitr document; confirm the route and that no `.quarto` file is written. Record the
       commands and results; then confirm the committed default leaves plain render unchanged.
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
-      Windows cross-clippy; `cd hub-client && npm run build:wasm`; `cargo xtask lint`.
+- [ ] Measure the three modes above on a release build (`cargo build --release --bin q2`, scripts as in the OPR-0c
+      note: one warm-up, three timed runs, `/usr/bin/time -l`) and record wall time, peak RSS and bytes under `.quarto`.
+- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (includes
+      `marimo_engine_e2e::`); the Windows cross-clippy; `cd hub-client && npm run build:wasm`; `cargo xtask lint`.
 
 ## Exit criteria
 

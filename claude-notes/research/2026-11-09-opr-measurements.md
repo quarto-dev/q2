@@ -59,7 +59,26 @@ statement: the two routes name figure files by different counters (the plain rou
 ordinal, which counts the prose block; the presenter's counts cells), so every figure URL changes when OPR-7a flips Julia
 plain to the recorded route. The recorded route also drops the generic `cell-output` class from the figure's output div
 (a deliberate choice, `presenter/cell.rs`, "match q2-knitr's figure hook"). Anything that keys on the figure file name, or on
-`.cell-output` for a Julia figure, sees a change. Not tested: `fig-format: svg` and `fig-format: pdf` for either route.
+`.cell-output` for a Julia figure, sees a change.
+
+Second follow-up (2026-11-09, ran unless marked):
+
+- **Quarto 1 on the same document** (`quarto render p2.qmd`, real Julia): the unlabeled cell\'s file is
+  `cell-2-output-1.png`, the same as q2 plain, and the labeled cell\'s file is named by its label,
+  `fig-b-output-1.png`. q2 plain names the labeled cell `cell-3-output-1.png`, and q2 recorded names both by a code-cell
+  counter. So plain matches Quarto 1 for the unlabeled cell only, and the recorded route matches neither. The counter in
+  Quarto 1\'s port (`ts-packages/quarto-api/src/jupyter/to-markdown.ts`, around line 835) is `"cell-" + (cellIndex + 1)`
+  over notebook cells with prose counted (read).
+- **`preferred` paths do not rescue Julia.** The presenter honors `metadata.quarto_file_path` (`presenter/figures.rs`), which
+  knitr supplies (`engine/knitr/span_records.rs`); I found no Julia producer in `crates/` or `ts-packages/` (read). The
+  recorded Julia notebook\'s outputs carry only inline data and a size, so the engine cannot name the file.
+- **`fig-format: svg` and `fig-format: pdf`** change nothing: not for the bare-PNG cells (both routes still write the PNG
+  files, with the names above) and not for Plots (all three routes, Quarto 1 included, embed the PNG from Plots\'
+  `text/html` bundle).
+- **Consumers of the plain-only attributes** (grep of `crates/`, `ts-packages/`, `hub-client/src`, `resources/`, read):
+  nothing reads `id="cell-N"`, `data-quarto` (the unit attribute) or `data-execution_count`. The generic `.cell-output`
+  class is read once, `resources/js/dashboard/quarto-dashboard.js:49`, to restyle iTables HTML tables; a figure div is not
+  one, and non-figure display outputs keep the class on the presenter route.
 
 Fixture note: `Plots` is not in the runner's default environment; each plot document got a copy of
 `~/.julia/environments/v1.12/{Project,Manifest}.toml` beside it.
@@ -103,6 +122,33 @@ Caveats: debug (optimized plus debuginfo) build; one machine; the first Julia sw
 failed in 0.1 s and was discarded). `ArgumentError: startpath must be non-empty` out of the runner's
 `evaluate_raw_cells!` appeared on every Julia render for a few minutes after the disk filled, then cleared when the
 shared server restarted. I did not diagnose it; it is not a result of this plan.
+
+**Release rerun (ran, 2026-11-09).** `cargo build --release --bin q2` (19.5 min cold), then the same documents (the fixtures
+were regenerated to the same spec: per cell `v = 1:10`/`collect(1:10)`, a `summary`/`sum`, a `plot`; Julia with one `using
+Plots` cell), one untimed warm-up and three timed runs per cell, plain against `execute: {record: true}`, run one after
+the other with nothing else started by me. The raw runs, in seconds, and medians:
+
+| Engine | Cells | Plain, three runs | Record, three runs | Median plain | Median record | Delta | Peak RSS plain / record | Bytes under `.quarto`, record |
+|---|---|---|---|---|---|---|---|---|
+| knitr | 1 | 2.03, 2.69, 1.79 | 2.28, 2.13, 1.91 | 2.03 | 2.13 | +0.10 s | 114 / 136 MB | 36 KB |
+| knitr | 10 | 3.15, 2.35, 2.95 | 3.19, 2.67, 2.14 | 2.95 | 2.67 | -0.28 s (noise) | 162 / 163 MB | 256 KB |
+| knitr | 100 | 7.73, 4.19, 4.84 | 6.77, 5.73, 5.12 | 4.84 | 5.73 | +0.89 s (+18%) | 209 / 199 MB | 2.4 MB |
+| Julia | 1 | 8.90, 8.84, 8.62 | 10.98, 8.48, 8.36 | 8.84 | 8.48 | noise | 66 / 69 MB | 68 KB |
+| Julia | 10 | 17.12, 16.15, 18.66 | 17.06, 17.32, 19.03 | 17.12 | 17.32 | +0.2 s (noise) | 64 / 70 MB | 584 KB |
+| Julia | 100 | 116.5, 161.7, 130.2 | 131.5, 213.1, 119.4 | 130.2 | 131.5 | +1.3 s (noise) | 124 / 104 MB | 5.8 MB |
+
+All eighteen timed runs per engine exited 0; plain renders wrote 4 to 40 KB under `.quarto`.
+
+- **Release against debug:** the Julia delta that looked like +47% in the debug sweep is not there (about +1% at 100 cells,
+  inside a spread of 116 to 213 s); it was noise, probably from the shared Julia server. The knitr delta fell from +1.84 s
+  (+42%) to +0.89 s (+18%) at 100 cells, with a spread (4.2 to 7.7 s plain) as large as the delta, so read it as "under a
+  second at 100 cells, not resolvable at 1 or 10". Peak memory of the `q2` process did not move measurably.
+- **What this says for OPR-7a:** in a release build the cost of recording in memory is not distinguishable from noise except
+  for knitr at 100 cells, where it is about 9 ms a cell. It is not the "expensive" outcome of the decision table. It still
+  does not separate serialization from the file write; OPR-7a\'s separate flag is what allows that, and its plan now asks
+  for the three-mode measurement.
+- **Caveats:** one machine that other lanes were also using (the Julia server is shared), three runs per cell, medians of
+  three. For a firmer Julia figure use more runs or a quiet machine.
 
 ## 4. Cached knitr chunks, the OPR-7b spike (ran at the knitr level; not through q2)
 
@@ -156,10 +202,17 @@ Findings:
 
   The variant's output was correct, because the splice rejected the three-record result and the document fell back
   to R's finished markdown, so figure numbering came from one source. The cost: no presenter output and an empty record. The
-  Rust side requires one record for every unit; a partial record is an error today. So the spike's
-  rule is **not** enough alone: OPR-7b must also teach the splice to accept units that have no record and to take R's
-  markdown for exactly those, which is the figure-numbering-across-two-sources case. That case is untested because
-  the splice cannot yet produce it. Cache files were written in `doc_cache/` by the variant (the chunks were cached).
+  count check (`EngineRecordProblem::CountMismatch`, `engine/diagnostics.rs`) wants one record cell for every unit the engine
+  owns, so a partial record is an error today. The spike's rule is therefore **not** enough alone. OPR-7b excludes cached
+  units from the expected count; the skeleton keeps their markdown in place (read: `rerange_onto_markers` skips a unit
+  with no marker), which is also how figure numbering across the two sources stays in one pass. Cache files were written
+  in `doc_cache/` by the variant (the chunks were cached).
+
+- *Which hooks run on a hit (ran, R 4.3.2, knitr 1.50; chunks at `cache=TRUE`, `cache=2`, `cache=1` and none, knit twice
+  with logging hooks):* on the hit, `opts_hooks$cache` ran for all four; `evaluate` ran only for the uncached chunk;
+  the `chunk` hook ran for the level-1 and level-2 chunks and **not** for the level-3 chunk; the markdown was identical.
+  Consequence: a recorder that works through the chunk hook cannot see a level-3 hit, and would wrongly record a level-1 or
+  level-2 hit as a source-only chunk, so the cached set must be noted in `opts_hooks$cache`, which runs every time.
 
 ## 5. Figure matrix (ran, two engines of three)
 
@@ -224,15 +277,15 @@ the epic (decision D12).
 
 | Result | Plan | Effect on its boundary |
 |---|---|---|
-| Plain Julia and knitr take the engine route; a recorded run takes the presenter (sections 1 and 2) | OPR-7a, 7c | Unchanged. For Julia the difference between routes is three wrapper and output attributes, which OPR-7c's parity gate must account for (`id`, `data-quarto`, `data-execution_count`), and the audit must decide if `id="cell-N"` is relied on (a crossref or a CSS target); I did not check. |
-| Cost (section 3) | OPR-7a | Stays as written: knitr about +42% at 100 cells (0.5 s at 10) in a debug build, Julia not resolvable and plausibly similar. Not "expensive" in the decision table's sense. OPR-7a should still avoid the extra serialization and the file write when no record was requested (there is no code path for that today, so it is the plan's own work, as already written). Re-measure in a release build in OPR-7a. |
-| Cache (section 4) | OPR-7b | Boundary holds at the knitr level: keeping the cache on and not recording cache-asking chunks gives identical miss and hit output at all three levels, `dependson`, `autodep` and a document-level cache. A document-level `cache: true` means no record at all. **Changed by the follow-up:** a mixed document through q2 with the spike's rule (cache kept, cache-asking chunks not recorded) is not enough alone. The splice requires a record for every unit, so a partial record is dropped (`Engine Execution Record Dropped`, 3 of 5 units), the record file is empty, and the document renders from R's markdown. The output was correct (figures 1 to 3, refs resolved, miss equal to hit), but OPR-7b has to teach the splice to take R's markdown for the unrecorded units; its first test is the mixed document through q2, on a miss and on a hit. The pinned test passes today. |
+| Plain Julia and knitr take the engine route; a recorded run takes the presenter (sections 1 and 2) | OPR-7a, 7c | Unchanged. For Julia the difference between routes is three wrapper and output attributes, which OPR-7c's parity gate must account for (`id`, `data-quarto`, `data-execution_count`), and nothing in the tree reads `id="cell-N"`, `data-quarto` or `data-execution_count` (grep, second follow-up), so they can go on the proposed allowlist. |
+| Cost (section 3) | OPR-7a | Stays as written, now with a release rerun: knitr +0.9 s (+18%) at 100 cells and unresolvable at 1 and 10 (debug build: +42%, +0.5 s at 10); Julia no distinguishable delta at any size (the debug-build +47% was noise). Not "expensive" in the decision table's sense. OPR-7a should still avoid the extra serialization and the file write when no record was requested (there is no code path for that today, so it is the plan's own work, as already written). OPR-7a re-measures with its own flag (three modes) on a release build, using this section as the baseline. |
+| Cache (section 4) | OPR-7b | Boundary holds at the knitr level: keeping the cache on and not recording cache-asking chunks gives identical miss and hit output at all three levels, `dependson`, `autodep` and a document-level cache. A document-level `cache: true` means no record at all. **Changed by the follow-up:** a mixed document through q2 with the spike's rule (cache kept, cache-asking chunks not recorded) is not enough alone. The splice requires a record for every unit, so a partial record is dropped (`Engine Execution Record Dropped`, 3 of 5 units), the record file is empty, and the document renders from R's markdown. The output was correct (figures 1 to 3, refs resolved, miss equal to hit), but OPR-7b has to exclude cached units from the expected unit count (design in its plan, with the measured hook behavior: `opts_hooks$cache` runs on every hit, the chunk hook does not at level 3); its first test is the mixed document through q2, on a miss and on a hit. The pinned test passes today. |
 | Figures (section 5) | OPR-7c | A new Julia-specific item (the stored-notebook case shows the same group failure on the Jupyter route; the single figure and the table resolve): the recorded route leaves `fig-subcap` group references unresolved where the plain route resolves them (wrongly). Also, when a Julia cell emits a PNG alone, the flip renames the figure files (`cell-2-output-1.png` becomes `cell-1-output-1.png`) and drops the `cell-output` class from the figure's output div. OPR-7a flips Julia plain to the recorded route, so the gate should either record this as a known regression with the strand `bd-gbaykhth` or hold the flip for Julia until the group refs resolve. This is a finding for Gordon: it could be a blocker for OPR-7d. |
 | Marimo (section 6) | none | Exception stands (D12). Marimo renders on this machine; plain and recorded HTML are identical, so the flip does not touch it. |
 
-**Still not done:** `fig-format: svg`/`pdf` file names on either Julia route; a release-build rerun of the cost sweep; the
-mixed tagged and bare marimo document (known failing); whether anything keys on Julia's `id="cell-N"` (a crossref or a
-CSS target); a Julia mixed-engine splice.
+**Still not done:** the mixed tagged and bare marimo document (known failing, no strand by instruction); a dashboard
+render with a Julia figure to see the dropped class in a browser (read only); `fig-format` through a Julia package that
+honors it (Plots does not here).
 
 Files: scratch fixtures and logs stayed in the session scratchpad; the throwaway `capture.R` worktree was deleted; nothing
 else was added.

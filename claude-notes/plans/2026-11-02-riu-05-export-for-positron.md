@@ -236,3 +236,10 @@ a plot needs Plots in the document's Julia project (add it with `JULIA_PKG_OFFLI
   until KNR-3 and KNR-5 land. That is expected; the demo does not include it.
 - **Large records.** The S7 record was 30 KB; the Julia plot record is about 75 KB (a PDF, a PNG and
   an SVG); Positron has a 100 MB cache cap. Not tested at size.
+
+## Note (2026-11-09, RFU-1)
+
+`q2 record export-positron` was never released and is replaced by `q2 convert <doc> --to positron-ipynb -o <path>`
+(plan [RFU-1](2026-11-08-rfu-1-convert-command.md)). Read the command references above with that substitution: `--out`
+is `-o`, `--records` is gone (the source list is fixed at `q2,engine` until OPR-5 reads it from metadata), and
+`-M KEY:VALUE` is new. The exit codes and the one-line JSON report are unchanged.
