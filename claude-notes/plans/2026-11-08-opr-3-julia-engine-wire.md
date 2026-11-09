@@ -2,7 +2,7 @@
 title: 'OPR-3: Julia engine wire, corrected hash declaration and core-presentation acknowledgement'
 date: 2026-11-08
 description: 'Two small engine-side wire changes in the vendored Julia engine, plus the additive q2 parsing: Julia declares its presentation-only options in its hash definition, and acknowledges that core presented its output, so core can stop deciding by engine name. Local edits in the subtree; pushing them to the fork is Gordon''s companion step.'
-status: ready
+status: in-progress
 depends-on: []
 lane: B
 ---
