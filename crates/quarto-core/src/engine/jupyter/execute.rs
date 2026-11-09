@@ -148,10 +148,7 @@ impl KernelSession {
                         Stdio::Stdout => "stdout",
                         Stdio::Stderr => "stderr",
                     };
-                    outputs.push(CellOutput::Stream {
-                        name: name.to_string(),
-                        text: stream.text,
-                    });
+                    push_stream(&mut outputs, name, stream.text);
                 }
                 JupyterMessageContent::DisplayData(data) => {
                     outputs.push(CellOutput::DisplayData {
@@ -192,6 +189,26 @@ impl KernelSession {
             execution_count,
         })
     }
+}
+
+/// Append stream text, merging it into the previous output when that is a stream of the same
+/// name. The kernel flushes `print("x")` as `"x"` and `"\n"` in separate messages whenever its
+/// flush timer fires between the two writes, so the split is timing-dependent; nbclient merges
+/// such runs too, which keeps the recorded outputs deterministic.
+fn push_stream(outputs: &mut Vec<CellOutput>, name: &str, text: String) {
+    if let Some(CellOutput::Stream {
+        name: last_name,
+        text: last_text,
+    }) = outputs.last_mut()
+        && last_name == name
+    {
+        last_text.push_str(&text);
+        return;
+    }
+    outputs.push(CellOutput::Stream {
+        name: name.to_string(),
+        text,
+    });
 }
 
 /// Convert jupyter_protocol::Media to a MimeBundle.
@@ -282,6 +299,33 @@ fn media_type_to_mime_entry(media_type: &MediaType) -> (String, serde_json::Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn stream_texts(outputs: &[CellOutput]) -> Vec<(String, String)> {
+        outputs
+            .iter()
+            .map(|o| match o {
+                CellOutput::Stream { name, text } => (name.clone(), text.clone()),
+                other => panic!("not a stream: {other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn push_stream_merges_adjacent_same_name_messages() {
+        let mut outputs = Vec::new();
+        push_stream(&mut outputs, "stdout", "cell 19".to_string());
+        push_stream(&mut outputs, "stdout", "\n".to_string());
+        push_stream(&mut outputs, "stderr", "warn\n".to_string());
+        push_stream(&mut outputs, "stdout", "after\n".to_string());
+        assert_eq!(
+            stream_texts(&outputs),
+            vec![
+                ("stdout".to_string(), "cell 19\n".to_string()),
+                ("stderr".to_string(), "warn\n".to_string()),
+                ("stdout".to_string(), "after\n".to_string()),
+            ]
+        );
+    }
 
     #[test]
     fn test_execute_status_variants() {
