@@ -2,7 +2,7 @@
 title: 'OPR-1a: one per-cell step over a struct of optional inputs'
 date: 2026-11-08
 description: 'Replaces the two per-cell presenter steps (present_document and the splice stage) with one function that takes a struct of optional inputs. quarto_resolved_options stops being the switch between the knitr and Jupyter entry paths; capability is read from which fields are present. Carries the scope rule, per-cell engine lookup and the forwarding fix for preview and hub.'
-status: ready
+status: in-progress
 depends-on: [opr-0a]
 lane: A
 ---
