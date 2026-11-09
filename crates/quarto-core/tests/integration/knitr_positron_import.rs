@@ -76,7 +76,7 @@ fn present(doc: &str, owner: &str, fallback: bool, tmp: &TempDir) -> (String, bo
         None,
         InlineTarget::from_format("html"),
         "html",
-        None,
+        &[],
         &mut fig,
     )
     .unwrap();
@@ -322,7 +322,7 @@ fn an_imported_output_with_only_an_unknown_mime_presents_nothing_for_it() {
         None,
         InlineTarget::from_format("html"),
         "html",
-        None,
+        &[],
         &mut fig,
     )
     .unwrap()
@@ -373,7 +373,7 @@ fn a_real_ark_cache_presents_through_the_knitr_layer() {
         None,
         InlineTarget::from_format("html"),
         "html",
-        None,
+        &[],
         &mut fig,
     )
     .unwrap();

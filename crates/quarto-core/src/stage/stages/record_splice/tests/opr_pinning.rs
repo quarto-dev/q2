@@ -51,7 +51,7 @@ fn record_for(source: &str, results: &[(usize, Vec<Value>)]) -> Record {
 }
 
 /// Run `record` over `source` through both loops, for output format `html`.
-fn run_both(source: &str, record: &Record, engine: Option<&EngineEntry>) -> Run {
+fn run_both(source: &str, record: &Record) -> Run {
     let doc = parse(source);
     let (qmd, _) = serialize_ast_to_qmd(&doc.ast).unwrap();
     let (units, _texts): (_, AuthorTexts) = scan_and_fill_ids(&qmd, &[]);
@@ -68,7 +68,7 @@ fn run_both(source: &str, record: &Record, engine: Option<&EngineEntry>) -> Run 
         scope.as_ref(),
         InlineTarget::from_format("html"),
         "html",
-        engine,
+        &record.metadata.quarto_engines,
         &mut fig,
     );
     let (spliced, splice_report) = splice_record(parse(source), record, &mut ctx(), dir.path());
@@ -122,21 +122,21 @@ const ONE_CELL: &str = "```{python}\n1\n```\n";
 // ---- Row: unknown `#|` options on a Jupyter cell ----------------------------------------
 
 #[test]
-fn unknown_cell_option_is_forwarded_by_render_but_not_by_the_splice() {
+fn unknown_cell_option_is_forwarded_by_render_and_by_the_splice() {
     let src = "```{python}\n#| data-testid: hero-plot\n1\n```\n";
-    let run = run_both(
-        src,
-        &record_for(src, &[(0, vec![stdout_out("hi\n")])]),
-        None,
-    );
+    let run = run_both(src, &record_for(src, &[(0, vec![stdout_out("hi\n")])]));
     assert!(
         rendered(&run).starts_with("::: {.cell data-testid='hero-plot'}\n"),
         "{}",
         rendered(&run)
     );
-    // OPR-1a: the splice forwards unknown options too (D9): `data-testid="hero-plot"` on the cell.
-    assert!(run.splice.starts_with("::: {.cell}\n"), "{}", run.splice);
-    assert!(!run.splice.contains("hero-plot"), "{}", run.splice);
+    // OPR-1a (done): the splice forwards unknown options too (D9), as render does.
+    assert!(
+        run.splice
+            .starts_with("::: {.cell data-testid=\"hero-plot\"}\n"),
+        "{}",
+        run.splice
+    );
     assert_eq!(run.splice_report.units[0].1, UnitStaleness::Fresh);
 }
 
@@ -153,7 +153,7 @@ fn invalid_cell_options_fail_render_and_leave_the_source_in_the_splice() {
     let (units, texts): (_, AuthorTexts) = scan_and_fill_ids(&qmd, &[]);
     record.cells[0].metadata.quarto_cell_id = unit_id(&units[0]);
     record.cells[0].metadata.quarto_content_hash = texts.0[0].content_hash.clone();
-    let run = run_both(src, &record, None);
+    let run = run_both(src, &record);
     assert!(
         matches!(
             run.render,
@@ -177,7 +177,7 @@ fn invalid_cell_options_fail_render_and_leave_the_source_in_the_splice() {
 fn stored_markdown_for_another_format_is_noted_by_render_and_silent_in_the_splice() {
     let src = "```{r}\n1\n```\n";
     let mismatch = record_for(src, &[(0, vec![markdown_cell("STORED\n", "pdf")])]);
-    let run = run_both(src, &mismatch, None);
+    let run = run_both(src, &mismatch);
     let result = run.render.as_ref().unwrap();
     assert_eq!(result.markdown, "```{r}\n1\n```\n");
     assert_eq!(
@@ -198,7 +198,7 @@ fn stored_markdown_for_another_format_is_noted_by_render_and_silent_in_the_splic
 
     // For the matching format both loops place the stored markdown.
     let matching = record_for(src, &[(0, vec![markdown_cell("STORED\n", "html")])]);
-    let run = run_both(src, &matching, None);
+    let run = run_both(src, &matching);
     assert_eq!(rendered(&run), "STORED\n");
     assert!(
         run.splice.contains("STORED") && !run.splice.contains("{r}"),
@@ -285,7 +285,7 @@ fn span_cases_through_both_routines() {
     ];
     let mut problems = Vec::new();
     for (case, outputs, want_render, want_splice) in rows {
-        let run = run_both(SPAN, &record_for(SPAN, &[(0, outputs)]), None);
+        let run = run_both(SPAN, &record_for(SPAN, &[(0, outputs)]));
         let (got_render, got_splice) = (span_value_render(&run), span_value_splice(&run));
         if got_render.as_deref() != want_render || got_splice.as_deref() != want_splice {
             problems.push(format!(
@@ -300,7 +300,7 @@ fn span_cases_through_both_routines() {
 #[test]
 fn render_notes_a_span_with_no_usable_value_and_the_splice_has_no_channel_for_it() {
     for outputs in [vec![], vec![error_out("boom")], vec![png_only()]] {
-        let run = run_both(SPAN, &record_for(SPAN, &[(0, outputs)]), None);
+        let run = run_both(SPAN, &record_for(SPAN, &[(0, outputs)]));
         assert_eq!(
             run.render.as_ref().unwrap().notes,
             [PresentNote::InlineNoUsableValue { unit: 0 }]
@@ -315,7 +315,6 @@ fn a_front_matter_span_is_presented_by_render_and_skipped_by_the_splice() {
     let run = run_both(
         FRONT_MATTER_SPAN,
         &record_for(FRONT_MATTER_SPAN, &[(0, vec![value_out("'say \"hi\"'")])]),
-        None,
     );
     // Render writes the value, YAML-escaped.
     assert_eq!(
@@ -331,7 +330,6 @@ fn a_newline_in_a_front_matter_span_value_fails_render_and_the_splice_skips_it()
     let run = run_both(
         FRONT_MATTER_SPAN,
         &record_for(FRONT_MATTER_SPAN, &[(0, vec![value_out("two\nlines")])]),
-        None,
     );
     assert!(
         matches!(&run.render, Err(PresentError::FrontMatterValue { unit: 0, key, .. }) if key == "title"),
@@ -385,7 +383,7 @@ fn mixed_engine_record() -> Record {
 }
 
 #[test]
-fn the_engine_entry_a_knitr_cell_sees_differs_between_the_loops() {
+fn the_engine_entry_a_knitr_cell_sees_is_looked_up_per_cell_in_both_loops() {
     let record = mixed_engine_record();
     let jupyter = record.metadata.quarto_engines[0].clone();
     let knitr = record.metadata.quarto_engines[1].clone();
@@ -394,9 +392,9 @@ fn the_engine_entry_a_knitr_cell_sees_differs_between_the_loops() {
         ("jupyter", "knitr")
     );
 
-    // The splice looks the entry up per cell (`quarto_engine`): knitr's `known_options` apply,
+    // Both loops look the entry up per cell (`quarto_engine`): knitr's `known_options` apply,
     // so `bar.unknown` is not known and is forwarded as a cell attribute.
-    let via_knitr = run_both(MIXED_DOC, &record, Some(&knitr));
+    let via_knitr = run_both(MIXED_DOC, &record);
     assert!(
         via_knitr.splice.contains("bar.unknown"),
         "{}",
@@ -408,11 +406,11 @@ fn the_engine_entry_a_knitr_cell_sees_differs_between_the_loops() {
         "{}",
         rendered(&via_knitr)
     );
-    // ...handed another engine's (no `known_options`), it does not.
-    // OPR-1a: the entry is looked up per cell everywhere, so render forwards here too.
-    let via_jupyter = run_both(MIXED_DOC, &record, Some(&jupyter));
+    // ...and handed another engine's, it forwards too (OPR-1a, done): the entry is looked up
+    // per cell, by the cell's `quarto_engine`, so the one handed in does not matter.
+    let via_jupyter = run_both(MIXED_DOC, &record);
     assert!(
-        !rendered(&via_jupyter).contains("bar.unknown"),
+        rendered(&via_jupyter).contains("bar.unknown"),
         "{}",
         rendered(&via_jupyter)
     );
@@ -444,7 +442,7 @@ fn a_jupyter_cell_with_no_resolved_options_is_layered_with_the_document_scope() 
         ("warning", true, true, false, true),
     ] {
         let src = scoped(key);
-        let run = run_both(&src, &record_for(&src, &[(0, scope_outputs())]), None);
+        let run = run_both(&src, &record_for(&src, &[(0, scope_outputs())]));
         for (loop_name, text) in [("render", rendered(&run)), ("splice", run.splice.as_str())] {
             let body = text.split("---\n").last().unwrap_or(text);
             let seen = (

@@ -145,7 +145,7 @@ impl ExecutionEngine for StoredRecordJupyter {
             ctx.execute_scope.as_ref(),
             InlineTarget::from_format(&ctx.format),
             &ctx.format,
-            None,
+            &[],
             &mut fig,
         )
         .map_err(|e| ExecutionError::execution_failed("jupyter", e.to_string()))?;
@@ -276,7 +276,7 @@ impl ExecutionEngine for MarkedIpynbReplay {
             ctx.execute_scope.as_ref(),
             InlineTarget::from_format(&ctx.format),
             &ctx.format,
-            None,
+            &[],
             &mut fig,
         )
         .map_err(|e| ExecutionError::execution_failed("ipynb", e.to_string()))?;

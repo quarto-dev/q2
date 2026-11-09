@@ -234,8 +234,9 @@ pub struct CellOptions {
     code_line_numbers: Option<String>,
     lst_cap: Option<String>,
     lst_label: Option<String>,
-    /// knitr `fig.cap` (one caption, or one per figure) and `fig.subcap`. Read under knitr\'s
-    /// dotted names only: Jupyter\'s `fig-cap` is handled by the Quarto crossref layer.
+    /// knitr `fig.cap` (one caption, or one per figure) and `fig.subcap`. Both front
+    /// ends read the canonical dashed `fig-cap` and `fig-subcap`; `from_knitr` also accepts knitr\'s
+    /// dotted spellings (`fig.cap`).
     fig_cap: Vec<String>,
     fig_subcap: Vec<String>,
     fig_alt: Option<String>,

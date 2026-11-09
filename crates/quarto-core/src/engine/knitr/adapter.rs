@@ -666,7 +666,7 @@ x
             None,
             InlineTarget::from_format("html"),
             "html",
-            Some(&record.engine),
+            std::slice::from_ref(&record.engine),
             &mut fig,
         )
         .unwrap();
