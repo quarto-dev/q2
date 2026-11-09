@@ -302,7 +302,7 @@ impl ExecutionEngine for KnitrEngine {
         };
 
         // Step 8: Call R
-        let result: KnitrExecuteResult = call_r(
+        let mut result: KnitrExecuteResult = call_r(
             "execute",
             &params,
             &ctx.temp_dir,
@@ -332,13 +332,16 @@ impl ExecutionEngine for KnitrEngine {
         };
 
         execute_result.warnings.extend(capture_plan.diagnostic);
-        if !result.cache_disabled.is_empty() {
-            execute_result
-                .warnings
-                .push(super::diagnostics::knitr_cache_disabled_diagnostic(
-                    &result.cache_disabled,
-                ));
-        }
+        // OPR-7b: a chunk that asked for knitr\'s cache keeps it and is not recorded, so it is
+        // not one of the units the record is checked against; its finished markdown is already
+        // in place in the skeleton.
+        let expected_ids: Vec<String> = expected_ids
+            .into_iter()
+            .filter(|id| !result.cached_units.contains(id))
+            .collect();
+        let cached_units = std::mem::take(&mut result.cached_units);
+        result.chunks.retain(|c| !cached_units.contains(&c.id));
+        result.pieces.retain(|c| !is_cached_chunk(c, &cached_units));
         let child_labels: Vec<String> = result
             .pieces
             .iter()
@@ -619,6 +622,15 @@ fn convert_includes(
         &mut result.include_after,
     );
     result
+}
+
+/// Whether a captured chunk carries the unit id of a chunk that asked for knitr\'s cache.
+fn is_cached_chunk(chunk: &types::KnitrCapturedChunk, cached_units: &[String]) -> bool {
+    chunk
+        .options
+        .get(chunk_records::UNIT_ID_OPTION)
+        .and_then(|v| v.as_str())
+        .is_some_and(|id| cached_units.iter().any(|c| c == id))
 }
 
 #[cfg(test)]

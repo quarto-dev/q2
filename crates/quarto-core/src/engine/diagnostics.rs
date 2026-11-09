@@ -192,26 +192,6 @@ pub fn no_runnable_kernel_diagnostic(
         .build()
 }
 
-/// `Q-18-12`: knitr\'s cache is off for the run that records the document. One per document,
-/// naming the chunks that asked for it. Informational: the output is the same, only slower.
-pub fn knitr_cache_disabled_diagnostic(labels: &[String]) -> DiagnosticMessage {
-    let list = labels
-        .iter()
-        .map(|l| format!("`{l}`"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    DiagnosticMessageBuilder::info("knitr Cache Is Off While Recording")
-        .with_code("Q-18-12")
-        .problem(format!(
-            "these chunks asked for knitr\'s cache, and it was turned off for them: {list}."
-        ))
-        .add_detail(
-            "Recording a chunk\'s output needs the chunk to run, and a cache hit skips the run, \
-             so the chunks run every time this document is executed.",
-        )
-        .build()
-}
-
 /// `Q-18-13`: the document replaced a knitr hook, so that chunk and every later one keep
 /// knitr\'s finished markdown. One per document, naming the hook and the first chunk.
 pub fn knitr_hook_override_diagnostic(hook: &str, label: &str) -> DiagnosticMessage {

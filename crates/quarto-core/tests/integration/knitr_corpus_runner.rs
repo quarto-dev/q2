@@ -546,8 +546,10 @@ fn capture_include_false_and_cache_hit_shapes() {
         .find(|c| c.options.get("include").and_then(|v| v.as_bool()) == Some(false))
         .expect("an include=FALSE chunk is recorded");
     assert!(!hidden.pieces.is_empty());
-    // S4: with capture on, cache is off, so a level-3 chunk reaches the hooks and yields
-    // pieces, and the recorded option is 0 (knitr normalizes FALSE to 0).
+    // OPR-7b (reverses S4): capture no longer turns the cache off, so the recorded option is the
+    // chunk\'s own level (3). This harness gives no unit ids, so the chunk is still captured on
+    // the miss; with ids (the engine\'s path) it is noted as cached and left out of the record
+    // (`capture_tests`, `gating_tests`).
     let run =
         run_fixture_with_env(&fixture_named("s1/14_cache_level3"), "html", true, &[]).expect("run");
     let cached = run
@@ -555,6 +557,6 @@ fn capture_include_false_and_cache_hit_shapes() {
         .iter()
         .find(|c| c.options.get("cache").is_some())
         .expect("a chunk records its cache option");
-    assert_eq!(cached.options["cache"], serde_json::json!(0));
+    assert_eq!(cached.options["cache"], serde_json::json!(3));
     assert!(!cached.pieces.is_empty());
 }

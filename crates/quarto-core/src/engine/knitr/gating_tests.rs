@@ -48,27 +48,33 @@ fn run_doc_with_files(
     want_record: bool,
 ) -> (ExecuteResult, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let qmd = dir.path().join("doc.qmd");
+    let result = run_doc_in(dir.path(), doc, files, format, want_record);
+    (result, dir)
+}
+
+/// [`run_doc_with_files`] in a directory the caller owns, so a second run sees the first one\'s cache.
+fn run_doc_in(
+    dir: &std::path::Path,
+    doc: &str,
+    files: &[(&str, &str)],
+    format: &str,
+    want_record: bool,
+) -> ExecuteResult {
+    let qmd = dir.join("doc.qmd");
     std::fs::write(&qmd, doc).unwrap();
     for (name, text) in files {
-        std::fs::write(dir.path().join(name), text).unwrap();
+        std::fs::write(dir.join(name), text).unwrap();
     }
     let mut units = scan_units(doc);
     let texts = AuthorTexts::from_scanned(&units);
     fill_ids(&mut units, &texts).unwrap();
-    let ctx = ExecutionContext::new(
-        dir.path().to_path_buf(),
-        PathBuf::from(dir.path()),
-        qmd,
-        format,
-    )
-    .with_owned_languages(vec!["r".to_string(), "bash".to_string()])
-    .with_units(units)
-    .with_author_texts(texts)
-    .with_want_record(want_record)
-    .with_quiet(true);
-    let result = KnitrEngine::new().execute(doc, &ctx).expect("execute");
-    (result, dir)
+    let ctx = ExecutionContext::new(dir.to_path_buf(), PathBuf::from(dir), qmd, format)
+        .with_owned_languages(vec!["r".to_string(), "bash".to_string()])
+        .with_units(units)
+        .with_author_texts(texts)
+        .with_want_record(want_record)
+        .with_quiet(true);
+    KnitrEngine::new().execute(doc, &ctx).expect("execute")
 }
 
 fn is_structured(cell: &crate::record::RecordCell) -> bool {
@@ -156,16 +162,76 @@ fn an_overridden_hook_makes_that_chunk_and_every_later_one_a_fallback_cell() {
 }
 
 #[test]
-fn a_chunk_that_asked_for_the_cache_is_named_once() {
-    if !r_available("a_chunk_that_asked_for_the_cache_is_named_once") {
+fn a_chunk_that_asked_for_the_cache_is_quiet_and_not_recorded() {
+    if !r_available("a_chunk_that_asked_for_the_cache_is_quiet_and_not_recorded") {
         return;
     }
-    let doc = "```{r cached}\n#| cache: true\n1\n```\n\n```{r also}\n#| cache: true\n2\n```\n";
+    let doc = "```{r cached}\n#| cache: true\n1\n```\n\n```{r plain}\n2\n```\n";
     let (result, _dir) = run_doc(doc, "html", true);
-    let notes = with_code(&result, "Q-18-12");
-    assert_eq!(notes.len(), 1, "{:?}", result.warnings);
-    let text = notes[0].to_text(None);
-    assert!(text.contains("cached") && text.contains("also"), "{text}");
+    assert!(
+        with_code(&result, "Q-18-12").is_empty(),
+        "{:?}",
+        result.warnings
+    );
+    assert!(
+        !result
+            .warnings
+            .iter()
+            .any(|w| w.title.contains("Record Dropped")),
+        "{:?}",
+        result.warnings
+    );
+    let record = result.record.expect("a record of the uncached chunk");
+    assert_eq!(record.cells.len(), 1, "only the uncached chunk is recorded");
+}
+
+/// The OPR-0c mixed document: two live figures, a cached figure, a live text chunk and a cached
+/// text chunk. Both the miss and the hit record exactly the three uncached units, drop nothing,
+/// and give the same markdown.
+#[test]
+fn a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit() {
+    if !r_available("a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit") {
+        return;
+    }
+    let doc = "```{r}\n#| label: fig-live1\n#| fig-cap: One\nplot(1)\n```\n\n\
+               ```{r}\n#| label: fig-cached\n#| cache: true\n#| fig-cap: Two\nplot(2)\n```\n\n\
+               ```{r}\n#| label: live-text\n1 + 1\n```\n\n\
+               ```{r}\n#| label: fig-live2\n#| fig-cap: Three\nplot(3)\n```\n\n\
+               ```{r}\n#| label: cached-text\n#| cache: true\n2 + 2\n```\n";
+    let dir = tempfile::tempdir().unwrap();
+    let miss = run_doc_in(dir.path(), doc, &[], "html", true);
+    let hit = run_doc_in(dir.path(), doc, &[], "html", true);
+    for (name, run) in [("miss", &miss), ("hit", &hit)] {
+        assert!(
+            run.warnings
+                .iter()
+                .all(|w| !w.title.contains("Record Dropped")),
+            "{name}: {:?}",
+            run.warnings
+        );
+        let record = run
+            .record
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name}: a record"));
+        assert_eq!(record.cells.len(), 3, "{name}: the three uncached units");
+        assert!(record.cells.iter().all(is_structured), "{name}");
+    }
+    assert_eq!(miss.markdown, hit.markdown);
+}
+
+/// A document where every chunk asked for the cache has no unit left to record: no record, no
+/// diagnostic, and the engine\'s own markdown.
+#[test]
+fn a_document_of_only_cached_chunks_has_no_record_and_no_diagnostic() {
+    if !r_available("a_document_of_only_cached_chunks_has_no_record_and_no_diagnostic") {
+        return;
+    }
+    let doc = "```{r a}\n#| cache: true\n1\n```\n\n```{r b}\n#| cache: true\n2\n```\n";
+    let dir = tempfile::tempdir().unwrap();
+    let _ = run_doc_in(dir.path(), doc, &[], "html", true);
+    let hit = run_doc_in(dir.path(), doc, &[], "html", true);
+    assert!(hit.warnings.is_empty(), "{:?}", hit.warnings);
+    assert!(hit.markdown.contains("[1] 1") && hit.markdown.contains("[1] 2"));
 }
 
 #[test]
@@ -234,10 +300,10 @@ fn the_fallback_table() {
         (
             "cache asked for",
             "html",
-            "```{r a}\n#| cache: true\n1\n```\n",
+            "```{r a}\n#| cache: true\n1\n```\n\n```{r b}\n2\n```\n",
             &[],
             vec![true],
-            Some("Q-18-12"),
+            None,
         ),
         (
             "hook override",
