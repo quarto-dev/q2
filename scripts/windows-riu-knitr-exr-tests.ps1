@@ -19,7 +19,7 @@
 # Prerequisites: Rust (rustup, MSVC toolchain), Visual Studio Build Tools with the C++
 # workload, cargo-nextest (cargo install cargo-nextest --locked). aws-lc-sys may also want
 # CMake and NASM on PATH. Optional, each unlocks more tests, and tests skip cleanly without
-# them: Rscript with knitr, python with ipykernel, julia, node (see .nvmrc).
+# them: pandoc and typst on PATH (about 150 pandoc_*, typst and book tests FAIL without them: CI installs them), Rscript with knitr, python with ipykernel, julia, node (see .nvmrc).
 #
 # It never stops at the first failure: every stage runs, then a summary table prints and the
 # exit code is 1 if anything failed. Full logs go to target\windows-run\ (one file per stage).
@@ -95,7 +95,7 @@ $lines += "date:    $(Get-Date -Format s)"
 $lines += "os:      $([System.Environment]::OSVersion.VersionString)"
 $lines += "ps:      $($PSVersionTable.PSVersion)"
 $lines += "commit:  $((& git rev-parse --short HEAD).Trim()) on $((& git rev-parse --abbrev-ref HEAD).Trim())"
-foreach ($t in 'rustc --version', 'cargo --version', 'cargo nextest --version', 'node --version', 'python --version', 'Rscript --version', 'julia --version') {
+foreach ($t in 'rustc --version', 'cargo --version', 'cargo nextest --version', 'pandoc --version', 'typst --version', 'node --version', 'python --version', 'Rscript --version', 'julia --version') {
     $exe = $t.Split(' ')[0]
     if (Have $exe) { $v = (& cmd /c "$t 2>&1" | Select-Object -First 1); $lines += ("{0,-28} {1}" -f $t, $v) }
     else { $lines += ("{0,-28} NOT FOUND (tests needing it will skip or be absent)" -f $t) }
