@@ -8,10 +8,21 @@
 #   .\scripts\windows-riu-knitr-exr-reasons.ps1
 #   powershell -ExecutionPolicy Bypass -File .\scripts\windows-riu-knitr-exr-reasons.ps1
 #
+# Also writes target\windows-run\failure-details.txt: the full output (diffs included) of the tests
+# named by -DetailPattern. Send both files back.
+#
 # Writes target\windows-run\failure-reasons.txt: one block per failing test with the first
 # lines of its output (the panic message). Send that file back. Also prints the most common
 # messages. Nextest prints each failure twice (live, then in the final recap); only the first
 # is kept per test and log.
+
+[CmdletBinding()]
+param(
+    # Tests whose whole failure output (panic, assertion diff, insta snapshot diff) is wanted,
+    # not just the first lines. Matched as a substring of the nextest test name.
+    [string[]]$DetailPattern = @('lmd_snapshots', 'smoke_all', 'jupyter_markdown', 'a_record_only_cache_entry'),
+    [int]$DetailLines = 150
+)
 
 $ErrorActionPreference = 'Continue'
 Set-StrictMode -Version Latest
@@ -59,6 +70,38 @@ foreach ($f in $files) {
         }
     }
 }
+
+# Full output for the tests named in -DetailPattern: the FAIL line of the live failure report and
+# everything nextest printed under it (stdout/stderr), minus backtrace frames. Own file.
+$detail = New-Object System.Collections.Generic.List[string]
+$detailSeen = @{}
+foreach ($f in @($files | Where-Object { $_.Name -match '\.log$' })) {
+    $L = @(Get-Content -LiteralPath $f.FullName)
+    for ($i = 0; $i -lt $L.Count; $i++) {
+        if ($L[$i] -notmatch '^\s*(FAIL|SIGABRT|TIMEOUT)\s+\[') { continue }
+        $hit = $false
+        foreach ($pat in $DetailPattern) { if ($L[$i] -like "*$pat*") { $hit = $true } }
+        if (-not $hit) { continue }
+        $key = $f.Name + '|' + $L[$i].Trim()
+        if ($detailSeen.ContainsKey($key)) { continue }
+        $detailSeen[$key] = 1
+        $detail.Add('=== ' + $f.Name + ' line ' + ($i + 1))
+        $detail.Add($L[$i].TrimEnd())
+        $n = 0
+        for ($j = $i + 1; $j -lt $L.Count -and $n -lt $DetailLines; $j++) {
+            if ($L[$j] -match '^\s*(FAIL|PASS|SLOW|SIGABRT|TIMEOUT)\s+\[') { break }
+            if ($L[$j] -match '^\s+\d+:\s+0x[0-9a-fA-F]+\s' -or $L[$j] -match '^\s+at\s') { continue }
+            $t = $L[$j].TrimEnd()
+            if ($t.Length -gt 400) { $t = $t.Substring(0, 400) + ' ...' }
+            $detail.Add($t)
+            $n++
+        }
+        $detail.Add('')
+    }
+}
+$detailDest = Join-Path $dir 'failure-details.txt'
+$detail | Out-File -Encoding ascii -FilePath $detailDest
+Write-Host "$($detailSeen.Count) detailed failures ($($DetailPattern -join ', ')) -> $detailDest ($($detail.Count) lines)"
 
 $hdr = @('# per-file diagnostics') + $diag + @('')
 ($hdr + $out) | Out-File -Encoding ascii -FilePath $dest
