@@ -2,7 +2,7 @@
 title: 'OPR-7e: a cached knitr chunk is recorded and presented like any other chunk'
 date: 2026-11-09
 description: 'OPR-7b leaves a chunk that asks for knitr''s cache out of the record, so it never goes through the presenter. This plan records a cache hit for the common case, cache=TRUE (level 3), with no change to knitr: the chunk hook returns a self-describing span that knitr stores in its own cache entry (or, if the spike prefers it, a sidecar file), and a spike decides which. Level 1 is an optional second slice; level 2 is out of scope. Amends decision D5 (Gordon, 2026-11-09).'
-status: ready
+status: in-progress
 depends-on: [opr-7b]
 lane: B
 ---
