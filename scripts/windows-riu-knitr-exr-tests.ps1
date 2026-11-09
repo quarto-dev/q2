@@ -13,6 +13,9 @@
 #   .\scripts\windows-riu-knitr-exr-tests.ps1 -SkipNode       # drop the TypeScript suite
 #   .\scripts\windows-riu-knitr-exr-tests.ps1 -OnlyCrate quarto-core
 #
+# If PowerShell refuses to run it (the default policy on Windows client is Restricted), use:
+#   powershell -ExecutionPolicy Bypass -File .\scripts\windows-riu-knitr-exr-tests.ps1
+#
 # Prerequisites: Rust (rustup, MSVC toolchain), Visual Studio Build Tools with the C++
 # workload, cargo-nextest (cargo install cargo-nextest --locked). aws-lc-sys may also want
 # CMake and NASM on PATH. Optional, each unlocks more tests, and tests skip cleanly without
@@ -59,16 +62,28 @@ function Add-Result($stage, $status, $detail, $log) {
 }
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
-# Run a native command with all output redirected into a log (no pipe, so nothing buffers or
-# hangs), then return its exit code.
+# Run a native command with stdout and stderr redirected by the OS into files (Start-Process,
+# no PowerShell pipeline, so nothing re-encodes, buffers or hangs), then append both to the
+# log and return the exit code. Arguments must not contain spaces (none of ours do).
+# We wait on the process itself, not with -Wait, because -Wait also waits for any grandchild
+# a test left running. cargo resolves to cargo.exe and npm to npm.cmd; we pass the full path.
 function Run-Logged($log, $exe, $argList) {
-    # cmd.exe does the redirection so the bytes land raw: PowerShell 5.1's own `>>` writes
-    # UTF-16 and would corrupt a log that also holds our ASCII header and footer.
     "> $exe $($argList -join ' ')" | Out-File -Encoding ascii $log
+    $full = (Get-Command $exe -CommandType Application | Select-Object -First 1).Source
+    $outF = "$log.stdout.tmp"
+    $errF = "$log.stderr.tmp"
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    & cmd /c "$exe $($argList -join ' ') >> `"$log`" 2>&1"
-    $code = $LASTEXITCODE
+    $p = Start-Process -FilePath $full -ArgumentList $argList -NoNewWindow -PassThru `
+        -RedirectStandardOutput $outF -RedirectStandardError $errF
+    $null = $p.Handle   # keeps the handle so ExitCode is populated after WaitForExit
+    $p.WaitForExit()
+    $code = $p.ExitCode
     $sw.Stop()
+    "--- stdout ---" | Out-File -Encoding ascii -Append $log
+    if (Test-Path $outF) { Get-Content -LiteralPath $outF | Out-File -Encoding ascii -Append $log }
+    "--- stderr ---" | Out-File -Encoding ascii -Append $log
+    if (Test-Path $errF) { Get-Content -LiteralPath $errF | Out-File -Encoding ascii -Append $log }
+    Remove-Item -LiteralPath $outF, $errF -ErrorAction SilentlyContinue
     "`n[exit code $code after $([int]$sw.Elapsed.TotalSeconds)s]" | Out-File -Encoding ascii -Append $log
     return $code
 }
@@ -117,8 +132,9 @@ if (-not $SkipNode -and -not $OnlyCrate) {
     $log = Join-Path $logDir ("{0:d2}-vitest-preview-renderer.log" -f $i)
     if (-not (Have 'npm')) { Add-Result 'vitest preview-renderer' 'SKIP' 'npm not found' $log }
     else {
-        $code = Run-Logged $log 'npm' @('ci')
-        if ($code -ne 0) { Add-Result 'npm ci' 'FAIL' "exit $code (needs the Node major in .nvmrc)" $log }
+        $ciLog = Join-Path $logDir ("{0:d2}-npm-ci.log" -f $i)
+        $code = Run-Logged $ciLog 'npm' @('ci')
+        if ($code -ne 0) { Add-Result 'npm ci' 'FAIL' "exit $code (needs the Node major in .nvmrc)" $ciLog }
         else {
             $code = Run-Logged $log 'npm' @('test', '-w', 'ts-packages/preview-renderer')
             if ($code -eq 0) { Add-Result 'vitest preview-renderer' 'PASS' '' $log } else { Add-Result 'vitest preview-renderer' 'FAIL' "exit $code" $log }
