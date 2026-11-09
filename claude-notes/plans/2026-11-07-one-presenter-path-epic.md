@@ -124,7 +124,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-2](2026-11-08-opr-2-enforcement-from-hash.md) | OPR | Enforcement derived from the hash, plus audit | 1b, OPR-3 | A | ready |
 | [OPR-3](2026-11-08-opr-3-julia-engine-wire.md) | OPR | Julia declaration fix and acknowledgement | nothing | B | ready |
 | [OPR-4a](2026-11-08-opr-4a-julia-spike.md) | OPR | Julia spike (a note) | nothing | B | complete |
-| [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | OPR | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | conditional |
+| [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | OPR | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | ready |
 | [OPR-4c](2026-11-08-opr-4c-julia-engine-facts.md) | OPR | Engine, wire and pin carry the facts | 4b, 3, Gordon\'s push | B | conditional |
 | [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | OPR | q2 writes the facts as cell metadata | 4c, 1b | A | conditional |
 | [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | OPR | The `execute: record-sources` key, one early reader, `--records` removed, a ceiling for provide-hub and `--share` | 0d, RFU-1, 3 | C | ready |
