@@ -55,8 +55,9 @@ so the flag stays internal; here only the mechanism and its tests exist.
 
 ## Findings from OPR-0c that shape this plan (2026-11-09)
 
-- **Cost** (ran, debug build; the release rerun is in the note): a recorded knitr render cost +42% at 100 cells
-  (about 18 ms a cell), Julia about +47% at 100 cells but unresolvable below that (the Julia server dominates). The
+- **Cost** (ran; debug and release builds are both in the note, section 3; release is the baseline, since debug
+  exaggerated it: knitr +0.9 s, +18% at 100 cells, no distinguishable Julia delta): in the debug build a recorded knitr render cost +42% at 100 cells
+  (about 18 ms a cell) and Julia looked like +47% at 100 cells, which the release rerun showed to be noise. The
   record run does both the full `serde_json::to_value` copy and the file write, and no setting separated them, so the
   note could not say which part costs. This plan introduces the separate flag, so **measure three modes** at 1, 10 and 100
   cells and put the numbers in the notes: plain today, `present_from_record` alone (no observer, no file), and
