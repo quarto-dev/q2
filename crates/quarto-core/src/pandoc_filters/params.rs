@@ -61,9 +61,11 @@ impl FilterParamsContributor for DocxCalloutIconsContributor {
                 .join("formats")
                 .join("docx")
                 .join(format!("{name}.png"));
+            // `/`-separated on every host, like the rest of the request (a native
+            // Windows path would carry backslashes into the wire blob).
             blob.insert(
                 format!("icon-{name}"),
-                json!(path.to_string_lossy().into_owned()),
+                json!(crate::pandoc_request::normalize_request_path(&path)),
             );
         }
     }
@@ -396,7 +398,7 @@ fn insert_top_level_literals(
 ) {
     blob.insert(
         "results-file".to_string(),
-        json!(results_file.to_string_lossy()),
+        json!(crate::pandoc_request::normalize_request_path(results_file)),
     );
     blob.insert("execution-engine".to_string(), json!("markdown"));
     // `quarto.config.cli_path()` in `init.lua`. Filters that shell back into
@@ -440,7 +442,7 @@ fn insert_top_level_literals(
 fn insert_mediabag_dir(blob: &mut Map<String, Value>, mediabag_dir: &std::path::Path) {
     blob.insert(
         "mediabag-dir".to_string(),
-        json!(mediabag_dir.to_string_lossy()),
+        json!(crate::pandoc_request::normalize_request_path(mediabag_dir)),
     );
 }
 
@@ -478,7 +480,7 @@ mod tests {
             project,
             Some(registry),
             language,
-            PathBuf::from("/tmp/quarto-pandoc-results.json"),
+            std::env::temp_dir().join("quarto-pandoc-results.json"),
             PathBuf::from("/project/doc_files/mediabag"),
         )
     }
