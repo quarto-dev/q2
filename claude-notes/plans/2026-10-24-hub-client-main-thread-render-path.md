@@ -578,7 +578,7 @@ Three corrections to the 2026-11-06 premise follow from the table:
   `q2-slides` mounted the slide preview — **which is `SlideAst`, the
   in-page generic slide surface, not the q2-preview iframe**: `revealjs`
   converged onto the iframe (bd-vwp4y5ku), `q2-slides` did not
-  (`ReactRenderer.tsx`'s fall-through arm); (c) after adding
+  (`ReactRenderer.tsx`\'s fall-through arm); (c) after adding
   `format: revealjs` to `_quarto.yml` and polling the VFS until the
   sibling edit landed (the router classifies only on the chapter's next
   content change, so a fixed sleep races the sync), one keystroke in the
@@ -634,8 +634,10 @@ the win on the Phase 0 fixture (whose baseline wall included a cheaper
 parse): relative to the Phase 0 baseline's own components, deleting the
 parse takes the 1x wall from 431 ms to ~350 ms and the 8x wall from
 3410 ms to ~2700 ms, matching this phase's prediction.
-- [ ] hub-client changelog entry (two-commit workflow: the change, then
+- [x] hub-client changelog entry (two-commit workflow: the change, then
   the hash). Close the strand with the measurement in the comment.
+  → 641acc274 + changelog efcad13be; bd-luoo7qgu closed with the
+  measurement.
 
 ## Phase 3 — Single-parse AST transport (finding 3)
 
