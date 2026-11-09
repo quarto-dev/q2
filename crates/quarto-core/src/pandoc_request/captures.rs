@@ -194,7 +194,10 @@ mod legacy {
 pub fn sidecar_key_from(root: &Path, path: &Path) -> String {
     let normalized = normalize_request_path_str(&path.to_string_lossy());
     let root = normalize_request_path_str(&root.to_string_lossy());
-    if !normalized.starts_with('/') {
+    // `C:/...` is absolute too (the normalizer upper-cases the drive letter).
+    let b = normalized.as_bytes();
+    let drive_absolute = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'/';
+    if !normalized.starts_with('/') && !drive_absolute {
         return normalized;
     }
     let root_prefix = if root.ends_with('/') {
@@ -251,6 +254,22 @@ mod tests {
             sidecar_key_from(root, Path::new("/projects/x.qmd")),
             "projects/x.qmd"
         );
+    }
+
+    #[test]
+    fn sidecar_key_handles_windows_drive_paths() {
+        // A drive-absolute path is absolute: the root is stripped, not mistaken for
+        // an already-relative key (the native resolver's `C:/...` chapter paths).
+        let root = Path::new("C:\\proj");
+        assert_eq!(
+            sidecar_key_from(root, Path::new("C:\\proj\\sub\\a.qmd")),
+            "sub/a.qmd"
+        );
+        assert_eq!(
+            sidecar_key_from(Path::new("c:/proj"), Path::new("C:/proj/one.qmd")),
+            "one.qmd"
+        );
+        assert_eq!(sidecar_key_from(root, Path::new("sub/a.qmd")), "sub/a.qmd");
     }
 
     #[test]
