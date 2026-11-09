@@ -2,7 +2,7 @@
 title: 'OPR-7h: two Julia plot differences between the plain and recorded routes (investigate, then fix or propose)'
 date: 2026-11-09
 description: 'OPR-7c left two Julia differences that nobody has diagnosed: the plain route writes requirejs and jquery script elements for three Plots documents and the recorded route does not, and the plain route writes width and height on a bare PNG where the recorded route writes a class and no size. Finds the cause of each with evidence, decides whether each is harmless, a presenter gap or a record gap, fixes the small ones and proposes an allowlist entry or a plan for the rest. Keeps the parity gate honest: a difference is fixed or signed, never silently left.'
-status: ready
+status: in-progress
 depends-on: [opr-7c]
 lane: D
 ---
