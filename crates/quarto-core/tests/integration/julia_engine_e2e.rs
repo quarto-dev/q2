@@ -1565,11 +1565,14 @@ fn j8_record_row_core_presents_the_output() {
     assert!(html.contains("expanded-two"), "{}", body_excerpt(&html));
     assert!(html.contains("<code>2</code>"), "{}", body_excerpt(&html));
 
-    // Core presented it, not the engine's `toMarkdown`: the engine's markdown puts
-    // `data-execution_count` on every cell div, and core's presenter does not (measured
-    // against the same run with `core_presents` forced false).
+    // Core presented it, not the engine's `toMarkdown`. The engine's markdown gives every code
+    // cell wrapper an id (`#cell-<n>`), the expansions included. Core's presenter gives the
+    // unit's one wrapper its id (OPR-7f) but a unit that expanded into several cells has one
+    // record cell, so the expansions\' wrappers carry none (the known limit, R8). A bare
+    // `<div class="cell">` therefore says core wrote this. (Before OPR-7f the marker was
+    // `data-execution_count`, which the engine wrote and core did not; core now writes it too.)
     assert!(
-        !html.contains("data-execution_count"),
+        html.contains("<div class=\"cell\">"),
         "the engine presented instead of core: {}",
         body_excerpt(&html)
     );
