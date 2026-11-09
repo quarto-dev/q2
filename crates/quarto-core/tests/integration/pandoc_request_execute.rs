@@ -45,7 +45,7 @@ fn write_fake_pandoc(dir: &Path) -> PathBuf {
         "@echo off\r\n\
          if \"%~1\"==\"--version\" (echo pandoc %FAKE_VERSION% & exit /b 0)\r\n\
          if defined FAKE_SLEEP (ping -n %FAKE_SLEEP% 127.0.0.1 >nul)\r\n\
-         (for %%a in (%*) do echo ARG:%%a) > \"%FAKE_LOG%\"\r\n\
+         (for %%a in (%*) do echo ARG:%%~a) > \"%FAKE_LOG%\"\r\n\
          echo SHARE:%QUARTO_SHARE_PATH%>> \"%FAKE_LOG%\"\r\n\
          if defined FAKE_FAIL (echo lua: boom 1>&2 & exit /b 3)\r\n\
          exit /b 0\r\n",
@@ -147,7 +147,13 @@ fn stage_runs_the_prepared_request_through_the_native_executor() {
     let args: Vec<&str> = log.lines().filter_map(|l| l.strip_prefix("ARG:")).collect();
     assert_eq!(&args[..4], ["-f", "json", "-t", "docx"]);
     let share = r.temp_root.join("pandoc-share");
-    let norm = |p: &Path| quarto_core::pandoc_request::normalize_request_path(p);
+    // The request carries `/`-normalized paths; a native Windows execute hands pandoc
+    // the native spelling (`to_native_windows_arg`, the identity elsewhere).
+    let norm = |p: &Path| {
+        quarto_core::pandoc_request::args::to_native_windows_arg(
+            &quarto_core::pandoc_request::normalize_request_path(p),
+        )
+    };
     let datadir = args.iter().position(|a| *a == "--data-dir").unwrap();
     assert_eq!(args[datadir + 1], norm(&share.join("pandoc/datadir")));
     let out = args.iter().position(|a| *a == "-o").unwrap();

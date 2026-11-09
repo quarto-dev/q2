@@ -26,7 +26,7 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
         .prefix("q2-r9-extfilter-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .unwrap();
-    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let root = quarto_system_runtime::canonicalize(dir.path()).unwrap();
     (dir, root)
 }
 
