@@ -1,7 +1,7 @@
 ---
 title: 'hub-client main-thread render path: audit fixes'
 date: 2026-10-24
-description: 'Phased fixes from the 2026-10-24 main-thread render-path audit: render coalescing, parse-check-only classification, single-parse AST transport, binary asset transfer, then measurement-gated worker work.'
+description: 'Phased fixes from the 2026-10-24 main-thread render-path audit: render coalescing, resolver-only format classification, single-parse AST transport, binary asset transfer, then measurement-gated worker work.'
 status: draft
 ---
 
@@ -35,6 +35,17 @@ for the TS-side perf instrumentation that has landed since the audit
 now decided (manifest moves iframe-side; the other consumers stay, with
 reasons recorded inline).
 
+Revised 2026-11-06: first Phase 2 review folded in (new export plus a
+two-signal skip).
+
+Revised 2026-11-09: Phase 2 rewritten for implementation after a second
+probe against the real WASM corrected the first review — `success` is
+*not* front-matter-determined (inline parse errors fail it), the
+router's guard is live only for unknown `q2-*` keys and causes a bug
+under a runtime `format`, and the new-export design is replaced by a
+one-line resolver fix plus deletions. The skip is dropped: the call it
+would save costs well under a millisecond.
+
 ## Findings
 
 | # | Finding | Primary site | Cost class |
@@ -53,8 +64,9 @@ crosses the JS-to-WASM boundary at least three times (sync callback
 `ts-packages/preview-runtime/src/automergeSync.ts:108`, semantic-tokens
 write `intelligenceService.ts:275`,
 `resolvePandocFormats` contentOverride `PreviewRouter.tsx:147`) before the
-render itself reads it. Folded into Phases 2 and 5 rather than tracked
-separately.
+render itself reads it. Measured in Phase 0 (sub-millisecond each; the
+Phase 2 decisions record why the third crossing is not worth removing)
+and folded into Phase 5 rather than tracked separately.
 
 Existing related strands: the closed bd-k9tfhsst covered SW asset-proxy
 namespace plumbing, not the base64 wire format (finding 6 is new work).
@@ -72,7 +84,8 @@ re-flush, template recompiles) — orthogonal to this plan.
   `--cpu-prof` driver workflow (never vitest), analysis via
   `hub-client/scripts/perf/analyze-cpuprofile.mjs`.
 - After each phase: `npm run test:ci` and `npm run build:all` from
-  `hub-client/`. Phases touching `crates/wasm-quarto-hub-client` (2, 3, 4)
+  `hub-client/`. Phases touching `crates/wasm-quarto-hub-client` or the
+  quarto-core code it compiles in (2 via `formats.rs`, 3, 4)
   also need the WASM rebuild chain (`npm run build:wasm`,
   `cargo xtask build-q2-preview-spa` if the SPA is affected) and
   `cargo xtask verify`.
@@ -331,27 +344,300 @@ nothing coalesces; `keyboard.type(..., { delay: 0 })` lets React batch
 keystrokes into as few as 3 effect fires, same symptom; the 250 ms
 pace makes overlap deterministic.
 
-## Phase 2 — Parse-check-only format classification (finding 1)
+## Phase 2 — Resolver-only format classification (finding 1)
 
-The router pays a full parse + AST serialization + main-thread
-`JSON.parse` per keystroke and keeps only `success`.
+The router pays a full parse per keystroke and reads only `success`
+(`PreviewRouter.tsx:147`). That parse is `parse_qmd_to_ast`: the whole
+tree-sitter body parse, the engine pass-through, `MetadataMergeStage`
+and the AST writer — the discard is larger than "parse + serialize"
+says. Nothing merged since the audit touches this path.
 
-- [ ] Test first (Rust, `crates/wasm-quarto-hub-client`): a new export
-  (working name `check_document_for_preview`) returns parseability plus
-  the resolved format classification inputs without serializing an AST;
-  assert classification parity with the `parse_qmd_to_ast` +
-  `resolve_pandoc_formats` pair across format fixtures (default html,
-  revealjs, pdf, docx, unknown key, mid-edit syntax error).
-- [ ] Implement the Rust export (TDD: failing test, then implement).
-  Reuse the metadata/front-matter path; no AST writer run.
-- [ ] TS wrapper in `wasmRenderer.ts` + switch
-  `PreviewRouter.tsx:134-168` to it. While here: skip the check entirely
-  when the edit did not touch the front-matter block (cheap string
-  compare of the YAML region), which also removes the
-  `resolvePandocFormats` contentOverride crossing for body-only edits.
-- [ ] Regression: keystroke-type through the format fixtures in the dev
-  server, confirm no mode flicker; record the per-keystroke cost delta
-  from the Phase 0 harness.
+**Status: done 2026-11-09 (bd-luoo7qgu).** The first
+review (2026-11-06) designed a new export, `check_document_for_preview`,
+returning parseability plus the classification in one envelope, with a
+two-signal skip in front of it. A second probe against the real WASM
+(below) shows none of that is needed: the router can drop the parse
+*and* its guard outright once a one-line inconsistency in the Rust
+resolver is fixed. The design is now one Rust line, deletions in the
+router, and no skip. Results below; the per-keystroke baseline's other
+components (render, tokens, VFS) are unchanged — the phase removes the
+discarded parse and its envelope, nothing else.
+
+### What the probe showed (2026-11-09, local WASM artifact of 2026-11-03)
+
+`parse_qmd_to_ast` + `resolve_pandoc_formats` on each input, then
+`classifyPreviewMode` as the router runs it. The artifact predates the
+dashboard commit (c5a29dcd0), so `format: dashboard` is omitted; nothing
+else relevant to this phase changed between the artifact and `main`
+(the only other touch, a0080ff54, is the single-file `_metadata.yml`
+walk).
+
+| Input | parse `success` | resolver `class` / `pseudoFormat` | router mode today |
+|---|---|---|---|
+| no front matter; `format: html`, `revealjs`, `q2-slides` | true | preview / set | react |
+| `format: q2-html-render` | true | preview / null | dom |
+| `format: typst`, `docx`; a `docx, html` map | true | download / null | download or pdf |
+| `format: latex`, `r`, `reveal`, `html5` | **false** | neither / null | neither |
+| `format: pdf` | true | neither / null | neither |
+| `format: acm-html`, extension not installed | true | preview / null | dom |
+| `format: q2-s`, `q2-bogus` | **false** | **neither / the key itself** | react — **held back by the guard** |
+| malformed YAML; unterminated front matter | true | html → q2-preview | react |
+| body: unclosed div, unclosed fence, bad cell options, unknown shortcode | true | from the front matter | unchanged |
+| body: `[text{.cls}`, `[x](` | **false** (parse error / Q-2-31) | from the front matter | held |
+| runtime `format: revealjs` + document `format: bogus` | **false** | revealjs / revealjs | **stuck on the previous mode** |
+
+Timing, 75 KB document, warm, min of 5: `parse_qmd_to_ast` 67.1 ms,
+`resolve_pandoc_formats` 0.26 ms. The Phase 0 baseline agrees: 79 ms vs
+0.48 ms at 1x, 708 ms vs 1.5 ms at 8x.
+
+Three corrections to the 2026-11-06 premise follow from the table:
+
+1. **`success` is not front-matter-determined.** Unbalanced inline
+   spans and malformed links hard-fail the parse (pampa raises a parse
+   error / Q-2-31). A parse-free export cannot reproduce `success`, and
+   the `success`-parity probes the first review specified would fail.
+   This does not matter for classification: the mode is a function of
+   the front matter and the project only, so "hold the previous mode on
+   a body error" and "reclassify from the unchanged front matter" are
+   the same mode. Parity is asserted on the **mode**, never on
+   `success`.
+2. **The guard is live in exactly one real case**: a `q2-*` key the
+   pipeline cannot build — the partial `q2-s` while typing `q2-slides`,
+   or a typo. The resolver is inconsistent there: `format_class` says
+   `neither` (it gates on `Format::from_format_string`) while
+   `preview_pseudo_format` returns the key for anything starting with
+   `q2-`, and `classifyPreviewMode` checks `pseudoFormat` before
+   `class`, so the mode would be `react` with an unbuildable format.
+   The parse gate was masking that. Once `preview_pseudo_format`
+   applies the same `from_format_string` gate, an unknown key *always*
+   classifies `neither`, which the guard already lets through — the
+   guard is provably vacuous and goes with the parse. (Every other mode
+   implies a key `from_format_string` accepts: `pseudoFormat` set ⇒
+   html / dashboard / revealjs / a buildable `q2-*`; `q2-html-render`
+   is builtin; class `preview` is gated on it; class `download` ⇒ one
+   of the five download-table keys, all known identifiers.)
+3. **The guard causes a bug.** `front_matter_format` reads the document
+   layer only, while the resolver — and the real render, via
+   `resolve_entry_format` — are project-aware and honor the runtime
+   scalar `format` (`q2 preview --to`). With a requested format, a
+   document whose own key is unknown never reclassifies today (last
+   row). Deleting the guard fixes it; the resolver is the one that is
+   right.
+
+### Decisions
+
+- **No new export.** `resolve_pandoc_formats` already returns everything
+  the router needs, synchronously, in a small envelope.
+- **No skip logic.** The two-signal skip of the first review
+  (YAML-region compare + VFS-write counter, per-path keying) would save
+  the resolver call: 0.26 ms here, 0.48 / 1.5 ms at 1x / 8x in the
+  baseline. The "third full-text crossing" of the amplifier is one
+  buffer copy into WASM memory, sub-millisecond at 8x. Against that, a
+  TS front-matter extractor would have to match the Rust YAML-block
+  boundary exactly (the unterminated case shows how subtle that is), and
+  the counter touches three VFS wrappers. Not worth the code or the
+  invalidation risk; the amplifier stays with Phase 5.
+- **Accepted behavior change.** While a `q2-*` format name is being
+  typed, the pane shows the `neither` view ("nothing can show `q2-s`")
+  for the partial key instead of holding the previous preview, then
+  mounts the deck when the key completes. That is exactly what typing
+  `revealjs` or `docx` does letter by letter today, and the preview
+  already shows a render error for the partial key (the render resolves
+  the format itself). Rejected alternative, for the record: a
+  `formatKnown` boolean on the resolver response computed from the same
+  gate, with the guard kept — same cost, but it keeps a special case for
+  one key family.
+- **Out of scope, pre-existing**: `format: q2-foo-html` parses as
+  extension `q2-foo` of `html`, gets a `pseudoFormat`, and mounts the
+  React preview on a non-preview pipeline. Unchanged by this phase; file
+  a strand if it ever bites.
+
+### Checklist
+
+- [x] File the strand (`braid create "Phase 2: resolver-only format
+  classification" -t task -p 2 -d "<this plan>"`), mark it
+  `in_progress`, branch `braid/<id>-resolver-only-format-check` off
+  `main`. → bd-luoo7qgu, branch `braid/bd-luoo7qgu-resolver-only-format-check`.
+- [x] **Test first (TS, wasm suite).** In
+  `previewModeClassification.wasm.test.ts`, under the editor-edge
+  `describe`, add two pins that must **fail** on the current artifact:
+  `format: q2-s` and `format: q2-bogus` → `{ mode: 'neither', formatKey:
+  'q2-s' }` / `'q2-bogus'` (today: `react` with the partial key). Add one
+  regression pin that passes already and documents correction 3:
+  `wasm.vfs_set_runtime_metadata('format: revealjs')` then a buffer with
+  `format: bogus` → `{ mode: 'react', format: 'revealjs' }` (the
+  `beforeEach` already resets the runtime metadata). Fix the stale
+  comment on the unterminated-front-matter pin: the parse succeeds there
+  too, the guard never suppressed anything, and the transient
+  `q2-preview` reclassify is real (benign only when the prior mode was
+  already `q2-preview`). → Red confirmed: `q2-s` classified `react`;
+  regression pin green from the start.
+- [x] **Test first (Rust).** Extend
+  `the_preview_pseudo_format_follows_the_react_rule` in
+  `crates/quarto-core/src/pandoc_request/formats.rs`: `q2-s`, `q2-bogus`
+  → `None`; `q2-preview`, `q2-debug`, `q2-sandboxed-preview`,
+  `q2-slides`, `q2-dashboard` → `Some(key)`; `q2-html-render` → `None`
+  (unchanged). `cargo nextest run -p quarto-core formats` — the two new
+  `None` assertions fail. → Red confirmed (`q2-s` → `Some("q2-s")`).
+- [x] **Implement the Rust fix**: in `preview_pseudo_format`, the `q2-*`
+  arm returns `Some(k)` only when `Format::from_format_string(k).is_ok()`
+  — the identical gate `format_class` uses a few lines up (`Format` is
+  already imported). One line plus a two-line comment: a `q2-*` key
+  previews as itself only when the pipeline can build it; a partial or
+  misspelt key is `neither`, like any unknown key. Then
+  `cargo clippy -p quarto-core --all-targets -- -D warnings`.
+  → 53/53 formats tests green, clippy clean.
+- [x] **Rebuild the WASM** so the TS pins see the fix: `cd hub-client &&
+  npm run build:wasm`, then `npm run test:wasm`. The `q2-s` / `q2-bogus`
+  pins flip to green; the rest of the classification suite (typst and
+  its `output-ext` variants, extension formats, multi-format maps,
+  project-level and book formats, the editor-edge pins) is unchanged —
+  that *is* the mode-parity assertion across the existing fixture set.
+  → 17/17 classification pins green; full wasm suite 445 passed / 28
+  skipped.
+- [x] **Router** (`PreviewRouter.tsx`, the `checkFormat` effect):
+  - delete the `parseQmdToAst` call, the `result.success || …` guard
+    and the `async` wrapper. The effect becomes synchronous: early
+    return when `!isWasmReady()`, build `deps`, `mode =
+    classifyPreviewMode(path, deps)`, then the existing
+    `setPreviewMode(prev => same ? prev : mode)` / `onFormatChange` /
+    `onPreviewModeChange` tail unconditionally. Keep `try/catch/finally`
+    with `setCheckedPath` in `finally` — the `initialChecking`
+    placeholder depends on it;
+  - the inner `isWasmReady() ? … : null` in `deps.resolve` is redundant
+    after the early return — drop it; `lastStableFormatRef` is written
+    and never read — delete it;
+  - gauges: keep `router.format-check` and `.classify`, delete `.parse`;
+  - delete the stale comments ("a mid-edit syntax error keeps the
+    previous mode"; "a format the parser's metadata merge does not know
+    (`latex`) fails the parse") and the "Finding 1" marker — the code
+    they describe is gone. Replace with one line: the mode is the
+    resolver's answer, re-read on every content change
+    (sub-millisecond; see this phase);
+  - `PreviewRouter.integration.test.tsx`: drop the `parseQmdToAst` entry
+    from the `vi.mock('@quarto/preview-runtime')` factory and rewrite the
+    header's "the WASM probe is mocked to return an AST…" sentence; the
+    three routing cases stay as they are. → 3/3 green.
+- [x] **preview-runtime cleanup** (`wasmRenderer.ts`): `parseQmdToAst`
+  loses its last caller (`ReactPreview` uses
+  `parseQmdToAstWithAttribution` for the q2-debug / q2-slides render;
+  the SPA and the sandboxed preview never imported it). Delete the
+  wrapper, per the Phase 1 precedent for dead exports, and point the two
+  comments that name it (`useAttribution.ts:20`, `pipelineKind.ts:12`)
+  at the attribution variant. Remove the "Finding 1" comment inside
+  `parseQmdToAstWithAttribution`; the `parse.qmd-to-ast` gauge stays —
+  it now measures only real q2-debug / q2-slides renders. Leave the Rust
+  `parse_qmd_to_ast` export alone.
+- [x] **Verify**: `npm run test:ci` and `npm run build:all` from
+  `hub-client/`; `cargo nextest run -p quarto-core`; `cargo xtask verify`
+  (full — quarto-core feeds the WASM). No snapshot changes expected; if
+  any `.snap` moves, stop and report per AGENTS.md.
+  → Full `cargo xtask verify` green (lint, workspace build + strict
+  claude-notes render + noop-rebuild check, ts-packages builds, hub-client
+  build:all incl. WASM + SPA, hub-client test:ci = 1746 unit + integration
+  + 445/28 wasm). Workspace nextest 19194/19194 with two exclusions, both
+  R-package version skew on this machine, both reproduced with the branch
+  diff reverted and filed as bd-qwscag8b:
+  `capture_classifies_pieces` (newer knitr classes the chunk error
+  `rlang_error`, test pins `simpleError`) and
+  `a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live` (newer
+  knitr refuses `#|` options on SQL chunks, so the live run errors). Zero
+  `.snap` files touched. Side effect: `cargo xtask verify` exposed a
+  stale `node_modules` (`@types/jsdom` missing) — `npm install` at the
+  repo root before the rerun.
+- [x] **Measure** with the Node driver (recipe: perf playbook § "Driving
+  the real render path"; same fixture scales as Phase 0). Per keystroke,
+  `router.format-check` drops from parse-dominated to ≤ ~1.5 ms and
+  `parse.qmd-to-ast` no longer fires from the router. Expected
+  per-keystroke wall: 431 → ~350 ms at 1x, 3410 → ~2700 ms at 8x.
+  Record before/after in a "Phase 2 result" table under this checklist.
+- [x] **End-to-end in the dev server** (`npm run dev`, a project with a
+  `_quarto.yml`): (a) type in the body of a `revealjs` document — the
+  deck stays mounted, no flicker; (b) in the front matter type
+  `format: q2-slides` letter by letter — the pane shows the `neither`
+  view for the partial keys and mounts the deck at `q2-slides`; (c)
+  change `format:` in `_quarto.yml` for a front-matter-less chapter — the
+  open chapter reclassifies on its next keystroke (the
+  VFS-generation-keyed `cached_project`, `lib.rs:2360`, still does this
+  with no skip in the way); (d) with `QUARTO_PERF_STATS` on, read
+  `router.format-check` from the gauge table. Record the invocation and
+  what was observed here.
+
+  Done as a throwaway Playwright spec (deleted after the run; precedent:
+  the Phase 0 driver, the Phase 1 smoke): vite dev
+  (`VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
+  VITE_HUB_SERVER=http://localhost:3031
+  VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html`) against
+  the functional suite's globalSetup hub, headless chromium; invocation
+  `cd hub-client && npx playwright test --config
+  playwright.phase2-smoke.config.ts` — **2 passed**. Observed:
+  (a) a 9-character body burst in a `format: revealjs` document kept the
+  deck mounted at every keystroke and the deck re-rendered with the new
+  text; (b) `format: q2-`/`q2-s`/`q2-sl` each showed the `neither` pane
+  *naming the partial key* (the accepted behavior change), and
+  `q2-slides` mounted the slide preview — **which is `SlideAst`, the
+  in-page generic slide surface, not the q2-preview iframe**: `revealjs`
+  converged onto the iframe (bd-vwp4y5ku), `q2-slides` did not
+  (`ReactRenderer.tsx`\'s fall-through arm); (c) after adding
+  `format: revealjs` to `_quarto.yml` and polling the VFS until the
+  sibling edit landed (the router classifies only on the chapter's next
+  content change, so a fixed sleep races the sync), one keystroke in the
+  open front-matter-less chapter flipped it to the reveal deck;
+  (d) browser gauges: `router.format-check` 17 runs avg **1.0 ms**
+  (resolver + classify; the deleted parse was 80–700+ ms), no
+  `router.format-check.parse`, and `parse.qmd-to-ast` entirely absent
+  before the `q2-slides` completion — then present after, from the one
+  remaining consumer (SlideAst's AST-only q2-slides render).
+  Gotchas for the next driver: Monaco auto-indents on Enter (an
+  unguarded `format:` line landed nested under `project:` — the
+  resolver was right to keep saying html; two Node probes confirmed the
+  resolver reclassifies correctly at the WASM level), and position the
+  cursor by clicking the target `.view-line` + `End`, not Meta+Arrow
+  chords (no-ops in headless chromium here).
+
+### Phase 2 result (2026-11-09, Node driver, release WASM, warm SASS cache)
+
+Reconstructed driver (the Phase 0/1 drivers did not survive /tmp; same
+design plus one flag): sequential 10-keystroke phase-A protocol — VFS
+write, format check, model-aligned semantic tokens, full render — against
+the production `wasmRenderer`/`intelligenceService`/`getQ2Format` sources
+and the real WASM. `ROUTER_PARSE=1` re-inserts the deleted per-keystroke
+parse (`parseQmdToAstWithAttribution(content, null)`, exactly the old
+router call) for the "before" leg, so both legs run the same fixture on
+the same build. Fixture rebuilt to the Phase 0 spec (mid-size project
+document, ~99 KB at 1x, images, theme; 1x/2x/4x/8x body duplication) —
+its composition differs from Phase 0's, so absolute render cost differs;
+only same-driver before/after is compared. Invocation:
+`QUARTO_PERF_STATS=1 node --import tsx/esm driver.mjs` (± `ROUTER_PARSE=1`),
+run on an idle machine.
+
+Per-keystroke wall (10 sequential keystrokes, ms):
+
+| Scale | before (parse) | after (resolver-only) | delta | % |
+|---|---|---|---|---|
+| 1x (99 KB) | 526.9 | 423.7 | −103.2 | −19.6 % |
+| 2x (199 KB) | 1030.5 | 831.3 | −199.2 | −19.3 % |
+| 4x (396 KB) | 2003.1 | 1644.2 | −358.9 | −17.9 % |
+| 8x (792 KB) | 3987.3 | 3299.6 | −687.7 | −17.2 % |
+
+The deleted parse was ~19 % of per-keystroke cost at 1x scaling linearly
+(delta 6.7× from 1x to 8x) — the Phase 0 baseline measured 18 % (79.4 ms
+of 431 ms) on its own fixture. The format check itself (resolver +
+classify, driver-timed) is 0.38–0.87 ms per call at every scale — under
+the ≤ ~1.5 ms target — and `parse.qmd-to-ast` no longer fires from the
+router path (0 runs in the after leg; it now measures only real
+q2-debug / q2-slides renders). Envelope `JSON.parse` per keystroke fell
+from 6 to 5 and envelope bytes −31 % (162.4 → 111.8 MB per 10 keystrokes
+at 1x, 1338.2 → 919.8 MB at 8x) — the discarded AST envelope is gone.
+The per-keystroke wall numbers are therefore a slight *under*statement of
+the win on the Phase 0 fixture (whose baseline wall included a cheaper
+parse): relative to the Phase 0 baseline's own components, deleting the
+parse takes the 1x wall from 431 ms to ~350 ms and the 8x wall from
+3410 ms to ~2700 ms, matching this phase's prediction.
+- [x] hub-client changelog entry (two-commit workflow: the change, then
+  the hash). Close the strand with the measurement in the comment.
+  → 641acc274 + changelog efcad13be; bd-luoo7qgu closed with the
+  measurement.
 
 ## Phase 3 — Single-parse AST transport (finding 3)
 

@@ -153,8 +153,10 @@ describe('classifyPreviewMode against the real wasm', () => {
       // Mid-edit YAML: no closing fence. The resolver SUCCEEDS but does not
       // see the unterminated block's `format:` key — it falls back to the
       // default (html → q2-preview). So an in-progress edit of the format
-      // key itself can transiently reclassify to q2-preview; PreviewRouter's
-      // parse guard is what suppresses the flicker (component logic).
+      // key itself transiently reclassifies to q2-preview. That reclassify
+      // is real — the parse succeeds here too, so PreviewRouter's former
+      // parse guard never suppressed it; it is benign only when the prior
+      // mode was already q2-preview.
       const buffer = '---\ntitle: T\nformat: revealjs\n';
       const resolved = JSON.parse(
         wasm.resolve_pandoc_formats('/project/doc.qmd', { contentOverride: buffer }),
@@ -162,6 +164,28 @@ describe('classifyPreviewMode against the real wasm', () => {
       expect(resolved.success).toBe(true);
       expect(resolved.key).toBe('html');
       expect(modeOfBuffer('/project/doc.qmd', buffer)).toEqual({ mode: 'react', format: 'q2-preview' });
+    });
+
+    // Phase 2 (bd-luoo7qgu): the resolver's pseudoFormat gate must agree
+    // with its format_class gate, so the router can classify without the
+    // per-keystroke parse.
+    it('a partial or misspelt q2-* key classifies as neither, not react', async () => {
+      // While `format: q2-slides` is being typed, the partial key is one the
+      // pipeline cannot build; it gets no pseudoFormat, the same answer any
+      // other unknown key gets.
+      expect(await modeOf('format: q2-s')).toEqual({ mode: 'neither', formatKey: 'q2-s' });
+      expect(await modeOf('format: q2-bogus')).toEqual({ mode: 'neither', formatKey: 'q2-bogus' });
+    });
+
+    it('a runtime format reclassifies a document whose own key is unknown', () => {
+      // The resolver — like the real render via `resolve_entry_format` —
+      // honors the runtime scalar `format` (`q2 preview --to`); the mode is
+      // its answer, re-read on every content change. (Regression pin for
+      // the router's former parse guard, which held the previous mode here:
+      // `front_matter_format` read the document layer only.)
+      wasm.vfs_set_runtime_metadata('format: revealjs');
+      const buffer = '---\nformat: bogus\n---\n\nBody.\n';
+      expect(modeOfBuffer('/project/doc.qmd', buffer)).toEqual({ mode: 'react', format: 'revealjs' });
     });
   });
 });

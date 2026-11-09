@@ -9,8 +9,9 @@
  * should land together.
  *
  * Used today by `ReactPreview.tsx::doRender` to choose between the
- * AST-only entry point (`parseQmdToAst`, for q2-debug / q2-slides)
- * and the full pipeline (`renderPageInProject`, for q2-preview).
+ * AST-only entry point (`parseQmdToAstWithAttribution`, for q2-debug /
+ * q2-slides) and the full pipeline (`renderPageInProject`, for
+ * q2-preview).
  * Plan 7 will extend it for the edit-back path: when q2-preview
  * round-trip lands, the writer wrapper takes a `pipelineKind`
  * argument that flows through this helper.
