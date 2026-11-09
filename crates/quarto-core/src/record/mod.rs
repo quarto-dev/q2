@@ -26,6 +26,8 @@ mod positron_export;
 mod positron_import;
 mod positron_record;
 mod reader;
+#[cfg(not(target_arch = "wasm32"))]
+mod render_sources;
 mod source_key;
 mod sources;
 mod staleness;
@@ -65,6 +67,10 @@ pub use positron_record::{
     imported_record_is_stale, is_imported_record, record_from_positron,
 };
 pub use reader::{ReadError, read_record, read_record_value};
+#[cfg(not(target_arch = "wasm32"))]
+pub use render_sources::{
+    RenderRecordSources, RenderSelection, SelectInputs, select_render_record,
+};
 pub use source_key::{
     CommandSources, RECORD_SOURCES_KEY, ResolvedSources, SourceKeyError, SourceNote, Trust,
     describe as describe_sources, host_record_sources, resolve_record_sources,
@@ -74,7 +80,7 @@ pub use sources::{
     ParseSourceError, RecordLookup, RecordSource, RecordSources, Resolution, SourceOutcome,
     WalkContext, resolve_records,
 };
-pub use staleness::record_is_stale;
+pub use staleness::{record_format_mismatch, record_is_stale, record_staleness, source_staleness};
 pub use types::{
     AuthorText, AuthorTexts, CellMetadata, CellType, EngineEntry, EngineRecord, Record, RecordCell,
     RecordFile, RecordMetadata, UnitKind, UnitLocation, UnitResult,

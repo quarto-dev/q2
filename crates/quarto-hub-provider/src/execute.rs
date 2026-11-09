@@ -559,6 +559,7 @@ impl Provider {
             SourceInputsOptions {
                 ownership: true,
                 registry: self.registry.clone(),
+                ..Default::default()
             },
         )
         .await

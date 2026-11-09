@@ -104,6 +104,58 @@ struct QuartoAnnotation {
     expansion: Option<u64>,
     /// `inline`: one entry per span evaluated in a markdown cell, in order.
     inline: Vec<InlineEntry>,
+    /// The runner's capture facts, present only for a runner built with them (OPR-4b).
+    // Read by OPR-4d, which maps them onto the knitr cell-metadata keys; nothing consumes them yet.
+    #[allow(dead_code)]
+    facts: CaptureFacts,
+}
+
+/// The three optional keys QuartoNotebookRunner adds to `metadata.quarto` for the presenter
+/// (OPR-4a spike, wire table): where each expression starts, where each output anchors, and what
+/// kind each output is. All `None` when the runner does not write them.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct CaptureFacts {
+    /// `expression_starts`: the 0-based line of the cell code at which each expression starts.
+    expression_starts: Option<Vec<u64>>,
+    /// `output_anchors`: the expression each output follows.
+    output_anchors: Option<Vec<u64>>,
+    /// `output_kinds`: per output, `message`, `warning`, or `null` for anything else.
+    output_kinds: Option<Vec<Option<String>>>,
+}
+
+/// An optional array of non-negative integers, or an error naming the key.
+fn read_u64_array(quarto: &Value, key: &str) -> Result<Option<Vec<u64>>, String> {
+    match quarto.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|v| v.as_u64())
+            .collect::<Option<Vec<_>>>()
+            .map(Some)
+            .ok_or_else(|| format!("`metadata.quarto.{key}` holds a non-integer")),
+        Some(_) => Err(format!("`metadata.quarto.{key}` is not an array")),
+    }
+}
+
+fn read_capture_facts(quarto: &Value) -> Result<CaptureFacts, String> {
+    let output_kinds = match quarto.get("output_kinds") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(a)) => Some(
+            a.iter()
+                .map(|v| match v {
+                    Value::Null => Ok(None),
+                    Value::String(s) => Ok(Some(s.clone())),
+                    _ => Err("`metadata.quarto.output_kinds` holds a non-string".to_string()),
+                })
+                .collect::<Result<Vec<_>, String>>()?,
+        ),
+        Some(_) => return Err("`metadata.quarto.output_kinds` is not an array".to_string()),
+    };
+    Ok(CaptureFacts {
+        expression_starts: read_u64_array(quarto, "expression_starts")?,
+        output_anchors: read_u64_array(quarto, "output_anchors")?,
+        output_kinds,
+    })
 }
 
 struct InlineEntry {
@@ -154,6 +206,7 @@ fn read_annotation(quarto: &Value, kernel: &Option<String>) -> Result<QuartoAnno
         line: quarto.get("line").and_then(Value::as_u64),
         expansion: quarto.get("expansion").and_then(Value::as_u64),
         inline,
+        facts: read_capture_facts(quarto)?,
     })
 }
 
@@ -1723,5 +1776,70 @@ fenced = 1
         let mut result = ExecuteResult::new("engine markdown");
         present_from_record("julia", JDOC, &ctx, &mut result).unwrap();
         assert_eq!(result.markdown, "engine markdown");
+    }
+
+    /// A notebook with one code cell whose `metadata.quarto` is `quarto`.
+    fn notebook_with_annotation(quarto: serde_json::Value) -> Value {
+        json!({
+            "nbformat": 4,
+            "nbformat_minor": 5,
+            "metadata": {"kernelspec": {"name": "julia-1.12"}},
+            "cells": [{
+                "cell_type": "code",
+                "execution_count": null,
+                "metadata": {"quarto": quarto},
+                "source": ["x = 1 + 1\n", "x\n", "y = x * 3"],
+                "outputs": []
+            }]
+        })
+    }
+
+    /// The runner's capture facts (OPR-4a, 4b) reach q2 in `metadata.quarto`, in the shapes the
+    /// runner wrote for a three-expression cell (a real run, 2026-11-09): the start line of each
+    /// expression, the output anchors, and the kind of each output (`null` for a plain value).
+    #[test]
+    fn capture_facts_in_the_cell_annotation_are_read_without_loss() {
+        let nb = notebook_with_annotation(json!({
+            "unit": 2,
+            "language": "julia",
+            "line": 15,
+            "expression_starts": [0, 1, 2],
+            "output_expressions": [1, 2, 3],
+            "output_anchors": [1, 2, 3],
+            "output_kinds": ["message", null, null],
+        }));
+        let cells = read_engine_notebook(&nb).unwrap();
+        let facts = &cells[0].quarto.as_ref().unwrap().facts;
+        assert_eq!(facts.expression_starts, Some(vec![0, 1, 2]));
+        assert_eq!(facts.output_anchors, Some(vec![1, 2, 3]));
+        assert_eq!(
+            facts.output_kinds,
+            Some(vec![Some("message".to_string()), None, None])
+        );
+    }
+
+    /// With none of the keys (an older runner, or units absent) a cell reads as before.
+    #[test]
+    fn an_annotation_without_capture_facts_reads_as_before() {
+        let nb = notebook_with_annotation(json!({"unit": 1, "language": "julia", "line": 9}));
+        let cells = read_engine_notebook(&nb).unwrap();
+        let q = cells[0].quarto.as_ref().unwrap();
+        assert_eq!(q.language.as_deref(), Some("julia"));
+        assert_eq!(q.line, Some(9));
+        assert_eq!(q.facts, CaptureFacts::default());
+    }
+
+    /// A key of the wrong shape is a runner bug, reported as the other malformed fields are.
+    #[test]
+    fn a_malformed_capture_fact_is_an_error() {
+        for (key, value) in [
+            ("expression_starts", json!("0,1")),
+            ("output_anchors", json!([1, "two"])),
+            ("output_kinds", json!([1])),
+        ] {
+            let nb = notebook_with_annotation(json!({"language": "julia", key: value}));
+            let err = read_engine_notebook(&nb).err().expect(key);
+            assert!(err.contains(key), "{err}");
+        }
     }
 }

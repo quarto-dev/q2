@@ -985,6 +985,8 @@ pub fn render_once(
         typst_target: None,
         captures: Default::default(),
         overlay,
+        // `execute: record-sources` is read per document inside the render; no option sets it.
+        record_sources: Default::default(),
     };
 
     match target {

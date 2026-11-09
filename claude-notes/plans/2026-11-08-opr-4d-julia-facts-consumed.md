@@ -1,8 +1,8 @@
 ---
 title: 'OPR-4d: q2 turns the Julia facts into cell metadata so the presenter uses them'
 date: 2026-11-08
-description: 'Conditional. Core maps the three facts the Julia runner puts in each cell''s metadata.quarto onto the same cell-metadata keys knitr uses, so the one per-cell step from OPR-1a reads them: interleaved output, exact prompt, numeric echo and numeric warning and message for Julia. With the facts absent, output is unchanged. Julia cells interleave per expression with Julia''s own limits, which is new behavior, not a restoration of Quarto 1.'
-status: conditional
+description: 'Core maps the three facts the Julia runner puts in each cell''s metadata.quarto onto the same cell-metadata keys knitr uses, so the one per-cell step from OPR-1a reads them: interleaved output, exact prompt, numeric echo and numeric warning and message for Julia. With the facts absent, output is unchanged. Julia cells interleave per expression with Julia''s own limits, which is new behavior, not a restoration of Quarto 1.'
+status: in-progress
 depends-on: [opr-4c, opr-1b]
 lane: A
 ---
@@ -15,8 +15,8 @@ lane: A
 
 ## Start condition
 
-`status: ready` on the integration branch (Gordon flips it after OPR-4c lands). If Gordon cancelled OPR-4b, this
-plan is `cancelled`; do not start.
+`status: ready` on the integration branch, with OPR-4c and OPR-1b resolved. Nothing else gates it: landing OPR-4c is
+the trigger, not a manual flip. If Gordon cancelled OPR-4b, this plan is `cancelled`; do not start.
 
 ## Branch and land (explicit)
 

@@ -30,7 +30,7 @@ use quarto_core::engine::preview_record::{
 };
 use quarto_core::pandoc_request::captures::{CapturePayload, parse_capture_payload};
 use quarto_core::project::ProjectContext;
-use quarto_core::record::{Record, record_is_stale};
+use quarto_core::record::{Record, record_staleness, source_staleness};
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::HubContext;
 use quarto_hub::index::CaptureRef;
@@ -212,6 +212,7 @@ async fn record_one(
         SourceInputsOptions {
             ownership: wants_import,
             registry: None,
+            ..Default::default()
         },
     )
     .await
@@ -313,55 +314,6 @@ async fn record_one(
         "recorded engine capture(s)",
     );
     Ok(true)
-}
-
-/// Whether the record a source supplied is stale for the document as it is now.
-///
-/// A cache hit is keyed by the document's content and an engine run is fresh by construction,
-/// so neither is stale. A `.quarto` copy was written by some earlier render, so it is checked
-/// when chosen (the same comparison the watcher uses). An unreadable declaration counts as
-/// stale: the viewer then offers Re-execute rather than claiming freshness. The imported
-/// sources have their own rule (RIU-3).
-fn source_staleness(
-    source: &quarto_core::record::RecordSource,
-    run: &CaptureRun,
-    inputs: &quarto_core::engine::preview_record::SourceInputs,
-) -> bool {
-    use quarto_core::record::RecordSource;
-    match source {
-        RecordSource::Cache | RecordSource::Engine => false,
-        RecordSource::Q2 | RecordSource::Positron | RecordSource::Dir(_) => {
-            run.record.as_ref().is_some_and(|record| {
-                record_staleness(
-                    record,
-                    &String::from_utf8_lossy(&inputs.input_qmd),
-                    &inputs.sugared_blocks,
-                    &inputs.metadata,
-                )
-                .unwrap_or(true)
-            })
-        }
-    }
-}
-
-/// The one staleness answer for a record, for the publish and for every file change, so the two
-/// cannot disagree. An imported record (Positron marker, no engines) skips only the
-/// engine-hash comparison and reports staleness by orphaned cells (epic decision 5 of
-/// 2026-11-05); any other record, including a hand-edited copy that carries the marker **and**
-/// engines, takes `record_is_stale`.
-fn record_staleness(
-    record: &Record,
-    input_qmd: &str,
-    sugared: &[quarto_core::record::SugaredBlock],
-    metadata: &std::collections::BTreeMap<String, serde_json::Value>,
-) -> Result<bool, quarto_core::record::HashError> {
-    if quarto_core::record::is_imported_record(record) {
-        Ok(quarto_core::record::imported_record_is_stale(
-            record, input_qmd, sugared,
-        ))
-    } else {
-        record_is_stale(record, input_qmd, sugared, metadata)
-    }
 }
 
 /// What the sidecar's capture doc held, as far as staleness is concerned.

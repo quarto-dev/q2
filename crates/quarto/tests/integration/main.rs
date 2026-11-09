@@ -46,6 +46,7 @@ pub mod render_cli_e2e;
 pub mod render_exit_codes;
 pub mod render_integration;
 pub mod render_pandoc_formats_e2e;
+pub mod render_record_sources_cli;
 pub mod render_scripts_cli;
 pub mod revealjs_cli;
 pub mod smoke_all;
