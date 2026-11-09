@@ -2,7 +2,7 @@
 title: 'OPR-0d: research, could the execution-records source list be a metadata key?'
 date: 2026-11-08
 description: 'Research note that answers Gordon''s question (R5): whether the source list of --execution-records could be a document or project metadata key instead of, or beside, a command-line flag. Covers hash effects, hub trust, path resolution, machine-local sources, convert, and conflict checks. Ends with a recommendation; Gordon decides, which unblocks OPR-5.'
-status: ready
+status: in-progress
 depends-on: []
 lane: C
 ---
