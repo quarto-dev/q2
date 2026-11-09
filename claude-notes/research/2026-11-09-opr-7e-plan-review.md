@@ -243,3 +243,20 @@ Build **level 3 only** (with the stale-`include`, version-stamp, document-order 
   `document.rs`); stale-data hazards; consumers (preview, hub guests, replay, Positron, OPR-7d); plan quality (S1 to S9
   pass/fail, decision rules, test-first order, missing gates); cost and value and the smallest slice; and protocol
   compliance and the plan\'s own references.
+
+## (g) Decided (Gordon, 2026-11-09), and where the plan departs from this note
+
+The five open questions in (d) were answered the same day and folded into the plan (see its "Decisions" section):
+
+1. Level 3 is slice 1; level 1 is an optional second slice; level 2 is cut; if level 3 fails the spike, stop.
+2. The unit-id fragility is accepted: code added above a cached chunk can change what runs below it, so a re-run is
+   correct.
+3. The sidecar is prototyped as S10, with a tie-break in the plan.
+4. A persisted copy of the record in knitr\'s own cache is tolerated and documented (knitr-epic decisions 2, 8, 24).
+5. Ordering with OPR-7d is soft: 7d does not wait for 7e.
+
+The plan departs from this note in one place. Finding 3 proposed refreshing the payload\'s `options` from the hit\'s
+current options. Writing the plan showed that is not enough: the stored markdown for an `include=false` miss is just the
+indent, so refreshed options would present an empty cell. The plan instead stores the `include` value in the payload and
+treats a mismatch as absent-and-quiet (knitr\'s own behavior for the page, no worse than OPR-7b). `include` is the only
+chunk option outside the level-3 key that changes presentation, so no other option needs refreshing.
