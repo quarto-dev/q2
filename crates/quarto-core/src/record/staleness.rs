@@ -19,7 +19,9 @@ use serde_json::Value;
 use super::author_text::{SugaredBlock, author_texts};
 use super::exec_hash::{HashError, UnitHashRef, hash_document};
 use super::matching::{OUTPUT_FORMAT_OPTION, UnitKey, lost_header_keys, match_units};
+use super::sources::RecordSource;
 use super::types::{EngineEntry, Record, UnitKind};
+use crate::engine::preview_record::{CaptureRun, SourceInputs};
 use crate::engine::units::{Unit, scan_units};
 
 /// The engine whose recorded owned-language set contains `lang`.
@@ -145,6 +147,59 @@ pub fn record_is_stale(
     // (KNR-3 slice 8); only the matched pairs count, so an unmatched unit (a prose edit never
     // makes one; a code edit already failed the hash check) does not.
     Ok(!lost_header_keys(&matching, &keys, &record.cells).is_empty())
+}
+
+/// Whether the record a source supplied is stale for the document as it is now.
+///
+/// A cache hit is keyed by the document's content and an engine run is fresh by construction,
+/// so neither is stale. A `.quarto` copy was written by some earlier render, so it is checked
+/// when chosen (the same comparison the watcher uses). An unreadable declaration counts as
+/// stale: the viewer then offers Re-execute rather than claiming freshness. The imported
+/// sources have their own rule (RIU-3).
+pub fn source_staleness(source: &RecordSource, run: &CaptureRun, inputs: &SourceInputs) -> bool {
+    match source {
+        RecordSource::Cache | RecordSource::Engine => false,
+        RecordSource::Q2 | RecordSource::Positron | RecordSource::Dir(_) => {
+            run.record.as_ref().is_some_and(|record| {
+                record_staleness(
+                    record,
+                    &String::from_utf8_lossy(&inputs.input_qmd),
+                    &inputs.sugared_blocks,
+                    &inputs.metadata,
+                )
+                .unwrap_or(true)
+            })
+        }
+    }
+}
+
+/// The one staleness answer for a record, for the publish and for every file change, so the two
+/// cannot disagree. An imported record (Positron marker, no engines) skips only the
+/// engine-hash comparison and reports staleness by orphaned cells (epic decision 5 of
+/// 2026-11-05); any other record, including a hand-edited copy that carries the marker **and**
+/// engines, takes `record_is_stale`.
+pub fn record_staleness(
+    record: &Record,
+    input_qmd: &str,
+    sugared: &[SugaredBlock],
+    metadata: &BTreeMap<String, Value>,
+) -> Result<bool, HashError> {
+    if super::is_imported_record(record) {
+        Ok(super::imported_record_is_stale(record, input_qmd, sugared))
+    } else {
+        record_is_stale(record, input_qmd, sugared, metadata)
+    }
+}
+
+/// Whether a record was recorded for an output format other than `target`.
+///
+/// `record_is_stale` deliberately takes no format ("format alone is not an edit": right for the
+/// preview, which shows a stale record). A render is for one format, so a record whose
+/// hash-profile cells were recorded for another format counts as not supplied. Returns the
+/// recorded format when it differs. `None` when the record names no format (Jupyter, Julia and
+/// fallback records carry none) or it matches.
+pub fn record_format_mismatch(record: &Record, target: &str) -> Option<String> {
+    recorded_format(record).filter(|f| f != target)
 }
 
 /// The output format the record\'s hash-profile cells were recorded for: the flat option such a
@@ -519,5 +574,11 @@ mod tests {
         assert_eq!(recorded_format(&rec).as_deref(), Some("docx"));
         assert!(!stale(&rec, PROFILED, &m), "format alone is not an edit");
         assert!(stale(&rec, &PROFILED.replace("plot(1)", "plot(2)"), &m));
+        // OPR-6: a render is for one format, so the same record counts as not supplied there.
+        assert_eq!(
+            record_format_mismatch(&rec, "html").as_deref(),
+            Some("docx")
+        );
+        assert_eq!(record_format_mismatch(&rec, "docx"), None);
     }
 }
