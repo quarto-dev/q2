@@ -1,7 +1,7 @@
 ---
 title: 'OPR-7f: engines control the attributes and file names of what the presenter writes'
 date: 2026-11-09
-description: 'Adds one general channel by which an engine tells the presenter which id, classes and attributes to put on a cell wrapper or an output div, and has the Julia mapping use it, together with the existing quarto_file_path, so a recorded Julia render keeps the wrapper id, the output execution count, the figure output class and the figure file names of the plain route. Removes four of the five OPR-7c allowlist entries about Julia markup and rewords the fifth as a deliberate drop (data-quarto leaks an absolute path). Lands before OPR-7d. No change to the Julia runner or engine fork.'
+description: 'Adds one general channel by which an engine tells the presenter which id, classes and attributes to put on a cell wrapper or an output div, and has the Julia mapping use it, together with the existing quarto_file_path, so a recorded Julia render keeps the wrapper id, the output execution count, the figure output class and the figure file names of the plain route. Stops the engine route from writing data-quarto (a q2 annotation that the Quarto 1 attribute forwarding leaks into the HTML, with an absolute path) by adding it to the forwarding exclusion list. Removes all five OPR-7c allowlist entries about Julia markup. Lands before OPR-7d. No change to the Julia runner or engine fork.'
 status: ready
 depends-on: [opr-4d, opr-7a, opr-7c]
 lane: C
@@ -33,12 +33,12 @@ bugs in either but things the engine route stamps and the presenter does not. Th
 Gordon\'s view (2026-11-09): these are gaps in the presenter, and the engine should be able to control them. The
 presenter already has two such channels, applied without interpretation: `metadata.quarto_file_path` on an image output
 (the file name; knitr uses it) and the size read by `metadata_size`. This plan adds the missing one, for attributes,
-and has the Julia mapping use both. It supersedes the allowlist entries instead of signing them.
+and has the Julia mapping use both. It supersedes the allowlist entries instead of signing them: all five go.
 
 | 7c entry | Resolution here |
 |---|---|
 | `julia wrapper id` (`id="cell-N"`) | Julia sends the id through the new channel. |
-| `julia wrapper data-quarto` | **Dropped on purpose.** It carries the absolute source path (a plain Julia render of a scratch file wrote `/private/var/folders/.../j.qmd` into the HTML, seen in the OPR-7a end-to-end run) and nothing reads it. The entry stays, reworded as an intentional drop that also stops a path leak. |
+| `julia wrapper data-quarto` | **Fixed at the source, not allowlisted** (see Part C). `quarto` goes on the attribute-forwarding exclusion list in q2\'s `to-markdown.ts`, so the engine route stops writing it, and the presenter never did. Why it exists: [Why data-quarto exists](#why-data-quarto-exists). |
 | `julia output data-execution_count` | Julia sends it through the new channel (the notebook already has the count). |
 | `julia figure output class` (`cell-output` on a figure div) | Julia sends the class through the new channel. The presenter default stays knitr-style. |
 | `julia figure file names` | No presenter change: Julia sends `quarto_file_path` per image, computed by the plain route\'s rule. |
@@ -69,6 +69,33 @@ All three keys are optional. The presenter appends and does not interpret.
 - An engine that sends nothing is byte-identical to today, for every engine and golden (the 13 presenter goldens and the
   knitr corpus gate must not move).
 
+## Why data-quarto exists
+
+It is an accident of two features meeting, found in the sources on 2026-11-09 (read):
+
+- The runner\'s `emitUnits` annotation (QuartoNotebookRunner fork, commit `5e04284`, `src/evaluation.jl`,
+  `_unit_annotation`) writes `metadata.quarto = {unit, language, file, line}` (and, since OPR-4b, the capture facts) on
+  each cell, "so a consumer can align the notebook with the document". It is q2\'s record wire. Stock Quarto 1 never
+  asks for it.
+- Quarto 1\'s Jupyter markdown writer (`external-sources/quarto-cli/src/core/jupyter/jupyter.ts`, "forward other
+  attributes we don\'t know about") writes every cell metadata key that is not on its three exclusion lists as a div
+  attribute `key='<json>'`, so a user\'s `#| foo: bar` becomes `data-foo`. q2\'s port (`ts-packages/quarto-api/src/jupyter/to-markdown.ts`,
+  `cellOptionsFilter`) has the same code. `quarto` is on no list, so the annotation comes out as
+  `quarto='{...}'`, which pandoc\'s HTML writer prefixes to `data-quarto`.
+
+Nothing reads it back: q2 reads `metadata.quarto` from the notebook JSON, never from HTML (OPR-0c grep). It also hits
+**today\'s plain Julia render**, not only a forced recorded one (seen in the OPR-7a end-to-end run), and it has grown
+since OPR-4c, which added the capture facts to the same object. Each Julia cell in published HTML carries that JSON
+and the absolute source path.
+
+## Part C: stop the leak at the source
+
+Add `"quarto"` to `kJupyterCellThirdPartyMetadataKeys` (or a new q2-internal list concatenated into
+`cellOptionsFilter`, named for what it is: metadata q2 itself writes) in
+`ts-packages/quarto-api/src/jupyter/to-markdown.ts`. Only that file needs it: `ts-packages/quarto-api` is the one
+copy (q2 builds extensions from its `src`, `crates/quarto-core/src/extension/build.rs`), and the vendored julia-engine
+subtree has none. The forwarding of user-authored metadata and options stays as it is. No fork and no push is involved.
+
 ## Part B: Julia uses it (q2 side only)
 
 In the Julia notebook mapping (`engine/ts_record.rs`, where OPR-4d maps the capture facts; the reader already sees every
@@ -83,7 +110,7 @@ notebook cell, including the markdown cells the plain route counts), fill:
   already gives it).
 - `attrs.attributes.execution_count` on each display or execute-result output that has a count.
 - `attrs.classes: ["cell-output"]` on the output div of a figure.
-- Nothing for `data-quarto`.
+- Nothing for `data-quarto`: Part C removes it from the engine route.
 
 An engine may send the same keys itself later; the channel is not Julia-specific. Marimo and every other engine send
 nothing and are unchanged.
@@ -105,9 +132,14 @@ nothing and are unchanged.
       difference left is `data-quarto`. Include an unlabeled cell after a markdown cell, a labeled figure cell and a
       cell with two figures.
 - [ ] Implement Part B.
-- [ ] **Allowlist and harness:** remove the four entries and their built-in rules (`julia-cell-id`,
-      `julia-data-execution-count`, `julia-cell-output-class`, `julia-figure-names`) and their harness tests; keep
-      `julia-data-quarto` and reword its entry as the intentional drop with the path-leak reason. Re-run the Julia part
+- [ ] **Part C test first** (`ts-packages/quarto-api/src/jupyter/to-markdown.test.ts`, vitest): a cell whose metadata has
+      `quarto: {unit: 1, ...}` produces no `quarto=` attribute, while another unknown metadata key and a cell option
+      are still forwarded as attributes (so the feature is unchanged for users). Watch it fail, then add the exclusion.
+- [ ] **Part C through the binary:** a plain `q2 render` of a Julia document has no `data-quarto` in the HTML; a Jupyter
+      document with a user-authored unknown option still gets its `data-` attribute. Record both.
+- [ ] **Allowlist and harness:** remove all five entries and their built-in rules (`julia-cell-id`,
+      `julia-data-quarto`, `julia-data-execution-count`, `julia-cell-output-class`, `julia-figure-names`) and their
+      harness tests (keep the other three entries untouched). Re-run the Julia part
       of the gate (`OPR_PARITY_ONLY=julia/`, see the OPR-7c report for the command) and add the counts to the notes.
       Do not change any other entry or sign anything: signing is Gordon\'s.
 - [ ] **End-to-end through the binary:** render a Julia document with a bare plot, a labeled plot and an unlabeled cell
@@ -117,16 +149,18 @@ nothing and are unchanged.
 - [ ] `cd hub-client && npm run build:wasm` (the presenter and `record/` are in the WASM).
 - [ ] Update the execution-record format description if one documents `metadata.quarto` (grep `docs/` and
       `claude-notes/designs/`); user docs stay for OPR-8.
+- [ ] `ts-packages/quarto-api` tests (`npm test -w ts-packages/quarto-api`, the package\'s `vitest run`) and its build
+      (`npm run build -w ts-packages/quarto-api`) pass; check the package\'s tests are wired into CI
+      (`.github/workflows/ts-test-suite.yml`) and say so in the notes.
 - [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (includes the
       knitr corpus gate, the presenter goldens and `marimo_engine_e2e::`); the Windows cross-clippy (say if it cannot
       run); `cargo xtask lint`; `q2 render --strict` on this file.
 
 ## Exit criteria
 
-- With the Julia mapping on, the recorded route\'s figure file names, wrapper id, output execution count and figure
-  output class equal the engine route\'s on the oracle fixtures; the only Julia markup difference left is `data-quarto`,
-  deliberately dropped.
-- The allowlist has four fewer entries and one reworded; no other entry changed; nothing signed.
+- With the Julia mapping on and Part C in, the recorded route\'s figure file names, wrapper id, output execution count
+  and figure output class equal the engine route\'s on the oracle fixtures, and neither route writes `data-quarto`.
+- The allowlist has five fewer entries; no other entry changed; nothing signed.
 - Every golden, the knitr corpus gate and the marimo tests are unchanged.
 
 ## Out of scope
