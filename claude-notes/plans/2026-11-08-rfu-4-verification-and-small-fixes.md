@@ -4,18 +4,18 @@ date: 2026-11-08
 description: 'The q2-side boxes the RIU-6 demo left open: find or run the hub verification, re-check that a failed optional record copy fails soft, check the preview highlight for an edited cell, write down what q2 can say about a stale Julia server or a missing Plots project, and the RIU-3 browser items nobody has seen.'
 status: ready
 depends-on: [opr-5]
-lane: C
+lane: B
 ---
 
 **Epic:** [RIU follow-up](2026-11-08-rfu-epic-riu-follow-up.md) ·
 **Protocol:** [agent protocol](2026-11-08-opr-agent-protocol.md) (read it first).
-**Branch:** `rfu/4-verification-and-small-fixes` · **Lane C** (`workspace-5`) · **Blocks:** nothing.
+**Branch:** `rfu/4-verification-and-small-fixes` · **Lane B** (`workspace-4`; moved from lane C on 2026-11-09, lane B is idle) · **Blocks:** nothing.
 **Needs:** Julia 1.12, Playwright for the browser checks, a built `target/debug/q2`, `hub-client` tooling.
 
 ## Branch and land (explicit)
 
 ```bash
-cd /Users/gordon/src/q2/.worktrees/workspace-5 && pwd
+cd /Users/gordon/src/q2/.worktrees/workspace-4 && pwd
 git switch -c rfu/4-verification-and-small-fixes feature/one-presenter
 # claim: set status: in-progress in this file, commit, land (protocol, "Claiming a plan")
 # ... work; commit often ...
