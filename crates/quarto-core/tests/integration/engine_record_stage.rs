@@ -761,8 +761,11 @@ fn an_unwritable_record_location_warns_and_the_render_succeeds() {
         .collect();
     assert!(
         warnings.iter().any(|w| w.contains("execution record")
+            // The product names the canonical (long, plain) form; a Windows TEMP can be
+            // an 8.3 short name (GORDON~1) that `tmp.path()` keeps verbatim.
             && w.contains(
-                &tmp.path()
+                &quarto_system_runtime::canonicalize(tmp.path())
+                    .unwrap()
                     .join(".quarto")
                     .join("execution-records")
                     .display()
