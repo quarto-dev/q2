@@ -52,6 +52,23 @@ fn execute_in(
     files: &[(&str, &str)],
     capture: bool,
 ) -> KnitrExecuteResult {
+    execute_with_format(
+        path,
+        markdown,
+        files,
+        capture,
+        KnitrFormatConfig::with_defaults("html"),
+    )
+}
+
+/// [`execute_in`] with the document\'s format (its `execute:` scope) chosen by the caller.
+fn execute_with_format(
+    path: &std::path::Path,
+    markdown: &str,
+    files: &[(&str, &str)],
+    capture: bool,
+    format: KnitrFormatConfig,
+) -> KnitrExecuteResult {
     let qmd = path.join("doc.qmd");
     std::fs::write(&qmd, markdown).unwrap();
     for (name, text) in files {
@@ -60,7 +77,7 @@ fn execute_in(
     let params = KnitrExecuteParams {
         input: qmd,
         markdown: markdown.to_string(),
-        format: KnitrFormatConfig::with_defaults("html"),
+        format,
         temp_dir: path.to_path_buf(),
         lib_dir: None,
         dependencies: true,
@@ -688,18 +705,24 @@ fn an_include_false_level_3_chunk_is_recorded_on_a_miss_and_absent_on_a_hit() {
     assert_eq!(hit.cached_units, ["u1"]);
 }
 
-/// `include` is not in knitr\'s cache key: flipping it from false to true hits the old entry. The
-/// stored record was made for `include: false`, so it must not come back as a hidden cell.
+/// `include` is not in knitr\'s cache key, and a document-level `execute: include` is not part of
+/// the chunk text either: flipping it from false to true hits the old entry. The stored record
+/// was made for `include: false`, so it must not come back as a hidden cell.
 #[test]
 fn a_level_3_hit_whose_include_changed_is_absent_not_a_hidden_cell() {
     if !r_available("a_level_3_hit_whose_include_changed_is_absent_not_a_hidden_cell") {
         return;
     }
-    let hidden = id_chunk("h", "u1", "#| cache: true\n#| include: false\n", "1");
-    let shown = id_chunk("h", "u1", "#| cache: true\n#| include: true\n", "1");
+    let doc = id_chunk("h", "u1", "#| cache: true\n", "1");
+    let with_include = |include: bool| {
+        let mut format = KnitrFormatConfig::with_defaults("html");
+        format.execute.include = Some(include);
+        format
+    };
     let dir = tempfile::tempdir().unwrap();
-    let _ = execute_in(dir.path(), &hidden, &[], true);
-    let hit = execute_in(dir.path(), &shown, &[], true);
+    let miss = execute_with_format(dir.path(), &doc, &[], true, with_include(false));
+    assert_eq!(unit_ids(&miss), ["u1"], "recorded on the miss");
+    let hit = execute_with_format(dir.path(), &doc, &[], true, with_include(true));
     assert!(unit_ids(&hit).is_empty(), "{:?}", unit_ids(&hit));
     assert_eq!(hit.cached_units, ["u1"]);
 }

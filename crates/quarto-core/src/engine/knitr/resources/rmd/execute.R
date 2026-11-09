@@ -288,7 +288,7 @@ execute <- function(
   if (isTRUE(capture)) {
     result$pieces <- I(unname(quarto_capture$records))
     result$knownOptions <- I(quarto_capture$known_options)
-    result$cachedUnits <- I(unique(quarto_capture$cached_units))
+    result$cachedUnits <- I(capture_cached_units())
   }
   result
 }

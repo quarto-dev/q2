@@ -166,7 +166,8 @@ fn a_chunk_that_asked_for_the_cache_is_quiet_and_not_recorded() {
     if !r_available("a_chunk_that_asked_for_the_cache_is_quiet_and_not_recorded") {
         return;
     }
-    let doc = "```{r cached}\n#| cache: true\n1\n```\n\n```{r plain}\n2\n```\n";
+    // level 1: a level-3 chunk is recorded since OPR-7e
+    let doc = "```{r cached}\n#| cache: 1\n1\n```\n\n```{r plain}\n2\n```\n";
     let (result, _dir) = run_doc(doc, "html", true);
     assert!(
         with_code(&result, "Q-18-12").is_empty(),
@@ -186,8 +187,8 @@ fn a_chunk_that_asked_for_the_cache_is_quiet_and_not_recorded() {
 }
 
 /// The OPR-0c mixed document: two live figures, a cached figure, a live text chunk and a cached
-/// text chunk. Both the miss and the hit record exactly the three uncached units, drop nothing,
-/// and give the same markdown.
+/// text chunk. Since OPR-7e both the miss and the hit record all five units, drop nothing, and
+/// give the same markdown.
 #[test]
 fn a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit() {
     if !r_available("a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit") {
@@ -329,9 +330,17 @@ fn the_fallback_table() {
             Some("Q-18-14"),
         ),
         (
-            "cache asked for",
+            "cache asked for (level 3, recorded since OPR-7e)",
             "html",
             "```{r a}\n#| cache: true\n1\n```\n\n```{r b}\n2\n```\n",
+            &[],
+            vec![true, true],
+            None,
+        ),
+        (
+            "cache asked for (level 1, left out of the record)",
+            "html",
+            "```{r a}\n#| cache: 1\n1\n```\n\n```{r b}\n2\n```\n",
             &[],
             vec![true],
             None,
