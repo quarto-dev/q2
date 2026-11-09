@@ -2,7 +2,7 @@
 title: 'RFU-2: knitr cells export, and the import gate becomes a declared fact'
 date: 2026-11-08
 description: 'Removes the engine-ownership skips from the Positron export so a knitr record exports like Python and Julia, and replaces the import-side owner rule with one declared fact, kernel equivalence, that each engine states for the languages it owns. Gordon''s Phase A verdict is recorded (export drops nothing).'
-status: ready
+status: in-progress
 depends-on: [rfu-1, opr-3]
 lane: B
 ---
