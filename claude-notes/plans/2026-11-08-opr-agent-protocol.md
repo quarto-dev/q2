@@ -97,6 +97,7 @@ merge. If another agent's claim for the same plan is already on the integration 
 - **Disk.** A gate that exits 101 with no test failure may be a full disk. Clear only your own workspace\'s
   `target/debug/incremental`.
 - **hub-client.** If a commit changes anything under `hub-client/`, the changelog rule in AGENTS.md applies.
+- **Locate code by symbol.** Line numbers in a plan are approximate; locate code by symbol.
 - **Do not weaken a test** to make it pass. A failing test you did not expect is a finding: say so.
 - **Evidence.** Say which steps you ran, which you only read, and which you did not do. "Tests pass, I did not
   verify the real render path" is an acceptable status.

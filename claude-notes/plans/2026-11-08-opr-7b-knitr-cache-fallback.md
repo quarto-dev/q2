@@ -1,7 +1,7 @@
 ---
 title: 'OPR-7b: cached knitr chunks use the markdown fallback and emit no record'
 date: 2026-11-08
-description: 'Gordon decided (2026-11-08): a knitr chunk that asks for the cache keeps knitr''s cache and its finished markdown, and emits no record; it degrades quietly. Reverses the S4 rule (cache off while recording) after the OPR-0c spike shows a mixed document comes out right. Retires the Q-18-11 message and updates the test and the knitr plan note that pinned the old rule.'
+description: 'Gordon decided (2026-11-08): a knitr chunk that asks for the cache keeps knitr''s cache and its finished markdown, and emits no record; it degrades quietly. Reverses the S4 rule (cache off while recording) after the OPR-0c spike shows a mixed document comes out right. Retires the Q-18-12 message and updates the test and the knitr plan note that pinned the old rule.'
 status: ready
 depends-on: [opr-0c]
 lane: B
@@ -55,7 +55,7 @@ ask for the cache are recorded as before. LaTeX-family targets are already on th
       `crates/quarto-core/tests/`), and say how and why in the commit message.
 - [ ] Change `capture_install` so a chunk that asks for the cache is neither forced off nor recorded, and the chunk
       hook writes the fallback unit. Keep `quarto_capture$cache_labels` only if something still reads it.
-- [ ] **Q-18-11** (docs/errors/engine/Q-18-11.qmd; catalog entry in `crates/quarto-error-catalog/error_catalog.json`)
+- [ ] **Q-18-12** (docs/errors/engine/Q-18-12.qmd; catalog entry in `crates/quarto-error-catalog/error_catalog.json`)
       says the cache is off while recording: stop emitting it. Leave the catalog entry and docs page in place (the
       error-docs lint requires a page for every catalog code) with one sentence that it is no longer emitted. Do not
       edit other docs; OPR-8 owns them.
