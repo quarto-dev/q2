@@ -298,6 +298,7 @@ async fn cells_shown_for_case(
         SourceInputsOptions {
             ownership: true,
             registry: None,
+            format: None,
         },
     )
     .await
@@ -467,6 +468,7 @@ async fn a_labeled_python_cell_with_fig_cap_shows_its_figure_and_caption() {
         SourceInputsOptions {
             ownership: true,
             registry: None,
+            format: None,
         },
     )
     .await
