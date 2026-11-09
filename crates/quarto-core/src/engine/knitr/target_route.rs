@@ -72,11 +72,18 @@ pub struct CapturePlan {
     pub diagnostic: Option<DiagnosticMessage>,
 }
 
-/// Decide capture for a run. Pieces are asked for only when a record is wanted, the document
-/// has units, and the target is structured; a fallback target skips capture and carries the
-/// one-per-document diagnostic. With no record wanted nothing is captured and nothing is said.
-pub fn plan_capture(want_record: bool, has_units: bool, format: &str) -> CapturePlan {
-    if !want_record || !has_units {
+/// Decide capture for a run. Pieces are asked for only when a record is built (explicitly
+/// wanted, or core will present from it), the document has units, and the target is
+/// structured. A fallback target skips capture; it carries the one-per-document diagnostic
+/// only when a record was explicitly wanted, so a fallback caused by `present_from_record`
+/// alone is quiet (decision D5). With no record built nothing is captured and nothing is said.
+pub fn plan_capture(
+    want_record: bool,
+    present_from_record: bool,
+    has_units: bool,
+    format: &str,
+) -> CapturePlan {
+    if !(want_record || present_from_record) || !has_units {
         return CapturePlan {
             capture: false,
             diagnostic: None,
@@ -89,7 +96,7 @@ pub fn plan_capture(want_record: bool, has_units: bool, format: &str) -> Capture
         },
         TargetRoute::Fallback(reason) => CapturePlan {
             capture: false,
-            diagnostic: Some(fallback_diagnostic(reason, format)),
+            diagnostic: want_record.then(|| fallback_diagnostic(reason, format)),
         },
     }
 }
@@ -138,14 +145,35 @@ mod tests {
 
     #[test]
     fn capture_needs_a_record_units_and_a_structured_target() {
-        let plan = plan_capture(true, true, "html");
+        let plan = plan_capture(true, false, true, "html");
         assert!(plan.capture && plan.diagnostic.is_none());
-        for (want, units) in [(false, true), (true, false), (false, false)] {
-            let plan = plan_capture(want, units, "pdf");
-            assert!(!plan.capture && plan.diagnostic.is_none(), "{want} {units}");
+        let plan = plan_capture(false, true, true, "html");
+        assert!(plan.capture && plan.diagnostic.is_none());
+        for (want, present, units) in [
+            (false, false, true),
+            (true, false, false),
+            (false, true, false),
+            (false, false, false),
+        ] {
+            let plan = plan_capture(want, present, units, "pdf");
+            assert!(
+                !plan.capture && plan.diagnostic.is_none(),
+                "{want} {present} {units}"
+            );
         }
-        let plan = plan_capture(true, true, "pdf");
+        let plan = plan_capture(true, false, true, "pdf");
         assert!(!plan.capture && plan.diagnostic.is_some());
+    }
+
+    #[test]
+    fn a_fallback_caused_only_by_present_from_record_is_quiet() {
+        for f in ["pdf", "pptx"] {
+            let plan = plan_capture(false, true, true, f);
+            assert!(!plan.capture && plan.diagnostic.is_none(), "{f}");
+        }
+        // An explicit request still gets the diagnostic, with or without the flag.
+        let plan = plan_capture(true, true, true, "pdf");
+        assert!(plan.diagnostic.is_some());
     }
 
     #[test]

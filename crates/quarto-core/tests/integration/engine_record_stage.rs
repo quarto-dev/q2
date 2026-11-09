@@ -38,7 +38,7 @@ use quarto_core::stage::stages::{
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 use quarto_trace::RenderInfo;
 
-use crate::engine_stage_driver::{AuxRecorder, run_engine_stage};
+use crate::engine_stage_driver::{AuxRecorder, run_engine_stage, run_engine_stage_presenting};
 
 // ── stub engine ────────────────────────────────────────────────────────────
 
@@ -109,7 +109,7 @@ impl ExecutionEngine for StubRecordEngine {
             result.preserve.insert("ph".to_string(), "<b/>".to_string());
             result.needs_postprocess = true;
         }
-        if ctx.want_record {
+        if ctx.builds_record() {
             self.builds.fetch_add(1, Ordering::SeqCst);
             let def = self.hash_definition();
             let mut builder = RecordBuilder::new(self.name, &def, &ctx.units, &ctx.author_texts)
@@ -389,6 +389,92 @@ fn execute_record_true_builds_a_record_for_a_plain_observer() {
     let record = observer.record();
     assert_eq!(record.cells.len(), 1);
     assert_eq!(record.metadata.quarto_source.as_deref(), Some("doc.qmd"));
+}
+
+// ── OPR-7a: present_from_record builds the record without the extra cost ──────
+
+/// Every file under `dir/.quarto`, so a test can say nothing was written.
+fn files_under_dot_quarto(dir: &Path) -> Vec<PathBuf> {
+    fn walk(p: &Path, out: &mut Vec<PathBuf>) {
+        if let Ok(rd) = std::fs::read_dir(p) {
+            for e in rd.flatten() {
+                let path = e.path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else {
+                    out.push(path);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&dir.join(".quarto"), &mut out);
+    out
+}
+
+#[test]
+fn present_from_record_builds_the_record_but_serializes_and_writes_nothing() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    let observer = AuxRecorder::arc(false);
+
+    run_engine_stage_presenting(&input, observer.clone(), Some(registry(&[engine.clone()])))
+        .unwrap();
+
+    assert_eq!(
+        engine.builds.load(Ordering::SeqCst),
+        1,
+        "the engine built a record"
+    );
+    assert!(
+        observer.events_of(ENGINE_RECORD_KIND).is_empty(),
+        "no full-record JSON copy goes to an observer that did not ask"
+    );
+    assert!(files_under_dot_quarto(tmp.path()).is_empty());
+}
+
+#[test]
+fn present_from_record_with_an_observer_still_emits_the_record() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    let observer = AuxRecorder::arc(true);
+
+    run_engine_stage_presenting(&input, observer.clone(), Some(registry(&[engine]))).unwrap();
+
+    assert_eq!(observer.record().cells.len(), 2);
+}
+
+#[test]
+fn record_true_still_writes_the_file_and_the_observer_still_receives_the_record() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(
+        tmp.path(),
+        "---\nengine: stub-a\nexecute:\n  record: true\n---\n\n```{stub-a}\nx = 1\n```\n",
+    );
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    let observer = AuxRecorder::arc(true);
+
+    run_engine_stage(&input, observer.clone(), Some(registry(&[engine]))).unwrap();
+
+    assert_eq!(observer.record().cells.len(), 1);
+    let files = files_under_dot_quarto(tmp.path());
+    assert!(
+        files
+            .iter()
+            .any(|f| f.extension().is_some_and(|e| e == "ipynb")),
+        "{files:?}"
+    );
+}
+
+#[test]
+fn a_plain_run_writes_no_record_file() {
+    let tmp = TempDir::new().unwrap();
+    let input = write_doc(tmp.path(), ONE_ENGINE);
+    let engine = StubRecordEngine::arc("stub-a", "stub-a", false);
+    run_engine_stage(&input, AuxRecorder::arc(false), Some(registry(&[engine]))).unwrap();
+    assert!(files_under_dot_quarto(tmp.path()).is_empty());
 }
 
 // ── Phase 2: unit ids and author texts in the stage ────────────────────────

@@ -269,8 +269,12 @@ impl ExecutionEngine for KnitrEngine {
 
         // Step 5b (KNR-3): ask R for pieces only on a structured route; a fallback route
         // skips capture and says so once.
-        let capture_plan =
-            target_route::plan_capture(ctx.want_record, !ctx.units.is_empty(), &ctx.format);
+        let capture_plan = target_route::plan_capture(
+            ctx.want_record,
+            ctx.present_from_record,
+            !ctx.units.is_empty(),
+            &ctx.format,
+        );
 
         // KNR-6: a captured run gets a nonce, so R returns markers for the units Rust presents.
         let nonce = capture_plan.capture.then(super::skeleton::new_nonce);

@@ -59,7 +59,7 @@ fn owns(ctx: &ExecutionContext, lang: &str) -> bool {
 /// record is wanted or the context carries no units, which keeps the live path
 /// byte-identical.
 pub(super) fn insert_unit_ids(text: &str, ctx: &ExecutionContext) -> (String, Vec<String>) {
-    if !ctx.want_record || ctx.units.is_empty() {
+    if !ctx.builds_record() || ctx.units.is_empty() {
         return (text.to_string(), Vec::new());
     }
     let located = locate_units(&ctx.units, text);
@@ -231,7 +231,7 @@ pub(super) fn attach_records(
     captured: Option<&Captured<'_>>,
     result: &mut ExecuteResult,
 ) {
-    if !ctx.want_record || ctx.units.is_empty() {
+    if !ctx.builds_record() || ctx.units.is_empty() {
         return;
     }
     let found: Vec<&str> = chunks.iter().map(|c| c.id.as_str()).collect();
