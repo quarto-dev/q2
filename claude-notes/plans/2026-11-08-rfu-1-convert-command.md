@@ -2,7 +2,7 @@
 title: 'RFU-1: q2 convert --to positron-ipynb replaces q2 record export-positron'
 date: 2026-11-08
 description: 'Implements the stub q2 convert as the one conversion command, with --to required and -M accepted, and deletes the unreleased q2 record command. It has no option for the record source list (Gordon, 2026-11-09: that list becomes the metadata key execute: record-sources, read by OPR-5); until then it uses the fixed default q2,engine. Lands first, with no dependency on the one-presenter epic.'
-status: ready
+status: in-progress
 depends-on: []
 lane: C
 ---
