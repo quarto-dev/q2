@@ -16,6 +16,9 @@
 # If PowerShell refuses to run it (the default policy on Windows client is Restricted), use:
 #   powershell -ExecutionPolicy Bypass -File .\scripts\windows-riu-knitr-exr-tests.ps1
 #
+# Run windows-riu-knitr-exr-setup.ps1 once first: it installs pandoc, typst, uv and a Jupyter
+# venv under target\windows-run\tools, and this script picks them up (a tool already on PATH wins).
+#
 # Prerequisites: Rust (rustup, MSVC toolchain), Visual Studio Build Tools with the C++
 # workload, cargo-nextest (cargo install cargo-nextest --locked). aws-lc-sys may also want
 # CMake and NASM on PATH. Optional, each unlocks more tests, and tests skip cleanly without
@@ -56,6 +59,25 @@ if (-not $SkipPampa) { $crates += 'pampa' }
 if ($OnlyCrate) { $crates = @($crates | Where-Object { $_ -eq $OnlyCrate }) }
 if ($crates.Count -eq 0) { Write-Error "no such crate in the list: $OnlyCrate"; exit 2 }
 
+# Tools installed by windows-riu-knitr-exr-setup.ps1 (pandoc, typst, uv, the Jupyter venv).
+# A tool already on PATH wins; the setup script's directory is appended for the rest, so a
+# machine with its own pandoc or typst is left alone. The tests spawn these by name, so
+# PATH (inherited by every child process, nextest included) is the whole integration.
+$pathsFile = Join-Path $logDir 'tools\paths.txt'
+$toolsOnPath = @()
+if (Test-Path $pathsFile) {
+    foreach ($d in (Get-Content $pathsFile | Where-Object { $_ -and (Test-Path $_) })) {
+        # Every tool dir holds one marker exe (the venv holds jupyter, so it is always added).
+        $marker = if (Test-Path (Join-Path $d 'pandoc.exe')) { 'pandoc' }
+                  elseif (Test-Path (Join-Path $d 'typst.exe')) { 'typst' }
+                  elseif (Test-Path (Join-Path $d 'uv.exe')) { 'uv' }
+                  else { $null }
+        if ($marker -and (Get-Command $marker -ErrorAction SilentlyContinue)) { continue }
+        $env:Path = "$env:Path;$d"
+        $toolsOnPath += $d
+    }
+}
+
 $results = New-Object System.Collections.Generic.List[object]
 function Add-Result($stage, $status, $detail, $log) {
     $results.Add([pscustomobject]@{ Stage = $stage; Status = $status; Detail = $detail; Log = $log })
@@ -95,11 +117,12 @@ $lines += "date:    $(Get-Date -Format s)"
 $lines += "os:      $([System.Environment]::OSVersion.VersionString)"
 $lines += "ps:      $($PSVersionTable.PSVersion)"
 $lines += "commit:  $((& git rev-parse --short HEAD).Trim()) on $((& git rev-parse --abbrev-ref HEAD).Trim())"
-foreach ($t in 'rustc --version', 'cargo --version', 'cargo nextest --version', 'pandoc --version', 'typst --version', 'node --version', 'python --version', 'Rscript --version', 'julia --version') {
+foreach ($t in 'rustc --version', 'cargo --version', 'cargo nextest --version', 'pandoc --version', 'typst --version', 'uv --version', 'jupyter kernelspec list', 'node --version', 'python --version', 'Rscript --version', 'julia --version') {
     $exe = $t.Split(' ')[0]
     if (Have $exe) { $v = (& cmd /c "$t 2>&1" | Select-Object -First 1); $lines += ("{0,-28} {1}" -f $t, $v) }
     else { $lines += ("{0,-28} NOT FOUND (tests needing it will skip or be absent)" -f $t) }
 }
+if ($toolsOnPath.Count -gt 0) { $lines += "tools appended to PATH from the setup script: $($toolsOnPath -join '; ')" }
 $lines | Tee-Object -FilePath $envLog | Write-Host
 if (-not (Have 'cargo')) { Write-Error 'cargo not found'; exit 2 }
 & cargo nextest --version *> $null
