@@ -60,12 +60,60 @@ ${message}`
 }
 
 // src/record-wire.ts
+var DISPLAY_ONLY_KEYS = [
+  // Visibility.
+  "echo",
+  "output",
+  "warning",
+  "include",
+  // Code display.
+  "code-fold",
+  "code-summary",
+  "code-overflow",
+  "code-line-numbers",
+  "code-copy",
+  // Captions, listing and layout.
+  "fig-cap",
+  "fig-subcap",
+  "fig-scap",
+  "fig-alt",
+  "fig-align",
+  "fig-link",
+  "fig-cap-location",
+  "tbl-cap",
+  "tbl-subcap",
+  "tbl-scap",
+  "tbl-colwidths",
+  "tbl-cap-location",
+  "lst-cap",
+  "lst-label",
+  "cap-location",
+  "layout",
+  "layout-ncol",
+  "layout-nrow",
+  "layout-align",
+  "layout-valign",
+  // Cell wrapper attributes the presenter writes (KNR-3 slice 7, D10).
+  "panel",
+  "column",
+  "keep-hidden",
+  // Image attributes the presenter writes (KNR-3 slice 7, D6, D10).
+  "fig-env",
+  "fig-pos",
+  "out-width",
+  "out-height",
+  "out-extra",
+  // Cell classes the presenter writes (KNR-3 slice 7, D10).
+  "classes",
+  "fig-column",
+  "tbl-column"
+];
 var JULIA_HASH_DEFINITION = {
   id: "julia",
   version: 1,
   granularity: "document",
-  presentationCellOptions: [],
-  presentationExecuteKeys: [],
+  presentationCellOptions: [...DISPLAY_ONLY_KEYS],
+  presentationExecuteKeys: [...DISPLAY_ONLY_KEYS],
   documentKeys: [
     "julia",
     "format",
@@ -79,10 +127,11 @@ function qnrRunOptions(options) {
   const hasUnits = Array.isArray(options.units);
   return hasUnits ? { ...options, emitUnits: true } : { ...options };
 }
-function buildRecordResult(nb, units) {
+function buildRecordResult(nb, units, options) {
   if (!Array.isArray(units)) {
     return {};
   }
+  const presentedBy = options && coreWillPresent(options) ? { presentedBy: "core" } : {};
   return {
     notebook: structuredClone(nb),
     recordInfo: {
@@ -91,9 +140,14 @@ function buildRecordResult(nb, units) {
       outputKind: "raw",
       // QNR's index is positional; it never sees core's unit ids.
       alignment: "positional",
-      hashDefinition: JULIA_HASH_DEFINITION
+      hashDefinition: JULIA_HASH_DEFINITION,
+      ...presentedBy
     }
   };
+}
+function coreWillPresent(options) {
+  const o = options;
+  return Array.isArray(o.units) && o.presentedBy === "core";
 }
 
 // src/constants.ts
@@ -407,8 +461,18 @@ var juliaEngineDiscovery = {
         }
         const record = buildRecordResult(
           nb,
-          options.units
+          options.units,
+          options
         );
+        if (coreWillPresent(options)) {
+          return {
+            engine: kJuliaEngine,
+            markdown: "",
+            supporting: [join(assets.base_dir, assets.supporting_dir)],
+            filters: [],
+            ...record
+          };
+        }
         const result = await quarto.jupyter.toMarkdown(
           nb,
           {
