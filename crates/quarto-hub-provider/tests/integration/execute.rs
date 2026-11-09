@@ -192,6 +192,81 @@ async fn provider_executes_an_allowed_request_and_writes_a_capture() {
     let _ = run_handle.await;
 }
 
+/// An engine that writes a figure beside the document and reports it by an absolute path built
+/// from the directory it was run in (RFU-6 probe: on Windows `canonicalize()` makes that root a
+/// `\\?\` verbatim path, and `collect_capture_files` compares by prefix).
+struct FigureEngine;
+
+impl ExecutionEngine for FigureEngine {
+    fn name(&self) -> &str {
+        "test-figure"
+    }
+    fn execute(
+        &self,
+        input: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        let dir = ctx.cwd.join("doc_files");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("fig.png"), b"PNG").unwrap();
+        Ok(ExecuteResult::passthrough(input).with_supporting_files(vec![dir]))
+    }
+
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == "test-figure" {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_figure_reported_under_the_materialized_root_is_captured() {
+    let (server_repo, ws_url) = spawn_server().await;
+    let qmd = "---\nengine: test-figure\n---\n\n```{test-figure}\n1 + 1\n```\n";
+    let file_id = create_text_doc(&server_repo, qmd).await;
+    let (server_index, index_id) = IndexDocument::create(&server_repo).await.unwrap();
+    server_index.add_file("doc.qmd", &file_id).unwrap();
+
+    let (provider_repo, provider_index) = join(
+        JoinConfig {
+            server_ws_url: ws_url,
+            index_doc_id: index_id,
+            connect_timeout: Duration::from_secs(10),
+        },
+        Arc::new(StaticTokenSource::new("test-token")),
+    )
+    .await
+    .expect("provider joins");
+    let mut registry = EngineRegistry::new();
+    registry.register(Arc::new(FigureEngine));
+    let provider = Provider::new(
+        provider_repo,
+        provider_index,
+        "provider-actor",
+        Arc::new(AlwaysAccept),
+        Some(Arc::new(registry)),
+    );
+    let outcome = provider
+        .execute_once("doc.qmd")
+        .await
+        .expect("execution succeeds");
+    let ExecOutcome::Executed(capture_doc_id) = outcome else {
+        panic!("expected Executed, got {outcome:?}");
+    };
+    provider
+        .flush_to_hub(&capture_doc_id, Duration::from_secs(10))
+        .await;
+    let captures = fetch_captures(&server_repo, &capture_doc_id).await;
+    let paths: Vec<&str> = captures
+        .iter()
+        .flat_map(|c| c.files.iter().map(|f| f.path.as_str()))
+        .collect();
+    assert_eq!(paths, vec!["doc_files/fig.png"], "captures: {captures:?}");
+    provider.stop().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn one_shot_executes_once_and_flushes_to_the_hub() {
     // The one-shot CLI path: execute_once → flush_to_hub (a real
