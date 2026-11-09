@@ -799,8 +799,9 @@ change. An armed project render drops from three QMD parses to two;
 single-document rendering remains at two until Phase 3B1. This is the
 first implementation checkpoint in the shared Phase 3A/3B1 strand.
 
-**Status: complete 2026-11-09 (bd-wpmqf039).** Work stopped after this
-checkpoint at the user's request; Phase 3B1 was not started.
+**Status: complete 2026-11-09 (bd-wpmqf039, implementation `3010beb04`).**
+Work stopped after this checkpoint at the user's request; Phase 3B1 was not
+started.
 
 - [x] File one Phase 3A/3B1 strand, mark it `in_progress`, and record the
   current project-path `render.wasm-call` baseline at 1x/8x with the Node
