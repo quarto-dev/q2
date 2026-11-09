@@ -107,7 +107,7 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
         if let Some(root_dir) = &self.root_dir {
             blob.insert(
                 "typst-root-dir".to_string(),
-                Value::String(root_dir.to_string_lossy().into_owned()),
+                Value::String(crate::pandoc_request::normalize_request_path(root_dir)),
             );
         }
         if let Some(numbers) = self.code_line_numbers {
