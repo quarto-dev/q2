@@ -10,6 +10,22 @@
 let injected = false;
 
 const CSS = `
+/* Edit-chrome colors are CSS custom properties, READ with today's values as
+   fallbacks and never SET here — so a theme or user stylesheet can override any
+   of them from anywhere (e.g. \`:root { --q2-edit-toolbar-color: … }\`) without
+   fighting specificity. Defining them on .q2-rt-toolbar itself would shadow a
+   :root override. The set:
+     --q2-edit-toolbar-color       glyph color for every toolbar button/crumb/arrow
+     --q2-edit-toolbar-bg          toolbar background
+     --q2-edit-toolbar-border      toolbar border
+     --q2-edit-toolbar-shadow      toolbar drop shadow
+     --q2-edit-toolbar-hover-bg    button hover background
+     --q2-edit-toolbar-active-bg   pressed/active button background
+     --q2-edit-toolbar-separator   divider rules between button groups
+     --q2-edit-toolbar-notice-color  transient refusal notice text
+     --q2-edit-toolbar-input-border  link URL input border
+     --q2-edit-ring                ring around the rich edit box
+     --q2-edit-tint                background tint of the rich edit box */
 .q2-richtext-editor { position: relative; }
 
 /* Formatting toolbar — a small box floating just above the top-left of the edit
@@ -25,10 +41,11 @@ const CSS = `
   align-items: center;
   gap: 1px;
   padding: 2px 3px;
-  background: #fff;
-  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: var(--q2-edit-toolbar-color, #334155);
+  background: var(--q2-edit-toolbar-bg, #fff);
+  border: 1px solid var(--q2-edit-toolbar-border, rgba(59, 130, 246, 0.35));
   border-radius: 5px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--q2-edit-toolbar-shadow, 0 2px 6px rgba(0, 0, 0, 0.12));
   user-select: none;
   font-size: 0.8rem;
   line-height: 1;
@@ -63,30 +80,34 @@ const CSS = `
   padding: 0.25em 0.4em;
   font-size: 0.8rem;
   cursor: pointer;
-  color: #334155;
+  /* Buttons don't inherit color by default; take the toolbar's single glyph color. */
+  color: inherit;
 }
 .q2-rt-tb-btn:disabled { opacity: 0.35; cursor: default; }
 .q2-rt-tb-btn:disabled:hover { background: none; }
-.q2-rt-tb-btn:hover { background: rgba(59, 130, 246, 0.12); }
-.q2-rt-tb-active { background: rgba(59, 130, 246, 0.18); }
-/* One glyph color for the whole toolbar: buttons (via .q2-rt-tb-btn), the
-   nesting arrows, and the type crumbs — overriding the crumb sheet's per-category
-   colors and #555 arrows. Active/pressed state shows as the background tint only. */
+.q2-rt-tb-btn:hover { background: var(--q2-edit-toolbar-hover-bg, rgba(59, 130, 246, 0.12)); }
+.q2-rt-tb-active { background: var(--q2-edit-toolbar-active-bg, rgba(59, 130, 246, 0.18)); }
+/* One glyph color for the whole toolbar (--q2-edit-toolbar-color on .q2-rt-toolbar):
+   buttons, nesting arrows, and type crumbs all inherit it — overriding the crumb
+   sheet's per-category colors and #555 arrows. Active/pressed state shows as the
+   background tint only. */
 .q2-rt-toolbar .q2-crumb,
 .q2-rt-toolbar .q2-breadcrumb-out,
-.q2-rt-toolbar .q2-breadcrumb-in { color: #334155; }
+.q2-rt-toolbar .q2-breadcrumb-in { color: inherit; }
+.q2-rt-toolbar .q2-breadcrumb-out:hover,
+.q2-rt-toolbar .q2-breadcrumb-in:hover { background: var(--q2-edit-toolbar-hover-bg, rgba(59, 130, 246, 0.12)); }
 /* SVG glyphs (comment, link, editorial marks, paragraph crumb) — currentColor. */
 .q2-rt-tb-btn:has(> .q2-rt-tb-icon) { display: inline-flex; align-items: center; justify-content: center; }
 .q2-rt-tb-icon { display: block; width: 1.25em; height: 1.25em; }
 .q2-rt-tb-icon.q2-rt-tb-icon-wide { width: 2.5em; }
-.q2-rt-tb-sep { width: 1px; align-self: stretch; margin: 2px 2px; background: rgba(0, 0, 0, 0.12); }
+.q2-rt-tb-sep { width: 1px; align-self: stretch; margin: 2px 2px; background: var(--q2-edit-toolbar-separator, rgba(0, 0, 0, 0.12)); }
 .q2-rt-link-editor { display: flex; align-items: center; gap: 2px; }
 /* Transient refusal notice next to the comment button. */
-.q2-rt-tb-notice { font-size: 0.72rem; color: #b91c1c; padding: 0 0.4em; white-space: nowrap; }
+.q2-rt-tb-notice { font-size: 0.72rem; color: var(--q2-edit-toolbar-notice-color, #b91c1c); padding: 0 0.4em; white-space: nowrap; }
 .q2-rt-link-input {
   font-size: 0.78rem;
   padding: 0.15em 0.4em;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--q2-edit-toolbar-input-border, rgba(0, 0, 0, 0.2));
   border-radius: 3px;
   width: 16rem;
   max-width: 40vw;
@@ -100,8 +121,8 @@ const CSS = `
      can't otherwise tell editing is live. A subtle tint + ring signals it. The
      padding is cancelled by an equal negative margin so the text does NOT shift
      (zero reflow) — only the tinted area extends slightly around the content. */
-  background: rgba(59, 130, 246, 0.08);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+  background: var(--q2-edit-tint, rgba(59, 130, 246, 0.08));
+  box-shadow: 0 0 0 2px var(--q2-edit-ring, rgba(59, 130, 246, 0.35));
   border-radius: 3px;
   padding: 2px 5px;
   margin: -2px -5px;
