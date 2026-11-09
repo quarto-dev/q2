@@ -107,11 +107,6 @@ impl Allowlist {
 /// The rule names an allowlist entry may use. Each is a normalization applied to BOTH sides, so a
 /// rule hides exactly the difference it names and nothing else.
 pub const RULES: &[&str] = &[
-    "julia-cell-id",
-    "julia-data-quarto",
-    "julia-data-execution-count",
-    "julia-cell-output-class",
-    "julia-figure-names",
     "knitr-empty-cell-wrapper",
     "knitr-adjacent-blockquotes",
     "julia-code-leading-newline",
@@ -124,29 +119,6 @@ pub fn apply_rule(rule: &str, side: &mut Side) -> Result<(), String> {
         side.text = re.replace_all(&side.text, with).into_owned();
     };
     match rule {
-        // The engine route stamps `id="cell-N"` (N from the unit ordinal) on the cell wrapper.
-        "julia-cell-id" => sub(r#" id="cell-\d+""#, "", side),
-        // ... and a `data-quarto` attribute (the unit's language, file and line) beside it.
-        "julia-data-quarto" => sub(r#" data-quarto="[^"]*""#, "", side),
-        "julia-data-execution-count" => sub(r#" data-execution_count="\d+""#, "", side),
-        // The presenter drops the generic `cell-output` class from a figure's output div.
-        // Only where the div holds a figure (an image, or a figure float): other display outputs
-        // keep the class on the presenter route.
-        "julia-cell-output-class" => sub(
-            r#"class="cell-output cell-output-display">(\s*<(?:p><img |figure|div id="fig-))"#,
-            r#"class="cell-output-display">$1"#,
-            side,
-        ),
-        // The two routes number figure files from different counters.
-        "julia-figure-names" => {
-            sub(r"cell-\d+-output-\d+\.", "cell-N-output-M.", side);
-            let re = Regex::new(r"cell-\d+-output-\d+\.").expect("rule pattern");
-            side.figures = side
-                .figures
-                .iter()
-                .map(|f| re.replace_all(f, "cell-N-output-M.").into_owned())
-                .collect();
-        }
         // R writes an empty `.cell` div for a chunk that renders nothing; the presenter writes none
         // (knitr epic decision 23, signed off for the knitr baseline presenter).
         "knitr-empty-cell-wrapper" => sub(r#"<div class="cell">\s*</div>\s*"#, "", side),
@@ -454,18 +426,11 @@ mod tests {
         Allowlist::parse(
             r#"
 [[entry]]
-name = "julia wrapper ids"
-rule = "julia-cell-id"
+name = "julia code block leading newline"
+rule = "julia-code-leading-newline"
 scope = "julia/"
 status = "proposed"
-reason = "the engine route stamps an id the presenter does not"
-
-[[entry]]
-name = "julia figure names"
-rule = "julia-figure-names"
-scope = "julia/"
-status = "proposed"
-reason = "different counters on the two routes"
+reason = "the engine route keeps a blank first line the presenter trims"
 "#,
         )
         .unwrap()
@@ -473,8 +438,7 @@ reason = "different counters on the two routes"
 
     #[test]
     fn allowlist_parse_rejects_an_entry_without_a_reason() {
-        let bad =
-            "[[entry]]\nname='x'\nrule='julia-cell-id'\nscope='j'\nstatus='proposed'\nreason=''\n";
+        let bad = "[[entry]]\nname='x'\nrule='julia-code-leading-newline'\nscope='j'\nstatus='proposed'\nreason=''\n";
         assert!(Allowlist::parse(bad).is_err());
     }
 
@@ -591,89 +555,70 @@ reason = "different counters on the two routes"
         );
     }
 
+    const OPEN: &str = "<code class=\"sourceCode julia\">";
+
     #[test]
     fn one_known_difference_is_a_blocker_without_an_entry() {
-        let plain = side("<div id=\"cell-1\" class=\"cell\">x</div>", &[]);
-        let rec = side("<div class=\"cell\">x</div>", &[]);
-        // `knitr/` is outside the entries' scope.
+        let plain = side(&format!("{OPEN}\nx</code>"), &[]);
+        let rec = side(&format!("{OPEN}x</code>"), &[]);
+        // `knitr/` is outside the entry's scope.
         match compare("knitr/a", &plain, &rec, &allowlist()) {
-            Verdict::Blocker { diff } => assert!(diff.contains("cell-1"), "{diff}"),
+            Verdict::Blocker { diff } => assert!(diff.contains("sourceCode"), "{diff}"),
             other => panic!("expected a blocker, got {other:?}"),
         }
     }
 
     #[test]
     fn one_known_difference_is_allowlisted_inside_the_scope() {
-        let plain = side("<div id=\"cell-1\" class=\"cell\">x</div>", &[]);
-        let rec = side("<div class=\"cell\">x</div>", &[]);
+        let plain = side(&format!("{OPEN}\nx</code>"), &[]);
+        let rec = side(&format!("{OPEN}x</code>"), &[]);
         assert_eq!(
             compare("julia/a", &plain, &rec, &allowlist()),
             Verdict::Allowlisted {
-                rules: vec!["julia-cell-id".to_string()]
+                rules: vec!["julia-code-leading-newline".to_string()]
             }
         );
     }
 
     #[test]
-    fn a_figure_file_name_difference_alone_is_visible() {
+    fn a_figure_file_name_difference_alone_is_a_blocker_even_inside_the_scope() {
         // Identical text, different file-name sets: the case an HTML-only compare misses.
+        // OPR-7f removed the rule that hid this for Julia, so it is a blocker on both sides.
         let plain = side("<p>x</p>", &["d_files/figure-html/cell-2-output-1.png"]);
         let rec = side("<p>x</p>", &["d_files/figure-html/cell-1-output-1.png"]);
-        match compare("knitr/a", &plain, &rec, &allowlist()) {
-            Verdict::Blocker { diff } => assert!(diff.contains("cell-2-output-1.png"), "{diff}"),
-            other => panic!("expected a blocker, got {other:?}"),
-        }
-        assert_eq!(
-            compare("julia/a", &plain, &rec, &allowlist()),
-            Verdict::Allowlisted {
-                rules: vec!["julia-figure-names".to_string()]
+        for name in ["knitr/a", "julia/a"] {
+            match compare(name, &plain, &rec, &allowlist()) {
+                Verdict::Blocker { diff } => {
+                    assert!(diff.contains("cell-2-output-1.png"), "{diff}")
+                }
+                other => panic!("expected a blocker for {name}, got {other:?}"),
             }
-        );
+        }
     }
 
     #[test]
-    fn the_cell_output_class_rule_covers_figure_divs_only() {
-        let list = Allowlist::parse(
-            "[[entry]]\nname='c'\nrule='julia-cell-output-class'\nscope='julia/'\nstatus='proposed'\nreason='r'\n",
-        )
-        .unwrap();
-        let figure = |class: &str| {
-            side(
-                &format!("<div class=\"{class}\">\n<p><img src=\"f.png\" /></p>\n</div>"),
-                &[],
-            )
-        };
+    fn a_wrapper_id_or_output_class_difference_is_a_blocker_inside_the_scope() {
+        let plain = side("<div id=\"cell-1\" class=\"cell\">x</div>", &[]);
+        let rec = side("<div class=\"cell\">x</div>", &[]);
         assert!(matches!(
-            compare(
-                "julia/a",
-                &figure("cell-output cell-output-display"),
-                &figure("cell-output-display"),
-                &list
-            ),
-            Verdict::Allowlisted { .. }
+            compare("julia/a", &plain, &rec, &allowlist()),
+            Verdict::Blocker { .. }
         ));
-        // A table or text output that loses the class is a different, unexplained change.
-        let text = |class: &str| {
-            side(
-                &format!("<div class=\"{class}\">\n<pre>1</pre>\n</div>"),
-                &[],
-            )
-        };
+        let plain = side(
+            "<div class=\"cell-output cell-output-display\">x</div>",
+            &[],
+        );
+        let rec = side("<div class=\"cell-output-display\">x</div>", &[]);
         assert!(matches!(
-            compare(
-                "julia/a",
-                &text("cell-output cell-output-display"),
-                &text("cell-output-display"),
-                &list
-            ),
+            compare("julia/a", &plain, &rec, &allowlist()),
             Verdict::Blocker { .. }
         ));
     }
 
     #[test]
     fn an_allowlist_rule_does_not_hide_an_unrelated_difference() {
-        let plain = side("<div id=\"cell-1\" class=\"cell\">x</div>", &[]);
-        let rec = side("<div class=\"cell\">y</div>", &[]);
+        let plain = side(&format!("{OPEN}\nx</code>"), &[]);
+        let rec = side(&format!("{OPEN}y</code>"), &[]);
         assert!(matches!(
             compare("julia/a", &plain, &rec, &allowlist()),
             Verdict::Blocker { .. }
