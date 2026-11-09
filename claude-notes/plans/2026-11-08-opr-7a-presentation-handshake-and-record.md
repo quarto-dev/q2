@@ -2,7 +2,7 @@
 title: 'OPR-7a: presentation handshake, and a record built for presentation without the extra cost'
 date: 2026-11-08
 description: 'Replaces the engine-name test that decides whether core presents (core_presents) with an offer and an acknowledgement, and separates building a record to present from requesting one to write or publish, so a plain render can later present from an in-memory record without the full JSON copy or any file. Everything lands behind an internal control that stays off; OPR-7d turns it on.'
-status: ready
+status: in-progress
 depends-on: [opr-1b, opr-3, opr-6]
 lane: C
 ---
