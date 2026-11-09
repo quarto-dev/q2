@@ -45,8 +45,11 @@ git grep -h -E '^(status|depends-on):' feature/one-presenter -- 'claude-notes/pl
 git grep -E '^status:' feature/one-presenter -- 'claude-notes/plans/2026-11-08-opr-*.md' 'claude-notes/plans/2026-11-08-rfu-*.md'
 ```
 
-Only `[Gordon]`-labeled work and the statuses `blocked-on-gordon` and `conditional` need Gordon. He flips those to
-`ready` by editing the plan on the integration branch. You never flip them yourself.
+A plan is `ready` from the start; its `depends-on` list alone holds it back, so resolving a dependency makes the
+plan startable with no manual step. Only `[Gordon]`-labeled work and the statuses `blocked-on-gordon` (work only he can
+do) and `conditional` (the plan names a condition, such as odd results, that he must check) need Gordon. He flips those
+to `ready` by editing the plan on the integration branch. You never flip them yourself. If you write or change a plan,
+do not use `conditional` for plain dependency gating; use `ready` and `depends-on`.
 
 ## Picking a plan
 

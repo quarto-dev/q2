@@ -139,7 +139,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-4a](2026-11-08-opr-4a-julia-spike.md) | OPR | Julia spike (a note) | nothing | B | complete |
 | [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | OPR | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | ready |
 | [OPR-4c](2026-11-08-opr-4c-julia-engine-facts.md) | OPR | Engine, wire and pin carry the facts | 4b, 3, Gordon\'s push | B | conditional |
-| [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | OPR | q2 writes the facts as cell metadata | 4c, 1b | A | conditional |
+| [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | OPR | q2 writes the facts as cell metadata | 4c, 1b | A | ready |
 | [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | OPR | The `execute: record-sources` key, one early reader, `--records` removed, a ceiling for provide-hub and `--share` | 0d, RFU-1, 3 | C | ready |
 | [OPR-6](2026-11-08-opr-6-render-execution-records.md) | OPR | `q2 render` reads `execute: record-sources` | 5, 1b | C | ready |
 | [OPR-7a](2026-11-08-opr-7a-presentation-handshake-and-record.md) | OPR | Handshake and record without the extra cost, behind a control | 1b, 3, 6 | C | ready |
@@ -181,10 +181,14 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 
 ## What Gordon does between plans
 
+Completing a plan never needs a manual flip. A plan is `ready` from the start, and its `depends-on` list alone holds it
+back until the plans it waits on are resolved. `conditional` is reserved for a plan that waits on a stated condition
+Gordon must check (for example, odd results from a measurement); the plan names that condition. `blocked-on-gordon` is
+for work only Gordon can do.
+
 - OPR-5, RFU-2 and RFU-7 were flipped to `ready` on 2026-11-09 (their decisions are recorded; each still waits on its `depends-on`).
 - OPR-4a landed (2026-11-09): read the [note](../research/2026-11-09-opr-julia-spike.md); write the scope into OPR-4b and set it to `ready`, or set 4b, 4c and 4d to `cancelled`. **Decided 2026-11-09:** all three facts, and the stderr fix is the runner keeping stderr under `emitUnits` (written into OPR-4b); only the flip to `ready` remains.
 - After OPR-4b lands: push the runner branch to the fork and write the revision into OPR-4c; set it to `ready`.
-- After OPR-4c lands: set OPR-4d to `ready`.
 - After OPR-7c lands: sign the allowlist and set OPR-7d to `ready` (its two decisions were recorded 2026-11-09).
 - When OPR-6, RFU-1 and RFU-2 have landed: run RFU-6 on a Windows machine.
 - At the end: pushes of the engine and runner forks, a push or merge of the Positron fork branch, the rebase of
