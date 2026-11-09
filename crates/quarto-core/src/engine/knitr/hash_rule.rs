@@ -395,4 +395,20 @@ mod tests {
             );
         }
     }
+
+    /// D2: knitr\'s declaration puts `warning` and `message` in the hash, for the default profile
+    /// and the structured one, so R enforced them at capture and the presenter does not. The
+    /// `Hashed` rows of the splice\'s option sweep rest on this.
+    #[test]
+    fn warning_and_message_are_capture_enforced_in_both_profiles() {
+        let def = knitr_hash_definition();
+        for profile in [None, Some(STRUCTURED_PROFILE)] {
+            for option in ["warning", "message"] {
+                assert!(
+                    !def.presenter_enforces(profile, option),
+                    "{profile:?} {option}"
+                );
+            }
+        }
+    }
 }

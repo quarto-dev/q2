@@ -441,11 +441,11 @@ fn scope(key: &str, value: bool) -> ConfigValue {
 }
 
 fn visible() -> CellVisibility {
-    CellVisibility::resolve(None)
+    CellVisibility::resolve(None, true)
 }
 
 fn hidden() -> CellVisibility {
-    CellVisibility::resolve(Some(&include_false()))
+    CellVisibility::resolve(Some(&include_false()), true)
 }
 
 fn include_false() -> ConfigValue {

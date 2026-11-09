@@ -389,6 +389,15 @@ impl ExecutionEngine for JupyterEngine {
 
 #[cfg(test)]
 mod tests {
+    /// D2: Jupyter lists `warning` display-only, so the presenter enforces it; it has no
+    /// `message` option, which stays in the hash.
+    #[test]
+    fn the_presenter_enforces_jupyter_warning_and_not_message() {
+        let def = jupyter_hash_definition();
+        assert!(def.presenter_enforces(None, "warning"));
+        assert!(!def.presenter_enforces(None, "message"));
+    }
+
     use super::*;
 
     // === EXR-4: hash declarations ===
