@@ -120,13 +120,28 @@ Each is a question for Gordon, not an assumption. Recommendation in parentheses.
 
 ## Item 4: does the epic match the tree
 
-- [ ] RIU-6 Phase E, still open: re-read the epic and RIU-0b to RIU-5, check each `- [ ]` and `- [x]`
-      against the tree, and update the epic's table and "Decisions for review". Decision 11 (R) gets
-      its outcome from Item 1.
+- [x] RIU-6 Phase E, done 2026-11-07: every plan re-read and its boxes checked against the tree (open boxes
+      all, ticked boxes by sample); statuses, the epic's table, board and exit criteria updated; see the
+      epic's "Closing reconciliation". Decision 11 (R) gets its outcome from Item 1.
 - [ ] Re-read the epic's stated intent once more against what the three commands do, and list anything
       the epic promised that no command or test covers.
+
+## Item 5: RIU-3b never started
+
+**Intended (epic exit criterion):** spliced record output is stamped so the viewer can tell a generated
+output node from the author's text, with the RIU-3 Phase E tests green. **Checked 2026-11-07:** there is
+no stamping code, no `jupyter-output` in `ts-packages/preview-renderer/src/utils/sourceInfo.ts`
+(`ATOMIC_KINDS` is still `filter`, `shortcode`, `title-block`, `tree-sitter-postprocess`), no viewer
+regression test and no interim `.cell` rule tests. 3a landed (conversion, locator, directory source,
+staleness, `--records`). Ask first: does the demo or any user need 3b, or was it meant for later? The
+plan has 14 open boxes for it (Phase E, the 3b part of F and G).
+
+- [x] Decide with Gordon whether 3b is wanted now, deferred, or dropped; record the decision in the epic. *Decided 2026-11-07: wanted now. Done on `feature/riu-3b-stamping`; see the 3b note in the RIU-3 plan.*
+- [ ] Also open from 3a (the Re-execute test is done 2026-11-07; the EXR-16 sweep and the labeled-cell acceptance case are not): tests that Re-execute on an imported page is refused with no engine and runs the
+      engine when it is listed (only the refusal was seen in a browser); the per-EXR-16-case import,
+      convert and splice sweep; an acceptance case with a labeled cell and `fig-cap`.
 
 ## Order
 
 Item 1 first, Phase A alone before committing to B to D. Item 2 next, since it decides whether the
-e2e tests can be trusted for Item 1. Items 3 and 4 after, in whatever order Gordon prefers.
+e2e tests can be trusted for Item 1. Items 3, 4 and 5 after, in whatever order Gordon prefers (Item 4 is done).
