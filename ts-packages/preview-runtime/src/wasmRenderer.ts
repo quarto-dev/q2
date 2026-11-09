@@ -1162,7 +1162,7 @@ export interface ConvertResult {
 }
 
 /**
- * Parse QMD content to Pandoc AST JSON, handling errors gracefully.
+ * Parse QMD content to Pandoc AST JSON, optionally with attribution.
  *
  * This function parses QMD markdown into a Pandoc AST representation,
  * which can be used for programmatic manipulation, analysis, or rendering
@@ -1189,31 +1189,21 @@ export interface ConvertResult {
  * }
  * ```
  *
- * @param qmdContent - QMD source text to parse
- * @returns Parse result with AST JSON string or error information
- */
-export async function parseQmdToAst(
-  qmdContent: string
-): Promise<ParseResult> {
-  return parseQmdToAstWithAttribution(qmdContent, null);
-}
-
-/**
- * Parse QMD content to Pandoc AST JSON, optionally with attribution.
- *
  * When `attributionJson` is non-null, the JSON string is shipped to the
  * Rust `PreBuiltAttributionProvider`, which decodes runs + identities
  * and drives `AttributionGenerateTransform` + `AttributionRenderTransform`.
  * The resulting AST carries `astContext.attribution` (sparse `{s, actor,
  * time}` records) and `astContext.attributionActors` (actor →
- * `{name, color}` table). When `null`, the call is byte-identical to
- * `parseQmdToAst(content)` — same code path, no provider installed,
- * no transforms fire (Phase 0 test #10 contract).
+ * `{name, color}` table). When `null`, no provider is installed and no
+ * attribution transforms fire (the Phase 0 test #10 contract).
  *
  * The producer of `attributionJson` is responsible for satisfying the
  * Phase 6 invariant: every actor referenced in `runs` must have an
  * entry in `identities`. See `useAttribution` for the hub-client
  * producer that builds this payload from Automerge history.
+ *
+ * @param qmdContent - QMD source text to parse
+ * @returns Parse result with AST JSON string or error information
  */
 export async function parseQmdToAstWithAttribution(
   qmdContent: string,
@@ -1222,8 +1212,6 @@ export async function parseQmdToAstWithAttribution(
   try {
     await initWasm();
     const wasm = getWasm();
-    // Finding 1: PreviewRouter calls this per keystroke only to read
-    // `success`; the AST is serialized, shipped, parsed and discarded.
     const pT0 = perfNow();
     const responseJson = await wasm.parse_qmd_to_ast_with_attribution(
       qmdContent,

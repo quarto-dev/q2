@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import { isSourceFile } from '@quarto/preview-renderer/types/project';
 import type { Diagnostic, RenderComment } from '@quarto/preview-renderer/types/diagnostic';
 import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
-import { parseQmdToAst, isWasmReady, initWasm, resolvePandocFormats } from '@quarto/preview-runtime';
+import { isWasmReady, initWasm, resolvePandocFormats } from '@quarto/preview-runtime';
 import Preview from './Preview';
 import ReactPreview from './ReactPreview';
 import { FallbackView, NonQmdPlaceholderView } from '@quarto/preview-renderer/overlays/PreviewStaticInfoViews';
@@ -103,9 +103,6 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   const [checkedPath, setCheckedPath] = useState<string | undefined>(undefined);
   const initialChecking = checkedPath !== props.currentFile?.path;
 
-  // Track the last stable format to avoid unmounting during re-checks
-  const lastStableFormatRef = useRef<string | null>(null);
-
   // WASM initialization state - shared by both Preview and ReactPreview
   const [wasmStatus, setWasmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [wasmError, setWasmError] = useState<string | null>(null);
@@ -131,51 +128,37 @@ export default function PreviewRouter(props: PreviewRouterProps) {
     props.onWasmStatusChange?.(wasmStatus, wasmError);
   }, [wasmStatus, wasmError, props.onWasmStatusChange]);
 
-  // Check the format whenever content changes
+  // Classify the format whenever content changes: the mode is the
+  // resolver's answer, re-read on every content change (sub-millisecond;
+  // Phase 2 of the main-thread render-path plan, bd-luoo7qgu).
   useEffect(() => {
-    async function checkFormat() {
-      const fxT0 = perfNow();
-      try {
-        // Skip format check if WASM isn't ready yet (will retry when it is)
-        if (!isWasmReady()) {
-          return;
-        }
-
-        // Parse the QMD only to learn whether it parses: a mid-edit syntax error keeps the
-        // previous mode. The format itself comes from the Rust resolver.
-        const parseT0 = perfNow();
-        const result = await parseQmdToAst(props.content);
-        // Finding 1 of the render-path plan: this per-keystroke full parse's
-        // AST is discarded — only `success` is read.
-        perfSegment('router.format-check.parse', parseT0);
-        const deps = {
-          // The editor buffer, not the VFS copy: it can lag a keystroke behind.
-          resolve: (path: string) => (isWasmReady() ? resolvePandocFormats(path, { contentOverride: props.content }) : null),
-          canDownload: (key: string) => menuFormats().some((f) => f.key === key),
-          canPreviewPdf: pdfPreviewAvailable,
-        };
-        // A format the parser's metadata merge does not know (`latex`) fails the parse. The
-        // resolver still classifies it; a failed parse of a previewable document changes nothing.
-        const classifyT0 = perfNow();
-        const mode = classifyPreviewMode(props.currentFile?.path, deps);
-        perfSegment('router.format-check.classify', classifyT0);
-        if (result.success || mode.mode === 'download' || mode.mode === 'pdf' || mode.mode === 'neither') {
-          const format = mode.mode === 'react' ? mode.format : null;
-          // Keep the same object when nothing changed, so a keystroke does not re-render consumers.
-          setPreviewMode((prev) => (JSON.stringify(prev) === JSON.stringify(mode) ? prev : mode));
-          lastStableFormatRef.current = format;
-          props.onFormatChange?.(format);
-          props.onPreviewModeChange?.(mode);
-        }
-      } catch (err) {
-        console.error('[PreviewRouter] Error checking format:', err);
-      } finally {
-        perfSegment('router.format-check', fxT0);
-        setCheckedPath(props.currentFile?.path);
+    const fxT0 = perfNow();
+    try {
+      // Skip format check if WASM isn't ready yet (will retry when it is)
+      if (!isWasmReady()) {
+        return;
       }
-    }
 
-    checkFormat();
+      const deps = {
+        // The editor buffer, not the VFS copy: it can lag a keystroke behind.
+        resolve: (path: string) => resolvePandocFormats(path, { contentOverride: props.content }),
+        canDownload: (key: string) => menuFormats().some((f) => f.key === key),
+        canPreviewPdf: pdfPreviewAvailable,
+      };
+      const classifyT0 = perfNow();
+      const mode = classifyPreviewMode(props.currentFile?.path, deps);
+      perfSegment('router.format-check.classify', classifyT0);
+      const format = mode.mode === 'react' ? mode.format : null;
+      // Keep the same object when nothing changed, so a keystroke does not re-render consumers.
+      setPreviewMode((prev) => (JSON.stringify(prev) === JSON.stringify(mode) ? prev : mode));
+      props.onFormatChange?.(format);
+      props.onPreviewModeChange?.(mode);
+    } catch (err) {
+      console.error('[PreviewRouter] Error checking format:', err);
+    } finally {
+      perfSegment('router.format-check', fxT0);
+      setCheckedPath(props.currentFile?.path);
+    }
   }, [props.content, props.currentFile?.path, wasmStatus]);
 
   // Show loading state only during the very first format check.
