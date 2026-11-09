@@ -2,7 +2,7 @@
 title: 'RFU-7: the Positron fork, extension update, demo guide, e2e and cache location'
 date: 2026-11-08
 description: 'The work that lives in the Positron fork (a different repository): update the demo extension for q2 convert and the execute: record-sources key (set with -M), run the extended raw-record experiment, add the R e2e test, write the demo run guide, prototype the cache-location feature, add the missing e2e cases, and apply Gordon''s command-2 decision. Commits go on a fork branch and never to the q2 integration branch; the q2 side lands only a note.'
-status: in-progress
+status: complete
 depends-on: [rfu-1, rfu-2, opr-5]
 lane: A
 ---
@@ -101,7 +101,7 @@ checked out in other worktrees).
 - [x] **Command 2 progress, cancel and dirty-document wording:** decided "document, do not fix" for both (above). No code;
       the demo run guide box covers it. Check the guide states the no-cancel and 300 s timeout facts and the dirty-document
       note and report.
-- [ ] `[Gordon]` Someone watches the R and Julia e2e once. Mark each step seen, Playwright, or not run.
+- [x] `[Gordon]` Someone watches the R and Julia e2e once. Mark each step seen, Playwright, or not run. (Gordon watched R command 2 and 3, and Julia command 2 and 3, on 2026-11-09: seen.)
 - [x] Write the landing note in the q2 repository: the fork branch, each commit hash and subject, what ran under
       Playwright, what was seen by a person, what was not run. Render-check it with `target/debug/q2 render --strict`.
 
@@ -126,6 +126,4 @@ helper uses a `Cmd+J E` keybinding that only the default profile has.
 
 **Raw-record experiment:** ran; keep the two export skips ([note](../research/2026-11-09-rfu-7-raw-record-experiment.md)).
 
-**Not done (this plan stays `in-progress`):**
-
-- The `[Gordon]` box: someone watches the R and Julia e2e once.
+**Not done:** nothing. Gordon watched the R and Julia e2e and reviewed `4cbd86bcb4` (lgtm).

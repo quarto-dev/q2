@@ -27,8 +27,8 @@ asks Positron where the cache is instead of guessing from the extension's own st
 
 ## What ran
 
-Marks: **Playwright** (automated, nobody watched), **CLI**, **not run**. Nothing here is marked **seen**: no
-person has watched any of these runs yet.
+Marks: **Playwright** (automated), **CLI**, **not run**. The R test (commands 2 and 3) and the two Julia tests (commands 2 and 3) are additionally marked **seen**: Gordon watched them on
+2026-11-09. Gordon reviewed `4cbd86bcb4` and approved it.
 
 | Check | Mark | Result |
 |---|---|---|
@@ -68,7 +68,7 @@ this test alone would catch its absence.
 
 ## Seen by a person
 
-Nothing in this session. Gordon saw stray "E" characters land in the document during some earlier runs. They did not
+Gordon watched the R and Julia e2e runs (rerun on 2026-11-09 after the landing). Earlier in the session, nothing was watched. Gordon saw stray "E" characters land in the document during some earlier runs. They did not
 appear in the last run. Gordon said to ignore them while they cause no trouble, and I left them alone and did not
 investigate.
 
