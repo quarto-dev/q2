@@ -39,7 +39,13 @@ the same plumbing, and kinds add about 25 lines.
 
 ## Scope chosen by Gordon
 
-(Empty until Gordon fills it in. If he narrows it, OPR-4c and OPR-4d build only what exists on the wire.)
+**Decided by Gordon, 2026-11-09:**
+
+1. **All three facts** (expression starts, anchors, output kinds), in one runner change, as recommended.
+2. **Stderr fix, option A:** under `emitUnits` the runner keeps stderr at capture and the presenter hides warnings
+   using the kinds; with `emitUnits` off nothing changes. `warning` stays in Julia\'s display-only list.
+
+The `status` line below is still `conditional`: Gordon flips it to `ready`.
 
 ## Goal
 

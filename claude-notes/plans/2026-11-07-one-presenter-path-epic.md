@@ -171,7 +171,7 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 - OPR-0d landed and R5 (move, no flag) is recorded in OPR-5: flip OPR-5 to `ready` once RFU-1 and OPR-3 are complete.
 - Any time: read the [Phase A note](../research/2026-11-07-r-through-knitr-phase-a.md), record the verdict in RFU-2, set
   it to `ready`.
-- OPR-4a landed (2026-11-09): read the [note](../research/2026-11-09-opr-julia-spike.md); write the scope into OPR-4b and set it to `ready`, or set 4b, 4c and 4d to `cancelled`. Decide the stderr-at-capture fix (runner stops dropping stderr under `emitUnits`, recommended, or remove `warning` from Julia\'s display-only list).
+- OPR-4a landed (2026-11-09): read the [note](../research/2026-11-09-opr-julia-spike.md); write the scope into OPR-4b and set it to `ready`, or set 4b, 4c and 4d to `cancelled`. **Decided 2026-11-09:** all three facts, and the stderr fix is the runner keeping stderr under `emitUnits` (written into OPR-4b); only the flip to `ready` remains.
 - After OPR-4b lands: push the runner branch to the fork and write the revision into OPR-4c; set it to `ready`.
 - After OPR-4c lands: set OPR-4d to `ready`.
 - After OPR-7c lands: sign the allowlist, record the two decisions in OPR-7d, set it to `ready`.
@@ -192,7 +192,7 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 | OPR-7c, parity | blockers beyond the known Julia three | fix plans appear before OPR-7d |
 | OPR-2, audit | a capture gap in an engine | a capture-side plan, coupled to lane B |
 | OPR-0a, loop divergence | more than the table | OPR-1a or OPR-1b splits again |
-| OPR-4a, spike | **came back 2026-11-09: all three facts feasible, not partial** | Gordon chooses the OPR-4b scope (recommended: all three plus the stderr-at-capture fix); 4b to 4d are rewritten to the spike wire (keys in `metadata.quarto`, no `ts_protocol.rs` change expected); Jupyter stays a follow-up |
+| OPR-4a, spike | **came back 2026-11-09: all three facts feasible, not partial** | scope chosen 2026-11-09: all three plus the stderr-at-capture fix; 4b to 4d are rewritten to the spike wire (keys in `metadata.quarto`, no `ts_protocol.rs` change expected); Jupyter stays a follow-up |
 
 ## Constraints that hold across the plans
 
