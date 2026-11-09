@@ -20,7 +20,6 @@ use super::types::{Record, RecordCell, UnitKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReason {
     InlineUnit,
-    EngineNotExportable,
     ExtensionLanguage,
     RenderedMarkdownOutput,
     DuplicateGroupWithSkippedMember,
@@ -30,7 +29,6 @@ impl SkipReason {
     pub fn as_str(self) -> &'static str {
         match self {
             SkipReason::InlineUnit => "inline unit",
-            SkipReason::EngineNotExportable => "engine is not jupyter or julia",
             SkipReason::ExtensionLanguage => "extension language",
             SkipReason::RenderedMarkdownOutput => "rendered quarto-markdown output",
             SkipReason::DuplicateGroupWithSkippedMember => {
@@ -96,24 +94,15 @@ pub enum ExportError {
     MalformedOutput { cell_id: String },
 }
 
-/// The engines whose cells Positron's own kernel could have produced: the same two owners the
-/// import gate admits for plain kernel languages (RIU-3), so the two directions agree.
-pub const EXPORT_OWNERS: [&str; 2] = ["jupyter", "julia"];
-
 const PDF: &str = "application/pdf";
 const PNG: &str = "image/png";
 const SVG: &str = "image/svg+xml";
 const HTML: &str = "text/html";
 
-fn skip_reason(record: &Record, cell: &RecordCell) -> Option<SkipReason> {
+fn skip_reason(cell: &RecordCell) -> Option<SkipReason> {
     let meta = &cell.metadata;
     if meta.quarto_kind == UnitKind::Inline {
         Some(SkipReason::InlineUnit)
-    } else if !record
-        .engine_of(cell)
-        .is_some_and(|e| EXPORT_OWNERS.contains(&e))
-    {
-        Some(SkipReason::EngineNotExportable)
     } else if meta.quarto_lang.contains('.') {
         Some(SkipReason::ExtensionLanguage)
     } else if cell.outputs.iter().any(|o| {
@@ -197,18 +186,15 @@ fn export_output(
 
 /// Export `record` as a Positron cache file.
 ///
-/// Keeps a unit only if it is a code cell (not an inline unit) owned by [`EXPORT_OWNERS`], in a
-/// plain language, with no rendered-markdown output. A group of cells sharing a content hash is
+/// Keeps a unit only if it is a code cell (not an inline unit), in a plain language, with no
+/// rendered-markdown output. The engine does not matter (RFU-2): a knitr cell exports like a
+/// Python one. A group of cells sharing a content hash is
 /// kept whole or skipped whole, because Positron pairs by occurrence.
 pub fn export_for_positron(
     record: &Record,
     options: &ExportOptions,
 ) -> Result<ExportedCache, ExportError> {
-    let reasons: Vec<Option<SkipReason>> = record
-        .cells
-        .iter()
-        .map(|c| skip_reason(record, c))
-        .collect();
+    let reasons: Vec<Option<SkipReason>> = record.cells.iter().map(skip_reason).collect();
     let lost: BTreeSet<&str> = record
         .cells
         .iter()
@@ -541,14 +527,85 @@ mod tests {
         assert_eq!(skipped(&cache), [("i", SkipReason::InlineUnit)]);
     }
 
+    fn knitr(id: &str, hash: &str, outputs: Value) -> Value {
+        cell(id, hash, "r", "knitr", "cell", outputs)
+    }
+
+    fn stream(text: &str) -> Value {
+        json!({"output_type": "stream", "name": "stdout", "text": [text]})
+    }
+
+    /// RFU-2: the export no longer consults the engine or the language (an extension language
+    /// and a fallback cell still skip, below).
     #[test]
-    fn another_engines_cell_is_skipped() {
+    fn a_cell_of_any_engine_exports() {
         let (_, cache) = export(vec![
-            cell("k", "h0", "r", "knitr", "cell", json!([])),
+            knitr("k", "h0", json!([])),
+            cell("x", "h2", "ruby", "anything", "cell", json!([])),
             py("a", "h1", json!([])),
         ]);
+        assert_eq!(cache.cells, 3);
+        assert!(cache.skipped.is_empty());
+    }
+
+    #[test]
+    fn a_knitr_record_exports_text_figure_message_table_error_and_options() {
+        let outs = json!([
+            stream("[1] 2\n"),
+            {"output_type": "display_data", "metadata": {}, "data": {"image/png": "iVBOR"}},
+            {"output_type": "stream", "name": "stderr", "text": ["Warning message:\n"]},
+            {"output_type": "execute_result", "execution_count": 1, "metadata": {},
+             "data": {"text/html": "<table><tr><td>1</td></tr></table>", "text/plain": ["x"]}},
+            {"output_type": "error", "ename": "simpleError", "evalue": "boom", "traceback": []},
+        ]);
+        let mut c = knitr("k", "h0", outs);
+        c["metadata"]["fig-width"] = json!(4);
+        let (v, cache) = export(vec![c]);
         assert_eq!(cache.cells, 1);
-        assert_eq!(skipped(&cache), [("k", SkipReason::EngineNotExportable)]);
+        let out = v["cells"][0]["outputs"].as_array().unwrap();
+        assert_eq!(out.len(), 5);
+        assert_eq!(out[1]["data"]["image/png"], "iVBOR");
+        assert!(
+            out[3]["data"]["text/html"]
+                .as_str()
+                .unwrap()
+                .contains("<table")
+        );
+        assert_eq!(out[4]["output_type"], "error");
+        // Only Positron's three metadata keys survive; the option does not.
+        assert!(v["cells"][0]["metadata"].get("fig-width").is_none());
+    }
+
+    /// Gordon's Phase A verdict (2026-11-09): nothing the document says to hide is dropped.
+    #[test]
+    fn results_hide_asis_and_raw_html_outputs_stay_in_the_export() {
+        let (v, cache) = export(vec![
+            knitr("hide", "h0", json!([stream("hidden by results: hide\n")])),
+            knitr(
+                "asis",
+                "h1",
+                result(json!({"text/markdown": "**bold**", "text/plain": ["**bold**"]})),
+            ),
+            knitr(
+                "raw",
+                "h2",
+                result(json!({"text/html": "<div class=\"x\">raw</div>"})),
+            ),
+        ]);
+        assert_eq!(cache.cells, 3);
+        assert!(cache.dropped.is_empty());
+        let all = v.to_string();
+        assert!(all.contains("hidden by results: hide"));
+        assert!(all.contains("**bold**"));
+        assert!(all.contains("class=\\\"x\\\">raw"));
+    }
+
+    #[test]
+    fn a_knitr_fallback_cell_is_still_skipped() {
+        let md = result(json!({"text/x-quarto-markdown": "# hi"}));
+        let (_, cache) = export(vec![knitr("f", "h0", md), knitr("a", "h1", json!([]))]);
+        assert_eq!(cache.cells, 1);
+        assert_eq!(skipped(&cache), [("f", SkipReason::RenderedMarkdownOutput)]);
     }
 
     #[test]
