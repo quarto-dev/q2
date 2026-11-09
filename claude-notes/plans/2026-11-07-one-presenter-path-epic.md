@@ -161,7 +161,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | Lane | Workspace | Plans, in order |
 |---|---|---|
 | A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3, **RFU-7** (moved from C) |
-| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, OPR-4b, 4c, **RFU-4** (moved from C), **RFU-8** (moved from D) |
+| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C) |
 | C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a |
 | D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, OPR-7d, OPR-8 |
 
