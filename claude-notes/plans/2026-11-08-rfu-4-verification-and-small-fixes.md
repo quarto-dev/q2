@@ -2,7 +2,7 @@
 title: 'RFU-4: verification and small fixes for the records-in-use epic'
 date: 2026-11-08
 description: 'The q2-side boxes the RIU-6 demo left open: find or run the hub verification, re-check that a failed optional record copy fails soft, check the preview highlight for an edited cell, write down what q2 can say about a stale Julia server or a missing Plots project, and the RIU-3 browser items nobody has seen.'
-status: ready
+status: in-progress
 depends-on: [opr-5]
 lane: B
 ---
