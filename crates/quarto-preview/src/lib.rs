@@ -268,7 +268,7 @@ pub struct PreviewConfig {
     /// substitute directly.
     pub engine_policy: EnginePolicy,
     /// The ordered record sources (RIU-2): where a document's record may come from, first
-    /// wins. The CLI's `--records` flag sets it (RIU-3a); the default is
+    /// wins. `-M 'execute: {record-sources: ...}'` sets it; the default is
     /// [`RecordSources::preview_default`](quarto_core::record::RecordSources::preview_default).
     pub record_sources: quarto_core::record::RecordSources,
     /// Resources-scoped `.html` files (project-root-relative) to carry
@@ -420,6 +420,7 @@ where
     let re_execute_cfg = config::ReExecuteConfig {
         policy: config.engine_policy,
         sources: config.record_sources.clone(),
+        share: config.share,
         record_gate: quarto_core::engine::capture_files::record_writing_enabled(
             quarto_core::engine::capture_files::WriterSurface::Preview,
         ),

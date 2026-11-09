@@ -204,6 +204,73 @@ pub fn resolve_record_sources(
         )));
     };
 
+    let (sources, notes) = resolve_entries(
+        &text,
+        &layer.base_dir,
+        &project.dir,
+        runtime,
+        command,
+        trust,
+    )?;
+    Ok(ResolvedSources {
+        sources,
+        origin: Some(layer.kind),
+        notes,
+    })
+}
+
+/// The host's own list, read from the runtime metadata alone (`-M`) at command start:
+/// the command default when the key is absent. Directories resolve against `base_dir`
+/// and must stay inside `project_dir`. This is the allowed set a [`Trust::Ceiling`]
+/// reader enforces.
+pub fn host_record_sources(
+    runtime_metadata: Option<&serde_json::Value>,
+    base_dir: &Path,
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+    command: &CommandSources,
+) -> Result<ResolvedSources, SourceKeyError> {
+    let value = runtime_metadata
+        .and_then(|m| m.get(KEY_PATH[0]))
+        .and_then(|e| e.get(KEY_PATH[1]))
+        .filter(|v| !v.is_null());
+    let Some(value) = value else {
+        return Ok(ResolvedSources {
+            sources: command.default_list(),
+            origin: None,
+            notes: Vec::new(),
+        });
+    };
+    let Some(text) = value.as_str() else {
+        return Err(SourceKeyError(format!(
+            "`{RECORD_SOURCES_KEY}` must be a comma-separated string such as `q2,engine`, not a \
+             list or a map"
+        )));
+    };
+    let (sources, notes) = resolve_entries(
+        text,
+        base_dir,
+        project_dir,
+        runtime,
+        command,
+        Trust::Override,
+    )?;
+    Ok(ResolvedSources {
+        sources,
+        origin: Some(LayerKind::Runtime),
+        notes,
+    })
+}
+
+/// Parse, filter and resolve the entries of one value.
+fn resolve_entries(
+    text: &str,
+    base_dir: &Path,
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+    command: &CommandSources,
+    trust: Trust<'_>,
+) -> Result<(RecordSources, Vec<SourceNote>), SourceKeyError> {
     let mut notes = Vec::new();
     let mut out: Vec<RecordSource> = Vec::new();
     for raw in text.split(',') {
@@ -235,8 +302,8 @@ pub fn resolve_record_sources(
             (RecordSource::Dir(p), Trust::Override) => RecordSource::Dir(resolve_directory(
                 entry,
                 &p,
-                &layer.base_dir,
-                &project.dir,
+                base_dir,
+                project_dir,
                 runtime,
             )?),
             (other, Trust::Ceiling { allowed }) => {
@@ -259,11 +326,7 @@ pub fn resolve_record_sources(
             out.push(source);
         }
     }
-    Ok(ResolvedSources {
-        sources: RecordSources::new(out),
-        origin: Some(layer.kind),
-        notes,
-    })
+    Ok((RecordSources::new(out), notes))
 }
 
 /// A list as a message prints it (`cache, q2, engine`).

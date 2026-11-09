@@ -100,7 +100,7 @@ pub struct Provider {
     /// sees, so a `-M` that changes how code runs (`execute:eval:false`,
     /// `jupyter:python3`) reaches the engine. `None` adds nothing.
     overlay: Option<Arc<RenderOverlay>>,
-    /// `--records` (RIU-4). Exactly `engine` (the default) keeps the pre-RIU path: no walk.
+    /// `execute: record-sources` (RIU-4). Exactly `engine` (the default) keeps the pre-RIU path: no walk.
     record_sources: RecordSources,
     /// The writer gate, read once at construction (`QUARTO_ENGINE_RECORD_WRITE`).
     record_gate: bool,
@@ -142,7 +142,7 @@ impl Provider {
         )
     }
 
-    /// [`Provider::new_with_overlay`] with the `--records` list and the writer gate (RIU-4).
+    /// [`Provider::new_with_overlay`] with the `execute: record-sources` list and the writer gate (RIU-4).
     /// With the list exactly `engine` this is the pre-RIU provider. With any other list,
     /// `execute_document` walks it, and `engine` absent means this provider never runs code.
     #[allow(clippy::too_many_arguments)]
@@ -599,7 +599,7 @@ impl Provider {
         Ok(Some(ExecOutcome::Executed(doc_id)))
     }
 
-    /// Whether `engine` is in this provider's `--records` list.
+    /// Whether `engine` is in this provider's `execute: record-sources` list.
     fn engine_listed(&self) -> bool {
         self.record_sources.contains_engine()
     }
@@ -838,7 +838,8 @@ impl RecordLookup for ProviderLookup<'_> {
     async fn run_engine(&self, _inputs: &SourceInputs) -> Result<EngineResult, EngineError> {
         if !self.provider.engine_listed() {
             return Err(EngineError::Failed(
-                "`engine` is not in --records, so this provider does not run code".into(),
+                "`engine` is not in `execute: record-sources`, so this provider does not run code"
+                    .into(),
             ));
         }
         match self.provider.run_and_store(self.rel_path).await {

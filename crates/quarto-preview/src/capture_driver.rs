@@ -183,7 +183,23 @@ async fn record_one(
     // whichever supplies first. The pre-engine pipeline runs once, here; the cache key and the
     // staleness check both derive from its result.
     // Only the Positron import needs the language ownership map (its gate); ask for it only then.
-    let wants_import = cfg.sources.iter().any(|s| {
+    // The list is per document: its `execute: record-sources`, bounded by the host list under
+    // `--share` (OPR-5). An unreadable key is the page's one diagnostic.
+    let resolved = cfg
+        .document_sources(abs_path, None)
+        .map_err(RecordError::RecordFailed)?;
+    if let Some(sink) = crate::diagnostics::current_sink() {
+        for note in &resolved.notes {
+            let builder = if note.warning {
+                quarto_error_reporting::DiagnosticMessageBuilder::warning(note.text.clone())
+            } else {
+                quarto_error_reporting::DiagnosticMessageBuilder::info(note.text.clone())
+            };
+            sink.emit(rel_path, builder.build());
+        }
+    }
+    let sources = resolved.sources;
+    let wants_import = sources.iter().any(|s| {
         matches!(
             s,
             quarto_core::record::RecordSource::Positron | quarto_core::record::RecordSource::Dir(_)
@@ -213,7 +229,7 @@ async fn record_one(
             source: Some(rel_path),
             positron_dir: None,
         }),
-        list: &cfg.sources,
+        list: &sources,
         engine_enabled: cfg.policy != EnginePolicy::Off,
         record_gate: cfg.record_gate,
     };
@@ -1652,7 +1668,7 @@ mod tests {
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
-    /// RIU-4: `--records cache,positron,engine` under `preview.engine: off`: the engine stays
+    /// RIU-4: `execute: record-sources: cache,positron,engine` under `preview.engine: off`: the engine stays
     /// listed but never runs, and the cached record still shows.
     #[tokio::test]
     async fn off_with_engine_listed_shows_the_cached_record_and_never_runs_the_engine() {
@@ -3224,7 +3240,7 @@ mod tests {
             .await
             .unwrap();
         let msg = String::from_utf8_lossy(&body).into_owned();
-        assert!(msg.contains("--records"), "{msg}");
+        assert!(msg.contains("`execute: record-sources`"), "{msg}");
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
         let now = ctx.index().get_capture("doc.qmd").unwrap();
         assert_eq!(

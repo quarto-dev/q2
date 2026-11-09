@@ -67,7 +67,7 @@ pub use positron_record::{
 pub use reader::{ReadError, read_record, read_record_value};
 pub use source_key::{
     CommandSources, RECORD_SOURCES_KEY, ResolvedSources, SourceKeyError, SourceNote, Trust,
-    describe as describe_sources, resolve_record_sources,
+    describe as describe_sources, host_record_sources, resolve_record_sources,
 };
 pub use sources::{
     Chosen, EngineError, EngineResult, ImportContext, ImportedOnly, LookupError, OutcomeKind,

@@ -1,12 +1,12 @@
 /**
- * `--records` record sources, end to end (RIU-4).
+ * `execute: record-sources`, end to end (RIU-4).
  *
- * Drives the real `q2 preview` binary (embedded SPA + WASM) with `--records` and asserts on the
+ * Drives the real `q2 preview` binary (embedded SPA + WASM) with `-M execute:{record-sources: ...}` and asserts on the
  * page a reader sees:
  *
- *   1. `--records <dir>`: outputs from a Positron-format cache file in that directory show under
+ *   1. a `record-sources` directory: outputs from a Positron-format cache file in that directory show under
  *      the cell, with no engine and no kernel (the list has no `engine`).
- *   2. `--records cache` on a document nothing has run: the warning box says no source supplied a
+ *   2. `cache` in `execute: record-sources` on a document nothing has run: the warning box says no source supplied a
  *      record, names each source and why it was passed over, and says how to fix it.
  *
  * Both are the checks that a stale viewer WASM breaks silently (the embedded WASM predates the
@@ -80,7 +80,7 @@ async function renderedText(page: Page): Promise<string> {
   return page.evaluate(() => document.querySelector('iframe')?.contentDocument?.body.innerText ?? '');
 }
 
-test('a --records directory shows its cached outputs under the cell, with no engine', async ({
+test('a record-sources directory shows its cached outputs under the cell, with no engine', async ({
   page,
 }) => {
   server = await startPreviewServer({
@@ -99,7 +99,7 @@ test('a --records directory shows its cached outputs under the cell, with no eng
   await expect(page.getByText('No execution record for this document')).toHaveCount(0);
 });
 
-test('--records cache on a document with no record explains why on the page', async ({ page }) => {
+test('record-sources `cache` on a document with no record explains why on the page', async ({ page }) => {
   server = await startPreviewServer({
     fixtureFiles: [{ path: 'records.qmd', content: DOC }],
     records: ['cache'],
@@ -116,7 +116,7 @@ test('--records cache on a document with no record explains why on the page', as
   // The per-source reasons and the fix are on the page, not only in the endpoint.
   await expect(page.getByText(/cache: nothing for this document/)).toBeVisible();
   await expect(page.getByText(/engine: not available/)).toBeVisible();
-  await expect(page.getByText(/Add `engine` to `--records`/)).toBeVisible();
+  await expect(page.getByText(/Add `engine` to `execute: record-sources`/)).toBeVisible();
   // And no output was invented: the cell is source only.
   expect(await renderedText(page)).not.toContain('FROM-THE-CACHE-FILE');
 });

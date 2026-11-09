@@ -52,7 +52,7 @@ impl RecordSource {
     }
 }
 
-/// Why a `--records` entry was not understood.
+/// Why a `execute: record-sources` entry was not understood.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseSourceError(pub String);
 
@@ -78,7 +78,7 @@ impl std::fmt::Display for ParseSourceError {
 
 impl std::error::Error for ParseSourceError {}
 
-/// The three classification rules of `--records` (RIU-3a, kept by RIU-4): a known name, else a
+/// The three classification rules of `execute: record-sources` (RIU-3a, kept by RIU-4): a known name, else a
 /// path-like entry is a directory, else an error. No validation (the directory need not exist
 /// here), no defaults and no conflicts; RIU-4 adds those.
 impl std::str::FromStr for RecordSource {
@@ -166,7 +166,7 @@ impl RecordSources {
     pub fn reject_cache(&self, command: &str) -> Result<(), String> {
         if self.0.contains(&RecordSource::Cache) {
             return Err(format!(
-                "`--records cache` is not available for `{command}`: it has no preview cache \
+                "`cache` in `execute: record-sources` is not available for `{command}`: it has no preview cache \
                  directory. Use `q2`, `positron`, a directory path, or `engine`"
             ));
         }

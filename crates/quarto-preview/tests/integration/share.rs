@@ -262,7 +262,7 @@ fn banner_states_capabilities_per_allow_edit() {
     );
 }
 
-/// A session that cannot re-execute (`engine` absent from `--records`, or `preview.engine: off`)
+/// A session that cannot re-execute (`engine` absent from `execute: record-sources`, or `preview.engine: off`)
 /// must not tell the host that guests can RE-RUN code.
 #[test]
 fn banner_does_not_claim_re_run_when_the_engine_cannot_run() {

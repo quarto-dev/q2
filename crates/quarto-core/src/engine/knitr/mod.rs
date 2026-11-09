@@ -675,12 +675,12 @@ mod tests {
     }
 
     #[test]
-    fn knitr_declares_empty_exclusion_lists_and_the_knitr_key() {
+    fn knitr_excludes_only_record_sources_from_the_execute_keys_and_declares_the_knitr_key() {
         let def = KnitrEngine { rscript_path: None }.hash_definition();
         assert_eq!(def.id, "knitr");
         assert_eq!(def.granularity, crate::record::Granularity::Unit);
         assert!(def.presentation_cell_options.is_empty());
-        assert!(def.presentation_execute_keys.is_empty());
+        assert_eq!(def.presentation_execute_keys, ["record-sources"]);
         assert_eq!(def.document_keys, ["knitr"]);
         // KNR-3: the default profile is still the all-options rule; fallback units use it. The
         // `structured` profile is covered in `hash_rule`.

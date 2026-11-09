@@ -151,7 +151,8 @@ fn refusal_message(cfg: &ReExecuteConfig) -> String {
     if cfg.policy == crate::config::EnginePolicy::Off {
         "Re-execute is disabled: preview.engine is off".to_string()
     } else {
-        "Re-execute is disabled: the engine is not in --records, so this preview never runs code"
+        "Re-execute is disabled: `engine` is not in this document's `execute: record-sources`, \
+         so this preview never runs its code"
             .to_string()
     }
 }
@@ -208,7 +209,14 @@ fn claim_and_spawn(
     // The one guard every kernel start passes through: the HTTP handler (a share guest reaches
     // it through the tunnel) and the automatic path both come here. It sits before the in-flight
     // insert, so a refusal cannot leak the slot and answer 409 to every later POST.
-    if !cfg.allows_engine() {
+    // Per document: its `execute: record-sources` (bounded by the host list under `--share`)
+    // decides whether `engine` is in play. With no project root (standalone mode) only the
+    // host list is known.
+    let allowed = match ctx.storage().project_root() {
+        Some(root) => cfg.allows_engine_for(&root.join(&rel_path)),
+        None => cfg.allows_engine(),
+    };
+    if !allowed {
         return ClaimOutcome::Refused;
     }
     let in_flight_set = in_flight();
@@ -615,7 +623,7 @@ mod tests {
         let response = post(&ctx, registry, &cfg).await;
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let msg = body_text(response).await;
-        assert!(msg.contains("--records"), "{msg}");
+        assert!(msg.contains("`execute: record-sources`"), "{msg}");
         assert_untouched(&ctx, &before);
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
     }

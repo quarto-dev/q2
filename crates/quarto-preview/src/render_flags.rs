@@ -72,6 +72,21 @@ pub fn native_runtime_for(profile: &[String]) -> NativeRuntime {
     native_runtime_for_selection(profile)
 }
 
+/// The session's native runtime with the `-M` overlay applied, for reading a metadata key
+/// before any pipeline runs (`execute: record-sources`). The overlay is the runtime layer, the
+/// highest precedence.
+pub(crate) fn runtime_with_overlay() -> std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> {
+    let native: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+        std::sync::Arc::new(native_runtime());
+    match get().metadata {
+        Some(m) => std::sync::Arc::new(quarto_core::overlay_runtime::RenderOverlay::with_metadata(
+            m,
+        ))
+        .apply(native),
+        None => native,
+    }
+}
+
 /// The session's native runtime: [`native_runtime_for`] the session's
 /// `--profile`. Use this instead of `NativeRuntime::new()` anywhere the
 /// server reads a project (a lint test enforces it).

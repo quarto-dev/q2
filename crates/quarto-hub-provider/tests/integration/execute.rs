@@ -715,7 +715,7 @@ fn records_provider(
     )
 }
 
-/// RIU-4: `execute_document` with `--records <dir>` (no `engine`) publishes the imported record
+/// RIU-4: `execute_document` with a `record-sources` directory (no `engine`) publishes the imported record
 /// through the walk without consent and never runs the engine.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn execute_document_with_an_imported_source_publishes_without_consent_or_engine() {

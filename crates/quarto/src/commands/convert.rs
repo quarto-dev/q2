@@ -44,14 +44,27 @@ pub mod exit {
 /// The conversions this command supports, as `(from, to)`. Listed in usage errors.
 const SUPPORTED_PAIRS: &[(&str, &str)] = &[("qmd", "positron-ipynb")];
 
-/// The record source list `convert` uses until OPR-5 replaces [`record_sources`] with the
-/// reader of the `execute: record-sources` metadata key (allowed values `q2` and
-/// `engine`, default `q2,engine`). There is deliberately no command-line option for it.
-const DEFAULT_RECORD_SOURCES: [RecordSource; 2] = [RecordSource::Q2, RecordSource::Engine];
-
-/// The one place `convert` decides where a record comes from.
-fn record_sources() -> Vec<RecordSource> {
-    DEFAULT_RECORD_SOURCES.to_vec()
+/// The record source list for `input`: `execute: record-sources` read before anything runs
+/// (allowed values `q2` and `engine`, default `q2,engine`). There is deliberately no
+/// command-line option for it; `-M 'execute:{record-sources: q2}'` sets it.
+fn record_sources(input: &Path, runtime: &dyn SystemRuntime) -> Result<Vec<RecordSource>, String> {
+    let doc = quarto_system_runtime::canonicalize(input)
+        .map_err(|e| format!("cannot read document {}: {e}", input.display()))?;
+    let project = ProjectContext::discover(&doc, runtime)
+        .map_err(|e| format!("project discovery failed: {e}"))?;
+    let resolved = quarto_core::record::resolve_record_sources(
+        &project,
+        &doc,
+        None,
+        runtime,
+        &quarto_core::record::CommandSources::CONVERT,
+        quarto_core::record::Trust::Override,
+    )
+    .map_err(|e| e.to_string())?;
+    for note in &resolved.notes {
+        eprintln!("info: {}", note.text);
+    }
+    Ok(resolved.sources.as_slice().to_vec())
 }
 
 pub struct ConvertArgs {
@@ -130,7 +143,11 @@ pub fn execute(args: ConvertArgs) -> i32 {
         Some(o) => o.apply(native),
         None => native,
     };
-    export_positron(&args, &out, &record_sources(), runtime)
+    let sources = match record_sources(&args.input, runtime.as_ref()) {
+        Ok(s) => s,
+        Err(e) => return usage(&e),
+    };
+    export_positron(&args, &out, &sources, runtime)
 }
 
 fn export_positron(
@@ -327,9 +344,36 @@ mod tests {
 
     #[test]
     fn the_default_source_list_is_q2_then_engine() {
+        let (_tmp, qmd) = scratch(None);
         assert_eq!(
-            record_sources(),
+            record_sources(&qmd, native().as_ref()).unwrap(),
             vec![RecordSource::Q2, RecordSource::Engine]
+        );
+    }
+
+    #[test]
+    fn the_key_sets_the_list_and_unusable_entries_are_dropped() {
+        let (tmp, qmd) = scratch(None);
+        std::fs::write(
+            &qmd,
+            "---\nexecute:\n  record-sources: cache,q2\n---\n\nProse.\n",
+        )
+        .unwrap();
+        let _ = &tmp;
+        assert_eq!(
+            record_sources(&qmd, native().as_ref()).unwrap(),
+            vec![RecordSource::Q2]
+        );
+    }
+
+    #[test]
+    fn an_unknown_entry_in_the_key_is_an_error() {
+        let (_tmp, qmd) = scratch(None);
+        std::fs::write(&qmd, "---\nexecute:\n  record-sources: nope\n---\n\nP.\n").unwrap();
+        let e = record_sources(&qmd, native().as_ref()).unwrap_err();
+        assert!(
+            e.contains("execute: record-sources") && e.contains("`nope`"),
+            "{e}"
         );
     }
 

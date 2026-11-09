@@ -109,7 +109,7 @@ pub fn spawn_share_task(
 /// `q2 preview --join …` line (last, with nothing after it, so a
 /// triple-click / drag copy survives terminal wrapping).
 ///
-/// `can_rerun` is whether a guest's re-execute can start an engine (`engine` is in `--records`
+/// `can_rerun` is whether a guest's re-execute can start an engine (`engine` is in `execute: record-sources`
 /// and `preview.engine` is not `off`); when it is not, the banner must not say guests can
 /// re-run code.
 pub fn format_share_banner(

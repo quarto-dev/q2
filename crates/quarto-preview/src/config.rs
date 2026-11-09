@@ -27,8 +27,15 @@ use quarto_system_runtime::SystemRuntime;
 pub struct ReExecuteConfig {
     /// `preview.engine`: `off` forbids every engine run.
     pub policy: EnginePolicy,
-    /// The ordered record sources; re-execute needs `engine` in it (epic decision 5).
+    /// The host's record sources: the preview default, or the value of `-M
+    /// 'execute: {record-sources: ...}'`. A document's `execute: record-sources` overrides it
+    /// (see [`Self::document_sources`]); when `share` is set it is the **ceiling** a document
+    /// may only reorder or narrow. Re-execute needs `engine` in the resolved list (epic
+    /// decision 5).
     pub sources: quarto_core::record::RecordSources,
+    /// A `--share` session: guests reach the render routes and re-execute, so a document is not
+    /// trusted to widen the host's list.
+    pub share: bool,
     /// The writer gate (`QUARTO_ENGINE_RECORD_WRITE`), read once at start-up.
     pub record_gate: bool,
     /// The capture cache root (`<data_dir>/captures/` unless overridden).
@@ -42,6 +49,7 @@ impl ReExecuteConfig {
         Self {
             policy,
             sources: quarto_core::record::RecordSources::preview_default(),
+            share: false,
             record_gate: false,
             cache_dir,
         }
@@ -58,6 +66,50 @@ impl ReExecuteConfig {
     /// source list. The one question `claim_and_spawn` asks before it claims a slot.
     pub fn allows_engine(&self) -> bool {
         engine_can_run(self.policy, &self.sources)
+    }
+
+    /// The record sources for one document: its `execute: record-sources` read before any
+    /// pipeline (project, directory, front matter, then `-M`), else the host list. With `share`
+    /// the host list is a ceiling the document may only reorder or narrow. The notes (what was
+    /// ignored and why) come back for the caller to put on the page.
+    pub fn document_sources(
+        &self,
+        abs_path: &std::path::Path,
+        content: Option<&str>,
+    ) -> Result<quarto_core::record::ResolvedSources, String> {
+        use quarto_core::record::{CommandSources, Trust, resolve_record_sources};
+        let runtime = crate::render_flags::runtime_with_overlay();
+        let project = quarto_core::project::ProjectContext::discover(abs_path, runtime.as_ref())
+            .map_err(|e| format!("project discovery failed: {e}"))?;
+        let trust = if self.share {
+            Trust::Ceiling {
+                allowed: &self.sources,
+            }
+        } else {
+            Trust::Override
+        };
+        let mut resolved = resolve_record_sources(
+            &project,
+            abs_path,
+            content,
+            runtime.as_ref(),
+            &CommandSources::PREVIEW,
+            trust,
+        )
+        .map_err(|e| e.to_string())?;
+        if resolved.origin.is_none() {
+            resolved.sources = self.sources.clone();
+        }
+        Ok(resolved)
+    }
+
+    /// Whether an engine run may start for `abs_path`: the policy is not `off` and `engine` is
+    /// in the document's list. A document whose key cannot be read refuses (fail closed).
+    pub fn allows_engine_for(&self, abs_path: &std::path::Path) -> bool {
+        self.policy != EnginePolicy::Off
+            && self
+                .document_sources(abs_path, None)
+                .is_ok_and(|r| r.sources.contains_engine())
     }
 }
 
