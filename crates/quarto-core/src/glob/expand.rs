@@ -209,6 +209,13 @@ mod tests {
         files: BTreeSet<PathBuf>,
     }
 
+    /// The mock keys its fake tree on `/`-separated strings, but `Path::join`
+    /// inserts `\` on Windows (`/proj` + `data` is `/proj\data`), so normalize
+    /// the separators before matching.
+    fn memory_key(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/")
+    }
+
     impl MemoryRuntime {
         fn new(paths: &[&str]) -> Self {
             Self {
@@ -217,7 +224,7 @@ mod tests {
         }
 
         fn is_dir_path(&self, path: &Path) -> bool {
-            let prefix = format!("{}/", path.to_string_lossy());
+            let prefix = format!("{}/", memory_key(path));
             self.files
                 .iter()
                 .any(|f| f.to_string_lossy().starts_with(&prefix))
@@ -237,7 +244,7 @@ mod tests {
         }
 
         fn dir_list(&self, path: &Path) -> RuntimeResult<Vec<PathBuf>> {
-            let prefix = format!("{}/", path.to_string_lossy());
+            let prefix = format!("{}/", memory_key(path));
             let mut children: BTreeSet<PathBuf> = BTreeSet::new();
             for file in &self.files {
                 let full = file.to_string_lossy().to_string();
