@@ -2,7 +2,7 @@
 title: 'OPR-0d: research, could the execution-records source list be a metadata key?'
 date: 2026-11-08
 description: 'Research note that answers Gordon''s question (R5): whether the source list of --execution-records could be a document or project metadata key instead of, or beside, a command-line flag. Covers hash effects, hub trust, path resolution, machine-local sources, convert, and conflict checks. Ends with a recommendation; Gordon decides, which unblocks OPR-5.'
-status: in-progress
+status: complete
 depends-on: []
 lane: C
 ---
@@ -29,7 +29,7 @@ Gordon: "Carlos is going to ask why `execution-records` is not just a YAML field
 any reason for it not to be. If we went that way, we would not need `--execution-records` because all commands
 already have `-M` (except convert)." The note must answer whether it can be, and what each answer does to OPR-5 and
 OPR-6. **No product code changes.** The deliverable is one note,
-`claude-notes/research/2026-11-xx-opr-metadata-key-research.md`.
+`claude-notes/research/2026-11-08-opr-metadata-key-research.md`.
 
 ## Background (relied from review agents on 2026-11-08 unless marked; re-check each before you cite it)
 
@@ -49,26 +49,26 @@ OPR-6. **No product code changes.** The deliverable is one note,
 
 ## Checklist (every box is `[unattended]`)
 
-- [ ] **Hash effect.** Demonstrate by a scratch test or run that adding an `execute:` key changes each engine\'s
+- [x] **Hash effect.** Demonstrate by a scratch test or run that adding an `execute:` key changes each engine\'s
       document hash, and list the three exclusion points (file and line) a new key would need. State whether
       `execute: record: true` itself enters the document hash (a review agent could not reproduce the hash by hand).
-- [ ] **Hub trust.** In `crates/quarto-hub-provider`, trace what a guest document\'s or project\'s metadata can do
+- [x] **Hub trust.** In `crates/quarto-hub-provider`, trace what a guest document\'s or project\'s metadata can do
       today, and what a key naming a directory or `positron` would let it read on the host, and who would see the
       result. State plainly whether a metadata key is safe there without a new rule, and what rule would make it so
       (for example: honor the key only from host-controlled metadata, or only for `q2` and `engine`).
-- [ ] **Path resolution.** Which base a directory entry would resolve against as a key (the declaring file) and as a
+- [x] **Path resolution.** Which base a directory entry would resolve against as a key (the declaring file) and as a
       flag (the working directory); does the `config-path-base` lint or `resolve_config_path` apply.
-- [ ] **Machine-local sources.** Which entries (`positron`, `cache`, directory paths) make sense in a committed
+- [x] **Machine-local sources.** Which entries (`positron`, `cache`, directory paths) make sense in a committed
       file, and which break another machine or CI.
-- [ ] **`convert`.** `convert` (RFU-1) has no `-M`: what each option would need there.
-- [ ] **Conflicts.** `--no-execute` plus `engine`, and `--replay` (`QUARTO_REPLAY` is read in
+- [x] **`convert`.** `convert` (RFU-1) has no `-M`: what each option would need there.
+- [x] **Conflicts.** `--no-execute` plus `engine`, and `--replay` (`QUARTO_REPLAY` is read in
       `commands/render.rs`, not by clap): where each check lives if the list arrives as metadata.
-- [ ] **Per-command defaults.** Could they come from per-command metadata (`render:`, `preview:`)? Does such a
+- [x] **Per-command defaults.** Could they come from per-command metadata (`render:`, `preview:`)? Does such a
       section exist, and what reads it.
-- [ ] **Options and a recommendation.** Lay out (a) flag only, (b) metadata only, (c) a mix (metadata for `engine`
+- [x] **Options and a recommendation.** Lay out (a) flag only, (b) metadata only, (c) a mix (metadata for `engine`
       and `q2`, a flag for machine-local sources and paths), with the effect of each on OPR-5 and OPR-6 (files and
       work), and recommend one. Do not decide.
-- [ ] Render-check the note (`target/debug/q2 render --strict <file>`).
+- [x] Render-check the note (`target/debug/q2 render --strict <file>`).
 
 ## Exit criteria
 
@@ -79,4 +79,15 @@ OPR-6. **No product code changes.** The deliverable is one note,
 
 ## Notes from the run
 
-(Fill in at landing.)
+Deliverable: [the research note](../research/2026-11-08-opr-metadata-key-research.md). It renders under `q2 render --strict`.
+
+- **Ran:** a scratch test (reverted, not committed) of `hash_document` for the Jupyter and knitr declarations and a
+  conservative Julia stand-in; `q2 render --strict` on the note. **Read:** everything else (hub provider, path model,
+  `main.rs`, `sources.rs`, preview config). **Not done:** a provider leak test, a full render with a key, RFU-1's final
+  `convert` shape.
+- **Finding:** a top-level key is in no engine hash, but a key inside `execute:` is, until three exclusion lists are
+  edited and the knitr and Julia versions are bumped. `execute: record: true` itself changes the hash on all three
+  engines at the `hash_document` level (ran); the "core always excludes `record`" exclusion covers only a top-level key.
+  I found no caller that strips it; not confirmed with a full render. Out of scope here; no strand opened.
+- **Recommendation:** flag only for OPR-5 and OPR-6, with a narrow key (`engine` and `q2`, flag wins) as an additive
+  follow-up. Gordon decides and records it in OPR-5.
