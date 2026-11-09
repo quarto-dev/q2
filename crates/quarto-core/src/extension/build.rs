@@ -587,14 +587,16 @@ mod tests {
     fn file_aliases_resolve_relative_to_the_config_dir() {
         let dir = make_dir();
         let config = dir.path().join("esbuild.json");
-        fs::write(
-            &config,
-            r#"{"alias": {"lib": "./vendor/lib.ts", "abs": "/already/absolute"}}"#,
-        )
-        .unwrap();
+        // Absolute on every platform: `/already/absolute` has no drive on Windows, so
+        // it is not absolute there and `join` would graft the config dir's drive on.
+        let absolute = dir.path().join("already").join("absolute");
+        let json = serde_json::json!({
+            "alias": {"lib": "./vendor/lib.ts", "abs": absolute.to_str().unwrap()}
+        });
+        fs::write(&config, json.to_string()).unwrap();
         let aliases = load_aliases(&ConfigSource::File(config)).unwrap();
         assert_eq!(aliases["lib"], dir.path().join("./vendor/lib.ts"));
-        assert_eq!(aliases["abs"], PathBuf::from("/already/absolute"));
+        assert_eq!(aliases["abs"], absolute);
     }
 
     #[test]
