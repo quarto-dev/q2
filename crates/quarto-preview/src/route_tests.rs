@@ -43,7 +43,7 @@ use crate::render_helper::{
 
 async fn build_ctx(files: &[(&str, &str)]) -> (TempDir, SharedContext) {
     let project = TempDir::with_prefix("p9-test-").unwrap();
-    let root = project.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(project.path()).unwrap();
     for (name, content) in files {
         let path = root.join(name);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -274,7 +274,7 @@ fn preview_out_is_empty(root: &Path) -> bool {
 }
 
 fn root_of(project: &TempDir) -> PathBuf {
-    project.path().canonicalize().unwrap()
+    quarto_system_runtime::canonicalize(project.path()).unwrap()
 }
 
 async fn wait_until(what: &str, mut cond: impl FnMut() -> bool) {
