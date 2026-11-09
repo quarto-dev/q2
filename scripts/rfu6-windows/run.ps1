@@ -239,7 +239,7 @@ Write-Host '== Items =='
 Invoke-Nextest 'i1' 'execute.rs canonicalize(): verbatim \\?\ root vs capture-file prefix comparison' `
     '-p quarto-hub-provider -p quarto-core' `
     'test(a_figure_reported_under_the_materialized_root_is_captured) | test(provider_executes_an_allowed_request_and_writes_a_capture) | test(one_shot_executes_once_and_flushes_to_the_hub) | test(engine::capture_files::)' `
-    12 `
+    28 `
     'A figure an engine reports under the canonicalized (on Windows: \\?\C:\...) materialization root is kept by collect_capture_files with a forward-slash relative path (the new probe, a_figure_reported_..., fails on macOS if canonicalize() is removed); a verbatim root works through ProjectContext::discover and the capture upload; the capture_files unit tests build their doc dir from canonicalize() too.' `
     'What a real engine (knitr, Jupyter) reports on Windows: knitr/R may print a plain C:\ path or reject a \\?\ path. If a real R run is wanted, render a knitr document by hand with q2 and look for dropped figures.'
 
@@ -249,7 +249,7 @@ Invoke-Nextest 'i1' 'execute.rs canonicalize(): verbatim \\?\ root vs capture-fi
 Invoke-Nextest 'i2' 'positron_cache.rs: vscode_file_uri (drive letter, %3A, non-ASCII) and %APPDATA% rule' `
     '-p quarto-core' `
     'test(positron_cache::)' `
-    8 `
+    16 `
     'The URI encoder and the directory rules are internally consistent for Windows inputs (HostOs::Windows is a parameter, so these unit tests ran on macOS too): drive letter lower-cased, colon as %3A, spaces and non-ASCII as upper-case UTF-8 escapes, the %APPDATA% then %USERPROFILE%\AppData\Roaming fallback, normalize_location on all spellings.' `
     'That REAL Positron on Windows hashes the same URI (the expected strings come from the same port of uri.ts). Step i2b checks that against a real Positron cache file when you give -PositronDoc.'
 
@@ -298,7 +298,7 @@ if (Test-Selected 'i2b') {
 Invoke-Nextest 'i4' 'convert_positron_cli: python3 use and literal paths' `
     '-p quarto' `
     'test(convert_positron_cli::)' `
-    10 `
+    20 `
     'The q2 convert CLI end to end on Windows: exit codes, -o handling, and (only if no caveat is reported) the Python-engine tests that need python3 with ipykernel on PATH. Reading the file found no literal /some/dir path (the old one at line ~113 is gone).' `
     'The engine tests are skipped, silently, unless python3.exe with ipykernel is on PATH (a venv has python.exe, not python3.exe; Microsoft Store python3 is a stub). A PASS with a caveat means they skipped: rerun with -WithPython.'
 
@@ -331,7 +331,7 @@ if (Test-Selected 'i5') {
 Invoke-Nextest 'i6' 'record sources: native-separator display and the capture_driver URI test' `
     '-p quarto-core -p quarto-preview' `
     'test(record::sources::) | test(capture_driver::)' `
-    20 `
+    75 `
     'The record-source list parser, ~ expansion (accepting \ after ~), is-a-directory checks and the diagnostics run on Windows paths; capture_driver builds the cache file URI with the same vscode_file_uri it later matches against, so the import test is self-consistent on Windows.' `
     'That the printed path in a diagnostic reads well (inspect one: render with -M "execute.record-sources=C:\nope" and check the message shows C:\nope with native separators), and that the URI equals Positron''s (see i2b).'
 
@@ -353,7 +353,7 @@ if (Test-Selected 'i7') {
     Invoke-Nextest 'i7' 'CRLF: positron-conformance/crlf.qmd and positron-cache/*.ipynb under autocrlf' `
         '-p quarto-core' `
         'test(positron_conformance::) | test(positron_source::) | test(knitr_positron_import::)' `
-        15 `
+        24 `
         ('The conformance, source and knitr-import tests hash the fixtures as checked out (crlf.qmd is a committed-CRLF case; the cache notebooks are LF in git). ' + $note) `
         'Anything under autocrlf=input/false: with autocrlf unset the LF fixtures stay LF and the checkout is not the stressing case. These fixtures are NOT pinned in .gitattributes (unlike pandoc-recordings), which is why this run matters.'
     # attach the CR note to the item just added
