@@ -1388,10 +1388,21 @@ caption {
 // Misc element parity. ported from _quarto-rules.scss (bd-28iqotrt), each
 // verified against live Q2 DOM via `q2 render`. `.visually-hidden` (L13-24) is
 // NOT ported — bootstrap core already supplies it (+ `.visually-hidden-
-// focusable`). `.zindex-bottom`/`.top-right` (row 1b) stay BLOCKED (client-JS
-// features). Row 29 (light/dark-content) was split to its own strand.
+// focusable`). `.zindex-bottom` (row 1b) stays BLOCKED (client-JS feature).
+// Row 29 (light/dark-content) was split to its own strand.
 .hidden {
   display: none !important;
+}
+
+// Floating utility (`_quarto-rules.scss:3-7`, row 1b), unblocked by its
+// emitter: the color-mode runtime's fallback toggle carries `.top-right`
+// (bd-kwgtllvn). Without it the toggle fell to the end of the document.
+// It is positioned against the page, which is why the runtime makes its
+// landmark container a fresh direct child of `<body>`.
+.top-right {
+  position: absolute;
+  top: 1em;
+  right: 1em;
 }
 
 // Raw-HTML <iframe> passthrough. from _quarto-rules.scss:262-264.
@@ -2589,9 +2600,10 @@ div.callout.callout-style-default > .callout-header {
 }
 
 // dark mode
-// Q1 `_bootstrap-rules.scss`: the toggle as a `<button>` (the dashboard
-// navbar's, Q1 `processPages`) drops the browser's button chrome; site
-// navbars use an `<a>`.
+// Q1 `_bootstrap-rules.scss`: every color-scheme toggle is a
+// `<button role="switch">` (website navbar, the runtime's floating
+// fallback, and the dashboard navbar; quarto-cli #14739, bd-kwgtllvn),
+// so drop the browser's button chrome.
 button.quarto-color-scheme-toggle {
   background: transparent;
   border: none;

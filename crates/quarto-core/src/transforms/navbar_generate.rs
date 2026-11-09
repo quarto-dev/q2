@@ -128,6 +128,11 @@ impl AstTransform for NavbarGenerateTransform {
             navbar.search,
         ));
         navbar.search_label = Some(crate::project::search::ui::search_label(&ast.meta));
+        // The toggle switch's localized name (bd-kwgtllvn), resolved
+        // here so the renderer needs no language table.
+        if navbar.dark_mode_toggle {
+            navbar.dark_toggle_label = Some(crate::language::toggle_dark_mode_label(&ast.meta));
+        }
 
         // bd-qor9a — resolve each href against the YAML file it was
         // authored in. Frontmatter-rooted hrefs become project-root-

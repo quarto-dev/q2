@@ -108,54 +108,86 @@ which is a workable harness.
 
 ### Phase 0: tests first (must fail on HEAD)
 
-- [ ] `quarto-navigation` unit tests: the navbar toggle is `<button
+- [x] `quarto-navigation` unit tests: the navbar toggle is `<button
   type="button" role="switch" aria-checked="false">` with `title` and
   `aria-label` from a threaded, escaped label, and is not an `<a>`.
-- [ ] `quarto-core` pipeline test: a website with a light/dark pair
+- [x] `quarto-core` pipeline test: a website with a light/dark pair
   and `lang:` set renders the localized label on the navbar toggle.
-- [ ] `quarto-core`: the `color-mode-script` tag carries the localized
+- [x] `quarto-core`: the `color-mode-script` tag carries the localized
   `data-toggle-label`.
-- [ ] JSDOM tests (`preview-renderer`) running the real runtime:
-  - [ ] `aria-checked` matches the mode on load (light default, dark
+- [x] JSDOM tests (`preview-renderer`) running the real runtime:
+  - [x] `aria-checked` matches the mode on load (light default, dark
     default, stored preference) and flips on
     `quartoToggleColorScheme()`. Covers every toggle, the dashboard
     one included.
-  - [ ] Fallback: a `<button type="button" role="switch">` with the
+  - [x] Fallback: a `<button type="button" role="switch">` with the
     label from `data-toggle-label` (falling back to English), and no
     fallback when a toggle already exists.
-  - [ ] Landmark: a `header.quarto-color-scheme-toggle-container` when
+  - [x] Landmark: a `header.quarto-color-scheme-toggle-container` when
     the page has no banner; a `div[role=region][aria-label]` when there
     is a body-level header, a header nested in a plain wrapper, or an
     explicit `role="banner"`; a `<header>` when the only header sits
     inside sectioning content (`main`, `article`, …).
-- [ ] A smoke-all fixture for the static navbar markup.
+- [x] A smoke-all fixture for the static navbar markup.
 
 ### Phase 1: navbar
 
-- [ ] Add a `dark_toggle_label` to `Navbar` (and to its `ConfigValue`
-  round-trip, if the Generate → Render handoff needs it), filled from
-  the `toggle-dark-mode` term in `navbar_generate.rs`.
-- [ ] Emit the button markup in `navbar_to_html`.
+- [x] Add a `dark_toggle_label` to `Navbar`, round-tripped as the
+  internal `dark-toggle-label` key and filled in `navbar_generate.rs`
+  from `crate::language::toggle_dark_mode_label`. That helper is shared
+  with `template.rs`.
+- [x] Emit the button markup in `navbar_to_html`.
 
 ### Phase 2: runtime
 
-- [ ] Make `setColorSchemeToggle()` set `aria-checked`.
-- [ ] Rewrite the fallback: button, localized label, landmark
+- [x] Make `setColorSchemeToggle()` set `aria-checked`.
+- [x] Rewrite the fallback: button, localized label, landmark
   container.
-- [ ] `template.rs`: add `data-toggle-label` to the script tag.
+- [x] `template.rs`: add `data-toggle-label` to the script tag.
 
 ### Phase 3: cleanup
 
-- [ ] Update the stale SCSS comment. Grep for
-  `a.quarto-color-scheme-toggle` selectors.
+- [x] Update the stale SCSS comment. Grep for
+  `a.quarto-color-scheme-toggle` selectors (none found).
+- [x] **Added in scope:** port Quarto 1's `.top-right` utility
+  (`_quarto-rules.scss:3-7`). The browser check showed the fallback
+  rendering at the bottom-left of the page. Catalog strand bd-q36vnfdp
+  had held the utility back because nothing emitted it, but the
+  runtime has emitted it since bd-ld-a4, so every plain dark-themed
+  page has misplaced the toggle since then. Covered by a compiled-CSS
+  test, with the Phase 5 `styles.css` baseline re-captured.
 
 ### Phase 4: verification
 
-- [ ] Run nextest and clippy on the touched crates, plus the
+- [x] Run nextest and clippy on the touched crates, plus the
   `preview-renderer` integration tests.
-- [ ] Browser check: keyboard activation and the accessibility tree
+- [x] Browser check: keyboard activation and the accessibility tree
   (a switch with its state; the fallback inside a landmark).
-- [ ] `cargo xtask verify --skip-hub-build`.
+- [x] `cargo xtask verify --skip-hub-build`.
+
+### Verification record
+
+- Rust, with `--no-fail-fast`:
+  - The only code-independent failure is
+    `knitr::capture_classifies_pieces` (local R install).
+  - `/usr/local/bin/pandoc` is 3.13, outside the oracle range
+    (3.6–3.12), and about 30 pandoc-oracle tests fail under it. With
+    Homebrew pandoc 3.12.1 first on `PATH` they pass.
+  - Homebrew pandoc has no HTTP support, so three remote-image
+    smoke-all fixtures (`url-image-mediabag`, `online-logo`,
+    `crossref-grand-finale`) fail under it. `url-image-mediabag` passes
+    with 3.13. All other smoke-all fixtures pass, including
+    `navigation/dark-toggle-switch`.
+- `cargo xtask verify --skip-hub-build --skip-rust-tests` passes. That
+  covers the hub-client WASM suite on a rebuilt bundle and the
+  `preview-renderer` typecheck. The 13 new JSDOM tests pass.
+- Browser check (chrome-devtools) on the repro fixtures:
+  - Navbar: Space on the focused toggle switches to dark mode, and the
+    accessibility tree shows `switch "Toggle dark mode" checked`.
+  - Plain document: the fallback sits top-right (17px from the top and
+    right edges, after the `.top-right` port) in the page's only
+    `banner`. Here the title-block header is inside `main`, so it is
+    not a banner. Enter toggles it, and it reports `checked`.
 
 ## Risks / tradeoffs (draft)
 

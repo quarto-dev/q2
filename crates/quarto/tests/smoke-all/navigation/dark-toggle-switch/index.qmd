@@ -1,0 +1,19 @@
+---
+title: Home
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        # quarto-cli #14739 (bd-kwgtllvn): the navbar color-scheme toggle
+        # is a localized switch button, not an `<a href="">`. The
+        # color-mode runtime keeps `aria-checked` in sync; its behavior
+        # is covered by the JSDOM tests in
+        # ts-packages/preview-renderer/src/q2-preview/quarto-color-mode.integration.test.ts.
+        - - '.quarto-navbar-tools > button.quarto-color-scheme-toggle[type="button"][role="switch"][aria-checked="false"][aria-label="Dunkelmodus umschalten"][title="Dunkelmodus umschalten"]'
+          - 'script#quarto-color-mode[data-toggle-label="Dunkelmodus umschalten"]'
+        - - 'a.quarto-color-scheme-toggle'
+---
+
+A website page whose theme has a dark variant, so the navbar carries
+the color-scheme toggle.

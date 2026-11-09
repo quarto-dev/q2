@@ -824,6 +824,24 @@ mod tests {
         );
     }
 
+    /// bd-kwgtllvn: the color-mode runtime's floating fallback toggle
+    /// carries `.top-right` (Q1 `_quarto-rules.scss:3-7`). Without the
+    /// utility the toggle renders at the end of the document instead
+    /// of the page's top-right corner; markup tests can't see that.
+    #[test]
+    fn test_top_right_utility_positions_against_page() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+        let decls = rules(&css)
+            .into_iter()
+            .find(|(sel, _)| sel.trim() == ".top-right")
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no `.top-right` rule. Port Q1 _quarto-rules.scss:3-7.");
+        for decl in ["position:absolute", "top:1em", "right:1em"] {
+            assert!(decls.contains(decl), "`.top-right` lacks `{decl}`: {decls}");
+        }
+    }
+
     /// bd-3bg8h1rx: sidebar section toggles are `<button>`s (Q1 #14826).
     /// Without the reset they render with the browser's native button
     /// chrome; without the flex layout an unlinked section's single
