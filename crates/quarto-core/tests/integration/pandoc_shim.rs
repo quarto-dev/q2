@@ -2312,7 +2312,8 @@ fn test_proof_missing_type_surfaces_lua_traceback() {
         |i| i + marker.len(),
     );
     let rest = &rendered[start..];
-    let end = rest.find(':').unwrap_or(rest.len());
+    // A Windows path holds a `:` (`C:\`), so cut at the `.json` extension, not at a colon.
+    let end = rest.find(".json").map_or(rest.len(), |i| i + ".json".len());
     let json_path = std::path::Path::new(rest[..end].trim());
     assert!(
         json_path.exists(),
