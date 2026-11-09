@@ -1,0 +1,41 @@
+[package]
+name = "quarto-hub-lsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A hub peer that answers document-structure questions over LSP"
+
+[lib]
+name = "quarto_hub_lsp"
+path = "src/lib.rs"
+
+[dependencies]
+pampa = { workspace = true }
+quarto-core = { workspace = true }
+# The index-document model and the dialers this peer joins a hub with.
+quarto-hub = { path = "../quarto-hub" }
+quarto-hub-provider = { path = "../quarto-hub-provider" }
+# Must match quarto-hub's samod and automerge versions exactly, else the
+# DocHandle and Automerge types no longer unify across the crate boundary.
+samod = { version = "0.16.0", features = ["tokio", "tungstenite"] }
+automerge = { version = "0.12.0", features = ["utf16-indexing"] }
+futures = "0.3"
+serde = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tower-lsp = { workspace = true }
+# The version tower-lsp 0.20 builds on, so `Service` is the same trait.
+tower = "0.4"
+quarto-util = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tower = { version = "0.4", features = ["util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio-tungstenite = { version = "0.27.0" }
+url = "2.5"
+
+[lints]
+workspace = true

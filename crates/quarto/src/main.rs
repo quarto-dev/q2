@@ -612,6 +612,26 @@ enum Commands {
     /// Start the Quarto Language Server Protocol server
     Lsp,
 
+    /// Answer questions about hub projects over LSP on stdio.
+    ///
+    /// Joins a hub's sync websocket as a client peer. The LSP client names
+    /// projects as workspace folders (`automerge:<index-doc-id>`) and asks
+    /// about them with custom requests, such as `quarto/projectComments`;
+    /// the server sends `quarto/documentsChanged` when their documents
+    /// change. Meant to be run by a program that hosts a hub, not by hand.
+    #[command(name = "hub-lsp")]
+    HubLsp {
+        /// The hub's sync websocket URL, e.g. ws://127.0.0.1:40404/ws.
+        #[arg(long)]
+        server: String,
+
+        /// Send handshake header NAME with the contents of the file at PATH
+        /// (trailing newline removed). Repeatable. Values come from files so
+        /// that secrets stay off the command line.
+        #[arg(long = "header-file", value_name = "NAME=PATH")]
+        header_file: Vec<String>,
+    },
+
     /// Print a document's merged configuration as JSON.
     ///
     /// Resolves the effective configuration that applies to a document after
@@ -1958,6 +1978,13 @@ fn main() -> Result<()> {
             CallCommands::InlineCss => commands::inline_css::execute(),
         },
         Commands::Lsp => commands::lsp::execute(),
+        Commands::HubLsp {
+            server,
+            header_file,
+        } => commands::hub_lsp::execute(commands::hub_lsp::HubLspArgs {
+            server,
+            header_files: header_file,
+        }),
         Commands::GetConfig {
             file,
             path,
