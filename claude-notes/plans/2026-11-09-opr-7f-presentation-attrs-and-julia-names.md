@@ -291,7 +291,9 @@ allowlist entries and their rules removed.
 
 **Tests changed on purpose (not weakened):** `ts_record::core_presents_the_record_as_the_markdown` and two
 `ts_engine::handshake_tests` asserted a bare `::: {.cell}`; they now assert `{#cell-N .cell execution_count='1'}`.
-`opr_parity_runner::the_seeded_allowlist_parses...` expects 3 entries (was 8). The harness tests that used the
+`opr_parity_runner::the_seeded_allowlist_parses...` expects 3 entries (was 8). `julia_engine_e2e::j8_record_row_core_presents_the_output` used
+`data-execution_count` as its "core presented it" marker (the engine wrote it, core did not); core now writes it
+too, so the marker is a bare `<div class="cell">` (an expansion wrapper, which has no id: the R8 limit). The harness tests that used the
 removed rules were rewritten around `julia-code-leading-newline`.
 
 **Ran (evidence):**
@@ -316,8 +318,11 @@ removed rules were rewritten around `julia-code-leading-newline`.
   left `git diff --exit-code` on the file clean.
 - `cd hub-client && npm run build:wasm` succeeded. No hub-client source changed, so no changelog entry.
 - `ts-packages/quarto-api`: `npm test` and `npm run build` pass (new vitest case failed before the exclusion).
-- `cargo clippy -p quarto-core --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-core` (see the
-  landing report for the final counts).
+- `cargo clippy -p quarto-core --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-core --no-fail-fast`
+  after the rebase onto `feature/one-presenter` (OPR-7e/7h landed there): 8205 passed, 36 skipped, 0 failed. The
+  pre-rebase run listed 8189 tests; the 52 more are this plan\'s new tests plus the ones the rebase brought in, and I
+  did not separate the two. The 13 presenter goldens, the knitr corpus gate and the marimo tests are in that run
+  and unchanged (no `.snap` or golden file touched).
 - `q2 render --strict` on this plan and on `engine-api-surface.md`: only the known Q-12-13 listing errors.
 
 **Not done or could not run:**
