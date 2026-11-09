@@ -2,7 +2,7 @@
 title: 'RFU-4: verification and small fixes for the records-in-use epic'
 date: 2026-11-08
 description: 'The q2-side boxes the RIU-6 demo left open: find or run the hub verification, re-check that a failed optional record copy fails soft, check the preview highlight for an edited cell, write down what q2 can say about a stale Julia server or a missing Plots project, and the RIU-3 browser items nobody has seen.'
-status: in-progress
+status: ready
 depends-on: [opr-5]
 lane: B
 ---
@@ -38,11 +38,11 @@ This is a demo (Gordon): a result is either fixed, or written down as a known is
       "verified through the real binary and a browser". Find where the hub half was verified and cite it, or run it:
       `q2 provide-hub` with the writer gate on (`QUARTO_ENGINE_RECORD_WRITE=1`) and a hub client. Record the invocations
       and what you saw; say what was automated and what was not seen by a person.
-- [ ] **Decision 12 re-check.** Records-in-use decision 12 (a failed optional `record: true` copy fails soft) says "not
+- [x] **Decision 12 re-check.** Records-in-use decision 12 (a failed optional `record: true` copy fails soft) says "not
       re-verified against the code"; re-verify with the real binary: make `.quarto/execution-records` unwritable
       (a regular file; create `.quarto/` first) and render with `execute: {record: true}`; record the exit code, the
       message and whether the render still produced its output.
-- [ ] **An edited cell loses its highlighting in the q2 preview** (RIU-3a). `q2 render` highlights an unexecuted
+- [x] **An edited cell loses its highlighting in the q2 preview** (RIU-3a). `q2 render` highlights an unexecuted
       `{python}` cell (checked 2026-11-07), so the gap is probably in how the records-only preview presents an
       unmatched cell. A Playwright check against `q2 preview` with `-M 'execute:{record-sources: <dir>}'` (an in-project directory) and an edited cell; file a box
       in "Findings for Gordon" if it is a bug. Do not fix it here.
@@ -65,3 +65,16 @@ This is a demo (Gordon): a result is either fixed, or written down as a known is
 ## Notes from the run
 
 (Fill in at landing.)
+
+## Notes from an earlier attempt
+
+Done (ran, on `target/debug/q2`; results in [the verification note](../research/2026-11-09-rfu-verification.md)):
+
+- Decision 12: confirmed, exit 0 with a warning and the output produced.
+- Edited cell in the records-only preview: bug reproduced under Playwright (`<pre class="{r} code-with-copy">`, no highlighting,
+  where `q2 render` gives `sourceCode r`). Not fixed; it is in the note\'s "Findings for Gordon".
+
+Not done: the hub verification (no earlier record found in the RIU plans; needs `q2 hub`, a built hub client and a browser),
+the stale Julia server / missing Plots project reproductions, and the RIU-3 browser items. Stopped there on purpose, to land the
+two results and hand the rest to a fresh session. Environment: no Python or Jupyter on this machine (use `{r}` or Julia cells);
+`timeout` is not installed; `cat` of an execution-records path once hung the shell, so avoid it.
