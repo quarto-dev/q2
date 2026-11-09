@@ -121,7 +121,7 @@ fn plan_jobs() -> (Vec<Job>, Vec<String>) {
             }
             let (dir, qmd) = materialize(&f);
             jobs.push(Job {
-                name: f.name.clone(),
+                name: format!("knitr-corpus/{}", f.name),
                 src: dir.path().to_path_buf(),
                 file: qmd.file_name().unwrap().to_string_lossy().into_owned(),
                 format: format.clone(),
@@ -553,7 +553,7 @@ mod tests {
     #[test]
     fn the_seeded_allowlist_parses_and_every_entry_is_proposed() {
         let list = Allowlist::load(&corpus_root().join("opr-parity-allowlist.toml")).unwrap();
-        assert_eq!(list.entries.len(), 5);
+        assert_eq!(list.entries.len(), 6);
         assert!(list.entries.iter().all(|e| e.status == "proposed"));
         // The subfigure-group references are a blocker, not an allowlist candidate.
         assert!(

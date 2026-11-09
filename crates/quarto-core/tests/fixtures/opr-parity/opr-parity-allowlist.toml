@@ -49,3 +49,10 @@ rule = "julia-figure-names"
 scope = "julia/"
 status = "proposed"
 reason = "the two routes name figure files from different counters (cell-2-output-1.png plain, cell-1-output-1.png recorded): the plain number comes from the unit ordinal, which counts prose, the presenter's counts cells. Quarto 1 matches the plain name for an unlabeled cell only (OPR-0c), so every figure URL changes at the flip"
+
+[[entry]]
+name = "knitr empty cell wrapper"
+rule = "knitr-empty-cell-wrapper"
+scope = "knitr"
+status = "proposed"
+reason = "R writes an empty .cell div for a chunk that renders nothing (a setup chunk, include false); the presenter writes none. The same divergence is already signed off for the knitr baseline (knitr allowlist.toml, s1/03_eval_false and markdown-stress/empty_output; epic decision 23), so Gordon carries it into the plain-render switch in OPR-7c"

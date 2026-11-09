@@ -112,6 +112,7 @@ pub const RULES: &[&str] = &[
     "julia-data-execution-count",
     "julia-cell-output-class",
     "julia-figure-names",
+    "knitr-empty-cell-wrapper",
 ];
 
 /// Apply the named normalization to one side. Unknown names are a bug in the allowlist file.
@@ -127,9 +128,11 @@ pub fn apply_rule(rule: &str, side: &mut Side) -> Result<(), String> {
         "julia-data-quarto" => sub(r#" data-quarto="[^"]*""#, "", side),
         "julia-data-execution-count" => sub(r#" data-execution_count="\d+""#, "", side),
         // The presenter drops the generic `cell-output` class from a figure's output div.
+        // Only where the div holds a figure (an image, or a figure float): other display outputs
+        // keep the class on the presenter route.
         "julia-cell-output-class" => sub(
-            r#"class="cell-output cell-output-display""#,
-            r#"class="cell-output-display""#,
+            r#"class="cell-output cell-output-display">(\s*<(?:p><img |figure|div id="fig-))"#,
+            r#"class="cell-output-display">$1"#,
             side,
         ),
         // The two routes number figure files from different counters.
@@ -142,6 +145,9 @@ pub fn apply_rule(rule: &str, side: &mut Side) -> Result<(), String> {
                 .map(|f| re.replace_all(f, "cell-N-output-M.").into_owned())
                 .collect();
         }
+        // R writes an empty `.cell` div for a chunk that renders nothing; the presenter writes none
+        // (knitr epic decision 23, signed off for the knitr baseline presenter).
+        "knitr-empty-cell-wrapper" => sub(r#"<div class="cell">\s*</div>\s*"#, "", side),
         other => return Err(format!("unknown rule `{other}`")),
     }
     Ok(())
@@ -153,6 +159,15 @@ pub fn normalize_text(text: &str, dirs: &[&Path]) -> String {
     let mut out = payload
         .replace_all(text, "data:image/$1;base64,<DATA>")
         .into_owned();
+    // Generated ids that differ on every render: flextable's `cl-<8 hex>` classes and gt's
+    // ten-letter table id (a `div id` followed by the table's inline style, then used in the CSS).
+    let flextable = Regex::new(r"cl-[0-9a-f]{8}").unwrap();
+    out = flextable.replace_all(&out, "cl-<ID>").into_owned();
+    let gt = Regex::new(r#"<div id="([a-z]{10})" style="padding-left:0px"#).unwrap();
+    let gt_ids: Vec<String> = gt.captures_iter(&out).map(|c| c[1].to_string()).collect();
+    for id in gt_ids {
+        out = out.replace(&id, "<GTID>");
+    }
     // The same directory has several spellings (`/var` and `/private/var` on macOS).
     let mut spellings: Vec<String> = Vec::new();
     for d in dirs {
@@ -406,8 +421,7 @@ pub fn render_prepared(dir: &Path, file: &str, format: &str) -> Result<Side, Str
     let out_dir = result
         .output_path
         .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| dir.to_path_buf());
+        .map_or_else(|| dir.to_path_buf(), Path::to_path_buf);
     let mut figures = BTreeSet::new();
     collect_figures(&out_dir, &out_dir, &mut figures);
     Ok(Side {
@@ -473,6 +487,51 @@ reason = "different counters on the two routes"
     }
 
     #[test]
+    fn normalize_strips_generated_ids_from_flextable_and_gt() {
+        let flex = |id: &str| format!("<style>.cl-{id}{{}}</style><td class=\"cl-{id}\">");
+        assert_eq!(
+            normalize_text(&flex("2a36ba32"), &[]),
+            normalize_text(&flex("1ef6e372"), &[])
+        );
+        let gt = |id: &str| {
+            format!(
+                "<div id=\"{id}\" style=\"padding-left:0px;\">\n<style>#{id} table {{\n#{id} .gt_table {{"
+            )
+        };
+        assert_eq!(
+            normalize_text(&gt("fgculgxszj"), &[]),
+            normalize_text(&gt("vdpiehumfu"), &[])
+        );
+        // A real difference is kept.
+        assert_ne!(
+            normalize_text("<td>1</td>", &[]),
+            normalize_text("<td>2</td>", &[])
+        );
+    }
+
+    #[test]
+    fn the_empty_cell_wrapper_rule_hides_only_an_empty_wrapper() {
+        let list = Allowlist::parse(
+            "[[entry]]\nname='c'\nrule='knitr-empty-cell-wrapper'\nscope='knitr'\nstatus='proposed'\nreason='r'\n",
+        )
+        .unwrap();
+        let plain = side("<p>a</p>\n<div class=\"cell\">\n</div>\n<p>b</p>", &[]);
+        let rec = side("<p>a</p>\n<p>b</p>", &[]);
+        assert!(matches!(
+            compare("knitr-corpus/x", &plain, &rec, &list),
+            Verdict::Allowlisted { .. }
+        ));
+        let full = side(
+            "<p>a</p>\n<div class=\"cell\">\n<pre>1</pre>\n</div>\n<p>b</p>",
+            &[],
+        );
+        assert!(matches!(
+            compare("knitr-corpus/x", &full, &rec, &list),
+            Verdict::Blocker { .. }
+        ));
+    }
+
+    #[test]
     fn identical_pair_is_identical() {
         let a = side("<p>x</p>", &["d_files/figure-html/f-1.png"]);
         assert_eq!(
@@ -519,6 +578,45 @@ reason = "different counters on the two routes"
                 rules: vec!["julia-figure-names".to_string()]
             }
         );
+    }
+
+    #[test]
+    fn the_cell_output_class_rule_covers_figure_divs_only() {
+        let list = Allowlist::parse(
+            "[[entry]]\nname='c'\nrule='julia-cell-output-class'\nscope='julia/'\nstatus='proposed'\nreason='r'\n",
+        )
+        .unwrap();
+        let figure = |class: &str| {
+            side(
+                &format!("<div class=\"{class}\">\n<p><img src=\"f.png\" /></p>\n</div>"),
+                &[],
+            )
+        };
+        assert!(matches!(
+            compare(
+                "julia/a",
+                &figure("cell-output cell-output-display"),
+                &figure("cell-output-display"),
+                &list
+            ),
+            Verdict::Allowlisted { .. }
+        ));
+        // A table or text output that loses the class is a different, unexplained change.
+        let text = |class: &str| {
+            side(
+                &format!("<div class=\"{class}\">\n<pre>1</pre>\n</div>"),
+                &[],
+            )
+        };
+        assert!(matches!(
+            compare(
+                "julia/a",
+                &text("cell-output cell-output-display"),
+                &text("cell-output-display"),
+                &list
+            ),
+            Verdict::Blocker { .. }
+        ));
     }
 
     #[test]
