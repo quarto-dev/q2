@@ -7,7 +7,7 @@ description: 'What the design-and-implementation review of the one-presenter epi
 **Epic:** [one presenter path](../plans/2026-11-07-one-presenter-path-epic.md).
 **Earlier notes:** [spikes](2026-11-07-one-presenter-spikes.md), [step-1 decisions](2026-11-08-one-presenter-review-decisions.md).
 Marks: **ran** (I ran it and read the output), **read** (I read the code), **relied** (a sub-agent\'s claim I did not
-check). Line numbers are for `4099022dc`. The three agents were Sonnet agents, read-only, with no sub-agents of their
+check). Line numbers are for `94906556f`. The three agents were Sonnet agents, read-only, with no sub-agents of their
 own: one designed `q2 render --execution-records` (before the discussion), and two reviewed the epic from a design
 and intent lens (A) and a tree and implementation lens (B) after the first rewrite.
 
@@ -49,7 +49,7 @@ existing pages; one pull request; lanes in workspaces 3 to 6 with `workspace-1` 
 - **Where `preview.engine` comes from (read).** The q2 preview epic, Phase C.6 (2026-05-11); reused by the records-in-use
   epic as "never execute".
 - **Existing strands (ran `braid`).** `bd-cm1mwyuq` covers Jupyter forwarding (its render half was fixed on 2026-11-04,
-  `99e3b2bb8`); `bd-nn2fou8h` is in progress and overlaps OPR-1a and OPR-2.
+  `2649c02ea`); `bd-nn2fou8h` is in progress and overlaps OPR-1a and OPR-2.
 - **Branch state (ran).** `feature/riu-follow-up-review` is 175 commits ahead of and 158 behind the `main` tip
   (`8f17e950d`, where workspaces 1, 3, 4 and 6 are parked) and is on no remote.
 

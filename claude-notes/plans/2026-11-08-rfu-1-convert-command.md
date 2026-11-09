@@ -29,7 +29,7 @@ Remove `q2 record`, which is too specific, and use `q2 convert`, as Quarto 1 had
 Quarto 1 chose its direction from the input\'s extension
 (`external-sources/quarto-cli/src/command/convert/cmd.ts`, in the main repo) and wrote beside the input. q2\'s `convert` is
 a stub (`crates/quarto/src/commands/convert.rs` returns `NotImplemented`; its `--output` flag is documented as a
-format, unlike Quarto 1\'s `-o` path). `q2 record` is unreleased (it landed in `d6954ccdf`), so removing it costs
+format, unlike Quarto 1\'s `-o` path). `q2 record` is unreleased (it landed in `10cfb0f93`), so removing it costs
 nothing. The ipynb-to-qmd and plain qmd-to-ipynb sides are **not** part of this plan: strand `bd-ju7u8a73`.
 
 **Design (agreed 2026-11-07):**

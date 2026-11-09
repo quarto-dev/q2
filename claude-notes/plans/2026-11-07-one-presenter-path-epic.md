@@ -78,7 +78,7 @@ capture splice and is not part of this epic.
 
 Marks are those of the [spike note](../research/2026-11-07-one-presenter-spikes.md) and the
 [findings note](../research/2026-11-08-one-presenter-review-findings.md), which says which review claims were
-verified. Line numbers are for `4099022dc`; each plan says (read), (ran) or (relied).
+verified. Line numbers are for `94906556f`; each plan says (read), (ran) or (relied).
 
 - Every cell ends in `render_cell_whole` (`presenter/cell.rs:131`); the two option front ends differ only in knitr\'s ten
   dotted aliases (S1, ran). With every capture input empty the knitr path reproduces Jupyter\'s bytes for 12 of 13 goldens;

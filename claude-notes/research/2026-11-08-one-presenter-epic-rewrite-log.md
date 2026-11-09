@@ -1,10 +1,10 @@
 ---
 title: 'One-presenter epic: rewrite log (2026-11-08)'
 date: 2026-11-08
-description: 'What changed when the one-presenter-path epic was rewritten on 2026-11-08 from a proposed plan list into nineteen plans for autonomous agents, and why, so the epic can read as the current truth. Old means the epic at 4099022dc.'
+description: 'What changed when the one-presenter-path epic was rewritten on 2026-11-08 from a proposed plan list into nineteen plans for autonomous agents, and why, so the epic can read as the current truth. Old means the epic at 94906556f.'
 ---
 
-The epic was rewritten, not appended to. "Old" means the epic at `4099022dc` (itself the first 2026-11-08 rewrite).
+The epic was rewritten, not appended to. "Old" means the epic at `94906556f` (itself the first 2026-11-08 rewrite).
 
 | Old section | Now | Why |
 |---|---|---|

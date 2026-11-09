@@ -76,7 +76,7 @@ function for the per-cell step.
 - [ ] Regenerate the preview and hub fixtures/snapshots that change **only** through forwarding; review each diff;
       document the count and the reason in the commit message and the landing report (protocol: snapshot rule).
 - [ ] Update strand `bd-cm1mwyuq` (Jupyter forward-unknown-cell-options): add a comment that the render path was
-      fixed on 2026-11-04 (`99e3b2bb8`) and the preview and hub path is fixed by this plan; close it if nothing else
+      fixed on 2026-11-04 (`2649c02ea`) and the preview and hub path is fixed by this plan; close it if nothing else
       remains in its text. (Gordon, 2026-11-08: "updated".) Reference `bd-nn2fou8h` (execute-visibility options) in
       your notes; do not change its status.
 - [ ] Fix the stale doc comment at `crates/quarto-core/src/presenter/options.rs:~237` ("read under knitr\'s dotted names
