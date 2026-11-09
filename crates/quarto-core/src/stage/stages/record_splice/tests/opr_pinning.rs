@@ -457,3 +457,40 @@ fn a_jupyter_cell_with_no_resolved_options_is_layered_with_the_document_scope() 
         }
     }
 }
+
+/// OPR-7f: an engine\'s `quarto_attrs` (on the cell and on an output) reach the markdown of both
+/// loops: render (`present_document`) and the splice that preview, the hub and a supplied
+/// record drive.
+#[test]
+fn engine_attrs_on_a_cell_and_an_output_reach_both_loops() {
+    let src = "```{python}\nplot()\n```\n";
+    let mut record = record_for(
+        src,
+        &[(
+            0,
+            vec![json!({
+                "output_type": "execute_result",
+                "execution_count": 3,
+                "data": {"text/plain": "RESULT"},
+                "metadata": {"quarto_attrs": {"attributes": {"execution_count": "3"}}}
+            })],
+        )],
+    );
+    record.cells[0].metadata.extra.insert(
+        "quarto_attrs".into(),
+        json!({"id": "cell-0", "classes": ["extra"]}),
+    );
+    let run = run_both(src, &record);
+    for (loop_name, text) in [("render", rendered(&run)), ("splice", run.splice.as_str())] {
+        assert!(
+            text.contains("::: {#cell-0 .cell .extra}"),
+            "{loop_name}: {text}"
+        );
+        // The splice reparses and reserializes, which normalizes the quote style.
+        assert!(
+            text.contains("execution_count='3'") || text.contains("execution_count=\"3\""),
+            "{loop_name}: {text}"
+        );
+    }
+    assert!(run.render.as_ref().unwrap().notes.is_empty());
+}
