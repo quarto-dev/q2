@@ -20,8 +20,8 @@
 param(
     # Tests whose whole failure output (panic, assertion diff, insta snapshot diff) is wanted,
     # not just the first lines. Matched as a substring of the nextest test name.
-    [string[]]$DetailPattern = @('lmd_snapshots', 'smoke_all', 'jupyter_markdown', 'a_record_only_cache_entry'),
-    [int]$DetailLines = 150
+    [string[]]$DetailPattern = @('smoke_all', 'jupyter_markdown', 'a_record_only_cache_entry', 'book_refactor_guard', 'book_download'),
+    [int]$DetailLines = 220
 )
 
 $ErrorActionPreference = 'Continue'
@@ -87,14 +87,22 @@ foreach ($f in @($files | Where-Object { $_.Name -match '\.log$' })) {
         $detailSeen[$key] = 1
         $detail.Add('=== ' + $f.Name + ' line ' + ($i + 1))
         $detail.Add($L[$i].TrimEnd())
-        $n = 0
-        for ($j = $i + 1; $j -lt $L.Count -and $n -lt $DetailLines; $j++) {
+        $blk = New-Object System.Collections.Generic.List[string]
+        for ($j = $i + 1; $j -lt $L.Count; $j++) {
             if ($L[$j] -match '^\s*(FAIL|PASS|SLOW|SIGABRT|TIMEOUT)\s+\[') { break }
             if ($L[$j] -match '^\s+\d+:\s+0x[0-9a-fA-F]+\s' -or $L[$j] -match '^\s+at\s') { continue }
             $t = $L[$j].TrimEnd()
             if ($t.Length -gt 400) { $t = $t.Substring(0, 400) + ' ...' }
-            $detail.Add($t)
-            $n++
+            $blk.Add($t)
+        }
+        # Long blocks (pass lists, golden diffs) keep their head and their tail: the verdict is at the end.
+        if ($blk.Count -le $DetailLines) {
+            foreach ($t in $blk) { $detail.Add($t) }
+        } else {
+            $head = 30
+            for ($k = 0; $k -lt $head; $k++) { $detail.Add($blk[$k]) }
+            $detail.Add("... [$($blk.Count - $DetailLines) lines omitted] ...")
+            for ($k = $blk.Count - ($DetailLines - $head); $k -lt $blk.Count; $k++) { $detail.Add($blk[$k]) }
         }
         $detail.Add('')
     }
