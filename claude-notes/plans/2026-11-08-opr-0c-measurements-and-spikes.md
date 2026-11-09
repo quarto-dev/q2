@@ -2,7 +2,7 @@
 title: 'OPR-0c: measurements and spikes (cost, cache, figures, plain-render routes)'
 date: 2026-11-08
 description: 'Produces the evidence that decides the shape of the plain-render plans: what an in-memory record costs, whether knitr cached chunks can fall back with no record in a mixed document, how the figure matrix behaves on each route against Quarto 1, and what a plain Julia and knitr render really does today. Notes only; no product code.'
-status: ready
+status: in-progress
 depends-on: []
 lane: D
 ---
