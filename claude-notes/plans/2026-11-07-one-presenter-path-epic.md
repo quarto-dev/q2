@@ -2,7 +2,7 @@
 title: 'Epic: one presenter path for every engine'
 date: 2026-11-07
 description: 'Every recorded cell goes through one presenter that reads what a cell supplies, not which engine made it. Plain render of Julia and knitr joins the recorded route, Julia gains the capture facts knitr has (subject to a spike), and the execution-records source list is one metadata key, execute: record-sources, read by one early reader in preview, provide-hub, convert and the new q2 render (no command-line option). Nineteen plans, plus the eight of the RIU follow-up epic, in four lanes on one integration branch, written to be run by agents with no orchestrator.'
-status: 'plans written 2026-11-08; ready to run; integration branch feature/one-presenter in workspace-1; two decisions still open (the retained fallback and an opt-out, Julia spike scope); R5 decided 2026-11-09: the list moves into metadata and the command-line option is removed'
+status: 'plans written 2026-11-08; ready to run; integration branch feature/one-presenter in workspace-1; two decisions still open (the retained fallback and an opt-out; Julia spike scope: OPR-4a done 2026-11-09, all three facts feasible, Gordon chooses the scope for OPR-4b); R5 decided 2026-11-09: the list moves into metadata and the command-line option is removed'
 ---
 
 **Follows from:** the RIU follow-up (its Item 7; its Item 9 folded into OPR-5), and
@@ -26,7 +26,7 @@ need, and degrade cleanly, one input at a time, for one that does not. The scope
 1. **Plain `q2 render` of Julia and knitr joins the recorded route.** Today a plain render asks for no record, so Julia
    is presented by the TypeScript engine\'s `toMarkdown` and knitr by R\'s finished markdown. After this epic a plain
    render builds the record in memory and presents it through the Rust presenter, writing nothing to `.quarto`.
-2. **Julia gains the capture facts knitr has** (expression starts, anchors, output kinds), subject to the spike in OPR-4a.
+2. **Julia gains the capture facts knitr has** (expression starts, anchors, output kinds). The OPR-4a spike (2026-11-09) found all three feasible with one runner change, so the verdict is not partial; Quarto 1 never interleaved Julia, so this is new behavior.
 3. **The record source list is one metadata key**, `execute: record-sources`, read by one early reader for `preview`,
    `provide-hub`, `q2 convert` (RFU-1, which replaces `q2 record export-positron`) and `q2 render`; the `--records`
    option is removed and `-M` is the command-line way (decision R5, 2026-11-09).
@@ -50,7 +50,7 @@ capture splice and is not part of this epic.
 - **D3. Document scope.** If a cell carries resolved options (knitr), R already baked the document `execute:` scope in
   (`execute.R:348-353` translates `output: false` to `results: hide` and `fig.show: hide`), so the presenter does not
   layer it; if it carries none (Jupyter, Julia, imported, fallback), the presenter layers it at present time.
-- **D4. Julia is in scope, subject to the OPR-4a spike.** Jupyter positions are a follow-up, not part of this epic.
+- **D4. Julia is in scope; the OPR-4a spike (2026-11-09) found it feasible.** Starts, anchors and kinds come from one runner change (OPR-4b), ride in the cell `metadata.quarto` under `emitUnits`, and are mapped to the knitr keys in OPR-4d. Julia shows only the last value, so it never interleaves like knitr. Jupyter positions are a follow-up, not part of this epic.
 - **D5. Plain render is in scope.** A cached knitr chunk keeps knitr\'s cache and uses the markdown fallback with no
   record, quietly. The LaTeX family, `pptx`, `context` and unknown knitr targets stay on the engine route, quietly
   (strands `bd-4y5scdhp`, `bd-lo1cs7u5`, `bd-ka76vcrp` track widening; LaTeX notes live in the LaTeX plan on
@@ -123,7 +123,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-1b](2026-11-08-opr-1b-one-document-function.md) | OPR | One document function returning outcomes | 1a | A | ready |
 | [OPR-2](2026-11-08-opr-2-enforcement-from-hash.md) | OPR | Enforcement derived from the hash, plus audit | 1b, OPR-3 | A | ready |
 | [OPR-3](2026-11-08-opr-3-julia-engine-wire.md) | OPR | Julia declaration fix and acknowledgement | nothing | B | ready |
-| [OPR-4a](2026-11-08-opr-4a-julia-spike.md) | OPR | Julia spike (a note) | nothing | B | ready |
+| [OPR-4a](2026-11-08-opr-4a-julia-spike.md) | OPR | Julia spike (a note) | nothing | B | complete |
 | [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | OPR | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | conditional |
 | [OPR-4c](2026-11-08-opr-4c-julia-engine-facts.md) | OPR | Engine, wire and pin carry the facts | 4b, 3, Gordon\'s push | B | conditional |
 | [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | OPR | q2 writes the facts as cell metadata | 4c, 1b | A | conditional |
@@ -171,7 +171,7 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 - OPR-0d landed and R5 (move, no flag) is recorded in OPR-5: flip OPR-5 to `ready` once RFU-1 and OPR-3 are complete.
 - Any time: read the [Phase A note](../research/2026-11-07-r-through-knitr-phase-a.md), record the verdict in RFU-2, set
   it to `ready`.
-- After OPR-4a lands: read the note; set OPR-4b to `ready` with the scope he chooses, or set 4b, 4c and 4d to `cancelled`.
+- OPR-4a landed (2026-11-09): read the [note](../research/2026-11-09-opr-julia-spike.md); write the scope into OPR-4b and set it to `ready`, or set 4b, 4c and 4d to `cancelled`. Decide the stderr-at-capture fix (runner stops dropping stderr under `emitUnits`, recommended, or remove `warning` from Julia\'s display-only list).
 - After OPR-4b lands: push the runner branch to the fork and write the revision into OPR-4c; set it to `ready`.
 - After OPR-4c lands: set OPR-4d to `ready`.
 - After OPR-7c lands: sign the allowlist, record the two decisions in OPR-7d, set it to `ready`.
@@ -192,7 +192,7 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 | OPR-7c, parity | blockers beyond the known Julia three | fix plans appear before OPR-7d |
 | OPR-2, audit | a capture gap in an engine | a capture-side plan, coupled to lane B |
 | OPR-0a, loop divergence | more than the table | OPR-1a or OPR-1b splits again |
-| OPR-4a, spike | partial or negative | OPR-4b to 4d shrink or are cancelled; Jupyter stays a follow-up |
+| OPR-4a, spike | **came back 2026-11-09: all three facts feasible, not partial** | Gordon chooses the OPR-4b scope (recommended: all three plus the stderr-at-capture fix); 4b to 4d are rewritten to the spike wire (keys in `metadata.quarto`, no `ts_protocol.rs` change expected); Jupyter stays a follow-up |
 
 ## Constraints that hold across the plans
 

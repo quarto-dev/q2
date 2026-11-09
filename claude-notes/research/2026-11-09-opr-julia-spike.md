@@ -124,8 +124,8 @@ OPR-4b should gate on the same option):
 
 `ts_protocol.rs` needs **no change**: these ride inside the notebook cells that `read_engine_notebook` already
 reads, and the record format is unchanged. What changes in q2 is the mapper that turns Julia cells into presenter
-inputs (OPR-4b): copy the three keys under the knitr names (see `presenter/knitr_inputs.rs`, `EXPRESSION_STARTS_KEY`
-and the two beside it). The Julia engine extension needs only a dependency bump of the runner pin
+inputs (OPR-4d; OPR-4b is the runner, OPR-4c the pin and the proof that the keys arrive): copy the three keys under the knitr names (see `presenter/knitr_inputs.rs`, `EXPRESSION_STARTS_KEY`
+and the two beside it). The Julia engine extension is expected to need only a dependency bump of the runner pin (read, not run through q2; OPR-4c confirms)
 (`resources/extension-subtrees/julia-engine`), and `RecordInfo.version` may stay 1 because the keys are optional.
 The runner's own protocol version (worker IPC, 8 to 9) is internal.
 
@@ -136,7 +136,7 @@ The runner's own protocol version (worker IPC, 8 to 9) is internal.
    and flipping to `warning: true` is, by the hash rule, not a change that invalidates the record: the presenter
    would show nothing. This is the inverse of D2's assumption ("when it is in the hash, capture enforced it").
    Seen: the `edge.qmd` cell with `warning: false` lost `@warn` **and** `@info`. I did not render this through q2, so the end-to-end
-   effect is unconfirmed. Fix in OPR-4b: have the runner stop dropping stderr when `emitUnits` is set (the presenter
+   effect is unconfirmed. Fix in OPR-4b (decision recorded in OPR-4b and the epic): have the runner stop dropping stderr when `emitUnits` is set (the presenter
    enforces it, using kinds), or remove `warning` from Julia's display-only list.
 2. Output written by C code through libc stdio (`puts`) is lost, before and after the prototype, because libc
    buffers it when stdout is a pipe and nothing flushes it. Unrelated to attribution; pre-existing.

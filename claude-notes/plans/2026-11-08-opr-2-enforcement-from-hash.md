@@ -56,7 +56,7 @@ this plan depends on it.
   no warning or message output under `warning: false` or `message: false`, but records outputs for `include: false`
   and `output: false`, which the presenter hides.
 - Julia: `JULIA_HASH_DEFINITION` (`resources/extension-subtrees/julia-engine/src/record-wire.ts:15-27`) has empty
-  `presentationCellOptions` and `presentationExecuteKeys`; (relied) capture enforces only a cell\'s own `#|` `warning`.
+  `presentationCellOptions` and `presentationExecuteKeys`; (relied) capture enforces only a cell\'s own `#|` `warning`. OPR-4a confirmed this by running the runner: under `warning: false` it drops **all** stderr at capture (`@warn`, `@info` and raw stderr), so with OPR-3\'s display-only declaration a Julia record taken under `warning: false` holds nothing for the presenter to show. Not fixed here: the fix is in OPR-4b (runner keeps stderr under `emitUnits`). Until it lands the audit should record this Julia gap, and D2 holds for Julia only after OPR-4b.
 - (relied) Marimo and the TS fixture engines declare `[]`. Marimo uses the legacy capture splice and is a documented
   exception to this epic (decision D12): record in the notes what its path does and do not change it.
 - Knitr\'s `execute.R` sets `message = isTRUE(format$execute[["warning"]])`, the same as Quarto 1\'s line 320
