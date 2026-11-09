@@ -2,7 +2,7 @@
 title: 'OPR-4b: the Julia runner reports expression starts, anchors and output kinds'
 date: 2026-11-08
 description: 'Conditional on Gordon''s go. The OPR-4a spike showed all three facts are feasible with one runner change, gated on the existing emitUnits option, and found that the runner drops all stderr under warning: false. This plan implements both in a local branch of the QuartoNotebookRunner fork. The work happens in another repository; q2 lands only a note. Gordon pushes the runner branch and records the pinned revision, which unblocks OPR-4c.'
-status: ready
+status: in-progress
 depends-on: [opr-4a]
 lane: B
 ---
