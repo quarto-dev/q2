@@ -811,6 +811,7 @@ z = 3
             alignment: TsAlignment::Ids,
             coverage: Default::default(),
             hash_definition: Some(def.clone()),
+            presented_by: None,
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
         assert_eq!(record.engine.hash_definition, def);
@@ -830,6 +831,7 @@ z = 3
             alignment: TsAlignment::Positional,
             coverage: Default::default(),
             hash_definition: None,
+            presented_by: None,
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
         let ids: Vec<_> = record
@@ -879,6 +881,7 @@ z = 3
             alignment: TsAlignment::Ids,
             coverage: Default::default(),
             hash_definition: Some(def),
+            presented_by: None,
         }
     }
 
@@ -1102,6 +1105,7 @@ fenced = 1
             alignment: TsAlignment::Positional,
             coverage: Default::default(),
             hash_definition: None,
+            presented_by: None,
         }
     }
 

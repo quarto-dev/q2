@@ -567,6 +567,12 @@ pub struct TsRecordInfo {
     /// The engine's declared execution-input hash rule (epic decision 35).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash_definition: Option<HashDefinition>,
+    /// The engine's acknowledgement that it honored core's `presentedBy: "core"` offer: it
+    /// returned the notebook and made no markdown of its own (decision D8). Absent from an
+    /// engine that predates it, or that presented itself. Parsed only for now: core's
+    /// decision to present is still by engine name (`core_presents`); OPR-7a switches it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presented_by: Option<TsPresentedBy>,
 }
 
 fn is_default_coverage(c: &TsCoverage) -> bool {
@@ -1887,6 +1893,7 @@ mod tests {
                 alignment: TsAlignment::Positional,
                 coverage: TsCoverage::Owned,
                 hash_definition: None,
+                presented_by: None,
             }),
             ..Default::default()
         };
@@ -1912,6 +1919,7 @@ mod tests {
             alignment: TsAlignment::Ids,
             coverage: TsCoverage::Owned,
             hash_definition: Some(def.clone()),
+            presented_by: None,
         };
         let v = serde_json::to_value(&info).unwrap();
         assert_eq!(v["hashDefinition"]["presentationCellOptions"][0], "echo");
@@ -1927,6 +1935,29 @@ mod tests {
             bare.hash_definition_or_conservative("marimo"),
             HashDefinition::conservative("marimo")
         );
+    }
+
+    #[test]
+    fn record_info_presented_by_is_optional_and_roundtrips() {
+        // An engine that predates the acknowledgement sends no field: it parses, as `None`.
+        let old: TsRecordInfo = serde_json::from_str(r#"{"version":1}"#).unwrap();
+        assert_eq!(old.presented_by, None);
+        // ... and `None` is not written back (additive on the wire).
+        assert!(
+            serde_json::to_value(&old)
+                .unwrap()
+                .get("presentedBy")
+                .is_none()
+        );
+
+        // An engine that honored core's offer acknowledges with `"presentedBy": "core"`.
+        let acked: TsRecordInfo =
+            serde_json::from_str(r#"{"version":1,"presentedBy":"core"}"#).unwrap();
+        assert_eq!(acked.presented_by, Some(TsPresentedBy::Core));
+        let v = serde_json::to_value(&acked).unwrap();
+        assert_eq!(v["presentedBy"], "core");
+        let back: TsRecordInfo = serde_json::from_value(v).unwrap();
+        assert_eq!(back, acked);
     }
 
     #[test]
@@ -2030,6 +2061,7 @@ mod tests {
             // optional field, so a rename of `coverage` changes the fixture.
             coverage: TsCoverage::Subset,
             hash_definition: Some(hash_def),
+            presented_by: Some(TsPresentedBy::Core),
         };
         // `TsUnit` has skipped optionals; the fixture instance is the unit with all of them.
         let full_unit = TsUnit {

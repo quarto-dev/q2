@@ -244,6 +244,9 @@ export interface TsRecordInfo {
    *  Core checks the count only under `owned`. */
   coverage?: "owned" | "subset";
   hashDefinition?: TsHashDefinition;
+  /** The engine honored core's `presentedBy: "core"` offer: it returned the notebook and made
+   *  no markdown of its own. Omitted when it presented itself (OPR-3, decision D8). */
+  presentedBy?: "core";
 }
 
 // ==================== Dependencies options ====================
