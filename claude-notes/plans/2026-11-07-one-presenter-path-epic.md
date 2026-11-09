@@ -54,7 +54,7 @@ capture splice and is not part of this epic.
 - **D5. Plain render is in scope.** A cached knitr chunk keeps knitr\'s cache and uses the markdown fallback with no
   record, quietly. The LaTeX family, `pptx`, `context` and unknown knitr targets stay on the engine route, quietly
   (strands `bd-4y5scdhp`, `bd-lo1cs7u5`, `bd-ka76vcrp` track widening; LaTeX notes live in the LaTeX plan on
-  `explore/pandoc-hybrid-latex`). Whether the retained fallback survives, and whether an opt-out exists, are open (OPR-7d).
+  `explore/pandoc-hybrid-latex`). Decided 2026-11-09 (Gordon): the retained knitr fallback survives for plain render, and there is **no opt-out control** (recorded in OPR-7d).
 - **D6. `render` reads `execute: record-sources`** (updated by R5, 2026-11-09; there is no render option). Read only
   (writing stays with `execute: record: true`); default `engine`; `cache` is ignored with an info line; the list is
   resolved **per document**; no source and no `engine` warns and leaves cells inert (`--strict` errors; prose-only
@@ -127,7 +127,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | OPR | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | conditional |
 | [OPR-4c](2026-11-08-opr-4c-julia-engine-facts.md) | OPR | Engine, wire and pin carry the facts | 4b, 3, Gordon\'s push | B | conditional |
 | [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | OPR | q2 writes the facts as cell metadata | 4c, 1b | A | conditional |
-| [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | OPR | The `execute: record-sources` key, one early reader, `--records` removed, a ceiling for provide-hub and `--share` | 0d, RFU-1, 3, Gordon\'s flip | C | blocked-on-gordon |
+| [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | OPR | The `execute: record-sources` key, one early reader, `--records` removed, a ceiling for provide-hub and `--share` | 0d, RFU-1, 3 | C | ready |
 | [OPR-6](2026-11-08-opr-6-render-execution-records.md) | OPR | `q2 render` reads `execute: record-sources` | 5, 1b | C | ready |
 | [OPR-7a](2026-11-08-opr-7a-presentation-handshake-and-record.md) | OPR | Handshake and record without the extra cost, behind a control | 1b, 3, 6 | C | ready |
 | [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md) | OPR | Cached knitr chunks fall back, no record | 0c | B | ready |
@@ -135,12 +135,12 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, Gordon\'s decisions | D | blocked-on-gordon |
 | [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved, RFU-8 | D | ready |
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
-| [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | RFU | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3, Gordon\'s Phase A verdict | B | blocked-on-gordon |
+| [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | RFU | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
 | [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | RFU | EXR-16 sweep and the labeled-cell `fig-cap` splice test | OPR-1b | A | ready |
 | [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | RFU | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | C | ready |
 | [RFU-5](2026-11-08-rfu-5-julia-e2e-flake.md) | RFU | The Julia e2e flake: find the EPIPE closer (a note) | nothing | B | ready |
 | [RFU-6](2026-11-08-rfu-6-windows-run.md) | RFU | The Windows run (Gordon\'s machine) | OPR-6, RFU-1, RFU-2 | none | blocked-on-gordon |
-| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | RFU | Positron fork: extension update, guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5, Gordon\'s decisions | C | blocked-on-gordon |
+| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | RFU | Positron fork: extension update, guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5 | C | ready |
 | [RFU-8](2026-11-08-rfu-8-docs.md) | RFU | Docs for `q2 convert` and the Positron export | RFU-1, RFU-2 resolved | D | ready |
 
 **Lanes** (an agent takes the first startable plan in its own lane list; if none, it stops and reports):
@@ -154,7 +154,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 
 The integration checkout is `/Users/gordon/src/q2/.worktrees/workspace-1`. Lane B puts OPR-7b and RFU-5 before OPR-4b
 and 4c because those two only wait on Gordon. Lane C starts with OPR-0d (a short note Gordon must read) and then RFU-1,
-so RFU-1 runs while Gordon reads the note; R5 is now decided, and OPR-5 follows when RFU-1 and OPR-3 are done and Gordon flips it.
+so RFU-1 runs while Gordon reads the note; R5 is now decided, and OPR-5 (flipped to `ready` 2026-11-09) follows when RFU-1 and OPR-3 are done.
 
 **How the epics run concurrently.** RFU-1 lands first and depends on nothing, so OPR-5 wires the key over the
 final commands and never touches the deleted `q2 record` code. RFU-2 waits for OPR-3 only to keep edits to
@@ -168,15 +168,11 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 
 ## What Gordon does between plans
 
-- OPR-0d landed and R5 (move, no flag) is recorded in OPR-5: flip OPR-5 to `ready` once RFU-1 and OPR-3 are complete.
-- Any time: read the [Phase A note](../research/2026-11-07-r-through-knitr-phase-a.md), record the verdict in RFU-2, set
-  it to `ready`.
+- OPR-5, RFU-2 and RFU-7 were flipped to `ready` on 2026-11-09 (their decisions are recorded; each still waits on its `depends-on`).
 - OPR-4a landed (2026-11-09): read the [note](../research/2026-11-09-opr-julia-spike.md); write the scope into OPR-4b and set it to `ready`, or set 4b, 4c and 4d to `cancelled`. **Decided 2026-11-09:** all three facts, and the stderr fix is the runner keeping stderr under `emitUnits` (written into OPR-4b); only the flip to `ready` remains.
 - After OPR-4b lands: push the runner branch to the fork and write the revision into OPR-4c; set it to `ready`.
 - After OPR-4c lands: set OPR-4d to `ready`.
-- After OPR-7c lands: sign the allowlist, record the two decisions in OPR-7d, set it to `ready`.
-- Before RFU-7: confirm the fork may take commits on a new branch, record the command-2 decision in RFU-7, set it to
-  `ready`.
+- After OPR-7c lands: sign the allowlist and set OPR-7d to `ready` (its two decisions were recorded 2026-11-09).
 - When OPR-6, RFU-1 and RFU-2 have landed: run RFU-6 on a Windows machine.
 - At the end: pushes of the engine and runner forks, a push or merge of the Positron fork branch, the rebase of
   `feature/one-presenter` onto `main` and the pull request. The integration branch was cut from the local review branch,

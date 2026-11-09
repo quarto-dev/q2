@@ -50,8 +50,8 @@ Knitr\'s `plan_capture` (`engine/knitr/target_route.rs:78`) captures when either
 explicit record request, caused the capture (change the diagnostic\'s condition, not its text).
 
 **3. The control.** `present_from_record` defaults to **false** here, so a plain render behaves exactly as today. Where it
-is set (the pipeline config) and how a user could turn it off is OPR-7d\'s decision; here only the mechanism and its
-tests exist.
+is set (the pipeline config) is OPR-7d\'s work; **there is no user-facing opt-out** (Gordon, 2026-11-09, recorded in OPR-7d),
+so the flag stays internal; here only the mechanism and its tests exist.
 
 ## Checklist (tests first; every box is `[unattended]`)
 

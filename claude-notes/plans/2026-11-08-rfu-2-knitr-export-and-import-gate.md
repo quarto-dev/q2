@@ -1,8 +1,8 @@
 ---
 title: 'RFU-2: knitr cells export, and the import gate becomes a declared fact'
 date: 2026-11-08
-description: 'Removes the engine-ownership skips from the Positron export so a knitr record exports like Python and Julia, and replaces the import-side owner rule with one declared fact, kernel equivalence, that each engine states for the languages it owns. Waits for Gordon''s Phase A verdict.'
-status: blocked-on-gordon
+description: 'Removes the engine-ownership skips from the Positron export so a knitr record exports like Python and Julia, and replaces the import-side owner rule with one declared fact, kernel equivalence, that each engine states for the languages it owns. Gordon''s Phase A verdict is recorded (export drops nothing).'
+status: ready
 depends-on: [rfu-1, opr-3]
 lane: B
 ---
@@ -14,14 +14,21 @@ lane: B
 
 ## Start condition
 
-`status` is `blocked-on-gordon` until Gordon records the Phase A verdict below and sets it to `ready`. If the section
-is empty or the status is not `ready`, stop and report.
+The Phase A verdict is recorded below (2026-11-09). Gordon flipped `status` to `ready` on 2026-11-09;
+startability still needs RFU-1 and OPR-3 complete. If either is not complete, stop and report.
 
-## The Phase A verdict (Gordon; empty until he fills it in)
+## The Phase A verdict (Gordon, 2026-11-09)
 
-Does RFU-2 proceed as proposed, and what happens to a `results: hide` output, `asis` and raw HTML (shown as text by
-Positron) and a Julia plot bundle shown several times? The principle says the export does not drop what the document
-says to hide. Evidence: [Phase A note](../research/2026-11-07-r-through-knitr-phase-a.md).
+**Decision: RFU-2 proceeds as proposed, and the export drops nothing the document says to hide.** Gordon chose
+"Proceed, export as-is". The export shrinks to a valid cache file and knitr cells export. A `results: hide` output, `asis`
+markdown and raw HTML appear in Positron as the record holds them (as text), and a Julia plot bundle is handled only by
+the existing temporary image rule. Reason: the epic\'s principle, "q2 does nothing special for Positron"; where q2 writes
+a compatible record Positron shows it, and Positron-side feature design is out of scope.
+
+Consequences for this plan: the export gets **no** `results: hide` filter and no new skip or filter rule for `asis` or raw
+HTML; add a test that a `results: hide` output and an `asis` output stay in the exported cache file. RFU-8 documents only
+what the export does, and mentions what Positron shows for these outputs only as Positron\'s behavior.
+Evidence: [Phase A note](../research/2026-11-07-r-through-knitr-phase-a.md).
 
 ## Branch and land (explicit)
 
@@ -64,6 +71,8 @@ import-side cost: for R, the hash agrees and the shape differs, which RIU-3 alre
 
 - [ ] **Export tests first**, each failing on the current skip: a knitr record exports text output, a figure (one
       `image/png`), a message, a data frame, an error and a chunk with options.
+- [ ] **Verdict test:** a knitr chunk with `results: hide`, one with `results: asis` and a raw-HTML chunk each keep their
+      output in the exported file (nothing is dropped for Positron).
 - [ ] A test that the export no longer consults the engine or language: a cell owned by any engine, in any language,
       appears when the record has outputs for it; fallback and marimo-style cells still skip, with their reasons.
 - [ ] **Import tests first**, one per engine in the table: a unit takes Positron outputs only when its engine declares

@@ -57,9 +57,9 @@ differences** on both corpora.
 
 - Every difference is Identical, SyntaxLevel, fixed, or on the **proposed** allowlist; no unclassified difference.
 - The report and allowlist are committed; blockers for Gordon are listed.
-- **`[Gordon]` (after landing):** sign the allowlist (change `proposed` to `signed` entry by entry), record the two
-  decisions OPR-7d needs (does the retained knitr fallback survive for plain render; is there an opt-out control),
-  and flip OPR-7d to `ready`.
+- **`[Gordon]` (after landing):** sign the allowlist (change `proposed` to `signed` entry by entry), and flip
+  OPR-7d to `ready`. (The two decisions OPR-7d needs were recorded on 2026-11-09: the fallback is kept; there is no
+  opt-out.)
 
 ## Notes from the run
 

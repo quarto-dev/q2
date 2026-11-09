@@ -2,7 +2,7 @@
 title: 'Epic: RIU follow-up (RFU), did we build what the records-in-use epic intended'
 date: 2026-11-08
 description: 'Closes what the RIU-6 demo exposed. R through knitr is characterized (Positron accepts a raw q2 knitr record; the export gate is the only blocker), and what remains is a command rename (q2 convert), the export and import-gate change, test and verification gaps, a Windows run, a docs plan, and a Positron-fork plan. Eight plans run in the same four lanes and on the same integration branch as the one-presenter epic, with dependencies arranged so both epics run concurrently.'
-status: 'plans written 2026-11-08; replaces the single follow-up plan; two Gordon decisions open (Phase A verdict, command 2); runs concurrently with the one-presenter epic on feature/one-presenter'
+status: 'plans written 2026-11-08; replaces the single follow-up plan; Gordon decisions closed 2026-11-09 (Phase A verdict, fork commits, command 2); runs concurrently with the one-presenter epic on feature/one-presenter'
 ---
 
 **Replaces:** the single plan `2026-11-07-riu-follow-up-did-we-build-it.md` (deleted 2026-11-08; its content is
@@ -48,21 +48,16 @@ Windows run). **Runs beside:** [the one-presenter epic](2026-11-07-one-presenter
 - Command 2 replaces a matched cell\'s outputs with no prompt; the preview banner text is left as is; stamped cells
   carrying no `data-loc` is fine; RIU-3b was wanted and is done.
 
-## Open decisions (Gordon\'s)
+## Decisions closed 2026-11-09 (Gordon; not to be reopened by a plan)
 
-- [ ] `[Gordon]` **The Phase A verdict.** Read the note, then say whether RFU-2 proceeds as proposed (export shrinks to
-      a valid cache file; the knitr cells export) and how to treat the Positron-side behaviors in the note: a
-      `results: hide` output shown, `asis` and raw HTML shown as text, a Julia plot bundle shown several times (the
-      image rule covers only the last). In particular: **should the export drop output the document says to hide
-      (`results: hide`)?** The principle says no. Record the answer in RFU-2 and set it to `ready`.
-- [ ] `[Gordon]` **Command 2: progress and cancel, and the dirty-document wording: fix or document?** Facts read from
-      the fork on 2026-11-07: the command shows an indeterminate notification titled "q2 is running FILENAME. The
-      first run can take a few minutes." with no cancel button; the only stop is the timeout
-      (`q2.exportTimeoutSeconds`, default 300 s, SIGTERM). A dirty document gets the note "q2 runs the saved file, so
-      cells you have edited since saving will not show outputs", and the push then reports how many cells matched and
-      how many were skipped. Records-in-use decision 7 ("a dirty document exports from disk and the push skips changed
-      cells with a report") agrees in substance; whether the wording is good enough, and whether cancel is wanted, is
-      the decision. Record it in RFU-7.
+- **The Phase A verdict.** RFU-2 proceeds as proposed: the export shrinks to a valid cache file and knitr cells export. The
+  export drops nothing the document says to hide: a `results: hide` output, `asis` markdown and raw HTML go in as the
+  record holds them, and Positron shows them as text. The image rule stays (temporary). Reason: the principle above.
+  Recorded in RFU-2.
+- **Fork commits allowed** on `q2/rfu-7-demo-followups`: yes (local, never pushed). Recorded in RFU-7.
+- **Command 2: progress and cancel, and the dirty-document wording: document, do not fix.** Both are known issues in the
+  demo run guide (no cancel; the 300 s timeout is the stop; the dirty-document note and the matched/skipped report stay).
+  Recorded in RFU-7.
 
 ## Plans
 
@@ -73,12 +68,12 @@ All plans use the shared integration branch `feature/one-presenter`, the lanes a
 | Plan | What | Depends on | Lane | Status at start |
 |---|---|---|---|---|
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | `q2 convert --to positron-ipynb` replaces `q2 record export-positron` | nothing | C | ready |
-| [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3, Gordon\'s Phase A verdict | B | blocked-on-gordon |
+| [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
 | [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | EXR-16 sweep test and the labeled-cell `fig-cap` splice test | OPR-1b | A | ready |
 | [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | C | ready |
 | [RFU-5](2026-11-08-rfu-5-julia-e2e-flake.md) | The Julia e2e flake: find the EPIPE closer (a note) | nothing | B | ready |
 | [RFU-6](2026-11-08-rfu-6-windows-run.md) | The Windows run | OPR-6, RFU-1, RFU-2 | (Gordon) | blocked-on-gordon |
-| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | Positron fork: extension update, demo guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5, Gordon\'s decisions | C | blocked-on-gordon |
+| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | Positron fork: extension update, demo guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5 | C | ready |
 | [RFU-8](2026-11-08-rfu-8-docs.md) | Docs for `q2 convert` and the export, written with `/reader-expectations-prose` | RFU-1, RFU-2 (resolved) | D | ready |
 
 **Concurrency with OPR.** RFU-1 has no dependency on OPR and lands first in lane C while Gordon decides OPR-0d\'s

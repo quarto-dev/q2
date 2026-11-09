@@ -2,7 +2,7 @@
 title: 'RFU-7: the Positron fork, extension update, demo guide, e2e and cache location'
 date: 2026-11-08
 description: 'The work that lives in the Positron fork (a different repository): update the demo extension for q2 convert and the execute: record-sources key (set with -M), run the extended raw-record experiment, add the R e2e test, write the demo run guide, prototype the cache-location feature, add the missing e2e cases, and apply Gordon''s command-2 decision. Commits go on a fork branch and never to the q2 integration branch; the q2 side lands only a note.'
-status: blocked-on-gordon
+status: ready
 depends-on: [rfu-1, rfu-2, opr-5]
 lane: C
 ---
@@ -16,16 +16,22 @@ lane: C
 
 ## Start condition
 
-`status` is `blocked-on-gordon` until Gordon (a) confirms the fork may take commits on a new branch, (b) records the
-command-2 decision below, and (c) sets it to `ready`. RFU-1, RFU-2 and OPR-5 must be complete so the final flags and
-export behavior exist. If a section below is empty or the status is not `ready`, stop and report.
+Gordon recorded both decisions below on 2026-11-09. Gordon flipped `status` to `ready` on 2026-11-09. RFU-1, RFU-2 and OPR-5 must be complete so the final flags and
+export behavior exist. If any is not complete, stop and report.
 
-## Decisions by Gordon (empty until he fills them in)
+## Decisions by Gordon (2026-11-09)
 
-**Fork commits allowed on branch `q2/rfu-7-demo-followups`:** (yes / no)
+**Fork commits allowed on branch `q2/rfu-7-demo-followups`:** **yes.** Local commits only on that new branch (cut from
+`spike/riu-6-phase-a`); nothing is pushed and no other fork branch is touched. Gordon pushes or merges it himself.
 
-**Command 2: progress and cancel, and the dirty-document wording, fix or document:** (see the RFU epic\'s open decisions
-for the facts; write the decision here)
+**Command 2, progress and cancel: document, do not fix.** The demo rule applies: this is a known issue in the run guide.
+The notification stays indeterminate ("q2 is running FILENAME. The first run can take a few minutes."), there is no cancel
+button, and the only stop is the timeout (`q2.exportTimeoutSeconds`, default 300 s, SIGTERM). The guide says so and names
+the setting.
+
+**Command 2, the dirty-document wording: keep it, document it.** The note ("q2 runs the saved file, so cells you have
+edited since saving will not show outputs") and the matched/skipped report after the push stay as they are; the guide
+describes both. This agrees with records-in-use decision 7. No fork code change for either item.
 
 ## Landing differs from a q2 plan (explicit)
 
@@ -92,7 +98,9 @@ checked out in other worktrees).
       document; and **command 1 on Julia and R spans** (command 1, `positronQuarto.runInlineExpressions`,
       `quartoRunInlineExpressions.ts`, never calls q2; its span detector takes the document\'s primary kernel language,
       `quartoInlineExpr.ts:~35`, and nothing in `quartoInlineExprExecutor.ts` is Python-specific; only Python was run).
-- [ ] **Command 2 progress, cancel and dirty-document wording**, as Gordon decided above; if "fix", tests first.
+- [ ] **Command 2 progress, cancel and dirty-document wording:** decided "document, do not fix" for both (above). No code;
+      the demo run guide box covers it. Check the guide states the no-cancel and 300 s timeout facts and the dirty-document
+      note and report.
 - [ ] `[Gordon]` Someone watches the R and Julia e2e once. Mark each step seen, Playwright, or not run.
 - [ ] Write the landing note in the q2 repository: the fork branch, each commit hash and subject, what ran under
       Playwright, what was seen by a person, what was not run. Render-check it with `target/debug/q2 render --strict`.
