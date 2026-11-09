@@ -1,0 +1,273 @@
+# OPR-0b: the plan's own parity corpus. The existing knitr corpus (tests/fixtures/knitr-corpus) is run
+# by the harness too and is not listed here.
+#
+# requires: tools a document needs: r, julia, plots (Julia Plots in the default environment), uv.
+# pending:  a plan after which the expected result changes (the case is still measured).
+# renders:  2 renders each side in one scratch directory, so a cache miss and then a hit are both covered.
+
+[[document]]
+name = "julia/fig-png-bare"
+dir = "julia/fig-png-bare"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "two cells that display only the PNG, the second labeled, after a prose block (OPR-0c: file names and the cell-output class)"
+
+[[document]]
+name = "julia/fig-subcap"
+dir = "julia/fig-subcap"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "a fig-subcap group with layout-ncol 2 plus references to the group and each member (bd-gbaykhth: blocker, not an allowlist candidate)"
+
+[[document]]
+name = "jupyter/fig-subcap"
+dir = "jupyter/fig-subcap"
+file = "doc.ipynb"
+requires = []
+formats = ["html"]
+note = "the same group case from a stored notebook (bd-gbaykhth)"
+
+[[document]]
+name = "julia/plot-website"
+dir = "julia/plot-website"
+file = "plot.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "from extensions/julia-website; a hardcoded PNG, no Plots"
+
+[[document]]
+name = "julia/records-plot"
+dir = "julia/records-plot"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "from records-export/julia-plot.qmd, with record: true removed"
+
+[[document]]
+name = "julia/records-error"
+dir = "julia/records-error"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "from records-export/julia-error.qmd, with record: true removed; error: true"
+
+[[document]]
+name = "julia/positron-cache"
+dir = "julia/positron-cache"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "from positron-cache/julia.qmd"
+
+[[document]]
+name = "julia/records-in-use"
+dir = "julia/records-in-use"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "from quarto-preview records-in-use/julia.qmd"
+
+[[document]]
+name = "julia/docs-index-chunk"
+dir = "julia/docs-index-chunk"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["html"]
+note = "the Julia chunk of docs/index.qmd, as a fixture copy"
+
+[[document]]
+name = "julia/engine-error"
+dir = "julia/engine-error"
+file = "error.qmd"
+requires = ["julia"]
+formats = ["html"]
+expect_failure = true
+note = "the Julia engine's own error document: the render is expected to fail on both routes"
+
+[[document]]
+name = "julia/engine-keep-ipynb"
+dir = "julia/engine-keep-ipynb"
+file = "keep-ipynb.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc"
+
+[[document]]
+name = "julia/engine-no-keep-ipynb"
+dir = "julia/engine-keep-ipynb"
+file = "no-keep-ipynb.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc"
+
+[[document]]
+name = "julia/engine-source-ranges"
+dir = "julia/engine-source-ranges"
+file = "source-ranges-test.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc with an include"
+
+[[document]]
+name = "julia/engine-reordering"
+dir = "julia/engine-reordering"
+file = "notebook.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc with a _metadata.yml"
+
+[[document]]
+name = "julia/engine-sleep"
+dir = "julia/engine-sleep"
+file = "sleep.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "engine test doc"
+
+[[document]]
+name = "knitr/cache-mixed"
+dir = "knitr/cache-mixed"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+pending = "OPR-7b"
+renders = 2
+note = "two live and two cache: true chunks; rendered twice (miss, then hit); its expected result changes in OPR-7b"
+
+[[document]]
+name = "knitr/fig-subcap"
+dir = "knitr/fig-subcap"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+note = "a fig-subcap group with layout-ncol 2 and references (bd-au5gts6e; identical on both routes)"
+
+[[document]]
+name = "knitr/exec-scope"
+dir = "knitr/exec-scope"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+note = "document-scope execute: echo, warning, message"
+
+[[document]]
+name = "knitr/exec-scope-output"
+dir = "knitr/exec-scope-output"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+note = "document-scope execute: output false"
+
+[[document]]
+name = "knitr/exec-scope-include"
+dir = "knitr/exec-scope-include"
+file = "doc.qmd"
+requires = ["r"]
+formats = ["html"]
+note = "document-scope execute: include false"
+
+[[document]]
+name = "marimo/minimal"
+dir = "marimo/minimal"
+file = "doc.qmd"
+requires = ["uv"]
+formats = ["html"]
+note = "the marimo extension; documented exception D12, expected identical"
+
+[[document]]
+name = "knitr/margin-layout/custom-geometry-asymmetric"
+dir = "knitr/margin-layout"
+file = "custom-geometry-asymmetric.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/custom-geometry-narrow"
+dir = "knitr/margin-layout"
+file = "custom-geometry-narrow.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/custom-geometry-wide"
+dir = "knitr/margin-layout"
+file = "custom-geometry-wide.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/fig-column-margin"
+dir = "knitr/margin-layout"
+file = "fig-column-margin.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/fullwidth-figure"
+dir = "knitr/margin-layout"
+file = "fullwidth-figure.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-figure-cell-option"
+dir = "knitr/margin-layout"
+file = "margin-figure-cell-option.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-subfigure-ggplot2"
+dir = "knitr/margin-layout"
+file = "margin-subfigure-ggplot2.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-flextable-crossref"
+dir = "knitr/margin-layout"
+file = "margin-table-flextable-crossref.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-flextable"
+dir = "knitr/margin-layout"
+file = "margin-table-flextable.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-gt-r-crossref"
+dir = "knitr/margin-layout"
+file = "margin-table-gt-r-crossref.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/margin-table-gt-r"
+dir = "knitr/margin-layout"
+file = "margin-table-gt-r.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "knitr/margin-layout/tbl-column-margin"
+dir = "knitr/margin-layout"
+file = "tbl-column-margin.qmd"
+requires = ["r"]
+formats = ["html", "typst"]
+note = "from crates/quarto/tests/smoke-all/typst/margin-layout"

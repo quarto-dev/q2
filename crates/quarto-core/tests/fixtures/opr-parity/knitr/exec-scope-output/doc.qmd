@@ -1,0 +1,12 @@
+---
+title: Document-scope output false
+execute:
+  output: false
+---
+
+```{r}
+x <- 1:3
+x
+```
+
+Prose after.
