@@ -61,7 +61,9 @@ fn test_regular_error_format() {
 #[test]
 fn test_newline_warning_json() {
     // Create a temporary file WITHOUT trailing newline
-    let temp_file = "/tmp/test_newline_warning.qmd";
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let temp_path = temp_dir.path().join("test_newline_warning.qmd");
+    let temp_file = temp_path.to_str().expect("utf-8 temp path");
     let input = "# Hello World"; // No trailing newline
 
     fs::write(temp_file, input).expect("Failed to write temp file");
@@ -114,7 +116,9 @@ fn test_newline_warning_json() {
 #[test]
 fn test_newline_warning_text() {
     // Create a temporary file WITHOUT trailing newline
-    let temp_file = "/tmp/test_newline_warning_text.qmd";
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let temp_path = temp_dir.path().join("test_newline_warning_text.qmd");
+    let temp_file = temp_path.to_str().expect("utf-8 temp path");
     let input = "# Hello World"; // No trailing newline
 
     fs::write(temp_file, input).expect("Failed to write temp file");
@@ -153,7 +157,9 @@ fn test_newline_warning_text() {
 #[test]
 fn test_no_newline_warning_when_present() {
     // Create a temporary file WITH trailing newline
-    let temp_file = "/tmp/test_no_newline_warning.qmd";
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let temp_path = temp_dir.path().join("test_no_newline_warning.qmd");
+    let temp_file = temp_path.to_str().expect("utf-8 temp path");
     let input = "# Hello World\n"; // WITH trailing newline
 
     fs::write(temp_file, input).expect("Failed to write temp file");
@@ -182,7 +188,9 @@ fn test_no_newline_warning_when_present() {
 #[test]
 fn test_json_errors_flag_with_warning() {
     // Create a temporary file with invalid markdown in metadata to trigger Q-1-20 warning
-    let temp_file = "/tmp/test_json_errors_warning.qmd";
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let temp_path = temp_dir.path().join("test_json_errors_warning.qmd");
+    let temp_file = temp_path.to_str().expect("utf-8 temp path");
     let input = r#"---
 title: "Test Document"
 description: "[incomplete link"
@@ -227,7 +235,9 @@ description: "[incomplete link"
 #[test]
 fn test_json_errors_flag_with_error() {
     // Create a temporary file with a parse error
-    let temp_file = "/tmp/test_json_errors_error.qmd";
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let temp_path = temp_dir.path().join("test_json_errors_error.qmd");
+    let temp_file = temp_path.to_str().expect("utf-8 temp path");
     let input = "```{python\n"; // Unclosed code fence
 
     fs::write(temp_file, input).expect("Failed to write temp file");
