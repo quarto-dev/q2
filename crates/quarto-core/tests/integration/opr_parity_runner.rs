@@ -119,11 +119,17 @@ fn plan_jobs() -> (Vec<Job>, Vec<String>) {
                 not_compared.push(format!("{} [{format}]", f.name));
                 continue;
             }
-            let (dir, qmd) = materialize(&f);
+            let (dir, doc) = materialize(&f);
+            // `q2 render` takes no `.Rmd` input; the same text goes in as `doc.qmd`.
+            let mut file = doc.file_name().unwrap().to_string_lossy().into_owned();
+            if file.ends_with(".Rmd") {
+                std::fs::rename(&doc, dir.path().join("doc.qmd")).unwrap();
+                file = "doc.qmd".into();
+            }
             jobs.push(Job {
                 name: format!("knitr-corpus/{}", f.name),
                 src: dir.path().to_path_buf(),
-                file: qmd.file_name().unwrap().to_string_lossy().into_owned(),
+                file,
                 format: format.clone(),
                 requires: vec!["r".into()],
                 pending: String::new(),
@@ -364,6 +370,14 @@ fn run_job(job: &Job, allowlist: &Allowlist) -> Vec<Case> {
         .collect()
 }
 
+/// A failure before any engine runs: the document does not parse, or names no engine. An
+/// execution failure is also wrapped in a `ParseError` by the render path, so exclude it.
+fn is_rejection(message: &str) -> bool {
+    !message.contains("Execution failed in")
+        && !message.contains("is registered but its runtime is not available")
+        && (message.contains("ParseError") || message.contains("Can't determine execution engine"))
+}
+
 fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist) -> String {
     let mut identical = Vec::new();
     let mut allowlisted: Vec<(&Case, &Vec<String>)> = Vec::new();
@@ -410,8 +424,18 @@ fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist)
         "| unallowlisted difference (blocker) | {} |\n",
         blockers.len()
     ));
+    let is_rejected = |c: &&Case| {
+        matches!(&c.outcome, Outcome::BothFailed { message, .. }
+            if is_rejection(message))
+    };
+    let (rejected, failed_same): (Vec<&Case>, Vec<&Case>) =
+        failed_same.into_iter().partition(is_rejected);
     out.push_str(&format!(
-        "| both routes failed, same message | {} |\n",
+        "| document rejected by q2 before any engine runs (same on both routes) | {} |\n",
+        rejected.len()
+    ));
+    out.push_str(&format!(
+        "| both routes failed at execution, same message | {} |\n",
         failed_same.len()
     ));
     out.push_str(&format!(
@@ -464,7 +488,26 @@ fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist)
     for c in &identical {
         out.push_str(&format!("- {}\n", tag(c)));
     }
-    out.push_str("\n## Both routes failed\n\n");
+    out.push_str("\n## Documents q2 rejects before any engine runs\n\n");
+    out.push_str(
+        "These never reach a route, so they say nothing about parity. Grouped by message:\n\n",
+    );
+    let mut groups: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for c in &rejected {
+        let Outcome::BothFailed { message, .. } = &c.outcome else {
+            continue;
+        };
+        let key: String = message.chars().take(160).collect();
+        groups.entry(key).or_default().push(tag(c));
+    }
+    for (message, names) in &groups {
+        out.push_str(&format!(
+            "- {} documents: `{}`\n",
+            names.len(),
+            message.replace('`', "'")
+        ));
+    }
+    out.push_str("\n## Both routes failed at execution\n\n");
     for c in &failed_same {
         let Outcome::BothFailed { message, .. } = &c.outcome else {
             continue;
@@ -561,6 +604,22 @@ mod tests {
                 .iter()
                 .all(|e| !e.reason.contains("fig-subcap") || e.reason.contains("not"))
         );
+    }
+
+    #[test]
+    fn a_failed_execution_is_not_a_rejection() {
+        assert!(is_rejection(
+            "Parse(ParseError { diagnostics: [ ... Q-2-36 ..."
+        ));
+        assert!(is_rejection(
+            "Other(\"Can't determine execution engine for x\")"
+        ));
+        assert!(!is_rejection(
+            "Parse(ParseError { title: \"Execution failed in julia: ... intentional failure"
+        ));
+        assert!(!is_rejection(
+            "Parse(ParseError { title: \"Engine 'jupyter' is registered but its runtime is not available."
+        ));
     }
 
     #[test]
