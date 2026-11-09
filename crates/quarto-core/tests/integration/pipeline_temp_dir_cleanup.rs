@@ -41,12 +41,17 @@ fn pipeline_dirs(root: &Path) -> Vec<String> {
         .collect()
 }
 
-/// Point `TMPDIR` at a fresh private directory and return it.
+/// Point the temp directory at a fresh private directory and return it. Unix reads
+/// `TMPDIR`; Windows' `GetTempPath` reads `TMP` (then `TEMP`) and ignores `TMPDIR`.
 fn private_tmpdir() -> TempDir {
     let private = TempDir::new().unwrap();
     // SAFETY: one test per process under nextest (see the module comment);
     // nothing else reads the environment concurrently.
-    unsafe { std::env::set_var("TMPDIR", private.path()) };
+    unsafe {
+        for var in ["TMPDIR", "TMP", "TEMP"] {
+            std::env::set_var(var, private.path());
+        }
+    }
     private
 }
 
