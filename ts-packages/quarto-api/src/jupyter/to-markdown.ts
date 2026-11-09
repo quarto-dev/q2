@@ -189,6 +189,11 @@ const kJupyterCellThirdPartyMetadataKeys = [
   kCellLinesToNext,
   "language",
 ];
+// Metadata that q2 itself writes (the QuartoNotebookRunner `emitUnits` annotation:
+// `{unit, language, file, line, ...capture facts}`). It is the record\'s wire, not a cell
+// attribute: forwarded, it would leak into the HTML as `data-quarto` with an absolute path
+// (OPR-7f). A user-authored `#| quarto:` option is no longer forwarded either.
+const kJupyterCellQ2InternalMetadataKeys = ["quarto"];
 
 // ─── local error-output shape (Q1 defines this in jupyter.ts, not @quarto/types) ─
 interface JupyterOutputError extends JupyterOutput {
@@ -684,6 +689,7 @@ function mdFromCodeCell(
   const cellOptionsFilter = kJupyterCellInternalOptionKeys.concat(
     kJupyterCellStandardMetadataKeys,
     kJupyterCellThirdPartyMetadataKeys,
+    kJupyterCellQ2InternalMetadataKeys,
   );
 
   const label = cellLabel(cell);
