@@ -3413,7 +3413,11 @@ mod tests {
             // connect() succeed while a probe read merely times out. Verified
             // by leaking the listener past the return — that reddens this test
             // only with the strict `is_err()` check, not the round-trip check.
-            let second = TcpStream::connect(addr);
+            // `connect_timeout`, not `connect`: Windows retries the SYN to a closed
+            // loopback port for about two seconds before reporting the refusal, which
+            // outlasts the watchdog. A live-but-unaccepted listener still connects at
+            // once, so an `Err` (refused or timed out) still proves no listener.
+            let second = TcpStream::connect_timeout(&addr, Duration::from_millis(500));
             assert!(
                 second.is_err(),
                 "a second dial after a successful handshake must be REFUSED at connect() \
