@@ -213,25 +213,56 @@ fn a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit() {
             .record
             .as_ref()
             .unwrap_or_else(|| panic!("{name}: a record"));
-        assert_eq!(record.cells.len(), 3, "{name}: the three uncached units");
+        assert_eq!(
+            record.cells.len(),
+            5,
+            "{name}: all five units, cached ones included"
+        );
         assert!(record.cells.iter().all(is_structured), "{name}");
     }
     assert_eq!(miss.markdown, hit.markdown);
 }
 
-/// A document where every chunk asked for the cache has no unit left to record: no record, no
-/// diagnostic, and the engine\'s own markdown.
+/// OPR-7e: a document where every chunk asked for the cache (level 3) is a record of those
+/// chunks, on a miss and on a hit, with no diagnostic.
 #[test]
-fn a_document_of_only_cached_chunks_has_no_record_and_no_diagnostic() {
-    if !r_available("a_document_of_only_cached_chunks_has_no_record_and_no_diagnostic") {
+fn a_document_of_only_cached_chunks_is_recorded_on_a_miss_and_a_hit() {
+    if !r_available("a_document_of_only_cached_chunks_is_recorded_on_a_miss_and_a_hit") {
         return;
     }
     let doc = "```{r a}\n#| cache: true\n1\n```\n\n```{r b}\n#| cache: true\n2\n```\n";
     let dir = tempfile::tempdir().unwrap();
+    let miss = run_doc_in(dir.path(), doc, &[], "html", true);
+    let hit = run_doc_in(dir.path(), doc, &[], "html", true);
+    for (name, run) in [("miss", &miss), ("hit", &hit)] {
+        assert!(run.warnings.is_empty(), "{name}: {:?}", run.warnings);
+        let record = run
+            .record
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name}: a record"));
+        assert_eq!(record.cells.len(), 2, "{name}");
+        assert!(record.cells.iter().all(is_structured), "{name}");
+        assert!(
+            run.markdown.contains("[1] 1") && run.markdown.contains("[1] 2"),
+            "{name}"
+        );
+    }
+    assert_eq!(miss.markdown, hit.markdown);
+}
+
+/// OPR-7b behavior kept where OPR-7e cannot record: a level-1 chunk has no record, quietly, and
+/// the rest of the document stays structured.
+#[test]
+fn a_level_1_cached_chunk_stays_out_of_the_record_quietly() {
+    if !r_available("a_level_1_cached_chunk_stays_out_of_the_record_quietly") {
+        return;
+    }
+    let doc = "```{r a}\n#| cache: 1\n1\n```\n\n```{r b}\n2\n```\n";
+    let dir = tempfile::tempdir().unwrap();
     let _ = run_doc_in(dir.path(), doc, &[], "html", true);
     let hit = run_doc_in(dir.path(), doc, &[], "html", true);
     assert!(hit.warnings.is_empty(), "{:?}", hit.warnings);
-    assert!(hit.markdown.contains("[1] 1") && hit.markdown.contains("[1] 2"));
+    assert_eq!(hit.record.as_ref().expect("a record").cells.len(), 1);
 }
 
 #[test]
