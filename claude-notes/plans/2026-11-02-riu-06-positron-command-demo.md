@@ -414,3 +414,9 @@ Added 2026-11-07 so the demo can be shown to people. Fork commit `99aa72fcb4`.
   was skipped).
 - **The TypeScript is not checked on Windows.** Path quoting in the runner is tested with vitest
   on one platform only.
+
+## Note (2026-11-09, RFU-1)
+
+The `q2 record export-positron` command this plan calls is now `q2 convert <doc> --to positron-ipynb -o <path>`
+(plan [RFU-1](2026-11-08-rfu-1-convert-command.md)); the extension update is RFU-7. An older q2 rejects `--to`
+with exit 2, which is how the extension detects a q2 that is too old.
