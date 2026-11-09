@@ -349,8 +349,10 @@ fn check_golden(name: &str, actual: &str) {
             path.display()
         )
     });
-    // Goldens are `eol=lf`; tolerate a CRLF checkout anyway.
+    // Goldens are `eol=lf`; tolerate a CRLF checkout anyway, and CRLF in the rendered text.
     let expected = expected.replace("\r\n", "\n");
+    let actual_lf = actual.replace("\r\n", "\n");
+    let actual = actual_lf.as_str();
     if expected != actual {
         let got = golden_dir().join(format!("{name}.actual.txt"));
         let _ = std::fs::write(&got, actual);
@@ -375,6 +377,18 @@ fn check_golden(name: &str, actual: &str) {
                 }
             }
         }
+        // No differing line but unequal text: a line-ending or trailing-newline difference.
+        let first_byte = expected
+            .bytes()
+            .zip(actual.bytes())
+            .position(|(e, a)| e != a)
+            .unwrap_or_else(|| expected.len().min(actual.len()));
+        let shown = format!(
+            "{shown}  (expected {} bytes, actual {} bytes, {} CR in actual, first differing byte {first_byte})\n",
+            expected.len(),
+            actual.len(),
+            actual.matches('\r').count()
+        );
         panic!(
             "native book output changed for `{name}`: diff {} against {}\nfirst differing lines:\n{shown}",
             path.display(),
@@ -385,12 +399,18 @@ fn check_golden(name: &str, actual: &str) {
 
 /// Replace machine- and run-specific text with stable placeholders.
 fn normalize(text: &str, root: &Path, temp: &Path) -> String {
-    let mut out = text.to_string();
+    // Separators first: a native path in a message is `C:\...\.tmpX` joined with `/absent.csl`,
+    // and the roots below are searched in `/` form.
+    let mut out = text.replace('\\', "/");
     for p in [root, temp] {
         let s = p.to_string_lossy().replace('\\', "/");
         out = out.replace(&s, "<ROOT>");
     }
-    out = out.replace('\\', "/");
+    // The OS wording of ENOENT: Windows says this where Unix says "No such file or directory".
+    out = out.replace(
+        "The system cannot find the file specified.",
+        "No such file or directory",
+    );
     let uuid = regex::Regex::new(r"urn:uuid:[0-9a-fA-F-]{36}").unwrap();
     out = uuid.replace_all(&out, "urn:uuid:<UUID>").into_owned();
     let uuid_bare = regex::Regex::new(
