@@ -16,6 +16,7 @@
 pub mod cell;
 pub mod cell_step;
 pub mod document;
+pub mod engine_attrs;
 pub mod expansion;
 pub mod figures;
 pub mod inline;
