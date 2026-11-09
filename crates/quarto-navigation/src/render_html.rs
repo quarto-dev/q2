@@ -394,18 +394,20 @@ pub enum SecondaryNavContent<'a> {
 /// navigation bar (bd-26bf3j1y). Hidden at `lg`+ by SCSS.
 ///
 /// Ported from Q1 `nav-before-body.ejs:64-93`, checked against the
-/// rendered output of a Q1 site rather than the template alone. Two
-/// deliberate differences, each recorded in the plan (the third — no
-/// `quartoToggleHeadroom` onclick hooks — was closed by bd-ersobfbt,
+/// rendered output of a Q1 site rather than the template alone. The
+/// differences recorded when it was ported, and their status (a third —
+/// no `quartoToggleHeadroom` onclick hooks — was closed by bd-ersobfbt,
 /// which ships headroom):
 ///
 /// - **No search button.** Q1's calls `window.quartoOpenSearch()`
 ///   unguarded; q2 has no search yet (bd-6cme), so the button would
 ///   throw on click.
-/// - **`role="navigation"` only.** Q1's template sets both
-///   `role="navigation"` and `role="link"` on the same anchor; its own
-///   DOM postprocessor drops the duplicate, so one attribute is
-///   byte-parity with Q1's *output*.
+/// - *(Resolved, bd-3bg8h1rx.)* The click-anywhere `a.flex-grow-1`
+///   carries no `role` and no `aria-*`, as in Q1 since quarto-cli
+///   #14826. It is a pointer convenience, not a focusable control
+///   (no `href`); `role="navigation"` made it an unnamed landmark,
+///   and the duplicated `aria-controls`/`aria-label` described a
+///   control that the button beside it already is.
 ///
 /// The toggle targets `.quarto-sidebar-collapse-item`, which
 /// [`sidebar_to_html`] puts on `nav#quarto-sidebar` and on the glass
@@ -423,16 +425,19 @@ pub fn secondary_nav_to_html(
     // sidebar drawer is open so the header can't slide away from under
     // it (Q1 `nav-before-body.ejs:66-84`, bd-ersobfbt). The `onclick` is
     // guarded — inert when headroom.min.js isn't shipped (`pinned:`).
-    let collapse_attrs = format!(
-        "data-bs-toggle=\"collapse\" data-bs-target=\".quarto-sidebar-collapse-item\" \
-         aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\" \
-         onclick=\"if (window.quartoToggleHeadroom) {{ window.quartoToggleHeadroom(); }}\""
-    );
+    // Only the button is the accessible control, so only it carries
+    // the `aria-*` attributes (Q1 #14826, bd-3bg8h1rx).
+    let collapse_attrs = "data-bs-toggle=\"collapse\" \
+         data-bs-target=\".quarto-sidebar-collapse-item\" \
+         onclick=\"if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }\"";
+    let button_aria =
+        format!("aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\"");
 
     let mut html = String::from("<nav class=\"quarto-secondary-nav\">\n");
     html.push_str("  <div class=\"container-fluid d-flex\">\n");
     html.push_str(&format!(
-        "    <button type=\"button\" class=\"quarto-btn-toggle btn\" role=\"button\" {collapse_attrs}>\n      \
+        "    <button type=\"button\" class=\"quarto-btn-toggle btn\" role=\"button\" \
+         {collapse_attrs} {button_aria}>\n      \
          <i class=\"bi bi-layout-text-sidebar-reverse\"></i>\n    </button>\n"
     ));
 
@@ -444,12 +449,12 @@ pub fn secondary_nav_to_html(
             // Q1 follows the trail with a full-width link so tapping
             // the empty space in the bar also opens the sidebar.
             html.push_str(&format!(
-                "    <a class=\"flex-grow-1\" role=\"navigation\" {collapse_attrs}></a>\n"
+                "    <a class=\"flex-grow-1\" {collapse_attrs}></a>\n"
             ));
         }
         SecondaryNavContent::CollapsedTitle(title) => {
             html.push_str(&format!(
-                "    <a class=\"flex-grow-1 no-decor\" role=\"navigation\" {collapse_attrs}>\n      \
+                "    <a class=\"flex-grow-1 no-decor\" {collapse_attrs}>\n      \
                  <h1 class=\"quarto-secondary-nav-title\">{}</h1>\n    </a>\n",
                 render_text(title)
             ));
@@ -502,6 +507,7 @@ pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
             appended_html: None,
             has_navbar: false,
             search: None,
+            toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
         },
     )
 }
@@ -534,7 +540,16 @@ pub struct SidebarRenderOptions<'a> {
     /// The search box to render in the sidebar, when search lives
     /// there (bd-6cme). `None` emits nothing.
     pub search: Option<SidebarSearch<'a>>,
+    /// Localized `toggle-section` term. A linked section's chevron
+    /// button is named `"{toggle_section_label}: {section text}"`
+    /// (Q1 `sidebaritem.ejs`, bd-3bg8h1rx). Callers without a language
+    /// table pass [`DEFAULT_TOGGLE_SECTION_LABEL`].
+    pub toggle_section_label: &'a str,
 }
+
+/// English `toggle-section` term (`resources/language/_language.yml`),
+/// the fallback for [`SidebarRenderOptions::toggle_section_label`].
+pub const DEFAULT_TOGGLE_SECTION_LABEL: &str = "Toggle section";
 
 /// How the sidebar's search box renders (Quarto 1 `sidebar.ejs:68-75`
 /// and `navtools.ejs:54-56`).
@@ -649,7 +664,16 @@ pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptio
         html.push_str("  <div class=\"sidebar-menu-container\">\n");
         html.push_str("    <ul class=\"list-unstyled mt-1\">\n");
         for (idx, entry) in sidebar.contents.iter().enumerate() {
-            render_sidebar_entry(&mut html, entry, 1, &[idx], sidebar.collapse_level);
+            render_sidebar_entry(
+                &mut html,
+                entry,
+                1,
+                &[idx],
+                &SectionRenderCtx {
+                    collapse_level: sidebar.collapse_level,
+                    toggle_section_label: opts.toggle_section_label,
+                },
+            );
         }
         html.push_str("    </ul>\n");
         html.push_str("  </div>\n");
@@ -1060,6 +1084,12 @@ fn render_icon(icon: &str) -> String {
     format!("<i class=\"bi bi-{}\"></i>", escape_attr(icon))
 }
 
+/// Sidebar-wide settings every nested section render needs.
+struct SectionRenderCtx<'a> {
+    collapse_level: u32,
+    toggle_section_label: &'a str,
+}
+
 /// Render one sidebar entry. `path` is the 0-based tree-path used to
 /// derive stable section anchors for the Bootstrap collapse targets.
 fn render_sidebar_entry(
@@ -1067,7 +1097,7 @@ fn render_sidebar_entry(
     entry: &SidebarEntry,
     depth: u32,
     path: &[usize],
-    collapse_level: u32,
+    ctx: &SectionRenderCtx,
 ) {
     match entry {
         SidebarEntry::Link { item } => {
@@ -1080,6 +1110,7 @@ fn render_sidebar_entry(
             id,
             contents,
             expanded,
+            active,
         } => {
             render_sidebar_section(
                 html,
@@ -1088,9 +1119,10 @@ fn render_sidebar_entry(
                 id.as_deref(),
                 contents,
                 *expanded,
+                *active,
                 depth,
                 path,
-                collapse_level,
+                ctx,
             );
         }
         SidebarEntry::Separator => {
@@ -1145,6 +1177,21 @@ fn render_sidebar_leaf(html: &mut String, item: &NavigationItem, active: bool, _
     html.push_str("      </li>\n");
 }
 
+/// Render a collapsible sidebar section (Q1 `sidebaritem.ejs`, as of
+/// quarto-cli #14826 / bd-3bg8h1rx).
+///
+/// The disclosure control is always a `<button>`, so it is reachable by
+/// keyboard and exposes the button role:
+///
+/// - **With `href`**: the header stays an `<a>` link, and a separate
+///   chevron `<button>` beside it is named
+///   `"{toggle-section}: {plain text}"` (the visible chevron says
+///   nothing).
+/// - **Without `href`**: one `<button>` holds both the label and the
+///   chevron — a single tab stop, named by its visible text.
+///
+/// Either way the label `<span>` carries `{id}-label`, which names the
+/// disclosed `<ul>` via `aria-labelledby`.
 #[allow(clippy::too_many_arguments)]
 fn render_sidebar_section(
     html: &mut String,
@@ -1153,67 +1200,79 @@ fn render_sidebar_section(
     explicit_id: Option<&str>,
     contents: &[SidebarEntry],
     expanded: bool,
+    active: bool,
     depth: u32,
     path: &[usize],
-    collapse_level: u32,
+    ctx: &SectionRenderCtx,
 ) {
     let section_id = explicit_id.map_or_else(|| default_section_id(path), |s| s.to_string());
+    let section_id_attr = escape_attr(&section_id);
     let label = text.map(render_text).unwrap_or_default();
+    let label_span =
+        format!("<span class=\"menu-text\" id=\"{section_id_attr}-label\">{label}</span>");
     // A section is collapsed by default when its depth is at or below
     // the user's `collapse-level`, unless `expanded: true` was set
     // (either by YAML or by the active-state expander).
-    let is_collapsed = !expanded && depth >= collapse_level;
+    let is_collapsed = !expanded && depth >= ctx.collapse_level;
+    let collapsed_class = if is_collapsed { " collapsed" } else { "" };
+    // Shared by both button forms: Bootstrap's collapse plugin keeps
+    // `aria-expanded` in sync, which also drives the chevron rotation
+    // in `_bootstrap-rules.scss`.
+    let disclosure_attrs = format!(
+        "data-bs-toggle=\"collapse\" data-bs-target=\"#{section_id_attr}\" \
+         aria-controls=\"{section_id_attr}\" aria-expanded=\"{}\"",
+        if is_collapsed { "false" } else { "true" }
+    );
 
     html.push_str("      <li class=\"sidebar-item sidebar-item-section\">\n");
     html.push_str("        <div class=\"sidebar-item-container\">\n");
 
-    // Header row: either a link (if href) or a data-toggle anchor.
     if let Some(href) = href {
+        // `active` marks the section's own page as current
+        // (bd-gtpwby98); only a linked header can be the current page.
+        let active_class = if active { " active" } else { "" };
         html.push_str(&format!(
-            "          <a href=\"{}\" class=\"sidebar-item-text sidebar-link\">{}</a>\n",
+            "          <a href=\"{}\" class=\"sidebar-item-text sidebar-link{}\">{}</a>\n",
             escape_attr(href),
-            label
+            active_class,
+            label_span
         ));
-    } else {
-        let collapsed_class = if is_collapsed { " collapsed" } else { "" };
+        // Attributes don't parse markup: name the button with the
+        // plain text of a formatted title (Q1 `item.plainText`).
+        let plain = text.and_then(|t| t.as_plain_text()).unwrap_or_default();
         html.push_str(&format!(
-            "          <a class=\"sidebar-item-text sidebar-link text-start{}\" \
-             data-bs-toggle=\"collapse\" data-bs-target=\"#{}\" role=\"navigation\" \
-             aria-expanded=\"{}\">{}</a>\n",
+            "          <button type=\"button\" class=\"sidebar-item-toggle text-start{}\" \
+             {} aria-label=\"{}: {}\">\n",
             collapsed_class,
-            escape_attr(&section_id),
-            if is_collapsed { "false" } else { "true" },
-            label
+            disclosure_attrs,
+            escape_attr(ctx.toggle_section_label),
+            escape_attr(&plain)
+        ));
+        html.push_str(
+            "            <i class=\"bi bi-chevron-right ms-2\" aria-hidden=\"true\"></i>\n",
+        );
+        html.push_str("          </button>\n");
+    } else {
+        html.push_str(&format!(
+            "          <button type=\"button\" class=\"sidebar-item-text sidebar-item-toggle \
+             sidebar-link text-start{}\" {}>{}<i class=\"bi bi-chevron-right\" \
+             aria-hidden=\"true\"></i></button>\n",
+            collapsed_class, disclosure_attrs, label_span
         ));
     }
-
-    // Toggle chevron (always emitted so the user has a click target
-    // for the collapse; inert in Phase 2, interactive in Phase 5).
-    let collapsed_class = if is_collapsed { " collapsed" } else { "" };
-    html.push_str(&format!(
-        "          <a class=\"sidebar-item-toggle text-start{}\" \
-         data-bs-toggle=\"collapse\" data-bs-target=\"#{}\" role=\"navigation\" \
-         aria-expanded=\"{}\" aria-label=\"Toggle section\">\n",
-        collapsed_class,
-        escape_attr(&section_id),
-        if is_collapsed { "false" } else { "true" }
-    ));
-    html.push_str("            <i class=\"bi bi-chevron-right ms-2\"></i>\n");
-    html.push_str("          </a>\n");
     html.push_str("        </div>\n");
 
     // Children.
     let show_class = if is_collapsed { "" } else { " show" };
     html.push_str(&format!(
-        "        <ul id=\"{}\" class=\"collapse list-unstyled sidebar-section depth{}{}\">\n",
-        escape_attr(&section_id),
-        depth,
-        show_class
+        "        <ul id=\"{section_id_attr}\" aria-labelledby=\"{section_id_attr}-label\" \
+         class=\"collapse list-unstyled sidebar-section depth{}{}\">\n",
+        depth, show_class
     ));
     for (child_idx, child) in contents.iter().enumerate() {
         let mut child_path = path.to_vec();
         child_path.push(child_idx);
-        render_sidebar_entry(html, child, depth + 1, &child_path, collapse_level);
+        render_sidebar_entry(html, child, depth + 1, &child_path, ctx);
     }
     html.push_str("        </ul>\n");
     html.push_str("      </li>\n");
@@ -2906,6 +2965,7 @@ mod tests {
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: false,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -2933,12 +2993,45 @@ mod tests {
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: true,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
         let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("aria-expanded=\"true\""));
         assert!(html.contains("class=\"collapse list-unstyled sidebar-section depth1 show\""));
+    }
+
+    /// bd-gtpwby98 — an active section header (the current page is the
+    /// section's own `href`) carries `active` on its header anchor; an
+    /// inactive one does not.
+    #[test]
+    fn sidebar_render_active_section_header() {
+        let section = |href: &str, active: bool| SidebarEntry::Section {
+            text: Some(s("Groups")),
+            href: Some(href.to_string()),
+            href_source: SourceInfo::for_test(),
+            id: None,
+            contents: vec![link("a.html", "A")],
+            expanded: true,
+            active,
+        };
+        let sb = Sidebar {
+            contents: vec![section("groups.html", true), section("other.html", false)],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb, "./");
+        assert!(
+            html.contains("href=\"groups.html\" class=\"sidebar-item-text sidebar-link active\""),
+            "active section header should have active class; html: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"other.html\" class=\"sidebar-item-text sidebar-link\""),
+            "inactive section header should render without active class; html: {}",
+            html
+        );
+        assert_eq!(html.matches("sidebar-link active").count(), 1);
     }
 
     /// Test 11 — active leaf has the `active` class on its anchor.
@@ -3039,6 +3132,7 @@ mod tests {
                 id: None,
                 contents: vec![link("guides/a.html", "A")],
                 expanded: true,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -3049,6 +3143,167 @@ mod tests {
         );
         // The chevron/toggle anchor is still present for the children.
         assert!(html.contains("sidebar-item-toggle"));
+    }
+
+    // --- Section disclosure controls (bd-3bg8h1rx, Q1 #14826) ----------
+
+    fn section(text: &str, href: Option<&str>, expanded: bool) -> SidebarEntry {
+        SidebarEntry::Section {
+            text: Some(s(text)),
+            href: href.map(str::to_string),
+            href_source: SourceInfo::for_test(),
+            id: None,
+            contents: vec![link("child.html", "Child")],
+            expanded,
+            active: false,
+        }
+    }
+
+    fn render_sections(contents: Vec<SidebarEntry>, toggle_section_label: &str) -> String {
+        let sb = Sidebar {
+            collapse_level: 1,
+            contents,
+            ..Sidebar::with_defaults()
+        };
+        sidebar_to_html_with_options(
+            &sb,
+            &SidebarRenderOptions {
+                home_url: "./",
+                appended_html: None,
+                has_navbar: false,
+                search: None,
+                toggle_section_label,
+            },
+        )
+    }
+
+    /// A linked section keeps its `<a>` header and gets a separate
+    /// `<button>` chevron named after the section (Q1 `sidebaritem.ejs`).
+    #[test]
+    fn sidebar_section_with_href_toggle_is_named_button() {
+        let html = render_sections(
+            vec![section("Groups", Some("groups.html"), true)],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        assert!(
+            html.contains(
+                "<a href=\"groups.html\" class=\"sidebar-item-text sidebar-link\">\
+                 <span class=\"menu-text\" id=\"quarto-sidebar-section-0-label\">Groups</span></a>"
+            ),
+            "header link must wrap a labelled menu-text span; got: {html}"
+        );
+        assert!(
+            html.contains(
+                "<button type=\"button\" class=\"sidebar-item-toggle text-start\" \
+                 data-bs-toggle=\"collapse\" data-bs-target=\"#quarto-sidebar-section-0\" \
+                 aria-controls=\"quarto-sidebar-section-0\" aria-expanded=\"true\" \
+                 aria-label=\"Toggle section: Groups\">"
+            ),
+            "chevron must be a named button controlling the section; got: {html}"
+        );
+        assert!(
+            html.contains("<i class=\"bi bi-chevron-right ms-2\" aria-hidden=\"true\"></i>"),
+            "chevron icon must be hidden from assistive tech; got: {html}"
+        );
+    }
+
+    /// An unlinked section is ONE button holding the label and the
+    /// chevron, so it is a single tab stop; its visible text names it.
+    #[test]
+    fn sidebar_section_without_href_is_single_button() {
+        let html = render_sections(
+            vec![section("Groups", None, false)],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        assert!(
+            html.contains(
+                "<button type=\"button\" class=\"sidebar-item-text sidebar-item-toggle \
+                 sidebar-link text-start collapsed\" data-bs-toggle=\"collapse\" \
+                 data-bs-target=\"#quarto-sidebar-section-0\" \
+                 aria-controls=\"quarto-sidebar-section-0\" aria-expanded=\"false\">\
+                 <span class=\"menu-text\" id=\"quarto-sidebar-section-0-label\">Groups</span>\
+                 <i class=\"bi bi-chevron-right\" aria-hidden=\"true\"></i></button>"
+            ),
+            "unlinked section must render one label+chevron button; got: {html}"
+        );
+        assert_eq!(
+            html.matches("sidebar-item-toggle").count(),
+            1,
+            "no separate chevron control for an unlinked section; got: {html}"
+        );
+    }
+
+    /// Every disclosed list is named by its own section label, and no
+    /// sidebar control is an `<a>` or a navigation landmark.
+    #[test]
+    fn sidebar_section_lists_are_labelled_and_no_anchor_toggles() {
+        let html = render_sections(
+            vec![
+                section("Linked", Some("l.html"), true),
+                section("Plain", None, true),
+            ],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        for id in ["quarto-sidebar-section-0", "quarto-sidebar-section-1"] {
+            assert!(
+                html.contains(&format!("<ul id=\"{id}\" aria-labelledby=\"{id}-label\"")),
+                "list {id} must be labelled by its section; got: {html}"
+            );
+        }
+        assert!(
+            !html.contains("role=\"navigation\""),
+            "toggles are not landmarks; got: {html}"
+        );
+        assert!(
+            !html.contains("<a class="),
+            "no href-less anchors may remain in the sidebar; got: {html}"
+        );
+    }
+
+    /// Formatted section titles feed the aria-label as plain text (Q1
+    /// uses `item.plainText`): attributes don't parse markup.
+    #[test]
+    fn sidebar_section_toggle_label_uses_plain_text() {
+        let text = ConfigValue::new_inlines(
+            vec![Inline::Strong(Strong {
+                content: vec![str_inline("Bold")],
+                source_info: SourceInfo::for_test(),
+            })],
+            SourceInfo::for_test(),
+        );
+        let html = render_sections(
+            vec![SidebarEntry::Section {
+                text: Some(text),
+                href: Some("b.html".to_string()),
+                href_source: SourceInfo::for_test(),
+                id: None,
+                contents: vec![link("child.html", "Child")],
+                expanded: true,
+                active: false,
+            }],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        assert!(
+            html.contains("aria-label=\"Toggle section: Bold\""),
+            "aria-label must be plain text; got: {html}"
+        );
+        assert!(
+            html.contains("<strong>Bold</strong>"),
+            "visible label keeps its formatting; got: {html}"
+        );
+    }
+
+    /// The `toggle-section` term is localized and attribute-escaped.
+    #[test]
+    fn sidebar_section_toggle_label_is_localized() {
+        let html = render_sections(
+            vec![section("Gruppen", Some("g.html"), true)],
+            "Abschnitt \"umschalten\"",
+        );
+        assert!(
+            html.contains("aria-label=\"Abschnitt &quot;umschalten&quot;: Gruppen\""),
+            "localized, escaped toggle label expected; got: {html}"
+        );
     }
 
     /// Active-state ancestor expansion is rendered correctly: an
@@ -3065,6 +3320,7 @@ mod tests {
                 id: None,
                 contents: vec![active_link("guide.html", "Guide")],
                 expanded: true, // set by active-state expansion
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -3182,6 +3438,7 @@ mod tests {
                 appended_html: None,
                 has_navbar: true,
                 search: None,
+                toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
             },
         );
         assert!(
@@ -3219,6 +3476,7 @@ mod tests {
                 appended_html: None,
                 has_navbar: false,
                 search: None,
+                toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
             },
         );
         assert!(
@@ -3715,6 +3973,41 @@ mod secondary_nav_tests {
             html.contains("<a class=\"flex-grow-1\""),
             "Q1 follows the trail with a flex-grow-1 toggle link; got: {html}"
         );
+    }
+
+    /// bd-3bg8h1rx (Q1 #14826): the click-anywhere `a.flex-grow-1` is
+    /// not a landmark and not a named control — only the real toggle
+    /// button carries the role/aria attributes.
+    #[test]
+    fn secondary_nav_flex_link_carries_no_role_or_aria() {
+        let title = s("Page");
+        for content in [
+            SecondaryNavContent::Breadcrumbs("<nav></nav>"),
+            SecondaryNavContent::CollapsedTitle(&title),
+        ] {
+            let html = secondary_nav_to_html(content, "Toggle sidebar navigation", None);
+            assert!(
+                !html.contains("role=\"navigation\""),
+                "flex-grow link must not be a navigation landmark; got: {html}"
+            );
+            let link_start = html.find("<a class=\"flex-grow-1").expect("flex-grow link");
+            let link_tag = &html[link_start..link_start + html[link_start..].find('>').unwrap()];
+            for attr in ["aria-controls", "aria-expanded", "aria-label", "role="] {
+                assert!(
+                    !link_tag.contains(attr),
+                    "flex-grow link must not carry {attr}; got: {link_tag}"
+                );
+            }
+            assert!(
+                link_tag.contains("data-bs-target=\".quarto-sidebar-collapse-item\""),
+                "flex-grow link still toggles the sidebar; got: {link_tag}"
+            );
+            assert_eq!(
+                html.matches("aria-controls=\"quarto-sidebar\"").count(),
+                1,
+                "only the button names what it controls; got: {html}"
+            );
+        }
     }
 
     /// `bread-crumbs: false` swaps the trail for Q1's collapsed page

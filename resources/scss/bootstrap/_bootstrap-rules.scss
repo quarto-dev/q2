@@ -573,6 +573,80 @@ $sidebar-section-bottom-margin: 0.2em !default;
   width: 100%;
 }
 
+.sidebar-item-toggle:hover {
+  cursor: pointer;
+}
+
+// Section disclosure controls are <button> elements so that they are
+// reachable by keyboard and expose the button role (bd-3bg8h1rx; Q1
+// `quarto-nav.scss:374-410`, quarto-cli #14826). Strip the browser's
+// default button styling so they still look like the sidebar links
+// beside them.
+.sidebar-item .sidebar-item-toggle,
+.sidebar-item button.sidebar-item-text {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+
+// In a section without its own page, the label and the chevron are one
+// control, so that button lays out its own children instead of relying
+// on the flex container. `margin-left: auto` keeps the chevron hard
+// right whether or not the item also has a navicon.
+//
+// `align-items: baseline` is deliberate, not a typo for `center`: Q1
+// chose it to reproduce the line box of the inline `<a>` the button
+// replaced, so row heights and the chevron position are unchanged.
+// `center` renders 1-2px shorter per section.
+.sidebar-item button.sidebar-item-text {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+}
+
+.sidebar-item button.sidebar-item-text > .bi-chevron-right {
+  margin-left: auto;
+  padding-left: 0.5rem;
+}
+
+// Section disclosure chevron (`button.sidebar-item-toggle > i.bi-chevron-right`).
+// Ported from Q1 `quarto-nav.scss:412-432` and `756-762` (bd-rl7r38pw).
+// Bootstrap's collapse plugin keeps `aria-expanded` on the toggle in sync
+// with the section, so the chevron points down while the section is open.
+// `test_sidebar_toggle_chevron_rotates_when_expanded` (quarto-sass) checks
+// the compiled CSS.
+.sidebar-item .sidebar-item-toggle .bi {
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.sidebar-item .sidebar-item-toggle .bi-chevron-right::before {
+  transition: transform 200ms ease;
+}
+
+.sidebar-item
+  .sidebar-item-toggle[aria-expanded="false"]
+  .bi-chevron-right::before {
+  transform: none;
+}
+
+.sidebar-item
+  .sidebar-item-toggle[aria-expanded="true"]
+  .bi-chevron-right::before {
+  transform: rotate(90deg);
+}
+
+.sidebar-section .bi-chevron-right {
+  vertical-align: middle;
+}
+
+.sidebar-section .bi-chevron-right::before {
+  font-size: 0.9em;
+}
+
 // Sidebar text colors. The link itself inherits `color` from the
 // surrounding `div.sidebar-item-container`; the active/hover/disabled
 // states are scoped to that container too. The four `$sidebar-*-color`

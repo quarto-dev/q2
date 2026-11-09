@@ -488,5 +488,19 @@
 # those five rules: rendering with the SCSS hunk removed reproduces the
 # previous hash (9fc3c3c9…) exactly. doc.html hash unchanged: the baseline
 # document has no lightbox images, so nothing is wrapped or shipped.
+#
+# Re-captured 2026-11-07 (bd-rl7r38pw): doc_files/styles.css gained the
+# sidebar section chevron rules ported from Q1 `quarto-nav.scss:412-432,
+# 756-762` (`.sidebar-item-toggle[aria-expanded=true] .bi-chevron-right::before
+# { transform: rotate(90deg) }` and friends). Verified the only delta is those
+# six rules: removing them from the new styles.css reproduces the previous
+# hash (187803ae…) exactly. doc.html hash unchanged.
+# Re-captured 2026-11-07 (bd-3bg8h1rx): doc_files/styles.css gained the
+# sidebar section-toggle button reset and layout rules ported from Q1
+# `quarto-nav.scss:374-410` (quarto-cli #14826: `.sidebar-item
+# .sidebar-item-toggle, .sidebar-item button.sidebar-item-text { background:
+# none; border: none; … }` and friends). Verified the only delta is that SCSS
+# hunk: rendering with it removed reproduces the previous hash (27ffc075…)
+# exactly. doc.html hash unchanged.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css 187803ae0e0f8ff281bb3baaa6f22522781ec900b04eca68ea2b11b993980c0b
+doc_files/styles.css d9a3a2debf57bcb1b7c19f715bd8961035ba67d921ff55b0acfcefc4df38ce9d

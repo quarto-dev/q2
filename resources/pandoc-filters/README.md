@@ -43,9 +43,9 @@ This directory contains Lua filters from Quarto 1 that are used with Pandoc to p
   chain. Materialized by
   `crate::pandoc_filters::bundle::extract_typst_template`, independent of
   the `filters/`/`pandoc/datadir/` layout above (`--template` and
-  `--data-dir`/`-L` are unrelated pandoc mechanisms). No Q2 customizations
-  exist here yet, so there is no corresponding "Ours vs. pinned" entry
-  below — if that changes, add one.
+  `--data-dir`/`-L` are unrelated pandoc mechanisms). One Q2 customization
+  lives here (the editorial-mark functions, GH #1102); see its "Ours vs.
+  pinned" entries below.
 
 ### Required runtime layout
 
@@ -256,6 +256,17 @@ The following files and modifications are *not* from `v1.11.6` and should be pre
   param: the Rust book merge has already re-anchored chapter-relative image
   targets (`project/book/images.rs`), and doing it again prefixed the chapter
   directory twice.
+- `resources/pandoc-filters/typst-template/editorial-marks.typ` — new (ours,
+  GH #1102; no upstream counterpart, since editorial marks are q2-only
+  syntax). Defines `quarto-insert`, `quarto-delete`, `quarto-highlight`,
+  `quarto-edit-comment` and their `-block` variants, which
+  `crate::transforms::EditorialMarksTypstTransform` calls. Users restyle the
+  marks by redefining them in a raw-Typst `header-includes`.
+- `resources/pandoc-filters/typst-template/definitions.typ` — patched (ours,
+  GH #1102, marked `QUARTO2-PATCH`). Two lines appended at the end: a
+  pandoc-template comment and `$editorial-marks.typ()$`. The include hangs
+  off `definitions.typ` rather than `template.typ` so a user's custom
+  `template:` (which replaces only `template.typ`) still gets the functions.
 
 Upstreamed and no longer ours: `modules/typst_css.lua`'s generic-font-family
 resolution (bd-hkf3r8i1) shipped in quarto-cli 1.11.6 (742f015bc) and is now

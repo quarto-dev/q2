@@ -9,10 +9,11 @@
  * appending a bibliography section.
  */
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use biblatex::{Bibliography, ChunksExt, DateValue, EntryType, PermissiveType};
-use quarto_citeproc::output::{Output, Tag};
+use quarto_citeproc::output::{Output, QuoteConfig, Tag};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::StyleClass;
 use quarto_csl::parse_csl;
@@ -133,22 +134,30 @@ pub fn apply_citeproc_filter(
     // Load CSL style
     let style = load_csl_style(&config, base_dir, runtime)?;
 
-    // Create processor
-    let mut processor = Processor::new(style);
-
-    // Add inline references from metadata
-    if !config.references.is_empty() {
-        processor.add_references(config.references.clone());
-    }
-
-    // Load bibliography references from files
-    for bib_path in &config.bibliography {
-        let references = load_bibliography(bib_path, base_dir, runtime)?;
-        processor.add_references(references);
-    }
+    // Create processor. The document `lang` overrides the style's
+    // `default-locale`, as in Pandoc and Quarto 1 (issue #1110).
+    let mut processor = Processor::with_lang(style, config.lang.as_deref());
 
     // Collect all citations from the document
     let citations = collect_citations(&pandoc);
+
+    // Only references the document cites or names in `nocite` reach the
+    // processor, and so the bibliography (issue #1109).
+    let scope = BibliographyScope::of(&pandoc, &citations, &config);
+
+    // Inline references from metadata first, then the bibliography files.
+    let mut loaded: Vec<Reference> = config
+        .references
+        .iter()
+        .filter(|r| scope.includes(&r.id))
+        .cloned()
+        .collect();
+    for bib_path in &config.bibliography {
+        let references = load_bibliography(bib_path, base_dir, runtime)?;
+        loaded.extend(references.into_iter().filter(|r| scope.includes(&r.id)));
+    }
+    let loaded_ids: Vec<String> = loaded.iter().map(|r| r.id.clone()).collect();
+    processor.add_references(loaded);
 
     // book-projects P6: harvest the cited ids (deduplicated, first-cited
     // order) and their full References before disambiguation mutates the
@@ -182,13 +191,23 @@ pub fn apply_citeproc_filter(
     // `link-citations` applies to in-text (author-date, numeric) styles
     // only, as in Pandoc.
     let link_citations = config.link_citations && processor.style.class != StyleClass::Note;
+    let quotes = processor.get_quote_config();
     let rendered = RenderedCitations {
         content: outputs
             .into_iter()
-            .map(|output| render_citation(output, link_citations))
+            .map(|output| render_citation(output, link_citations, &quotes))
             .collect(),
         keep_cite_nodes: keeps_resolved_cite_nodes(target_format),
     };
+
+    // Number the uncited (`nocite`) references after the cited ones, in
+    // load order, as Pandoc's citeproc does; numeric styles would otherwise
+    // print them without a number.
+    // `get_initial_citation_number` is a no-op for an already-numbered
+    // (cited) id.
+    for id in &loaded_ids {
+        processor.get_initial_citation_number(id);
+    }
 
     // Transform the document, filling each Cite with its rendered content
     let mut pandoc = pandoc;
@@ -624,6 +643,102 @@ fn datetime_to_csl_date_parts(datetime: biblatex::Datetime) -> Vec<i32> {
     parts
 }
 
+/// Which loaded references may reach the bibliography, following Pandoc's
+/// `getReferences` (Text/Pandoc/Citeproc.hs): those cited anywhere in the
+/// document, metadata included (which covers `nocite: "@a, @b"` parsed
+/// as citations), plus ids in a plain-string `nocite` (e.g.
+/// `nocite: !str "@a"`). A `*` id in `nocite` admits every reference.
+enum BibliographyScope {
+    All,
+    Ids(HashSet<String>),
+}
+
+impl BibliographyScope {
+    fn of(pandoc: &Pandoc, body_citations: &[Citation], config: &CiteprocConfig) -> Self {
+        let mut ids: HashSet<String> = body_citations
+            .iter()
+            .flat_map(|c| c.items.iter().map(|item| item.id.clone()))
+            .collect();
+
+        // `nocite` alone decides the wildcard, so collect it separately.
+        let mut nocite_ids: Vec<String> = Vec::new();
+        if let Some(nocite) = meta_entry(&pandoc.meta, "nocite") {
+            nocite_ids.extend(citation_ids_in_config_value(nocite));
+        }
+        // A plain-string value has no `Cite` nodes; read its `@key` tokens.
+        // (A parsed value flattens to text without its `Cite`s, so this
+        // adds nothing for it.)
+        for text in &config.nocite {
+            nocite_ids.extend(
+                text.split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+                    .filter_map(|token| token.strip_prefix('@'))
+                    .filter(|id| !id.is_empty())
+                    .map(str::to_string),
+            );
+        }
+        if nocite_ids.iter().any(|id| id == "*") {
+            return BibliographyScope::All;
+        }
+        ids.extend(nocite_ids);
+
+        // Citations elsewhere in the metadata count as cited.
+        if let ConfigValueKind::Map(entries) = &pandoc.meta.value {
+            for entry in entries.iter().filter(|e| e.key != "nocite") {
+                ids.extend(citation_ids_in_config_value(&entry.value));
+            }
+        }
+        BibliographyScope::Ids(ids)
+    }
+
+    fn includes(&self, id: &str) -> bool {
+        match self {
+            BibliographyScope::All => true,
+            BibliographyScope::Ids(ids) => ids.contains(id),
+        }
+    }
+}
+
+fn meta_entry<'a>(meta: &'a ConfigValue, key: &str) -> Option<&'a ConfigValue> {
+    match &meta.value {
+        ConfigValueKind::Map(entries) => entries.iter().find(|e| e.key == key).map(|e| &e.value),
+        _ => None,
+    }
+}
+
+/// Ids of every `Cite` inside a metadata value, at any depth.
+fn citation_ids_in_config_value(value: &ConfigValue) -> Vec<String> {
+    let mut citations = Vec::new();
+    let mut note_number = 1;
+    fn walk(value: &ConfigValue, citations: &mut Vec<Citation>, note_number: &mut i32) {
+        match &value.value {
+            ConfigValueKind::PandocInlines(inlines) => {
+                collect_citations_from_inlines(inlines, citations, note_number)
+            }
+            ConfigValueKind::PandocBlocks(blocks) => {
+                for b in blocks {
+                    collect_citations_from_block(b, citations, note_number);
+                }
+            }
+            ConfigValueKind::Array(items) => {
+                for item in items {
+                    walk(item, citations, note_number);
+                }
+            }
+            ConfigValueKind::Map(entries) => {
+                for entry in entries {
+                    walk(&entry.value, citations, note_number);
+                }
+            }
+            _ => {}
+        }
+    }
+    walk(value, &mut citations, &mut note_number);
+    citations
+        .into_iter()
+        .flat_map(|c| c.items.into_iter().map(|item| item.id))
+        .collect()
+}
+
 /// Collect all citations from the document.
 fn collect_citations(pandoc: &Pandoc) -> Vec<Citation> {
     let mut citations = Vec::new();
@@ -890,7 +1005,7 @@ fn keeps_resolved_cite_nodes(target_format: &str) -> bool {
 /// Render one citation's Output AST to inlines. With `link_citations`,
 /// each cited item links to its bibliography entry (`#ref-<id>`, the id
 /// [`generate_bibliography`] gives the entry's div).
-fn render_citation(output: Output, link_citations: bool) -> Inlines {
+fn render_citation(output: Output, link_citations: bool, quotes: &QuoteConfig) -> Inlines {
     let mut inlines = if link_citations {
         let mut inlines = link_cited_items(output).to_inlines();
         mark_bibliography_links(&mut inlines);
@@ -898,8 +1013,70 @@ fn render_citation(output: Output, link_citations: bool) -> Inlines {
     } else {
         output.to_inlines()
     };
+    localize_quotes(&mut inlines, quotes, 0);
     merge_adjacent_strs(&mut inlines);
     inlines
+}
+
+/// Replace each `Quoted` node in citeproc output with a `Span` holding the
+/// locale's quote marks as text, as Pandoc's citeproc does (issue #1110):
+/// `‘A page’` in Dutch, `„A page“` in German, `“A Page”` in English. A
+/// `Quoted` node would let the writer pick its own (English) marks.
+/// Nested quotes alternate outer and inner marks.
+fn localize_quotes(inlines: &mut Inlines, quotes: &QuoteConfig, depth: usize) {
+    for inline in inlines.iter_mut() {
+        match inline {
+            Inline::Emph(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Strong(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Underline(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Strikeout(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Superscript(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Subscript(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::SmallCaps(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Span(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Link(x) => localize_quotes(&mut x.content, quotes, depth),
+            Inline::Quoted(q) => {
+                let (open, close) = if depth.is_multiple_of(2) {
+                    (&quotes.outer_open, &quotes.outer_close)
+                } else {
+                    (&quotes.inner_open, &quotes.inner_close)
+                };
+                let mut content = std::mem::take(&mut q.content);
+                localize_quotes(&mut content, quotes, depth + 1);
+                let mut wrapped = Vec::with_capacity(content.len() + 2);
+                wrapped.push(quote_str(open));
+                wrapped.extend(content);
+                wrapped.push(quote_str(close));
+                *inline = Inline::Span(crate::pandoc::Span {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                    content: wrapped,
+                    source_info: q.source_info.clone(),
+                    attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
+fn quote_str(text: &str) -> Inline {
+    Inline::Str(crate::pandoc::Str {
+        text: text.to_string(),
+        source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc()),
+    })
+}
+
+/// [`localize_quotes`] over a bibliography entry's blocks. Unlike citations,
+/// bibliography entries keep their `Str` chunks unmerged, as before.
+fn localize_quotes_in_blocks(blocks: &mut [Block], quotes: &QuoteConfig) {
+    for block in blocks {
+        match block {
+            Block::Plain(x) => localize_quotes(&mut x.content, quotes, 0),
+            Block::Paragraph(x) => localize_quotes(&mut x.content, quotes, 0),
+            Block::Div(x) => localize_quotes_in_blocks(&mut x.content, quotes),
+            _ => {}
+        }
+    }
 }
 
 /// Merge each run of adjacent `Str` inlines into one, at every level, as
@@ -1242,9 +1419,11 @@ pub fn generate_bibliography(processor: &mut Processor) -> Result<Vec<Block>, Ci
     }
 
     // Convert each entry to blocks
+    let quotes = processor.get_quote_config();
     let mut bib_blocks = Vec::new();
     for (id, output) in entries {
-        let blocks = output.to_blocks();
+        let mut blocks = output.to_blocks();
+        localize_quotes_in_blocks(&mut blocks, &quotes);
         if !blocks.is_empty() {
             // Wrap each entry in a Div with the reference ID
             // Attr is a tuple: (id, classes, attributes)
@@ -4290,6 +4469,33 @@ mod tests {
     }
 
     #[test]
+    fn localize_quotes_uses_locale_marks_and_alternates_when_nested() {
+        // Issue #1110: Pandoc's citeproc writes the locale's quote marks as
+        // text in a Span; nested quotes take the inner marks.
+        let quotes = QuoteConfig {
+            outer_open: "„".to_string(),
+            outer_close: "“".to_string(),
+            inner_open: "‚".to_string(),
+            inner_close: "‘".to_string(),
+        };
+        let quoted = |content: Inlines| {
+            Inline::Quoted(Quoted {
+                quote_type: QuoteType::DoubleQuote,
+                content,
+                source_info: si(),
+            })
+        };
+        let mut inlines = vec![quoted(vec![
+            str_inline("a "),
+            quoted(vec![str_inline("b")]),
+        ])];
+        localize_quotes(&mut inlines, &quotes, 0);
+        merge_adjacent_strs(&mut inlines);
+        assert_eq!(inlines_to_text(&inlines), "„a ‚b‘“");
+        assert!(matches!(&inlines[0], Inline::Span(_)));
+    }
+
+    #[test]
     fn bibliography_is_read_through_the_runtime() {
         let rt = MemRuntime::new(&[("/mem/refs.bib", MEM_BIB)]);
         let refs = load_bibliography("refs.bib", Path::new("/mem"), &rt).unwrap();
@@ -4358,5 +4564,232 @@ mod tests {
         let msg = err.to_string();
         let expected = Path::new("/mem").join("absent.csl");
         assert!(msg.contains(&expected.display().to_string()), "{msg}");
+    }
+
+    // ---- Bibliography scope: cited + nocite only (issue #1109, bd-o5zfde39) ----
+    //
+    // Pandoc / Quarto 1 list only references the document cites (anywhere,
+    // metadata included) plus those named in `nocite`; `nocite: "@*"` lists
+    // all of them. See Pandoc's `getReferences` in Text/Pandoc/Citeproc.hs.
+
+    const SCOPE_BIB: &str = "@book{uncited,\n  author = {Doe, John},\n  title = {Uncited Work},\n  year = {2021}\n}\n\n\
+@book{cited,\n  author = {Smith, Jane},\n  title = {Cited Work},\n  year = {2020}\n}\n\n\
+@book{extra,\n  author = {Brown, Bob},\n  title = {Nocite Work},\n  year = {2018}\n}\n";
+
+    /// A numeric style whose bibliography has no `<sort>`: entries print
+    /// `[n]` then the title, in citation-number order of registration.
+    const NUMERIC_CSL: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="in-text" default-locale="en-US">
+  <info><title>Numeric</title><id>numeric</id><updated>2026-01-01T00:00:00+00:00</updated></info>
+  <citation><layout><text variable="citation-number" prefix="[" suffix="]"/></layout></citation>
+  <bibliography><layout><text variable="citation-number" prefix="[" suffix="] "/><text variable="title"/></layout></bibliography>
+</style>
+"#;
+
+    fn meta_inlines(inlines: Vec<Inline>) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::PandocInlines(inlines),
+            source_info: quarto_source_map::SourceInfo::for_test(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    /// Run the filter on a document citing `cited` against `SCOPE_BIB`, with
+    /// `extra_meta` added to the metadata.
+    fn render_scoped(extra_meta: Vec<(&str, ConfigValue)>, files: &[(&str, &str)]) -> Pandoc {
+        render_citing(&["cited"], extra_meta, files)
+    }
+
+    /// Like [`render_scoped`], but the body cites `cited_ids`, one
+    /// citation each, in order.
+    fn render_citing(
+        cited_ids: &[&str],
+        extra_meta: Vec<(&str, ConfigValue)>,
+        files: &[(&str, &str)],
+    ) -> Pandoc {
+        let mut all_files = vec![("/mem/refs.bib", SCOPE_BIB)];
+        all_files.extend_from_slice(files);
+        let rt = MemRuntime::new(&all_files);
+        let mut meta = vec![("bibliography", meta_string("refs.bib"))];
+        meta.extend(extra_meta);
+        let pandoc = Pandoc {
+            meta: meta_map(meta),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: cited_ids.iter().map(|id| make_cite(id)).collect(),
+                source_info: si(),
+            })],
+        };
+        let (out, _, _, _) =
+            apply_citeproc_filter(pandoc, ASTContext::new(), "html", Path::new("/mem"), &rt)
+                .unwrap();
+        out
+    }
+
+    /// The bibliography entries (`ref-<id>` Divs) in output order, with
+    /// each entry's plain text.
+    fn bibliography_entries(pandoc: &Pandoc) -> Vec<(String, String)> {
+        fn walk(blocks: &[Block], out: &mut Vec<(String, String)>) {
+            for block in blocks {
+                if let Block::Div(d) = block {
+                    if let Some(id) = d.attr.0.strip_prefix("ref-") {
+                        let mut text = String::new();
+                        for b in &d.content {
+                            match b {
+                                Block::Paragraph(p) => text.push_str(&inlines_to_text(&p.content)),
+                                Block::Plain(p) => text.push_str(&inlines_to_text(&p.content)),
+                                _ => {}
+                            }
+                        }
+                        out.push((id.to_string(), text));
+                    } else {
+                        walk(&d.content, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&pandoc.blocks, &mut out);
+        out
+    }
+
+    fn entry_ids(pandoc: &Pandoc) -> Vec<String> {
+        let mut ids: Vec<String> = bibliography_entries(pandoc)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    #[test]
+    fn bibliography_lists_only_cited_references() {
+        let out = render_scoped(vec![], &[]);
+        assert_eq!(entry_ids(&out), vec!["cited"]);
+    }
+
+    #[test]
+    fn nocite_citation_adds_its_reference() {
+        let out = render_scoped(
+            vec![("nocite", meta_inlines(vec![make_cite("extra")]))],
+            &[],
+        );
+        assert_eq!(entry_ids(&out), vec!["cited", "extra"]);
+    }
+
+    #[test]
+    fn nocite_wildcard_citation_lists_every_reference() {
+        let out = render_scoped(vec![("nocite", meta_inlines(vec![make_cite("*")]))], &[]);
+        assert_eq!(entry_ids(&out), vec!["cited", "extra", "uncited"]);
+    }
+
+    #[test]
+    fn nocite_plain_string_ids_add_their_references() {
+        // `nocite: !str "@extra, @uncited"` stays a plain string.
+        let out = render_scoped(vec![("nocite", meta_string("@extra, @uncited"))], &[]);
+        assert_eq!(entry_ids(&out), vec!["cited", "extra", "uncited"]);
+    }
+
+    #[test]
+    fn nocite_plain_string_wildcard_lists_every_reference() {
+        // `nocite: !str "@*"`, the workaround until `@*` parses (bd-ae2i9ei1).
+        let out = render_scoped(vec![("nocite", meta_string("@*"))], &[]);
+        assert_eq!(entry_ids(&out), vec!["cited", "extra", "uncited"]);
+    }
+
+    #[test]
+    fn citation_in_other_metadata_counts_as_cited() {
+        // Pandoc collects citation ids from the whole document, metadata
+        // included.
+        let out = render_scoped(
+            vec![("abstract", meta_inlines(vec![make_cite("extra")]))],
+            &[],
+        );
+        assert_eq!(entry_ids(&out), vec!["cited", "extra"]);
+    }
+
+    #[test]
+    fn inline_references_are_scoped_too() {
+        let reference = |id: &str| {
+            meta_map(vec![
+                ("id", meta_string(id)),
+                ("type", meta_string("book")),
+                ("title", meta_string(id)),
+            ])
+        };
+        let out = render_scoped(
+            vec![
+                (
+                    "references",
+                    meta_array(vec![reference("inline-uncited"), reference("inline-extra")]),
+                ),
+                ("nocite", meta_inlines(vec![make_cite("inline-extra")])),
+            ],
+            &[],
+        );
+        assert_eq!(entry_ids(&out), vec!["cited", "inline-extra"]);
+    }
+
+    #[test]
+    fn nocite_entries_are_numbered_after_cited_ones() {
+        let out = render_scoped(
+            vec![
+                ("csl", meta_string("numeric.csl")),
+                ("nocite", meta_inlines(vec![make_cite("extra")])),
+            ],
+            &[("/mem/numeric.csl", NUMERIC_CSL)],
+        );
+        let entries = bibliography_entries(&out);
+        assert_eq!(
+            entries,
+            vec![
+                ("cited".to_string(), "[1] Cited work".to_string()),
+                ("extra".to_string(), "[2] Nocite work".to_string()),
+            ]
+        );
+    }
+
+    // ---- Unsorted styles list by citation number (bd-mumobar8) ----
+    //
+    // `NUMERIC_CSL` has no bibliography `<sort>`. Pandoc lists cited entries
+    // by citation number, then uncited (`nocite`) entries in load order,
+    // whatever order `nocite` names them in. `SCOPE_BIB` load order is
+    // `uncited`, `cited`, `extra`.
+
+    #[test]
+    fn unsorted_style_lists_cited_entries_in_citation_order() {
+        let out = render_citing(
+            &["extra", "cited"],
+            vec![("csl", meta_string("numeric.csl"))],
+            &[("/mem/numeric.csl", NUMERIC_CSL)],
+        );
+        assert_eq!(
+            bibliography_entries(&out),
+            vec![
+                ("extra".to_string(), "[1] Nocite work".to_string()),
+                ("cited".to_string(), "[2] Cited work".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn unsorted_style_lists_nocite_entries_in_load_order() {
+        let out = render_scoped(
+            vec![
+                ("csl", meta_string("numeric.csl")),
+                (
+                    "nocite",
+                    meta_inlines(vec![make_cite("extra"), make_cite("uncited")]),
+                ),
+            ],
+            &[("/mem/numeric.csl", NUMERIC_CSL)],
+        );
+        assert_eq!(
+            bibliography_entries(&out),
+            vec![
+                ("cited".to_string(), "[1] Cited work".to_string()),
+                ("uncited".to_string(), "[2] Uncited work".to_string()),
+                ("extra".to_string(), "[3] Nocite work".to_string()),
+            ]
+        );
     }
 }

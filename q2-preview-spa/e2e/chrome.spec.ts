@@ -456,6 +456,40 @@ test('TOC active link follows scroll and nested lists collapse', async ({ page }
     });
 });
 
+// bd-d5gss9pz: each section heading names its section in `data-anchor-id`
+// (AnchorSectionsTransform), and `quarto-toc.js` uses it to reveal the
+// heading's anchor link when the TOC entry is clicked (Q1 quarto.js
+// `reveal-anchorjs-link`). The class goes away once the pointer leaves
+// the heading.
+test('clicking a TOC link reveals the heading anchor', async ({ page }) => {
+    server = await startPreviewServer({
+        fixtureFiles: [
+            {
+                path: 'index.qmd',
+                content:
+                    '---\ntitle: Anchor Page\ntoc: true\n---\n\n' +
+                    '## Section A\n\nA content.\n\n## Section B\n\nB content.\n',
+            },
+        ],
+    });
+
+    await page.goto(server.url);
+    await waitForInnerHeading(page, 'Anchor Page');
+    await waitForInnerSelector(page, 'nav#TOC a.active');
+    await waitForInnerSelector(page, 'h2[data-anchor-id="section-b"]');
+
+    const frame = page.frameLocator('iframe');
+    const heading = frame.locator('h2[data-anchor-id="section-b"]');
+    await expect(heading).not.toHaveClass(/reveal-anchorjs-link/);
+
+    await frame.locator('nav#TOC a[href$="#section-b"]').click();
+    await expect(heading).toHaveClass(/reveal-anchorjs-link/);
+
+    await heading.hover();
+    await frame.locator('h1').hover();
+    await expect(heading).not.toHaveClass(/reveal-anchorjs-link/);
+});
+
 test('favicon link lands in iframe document.head', async ({ page }) => {
     // Inline the favicon as a tiny PNG fixture so the project actually
     // has a file at that path. We only assert the `<link rel="icon">`
