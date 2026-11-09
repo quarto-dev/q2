@@ -38,9 +38,14 @@ fn orange_book_lua_path() -> String {
 /// `inject_user_filters_at_entry_points` — to test whether that path works).
 fn params_with_orange_book_entry_point() -> String {
     let path = orange_book_lua_path();
-    format!(
-        r#"{{"quarto-filters":{{"entryPoints":[{{"at":"post-quarto","path":"{path}","type":"lua"}}]}},"language":{{}},"active-filters":{{}},"results-file":"/dev/null"}}"#
-    )
+    // `json!` escapes the backslashes of a Windows path; a hand-built string would not.
+    serde_json::json!({
+        "quarto-filters": {"entryPoints": [{"at": "post-quarto", "path": path, "type": "lua"}]},
+        "language": {},
+        "active-filters": {},
+        "results-file": "/dev/null"
+    })
+    .to_string()
 }
 
 /// RED (until Q2's vendored `main.lua` exposes a working
@@ -160,9 +165,13 @@ fn pre_render_entry_point_round_trips_through_pandocs_main_lua_chain() {
         .expect("synthetic filter temp file must exist")
         .to_string_lossy()
         .into_owned();
-    let params = format!(
-        r#"{{"quarto-filters":{{"entryPoints":[{{"at":"pre-render","path":"{filter_path}","type":"lua"}}]}},"language":{{}},"active-filters":{{}},"results-file":"/dev/null"}}"#
-    );
+    let params = serde_json::json!({
+        "quarto-filters": {"entryPoints": [{"at": "pre-render", "path": filter_path, "type": "lua"}]},
+        "language": {},
+        "active-filters": {},
+        "results-file": "/dev/null"
+    })
+    .to_string();
     let out = tempfile::Builder::new()
         .suffix(".typ")
         .tempfile()
