@@ -57,7 +57,7 @@ checked out in other worktrees).
 
 ## Checklist (tests first where code is involved; every box is `[unattended]` unless marked)
 
-- [ ] **Update the extension for `q2 convert` and the `execute: record-sources` key.** There is no option for the list after OPR-5 (decision R5, Gordon, 2026-11-09), so `buildPreviewArgs` and any export call pass `-M 'execute:{record-sources: ...}'` (dotted keys are not expanded, so use the braces); a directory entry must be inside the project (v1), so the extension cannot point the preview at Positron\'s cache directory and uses the `positron` keyword, or links the cache into the project. `extensions/q2-records-demo/src/q2Contract.ts`
+- [x] **Update the extension for `q2 convert` and the `execute: record-sources` key.** There is no option for the list after OPR-5 (decision R5, Gordon, 2026-11-09), so `buildPreviewArgs` and any export call pass `-M 'execute:{record-sources: ...}'` (dotted keys are not expanded, so use the braces); a directory entry must be inside the project (v1), so the extension cannot point the preview at Positron\'s cache directory and uses the `positron` keyword, or links the cache into the project. `extensions/q2-records-demo/src/q2Contract.ts`
       `buildExportArgs` (about lines 34-38: `convert`, `--to positron-ipynb`, `-o`) and `buildPreviewArgs` (about line 54:
       `--records`/`--execution-records`), the comment at line 7, `exportCommand.ts`, `previewCommand.ts` and their vitests. Keep the
       "q2 too old" detection (an older q2 has no `convert`, so it exits 2 on a missing `--to`) and add a vitest for it.
@@ -69,13 +69,13 @@ checked out in other worktrees).
       **marimo** document. Playwright. Write the result as a note in the q2 repository,
       `claude-notes/research/2026-11-xx-rfu-7-raw-record-experiment.md`; if it shows no harm, recommend lifting the two
       skips (a follow-up for Gordon, not done here).
-- [ ] **R e2e test.** An R version of `quarto-render-and-push.test.ts`: command 2 on an R document, outputs appear;
+- [x] **R e2e test.** An R version of `quarto-render-and-push.test.ts`: command 2 on an R document, outputs appear;
       command 3 shows them from the cache with no R process started by the preview. Needs RFU-2 (knitr export). An R
       session exists in the dev build (`POSITRON_R_VER_SEL=4.3.2`, the `r` fixture). Serialize edits with the Julia
       e2e changes in this plan (one file).
-- [ ] **Julia e2e.** If RFU-5\'s note is on the integration branch, apply its proposed fork changes; otherwise skip this
+- [x] **Julia e2e.** If RFU-5\'s note is on the integration branch, apply its proposed fork changes; otherwise skip this
       box and say so.
-- [ ] **The demo run guide.** `extensions/q2-records-demo/demo/README.md` does not exist (the RIU-6 plan and the commands
+- [x] **The demo run guide.** `extensions/q2-records-demo/demo/README.md` does not exist (the RIU-6 plan and the commands
       findings cite it, but at fork `99aa72fcb4` the `demo/` folder holds the three `.qmd` documents only). Write it: the
       script from the commands findings note ([RIU-6 findings](../research/2026-11-07-riu-6-commands-findings.md)) plus the
       known limits: the Viewer\'s big X leaves q2 running (the extension kills q2 on `onDidRequestStop` and
@@ -85,7 +85,7 @@ checked out in other worktrees).
       a pushed cell fails; command 1 values are editor decorations, gone on reload, and command 3 cannot show them; what
       q2 says about a stale Julia server or a missing Plots project (RFU-4 writes that down). Apply the command-2
       decision above to the wording. Write it with the `/reader-expectations-prose` skill.
-- [ ] **Positron\'s cache location: prototype a Positron feature, idiomatically** (Gordon wants a Positron-side prototype
+- [x] **Positron\'s cache location: prototype a Positron feature, idiomatically** (Gordon wants a Positron-side prototype
       here). The extension takes the sibling of `ctx.globalStorageUri` (`previewHelpers.ts:~31-35`), which is
       profile-scoped, while the cache service always writes under `defaultProfile.globalStorageHome`
       (`src/vs/workbench/contrib/positronQuarto/browser/quartoOutputCacheService.ts:~133-136`). First investigate how
@@ -98,11 +98,11 @@ checked out in other worktrees).
       document; and **command 1 on Julia and R spans** (command 1, `positronQuarto.runInlineExpressions`,
       `quartoRunInlineExpressions.ts`, never calls q2; its span detector takes the document\'s primary kernel language,
       `quartoInlineExpr.ts:~35`, and nothing in `quartoInlineExprExecutor.ts` is Python-specific; only Python was run).
-- [ ] **Command 2 progress, cancel and dirty-document wording:** decided "document, do not fix" for both (above). No code;
+- [x] **Command 2 progress, cancel and dirty-document wording:** decided "document, do not fix" for both (above). No code;
       the demo run guide box covers it. Check the guide states the no-cancel and 300 s timeout facts and the dirty-document
       note and report.
 - [ ] `[Gordon]` Someone watches the R and Julia e2e once. Mark each step seen, Playwright, or not run.
-- [ ] Write the landing note in the q2 repository: the fork branch, each commit hash and subject, what ran under
+- [x] Write the landing note in the q2 repository: the fork branch, each commit hash and subject, what ran under
       Playwright, what was seen by a person, what was not run. Render-check it with `target/debug/q2 render --strict`.
 
 ## Exit criteria
@@ -117,4 +117,15 @@ Push or merge the fork branch when he chooses.
 
 ## Notes from the run
 
-(Fill in at landing.)
+Landing note: [RFU-7 landing note](../research/2026-11-09-rfu-7-landing-note.md) (fork branch, six commits, results).
+
+**Done:** extension updated for `q2 convert` and `record-sources` (with a vitest for "q2 too old"); demo run guide; Julia
+warm-up call; cache location through `_positronQuarto.getOutputCacheDir` (a Positron core change, for Gordon to
+review); R e2e; commands 2 and 3 pass under a non-default profile. The profile failure was the harness: its palette
+helper uses a `Cmd+J E` keybinding that only the default profile has.
+
+**Not done (this plan stays `in-progress`):**
+
+- The e2e cases for an untitled document, "q2 too old" (exit 2), a dirty document, and command 1 on Julia and R spans.
+- The raw-record experiment (fallback cell, marimo). It needs the `q2spike.pushRaw` helper, which lives only in another session's scratchpad.
+- The `[Gordon]` box: someone watches the R and Julia e2e once.
