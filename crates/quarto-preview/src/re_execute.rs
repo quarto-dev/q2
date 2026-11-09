@@ -384,7 +384,7 @@ mod tests {
 
     async fn build_ctx_with_file(content: &str) -> (TempDir, SharedContext) {
         let project = TempDir::with_prefix("c5-test-").unwrap();
-        let project_root = project.path().canonicalize().unwrap();
+        let project_root = quarto_system_runtime::canonicalize(project.path()).unwrap();
         std::fs::write(project_root.join("doc.qmd"), content).unwrap();
         let storage = StorageManager::new(&project_root).unwrap();
         let ctx = Arc::new(
@@ -509,7 +509,7 @@ mod tests {
     async fn re_execute_runs_the_engine_and_ignores_a_q2_record() {
         reset_in_flight_for_tests();
         let (tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         let cache = TempDir::with_prefix("riu2-reexec-").unwrap();
         seed_capture(ctx.clone(), cache.path()).await;
         let initial = ctx.index().get_capture("doc.qmd").unwrap().capture_doc_id;
@@ -654,7 +654,9 @@ mod tests {
         // Change the code so the content-keyed cache misses; an identical document is a cache
         // hit and would (correctly) run no engine.
         std::fs::write(
-            tmp.path().canonicalize().unwrap().join("doc.qmd"),
+            quarto_system_runtime::canonicalize(tmp.path())
+                .unwrap()
+                .join("doc.qmd"),
             GUARD_DOC.replace("\n1\n", "\n2\n"),
         )
         .unwrap();

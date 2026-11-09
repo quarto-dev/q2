@@ -128,7 +128,7 @@ mod tests {
 
     async fn build_ctx(files: &[(&str, &str)]) -> (TempDir, SharedContext) {
         let project = TempDir::with_prefix("h4b-test-").unwrap();
-        let root = project.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(project.path()).unwrap();
         for (name, content) in files {
             std::fs::write(root.join(name), content).unwrap();
         }

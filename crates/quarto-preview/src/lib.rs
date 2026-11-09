@@ -492,8 +492,9 @@ where
         let Some(project_root_raw) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
             return;
         };
-        let project_root = project_root_raw.canonicalize().unwrap_or(project_root_raw);
-        let abs_path_canonical = abs_path.canonicalize().unwrap_or(abs_path);
+        let project_root =
+            quarto_system_runtime::canonicalize(&project_root_raw).unwrap_or(project_root_raw);
+        let abs_path_canonical = quarto_system_runtime::canonicalize(&abs_path).unwrap_or(abs_path);
         let Ok(rel) = abs_path_canonical.strip_prefix(&project_root) else {
             return;
         };

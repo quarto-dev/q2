@@ -680,7 +680,7 @@ pub fn locate(ctx: &SharedContext, rel_path: &str) -> Result<(PathBuf, PathBuf),
     };
     // The sidecar keys are relative to the hub root: a canonical project dir
     // against a non-canonical root would silently produce a wrong key.
-    let hub_root = project_root.canonicalize().unwrap_or(project_root);
+    let hub_root = quarto_system_runtime::canonicalize(&project_root).unwrap_or(project_root);
     let abs_path = hub_root.join(rel_path);
     Ok((abs_path, hub_root))
 }

@@ -99,7 +99,7 @@ pub async fn deps_handler(
         // Standalone mode (no project) — return empty deps.
         return Json(DepsResponse { deps: vec![] }).into_response();
     };
-    let project_root = project_root.canonicalize().unwrap_or(project_root);
+    let project_root = quarto_system_runtime::canonicalize(&project_root).unwrap_or(project_root);
 
     let abs_path = project_root.join(&rel_path);
     let source = match std::fs::read(&abs_path) {

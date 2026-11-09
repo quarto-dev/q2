@@ -218,7 +218,7 @@ mod tests {
     use super::*;
 
     fn ctx(temp: &tempfile::TempDir, website: bool) -> WatchContext {
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let output_dir = if website {
             dir.join("_site")
         } else {
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn tracker_reports_only_real_content_changes() {
         let temp = tempfile::TempDir::new().unwrap();
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let a = dir.join("a.qmd");
         std::fs::write(&a, "one").unwrap();
         let mut t = ContentTracker::default();
@@ -420,7 +420,7 @@ mod tests {
     #[test]
     fn tracker_first_sight_of_a_readable_file_is_a_change_but_directories_are_not() {
         let temp = tempfile::TempDir::new().unwrap();
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let b = dir.join("b.png");
         std::fs::write(&b, "img").unwrap();
         let mut t = ContentTracker::default();
