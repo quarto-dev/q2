@@ -25,12 +25,16 @@ if ($files.Count -eq 0) { Write-Host "no nextest logs in $dir"; exit 1 }
 
 $out = New-Object System.Collections.Generic.List[string]
 $seen = @{}
+$diag = New-Object System.Collections.Generic.List[string]
 foreach ($f in $files) {
-    # A finished stage's .log supersedes the same stage's .tmp, which is deleted on completion
-    # anyway; reading both only matters while a stage is running.
     $L = @(Get-Content -LiteralPath $f.FullName)
+    $nBlocks = @($L | Where-Object { $_ -match 'STD(ERR|OUT):' }).Count
+    $nPanic = @($L | Where-Object { $_ -match 'panicked at' }).Count
+    $nFail = @($L | Where-Object { $_ -match '^\s*(FAIL|SIGABRT|TIMEOUT)\b' }).Count
+    $diag.Add(("{0,-40} lines={1} FAIL={2} STDERR/STDOUT-blocks={3} panicked={4}" -f $f.Name, $L.Count, $nFail, $nBlocks, $nPanic))
+    # Pass 1: nextest failure blocks ("--- STDERR: crate test ---", any spacing or decoration).
     for ($i = 0; $i -lt $L.Count; $i++) {
-        if ($L[$i] -match '^\s*--- STD(ERR|OUT):\s+(.+?)\s+---\s*$') {
+        if ($L[$i] -match 'STD(ERR|OUT):\s+(\S+\s+\S+)') {
             $test = $Matches[2]
             $key = ($f.Name -replace '\.stderr\.tmp$', '.log') + '|' + $test
             if ($seen.ContainsKey($key)) { continue }
@@ -38,19 +42,31 @@ foreach ($f in $files) {
             $out.Add("=== $($f.Name): $test")
             $j = $i + 1
             $n = 0
-            while ($j -lt $L.Count -and $n -lt 8 -and $L[$j] -notmatch '^\s*--- STD') {
+            while ($j -lt $L.Count -and $n -lt 8 -and $L[$j] -notmatch 'STD(ERR|OUT):\s') {
                 if ($L[$j].Trim()) { $out.Add('    ' + $L[$j].TrimEnd()); $n++ }
                 $j++
             }
         }
     }
+    # Pass 2 (fallback, always): every panic line with context.
+    for ($i = 0; $i -lt $L.Count; $i++) {
+        if ($L[$i] -match 'panicked at') {
+            $key = $f.Name + '|panic|' + $L[$i].Trim()
+            if ($seen.ContainsKey($key)) { continue }
+            $seen[$key] = 1
+            $out.Add("=== PANIC in $($f.Name) line $($i + 1)")
+            for ($j = [Math]::Max(0, $i - 1); $j -lt [Math]::Min($L.Count, $i + 4); $j++) { $out.Add('    ' + $L[$j].TrimEnd()) }
+        }
+    }
 }
 
-$out | Out-File -Encoding ascii -FilePath $dest
-Write-Host "$($seen.Count) failing tests -> $dest ($($out.Count) lines)"
-if ($seen.Count -eq 0) {
-    Write-Host 'No "--- STDERR:" blocks found; send the output of:'
-    Write-Host "  Select-String -Path $dir\02-nextest-quarto-core.log -Pattern 'FAIL' -Context 0,10 | Select-Object -First 1"
+$hdr = @('# per-file diagnostics') + $diag + @('')
+($hdr + $out) | Out-File -Encoding ascii -FilePath $dest
+$diag | ForEach-Object { Write-Host $_ }
+Write-Host "$($seen.Count) entries -> $dest ($($out.Count) lines)"
+if ($out.Count -eq 0) {
+    Write-Host 'Nothing matched. Send the diagnostics above plus the output of:'
+    Write-Host "  Get-Content $dir\02-nextest-quarto-core.log | Select-Object -First 60"
     exit 0
 }
 
