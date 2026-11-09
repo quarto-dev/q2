@@ -580,7 +580,7 @@ impl TsEngine {
             // EXR-7: the stage's one shared unit list, relocated into `input`
             // (`None` when the context carries no units).
             units: crate::engine::ts_record::wire_units(input, ctx),
-            // Set by `execute` for an engine core presents for (`core_presents`).
+            // Set by `execute` when core offers to present (`offers_presentation`).
             presented_by: None,
         }
     }
@@ -1080,10 +1080,10 @@ impl ExecutionEngine for TsEngine {
         self.ensure_launched(&ctx.cancellation)?;
 
         let mut options = Self::build_execute_options(input, ctx);
-        // EXR-8 B4: for Julia, core presents the output from the record and the engine
-        // returns only its notebook. An older engine ignores this and presents anyway.
-        let core_presents = crate::engine::ts_record::core_presents(&self.wire_name(), ctx);
-        if core_presents {
+        // OPR-7a (D8): core offers to present from the record whenever it builds one. An
+        // engine that supports it returns only its notebook and acknowledges on its record
+        // info; one that ignores the offer presents for itself, as before.
+        if crate::engine::ts_record::offers_presentation(ctx) {
             options.presented_by = Some(crate::engine::ts_protocol::TsPresentedBy::Core);
         }
         let msg = ToEngine::Execute {
@@ -1143,6 +1143,8 @@ impl ExecutionEngine for TsEngine {
                 // a failed render (the record is additive for now).
                 let notebook = result.notebook.take();
                 let record_info = result.record_info.take();
+                let core_presents =
+                    crate::engine::ts_record::acknowledged_presentation(record_info.as_ref());
                 let engine = self.wire_name();
                 let mut mapped = Self::map_execute_result(&engine, result)?;
                 crate::engine::ts_record::attach_record(
@@ -3657,5 +3659,171 @@ mod tests {
             );
             mock.signal_eof();
         });
+    }
+}
+
+/// OPR-7a: the presentation handshake. Core offers `presentedBy: "core"` whenever it builds
+/// a record for a document with units, and presents from the record exactly when the engine
+/// acknowledges. No engine name decides.
+#[cfg(test)]
+mod handshake_tests {
+    use super::*;
+    use crate::engine::ts_process::{MockTransport, TsEngineHost};
+    use crate::engine::ts_protocol::{
+        FromEngine, HostGlobalConfig, LaunchEngineResult, ToEngine, TsExecuteResult, TsPresentedBy,
+    };
+    use crate::engine::units::scan_units;
+    use crate::record::{AuthorTexts, fill_ids};
+    use serde_json::json;
+
+    const DOC: &str = "Prose.\n\n```{julia}\nx = 1\n```\n";
+    const ENGINE_MD: &str = "ENGINE-OWN-MARKDOWN";
+
+    fn notebook() -> serde_json::Value {
+        json!({
+            "nbformat": 4, "nbformat_minor": 5,
+            "metadata": {"kernelspec": {"name": "k"}},
+            "cells": [{
+                "cell_type": "code", "id": "1", "execution_count": 1,
+                "metadata": {"quarto": {"unit": 1, "language": "julia", "file": "doc.qmd", "line": 3}},
+                "outputs": [{"output_type": "stream", "name": "stdout", "text": ["x\n"]}],
+                "source": ["x = 1"],
+            }],
+        })
+    }
+
+    fn ctx(want_record: bool, present_from_record: bool) -> ExecutionContext {
+        let mut units = scan_units(DOC);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_owned_languages(vec!["julia".to_string()])
+        .with_units(units)
+        .with_author_texts(texts)
+        .with_want_record(want_record)
+        .with_present_from_record(present_from_record)
+        .with_execute_timeout(Some(Duration::from_secs(5)))
+    }
+
+    /// Run one execute against a mock engine called `name`; `ack` is whether its returned
+    /// record info acknowledges the offer. Returns the result and the options core sent.
+    fn run(
+        name: &str,
+        ack: bool,
+        ctx: &ExecutionContext,
+    ) -> (ExecuteResult, Option<TsPresentedBy>) {
+        let (write, read, mock) = MockTransport::pair_with_handle();
+        let host = Arc::new(TsEngineHost::with_transport(
+            write,
+            read,
+            HostGlobalConfig {
+                resource_dir: "/res".into(),
+                runtime_dir: "/rt".into(),
+                data_dir: "/data".into(),
+                pandoc_path: None,
+                is_interactive_session: false,
+                running_in_ci: false,
+                quarto_version: "0.1.0".into(),
+            },
+        ));
+        let engine = TsEngine::new(
+            name,
+            false,
+            PathBuf::from(format!("/engines/{name}.ts")),
+            host,
+            None,
+            None,
+            None,
+            ExtensionId::new(name),
+            Arc::new(Mutex::new(HashMap::new())),
+            Arc::new(Mutex::new(Vec::new())),
+        );
+        mock.enable_auto_echo();
+        mock.auto_respond(
+            |m| matches!(m, ToEngine::LaunchEngine { .. }),
+            vec![FromEngine::Launched {
+                instance: LaunchEngineResult { can_freeze: false },
+            }],
+            None,
+        );
+        let mut info = json!({"version": 1, "alignment": "positional"});
+        if ack {
+            info["presentedBy"] = json!("core");
+        }
+        mock.auto_respond(
+            |m| matches!(m, ToEngine::Execute { .. }),
+            vec![FromEngine::ExecuteResult {
+                result: TsExecuteResult {
+                    markdown: ENGINE_MD.to_string(),
+                    notebook: Some(notebook()),
+                    record_info: Some(serde_json::from_value(info).unwrap()),
+                    ..Default::default()
+                },
+            }],
+            None,
+        );
+        let result = engine.execute(DOC, ctx).expect("execute succeeds");
+        let offered = mock.sent_messages().into_iter().find_map(|m| match m {
+            ToEngine::Execute { options, .. } => Some(options.presented_by),
+            _ => None,
+        });
+        mock.signal_eof();
+        (result, offered.flatten())
+    }
+
+    #[test]
+    fn an_engine_that_acknowledges_is_presented_by_core() {
+        let (result, offered) = run("mock", true, &ctx(true, false));
+        assert_eq!(offered, Some(TsPresentedBy::Core));
+        assert!(
+            result.markdown.contains("::: {.cell}"),
+            "{}",
+            result.markdown
+        );
+        assert_ne!(result.markdown, ENGINE_MD);
+    }
+
+    #[test]
+    fn an_engine_that_does_not_acknowledge_keeps_its_own_markdown() {
+        let (result, offered) = run("mock", false, &ctx(true, false));
+        assert_eq!(
+            offered,
+            Some(TsPresentedBy::Core),
+            "the offer is not name-gated"
+        );
+        assert_eq!(result.markdown, ENGINE_MD);
+        assert!(result.record.is_some(), "the record is still built");
+    }
+
+    /// The name no longer matters: an engine called `julia` that ignores the offer is not
+    /// presented by core.
+    #[test]
+    fn an_engine_named_julia_that_does_not_acknowledge_is_not_presented_by_core() {
+        let (result, _) = run("julia", false, &ctx(true, false));
+        assert_eq!(result.markdown, ENGINE_MD);
+    }
+
+    #[test]
+    fn present_from_record_alone_offers_and_presents() {
+        let (result, offered) = run("mock", true, &ctx(false, true));
+        assert_eq!(offered, Some(TsPresentedBy::Core));
+        assert!(
+            result.markdown.contains("::: {.cell}"),
+            "{}",
+            result.markdown
+        );
+    }
+
+    #[test]
+    fn no_record_built_means_no_offer() {
+        let (result, offered) = run("mock", true, &ctx(false, false));
+        assert_eq!(offered, None);
+        assert_eq!(result.markdown, ENGINE_MD);
+        assert!(result.record.is_none());
     }
 }

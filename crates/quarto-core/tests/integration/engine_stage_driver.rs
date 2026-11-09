@@ -91,6 +91,17 @@ pub fn run_engine_stage_as(
     run_engine_stage_ast_as(input, format, observer, registry).map(|_| ())
 }
 
+/// As [`run_engine_stage`] with the stage's internal `present_from_record` flag on
+/// (OPR-7a): engines build the record in memory; nothing is serialized or written unless
+/// the observer or the document asks.
+pub fn run_engine_stage_presenting(
+    input: &Path,
+    observer: Arc<dyn PipelineObserver>,
+    registry: Option<Arc<EngineRegistry>>,
+) -> Result<(), PipelineError> {
+    run_stage_inner(input, "html", observer, registry, true).map(|_| ())
+}
+
 /// As [`run_engine_stage`], returning the document the stage produced (the executed
 /// markdown, parsed).
 pub fn run_engine_stage_ast(
@@ -111,6 +122,16 @@ pub fn run_engine_stage_ast_as(
     observer: Arc<dyn PipelineObserver>,
     registry: Option<Arc<EngineRegistry>>,
 ) -> Result<pampa::pandoc::Pandoc, PipelineError> {
+    run_stage_inner(input, format, observer, registry, false)
+}
+
+fn run_stage_inner(
+    input: &Path,
+    format: &str,
+    observer: Arc<dyn PipelineObserver>,
+    registry: Option<Arc<EngineRegistry>>,
+    present_from_record: bool,
+) -> Result<pampa::pandoc::Pandoc, PipelineError> {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(input, runtime.as_ref()).expect("project discovery");
     let content = runtime.file_read(input).expect("read the input");
@@ -124,6 +145,12 @@ pub fn run_engine_stage_ast_as(
     let mut stages = build_html_pipeline_stages_with_options(None);
     if let Some(idx) = stages.iter().position(|s| s.name() == "engine-execution") {
         stages.truncate(idx + 1);
+        if present_from_record {
+            stages[idx] = Box::new(
+                quarto_core::stage::stages::EngineExecutionStage::new()
+                    .with_present_from_record(true),
+            );
+        }
     }
     let pipeline = Pipeline::new(stages).expect("pipeline stages are compatible");
     let data = PipelineData::LoadedSource(LoadedSource::new(input.to_path_buf(), content));

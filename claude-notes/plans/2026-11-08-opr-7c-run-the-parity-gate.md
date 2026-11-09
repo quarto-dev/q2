@@ -2,7 +2,7 @@
 title: 'OPR-7c: run the parity gate for the plain-render switch'
 date: 2026-11-08
 description: 'Runs the OPR-0b parity corpus and harness on the final presenter, classifies every difference between the engine-owned route and the recorded route for knitr and Julia, fixes the small presenter blockers, and proposes the allowlist. The rule (knitr epic decision 26) is zero unallowlisted differences; Gordon signs the allowlist, which unblocks OPR-7d.'
-status: ready
+status: complete
 depends-on: [opr-0b, opr-1b, opr-2, opr-7b, opr-4d]
 lane: D
 ---
@@ -35,13 +35,13 @@ differences** on both corpora.
 
 ## Checklist (every box is `[unattended]`)
 
-- [ ] Run the corpora with the harness from OPR-0b (the exact command is in that plan\'s notes; it sets
+- [x] Run the corpora with the harness from OPR-0b (the exact command is in that plan\'s notes; it sets
       `OPR_PARITY_REPORT=1`) on a machine with R and Julia. Commit the report under `claude-notes/research/`.
-- [ ] Classify every difference. For each Semantic or Blocker, decide: **fix** or **allowlist**.
+- [x] Classify every difference. For each Semantic or Blocker, decide: **fix** or **allowlist**.
       Fix those that are small and live in `presenter/`, `record_splice.rs` or `engine/knitr/` (one session or less
       each), with a test first; do not widen the plan beyond that. Anything larger: list it in the report as a
       blocker for Gordon and do **not** allowlist it yourself.
-- [ ] Known candidates, now measured by OPR-0c ([note](../research/2026-11-09-opr-measurements.md) sections 2 and 5):
+- [x] Known candidates, now measured by OPR-0c ([note](../research/2026-11-09-opr-measurements.md) sections 2 and 5):
   - **`id="cell-N"`, `data-quarto`, `data-execution_count`** (plain Julia only). The consumer check is done: a grep of
     `crates/`, `ts-packages/`, `hub-client/src` and `resources/` finds no reader of any of the three (read). Re-run
     the grep at the time of the gate, then propose them for the allowlist with that as the reason.
@@ -61,12 +61,12 @@ differences** on both corpora.
     subfigure references unresolved; Julia plain and both knitr routes resolve them with wrong numbers. These are
     `bd-gbaykhth` and `bd-au5gts6e`, and moving Julia from wrong to unresolved is a Semantic difference. Do not
     allowlist it yourself: list it as a blocker for Gordon (see OPR-7d decision 3).
-- [ ] The corpus (OPR-0b) must contain the group case on Julia and on a stored notebook, a bare-PNG Julia cell with a
+- [x] The corpus (OPR-0b) must contain the group case on Julia and on a stored notebook, a bare-PNG Julia cell with a
       labeled and an unlabeled cell, the mixed cached knitr document, and a minimal marimo document (expected identical
       between plain and recorded, since marimo has no presenter route). If a case is missing, add it here before
       classifying; they are the 0c baseline.
-- [ ] Mark each remaining entry in `opr-parity-allowlist.toml` as `proposed` with a one-line reason.
-- [ ] Re-run the whole gate after fixes; the final report lists: counts per class, every allowlist entry with its
+- [x] Mark each remaining entry in `opr-parity-allowlist.toml` as `proposed` with a one-line reason.
+- [x] Re-run the whole gate after fixes; the final report lists: counts per class, every allowlist entry with its
       reason, every blocker for Gordon, the documents skipped and why.
 - [ ] Gates for any fixes: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`;
       the Windows cross-clippy; `cd hub-client && npm run build:wasm` if `presenter/` or `record/` changed.
@@ -81,4 +81,17 @@ differences** on both corpora.
 
 ## Notes from the run
 
-(Fill in at landing.)
+Report: The baseline is [OPR-0b](../research/2026-11-09-opr-parity-baseline.md); the result is
+[the 7c report](../research/2026-11-09-opr-7c-parity-report.md). Final: 56 identical, 13 allowlisted (proposed),
+**7 documents unallowlisted** (5 causes), 253 rejected before any engine, 0 skipped.
+
+- Ran the gate twice in full plus two narrowed runs; added two allowlist entries (`knitr-adjacent-blockquotes`,
+  `julia-code-leading-newline`) with harness tests; removed the `pending = "OPR-7b"` mark on `knitr/cache-mixed` (identical
+  on a miss and a hit); aligned the wording to `signed`.
+- Fixed nothing in `presenter/`: the ANSI difference needs a cross-engine decision (knitr keeps escapes), and the
+  Plots-scripts and bare-PNG-size differences were not investigated to a root cause. All are listed for Gordon.
+- **The exit criterion "every difference is Identical, SyntaxLevel, fixed or proposed" is not met:** 7 documents remain
+  unallowlisted and are blockers for Gordon. OPR-7d stays blocked.
+- Not done: the Windows cross-clippy (aws-lc-sys and wasmtime build scripts fail from macOS; needs a native run), the
+  WASM build (no `presenter/` or `record/` change), the Q1 comparison.
+- Julia server timed out once on `julia/docs-index-chunk` in the second full run (transient; the narrowed rerun passed).

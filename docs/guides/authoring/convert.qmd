@@ -1,0 +1,104 @@
+---
+title: Converting a document with q2 convert
+---
+
+## Overview
+
+`q2 convert` turns a document into another representation. One conversion
+exists today: a `.qmd` file becomes a notebook that
+[Positron](https://positron.posit.co) can read as its cache of inline outputs.
+With that notebook in place, Positron shows the outputs of your cells without
+running them again.
+
+```bash
+q2 convert report.qmd --to positron-ipynb -o report.ipynb
+```
+
+The output format is always explicit: `--to` has no default and is never
+guessed from the name given to `-o`. The notebook is built from the
+document's [execution record](execution-records.qmd), so the command may run
+your code to produce one; [Where the record comes from](#where-the-record-comes-from)
+explains when.
+
+## Options
+
+| Option | What it does |
+|---|---|
+| `--to positron-ipynb` | The output format. Required. |
+| `--from qmd` | The input format. Optional: `.qmd` and `.md` files are read as `qmd`. |
+| `-o <path>` | Where to write the notebook. Required. `-o -` writes it to standard output. |
+| `-M 'key: value'` | Sets document metadata for this run, as in `q2 render -M`. |
+| `--source-uri <uri>` | The location written into the notebook as `quarto_source`. |
+
+By default `quarto_source` is the absolute path of the document, written with
+forward slashes. Pass `--source-uri` when the notebook will be read on a
+machine where that path does not exist.
+
+An existing output file is overwritten, and the command prints a note when it
+does so. The `--to ipynb` and `--from ipynb` conversions are reserved names:
+they exit with a usage error until they are implemented.
+
+## Where the record comes from
+
+The command first looks for the copy of the record that
+[`record: true`](execution-records.qmd#keeping-a-copy-of-the-record) leaves
+under `.quarto/`. When there is none, it runs the document to produce one,
+which executes your code.
+
+The `execute: record-sources` key controls this choice. For `q2 convert` it
+accepts two entries, and its default is `q2,engine`:
+
+| Entry | Meaning |
+|---|---|
+| `q2` | Use the copy under `.quarto/execution-records/`. |
+| `engine` | Run the document when there is no copy. |
+
+Set the key in the document's front matter, or for a single run with `-M`.
+With `q2` alone, the command never runs the document:
+
+```bash
+q2 convert report.qmd --to positron-ipynb -o report.ipynb \
+  -M 'execute:{record-sources: q2}'
+```
+
+If no copy exists, this exits with code 10 instead of executing anything.
+Other entries, such as `cache`, are ignored with an info line.
+
+The command does not check whether the copy under `.quarto/` is out of date
+with the document. Render the document again with `record: true` first if
+you have edited it since.
+
+## What the command prints
+
+On success, the command prints one line of JSON, to standard output. With
+`-o -` the notebook takes standard output and the JSON line goes to standard
+error instead. The line reports the cells it wrote and the cells it left out:
+
+```json
+{"cells":4,"dropped":[],"skipped":[{"id":"0-f2bd0a9f-inline","reason":"inline unit"}]}
+```
+
+`cells` counts the cells in the notebook. Each entry of `skipped` names a unit
+that could not be represented, with the reason: inline expressions, for
+example, have no cell in Positron's cache. Diagnostics go to standard error.
+
+The notebook holds the outputs the record holds, whatever engine produced
+them: Jupyter, Julia and knitr documents all convert. A cell with
+`results: hide` or `results: asis` keeps its output in the file; how Positron
+displays such an output is up to Positron.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | The notebook was written. |
+| 2 | A usage error, such as a missing `-o` or an unsupported pair of formats. |
+| 10 | There is no record, and the record sources do not allow running the document. |
+| 11 | The record has no cells that can be exported. The JSON line is still printed. |
+| 12 | The record is unreadable or invalid. |
+| 13 | Running the document failed. A cell that raises an error fails the run; set `#| error: true` on the cell or `execute: error: true` to keep going and export the error output. |
+
+## See also
+
+- [Execution records](execution-records.qmd), including how a preview or hub
+  reads Positron's cache in the other direction.

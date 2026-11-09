@@ -156,4 +156,29 @@
 <rect x="239.2" y="894" width="22" height="14" rx="3" fill="#fef3c7" stroke="#6b7280"/><text x="267.2" y="906" font-size="11" fill="#374151">conditional (Julia chain)</text>
 <rect x="454.2" y="894" width="22" height="14" rx="3" fill="#fff" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/><circle cx="465.2" cy="901" r="0" /><text x="482.2" y="906" font-size="11" fill="#374151">waits on a Gordon decision (G)</text>
 <path d="M704.2,901 L734.2,901" stroke="#b45309" stroke-width="1.5" marker-end="url(#x)"/><text x="742.2" y="906" font-size="11" fill="#374151">edge between the two epics</text>
+<text x="352" y="137" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-0a">✓</text>
+<text x="352" y="697" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-0b">✓</text>
+<text x="352" y="755" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-0c">✓</text>
+<text x="352" y="549" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-0d">✓</text>
+<text x="582" y="137" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-1a">✓</text>
+<text x="812" y="137" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-1b">✓</text>
+<text x="1042" y="137" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-2">✓</text>
+<text x="352" y="343" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-3">✓</text>
+<text x="352" y="401" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-4a">✓</text>
+<text x="582" y="343" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-4b">✓</text>
+<text x="812" y="343" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-4c">✓</text>
+<text x="797" y="342" font-size="10.5" font-weight="bold" fill="#b45309" text-anchor="end">on D</text>
+<text x="1042" y="195" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-4d">✓</text>
+<text x="582" y="549" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-5">✓</text>
+<text x="1042" y="549" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-6">✓</text>
+<text x="582" y="401" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="OPR-7b">✓</text>
+<text x="352" y="607" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="RFU-1">✓</text>
+<text x="582" y="459" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="RFU-2">✓</text>
+<text x="1042" y="253" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="RFU-3">✓</text>
+<text x="352" y="459" font-size="13" font-weight="bold" fill="#15803d" text-anchor="end" data-ran="RFU-5">✓</text>
+<text x="900" y="906" font-size="11" fill="#374151"><tspan fill="#15803d" font-weight="bold">✓</tspan> ran (plan complete)   <tspan fill="#b45309" font-weight="bold">on X</tspan> = ran on lane X, not the one shown</text>
+<text x="812" y="549" font-size="12" font-weight="bold" fill="#7e22ce" text-anchor="end" data-move="RFU-4">→ B</text>
+<text x="812" y="607" font-size="12" font-weight="bold" fill="#7e22ce" text-anchor="end" data-move="RFU-7">→ A</text>
+<text x="812" y="697" font-size="12" font-weight="bold" fill="#7e22ce" text-anchor="end" data-move="RFU-8">→ B</text>
+<text x="1230" y="906" font-size="11" fill="#374151"><tspan fill="#7e22ce" font-weight="bold">→ X</tspan> = move to lane X (A, B idle)</text>
 </svg>

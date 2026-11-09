@@ -582,7 +582,7 @@ pub(super) fn attach_record(
     result: &mut ExecuteResult,
 ) {
     let Some(notebook) = notebook else { return };
-    if !ctx.want_record || ctx.units.is_empty() {
+    if !ctx.builds_record() || ctx.units.is_empty() {
         return;
     }
     let info = info.unwrap_or_else(default_record_info);
@@ -594,11 +594,17 @@ pub(super) fn attach_record(
     }
 }
 
-/// Whether core presents this engine's output (EXR-8 B4): Julia, when core built a unit
-/// list and wants a record. The flip is per engine; an engine this returns `false` for
-/// keeps presenting for itself.
-pub(super) fn core_presents(engine: &str, ctx: &ExecutionContext) -> bool {
-    engine == "julia" && ctx.want_record && !ctx.units.is_empty()
+/// Whether core offers to present this run's output (OPR-7a, decision D8): whenever it
+/// builds a record and the document has units. No engine name is tested; an engine that
+/// ignores the offer keeps presenting for itself.
+pub(super) fn offers_presentation(ctx: &ExecutionContext) -> bool {
+    ctx.builds_record() && !ctx.units.is_empty()
+}
+
+/// Whether the engine acknowledged the offer on its returned record info. Core presents
+/// from the record exactly when this is true.
+pub(super) fn acknowledged_presentation(info: Option<&TsRecordInfo>) -> bool {
+    info.is_some_and(|i| i.presented_by == Some(crate::engine::ts_protocol::TsPresentedBy::Core))
 }
 
 /// After [`attach_record`] on a run core asked to present (`presentedBy: "core"`): replace
@@ -1728,10 +1734,29 @@ fenced = 1
     }
 
     #[test]
-    fn only_julia_with_units_and_a_wanted_record_is_presented_by_core() {
-        assert!(core_presents("julia", &ctx_for(JDOC, &["julia"], true)));
-        assert!(!core_presents("julia", &ctx_for(JDOC, &["julia"], false)));
-        assert!(!core_presents("marimo", &ctx_for(JDOC, &["julia"], true)));
+    fn core_offers_whenever_it_builds_a_record_for_a_document_with_units() {
+        assert!(offers_presentation(&ctx_for(JDOC, &["julia"], true)));
+        assert!(!offers_presentation(&ctx_for(JDOC, &["julia"], false)));
+        assert!(offers_presentation(
+            &ctx_for(JDOC, &["julia"], false).with_present_from_record(true)
+        ));
+        let no_units = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_want_record(true);
+        assert!(!offers_presentation(&no_units));
+    }
+
+    #[test]
+    fn only_an_acknowledgement_on_the_record_info_means_present() {
+        let mut info = positional();
+        assert!(!acknowledged_presentation(None));
+        assert!(!acknowledged_presentation(Some(&info)));
+        info.presented_by = Some(crate::engine::ts_protocol::TsPresentedBy::Core);
+        assert!(acknowledged_presentation(Some(&info)));
     }
 
     #[test]

@@ -109,6 +109,11 @@ pub struct EngineExecutionStage {
     /// Empty for every pipeline except q2-preview; see
     /// [`with_spliced_engines`](Self::with_spliced_engines).
     spliced_engines: HashSet<String>,
+
+    /// OPR-7a: build the engines' record in memory so core can present from it, without
+    /// serializing it, emitting it to the observer or writing a file unless something asks
+    /// for that. Internal control, off by default; OPR-7d sets it for plain render.
+    present_from_record: bool,
 }
 
 impl EngineExecutionStage {
@@ -121,7 +126,15 @@ impl EngineExecutionStage {
     pub fn new() -> Self {
         Self {
             spliced_engines: HashSet::new(),
+            present_from_record: false,
         }
+    }
+
+    /// Present from the engines' record (OPR-7a). See
+    /// [`present_from_record`](Self::present_from_record).
+    pub fn with_present_from_record(mut self, present: bool) -> Self {
+        self.present_from_record = present;
+        self
     }
 
     /// Mark a set of engines as already executed out-of-band, their output
@@ -685,6 +698,7 @@ impl PipelineStage for EngineExecutionStage {
             .with_units(units_for_engine)
             .with_author_texts(shared_author_texts.clone().unwrap_or_default())
             .with_want_record(want_record)
+            .with_present_from_record(self.present_from_record)
             .with_metadata(document_metadata.clone())
             .with_execute_env(execute_env.clone())
             .with_project_env({
@@ -890,7 +904,7 @@ impl PipelineStage for EngineExecutionStage {
         // an aux event (the preview recorder and the hub collect it). When the
         // document asked for it, the record is also written beside the
         // project's `.quarto/` (epic decisions 3 and 33).
-        if want_record {
+        if want_record || self.present_from_record {
             let unit_order = shared_units.as_deref().unwrap_or(&[]);
             let mut record = crate::record::coalesce(&engine_records, unit_order).map_err(|e| {
                 PipelineError::stage_error(self.name(), format!("execution record: {e}"))
@@ -899,17 +913,22 @@ impl PipelineStage for EngineExecutionStage {
                 &ctx.project.dir,
                 &path,
             ));
-            match serde_json::to_value(&record) {
-                Ok(value) => {
-                    ctx.observer
-                        .on_auxiliary_data(self.name(), 0, ENGINE_RECORD_KIND, &value);
+            // The full JSON copy (a second copy of every inline image) is made only when a
+            // record was explicitly asked for (an observer or `record: true`); presenting
+            // from the record needs none.
+            if want_record {
+                match serde_json::to_value(&record) {
+                    Ok(value) => {
+                        ctx.observer
+                            .on_auxiliary_data(self.name(), 0, ENGINE_RECORD_KIND, &value);
+                    }
+                    Err(e) => trace_event!(
+                        ctx,
+                        EventLevel::Warn,
+                        "failed to serialize the execution record: {}",
+                        e
+                    ),
                 }
-                Err(e) => trace_event!(
-                    ctx,
-                    EventLevel::Warn,
-                    "failed to serialize the execution record: {}",
-                    e
-                ),
             }
             if record_requested {
                 // The copy is optional (RIU-1, epic decision 10): a location that

@@ -569,8 +569,8 @@ pub struct TsRecordInfo {
     pub hash_definition: Option<HashDefinition>,
     /// The engine's acknowledgement that it honored core's `presentedBy: "core"` offer: it
     /// returned the notebook and made no markdown of its own (decision D8). Absent from an
-    /// engine that predates it, or that presented itself. Parsed only for now: core's
-    /// decision to present is still by engine name (`core_presents`); OPR-7a switches it.
+    /// engine that predates it, or that presented itself. Core presents from the record
+    /// exactly when this is `Core` (`acknowledged_presentation`, OPR-7a).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presented_by: Option<TsPresentedBy>,
 }

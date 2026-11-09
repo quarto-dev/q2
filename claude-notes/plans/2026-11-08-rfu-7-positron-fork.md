@@ -2,15 +2,15 @@
 title: 'RFU-7: the Positron fork, extension update, demo guide, e2e and cache location'
 date: 2026-11-08
 description: 'The work that lives in the Positron fork (a different repository): update the demo extension for q2 convert and the execute: record-sources key (set with -M), run the extended raw-record experiment, add the R e2e test, write the demo run guide, prototype the cache-location feature, add the missing e2e cases, and apply Gordon''s command-2 decision. Commits go on a fork branch and never to the q2 integration branch; the q2 side lands only a note.'
-status: ready
+status: in-progress
 depends-on: [rfu-1, rfu-2, opr-5]
-lane: C
+lane: A
 ---
 
 **Epic:** [RIU follow-up](2026-11-08-rfu-epic-riu-follow-up.md) ·
 **Protocol:** [agent protocol](2026-11-08-opr-agent-protocol.md) (read it first; "Landing" differs here, see below).
 **Branch:** a fork branch `q2/rfu-7-demo-followups` in `/Users/gordon/src/positron-riu6-a`, plus the q2 branch
-`rfu/7-positron-fork` for the landing note · **Lane C** (`workspace-5`) · **Blocks:** nothing.
+`rfu/7-positron-fork` for the landing note · **Lane A** (`workspace-3`; moved from lane C on 2026-11-09, lane A is idle) · **Blocks:** nothing.
 **Needs:** the Positron dev build and its Playwright setup (see the fork\'s `CLAUDE.md`, `AGENTS.md` and `.claude/rules`;
 **read them first**; they govern the fork), R 4.3, Julia 1.12, Python, `target/debug/q2` from the integration branch.
 
@@ -43,7 +43,7 @@ and subject, and the results.
 cd /Users/gordon/src/positron-riu6-a && pwd && git status --short
 git switch -c q2/rfu-7-demo-followups spike/riu-6-phase-a    # tip 99aa72fcb4 when this plan was written
 # ... fork work and fork commits (follow the fork's own commit conventions) ...
-cd /Users/gordon/src/q2/.worktrees/workspace-5 && pwd
+cd /Users/gordon/src/q2/.worktrees/workspace-3 && pwd
 git switch -c rfu/7-positron-fork feature/one-presenter
 # claim: set status: in-progress in this file, commit, land (protocol, "Claiming a plan")
 # at the end: write the landing note, set status: complete, then the usual

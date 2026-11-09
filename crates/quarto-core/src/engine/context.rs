@@ -246,6 +246,13 @@ pub struct ExecutionContext {
     /// `execute: {record: true}` in the merged metadata; a plain render leaves
     /// it `false` and the engine allocates nothing for the record.
     pub want_record: bool,
+
+    /// Whether core will present this document from the engine's record (OPR-7a). Unlike
+    /// [`want_record`](Self::want_record) it asks for nothing to be serialized, emitted or
+    /// written: engines build the record in memory (see [`builds_record`](Self::builds_record))
+    /// and core presents from it when the engine acknowledges the offer. Internal control,
+    /// `false` unless the pipeline sets it.
+    pub present_from_record: bool,
 }
 
 impl ExecutionContext {
@@ -287,6 +294,7 @@ impl ExecutionContext {
             units: Vec::new(),
             author_texts: crate::record::AuthorTexts::default(),
             want_record: false,
+            present_from_record: false,
         }
     }
 
@@ -300,6 +308,18 @@ impl ExecutionContext {
     pub fn with_want_record(mut self, want: bool) -> Self {
         self.want_record = want;
         self
+    }
+
+    /// Present from the engine's record (see [`ExecutionContext::present_from_record`]).
+    pub fn with_present_from_record(mut self, present: bool) -> Self {
+        self.present_from_record = present;
+        self
+    }
+
+    /// Whether engines build a record in memory this run: someone wants one, or core will
+    /// present from it.
+    pub fn builds_record(&self) -> bool {
+        self.want_record || self.present_from_record
     }
 
     /// The merged document metadata as JSON, the shape the record's document hash

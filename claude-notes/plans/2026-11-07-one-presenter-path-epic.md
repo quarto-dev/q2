@@ -150,20 +150,22 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
 | [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | RFU | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
 | [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | RFU | EXR-16 sweep and the labeled-cell `fig-cap` splice test | OPR-1b | A | ready |
-| [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | RFU | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | C | ready |
+| [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | RFU | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | B (was C) | ready |
 | [RFU-5](2026-11-08-rfu-5-julia-e2e-flake.md) | RFU | The Julia e2e flake: find the EPIPE closer (a note) | nothing | B | ready |
 | [RFU-6](2026-11-08-rfu-6-windows-run.md) | RFU | The Windows run (Gordon\'s machine) | OPR-6, RFU-1, RFU-2 | none | blocked-on-gordon |
-| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | RFU | Positron fork: extension update, guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5 | C | ready |
-| [RFU-8](2026-11-08-rfu-8-docs.md) | RFU | Docs for `q2 convert` and the Positron export | RFU-1, RFU-2 resolved | D | ready |
+| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | RFU | Positron fork: extension update, guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5 | A (was C) | ready |
+| [RFU-8](2026-11-08-rfu-8-docs.md) | RFU | Docs for `q2 convert` and the Positron export | RFU-1, RFU-2 resolved | B (was D) | ready |
 
 **Lanes** (an agent takes the first startable plan in its own lane list; if none, it stops and reports):
 
 | Lane | Workspace | Plans, in order |
 |---|---|---|
-| A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3 |
-| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, OPR-4b, 4c |
-| C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a, RFU-4, RFU-7 |
-| D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, RFU-8, OPR-7c, OPR-7d, OPR-8 |
+| A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3, **RFU-7** (moved from C) |
+| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C) |
+| C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a |
+| D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, OPR-7d, OPR-8 |
+
+> **Lane change, 2026-11-09.** Lanes A and B went idle (all their plans complete) while C and D still held startable plans, so three plans were **reassigned**: RFU-7 from lane C to **lane A** (`workspace-3`), RFU-4 from lane C to **lane B** (`workspace-4`), and RFU-8 from lane D to **lane B** (`workspace-4`). Dependencies are unchanged. The Lane column and lane lists below show the new lanes; the plan files and the lanes diagram carry the same change.
 
 The integration checkout is `/Users/gordon/src/q2/.worktrees/workspace-1`. Lane B puts OPR-7b and RFU-5 before OPR-4b
 and 4c because those two only wait on Gordon. Lane C starts with OPR-0d (a short note Gordon must read) and then RFU-1,

@@ -70,11 +70,13 @@ All plans use the shared integration branch `feature/one-presenter`, the lanes a
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | `q2 convert --to positron-ipynb` replaces `q2 record export-positron` | nothing | C | ready |
 | [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
 | [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | EXR-16 sweep test and the labeled-cell `fig-cap` splice test | OPR-1b | A | ready |
-| [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | C | ready |
+| [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | B (was C) | ready |
 | [RFU-5](2026-11-08-rfu-5-julia-e2e-flake.md) | The Julia e2e flake: find the EPIPE closer (a note) | nothing | B | ready |
 | [RFU-6](2026-11-08-rfu-6-windows-run.md) | The Windows run | OPR-6, RFU-1, RFU-2 | (Gordon) | blocked-on-gordon |
-| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | Positron fork: extension update, demo guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5 | C | ready |
-| [RFU-8](2026-11-08-rfu-8-docs.md) | Docs for `q2 convert` and the export, written with `/reader-expectations-prose` | RFU-1, RFU-2 (resolved) | D | ready |
+| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | Positron fork: extension update, demo guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5 | A (was C) | ready |
+| [RFU-8](2026-11-08-rfu-8-docs.md) | Docs for `q2 convert` and the export, written with `/reader-expectations-prose` | RFU-1, RFU-2 (resolved) | B (was D) | ready |
+
+> **Lane change, 2026-11-09.** RFU-7 moved from lane C to lane A, RFU-4 from lane C to lane B, and RFU-8 from lane D to lane B, because lanes A and B went idle. See the [one-presenter epic](2026-11-07-one-presenter-path-epic.md#plans-lanes-and-dependencies).
 
 **Concurrency with OPR.** RFU-1 has no dependency on OPR and lands first in lane C while Gordon decides OPR-0d\'s
 question. OPR-5 then waits for RFU-1 (so the shared flag definition absorbs `convert` and the deleted `record`
