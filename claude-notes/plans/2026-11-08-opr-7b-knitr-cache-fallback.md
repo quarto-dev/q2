@@ -1,7 +1,7 @@
 ---
 title: 'OPR-7b: cached knitr chunks use the markdown fallback and emit no record'
 date: 2026-11-08
-description: 'Gordon decided (2026-11-08): a knitr chunk that asks for the cache keeps knitr''s cache and its finished markdown, and emits no record; it degrades quietly. Reverses the S4 rule (cache off while recording) after the OPR-0c spike shows a mixed document comes out right. Retires the Q-18-12 message and updates the test and the knitr plan note that pinned the old rule.'
+description: 'Gordon decided (2026-11-08): a knitr chunk that asks for the cache keeps knitr''s cache and its finished markdown, and emits no structured record; it degrades quietly. Reverses the S4 rule (cache off while recording). OPR-0c found the chunk must stay in the record as a fallback unit: a record with the chunk missing is dropped whole by the splice. Retires the Q-18-12 message and updates the test and the knitr plan note that pinned the old rule.'
 status: ready
 depends-on: [opr-0c]
 lane: B
@@ -17,6 +17,18 @@ lane: B
 OPR-0c\'s note (the cache spike) must say a mixed document comes out right (first and second run the same, cached
 chunks fall back, structured chunks present). If it says otherwise, **stop** and report; the plan is then
 `blocked-on-gordon` and its design needs Gordon.
+
+**What OPR-0c found (2026-11-09; [note](../research/2026-11-09-opr-measurements.md) sections 4 and 5, ran).** The start
+condition holds at the knitr level (miss and hit identical at all three cache levels, `dependson`, `autodep`, document
+`cache`). Through q2 the plain rule "keep the cache, do not record the chunk" is **not enough on its own**: a throwaway
+`capture.R` that kept `cache = TRUE` and returned before recording gave 3 records for a 5-unit document, and the splice
+dropped the whole record (`Engine Execution Record Dropped`, empty `doc.ipynb`). The render fell back to R\'s markdown
+and was correct (figures 1 to 3, refs resolved, miss equal to hit), so nothing breaks, but nothing is presented. So
+design this plan as: the cached chunk **is** recorded, as a fallback unit (`text/x-quarto-markdown`, knitr epic decision
+8) that keeps its ordinal and unit id, with no structured outputs. Do not skip the chunk in the chunk hook.
+**Unknown, find out first:** whether `capture_chunk_hook` runs at all on a level-3 `cache=TRUE` hit (the spike could not
+tell). If it does not, the fallback unit for a hit has to be built from R\'s knit output (the skeleton) rather than from
+the hook.
 
 ## Branch and land (explicit)
 
@@ -45,16 +57,22 @@ ask for the cache are recorded as before. LaTeX-family targets are already on th
 
 ## Checklist (tests first; every box is `[unattended]`)
 
-- [ ] Read OPR-0c\'s cache-spike results and the knitr epic\'s S4 section
+- [ ] Answer the open question above with a test (does the chunk hook run on a level-3 hit?) and record the answer in
+      the notes. Read OPR-0c\'s cache-spike results and the knitr epic\'s S4 section
       (`claude-notes/plans/2026-10-30-knr-01*.md`, "S4 decision").
 - [ ] **Tests first** (R required, skip without it; follow knitr epic decision 17): a document with a cached chunk, run
       twice in fresh R processes: both runs give the same document; the cached chunk is a fallback unit with no
       structured outputs; the other chunks are structured; levels 1, 2 and 3; `dependson`; a document-level
       `execute: cache: true`; the cached chunk\'s figures and numbering. **Update the test that pins the old rule,**
-      `a_cache_written_without_capture_is_not_replayed_by_a_recorded_run` (search for it in
-      `crates/quarto-core/tests/`), and say how and why in the commit message.
-- [ ] Change `capture_install` so a chunk that asks for the cache is neither forced off nor recorded, and the chunk
-      hook writes the fallback unit. Keep `quarto_capture$cache_labels` only if something still reads it.
+      `a_cache_written_without_capture_is_not_replayed_by_a_recorded_run` (it is in
+      `crates/quarto-core/src/engine/knitr/capture_tests.rs`, not under `tests/`; it passes today, OPR-0c ran it), and say
+      how and why in the commit message. Add the 0c document as a test: chunks `fig-live1` (figure, caption), `fig-cached`
+      (`cache: true`, figure, caption), a live text chunk, `fig-live2` (figure, caption), a cached text chunk, and
+      references to the three figures; on a miss and on a hit expect figures 1, 2, 3, resolved references, a record of five
+      units (two of them fallback), **no** `Engine Execution Record Dropped`, and identical output between runs.
+- [ ] Change `capture_install` so a chunk that asks for the cache is not forced off and is recorded as a fallback unit
+      (ordinal and unit id kept, no structured outputs), including a document-level `cache: true` (then every unit is a
+      fallback unit; decide in the notes whether that still counts as a record). Keep `quarto_capture$cache_labels` only if something still reads it.
 - [ ] **Q-18-12** (docs/errors/engine/Q-18-12.qmd; catalog entry in `crates/quarto-error-catalog/error_catalog.json`)
       says the cache is off while recording: stop emitting it. Leave the catalog entry and docs page in place (the
       error-docs lint requires a page for every catalog code) with one sentence that it is no longer emitted. Do not
@@ -65,8 +83,9 @@ ask for the cache are recorded as before. LaTeX-family targets are already on th
       it for OPR-7c and say so in the notes.
 - [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
       Windows cross-clippy; `cargo xtask lint`; `target/debug/q2 render --strict` on the edited plan note.
-- [ ] **End-to-end:** `q2 render` a document with one cached chunk and two plain chunks, plain and with
-      `execute: {record: true}`; read both outputs; record the invocations and what you saw.
+- [ ] **End-to-end:** `q2 render` the 0c mixed document above (and one with a cached chunk and two plain chunks), plain
+      and with `execute: {record: true}`, each twice (miss, then hit); read the outputs and the record file; record the
+      invocations and what you saw. Include that the log has no `Record Dropped` warning.
 
 ## Exit criteria
 

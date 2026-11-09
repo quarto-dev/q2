@@ -99,6 +99,13 @@ function for the per-cell step.
   output differ from before **only** by forwarded unknown `#|` options on Jupyter cells.
 - WASM build and the Windows cross-clippy are green; the snapshot counts are in the landing report.
 
+## Regression baseline from OPR-0c (2026-11-09)
+
+The refactor must keep bytes unchanged, so the OPR-0c measurements are a ready baseline: the Julia and knitr figure
+reference table ([note](../research/2026-11-09-opr-measurements.md) section 5, including the unresolved Julia-recorded group)
+and the bare-PNG file names (`cell-1-output-1.png`, `cell-2-output-1.png` recorded). A change in any of them in this plan
+is a bug in the refactor, not an improvement; the fixes belong to OPR-7c.
+
 ## Risks
 
 (relied) The goldens never set a document `execute:` scope; OPR-0a\'s fixtures close that gap, so trust them over

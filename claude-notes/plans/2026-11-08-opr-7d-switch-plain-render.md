@@ -29,6 +29,11 @@ variable, document key or other user-facing way back. Reason: Gordon chose the r
 unallowlisted differences, OPR-7c) is the safety, and a control would be a user surface to document and later retire. A bad
 case is fixed in q2, not worked around. OPR-7a\'s "behind a control" means this internal flag only, which agrees.
 
+**3. Julia subfigure groups on the flip (added 2026-11-09 from OPR-0c; needs Gordon).** Today plain Julia resolves a
+`fig-subcap` group\'s references with wrong numbers; the recorded route leaves them unresolved (`bd-gbaykhth`, same
+failure as a stored notebook). Flipping Julia changes wrong to unresolved. Choose: (accept it and record the regression
+against `bd-gbaykhth` / flip knitr and Julia together / flip knitr first and hold Julia until the group resolves).
+
 ## Branch and land (explicit)
 
 ```bash
@@ -59,7 +64,9 @@ presenter, as a recorded render does. Concretely:
 
 - [ ] **Tests first, through the binary** (model `crates/quarto/tests/integration/no_execute_cli.rs`): a plain render of a
       Julia and a knitr document is presented from a record (show it: the output carries the recorded-route markup,
-      for example the `.cell` wrapper without `id="cell-N"` unless OPR-7c decided to keep it); nothing new under
+      for example the `.cell` wrapper without `id="cell-N"` unless OPR-7c decided to keep it; nothing in the tree
+      reads those attributes, OPR-0c grep); a Julia cell with a bare PNG gets the file names OPR-7c decided on; a marimo
+      document\'s HTML is identical to before (it has no presenter route; `marimo_engine_e2e::` still passes); nothing new under
       `.quarto`; a knitr document to `pdf` or `latex` takes the engine route and prints nothing about it; a cached
       chunk falls back; `execute: record: true` still writes the file; there is no opt-out to test (decision 2).
 - [ ] Flip the default (no opt-out, decision 2); change the fallback diagnostic\'s condition so it does

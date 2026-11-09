@@ -59,7 +59,26 @@ statement: the two routes name figure files by different counters (the plain rou
 ordinal, which counts the prose block; the presenter's counts cells), so every figure URL changes when OPR-7a flips Julia
 plain to the recorded route. The recorded route also drops the generic `cell-output` class from the figure's output div
 (a deliberate choice, `presenter/cell.rs`, "match q2-knitr's figure hook"). Anything that keys on the figure file name, or on
-`.cell-output` for a Julia figure, sees a change. Not tested: `fig-format: svg` and `fig-format: pdf` for either route.
+`.cell-output` for a Julia figure, sees a change.
+
+Second follow-up (2026-11-09, ran unless marked):
+
+- **Quarto 1 on the same document** (`quarto render p2.qmd`, real Julia): the unlabeled cell\'s file is
+  `cell-2-output-1.png`, the same as q2 plain, and the labeled cell\'s file is named by its label,
+  `fig-b-output-1.png`. q2 plain names the labeled cell `cell-3-output-1.png`, and q2 recorded names both by a code-cell
+  counter. So plain matches Quarto 1 for the unlabeled cell only, and the recorded route matches neither. The counter in
+  Quarto 1\'s port (`ts-packages/quarto-api/src/jupyter/to-markdown.ts`, around line 835) is `"cell-" + (cellIndex + 1)`
+  over notebook cells with prose counted (read).
+- **`preferred` paths do not rescue Julia.** The presenter honors `metadata.quarto_file_path` (`presenter/figures.rs`), which
+  knitr supplies (`engine/knitr/span_records.rs`); I found no Julia producer in `crates/` or `ts-packages/` (read). The
+  recorded Julia notebook\'s outputs carry only inline data and a size, so the engine cannot name the file.
+- **`fig-format: svg` and `fig-format: pdf`** change nothing: not for the bare-PNG cells (both routes still write the PNG
+  files, with the names above) and not for Plots (all three routes, Quarto 1 included, embed the PNG from Plots\'
+  `text/html` bundle).
+- **Consumers of the plain-only attributes** (grep of `crates/`, `ts-packages/`, `hub-client/src`, `resources/`, read):
+  nothing reads `id="cell-N"`, `data-quarto` (the unit attribute) or `data-execution_count`. The generic `.cell-output`
+  class is read once, `resources/js/dashboard/quarto-dashboard.js:49`, to restyle iTables HTML tables; a figure div is not
+  one, and non-figure display outputs keep the class on the presenter route.
 
 Fixture note: `Plots` is not in the runner's default environment; each plot document got a copy of
 `~/.julia/environments/v1.12/{Project,Manifest}.toml` beside it.
@@ -230,9 +249,9 @@ the epic (decision D12).
 | Figures (section 5) | OPR-7c | A new Julia-specific item (the stored-notebook case shows the same group failure on the Jupyter route; the single figure and the table resolve): the recorded route leaves `fig-subcap` group references unresolved where the plain route resolves them (wrongly). Also, when a Julia cell emits a PNG alone, the flip renames the figure files (`cell-2-output-1.png` becomes `cell-1-output-1.png`) and drops the `cell-output` class from the figure's output div. OPR-7a flips Julia plain to the recorded route, so the gate should either record this as a known regression with the strand `bd-gbaykhth` or hold the flip for Julia until the group refs resolve. This is a finding for Gordon: it could be a blocker for OPR-7d. |
 | Marimo (section 6) | none | Exception stands (D12). Marimo renders on this machine; plain and recorded HTML are identical, so the flip does not touch it. |
 
-**Still not done:** `fig-format: svg`/`pdf` file names on either Julia route; a release-build rerun of the cost sweep; the
-mixed tagged and bare marimo document (known failing); whether anything keys on Julia's `id="cell-N"` (a crossref or a
-CSS target); a Julia mixed-engine splice.
+**Still not done:** the mixed tagged and bare marimo document (known failing, no strand by instruction); a dashboard
+render with a Julia figure to see the dropped class in a browser (read only); `fig-format` through a Julia package that
+honors it (Plots does not here).
 
 Files: scratch fixtures and logs stayed in the session scratchpad; the throwaway `capture.R` worktree was deleted; nothing
 else was added.
