@@ -105,7 +105,8 @@ impl CommandSources {
         )
     }
 
-    fn allows(&self, source: &RecordSource) -> bool {
+    /// Whether the command can use `source` at all (a valid entry it cannot use is ignored).
+    pub fn allows(&self, source: &RecordSource) -> bool {
         match source {
             RecordSource::Dir(_) => self.directories,
             other => self.allowed.contains(&other.label().as_str()),

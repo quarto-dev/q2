@@ -345,6 +345,9 @@ where
     // native runtime, since every native site goes through
     // `render_flags::native_runtime()`.
     render_flags::set(config.render.clone());
+    // OPR-6: under `--share` the host's record source list is the ceiling for what a guest's
+    // render request may read (`execute: record-sources` in the document or the request).
+    render_helper::set_record_sources_ceiling(config.share.then(|| config.record_sources.clone()));
 
     // bd-kjrpya2d: resolve the project's `resources:` set to (output-relative
     // → disk path) so the artifact route can SERVE embedded-example decks +

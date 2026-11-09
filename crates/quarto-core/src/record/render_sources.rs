@@ -186,7 +186,15 @@ pub async fn select_render_record(inp: SelectInputs<'_>) -> Result<RenderSelecti
     }
 
     // The default, `engine` alone, is today's behavior: no inputs, no walk.
-    let list = resolved.sources;
+    // A ceiling's default can hold what this command cannot use (`cache`); drop it quietly.
+    let list = RecordSources::new(
+        resolved
+            .sources
+            .iter()
+            .filter(|s| inp.config.command.allows(s))
+            .cloned()
+            .collect(),
+    );
     if list.as_slice() == [RecordSource::Engine] && inp.engine_allowed {
         return Ok(selection);
     }
@@ -383,6 +391,60 @@ mod tests {
         // No key: nothing to say.
         let (_t, s) = select("", true, true);
         assert!(s.diagnostics.is_empty());
+    }
+
+    /// OPR-6, preview render routes under `--share`: the request's `metadata` (the runtime layer)
+    /// and a document key outside the host's list are both ignored, with the warning on the
+    /// page, and nothing is read from a source the host did not allow.
+    #[test]
+    fn a_ceiling_ignores_request_metadata_and_out_of_set_document_keys() {
+        use quarto_system_runtime::NativeRuntime;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().canonicalize().unwrap();
+        let doc = dir.join("doc.qmd");
+        std::fs::write(
+            &doc,
+            "---\nexecute:\n  record-sources: \"positron,q2\"\n---\n\n```{python}\n1\n```\n",
+        )
+        .unwrap();
+        let native: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        // The guest request's `metadata` asks for the host's Positron cache.
+        let overlay = Arc::new(crate::overlay_runtime::RenderOverlay::with_metadata(
+            serde_json::json!({"execute": {"record-sources": "positron"}}),
+        ));
+        let runtime = overlay.apply(native);
+        let project = ProjectContext::discover(&doc, runtime.as_ref()).unwrap();
+        let config = RenderRecordSources {
+            command: CommandSources::RENDER,
+            ceiling: Some(RecordSources::new(vec![RecordSource::Q2])),
+        };
+        let selection = pollster::block_on(select_render_record(SelectInputs {
+            project: &project,
+            abs_path: &doc,
+            runtime: &runtime,
+            config: &config,
+            target_format: "html",
+            engine_allowed: false,
+            replay: false,
+            registry: None,
+        }))
+        .unwrap();
+        let titles = texts(&selection);
+        // One warning for the document's `positron`, and the "no record" warning for the `q2`
+        // that was allowed and had nothing. No Positron source was walked.
+        assert!(
+            titles
+                .iter()
+                .any(|t| t.contains("`positron`") && t.contains("ignored")),
+            "{titles:?}"
+        );
+        assert!(selection.record.is_none() && selection.no_engine);
+        let detail: String = selection
+            .diagnostics
+            .iter()
+            .filter_map(|d| d.problem.as_ref().map(|p| p.as_str().to_string()))
+            .collect();
+        assert!(!detail.contains("positron"), "{detail}");
     }
 
     /// The default list (`engine`) does no work and says nothing, vetoed or not.
