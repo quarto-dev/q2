@@ -6,7 +6,7 @@
 import { useContext } from 'react';
 import { PreviewContext } from '../PreviewContext';
 import { buildAncestorPath } from '../nestingNav';
-import { BreadcrumbCrumbs, ensureBreadcrumbStyles } from '../BreadcrumbCrumbs';
+import { BreadcrumbCrumbs, CrumbGlyph, crumbClassName, ensureBreadcrumbStyles } from '../BreadcrumbCrumbs';
 
 export function EditTypeIndicator() {
   // Inject the crumb stylesheet here too: the minimal (nesting-off) branch doesn't
@@ -28,11 +28,12 @@ export function EditTypeIndicator() {
   const current = crumbs[crumbs.length - 1];
   return (
     <span
-      className={`q2-crumb q2-crumb-cat-${current.category} q2-crumb-current`}
+      className={crumbClassName(current.category, true, current.abbrev)}
+      data-abbrev={current.abbrev}
       title={current.label}
       aria-current="true"
     >
-      {current.abbrev}
+      <CrumbGlyph abbrev={current.abbrev} />
     </span>
   );
 }

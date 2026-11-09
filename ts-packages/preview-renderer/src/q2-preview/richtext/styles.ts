@@ -38,6 +38,11 @@ const CSS = `
   width: max-content;
   white-space: nowrap;
 }
+/* Rich surface: left-align the toolbar's outer edge with the edit box's visible
+   ring. The ring (.ProseMirror below) is the 2px box-shadow around a tint that
+   bleeds 5px left of the text (padding 5px / margin -5px), so its outer left edge
+   sits at -(5 + 2) = -7px. Keep in sync with the .ProseMirror padding + ring. */
+.q2-richtext-editor > .q2-rt-toolbar { left: -7px; }
 /* bd-pvcnea83: flip below the edit box when there is no room above (e.g. the
    first block of a title-less document, flush against the viewport top — the
    default bottom:100% placement would clip the toolbar above the scroll area). */
@@ -63,21 +68,17 @@ const CSS = `
 .q2-rt-tb-btn:disabled { opacity: 0.35; cursor: default; }
 .q2-rt-tb-btn:disabled:hover { background: none; }
 .q2-rt-tb-btn:hover { background: rgba(59, 130, 246, 0.12); }
-.q2-rt-tb-active { background: rgba(59, 130, 246, 0.18); color: rgb(37, 99, 235); }
-/* Mode toggle — the Markdown-mark SVG. inline-flex centers it; the SVG's
-   currentColor recolors with the button's active state (highlight-only). */
-.q2-rt-tb-mode {
-  display: inline-flex;
-  align-items: center;
-}
-.q2-rt-tb-mode svg {
-  display: block;
-  height: 0.95em;
-  width: auto;
-}
-.q2-rt-tb-bold { font-weight: 700; }
-.q2-rt-tb-italic { font-style: italic; }
-.q2-rt-tb-strike { text-decoration: line-through; }
+.q2-rt-tb-active { background: rgba(59, 130, 246, 0.18); }
+/* One glyph color for the whole toolbar: buttons (via .q2-rt-tb-btn), the
+   nesting arrows, and the type crumbs — overriding the crumb sheet's per-category
+   colors and #555 arrows. Active/pressed state shows as the background tint only. */
+.q2-rt-toolbar .q2-crumb,
+.q2-rt-toolbar .q2-breadcrumb-out,
+.q2-rt-toolbar .q2-breadcrumb-in { color: #334155; }
+/* SVG glyphs (comment, link, editorial marks, paragraph crumb) — currentColor. */
+.q2-rt-tb-btn:has(> .q2-rt-tb-icon) { display: inline-flex; align-items: center; justify-content: center; }
+.q2-rt-tb-icon { display: block; width: 1.25em; height: 1.25em; }
+.q2-rt-tb-icon.q2-rt-tb-icon-wide { width: 2.5em; }
 .q2-rt-tb-sep { width: 1px; align-self: stretch; margin: 2px 2px; background: rgba(0, 0, 0, 0.12); }
 .q2-rt-link-editor { display: flex; align-items: center; gap: 2px; }
 /* Transient refusal notice next to the comment button. */
@@ -133,9 +134,6 @@ const CSS = `
 .q2-rt-span-insert { background-color: #d9ecd9; border-bottom: none; }
 .q2-rt-span-delete { background-color: #ffd9d9; border-bottom: none; text-decoration: line-through; }
 .q2-rt-span-highlight { background-color: #fff799; border-bottom: none; }
-.q2-rt-tb-insert { color: #16a34a; font-weight: 700; }
-.q2-rt-tb-delete { color: #dc2626; font-weight: 700; }
-.q2-rt-tb-highlight { color: #ca8a04; font-weight: 700; }
 .q2-chip-math { background: rgba(80, 160, 120, 0.14); border-color: rgba(80, 160, 120, 0.30); }
 .q2-chip-cite, .q2-chip-shortcode { background: rgba(160, 120, 80, 0.14); border-color: rgba(160, 120, 80, 0.30); }
 `;
