@@ -2,7 +2,7 @@
 title: 'RFU-6: the Windows run (Gordon, on a Windows machine)'
 date: 2026-11-08
 description: 'The Windows checks the records-in-use epic deferred, in highest-risk order. Needs a Windows machine because aws-lc-sys blocks the msvc cross-check from macOS, so no agent runs it. It waits for the plans that change the touched code, then Gordon runs it once and lands the results.'
-status: blocked-on-gordon
+status: in-progress
 depends-on: [opr-6, rfu-1, rfu-2]
 lane: none
 ---
