@@ -294,7 +294,8 @@ fn render_image(
     let rel_path = artifact_path(&source, &bytes, width, height, palette);
     let html_url = match &ctx.resource_resolver {
         Some(resolver) => resolver.html_url_for(ArtifactScope::Page, &rel_path),
-        None => rel_path.to_string_lossy().into_owned(),
+        // The fallback lands in the page as a URL, so it is `/`-separated on every host.
+        None => quarto_util::to_forward_slashes(&rel_path),
     };
     ctx.artifacts.store(
         format!("{ARTIFACT_KEY_PREFIX}{}", rel_path.display()),
@@ -552,7 +553,7 @@ mod tests {
         assert_ne!(a, c, "size participates");
         assert_ne!(a, d, "content participates");
         assert_ne!(a, e, "the brand palette participates");
-        let name = a.to_string_lossy();
+        let name = quarto_util::to_forward_slashes(&a);
         assert!(name.starts_with("figure-html/plot-"), "{name}");
         assert!(name.ends_with(".svg"), "{name}");
     }
