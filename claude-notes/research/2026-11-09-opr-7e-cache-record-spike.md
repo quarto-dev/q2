@@ -43,7 +43,7 @@ twice in fresh R processes (miss, then hit).
   (`cached_49a9...` against `cached_f5b9...`): plain and record runs never share an entry. No salt.
 - **S9 size (ran, rough).** A sidecar for the corpus chunks is a few hundred bytes of JSON. A widget chunk would hold its html
   in the stored markdown and so in the sidecar digest only, not twice (the sidecar stores a digest, not the markdown). Cap and
-  widget measurement: (not run); Phase C caps a record at 1 MB and degrades above it.
+  widget measurement: (not run); no size cap was built.
 - **S2 level 1, S5 (htmlwidget, `child=`, `dependson`, `autodep`, `cache.lazy`, `cache.rebuild`, `<doc>_files` deleted
   with the cache kept) through q2\'s `capture.R` (not run in the spike).** The first run of the `_files` case in the
   scratch log was polluted by a corrupted sidecar from the digest test (its mismatch message is that leftover), so it

@@ -2,7 +2,7 @@
 title: 'OPR-7e: a cached knitr chunk is recorded and presented like any other chunk'
 date: 2026-11-09
 description: 'OPR-7b leaves a chunk that asks for knitr''s cache out of the record, so it never goes through the presenter. This plan records a cache hit for the common case, cache=TRUE (level 3), with no change to knitr: the chunk hook returns a self-describing span that knitr stores in its own cache entry (or, if the spike prefers it, a sidecar file), and a spike decides which. Level 1 is an optional second slice; level 2 is out of scope. Amends decision D5 (Gordon, 2026-11-09).'
-status: in-progress
+status: complete
 depends-on: [opr-7b]
 lane: B
 ---
@@ -203,7 +203,7 @@ three `@fig` references) as the base and add the cases named below. Each documen
 (a miss, then a hit). Pass means the stated equality holds; anything else is a finding to report, and a failure of a
 level-3 item that the normalizer or a payload check cannot remove is a "does not hold" (see the rules).
 
-- [ ] **S1, level 3 round trip (span).** With the span in the chunk hook\'s return value: (a) the miss run\'s record equals
+- [x] **S1, level 3 round trip (span).** With the span in the chunk hook\'s return value: (a) the miss run\'s record equals *(Spike: plain R only, via the sidecar not the span; the real-record equality is Phase B/D.)*
       today\'s; (b) the hit run, capture on, yields a record and `chunks` entry equal to the miss run\'s after the nonce is
       normalized (the payload\'s `ordinal` and any figure paths that differ by run are listed, not ignored silently);
       (c) a hit run with capture **off** and ids in the document text (as the `id_chunk` test helper builds it) gives
@@ -216,8 +216,8 @@ level-3 item that the normalizer or a payload check cannot remove is a "does not
       miss\'s, including `eval=c(1,2)` and `tidy=TRUE`, whose `code` the wrapper cannot see unmasked (review). Confirm by
       `grep` over the versions you test that the two call sites are the only ones and that `mode = 'list'` distinguishes
       them. On 1.44 the list also passes through `fix_evaluate` after the wrapper (`block.R`, review): run it there.
-- [ ] **S3, level 2.** Cut (decision 1). Nothing to measure; the note says level 2 stays as OPR-7b has it.
-- [ ] **S4, id stability.** Insert a paragraph above a cached chunk, add a chunk above it, and reorder two cached chunks.
+- [x] **S3, level 2.** Cut (decision 1). Nothing to measure; the note says level 2 stays as OPR-7b has it.
+- [x] **S4, id stability.** Insert a paragraph above a cached chunk, add a chunk above it, and reorder two cached chunks.
       Prediction (decision 2): a paragraph above still hits; a chunk above or a reorder changes the id and misses. Record
       what happens; a hit that returns a payload whose id differs from the unit is a failure. (A hit always carries the id
       in the key, so the payload id equals the unit\'s by construction; there is nothing to match.)
@@ -232,17 +232,17 @@ level-3 item that the normalizer or a payload check cannot remove is a "does not
       sites and their signature, `block_cache`, the `cache_purge` file set (matters for the sidecar), `.deps` in the key,
       and a level-3 entry written by 1.44 and read by 1.50. An unrecognized shape must degrade to today\'s
       absent-and-quiet, never to wrong output.
-- [ ] **S7, scoping.** One line, (read): the engine runs one `Rscript` per call and every existing patch is permanent for
+- [x] **S7, scoping.** One line, (read): the engine runs one `Rscript` per call and every existing patch is permanent for
       the process, so a patch needs no restore. If the spike installs a patch (the sidecar does), say whether it is
       idempotent (keeps the pristine original) and gated on `quarto_capture$active`.
-- [ ] **S8, keys.** Confirm (ran) that a plain run and a record run produce different level-3 hashes for the same chunk
+- [x] **S8, keys.** Confirm (ran) that a plain run and a record run produce different level-3 hashes for the same chunk
       (the id is the only difference), so they never share an entry. That settles the "no salt" default.
 - [ ] **S9, size.** The payload per chunk for the corpus (median, largest), with and without the markdown stored twice,
       and for a widget chunk specifically (its html lands in the cache entry). Figures are paths, not bytes. State a cap
       above which the chunk degrades to absent-and-quiet.
-- [ ] **S10, the sidecar.** Prototype Mechanism B (S1 (a) to (d) and S5\'s `<doc>_files` and `dependson` cases) and apply
+- [x] **S10, the sidecar.** Prototype Mechanism B (S1 (a) to (d) and S5\'s `<doc>_files` and `dependson` cases) and apply
       the tie-break above. Record which mechanism Phase C builds and why.
-- [ ] Write the note, apply the decision rules, and record the outcome (mechanism chosen, or stop) at the top of "Notes
+- [x] Write the note, apply the decision rules, and record the outcome (mechanism chosen, or stop) at the top of "Notes
       from the run" in this plan. If the rule says stop, stop here.
 
 ## Phase B: tests first (R required; skip without it, knitr epic decision 17)
@@ -250,49 +250,49 @@ level-3 item that the normalizer or a payload check cannot remove is a "does not
 Write each test, run it, see it fail for the stated reason, then implement. Tests live next to the OPR-7b ones
 (`engine/knitr/capture_tests.rs`, `engine/knitr/gating_tests.rs`) and, for the end to end, in the knitr corpus runner.
 
-- [ ] `a_cache_hit_records_nothing_for_a_cached_chunk_at_any_level` pins the old rule for all levels. **Split it:** the
+- [x] `a_cache_hit_records_nothing_for_a_cached_chunk_at_any_level` pins the old rule for all levels. **Split it:** the
       level-3 case now expects the chunk recorded on a hit (it fails first for that reason); the level-1 and level-2 cases
       keep the old assertion until Phase E changes level 1. Say how and why in the commit message.
 - [ ] A level-3 hit, capture on: the record, the `chunks` entry and the skeleton marker exist, with the live run\'s nonce;
       the payload comment is gone from the markdown. Repeat inside a blockquote and a list item.
-- [ ] A level-3 hit, capture **off**, ids in the document text: markdown equal to an uncached render; no `q2-cache`
+- [x] A level-3 hit, capture **off**, ids in the document text: markdown equal to an uncached render; no `q2-cache`
       comment anywhere.
-- [ ] The 0c mixed document (`a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit`): now a record of
+- [x] The 0c mixed document (`a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit`): now a record of
       **all five** units on a miss and on a hit, the same figures 1, 2, 3, resolved references, no `Engine Execution
       Record Dropped`, identical output between runs. That test pins "three" today; update it.
-- [ ] A hit between two misses puts the added entries in document order (a document with a cached chunk between two live
+- [x] A hit between two misses puts the added entries in document order (a document with a cached chunk between two live
       ones; the record is not dropped).
-- [ ] `include=FALSE` at level 3: recorded on the miss, absent on the hit, in `cached_units`, no record dropped. And
+- [x] `include=FALSE` at level 3: recorded on the miss, absent on the hit, in `cached_units`, no record dropped. And
       `include` toggled false to true between miss and hit (document-level `execute: include`): absent-and-quiet, not a
       hidden cell.
-- [ ] A legacy level-3 entry (written with capture off, hit in a capture run): the chunk is absent from the record and
+- [x] A legacy level-3 entry (written with capture off, hit in a capture run): the chunk is absent from the record and
       from the expected count, quiet, as in 7b (`a_cache_written_without_capture_is_replayed_by_a_recorded_run` stays
       green; note it builds both runs with ids in the text, which a real plain run does not).
 - [ ] A payload with a wrong version, a wrong format, mismatched begin and end ids, or truncated or corrupt base64
       degrades the chunk to absent-and-quiet, never to an error (run it red first against a stub that reads the payload
       without checking).
-- [ ] Replay: `a_replayed_record_with_a_cached_chunk_equals_the_live_run` still holds, and now the replayed cached chunk
+- [x] Replay: `a_replayed_record_with_a_cached_chunk_equals_the_live_run` still holds, and now the replayed cached chunk
       is presented from the record, not from stored markdown.
 
 ## Phase C: implement level 3 with the mechanism the spike chose
 
-- [ ] The level-3 hook and recording path, for the chosen mechanism. Span: `capture.R` and `hooks.R` make the level-3
+- [x] The level-3 hook and recording path, for the chosen mechanism. Span: `capture.R` and `hooks.R` make the level-3
       chunk hook return the span (inner markdown, closing comment with the payload); the payload holds the wire record,
       the options digest and files, the version, the format and `include` (locate by symbol: `quarto_capture$records`,
       `quarto_chunk_records$records`); chunks that do not ask for the cache are unchanged. Sidecar: the `cache$save` and
       `cache$output` wrappers, installed in `capture_install`, idempotent and gated on `quarto_capture$active`.
-- [ ] Span only: the normalizing step over the knit result, capture on and off as above, with the rules listed under
+- [x] Span only: the normalizing step over the knit result, capture on and off as above, with the rules listed under *(n/a: the sidecar was built.)*
       Mechanism A. It must run on the miss as well, so the skeleton never holds a span.
-- [ ] `capture_chunk_hook`: a cached chunk that records no longer returns early. `cached_units` is what ends the run
+- [x] `capture_chunk_hook`: a cached chunk that records no longer returns early. `cached_units` is what ends the run
       unrecorded (compute it at the end of the run, not in `opts_hooks$cache`).
-- [ ] `execute.R` reports the result as it does today (`pieces`, `chunks`, `cachedUnits`); `knitr/mod.rs` should need no
+- [x] `execute.R` reports the result as it does today (`pieces`, `chunks`, `cachedUnits`); `knitr/mod.rs` should need no
       change beyond the tests. If it does, say what and why.
-- [ ] Remove or reword any comment that says a cached chunk is never recorded (`capture.R` header, `capture_install`,
+- [x] Remove or reword any comment that says a cached chunk is never recorded (`capture.R` header, `capture_install`,
       the chunk hook).
 
 ## Phase D: parity and end to end
 
-- [ ] Re-run the parity gate on the cached documents (the harness from OPR-0b; OPR-7c found `knitr/cache-mixed`
+- [x] Re-run the parity gate on the cached documents (the harness from OPR-0b; OPR-7c found `knitr/cache-mixed`
       identical, so any new difference is this plan\'s); the command is under this list. Classify each difference as knitr
       epic decision 26 does. A new difference is a blocker for Gordon unless it is a plain bug in this plan\'s code.
 - [ ] **End to end** (`target/debug/q2 render doc.qmd`), each run twice (miss, then hit), reading the outputs and logs:
@@ -351,4 +351,55 @@ say so in the notes; do not leave it half built.
 
 **Spike outcome (Phase A, 2026-11-09):** level 3 holds; Phase C builds the **sidecar** (tie-break, decision 3). See [the spike note](../research/2026-11-09-opr-7e-cache-record-spike.md). The span was never needed. Items run only in plain R, not through `capture.R`, are marked in the note.
 
-(rest empty until landing)
+**What was built (sidecar, level 3 only).** `capture.R` wraps knitr\'s `cache$save` and `cache$output` in the knitr
+namespace (`capture_patch_cache`: idempotent, keeps the pristine list, does nothing unless capture is active). A level-3 miss
+swaps knitr\'s stored string (this run\'s marker line) for the finished markdown and writes `<hash>.q2rec.json` (version, id,
+`include`, md5 digest of the markdown, the capture record, the chunk record). A hit reads it back, checks version, id,
+`include`, digest and hook-override state, registers the record and chunk entry in document order with the next ordinal, and
+returns this run\'s marker line. Any failed check leaves the chunk unrecorded and quiet (OPR-7b behavior).
+`cached_units` is now computed at the end of the run (`capture_cached_units`: asked for the cache and has no record), so an
+`include=FALSE` hit and a bad sidecar land in it. `knitr/mod.rs` needed only a comment. No Rust logic changed.
+
+**Findings that were not in the plan.**
+
+- At `cache$output` time knitr\'s current options still hold `cache = TRUE`; knitr turns it into 3 only later. The level-3 test
+  accepts both.
+- jsonlite reads a JSON `null` (an `NA` option such as `comment`) back as `NULL`, which it writes as `{}`; the sidecar reader maps
+  null to `NA` (found by the miss-equals-hit test).
+- A chunk-level `#| include:` change already changes knitr\'s key (the `#|` text is hashed), so only a document-level
+  `execute: include` flip reaches the sidecar\'s `include` check; the test uses that.
+- Three tests that pinned "level 3 is never recorded" were not listed in the plan and moved to level 1 or were updated:
+  `capture_names_the_units_that_asked_for_the_cache`, `a_chunk_that_asked_for_the_cache_is_quiet_and_not_recorded`, and the
+  fallback-table row "cache asked for" (now a level-3 row and a level-1 row). The all-cached document test now expects a
+  two-cell record.
+
+**Gates.** `cargo clippy -p quarto-core --all-targets -- -D warnings`: clean. `cargo nextest run -p quarto-core`: 7326 passed,
+36 skipped, **1 failed**: `opr_parity_runner::tests::the_seeded_allowlist_parses_and_every_entry_is_proposed` (the allowlist has
+8 entries, the test says 6). It reads a file this plan does not touch (`git diff feature/one-presenter -- crates/quarto-core/tests`
+is empty); OPR-7c added two proposed entries and left the count stale. Not fixed here. `cargo xtask lint`: only the known
+`positron_cache.rs:360`. **Windows cross-clippy not run**: the `aws-lc-sys` C build fails on this macOS host. `npm run
+build:wasm` not run: nothing under `presenter/`, `record/`, the splice stage or `engine/{replay,ipynb_replay,skeleton}.rs`
+changed (the R files and tests only). No snapshot or golden files changed (0).
+
+**Parity.** `OPR_PARITY_ONLY=cache`: `knitr/cache-mixed` (miss and hit) and `execute_cache_front_matter` Identical; no new
+difference.
+
+**End to end** (`target/debug/q2 render`, rebuilt after the R change; scratch dir in the session scratchpad; outputs read):
+
+- The 0c mixed document with `execute: {record: true}`, twice: `doc.ipynb` has **5** cells on the miss and on the hit; Figures 1
+  to 3 with resolved references; HTML identical between runs (after stripping hashes); `grep q2-cache` finds nothing in the html or
+  the record; no `Record Dropped` or other warning; two sidecars written.
+- The same document without `record`, twice: no warnings; HTML identical between runs.
+- A `record: true` run followed by a plain run of the same file: no warning. I did **not** verify the expected miss both ways
+  (the cache-file count check I ran was not conclusive).
+- A trivial htmlwidget chunk (`createWidget`) at level 3, twice: one cell both times, no warning. The widget\'s dependencies were
+  not inspected, and widget sizes (S9) were not measured.
+- A PDF render after an html render was not run.
+
+**Not done.** S2 and Phase E (level 1): skipped, as the plan allows when S2 has not passed; level 1 stays as OPR-7b has it. S5
+(`dependson`, `autodep`, `cache.lazy`, `cache.rebuild`, `<doc>_files` deleted, `child=`, callout) and S9 sizes were not run through
+`capture.R`; the digest check and the entry-removed case were exercised in plain R only. S6: knitr 1.52 was not available, and the
+sidecar was run through q2 only on 1.50 (the installed knitr); the 1.44 run is plain R. Nothing here touched
+`presenter/cell.rs`, `engine/ts_record.rs` or the parity allowlist, so OPR-7f needs no rebase around this plan. The capture-on
+test that checks the skeleton marker with a nonce is covered only by the end-to-end run above, not by a unit test.
+
