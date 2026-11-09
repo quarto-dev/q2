@@ -2,7 +2,7 @@
 title: 'RIU-6: the Positron command demo'
 date: 2026-11-02
 description: 'Three commands in Gordon fork of Positron that exercise both directions between Positron and q2 records: run inline expressions, render with q2 and push the outputs into the open document, and preview from the Positron cache with no execution. Mechanisms proven in RIU-0 S5 and S6; Python and Julia are in scope. Starts with an early spike that shows the default q2 preview viewer in the Positron preview pane, which can run before any other RIU plan. A spike in the fork, ending with a script, a capture, a findings note and the reconciliation of the epic checklists.'
-status: done 2026-11-07 except the push to Gordon's fork (only when he asks); follow-ups are in 2026-11-07-riu-follow-up-did-we-build-it.md
+status: done 2026-11-07 except the push to Gordon's fork (only when he asks); follow-ups are in 2026-11-08-rfu-epic-riu-follow-up.md
 ---
 
 **Part of:** [the records-in-use epic](2026-11-02-records-in-use-epic.md)
@@ -44,7 +44,7 @@ and this lane is rebased on it. Checks, and who ran each, are in
 Nothing in this plan except the push (only when Gordon asks). The Julia preview test passes (the stale server
 is gone; a warm-up and a longer timeout keep it passing, see below), Gordon saw Python and Julia sessions in
 the window and said no screen capture is needed, and Phase E and Phase F are done. What is left lives in
-[the follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md): R through knitr first, the Julia server
+[the RIU follow-up epic](2026-11-08-rfu-epic-riu-follow-up.md): R through knitr first, the Julia server
 and the unexplained EPIPE, the loose ends, RIU-3b.
 
 **Running the e2e tests** (all in `test/e2e/tests/quarto/`; from the fork root; pinned Node 24.22.1 first on

@@ -70,7 +70,7 @@ parity suite being structural; the runner internals for OPR-4a (`include_str`, `
 - **S3 against the real render.** Resolved: R translates `output: false`; the spike\'s table of "scope ignored" was an
   artificial state. Layering is not needed for knitr (D3).
 - **"Convert has a record option."** The epic and my notes said `preview`, `provide-hub` and `convert`; agent B found the
-  third consumer is `q2 record export-positron` and `convert` is a stub with no option yet (RIU follow-up Item 8 adds it).
+  third consumer is `q2 record export-positron` and `convert` is a stub with no option yet (RFU-1 adds it).
 - **"A native HTML render cannot carry a record."** True of `render_to_file`, false at library level (`HtmlRenderConfig` has
   `record` and `with_record`); OPR-6 copies it in.
 - **My first parallel plan list.** Agent B found OPR-1, 2, 3 and 4 edit the same files; the plans are now serial where
@@ -99,6 +99,6 @@ parity suite being structural; the runner internals for OPR-4a (`include_str`, `
 2. **The retained knitr fallback and an opt-out control** for the plain-render switch. After OPR-7c. Written into OPR-7d.
 3. **Julia scope after OPR-4a:** which of expression starts, anchors and output kinds to build, or cancel.
 4. **Signing the parity allowlist** (OPR-7c) and, outside the epic, **the Phase A verdict** and **command 2** (progress,
-   cancel, dirty-document wording) in the RIU follow-up plan.
+   cancel, dirty-document wording) in the RIU follow-up epic (RFU-2 and RFU-7).
 5. **Companions:** pushing the engine and runner forks, the Positron fork\'s extension update, and the rebase of the
    integration branch onto `main` (158 commits behind) before the pull request.

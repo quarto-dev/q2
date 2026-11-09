@@ -3,7 +3,7 @@ title: 'OPR-8: user docs, embedded-docs refresh and end-to-end checks'
 date: 2026-11-08
 description: 'The last plan of the one-presenter epic. Writes the user-facing changes inside the existing docs pages (no page about differences), refreshes the embedded docs once, and runs the end-to-end checks for the whole epic, which merges as a single pull request.'
 status: ready
-depends-on: [opr-1b, opr-2, opr-5, opr-6, opr-7d, opr-4d]
+depends-on: [opr-1b, opr-2, opr-5, opr-6, opr-7d, opr-4d, rfu-8]
 lane: D
 ---
 
@@ -13,6 +13,8 @@ lane: D
 **Needs:** R 4.3 with knitr, Julia 1.12, Node 24; a full build of the preview chain.
 
 Dependencies count as resolved when `complete` **or** `cancelled`; OPR-4d may have been cancelled with the Julia work.
+RFU-8 (the RIU follow-up docs) must land first: it edits `execution-records.qmd` too, and this plan does the one
+embedded-docs refresh for the whole integration branch.
 
 ## Branch and land (explicit)
 
@@ -84,7 +86,7 @@ it for each page you edit.
 - [ ] If anything under `hub-client/` changed in the epic, the two-commit changelog rule in AGENTS.md applies.
 - [ ] Reconcile the epic: re-read it, verify each plan\'s status and exit criteria against the integration branch, and
       list the **companions** still owed to Gordon (pushes to the Julia engine and runner forks; the Positron
-      fork\'s extension; any push of this epic\'s branch and the rebase onto `main`).
+      fork\'s work (RFU-7); any push of this epic\'s branch and the rebase onto `main`).
 
 ## Exit criteria
 

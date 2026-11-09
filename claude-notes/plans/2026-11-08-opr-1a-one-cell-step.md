@@ -79,6 +79,9 @@ function for the per-cell step.
       fixed on 2026-11-04 (`99e3b2bb8`) and the preview and hub path is fixed by this plan; close it if nothing else
       remains in its text. (Gordon, 2026-11-08: "updated".) Reference `bd-nn2fou8h` (execute-visibility options) in
       your notes; do not change its status.
+- [ ] Fix the stale doc comment at `crates/quarto-core/src/presenter/options.rs:~237` ("read under knitr\'s dotted names
+      only"; the code reads the canonical dashed `fig-cap` for both front ends); it was carried over from the RIU follow-up
+      plan (Item 4), whose boxes moved here and to RFU-4.
 - [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`;
       the dependents that call the presenter (confirm with `cargo tree -i quarto-core` that no other crate calls
       `present_document` or `present_cell`; (relied) none does); the Windows cross-clippy for `quarto-core`;

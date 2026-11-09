@@ -4,7 +4,9 @@ date: 2026-11-08
 description: 'The rules every agent follows when it runs one plan of the one-presenter epic on its own, with no orchestrator and no sub-agents: how to find a plan whose dependencies are complete, claim it, work in a lane workspace, and land it on the integration branch with a rebase and a fast-forward merge.'
 ---
 
-**Epic:** [one presenter path](2026-11-07-one-presenter-path-epic.md). Every plan file (`opr-*`) points here.
+**Epics:** [one presenter path](2026-11-07-one-presenter-path-epic.md) (plans `opr-*`) and [RIU follow-up](2026-11-08-rfu-epic-riu-follow-up.md)
+(plans `rfu-*`). They share one integration branch, four lanes and **one execution DAG**, which lives in the one-presenter
+epic under "Plans, lanes and dependencies". Every plan file points here.
 Read this file, the epic's "Decisions" section and your plan, in that order, before touching anything.
 
 ## Who you are
@@ -19,13 +21,12 @@ sub-agents** (no `Agent` tool calls); do the work yourself. Do not ask Gordon qu
 | Role | Path | Branch |
 |---|---|---|
 | Integration checkout (a landing pad: **nobody edits here**) | `/Users/gordon/src/q2/.worktrees/workspace-1` | `feature/one-presenter` |
-| Lane A | `/Users/gordon/src/q2/.worktrees/workspace-3` | one `opr/...` branch per plan |
-| Lane B | `/Users/gordon/src/q2/.worktrees/workspace-4` | one `opr/...` branch per plan |
-| Lane C | `/Users/gordon/src/q2/.worktrees/workspace-5` | one `opr/...` branch per plan |
-| Lane D | `/Users/gordon/src/q2/.worktrees/workspace-6` | one `opr/...` branch per plan |
+| Lane A | `/Users/gordon/src/q2/.worktrees/workspace-3` | one `opr/...` or `rfu/...` branch per plan |
+| Lane B | `/Users/gordon/src/q2/.worktrees/workspace-4` | one `opr/...` or `rfu/...` branch per plan |
+| Lane C | `/Users/gordon/src/q2/.worktrees/workspace-5` | one `opr/...` or `rfu/...` branch per plan |
+| Lane D | `/Users/gordon/src/q2/.worktrees/workspace-6` | one `opr/...` or `rfu/...` branch per plan |
 
-Work in your own lane workspace. Run `pwd` before any command that uses a relative path. The epic lists which plans
-belong to which lane, in order.
+Work in your own lane workspace. Run `pwd` before any command that uses a relative path. The one-presenter epic\'s table lists which plans belong to which lane, in order (both epics\' plans are in it).
 
 ## Status values (frontmatter `status:` of each plan file)
 
@@ -37,11 +38,11 @@ A plan is **startable** when all of these hold, read from the **integration bran
 2. Every plan in its `depends-on` list is **resolved**: `complete`, or `cancelled` (a conditional plan that was
    dropped counts as resolved; say so in your plan notes if it changes what you do).
 
-Check from your lane workspace (the plan ids map to files `claude-notes/plans/2026-11-08-opr-<id>-*.md`):
+Check from your lane workspace (the plan ids map to files `claude-notes/plans/2026-11-08-opr-<id>-*.md` and `...-rfu-<id>-*.md`):
 
 ```bash
-git grep -h -E '^(status|depends-on):' feature/one-presenter -- 'claude-notes/plans/2026-11-08-opr-*.md'
-git grep -E '^status:' feature/one-presenter -- 'claude-notes/plans/2026-11-08-opr-*.md'
+git grep -h -E '^(status|depends-on):' feature/one-presenter -- 'claude-notes/plans/2026-11-08-opr-*.md' 'claude-notes/plans/2026-11-08-rfu-*.md'
+git grep -E '^status:' feature/one-presenter -- 'claude-notes/plans/2026-11-08-opr-*.md' 'claude-notes/plans/2026-11-08-rfu-*.md'
 ```
 
 Only `[Gordon]`-labeled work and the statuses `blocked-on-gordon` and `conditional` need Gordon. He flips those to
@@ -58,10 +59,10 @@ unless the epic says so, and do not start a plan whose dependencies are not reso
 Claiming prevents two agents from taking the same plan. Do it first and land it at once.
 
 ```bash
-git switch -c opr/<id>-<slug> feature/one-presenter    # the branch name is in your plan
+git switch -c <opr|rfu>/<id>-<slug> feature/one-presenter    # the branch name is in your plan
 # edit the plan's frontmatter: status: in-progress   (nothing else)
 git add -A && git commit -m "OPR-<id>: claim"
-git -C /Users/gordon/src/q2/.worktrees/workspace-1 merge --ff-only opr/<id>-<slug>
+git -C /Users/gordon/src/q2/.worktrees/workspace-1 merge --ff-only <opr|rfu>/<id>-<slug>
 ```
 
 If the fast-forward fails because the integration branch moved, run `git rebase feature/one-presenter` and repeat the
@@ -107,7 +108,7 @@ merge. If another agent's claim for the same plan is already on the integration 
 The epic merges to `main` as one pull request, so history on the integration branch stays **linear**: rebase, never
 merge commits.
 
-1. Everything is committed in your lane workspace on your `opr/...` branch, and the plan\'s own gates are green.
+1. Everything is committed in your lane workspace on your `opr/...` or `rfu/...` branch, and the plan\'s own gates are green.
 2. Reconcile the plan file: re-read your plan, verify each `- [ ]` and `- [x]` against what actually landed, correct
    any that are wrong, and fill in "Notes from the run" (what you ran, what you found, what surprised you).
 3. Set the plan\'s frontmatter `status: complete` in the same branch.
@@ -123,7 +124,7 @@ merge commits.
 6. Fast-forward the integration branch from the integration checkout:
 
    ```bash
-   git -C /Users/gordon/src/q2/.worktrees/workspace-1 merge --ff-only opr/<id>-<slug>
+   git -C /Users/gordon/src/q2/.worktrees/workspace-1 merge --ff-only <opr|rfu>/<id>-<slug>
    ```
 
    If it refuses because the integration branch moved again, go back to step 4. Do not use `--no-ff`, `-f` or a
@@ -132,21 +133,26 @@ merge commits.
 8. Report: the plan id, the landed commit, the gates you ran and their results, snapshot changes (counts and
    files), and anything Gordon needs to know. Then stop, or pick your lane\'s next startable plan.
 
-Leave your `opr/...` branch in place. Do not delete branches or worktrees.
+Leave your branch in place. Do not delete branches or worktrees.
 
 ## When you cannot finish
 
 If you are blocked (a `[Gordon]` box, an unexpected result that changes the plan\'s boundary, a tool you do not
 have), do **not** land a partial plan. Instead:
 
-1. Commit your progress on your `opr/...` branch.
+1. Commit your progress on your `opr/...` or `rfu/...` branch.
 2. Add a "Notes from an earlier attempt" section to the plan with what is done, what is not, and why you stopped.
 3. Set `status: ready` (or `blocked-on-gordon` if only Gordon can unblock it), commit, rebase, and land **only that
    notes commit** with the fast-forward merge above (cherry-pick it onto a fresh branch from the integration branch
    if your work commits cannot go with it).
 4. Report the reason and the branch name in your final message.
 
+## A plan in another repository (the Positron fork)
+
+RFU-7 works in the Positron fork, which is not part of `feature/one-presenter`. Its commits go on a fork branch (never
+pushed) and only a landing note is merged here; the plan says how. Read the fork\'s own `CLAUDE.md` and `AGENTS.md` first.
+
 ## Companions outside the epic (Gordon\'s, not agents\')
 
-Pushes to the Julia engine and runner forks, the Positron fork\'s extension, and any push of this epic\'s branch. A
+Pushes to the Julia engine and runner forks, a push or merge of the Positron fork branch (RFU-7), and any push of the integration branch. A
 plan that needs one says so and ends before it.

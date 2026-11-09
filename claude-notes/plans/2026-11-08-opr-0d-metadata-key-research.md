@@ -34,8 +34,7 @@ OPR-6. **No product code changes.** The deliverable is one note,
 ## Background (relied from review agents on 2026-11-08 unless marked; re-check each before you cite it)
 
 - The flag today is `--records` on `q2 preview` (`crates/quarto/src/main.rs:~352`) and `q2 provide-hub` (`:~809`) and
-  on `q2 record export-positron` (`:~63`, removed by RIU follow-up Item 8, replaced by `q2 convert`, currently a stub
-  with no record option). Grammar and walk are shared in `crates/quarto-core/src/record/sources.rs`.
+  on `q2 record export-positron` (`:~63`; RFU-1 deletes it and gives `q2 convert` its own `--execution-records`). Grammar and walk are shared in `crates/quarto-core/src/record/sources.rs`.
 - `-M` exists on `render` and `preview` (`main.rs:~96-103`, `:~426-438`), sits above the document\'s own metadata and
   applies to every document (read). `preview.engine` is a YAML setting read only by `quarto-preview`.
 - A new `execute:` key would count in the document hash of Jupyter, knitr and Julia, because none ignores unknown
@@ -61,7 +60,7 @@ OPR-6. **No product code changes.** The deliverable is one note,
       flag (the working directory); does the `config-path-base` lint or `resolve_config_path` apply.
 - [ ] **Machine-local sources.** Which entries (`positron`, `cache`, directory paths) make sense in a committed
       file, and which break another machine or CI.
-- [ ] **`convert` and `export-positron`.** `convert` has no `-M` today: what each option would need there.
+- [ ] **`convert`.** `convert` (RFU-1) has no `-M`: what each option would need there.
 - [ ] **Conflicts.** `--no-execute` plus `engine`, and `--replay` (`QUARTO_REPLAY` is read in
       `commands/render.rs`, not by clap): where each check lives if the list arrives as metadata.
 - [ ] **Per-command defaults.** Could they come from per-command metadata (`render:`, `preview:`)? Does such a

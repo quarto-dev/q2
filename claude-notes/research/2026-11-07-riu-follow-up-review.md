@@ -4,7 +4,7 @@ date: 2026-11-07
 description: 'Design and implementation review of the plan that follows the Records in use epic. Two read-only reviewers on branch feature/riu-follow-up-review (cut from feature/records-in-use at 3f0c55a6d), merged, with the claims I re-checked, what I did not verify, and how the plan was amended.'
 ---
 
-**Reviewed:** [the follow-up plan](../plans/2026-11-07-riu-follow-up-did-we-build-it.md), the epic, RIU-3, RIU-5, RIU-6
+**Reviewed:** the follow-up plan (since replaced by the [RIU follow-up epic](../plans/2026-11-08-rfu-epic-riu-follow-up.md); the single plan file was deleted on 2026-11-08), the epic, RIU-3, RIU-5, RIU-6
 and the RIU-6 commands findings, against the tree at `3f0c55a6d`.
 **Method:** two read-only Sonnet reviewers. A asked "is this the right plan?"; B asked "will this hold up in the
 tree?". Neither built or ran anything. "Verified" means I re-read it in the tree with `git grep` or ran it myself.

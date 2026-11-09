@@ -64,7 +64,7 @@ I checked myself are marked.
    plain render, and whether users get an opt-out while the route is switched.
 3. **Jupyter** under Q4.
 4. **Epic Q2 and Q6**, after the reports.
-5. The two decisions in the RIU follow-up plan that this epic does not own: the Phase A verdict and command 2
+5. The two decisions in the RIU follow-up (now the RFU epic) that this epic does not own: the Phase A verdict and command 2
    (progress, cancel and the dirty-document wording).
 
 ## Changes to the review sub-agent briefs (not started)

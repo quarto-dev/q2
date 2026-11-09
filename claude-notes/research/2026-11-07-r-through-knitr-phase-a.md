@@ -4,7 +4,7 @@ date: 2026-11-07
 description: 'Phase A of Item 1 in the RIU follow-up plan. Unfiltered q2 execution records (knitr R, Julia, Python, an inline span) were pushed into open Positron documents under Playwright, and Positron\''s own native run of the same documents was captured for comparison. Verdict, Positron''s validity rules, and what was not checked.'
 ---
 
-**Plan:** [RIU follow-up](../plans/2026-11-07-riu-follow-up-did-we-build-it.md), Item 1, Phase A.
+**Plan:** [RIU follow-up epic](../plans/2026-11-08-rfu-epic-riu-follow-up.md) (this was Item 1, Phase A of the single follow-up plan it replaced; the work continues in RFU-2 and RFU-7).
 **Status of this note:** findings only. Phase B is not started. The gate stays: Gordon decides after reading this.
 
 How each result was obtained is marked **Playwright** (an automated run against a real Positron window; nobody

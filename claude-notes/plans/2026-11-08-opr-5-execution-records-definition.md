@@ -3,19 +3,20 @@ title: 'OPR-5: one --execution-records definition, and the rename'
 date: 2026-11-08
 description: 'Defines the grammar, default, allowed values, validation and error text of the execution-records source list once, for every command that takes it, and renames --records to --execution-records (unreleased, no alias). Shape depends on Gordon''s answer to the metadata-key question researched in OPR-0d.'
 status: blocked-on-gordon
-depends-on: [opr-0d]
+depends-on: [opr-0d, rfu-1]
 lane: C
 ---
 
-**Epic:** [one presenter path](2026-11-07-one-presenter-path-epic.md) ·
+**Epic:** [one presenter path](2026-11-07-one-presenter-path-epic.md) (runs beside the [RIU follow-up](2026-11-08-rfu-epic-riu-follow-up.md)) ·
 **Protocol:** [agent protocol](2026-11-08-opr-agent-protocol.md) (read it first).
-**Branch:** `opr/5-execution-records-definition` · **Lane C** (`workspace-5`) · **Blocks:** OPR-6.
+**Branch:** `opr/5-execution-records-definition` · **Lane C** (`workspace-5`) · **Blocks:** OPR-6, RFU-4, RFU-7.
 **Needs:** Node tooling for the e2e edits; no R or Julia.
 
 ## Start condition
 
 `status` is `blocked-on-gordon` until Gordon reads the OPR-0d note, writes his decision below, and flips it to `ready`.
-If the section is empty or the status is not `ready`, stop and report.
+If the section is empty or the status is not `ready`, stop and report. RFU-1 (the `q2 convert` command; it replaces
+`q2 record export-positron`) must also be `complete`: it lands first so this plan never touches the deleted command.
 
 ## Decision by Gordon on the metadata-key question (R5)
 
@@ -36,12 +37,12 @@ git -C /Users/gordon/src/q2/.worktrees/workspace-1 merge --ff-only opr/5-executi
 
 ## Goal (decisions D6, D7)
 
-Today three commands declare the flag separately and each has its own resolver:
+After RFU-1 three commands declare the flag separately and each has its own resolver:
 
-- clap fields in `crates/quarto/src/main.rs` at about lines 63 (`q2 record export-positron`), 352 (`preview`) and 809
-  (`provide-hub`), each with its own doc comment;
+- clap fields in `crates/quarto/src/main.rs`: `preview` (about line 352), `provide-hub` (about line 809) and `convert`
+  (RFU-1, spelled `--execution-records` already), each with its own doc comment;
 - resolvers: `commands/preview.rs:~156` (`resolve_record_sources`), `commands/provide_hub.rs:~184` (near-identical),
-  and a hand-rolled default and allow-check in `commands/record.rs:~46-65`;
+  and `convert`\'s own default and allow-check from RFU-1 (it replaced `commands/record.rs`);
 - the flag name inside user-visible text, much of it asserted by tests: `engine/diagnostics.rs:~289-323`,
   `quarto-preview/src/re_execute.rs:~154`, `capture_driver.rs:~1655`, `config.rs`, `lib.rs:~271`,
   `quarto-hub-provider/src/execute.rs:~103,~145,~602,~841`, `commands/preview.rs:~169-178`, the `reject_cache` text in
@@ -57,9 +58,8 @@ Build **one** definition:
    `SOURCES`), flattened into each command.
 2. A per-command declaration of **allowed values and default**: `preview` allows `cache`, `q2`, `positron`, `engine`
    and a directory path, default `cache,q2,engine`; `provide-hub` refuses `cache`, default `engine`;
-   `q2 record export-positron` allows only `q2` and `engine`, default `q2,engine`; `render` (adopted in OPR-6)
-   refuses `cache`, default `engine`; `q2 convert` is added later by the RIU follow-up Item 8 and will declare
-   `q2` and `engine`, default `q2,engine`. Defaults differ on purpose.
+   `q2 convert` allows only `q2` and `engine`, default `q2,engine`; `render` (adopted in OPR-6) refuses `cache`,
+   default `engine`. Defaults differ on purpose.
 3. One validation and diagnostics path, and one constant for the flag name used in every message.
 4. The rename: `--records` becomes `--execution-records`, **no alias, no deprecation** (unreleased: neither `v0.42.0`
    nor `main` has it). The old spelling must be rejected as an unknown flag on every command that had it.
@@ -71,10 +71,10 @@ Build **one** definition:
 - [ ] Re-run the inventory (`git grep -n -e '--records'`, outside `claude-notes/`) and write the final list into
       "Notes from the run". (relied) 184 lines at the time of the review.
 - [ ] **Tests first, through the real argument parser, per command:** the allowed values and default per command; the
-      refusal of `cache` where declared; `--records` rejected as an unknown flag on `preview`, `provide-hub` and
-      `record export-positron`; the existing parse tests (`main.rs:~1394-1640`) rewritten to the new spelling; message
+      refusal of `cache` where declared; `--records` rejected as an unknown flag on `preview` and `provide-hub`
+      (`convert` never had it); the existing parse tests (`main.rs:~1394-1640`) rewritten to the new spelling; message
       tests rewritten (they fail first on the old name).
-- [ ] Implement the shared group, the per-command declarations and the one resolver; delete the three resolvers.
+- [ ] Implement the shared group, the per-command declarations and the one resolver; replace the three resolvers (preview, provide-hub, convert) with the one.
 - [ ] Rename in every message, comment and test. Update the TypeScript e2e files in this repository:
       `q2-preview-spa/e2e/helpers/previewServer.ts` and `q2-preview-spa/e2e/records-sources.spec.ts`; run the
       records-sources e2e if it can run here and say which ran.
@@ -94,7 +94,7 @@ Build **one** definition:
 ## Companion (Gordon, outside this repository)
 
 The Positron fork\'s extension (`q2Contract.ts` `buildPreviewArgs`, `previewCommand.ts`, their vitests) and its e2e
-use the old spelling; RIU follow-up Item 9 lists it. Not part of this plan.
+use the old spelling; RFU-7 updates them once this plan and RFU-1 have landed. Not part of this plan.
 
 ## Notes from the run
 

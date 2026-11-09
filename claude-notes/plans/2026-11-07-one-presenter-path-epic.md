@@ -1,12 +1,14 @@
 ---
 title: 'Epic: one presenter path for every engine'
 date: 2026-11-07
-description: 'Every recorded cell goes through one presenter that reads what a cell supplies, not which engine made it. Plain render of Julia and knitr joins the recorded route, Julia gains the capture facts knitr has (subject to a spike), and the execution-records option is one shared definition across preview, provide-hub and the new q2 render. Seventeen plans in four lanes, written to be run by agents with no orchestrator.'
+description: 'Every recorded cell goes through one presenter that reads what a cell supplies, not which engine made it. Plain render of Julia and knitr joins the recorded route, Julia gains the capture facts knitr has (subject to a spike), and the execution-records option is one shared definition across preview, provide-hub, convert and the new q2 render. Nineteen plans, plus the eight of the RIU follow-up epic, in four lanes on one integration branch, written to be run by agents with no orchestrator.'
 status: 'plans written 2026-11-08; ready to run; integration branch feature/one-presenter in workspace-1; three decisions still open (metadata key versus flag, the retained fallback and an opt-out, Julia spike scope)'
 ---
 
-**Follows from:** [the RIU follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md), Item 7 (Item 9 folds into
-OPR-5 here), and [the review note](../research/2026-11-07-riu-follow-up-review.md).
+**Follows from:** the RIU follow-up (its Item 7; its Item 9 folded into OPR-5), and
+[the review note](../research/2026-11-07-riu-follow-up-review.md). **Runs beside:** the
+[RIU follow-up epic](2026-11-08-rfu-epic-riu-follow-up.md) (plans `RFU-*`); this document holds the **one execution DAG**
+for both.
 **Evidence:** [spike results](../research/2026-11-07-one-presenter-spikes.md),
 [decisions note](../research/2026-11-08-one-presenter-review-decisions.md),
 [review findings](../research/2026-11-08-one-presenter-review-findings.md).
@@ -25,8 +27,8 @@ need, and degrade cleanly, one input at a time, for one that does not. The scope
    is presented by the TypeScript engine\'s `toMarkdown` and knitr by R\'s finished markdown. After this epic a plain
    render builds the record in memory and presents it through the Rust presenter, writing nothing to `.quarto`.
 2. **Julia gains the capture facts knitr has** (expression starts, anchors, output kinds), subject to the spike in OPR-4a.
-3. **`--execution-records` is one definition**, shared by `preview`, `provide-hub`, `q2 record export-positron`
-   (until RIU follow-up Item 8 replaces it with `q2 convert`) and the new `q2 render --execution-records`.
+3. **`--execution-records` is one definition**, shared by `preview`, `provide-hub`, `q2 convert` (RFU-1, which replaces
+   `q2 record export-positron`) and the new `q2 render --execution-records`.
 
 Jupyter output stays byte-identical unless a cell sets a new option (knitr epic decision 12), except for the two
 documented preview and hub fixes in OPR-1a and OPR-1b. **Marimo is a documented exception**: it uses the legacy
@@ -97,57 +99,81 @@ verified. Line numbers are for `4099022dc`; each plan says (read), (ran) or (rel
 
 ## Plans, lanes and dependencies
 
-Each plan is a unit of merge to the integration branch `feature/one-presenter` (checked out in `workspace-1`, a landing
-pad nobody edits), branched from it, rebased onto it and fast-forwarded back. A plan depends **only on complete (or
-cancelled) plans**; "complete" is the plan file\'s `status:` on the integration branch. The protocol says how.
+**One integration plan, one execution DAG, for both epics.** Each plan is a unit of merge to the integration branch
+`feature/one-presenter` (checked out in `workspace-1`, a landing pad nobody edits), branched from it, rebased onto it
+and fast-forwarded back. A plan depends **only on complete (or cancelled) plans**; "complete" is the plan file\'s
+`status:` on the integration branch. The [protocol](2026-11-08-opr-agent-protocol.md) says how. OPR plans are
+[this epic\'s](2026-11-07-one-presenter-path-epic.md); RFU plans are the
+[RIU follow-up epic\'s](2026-11-08-rfu-epic-riu-follow-up.md). The two run concurrently.
 
-| Plan | What | Depends on | Lane | Status at start |
-|---|---|---|---|---|
-| [OPR-0a](2026-11-08-opr-0a-pinning-tests.md) | Pinning tests for the loops, scope, spans and entry paths | nothing | A | ready |
-| [OPR-0b](2026-11-08-opr-0b-parity-corpus-and-harness.md) | Parity corpus and harness | nothing | D | ready |
-| [OPR-0c](2026-11-08-opr-0c-measurements-and-spikes.md) | Cost, cache, figure and route measurements (a note) | nothing | D | ready |
-| [OPR-0d](2026-11-08-opr-0d-metadata-key-research.md) | Metadata-key research (a note) | nothing | C | ready |
-| [OPR-1a](2026-11-08-opr-1a-one-cell-step.md) | One per-cell step over a struct of optional inputs | 0a | A | ready |
-| [OPR-1b](2026-11-08-opr-1b-one-document-function.md) | One document function returning outcomes | 1a | A | ready |
-| [OPR-2](2026-11-08-opr-2-enforcement-from-hash.md) | Enforcement derived from the hash, plus audit | 1b, 3 | A | ready |
-| [OPR-3](2026-11-08-opr-3-julia-engine-wire.md) | Julia declaration fix and acknowledgement | nothing | B | ready |
-| [OPR-4a](2026-11-08-opr-4a-julia-spike.md) | Julia spike (a note) | nothing | B | ready |
-| [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | conditional |
-| [OPR-4c](2026-11-08-opr-4c-julia-engine-facts.md) | Engine, wire and pin carry the facts | 4b, 3, Gordon\'s push | B | conditional |
-| [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | q2 writes the facts as cell metadata | 4c, 1b | A | conditional |
-| [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | One `--execution-records` definition and the rename | 0d, Gordon\'s R5 decision | C | blocked-on-gordon |
-| [OPR-6](2026-11-08-opr-6-render-execution-records.md) | `q2 render --execution-records` | 5, 1b | C | ready |
-| [OPR-7a](2026-11-08-opr-7a-presentation-handshake-and-record.md) | Handshake and record without the extra cost, behind a control | 1b, 3, 6 | C | ready |
-| [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md) | Cached knitr chunks fall back, no record | 0c | B | ready |
-| [OPR-7c](2026-11-08-opr-7c-run-the-parity-gate.md) | Run the parity gate, fix or propose the allowlist | 0b, 1b, 2, 7b, 4d resolved | D | ready |
-| [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | Switch plain render to the recorded route | 7a, 7b, 7c, Gordon\'s decisions | D | blocked-on-gordon |
-| [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved | D | ready |
+| Plan | Epic | What | Depends on | Lane | Status at start |
+|---|---|---|---|---|---|
+| [OPR-0a](2026-11-08-opr-0a-pinning-tests.md) | OPR | Pinning tests for the loops, scope, spans and entry paths | nothing | A | ready |
+| [OPR-0b](2026-11-08-opr-0b-parity-corpus-and-harness.md) | OPR | Parity corpus and harness | nothing | D | ready |
+| [OPR-0c](2026-11-08-opr-0c-measurements-and-spikes.md) | OPR | Cost, cache, figure and route measurements (a note) | nothing | D | ready |
+| [OPR-0d](2026-11-08-opr-0d-metadata-key-research.md) | OPR | Metadata-key research (a note) | nothing | C | ready |
+| [OPR-1a](2026-11-08-opr-1a-one-cell-step.md) | OPR | One per-cell step over a struct of optional inputs | 0a | A | ready |
+| [OPR-1b](2026-11-08-opr-1b-one-document-function.md) | OPR | One document function returning outcomes | 1a | A | ready |
+| [OPR-2](2026-11-08-opr-2-enforcement-from-hash.md) | OPR | Enforcement derived from the hash, plus audit | 1b, OPR-3 | A | ready |
+| [OPR-3](2026-11-08-opr-3-julia-engine-wire.md) | OPR | Julia declaration fix and acknowledgement | nothing | B | ready |
+| [OPR-4a](2026-11-08-opr-4a-julia-spike.md) | OPR | Julia spike (a note) | nothing | B | ready |
+| [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | OPR | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | conditional |
+| [OPR-4c](2026-11-08-opr-4c-julia-engine-facts.md) | OPR | Engine, wire and pin carry the facts | 4b, 3, Gordon\'s push | B | conditional |
+| [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | OPR | q2 writes the facts as cell metadata | 4c, 1b | A | conditional |
+| [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | OPR | One `--execution-records` definition and the rename | 0d, RFU-1, Gordon\'s R5 decision | C | blocked-on-gordon |
+| [OPR-6](2026-11-08-opr-6-render-execution-records.md) | OPR | `q2 render --execution-records` | 5, 1b | C | ready |
+| [OPR-7a](2026-11-08-opr-7a-presentation-handshake-and-record.md) | OPR | Handshake and record without the extra cost, behind a control | 1b, 3, 6 | C | ready |
+| [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md) | OPR | Cached knitr chunks fall back, no record | 0c | B | ready |
+| [OPR-7c](2026-11-08-opr-7c-run-the-parity-gate.md) | OPR | Run the parity gate, fix or propose the allowlist | 0b, 1b, 2, 7b, 4d resolved | D | ready |
+| [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, Gordon\'s decisions | D | blocked-on-gordon |
+| [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved, RFU-8 | D | ready |
+| [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
+| [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | RFU | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3, Gordon\'s Phase A verdict | B | blocked-on-gordon |
+| [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | RFU | EXR-16 sweep and the labeled-cell `fig-cap` splice test | OPR-1b | A | ready |
+| [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | RFU | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | C | ready |
+| [RFU-5](2026-11-08-rfu-5-julia-e2e-flake.md) | RFU | The Julia e2e flake: find the EPIPE closer (a note) | nothing | B | ready |
+| [RFU-6](2026-11-08-rfu-6-windows-run.md) | RFU | The Windows run (Gordon\'s machine) | OPR-6, RFU-1, RFU-2 | none | blocked-on-gordon |
+| [RFU-7](2026-11-08-rfu-7-positron-fork.md) | RFU | Positron fork: extension update, guide, e2e, cache location, command 2 | RFU-1, RFU-2, OPR-5, Gordon\'s decisions | C | blocked-on-gordon |
+| [RFU-8](2026-11-08-rfu-8-docs.md) | RFU | Docs for `q2 convert` and the Positron export | RFU-1, RFU-2 resolved | D | ready |
 
 **Lanes** (an agent takes the first startable plan in its own lane list; if none, it stops and reports):
 
 | Lane | Workspace | Plans, in order |
 |---|---|---|
-| A, the presenter chain | `workspace-3` | 0a, 1a, 1b, 2, 4d |
-| B, Julia and knitr capture | `workspace-4` | 3, 4a, 7b, 4b, 4c |
-| C, the flag | `workspace-5` | 0d, 5, 6, 7a |
-| D, measurement, gate, docs | `workspace-6` | 0c, 0b, 7c, 7d, 8 |
+| A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3 |
+| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, OPR-4b, 4c |
+| C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a, RFU-4, RFU-7 |
+| D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, RFU-8, OPR-7c, OPR-7d, OPR-8 |
 
-Lane B puts 7b before 4b and 4c because 7b only waits on OPR-0c, while 4b and 4c wait on Gordon. The integration
-checkout is `/Users/gordon/src/q2/.worktrees/workspace-1`.
+The integration checkout is `/Users/gordon/src/q2/.worktrees/workspace-1`. Lane B puts OPR-7b and RFU-5 before OPR-4b
+and 4c because those two only wait on Gordon. Lane C starts with OPR-0d (a short note Gordon must read) and then RFU-1,
+so RFU-1 runs while Gordon decides R5; OPR-5 follows when both are done.
 
-**Critical path:** 0a, 1a, 1b, then 6 (also needs 5, which needs 0d and Gordon), then 7a, then 7d (also needs 7b, 7c and
-Gordon\'s decisions), then 8. Parallel from the start: 0a, 0b, 0c, 0d, 3, 4a.
+**How the epics run concurrently.** RFU-1 lands first and depends on nothing, so OPR-5 consolidates the flag over the
+final commands and never touches the deleted `q2 record` code. RFU-2 waits for OPR-3 only to keep edits to
+`ts_protocol.rs` and the vendored Julia subtree from colliding. RFU-3 waits for OPR-1b because it pins splice output.
+RFU-4 and RFU-7 wait for OPR-5 because they use the final flag spelling. The docs of both epics land before the one
+embedded-docs refresh: RFU-8, then OPR-8. RFU-6 (Windows) runs once at the end, on Gordon\'s machine.
+
+**Critical path:** OPR-0a, 1a, 1b, then OPR-6 (also needs OPR-5, which needs OPR-0d, RFU-1 and Gordon), then OPR-7a, then
+OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Parallel from the start: OPR-0a, 0b, 0c, 0d,
+3, 4a and RFU-1, RFU-5.
 
 ## What Gordon does between plans
 
 - After OPR-0d lands: read the note, write the R5 decision into OPR-5, set it to `ready`.
+- Any time: read the [Phase A note](../research/2026-11-07-r-through-knitr-phase-a.md), record the verdict in RFU-2, set
+  it to `ready`.
 - After OPR-4a lands: read the note; set OPR-4b to `ready` with the scope he chooses, or set 4b, 4c and 4d to `cancelled`.
 - After OPR-4b lands: push the runner branch to the fork and write the revision into OPR-4c; set it to `ready`.
 - After OPR-4c lands: set OPR-4d to `ready`.
 - After OPR-7c lands: sign the allowlist, record the two decisions in OPR-7d, set it to `ready`.
-- At the end: pushes of the engine and runner forks, the Positron fork\'s extension (RIU follow-up Items 8 and 9), and the
-  rebase of `feature/one-presenter` onto `main` and the pull request. The integration branch was cut from the local
-  review branch, 175 commits that are on no remote and 158 commits behind the `main` tip on 2026-11-08.
+- Before RFU-7: confirm the fork may take commits on a new branch, record the command-2 decision in RFU-7, set it to
+  `ready`.
+- When OPR-6, RFU-1 and RFU-2 have landed: run RFU-6 on a Windows machine.
+- At the end: pushes of the engine and runner forks, a push or merge of the Positron fork branch, the rebase of
+  `feature/one-presenter` onto `main` and the pull request. The integration branch was cut from the local review branch,
+  175 commits that are on no remote and 158 commits behind the `main` tip on 2026-11-08.
 
 ## Decision points (which results could change the plan list)
 
@@ -176,5 +202,5 @@ Gordon\'s decisions), then 8. Parallel from the start: 0a, 0b, 0c, 0d, 3, 4a.
 - Jupyter positions; pptx, context and other knitr targets (strands); LaTeX (its own epic); marimo; the knitr sub-figure
   numbering (`bd-au5gts6e`); Jupyter subfloat synthesis (`bd-gbaykhth`); the parsed-but-dropped render flags; writing
   records from the new flag.
-- RIU follow-up Items 1 to 6 and 8, and the Phase A verdict and command-2 decisions, stay in the
-  [RIU follow-up plan](2026-11-07-riu-follow-up-did-we-build-it.md).
+- Everything in the [RIU follow-up epic](2026-11-08-rfu-epic-riu-follow-up.md) is that epic\'s; it shares this
+  document\'s DAG and lanes but not its decisions.
