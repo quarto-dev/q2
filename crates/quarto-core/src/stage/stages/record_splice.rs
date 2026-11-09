@@ -1346,6 +1346,7 @@ mod tests {
     }
 
     mod layering;
+    mod opr_pinning;
     mod option_sweep;
     mod stamp;
 

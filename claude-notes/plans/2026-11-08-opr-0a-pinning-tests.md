@@ -2,7 +2,7 @@
 title: 'OPR-0a: pinning tests for the presenter loops, scope, spans and entry paths'
 date: 2026-11-08
 description: 'Tests first for the one-presenter epic. Pins what the two presenter loops, the document execute scope, the span routines and the knitr and Jupyter entry paths do today, so OPR-1a and OPR-1b can prove they changed only what the epic decided. No product code changes.'
-status: in-progress
+status: complete
 depends-on: []
 lane: A
 ---
@@ -57,42 +57,42 @@ from the spikes. Read it with `git show`; **never merge or push it**. Port what 
 
 ## Checklist (tests first; every box is `[unattended]`)
 
-- [ ] Find the existing oracle and sweeps and read them: `crates/quarto-core/tests/integration/jupyter_markdown_goldens.rs`
-      (`stored_records_present_to_the_goldens`), `tests/fixtures/jupyter-markdown-goldens/` (13 shadow goldens and six
-      `ipynb-*` stored-replay goldens), `crates/quarto-core/src/presenter/jupyter_option_sweep.rs`, and the knitr
-      option sweep (`git ls-files | grep option_sweep`).
-- [ ] **Document-scope fixtures (Jupyter).** Add fixtures whose front matter sets `execute:` keys: `echo: false`,
-      `output: false`, `include: false`, `warning: false` (one fixture per key, each with a stored record that has
-      stderr and stdout outputs). Present them through `present_document` **and** through the splice. Pin today\'s
-      bytes. Decision D3 applies: a cell **without** resolved options is layered with the document scope.
-- [ ] **Document-scope test (knitr), R required.** A knitr document with `execute: {record: true, output: false}`:
-      assert the record\'s cell keeps its outputs and its `quarto_resolved_options` hold `results: "hide"` and
-      `fig.show: "hide"` (R translates `output: false` in `crates/quarto-core/src/engine/knitr/resources/rmd/execute.R:348-353`),
-      and the rendered HTML has no `cell-output` divs. Skip cleanly without R. Follow knitr epic decision 17 (R tests
-      are CI-ready, CI stays disabled).
-- [ ] **Loop differences.** One test per row of the table above, each pinning **both** sides:
-      forwarding (`#| data-testid: hero-plot` appears as a cell attribute through `present_document`, not through the
-      splice; `// OPR-1a:` the splice will forward); invalid cell options; stored-markdown format mismatch (note
-      versus silence); the span rows of the next box; the mixed-engine row of the box after.
-- [ ] **Span cases.** A table-driven test over both span routines with these records, each with its expected result
-      today: one text value; stdout then a value; two text values (last versus first); an error then a value; an
-      image-only bundle then a text value; an empty result; a span in front matter (value with and without a newline).
-      Mark every row where the two differ with `// OPR-1b:` and the decided result (`classify_inline_result` rule).
-- [ ] **Mixed-engine document.** A record with two engines in one document (knitr plus Python): pin which engine
-      entry\'s `known_options` reach a knitr cell through each loop. `// OPR-1a:` per-cell lookup everywhere.
-- [ ] **Entry-path equivalence (ports of S1 and S2).** Port the front-end diff (`from_config` against `from_knitr`
-      over the union of option keys; today 55 of 65 identical and the 10 differences are knitr\'s dotted aliases) and
-      the goldens-through-the-knitr-entry-path test (add the marker `quarto_resolved_options: {}` to every record
-      cell; today 12 of 13 shadow goldens are byte-identical and `warning-false-stderr` differs because
-      `knitr_visibility` does not read `warning`). **Add the six `ipynb-*` goldens**, which S2 did not run, and record
-      what they do. These pin the equivalence OPR-1a must keep and the one difference OPR-2 will remove.
-- [ ] **Julia route.** Keep and extend `only_julia_with_units_and_a_wanted_record_is_presented_by_core`
-      (`engine/ts_record.rs`, near line 1622) only if it needs a companion; do not change `core_presents`.
-- [ ] Register new integration test files in `crates/quarto-core/tests/integration/main.rs`, alphabetically.
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`, `cargo nextest run -p quarto-core`, and the
-      Windows cross-clippy for `quarto-core` (protocol).
-- [ ] Write "Handoff to OPR-1a and OPR-1b" in this file: a table of every test marked `// OPR-1a:` or `// OPR-1b:`,
-      with the intended new expectation. This table is the checklist those plans use to prove their changes.
+- [x] Read the oracle and sweeps: `jupyter_markdown_goldens.rs`, the 13 shadow and six `ipynb-*` goldens, `presenter/jupyter_option_sweep.rs`, and the knitr `record_splice/tests/option_sweep.rs`.
+- [x] **Document-scope fixtures (Jupyter).** `a_jupyter_cell_with_no_resolved_options_is_layered_with_the_document_scope`
+      (`record_splice/tests/opr_pinning.rs`): one source per key (`echo`, `output`, `include`, `warning`), a record with stdout
+      and stderr, through `present_document` and the splice. Both loops agree today. In-code sources, not fixture files.
+- [x] **Document-scope test (knitr), R required.** `knitr_bakes_the_document_output_scope_into_the_record`
+      (`tests/integration/presenter_pinning.rs`): `results: hide` and `fig.show: hide` in the resolved options, outputs kept,
+      no `cell-output` in the HTML. Skips without Rscript and knitr. Ran here (R present).
+- [x] **Loop differences.** One test per row: forwarding, invalid options, stored-markdown mismatch, spans (below),
+      mixed engine (below), all in `record_splice/tests/opr_pinning.rs`, each pinning both sides.
+- [x] **Span cases.** `span_cases_through_both_routines` (table-driven), plus the notes test and the two front-matter tests.
+- [x] **Mixed-engine document.** `the_engine_entry_a_knitr_cell_sees_differs_between_the_loops`.
+- [x] **Entry-path equivalence.** `presenter::options::opr_pinning` (S1 front-end diff: 55 of 65 equal, ten dotted aliases
+      differ), `shadow_goldens_through_the_knitr_entry_path` (S2) and `ipynb_goldens_through_the_knitr_entry_path` (the six
+      `ipynb-*` goldens).
+- [x] **Julia route.** Not needed: `only_julia_with_units_and_a_wanted_record_is_presented_by_core` needs no companion; `core_presents` untouched.
+- [x] `presenter_pinning` registered in `tests/integration/main.rs`, alphabetically.
+- [x] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings` (green), `cargo nextest run -p quarto-core` (see Notes). The Windows cross-clippy could not run: `aws-lc-sys` compiles C for the target and fails on macOS (the known caveat); the new tests use no platform API and no path literals.
+- [x] Handoff table (below).
+
+## Handoff to OPR-1a and OPR-1b
+
+Every comment tagged `OPR-1a:` or `OPR-1b:` (`git grep -n 'OPR-1[ab]:'`), with what the plan must change it to.
+
+| Test | Tag | Today | Intended new expectation |
+|---|---|---|---|
+| `unknown_cell_option_is_forwarded_by_render_but_not_by_the_splice` | 1a | splice emits `::: {.cell}` with no `data-testid` | splice forwards: `::: {.cell data-testid='hero-plot'}` (D9) |
+| `the_engine_entry_a_knitr_cell_sees_differs_between_the_loops` | 1a | render uses the one entry it is handed; handed Jupyter's, `bar.unknown` is not forwarded | entry looked up per cell: forwarded whichever entry the caller passes |
+| `span_cases_through_both_routines`, "two text values" | 1b | splice `1` (first), render `2` (last) | both `2` |
+| same, "an error then a value" | 1b | splice `7`, render keeps the span | both keep the span source |
+| same, "an image-only bundle then a text value" | 1b | splice keeps the span, render `5` | both `5` |
+| `shadow_goldens_through_the_knitr_entry_path` | 1a (keep) | 12 of 13 identical; `warning-false-stderr` differs (stderr shown) | unchanged until OPR-2 moves `warning` enforcement |
+| `ipynb_goldens_through_the_knitr_entry_path` | 1a (keep) | all six identical | unchanged |
+
+Pinned and **not** tagged (no epic decision changes them): invalid options (render fails, splice keeps source, D1 keeps
+the error policy per caller); stored-markdown mismatch (render notes it, splice silent); front-matter spans (render
+presents, splice skips); the Jupyter document scope (both loops identical); the S1 option-reader diff (ten dotted aliases).
 
 ## Exit criteria
 
@@ -109,4 +109,31 @@ as read.
 
 ## Notes from the run
 
-(Fill in at landing.)
+**Ran:** `cargo clippy -p quarto-core --all-targets -- -D warnings` (clean); `cargo nextest run -p quarto-core`: 8054 run,
+8053 passed, 1 failed. The failure is `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package`: this
+workspace\'s `node_modules/reveal.js` has a `reset.css` that differs from the vendored copy (property order). It is
+environmental, unrelated to this plan, and no product file changed. The 13 new tests (9 in
+`record_splice/tests/opr_pinning.rs`, 1 in `presenter/options.rs`, 3 in `tests/integration/presenter_pinning.rs`)
+all pass, with R and knitr present. **Not run:** the Windows cross-clippy (`aws-lc-sys`
+fails to compile C for `x86_64-pc-windows-msvc` on macOS); no new test uses a platform API or a path literal.
+
+**Findings.**
+
+- *Six `ipynb-*` goldens through the knitr entry path:* all six are byte-identical to their goldens. The 13 shadow
+  goldens: 12 identical, `warning-false-stderr` differs (stderr is shown), as the S2 spike found. Each run has a control
+  without the marker that reproduces the golden, so the stand-in engines are faithful.
+- *S1:* 55 of 65 option rows equal; the ten differences are knitr\'s dotted aliases (`fig.align`, `fig.env`, `fig.cap`,
+  `fig.scap`, `fig.subcap`, `fig.pos`, `out.width`, `out.height`, `out.extra`, `fig.link`).
+- *Span cases (render, splice):* one value (42, 42); stdout then value (42, 42); two text values (last `2`, first `1`);
+  error then value (span kept, `7`); image-only then text (`5`, span kept); empty (kept, kept). Front matter: render
+  writes the escaped value and fails on a newline; the splice skips. All as read in the plan.
+- *Document scope (Jupyter):* both loops agree for all four keys (`echo`: no code; `output`: code only; `include`: nothing;
+  `warning`: stdout but no stderr). The loops differ in none of them today.
+- *Same text for the same cell (blank lines):* not measured beyond the wrapper cases already pinned in
+  `jupyter_markdown_goldens`; the two loops produced equal text in every scope case above.
+- *Invalid options:* the record builder rejects invalid `#|` YAML, so the test builds a record from a valid twin and
+  re-keys the cell\'s id and content hash to the invalid source (the splice matches it by content hash).
+- *Knitr scope:* R\'s record has `results: hide` and `fig.show: hide`, keeps the stdout output, and the rendered HTML has no
+  `cell-output` and no `[1] 2`. (The echoed code still contains the text of the `cat` call, so the assertion is on the
+  output value.)
+- Document-scope fixtures are in-code sources, not files, so no snapshot or golden file was added, changed or removed.
