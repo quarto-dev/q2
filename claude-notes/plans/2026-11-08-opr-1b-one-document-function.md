@@ -2,7 +2,7 @@
 title: 'OPR-1b: one document function that returns outcomes'
 date: 2026-11-08
 description: 'Merges the two document-level loops (present_document and the splice stage loop) into one function that takes already-matched cells and returns, per unit, a replacement, a skip with a reason, or an error, plus one shared apply_edits step. Callers keep matching, error policy, reporting, stamping and the AST reparse. Applies the span rule from classify_inline_result to both surfaces.'
-status: ready
+status: in-progress
 depends-on: [opr-1a]
 lane: A
 ---
