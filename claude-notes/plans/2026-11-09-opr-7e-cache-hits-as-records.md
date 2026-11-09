@@ -377,7 +377,7 @@ returns this run\'s marker line. Any failed check leaves the chunk unrecorded an
 36 skipped, **1 failed**: `opr_parity_runner::tests::the_seeded_allowlist_parses_and_every_entry_is_proposed` (the allowlist has
 8 entries, the test says 6). It reads a file this plan does not touch (`git diff feature/one-presenter -- crates/quarto-core/tests`
 is empty); OPR-7c added two proposed entries and left the count stale. Not fixed here. `cargo xtask lint`: only the known
-`positron_cache.rs:360`. **Windows cross-clippy not run**: the `aws-lc-sys` C build fails on this macOS host. `npm run
+`positron_cache.rs:360`. **Windows cross-clippy** failed on this macOS host (`aws-lc-sys` C build; rerun in the follow-up, same result). `npm run
 build:wasm` not run: nothing under `presenter/`, `record/`, the splice stage or `engine/{replay,ipynb_replay,skeleton}.rs`
 changed (the R files and tests only). No snapshot or golden files changed (0).
 
@@ -396,10 +396,26 @@ difference.
   not inspected, and widget sizes (S9) were not measured.
 - A PDF render after an html render was not run.
 
-**Not done.** S2 and Phase E (level 1): skipped, as the plan allows when S2 has not passed; level 1 stays as OPR-7b has it. S5
-(`dependson`, `autodep`, `cache.lazy`, `cache.rebuild`, `<doc>_files` deleted, `child=`, callout) and S9 sizes were not run through
-`capture.R`; the digest check and the entry-removed case were exercised in plain R only. S6: knitr 1.52 was not available, and the
-sidecar was run through q2 only on 1.50 (the installed knitr); the 1.44 run is plain R. Nothing here touched
-`presenter/cell.rs`, `engine/ts_record.rs` or the parity allowlist, so OPR-7f needs no rebase around this plan. The capture-on
-test that checks the skeleton marker with a nonce is covered only by the end-to-end run above, not by a unit test.
+**Not done in the run, then run in the follow-up (2026-11-09, lane B; evidence in the
+[spike note\'s addendum](../research/2026-11-09-opr-7e-cache-record-spike.md)).** S2 and Phase E (level 1) stay skipped and level 1
+stays as OPR-7b has it; nothing here touched `presenter/cell.rs`, `engine/ts_record.rs` or the parity allowlist, so OPR-7f needs
+no rebase around this plan.
 
+- **S5 through `capture.R`, ran, now tests** (`capture_tests.rs`, all green on the first run since they pin existing behavior):
+  `dependson`, `autodep`, `cache.lazy: false`, `cache.rebuild` (runs again, recorded live), a callout, `child=`, and `<doc>_files`
+  deleted with the cache kept. Every hit is recorded like the miss, or absent and quiet, and the document never differs. The
+  deleted-`_files` case keeps knitr\'s own caveat (the cached figure is not redrawn; the render warns Q-5-6, as an unrecorded run does).
+  No case produced wrong output.
+- **S9 sizes, ran.** Corpus sidecars: median 1.5 KB, largest 12.5 KB (a plotly widget). A sidecar is about twice the chunk\'s output
+  (it holds the record\'s pieces and the chunk markdown), 3.8 MB for a 100,000-value widget. **No size cap is enforced** in `capture.R`;
+  reported as a finding, no cap invented. This corrects the spike\'s "digest only, a few hundred bytes" guess.
+- **The skeleton marker on a hit, now a unit test** (this run\'s nonce, with the blockquote prefix, checked by mutation).
+- **End to end, ran:** a record run followed by a plain run of the same file **misses** (and the reverse); they share one entry slot per
+  chunk label and evict each other. A second format (`typst`; `pdf` is not supported yet) misses in its own cache directory and html
+  then hits. A widget chunk at level 3 twice gives identical html with all 17 script and link tags and the widget dependency
+  directories present on the hit.
+- **Versions, ran:** knitr 1.44, 1.50 and 1.52. All `capture_tests` pass on 1.44 and 1.50; on 1.52 one test fails,
+  `capture_classifies_pieces` (evaluate 1.0.5 reports `rlang_error` where the test expects `simpleError`), which is not about the cache and
+  needs an owner. An entry written by another knitr version is a quiet miss, not a misread.
+- **Windows cross-clippy, ran, failed as in 7b, 7c and 7e:** `aws-lc-sys` fails to build for `x86_64-pc-windows-msvc` on this macOS host
+  (`cc` error compiling the jitterentropy C files). Not worked around; the new tests use no platform API and no path literal.
