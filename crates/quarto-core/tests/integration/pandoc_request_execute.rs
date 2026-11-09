@@ -47,6 +47,7 @@ fn write_fake_pandoc(dir: &Path) -> PathBuf {
          if defined FAKE_SLEEP (ping -n %FAKE_SLEEP% 127.0.0.1 >nul)\r\n\
          (for %%a in (%*) do echo ARG:%%~a) > \"%FAKE_LOG%\"\r\n\
          echo SHARE:%QUARTO_SHARE_PATH%>> \"%FAKE_LOG%\"\r\n\
+         if defined SOURCE_DATE_EPOCH (>> \"%FAKE_LOG%\" echo SDE:%SOURCE_DATE_EPOCH%) else (>> \"%FAKE_LOG%\" echo SDE:unset)\r\n\
          if defined FAKE_FAIL (echo lua: boom 1>&2 & exit /b 3)\r\n\
          exit /b 0\r\n",
     )
@@ -205,12 +206,17 @@ fn execute_applies_dirs_files_share_tree_argv_and_env() {
     assert!(root.join("pandoc-filter-deps.txt").is_file());
     assert!(root.join("pandoc-share/filters/main.lua").is_file());
     let log = std::fs::read_to_string(&fake.log).unwrap();
-    let args: Vec<&str> = log.lines().filter_map(|l| l.strip_prefix("ARG:")).collect();
+    let args: Vec<String> = log
+        .lines()
+        .filter_map(|l| l.strip_prefix("ARG:"))
+        .map(str::to_string)
+        .collect();
     assert_eq!(
         args,
+        // The request is `/`-normalized; a native Windows execute spells args natively.
         request.argv[1..]
             .iter()
-            .map(String::as_str)
+            .map(|a| quarto_core::pandoc_request::args::to_native_windows_arg(a))
             .collect::<Vec<_>>()
     );
     assert!(log.contains("SDE:123"), "request env is applied: {log}");
