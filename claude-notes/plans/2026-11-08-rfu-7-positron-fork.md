@@ -2,7 +2,7 @@
 title: 'RFU-7: the Positron fork, extension update, demo guide, e2e and cache location'
 date: 2026-11-08
 description: 'The work that lives in the Positron fork (a different repository): update the demo extension for q2 convert and the execute: record-sources key (set with -M), run the extended raw-record experiment, add the R e2e test, write the demo run guide, prototype the cache-location feature, add the missing e2e cases, and apply Gordon''s command-2 decision. Commits go on a fork branch and never to the q2 integration branch; the q2 side lands only a note.'
-status: ready
+status: in-progress
 depends-on: [rfu-1, rfu-2, opr-5]
 lane: A
 ---
