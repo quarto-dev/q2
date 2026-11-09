@@ -37,6 +37,8 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+# Backtraces in panic output (nextest logs them; the reasons script keeps our own frames).
+$env:RUST_BACKTRACE = '1'
 Set-StrictMode -Version Latest
 
 $repo = (& git rev-parse --show-toplevel).Trim()

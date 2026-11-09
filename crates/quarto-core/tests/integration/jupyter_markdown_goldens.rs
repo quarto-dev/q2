@@ -125,6 +125,35 @@ fn capture(input: &Path, want_record: bool) -> (Value, Option<String>) {
     (captures.into_iter().next().unwrap().1, record)
 }
 
+/// The first lines where `expected` and `actual` differ (up to 10), with line-ending
+/// counts, so a failure message stays short and shows the cause.
+fn first_diff(expected: &str, actual: &str) -> String {
+    let (e, a): (Vec<_>, Vec<_>) = (expected.lines().collect(), actual.lines().collect());
+    let mut out = format!(
+        "expected {} lines / {} CR; actual {} lines / {} CR\n",
+        e.len(),
+        expected.matches('\r').count(),
+        a.len(),
+        actual.matches('\r').count()
+    );
+    let mut shown = 0;
+    for i in 0..e.len().max(a.len()) {
+        if e.get(i) != a.get(i) {
+            out.push_str(&format!(
+                "  line {}:\n    - {:?}\n    + {:?}\n",
+                i + 1,
+                e.get(i),
+                a.get(i)
+            ));
+            shown += 1;
+            if shown >= 10 {
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// Compare `actual` with the golden at `path`, or write it when blessing.
 fn check(path: &Path, actual: &str, problems: &mut Vec<String>) {
     if bless() {
@@ -134,8 +163,9 @@ fn check(path: &Path, actual: &str, problems: &mut Vec<String>) {
     match std::fs::read_to_string(path) {
         Ok(expected) if expected == actual => {}
         Ok(expected) => problems.push(format!(
-            "{}: differs\n--- expected\n{expected}\n--- actual\n{actual}",
-            path.display()
+            "{}: differs\n{}",
+            path.display(),
+            first_diff(&expected, actual)
         )),
         Err(e) => problems.push(format!("{}: unreadable ({e})", path.display())),
     }
@@ -322,9 +352,7 @@ fn stored_records_present_to_the_goldens() {
         let golden = std::fs::read_to_string(goldens_root().join(format!("{name}.md"))).unwrap();
         let actual = markdown_of(&captures[0].1);
         if actual != golden {
-            problems.push(format!(
-                "{name}: differs\n--- golden\n{golden}\n--- presented\n{actual}"
-            ));
+            problems.push(format!("{name}: differs\n{}", first_diff(&golden, &actual)));
         }
         if *name == "png-plus-text" {
             assert!(

@@ -90,7 +90,7 @@ foreach ($f in @($files | Where-Object { $_.Name -match '\.log$' })) {
         $blk = New-Object System.Collections.Generic.List[string]
         for ($j = $i + 1; $j -lt $L.Count; $j++) {
             if ($L[$j] -match '^\s*(FAIL|PASS|SLOW|SIGABRT|TIMEOUT)\s+\[') { break }
-            if ($L[$j] -match '^\s+\d+:\s+0x[0-9a-fA-F]+\s' -or $L[$j] -match '^\s+at\s') { continue }
+            if ($L[$j] -match '^\s+\d+:\s+0x[0-9a-fA-F]+\s' -or ($L[$j] -match '^\s+at\s' -and $L[$j] -notmatch 'crates[\\/]')) { continue }
             $t = $L[$j].TrimEnd()
             if ($t.Length -gt 400) { $t = $t.Substring(0, 400) + ' ...' }
             $blk.Add($t)
@@ -106,6 +106,15 @@ foreach ($f in @($files | Where-Object { $_.Name -match '\.log$' })) {
         }
         $detail.Add('')
     }
+}
+# Vitest log (not nextest format): its failure lines and the last lines of output.
+foreach ($f in @(Get-ChildItem -Path $dir -File | Where-Object { $_.Name -match '^\d\d-vitest-.*\.log$' })) {
+    $V = @(Get-Content -LiteralPath $f.FullName)
+    $detail.Add('=== ' + $f.Name + ' (' + $V.Count + ' lines): failure lines, then the last 60 lines')
+    foreach ($t in @($V | Where-Object { $_ -match 'FAIL|AssertionError|Error:|expected|received' } | Select-Object -First 60)) { $detail.Add($t.TrimEnd()) }
+    $detail.Add('--- tail')
+    foreach ($t in @($V | Select-Object -Last 60)) { $detail.Add($t.TrimEnd()) }
+    $detail.Add('')
 }
 $detailDest = Join-Path $dir 'failure-details.txt'
 $detail | Out-File -Encoding ascii -FilePath $detailDest
