@@ -2,7 +2,7 @@
 title: 'OPR-0b: parity corpus and harness for the plain-render switch'
 date: 2026-11-08
 description: 'Builds the instrument that decides whether a plain render of Julia and knitr documents may move to the recorded route: knitr corpus additions, a live Julia corpus, a harness that renders each document both ways and classifies every difference, and a committed baseline report. The gate rule itself is applied in OPR-7c.'
-status: ready
+status: in-progress
 depends-on: []
 lane: D
 ---
