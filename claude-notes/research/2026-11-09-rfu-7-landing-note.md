@@ -6,7 +6,7 @@ description: 'The fork branch and its commits, what ran under Playwright, what a
 
 **Plan:** [RFU-7](../plans/2026-11-08-rfu-7-positron-fork.md) \
 **Fork:** `/Users/gordon/src/positron-riu6-a`, branch `q2/rfu-7-demo-followups`, cut from `spike/riu-6-phase-a` at `99aa72fcb4`.
-Six commits, local only. Nothing was pushed and no other fork branch was touched.
+Seven commits, local only. Nothing was pushed and no other fork branch was touched.
 
 ## Fork commits
 
@@ -18,6 +18,7 @@ Six commits, local only. Nothing was pushed and no other fork branch was touched
 | `4cbd86bcb4` | q2-records-demo: ask Positron for the output cache directory |
 | `2821b5302b` | e2e: R render-and-push test, and a non-default-profile test (fixme) |
 | `dd1132bbdb` | e2e: the non-default-profile test opens the palette with the standard shortcut |
+| `7251378ab2` | e2e: untitled, q2-too-old and dirty-document cases, and command 1 on R spans |
 
 **For Gordon to review:** `4cbd86bcb4` changes Positron core, not just the extension. It adds the internal command
 `_positronQuarto.getOutputCacheDir` (in `quartoPushOutputs.ts` and `quartoOutputCacheService.ts`), so that command 3
@@ -36,12 +37,18 @@ person has watched any of these runs yet.
 | Commands 2 and 3 under `--profile q2-e2e-profile` | Playwright | pass (52 s, after the fix below) |
 | Extension vitests (`extensions/q2-records-demo/src`) | CLI | 66 of 66 |
 | Core type check (`npm run build-check`) | CLI | 0 errors |
-| "q2 too old" detection (exit 2) | vitest only | covered in `4692725893`; no e2e |
-| Untitled document; a dirty document | not run | no e2e |
-| Command 1 on Julia and R spans | not run | only Python was run |
+| "q2 too old" (a fake q2 that exits 2): the toast says "probably too old" | Playwright | pass |
+| Untitled document: the toast says "Save the document first" | Playwright | pass |
+| Dirty document: the saved-file note appears, and the saved file's outputs still arrive | Playwright | pass |
+| Command 1 on R spans (`inline_exprs_r.qmd`) | Playwright | pass (2 values, 42 and 3) |
+| Command 1 on Julia spans | not run | Positron has no Julia kernel in this build, so there is nothing for the command to run on |
 | Raw-record experiment (fallback cell, marimo) | not run | see below |
 
 All runs used `target/debug/q2` built from this branch.
+
+Finding from the R span case: a document with no code chunk has no primary language, so command 1 finds no spans.
+The first R fixture had only spans and showed no values; adding one `{r}` chunk fixed it. This is existing Positron
+behavior, not a change made here, and it is not documented in the demo guide.
 
 ## The non-default-profile test
 
@@ -72,7 +79,7 @@ recommendation about lifting them.
 
 ## Fork environment incidents
 
-- Replacing the fork's `node_modules` symlinks with a real install emptied `positron-spike-s3`'s extension
+- Replacing the fork's `node_modules` symlinks with a real install emptied `positron-spike-s3`\'s extension
   `node_modules`. Gordon approved a repair and `npm ci` was re-run there. Node 24.22.1 is required. The pre-commit hook
   fails under Node 24.5.0, so put 24.22.1 on `PATH` before committing.
 - Nine orphaned `esbuild --watch` processes from `spike-s3` may remain.

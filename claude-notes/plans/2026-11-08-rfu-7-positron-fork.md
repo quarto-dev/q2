@@ -94,7 +94,7 @@ checked out in other worktrees).
       idiomatic; the service already holds `_cacheDir`. Then tests first (a vitest for the extension, and a check with a
       non-default profile), replace `cacheDirFromGlobalStorage`, and make a missing answer an error that names the
       cause. Done when commands 2 and 3 work under a non-default profile.
-- [ ] **E2E cases not run in any window:** untitled document, "q2 too old" (exit 2), non-default profile, a dirty
+- [x] **E2E cases not run in any window** (all four ran under Playwright; command 1 on Julia is not runnable, Positron has no Julia kernel here): untitled document, "q2 too old" (exit 2), non-default profile, a dirty
       document; and **command 1 on Julia and R spans** (command 1, `positronQuarto.runInlineExpressions`,
       `quartoRunInlineExpressions.ts`, never calls q2; its span detector takes the document\'s primary kernel language,
       `quartoInlineExpr.ts:~35`, and nothing in `quartoInlineExprExecutor.ts` is Python-specific; only Python was run).
@@ -126,6 +126,5 @@ helper uses a `Cmd+J E` keybinding that only the default profile has.
 
 **Not done (this plan stays `in-progress`):**
 
-- The e2e cases for an untitled document, "q2 too old" (exit 2), a dirty document, and command 1 on Julia and R spans.
 - The raw-record experiment (fallback cell, marimo). It needs the `q2spike.pushRaw` helper, which lives only in another session's scratchpad.
 - The `[Gordon]` box: someone watches the R and Julia e2e once.
