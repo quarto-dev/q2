@@ -44,19 +44,30 @@ it for each page you edit.
   numeric `echo` after OPR-1a to OPR-4d (what works for which engine; `prompt` and numeric `echo` need expression
   starts, which knitr and Julia supply and Jupyter does not, so Jupyter cells treat code as one expression; who
   hides warnings follows each engine); the sentence at about line 31, "Each cell is shown as code with no output, and
-  no engine is started", is false for `--no-execute --execution-records q2`; keep the page\'s existing structure
+  no engine is started", is false for `--no-execute` with `execute: record-sources: q2`; keep the page\'s existing structure
   and add to its "differ by engine" sections.
 - `docs/guides/authoring/execution-records.qmd`: it says a plain `q2 render` writes nothing under `.quarto/` (about
   line 20), that `q2 render` does not read Positron\'s cache (about lines 80-82), and that `q2 preview` and
-  `q2 provide-hub` take `--records` (about lines 89-114). Update for `--execution-records`, the new
-  `q2 render --execution-records` (read only, default `engine`, stale or format-mismatched records count as not
-  supplied, a document with no source warns and stays inert, `--strict`, `--no-execute`, `--replay`), the fact that
+  `q2 provide-hub` take `--records` (about lines 89-114). The option is gone (decision R5, Gordon, 2026-11-09): document
+  the metadata key `execute: record-sources` instead, a comma-separated scalar (`positron,engine`) set in a document, a
+  directory\'s `_metadata.yml`, `_quarto.yml`, or for one run with `-M 'execute:{record-sources: positron,engine}'` (the
+  braces are needed: `-M` does not expand dotted keys). Cover: the entries and what each command allows and defaults to
+  (preview `cache,q2,engine`, render `engine`, convert `q2,engine`, provide-hub `engine`); that a valid entry a command
+  cannot use is ignored with a note while an unknown one is an error; that the list is resolved per document; that a
+  directory entry must be **inside the project** (relative to the file that wrote it, a leading `/` is the project root;
+  an absolute path or one outside the project is an error, and the pitfall is that a Positron cache outside the project
+  cannot be named, so use the `positron` entry or link the cache in); that `-M` overrides the document; `--no-execute`
+  and `execute: enabled: false` veto `engine`; `--replay` wins; the committed-file behavior (an entry with nothing to
+  find falls through to the next, so the output can depend on whose machine runs it); that `provide-hub` and a `--share`
+  preview take the host list as a ceiling (a shared document may only reorder or narrow it, and the host sees a warning
+  for the rest); and the new `q2 render` behavior (read only, default `engine`, stale or format-mismatched records count
+  as not supplied, a document with no source warns and stays inert, `--strict`), the fact that
   a plain render of Julia and knitr now presents from an in-memory record and writes nothing, and the `cache:
   true` chunk behavior.
 - `docs/guides/projects/preview.qmd`: the rename (about lines 147, 153, 162, 247), and the difference that preview
   shows a stale record while render treats it as not supplied; `preview.engine` is preview-only.
-- The render options page (`docs/guides/projects/render-options.qmd`): the new flag.
-- Search for any other page that mentions `--records`: `git grep -n -e '--records' docs/`; the result must be empty.
+- The render options page (`docs/guides/projects/render-options.qmd`): there is no new flag; point to `execute: record-sources` and the `-M` spelling.
+- Search for any other page that mentions `--records` or `--execution-records`: `git grep -n -e '--records' -e '--execution-records' docs/`; the result must be empty.
 - A knitr page or note about caching, only if a page describes it today (`git grep -n -i 'cache' docs/guides`);
   say that chunks with `cache: true` keep knitr\'s cache and are not part of the execution record.
 
@@ -66,15 +77,15 @@ it for each page you edit.
       as sentences first and list them in "Notes from the run".
 - [ ] Edit the pages with the `/reader-expectations-prose` skill. Render: `target/debug/q2 render docs/` and fix
       every warning your edits caused.
-- [ ] `git grep -n -e '--records'` outside `claude-notes/` prints nothing.
+- [ ] `git grep -n -e '--records' -e '--execution-records'` outside `claude-notes/` prints nothing.
 - [ ] **Embedded docs, once:** `cargo xtask build-agents-docs` then `cargo build --bin q2`; confirm with
       `target/debug/q2 docs llms --embed-info`. (It renders the docs with the `q2` you just built, so run it after a
       Rust build.)
 - [ ] **End-to-end for the whole epic**, through the real binary, recording each invocation and what you saw (say
       which were seen by a person and which were automated): `q2 render` plain on Jupyter, Julia, knitr and a LaTeX
-      target; `q2 render --execution-records q2` with a prior record; `q2 render --execution-records q2,engine` with a
-      stale record; `q2 render --execution-records q2 --no-execute`; `q2 preview` of the same documents; `q2 render
-      --execution-records` on a project of several documents.
+      target; `q2 render -M 'execute:{record-sources: q2}'` with a prior record; `-M 'execute:{record-sources: q2,engine}'` with a
+      stale record; `-M 'execute:{record-sources: q2}' --no-execute`; the key in front matter instead of `-M`; `q2 preview`
+      of the same documents; `q2 render` of a project of several documents with a different key in each.
 - [ ] The preview chain: `cd hub-client && npm run build:wasm`, `cargo xtask build-q2-preview-spa`,
       `cargo build --bin q2`, then confirm the preview.
 - [ ] `cargo xtask lint`; `cargo clippy` on the crates the epic touched (`quarto`, `quarto-core`, `quarto-preview`,

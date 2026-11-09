@@ -1,8 +1,8 @@
 ---
 title: 'Epic: one presenter path for every engine'
 date: 2026-11-07
-description: 'Every recorded cell goes through one presenter that reads what a cell supplies, not which engine made it. Plain render of Julia and knitr joins the recorded route, Julia gains the capture facts knitr has (subject to a spike), and the execution-records option is one shared definition across preview, provide-hub, convert and the new q2 render. Nineteen plans, plus the eight of the RIU follow-up epic, in four lanes on one integration branch, written to be run by agents with no orchestrator.'
-status: 'plans written 2026-11-08; ready to run; integration branch feature/one-presenter in workspace-1; three decisions still open (metadata key versus flag, the retained fallback and an opt-out, Julia spike scope)'
+description: 'Every recorded cell goes through one presenter that reads what a cell supplies, not which engine made it. Plain render of Julia and knitr joins the recorded route, Julia gains the capture facts knitr has (subject to a spike), and the execution-records source list is one metadata key, execute: record-sources, read by one early reader in preview, provide-hub, convert and the new q2 render (no command-line option). Nineteen plans, plus the eight of the RIU follow-up epic, in four lanes on one integration branch, written to be run by agents with no orchestrator.'
+status: 'plans written 2026-11-08; ready to run; integration branch feature/one-presenter in workspace-1; two decisions still open (the retained fallback and an opt-out, Julia spike scope); R5 decided 2026-11-09: the list moves into metadata and the command-line option is removed'
 ---
 
 **Follows from:** the RIU follow-up (its Item 7; its Item 9 folded into OPR-5), and
@@ -27,8 +27,9 @@ need, and degrade cleanly, one input at a time, for one that does not. The scope
    is presented by the TypeScript engine\'s `toMarkdown` and knitr by R\'s finished markdown. After this epic a plain
    render builds the record in memory and presents it through the Rust presenter, writing nothing to `.quarto`.
 2. **Julia gains the capture facts knitr has** (expression starts, anchors, output kinds), subject to the spike in OPR-4a.
-3. **`--execution-records` is one definition**, shared by `preview`, `provide-hub`, `q2 convert` (RFU-1, which replaces
-   `q2 record export-positron`) and the new `q2 render --execution-records`.
+3. **The record source list is one metadata key**, `execute: record-sources`, read by one early reader for `preview`,
+   `provide-hub`, `q2 convert` (RFU-1, which replaces `q2 record export-positron`) and `q2 render`; the `--records`
+   option is removed and `-M` is the command-line way (decision R5, 2026-11-09).
 
 Jupyter output stays byte-identical unless a cell sets a new option (knitr epic decision 12), except for the two
 documented preview and hub fixes in OPR-1a and OPR-1b. **Marimo is a documented exception**: it uses the legacy
@@ -54,13 +55,19 @@ capture splice and is not part of this epic.
   record, quietly. The LaTeX family, `pptx`, `context` and unknown knitr targets stay on the engine route, quietly
   (strands `bd-4y5scdhp`, `bd-lo1cs7u5`, `bd-ka76vcrp` track widening; LaTeX notes live in the LaTeX plan on
   `explore/pandoc-hybrid-latex`). Whether the retained fallback survives, and whether an opt-out exists, are open (OPR-7d).
-- **D6. `render --execution-records`.** Read only (writing stays with `execute: record: true`); default `engine`; `cache`
-  refused; one list for all documents, walked per document; no source and no `engine` warns and leaves cells inert
-  (`--strict` errors; prose-only silent); a stale record, or one recorded for another format, counts as not supplied;
-  `want_record` unchanged; `--no-execute` vetoes `engine`; `--replay` conflicts (a runtime check, which covers
+- **D6. `render` reads `execute: record-sources`** (updated by R5, 2026-11-09; there is no render option). Read only
+  (writing stays with `execute: record: true`); default `engine`; `cache` is ignored with an info line; the list is
+  resolved **per document**; no source and no `engine` warns and leaves cells inert (`--strict` errors; prose-only
+  silent); a stale record, or one recorded for another format, counts as not supplied; `want_record` unchanged;
+  `--no-execute` vetoes `engine`; `--replay` wins over a key, with an info line (a runtime check, which covers
   `QUARTO_REPLAY`); `preview.engine` stays preview-only; `preview --static` is in scope.
-- **D7. Consolidation.** The grammar and handling are defined once; the rename `--records` to `--execution-records`
-  (unreleased, no alias) is folded in (OPR-5). Its shape depends on the metadata-key research (OPR-0d, then Gordon).
+- **D7. Consolidation, decided by R5 (Gordon, 2026-11-09): move, no flag.** The source list is the metadata key
+  `execute: record-sources` (a comma-separated scalar; entries `engine`, `q2`, `positron`, `cache` and an in-project
+  directory), read before the pipeline by one early reader built on `collect_metadata_layers`, with per-command allowed
+  values and defaults; `--records` is deleted from `preview` and `provide-hub` with no alias, and `q2 convert` gains `-M`
+  (OPR-5, RFU-1). `provide-hub` and a `--share` preview treat the host list as a ceiling a guest document may only reorder
+  or narrow (OPR-5 Part B, OPR-6). The evidence and every sub-decision are in the
+  [OPR-0d note](../research/2026-11-08-opr-metadata-key-research.md).
 - **D8. Handshake.** Core offers `presentedBy: "core"`; an engine acknowledges in its returned record info; core
   presents from the record exactly when acknowledged. No engine-name test (OPR-3, OPR-7a).
 - **D9. Merge-time fixes to preview and hub.** Unknown `#|` options on Jupyter cells are forwarded on both surfaces
@@ -120,8 +127,8 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-4b](2026-11-08-opr-4b-julia-runner-facts.md) | OPR | Runner reports the facts (another repository) | 4a, Gordon\'s go | B | conditional |
 | [OPR-4c](2026-11-08-opr-4c-julia-engine-facts.md) | OPR | Engine, wire and pin carry the facts | 4b, 3, Gordon\'s push | B | conditional |
 | [OPR-4d](2026-11-08-opr-4d-julia-facts-consumed.md) | OPR | q2 writes the facts as cell metadata | 4c, 1b | A | conditional |
-| [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | OPR | One `--execution-records` definition and the rename | 0d, RFU-1, Gordon\'s R5 decision | C | blocked-on-gordon |
-| [OPR-6](2026-11-08-opr-6-render-execution-records.md) | OPR | `q2 render --execution-records` | 5, 1b | C | ready |
+| [OPR-5](2026-11-08-opr-5-execution-records-definition.md) | OPR | The `execute: record-sources` key, one early reader, `--records` removed, a ceiling for provide-hub and `--share` | 0d, RFU-1, 3, Gordon\'s flip | C | blocked-on-gordon |
+| [OPR-6](2026-11-08-opr-6-render-execution-records.md) | OPR | `q2 render` reads `execute: record-sources` | 5, 1b | C | ready |
 | [OPR-7a](2026-11-08-opr-7a-presentation-handshake-and-record.md) | OPR | Handshake and record without the extra cost, behind a control | 1b, 3, 6 | C | ready |
 | [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md) | OPR | Cached knitr chunks fall back, no record | 0c | B | ready |
 | [OPR-7c](2026-11-08-opr-7c-run-the-parity-gate.md) | OPR | Run the parity gate, fix or propose the allowlist | 0b, 1b, 2, 7b, 4d resolved | D | ready |
@@ -147,9 +154,9 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 
 The integration checkout is `/Users/gordon/src/q2/.worktrees/workspace-1`. Lane B puts OPR-7b and RFU-5 before OPR-4b
 and 4c because those two only wait on Gordon. Lane C starts with OPR-0d (a short note Gordon must read) and then RFU-1,
-so RFU-1 runs while Gordon decides R5; OPR-5 follows when both are done.
+so RFU-1 runs while Gordon reads the note; R5 is now decided, and OPR-5 follows when RFU-1 and OPR-3 are done and Gordon flips it.
 
-**How the epics run concurrently.** RFU-1 lands first and depends on nothing, so OPR-5 consolidates the flag over the
+**How the epics run concurrently.** RFU-1 lands first and depends on nothing, so OPR-5 wires the key over the
 final commands and never touches the deleted `q2 record` code. RFU-2 waits for OPR-3 only to keep edits to
 `ts_protocol.rs` and the vendored Julia subtree from colliding. RFU-3 waits for OPR-1b because it pins splice output.
 RFU-4 and RFU-7 wait for OPR-5 because they use the final flag spelling. The docs of both epics land before the one
@@ -161,7 +168,7 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 
 ## What Gordon does between plans
 
-- After OPR-0d lands: read the note, write the R5 decision into OPR-5, set it to `ready`.
+- OPR-0d landed and R5 (move, no flag) is recorded in OPR-5: flip OPR-5 to `ready` once RFU-1 and OPR-3 are complete.
 - Any time: read the [Phase A note](../research/2026-11-07-r-through-knitr-phase-a.md), record the verdict in RFU-2, set
   it to `ready`.
 - After OPR-4a lands: read the note; set OPR-4b to `ready` with the scope he chooses, or set 4b, 4c and 4d to `cancelled`.
@@ -179,7 +186,7 @@ OPR-7d (also needs OPR-7b, 7c and Gordon\'s decisions), then RFU-8 and OPR-8. Pa
 
 | Result | If it comes back this way | What changes |
 |---|---|---|
-| OPR-0d, R5 | metadata, or a mix | OPR-5 and OPR-6 change input and shape; hash exclusions touch the Julia and knitr declarations |
+| OPR-0d, R5 | **decided 2026-11-09: metadata only** | recorded in OPR-5 (key, early reader, hash exclusions in the Jupyter, knitr and Julia declarations, ceiling), OPR-6, RFU-1 and the docs plans |
 | OPR-0c, cost | expensive | OPR-7a grows into a new seam (its own plan) |
 | OPR-0c, cache spike | a mixed document is wrong | OPR-7b needs Gordon (blocked) and may grow |
 | OPR-7c, parity | blockers beyond the known Julia three | fix plans appear before OPR-7d |

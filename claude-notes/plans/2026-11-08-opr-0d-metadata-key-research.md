@@ -91,3 +91,13 @@ Deliverable: [the research note](../research/2026-11-08-opr-metadata-key-researc
   I found no caller that strips it; not confirmed with a full render. Out of scope here; no strand opened.
 - **Recommendation:** flag only for OPR-5 and OPR-6, with a narrow key (`engine` and `q2`, flag wins) as an additive
   follow-up. Gordon decides and records it in OPR-5.
+
+**Follow-up after Gordon\'s review (2026-11-09).** Gordon read the note and decided to **move** the source list into the
+metadata key `execute: record-sources` and remove the command-line option entirely (decision R5). The note now opens with
+the nine sub-decisions and corrects one claim (a committed `positron` entry falls through, it does not break another
+machine). The decision is recorded in OPR-5, whose status is still `blocked-on-gordon`: flipping it to `ready` is his
+step. Plans edited to match (all later plans; OPR-0a, OPR-0c and OPR-3 needed nothing): OPR-5 (rewritten: key, early
+reader on `collect_metadata_layers`, per-command declarations, hash exclusion in three engines, Part B ceiling for
+`provide-hub` and a `--share` preview; now depends on OPR-3), OPR-6, RFU-1 (no option for the list, accepts `-M`),
+RFU-4, RFU-6, RFU-7, RFU-8, OPR-8, OPR-1b (one phrase), both epics, and the dependency SVG. Strand `bd-ia3idnvk` tracks
+the client-visible provider warnings. Not done: no product code, no test of the provider leak.

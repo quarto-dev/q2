@@ -25,7 +25,7 @@ git -C /Users/gordon/src/q2/.worktrees/workspace-1 merge --ff-only rfu/4-verific
 
 ## Why this waits for OPR-5
 
-The checks use `q2 preview` and `q2 provide-hub` with `--execution-records`; before OPR-5 they still say `--records`.
+The checks use `q2 preview` and `q2 provide-hub` with the record source list. After OPR-5 there is no option for it: set it with `-M 'execute:{record-sources: ...}'` or the `execute: record-sources` key (decision R5, Gordon, 2026-11-09); before OPR-5 the old `--records` option is still there. A directory source must be inside the project (v1), so copy or link a cache directory into the project for these checks.
 
 ## Goal
 
@@ -44,14 +44,14 @@ This is a demo (Gordon): a result is either fixed, or written down as a known is
       message and whether the render still produced its output.
 - [ ] **An edited cell loses its highlighting in the q2 preview** (RIU-3a). `q2 render` highlights an unexecuted
       `{python}` cell (checked 2026-11-07), so the gap is probably in how the records-only preview presents an
-      unmatched cell. A Playwright check against `q2 preview --execution-records <dir>` with an edited cell; file a box
+      unmatched cell. A Playwright check against `q2 preview` with `-M 'execute:{record-sources: <dir>}'` (an in-project directory) and an edited cell; file a box
       in "Findings for Gordon" if it is a bug. Do not fix it here.
 - [ ] **Stale Julia servers and a missing Plots project** give confusing results (`startpath must be non-empty`; an
       `ArgumentError` exported as an error output that looks like a working run; a stream of `SYSTEM: caught exception
       ... failed Task notice` in a plot cell\'s stderr seen in the Phase A run). Reproduce each, and write down what q2
       can say when it sees either, with where in the code it would say it. Implement nothing without Gordon\'s say-so.
-- [ ] `[either]` **RIU-3 browser items never seen:** `--execution-records positron,engine` running the engine, a cache
-      older than the document shown in a browser, `--share --allow-edit` with a guest, "Clear results" clicked, a real
+- [ ] `[either]` **RIU-3 browser items never seen:** `record-sources` set to `positron,engine` (by `-M`) running the engine, a cache
+      older than the document shown in a browser, `--share --allow-edit` with a guest (after OPR-5 Part B also check that a guest document key outside the host list is ignored with a page warning), "Clear results" clicked, a real
       click or scroll sync. Run what Playwright can; mark the rest `not run` for Gordon to watch.
 - [ ] Write the results as one note, `claude-notes/research/2026-11-xx-rfu-verification.md`, with a table: item, result,
       ran, read or not run. Render-check it with `target/debug/q2 render --strict`.

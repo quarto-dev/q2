@@ -1,7 +1,7 @@
 ---
 title: 'RFU-1: q2 convert --to positron-ipynb replaces q2 record export-positron'
 date: 2026-11-08
-description: 'Implements the stub q2 convert as the one conversion command, with --to required and --execution-records limited to q2 and engine, and deletes the unreleased q2 record command. Lands first, with no dependency on the one-presenter epic, so OPR-5 consolidates the flag definition over the final set of commands.'
+description: 'Implements the stub q2 convert as the one conversion command, with --to required and -M accepted, and deletes the unreleased q2 record command. It has no option for the record source list (Gordon, 2026-11-09: that list becomes the metadata key execute: record-sources, read by OPR-5); until then it uses the fixed default q2,engine. Lands first, with no dependency on the one-presenter epic.'
 status: ready
 depends-on: []
 lane: C
@@ -42,8 +42,11 @@ q2 convert <input> --to <format> [--from <format>] [-o <path>] [target options]
   `.ipynb` is ipynb) and an error otherwise. An unsupported pair is an error that lists the supported pairs. Names
   and flags match `q2 render` (`--to`, `-o`).
 - Supported here: `--from qmd --to positron-ipynb`. Reserved by name, not implemented: `--to ipynb`, `--from ipynb`.
-- Options for `positron-ipynb` only, rejected for other targets: `--execution-records q2,engine` (only those two
-  values; default `q2,engine`; `q2` alone forbids running the document) and `--source-uri`.
+- Options for `positron-ipynb` only, rejected for other targets: `--source-uri`. There is **no option for the record source
+  list** (decision R5, Gordon, 2026-11-09: it moves into metadata). `convert` uses the key `execute: record-sources`,
+  allowed values `q2` and `engine`, default `q2,engine`, where `q2` alone forbids running the document; OPR-5 wires
+  the key. Until OPR-5 lands, `convert` uses the fixed default `q2,engine`, defined in one place (a constant and one
+  function) so OPR-5 replaces it with the reader.
 - `-o <path>` is required for `positron-ipynb`, because the file name belongs to the consumer (a hash of the document
   URI, computed by the extension). `-o -` writes the notebook to stdout and the JSON report to stderr; otherwise the
   report is the one JSON line on stdout, as today.
@@ -51,15 +54,19 @@ q2 convert <input> --to <format> [--from <format>] [-o <path>] [target options]
 - Unchanged: `export_for_positron` in `quarto-core`, the report fields, exit codes 10 to 13 (documented under the
   target), exit 2 for usage errors (so the extension\'s "q2 too old" detection still works: an older `convert` has no
   `--to`). A `convert` that may run code says so in its help text.
-- Not `-M`: `-M` is document metadata in `q2 render`, `preview` and `provide-hub`.
+- `-M KEY:VALUE` (repeatable) **is accepted**, parsed exactly as in `q2 render`, `preview` and `provide-hub` (YAML value,
+  later repeat replaces, dotted keys not expanded) and applied as a runtime-metadata overlay, the way `provide-hub` applies
+  it (`RenderOverlay::with_metadata(..).apply(runtime)`), to project discovery and to the engine run. It is how the
+  record source list is set once OPR-5 lands (`-M 'execute:{record-sources: q2}'`). A `-M` overlay that reaches an
+  engine run is recorded as given; do not strip it from the exported record.
 - The `--source-uri` default is the document\'s path with forward slashes (`quarto_util::to_forward_slashes`). Today it
   is the native path (`commands/record.rs:~138-139`). `normalize_location` in `positron_cache.rs` accepts both forms
   and Positron ignores the field on load.
 
-**Boundary with OPR-5.** This plan declares `convert`\'s `--execution-records` **locally** (its own clap field, allowed
-values and default). OPR-5 then absorbs `convert`, `preview` and `provide-hub` into one shared definition and renames
-the other two commands\' `--records`. So `convert` spells it `--execution-records` from the start, and until OPR-5
-lands `preview` and `provide-hub` still say `--records`. That interim state is not released, so it is fine.
+**Boundary with OPR-5.** This plan adds `-M` and **no** option for the source list: `convert` does not declare
+`--execution-records`, and no command will (OPR-5 deletes `--records` from `preview` and `provide-hub`). Until OPR-5
+lands, `convert` uses the fixed default `q2,engine`, so a user cannot yet choose `q2` alone; that interim state is
+not released, so it is fine. OPR-5 then replaces the fixed default with the shared early reader.
 
 ## Checklist (tests first; every box is `[unattended]`)
 
@@ -68,13 +75,14 @@ lands `preview` and `provide-hub` still say `--records`. That interim state is n
 - [ ] **Tests first, through the binary** (`crates/quarto/tests/integration/`, replacing
       `record_export_positron_cli.rs`; register the new file in `main.rs`): `--to` missing is exit 2; an unsupported
       pair lists the supported ones; `--from` inferred from `.qmd`; an unknown extension errors;
-      `--execution-records` values other than `q2` and `engine` are rejected; `--execution-records` and `--source-uri`
-      are rejected for a target that does not take them; `-o -` puts the notebook on stdout and the report on
+      `-M` is accepted and reaches the engine run (a `-M` value changes the exported output); `--source-uri`
+      is rejected for a target that does not take it; with no option the default `q2,engine` exports a document that has
+      a fresh `.quarto` copy without running it; `-o -` puts the notebook on stdout and the report on
       stderr; an existing file is overwritten and an info line names it; exit codes 10 to 13 keep their meanings.
       **Move, do not weaken,** the existing cases. A test builds its expected `--source-uri` default with
       `Path::join` and forward slashes (cross-platform rule: a path that leaves the process uses `/`).
 - [ ] Implement `commands/convert.rs` (replacing the stub) and wire `Commands::Convert` in `main.rs` with `--to`,
-      `--from`, `-o/--output` (a path), `--execution-records`, `--source-uri`. Delete `commands/record.rs`, the
+      `--from`, `-o/--output` (a path), `-M`, `--source-uri`. Delete `commands/record.rs`, the
       `Record` subcommand and `record_export_positron_cli.rs`.
 - [ ] Run the real binary on a Python fixture and a Julia fixture
       (`target/debug/q2 convert d.qmd --to positron-ipynb -o out.ipynb --source-uri file:///x/d.qmd`); read the JSON and
@@ -91,7 +99,8 @@ lands `preview` and `provide-hub` still say `--records`. That interim state is n
 - `q2 convert d.qmd --to positron-ipynb -o out.ipynb` works on the Python and Julia fixtures and reports cells; every
   behavior in the design list has a passing test through the binary.
 - `q2 record` no longer exists; `git grep -n 'export-positron'` outside `claude-notes/`, `docs/` and the fork shows nothing.
-- The convert command declares its flag locally in a way OPR-5 can lift (one clap field, one allowed-values list).
+- `convert` takes its source list from one fixed default in one place that OPR-5 replaces with the key reader; it has no
+  option for the list and accepts `-M`.
 
 ## Notes from the run
 

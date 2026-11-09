@@ -28,6 +28,7 @@
 <path d="M818,325.0 C849.0,325.0 849.0,177.0 880,177.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
 <path d="M818,119.0 C849.0,119.0 849.0,177.0 880,177.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
 <path d="M358,531.0 C389.0,531.0 389.0,531.0 420,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
+<path d="M358,325.0 C389.0,325.0 389.0,531.0 420,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
 <path d="M358,589.0 C389.0,589.0 389.0,531.0 420,531.0" fill="none" stroke="#b45309" stroke-width="1.3" opacity="0.75" marker-end="url(#x)"/>
 <path d="M588,531.0 C734.0,531.0 734.0,531.0 880,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
 <path d="M818,119.0 C849.0,119.0 849.0,531.0 880,531.0" fill="none" stroke="#6b7280" stroke-width="1.3" opacity="0.75" marker-end="url(#a)"/>
@@ -102,11 +103,11 @@
 <text x="888" y="189" font-size="10.5" fill="#374151">facts as cell metadata</text>
 <rect x="420" y="508" width="168" height="46" rx="6" fill="#dbeafe" stroke="#111827" stroke-width="2" stroke-dasharray="5 3"/>
 <text x="428" y="526" font-size="13" font-weight="bold" fill="#111827">OPR-5</text>
-<text x="428" y="543" font-size="10.5" fill="#374151">--execution-records def</text>
+<text x="428" y="543" font-size="10.5" fill="#374151">record-sources key</text>
 <circle cx="576" cy="520" r="8" fill="#111827"/><text x="576" y="524" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle">G</text>
 <rect x="880" y="508" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
 <text x="888" y="526" font-size="13" font-weight="bold" fill="#111827">OPR-6</text>
-<text x="888" y="543" font-size="10.5" fill="#374151">q2 render --exec-records</text>
+<text x="888" y="543" font-size="10.5" fill="#374151">render reads the key</text>
 <rect x="1110" y="508" width="168" height="46" rx="6" fill="#dbeafe" stroke="#6b7280" stroke-width="1"/>
 <text x="1118" y="526" font-size="13" font-weight="bold" fill="#111827">OPR-7a</text>
 <text x="1118" y="543" font-size="10.5" fill="#374151">handshake + record</text>

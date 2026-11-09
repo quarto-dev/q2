@@ -1,7 +1,7 @@
 ---
 title: 'RFU-7: the Positron fork, extension update, demo guide, e2e and cache location'
 date: 2026-11-08
-description: 'The work that lives in the Positron fork (a different repository): update the demo extension for q2 convert and --execution-records, run the extended raw-record experiment, add the R e2e test, write the demo run guide, prototype the cache-location feature, add the missing e2e cases, and apply Gordon''s command-2 decision. Commits go on a fork branch and never to the q2 integration branch; the q2 side lands only a note.'
+description: 'The work that lives in the Positron fork (a different repository): update the demo extension for q2 convert and the execute: record-sources key (set with -M), run the extended raw-record experiment, add the R e2e test, write the demo run guide, prototype the cache-location feature, add the missing e2e cases, and apply Gordon''s command-2 decision. Commits go on a fork branch and never to the q2 integration branch; the q2 side lands only a note.'
 status: blocked-on-gordon
 depends-on: [rfu-1, rfu-2, opr-5]
 lane: C
@@ -51,9 +51,9 @@ checked out in other worktrees).
 
 ## Checklist (tests first where code is involved; every box is `[unattended]` unless marked)
 
-- [ ] **Update the extension for `q2 convert` and `--execution-records`.** `extensions/q2-records-demo/src/q2Contract.ts`
+- [ ] **Update the extension for `q2 convert` and the `execute: record-sources` key.** There is no option for the list after OPR-5 (decision R5, Gordon, 2026-11-09), so `buildPreviewArgs` and any export call pass `-M 'execute:{record-sources: ...}'` (dotted keys are not expanded, so use the braces); a directory entry must be inside the project (v1), so the extension cannot point the preview at Positron\'s cache directory and uses the `positron` keyword, or links the cache into the project. `extensions/q2-records-demo/src/q2Contract.ts`
       `buildExportArgs` (about lines 34-38: `convert`, `--to positron-ipynb`, `-o`) and `buildPreviewArgs` (about line 54:
-      `--execution-records`), the comment at line 7, `exportCommand.ts`, `previewCommand.ts` and their vitests. Keep the
+      `--records`/`--execution-records`), the comment at line 7, `exportCommand.ts`, `previewCommand.ts` and their vitests. Keep the
       "q2 too old" detection (an older q2 has no `convert`, so it exits 2 on a missing `--to`) and add a vitest for it.
       The fork\'s e2e (`warmJuliaServer`, about line 17 of `quarto-render-and-push.test.ts`) also calls `record
       export-positron` and needs the same change. Verify against the real `target/debug/q2`.
@@ -100,7 +100,7 @@ checked out in other worktrees).
 ## Exit criteria
 
 - The fork branch has the commits with passing vitests and e2e runs reported; the extension works against the landed
-  `q2 convert` and `--execution-records`; the guide exists; the landing note is on the integration branch.
+  `q2 convert` and the `record-sources` key; the guide exists; the landing note is on the integration branch.
 - Nothing was pushed; no other fork branch was touched.
 
 ## Companion (Gordon)

@@ -49,7 +49,7 @@ After OPR-1a both loops call one per-cell function. This plan makes the loop its
   (YAML-escaped; a newline is an error, as `inline_text` does today at `document.rs:316`); the splice ignores it.
   `present_span` is deleted.
 - **Format mismatch:** a skip with a reason on both; render keeps its `PresentNote::MarkdownFormatMismatch`; the
-  splice may surface it too (OPR-6 uses it for the `render --execution-records` warning).
+  splice may surface it too (OPR-6 uses it for the `render` `record-sources` warning).
 - **Substitution details:** `present_document` inserts a blank line before a cell when the preceding text does not end
   with one; the splice\'s edit path may not. OPR-0a pinned both. Keep render\'s text byte-identical; where the
   splice differs, follow render and say so in the landing report.

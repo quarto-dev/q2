@@ -5,10 +5,56 @@ description: 'Research for Gordon''s question R5: whether the source list of --e
 ---
 
 **Plan:** [OPR-0d](../plans/2026-11-08-opr-0d-metadata-key-research.md) · **Epic:** [one presenter path](../plans/2026-11-07-one-presenter-path-epic.md) ·
-**Decides:** the "R5" box in [OPR-5](../plans/2026-11-08-opr-5-execution-records-definition.md), which stays `blocked-on-gordon`.
+**Decides:** the "R5" box in [OPR-5](../plans/2026-11-08-opr-5-execution-records-definition.md). Gordon\'s decision is recorded below and in OPR-5; flipping OPR-5 to `ready` is still his step.
 
 Evidence marks: **(ran)** I executed it, **(read)** I read the code at the named symbol, **(not done)** I did not check it.
 Paths are in this checkout, on top of `feature/one-presenter`.
+
+## Decision (Gordon, 2026-11-09): move the option into metadata
+
+After reading this note Gordon chose to **move** the source list into metadata and **remove the command-line option
+entirely**: there is no `--records` and no `--execution-records` on any command. The rest of the note is the evidence;
+where it recommends keeping the flag (see "Recommendation" below), that recommendation is **superseded**. The decisions,
+which OPR-5, OPR-6, RFU-1 and the docs plans now carry:
+
+1. **The key.** `execute: record-sources:`, a **comma-separated scalar string** (`positron,engine`), not a YAML list.
+   A list from `-M` or the provider overlay would append to the document\'s list, because the runtime layer is JSON
+   and cannot carry `!prefer` (read: `json_to_config_value` builds nodes with the default merge op, which concatenates
+   arrays). A scalar is replaced, last layer wins. **Known limitation, a better solution is wanted later:** either the
+   provider reads the runtime layer directly, or `json_to_config_value` learns a way to say "prefer".
+2. **No option, `-M` instead.** The command-line spelling is `-M 'execute:{record-sources: positron,engine}'` (dotted
+   keys are not expanded by `-M`; Gordon accepts the longer spelling). `q2 convert` gains `-M`.
+3. **Entries.** The keywords `engine`, `q2`, `positron`, `cache`, and a **directory inside the project** (v1
+   restriction): a relative path resolves against the declaring layer\'s `base_dir`, a leading `/` is the project root,
+   and a path that resolves outside the project is an error. No `~`, no absolute paths, no existence fallback.
+4. **Per command.** Each command has its own allowed values and default (preview `cache,q2,engine`, render `engine`,
+   convert `q2,engine`, provide-hub `engine`). A valid entry the command cannot use (`cache` on render) is **ignored
+   with an info line** once per run; an unknown or malformed entry (`postiron`) is an **error**.
+5. **Per document.** The list is resolved per document, which supersedes D6\'s "one list for all documents".
+6. **One early reader.** The list is needed before any pipeline runs, the same problem as the output format. It is read
+   by a new `resolve_record_sources`, built on `metadata_layers::collect_metadata_layers` (the collector the format
+   resolver `format_resolution::resolve_document_format` uses), front matter only, so `render`, `preview`, `convert`
+   and the provider all call it. A small "highest layer that sets this key path" helper joins the collector.
+7. **Conflicts.** `--no-execute` and `execute: enabled: false` veto `engine` quietly (the entry is ignored).
+   `--replay` and `QUARTO_REPLAY` win over a committed key, with an info line, and are not an error.
+8. **Untrusted authors get a ceiling** (`provide-hub` and a `--share` preview; no other command). The allowed set is the
+   host\'s `-M` value, or the command\'s default when there is none. A guest document may **reorder or narrow** it and may
+   not add to it. An entry outside the set is ignored with a **warning-level** diagnostic. In the provider the warning
+   goes to the operator\'s log (and is appended to `last_error` when the run fails), because the provider has no route
+   for a warning to a client: strand `bd-ia3idnvk` tracks a client-visible `warnings` field on the capture sidecar. In
+   the `--share` preview the warning goes through the page diagnostic sink. Why `--share` and not only `--allow-edit`:
+   execution reads the host\'s disk, which a guest reaches only with `--allow-edit`, but the preview\'s render routes
+   (`POST /api/preview/render` and the downloads) take a guest-supplied `content` and `metadata` (the runtime layer,
+   the highest precedence), and OPR-6 makes `render_to_file` read the list.
+9. **Hash.** The key is an `execute:` key, so it counts in every engine\'s document hash unless excluded. It is excluded
+   in the three declarations (Jupyter, knitr with a `KNITR_HASH_VERSION` bump, Julia in `record-wire.ts` after OPR-3).
+   Record compatibility is not a concern for this epic.
+
+**Corrections to the text below.** The "Machine-local sources" section says a committed `positron` or `q2` entry "breaks
+another machine". It does not: a source that finds nothing returns `Nothing` and the walk moves to the next entry
+(`resolve_records`), so a committed `positron,engine` falls through to `engine` on a machine without Positron. The two
+real costs are that the output then depends on who runs it, and that a directory entry is a startup error where it is
+missing. The "Recommendation" section recommended the flag; it is superseded by the decision above.
 
 ## Short answer
 
@@ -172,7 +218,7 @@ precedence rule, the trust rule is still needed, and the key's value set must be
 | (b) metadata only | rewrite: no flag; a metadata reader in `quarto-core` with `resolve_config_path`; drop `~` and absolute directories; provider trust rule and tests; `convert` gets `-M` or a flag; rename becomes a key name; TypeScript e2e files change to `-M` | rewrite: the per-document seam reads the key; `--no-execute` and `--replay` checks move per document; D6's "one list" restated |
 | (c) mix | the (a) work, plus a key reader for `engine` and `q2`, a precedence rule (flag wins), the provider trust rule and its tests | the (a) work, plus the seam merges flag over key; conflict checks run on the merged list |
 
-## Recommendation
+## Recommendation (superseded by the decision at the top)
 
 **(a) for OPR-5 and OPR-6 now; (c) as an additive follow-up if a team asks for committed defaults.**
 

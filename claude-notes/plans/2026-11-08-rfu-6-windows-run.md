@@ -14,7 +14,7 @@ lane: none
 ## Why it waits
 
 It runs the epic\'s clippy and nextest commands once, after the plans that change the touched code have landed:
-OPR-6 (`render --execution-records`, a per-document record seam, the moved staleness wrapper), RFU-1 (`q2 convert`
+OPR-6 (`render` reads `execute: record-sources`, a per-document record seam, the moved staleness wrapper), RFU-1 (`q2 convert`
 replaces `q2 record`) and RFU-2 (export and import gate). `cargo clippy ... --target x86_64-pc-windows-msvc` from macOS
 type-checks Windows code but cannot link (`aws-lc-sys`), and it proves compilation only: file locking, line endings
 and process signals need a Windows run.
@@ -47,7 +47,7 @@ Item 8\'s deletion of `commands/record.rs` moved the old export-command entries 
 - [ ] CRLF: `positron-conformance/crlf.qmd` and `positron-cache/*.ipynb` under `autocrlf`.
 - [ ] Then the epic\'s command, once: `cargo clippy -p quarto -p quarto-core -p quarto-preview -p quarto-hub
       -p quarto-hub-provider -p quarto-ast-reconcile --all-targets -- -D warnings` and `cargo nextest run` for the same
-      crates. Also run the new `render --execution-records` and `convert` integration tests (they build paths with
+      crates. Also run the new `record-sources` (render, preview, provider) and `convert` integration tests (they build paths with
       `Path::join`) and say which passed.
 
 ## Exit criteria

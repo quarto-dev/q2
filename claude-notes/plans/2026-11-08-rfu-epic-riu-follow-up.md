@@ -40,7 +40,7 @@ Windows run). **Runs beside:** [the one-presenter epic](2026-11-07-one-presenter
   (`quartoOutputViewZone.ts`) chooses one representation.
 - The `--source-uri` default is the document path written with forward slashes (`quarto_util::to_forward_slashes`).
 - `q2 convert --to positron-ipynb` replaces `q2 record` (RFU-1; the ipynb and qmd side is strand `bd-ju7u8a73`).
-- `--records` is renamed `--execution-records`, no alias (folded into OPR-5).
+- `--records` is deleted with no alias; the record source list becomes the `execute: record-sources` metadata key, set with `-M` on the command line (decision R5, folded into OPR-5).
 - This is a demo. "Ship" means the demo in the fork; each loose end is fixed for the demo or written down as a known
   issue in the demo\'s run guide.
 - Command 1 is live-only (never calls q2); persisting span outputs in records is an eventual goal, not demo work.
