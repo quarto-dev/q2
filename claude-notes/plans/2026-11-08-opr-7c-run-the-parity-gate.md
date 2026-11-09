@@ -2,7 +2,7 @@
 title: 'OPR-7c: run the parity gate for the plain-render switch'
 date: 2026-11-08
 description: 'Runs the OPR-0b parity corpus and harness on the final presenter, classifies every difference between the engine-owned route and the recorded route for knitr and Julia, fixes the small presenter blockers, and proposes the allowlist. The rule (knitr epic decision 26) is zero unallowlisted differences; Gordon signs the allowlist, which unblocks OPR-7d.'
-status: ready
+status: in-progress
 depends-on: [opr-0b, opr-1b, opr-2, opr-7b, opr-4d]
 lane: D
 ---
