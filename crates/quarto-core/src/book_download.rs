@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn a_second_download_of_the_same_project_is_busy_until_the_first_ends() {
         let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         std::fs::write(
             root.join("_quarto.yml"),
             "project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - a.qmd\n",
