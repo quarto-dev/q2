@@ -17,6 +17,12 @@ lane: D
 `status` is `blocked-on-gordon` until Gordon has signed the allowlist (OPR-7c) and flipped this plan to `ready`; the
 decisions below are recorded (2026-11-09). If the allowlist is unsigned or the status is not `ready`, stop and report.
 
+**Allowlist state (2026-11-09).** Gordon signed the three non-Julia entries in
+`crates/quarto-core/tests/fixtures/opr-parity/opr-parity-allowlist.toml` (`knitr-empty-cell-wrapper`,
+`knitr-adjacent-blockquotes`, `julia-code-leading-newline`; each reason ends "Signed: Gordon, 2026-11-09"). The five
+Julia markup entries are not signed: [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) removes them.
+Anything OPR-7h proposes is `proposed` until Gordon signs it. The flip to `ready` still waits on 7f, 7g and 7h.
+
 ## Decisions by Gordon (2026-11-09)
 
 **1. The retained knitr fallback (knitr epic decision 24) for plain render: keep, as today.** It stays for chunks Rust
