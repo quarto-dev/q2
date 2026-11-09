@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-09
+
+- [`641acc274`](https://github.com/quarto-dev/q2/commits/641acc274): Typing in the editor no longer pays a full document parse just to decide which preview to show — the format check is now a sub-millisecond resolver call, cutting the per-keystroke cost of a live editing session by about a fifth. While a `q2-*` format name is being typed (say `q2-slides`), the pane now says immediately that the partial name can't be shown instead of holding the previous preview, matching what typing `docx` or `revealjs` already did.
+
 ### 2026-11-03
 
 - [`9e9f81418`](https://github.com/quarto-dev/q2/commits/9e9f81418): The PDF preview no longer shows a spurious "The PDF viewer drew nothing within 30 s" error over a correctly updated PDF after a quick edit during a slow compile: a compiled PDF that a newer one replaced before it reached the screen is now dropped quietly instead of timing out later.
