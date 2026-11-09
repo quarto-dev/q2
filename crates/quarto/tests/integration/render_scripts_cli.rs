@@ -575,7 +575,10 @@ fn list_form_runs_scripts_in_order() {
         "render should succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let log = std::fs::read_to_string(project.join("order.log")).expect("order.log written");
+    // Python writes in text mode, so newlines are CRLF on Windows.
+    let log = std::fs::read_to_string(project.join("order.log"))
+        .expect("order.log written")
+        .replace("\r\n", "\n");
     assert_eq!(log, "one\ntwo\n", "scripts must run in declaration order");
 }
 
@@ -607,7 +610,10 @@ with open("args.txt", "w") as f:
         "render should succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let args = std::fs::read_to_string(project.join("args.txt")).expect("args.txt written");
+    // Python writes in text mode, so newlines are CRLF on Windows.
+    let args = std::fs::read_to_string(project.join("args.txt"))
+        .expect("args.txt written")
+        .replace("\r\n", "\n");
     assert_eq!(
         args, "--flag\ntwo words",
         "quoted argument should arrive as a single argv entry"
