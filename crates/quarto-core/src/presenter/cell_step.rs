@@ -16,6 +16,7 @@
 
 use quarto_source_map::{By, SourceInfo};
 
+use super::engine_attrs::{cell_engine_attrs, rejection_reasons};
 use super::expansion::{render_expanded_unit, split_expansions};
 use super::figures::FigureSink;
 use super::knitr_inputs::{
@@ -46,7 +47,8 @@ pub fn record_engine_entry<'a>(record: &'a Record, cell: &RecordCell) -> Option<
 /// Present one fenced cell. `author_text` is the unit\'s author text, `attr_tail` the rest of
 /// its info string, `scope` the document\'s merged `execute:` scope. The caller has already
 /// handled stored markdown and called `fig.begin_cell()`. An `Err` is the message for invalid
-/// cell options: render fails with it, the splice keeps the source.
+/// cell options: render fails with it, the splice keeps the source. The `Ok` side carries the
+/// markdown and one reason per engine `quarto_attrs` entry the grammar refused (OPR-7f).
 pub fn present_cell_step(
     language: &str,
     attr_tail: &str,
@@ -55,7 +57,7 @@ pub fn present_cell_step(
     engine: Option<&EngineEntry>,
     scope: Option<&ConfigValue>,
     fig: &mut dyn FigureSink,
-) -> Result<String, String> {
+) -> Result<(String, Vec<String>), String> {
     let parsed =
         partition_cell_options(language, author_text, SourceInfo::generated(By::unknown()))
             .map_err(|e| e.to_string())?;
@@ -63,7 +65,11 @@ pub fn present_cell_step(
     let resolved = resolve_cell_options(scope, parsed.options.clone());
     let visibility =
         CellVisibility::resolve(resolved.as_ref(), presenter_enforces_warning(cell, engine));
-    let options = CellOptions::from_config(resolved.as_ref()).forwarding(cell_only.as_ref());
+    let mut options = CellOptions::from_config(resolved.as_ref()).forwarding(cell_only.as_ref());
+    if let Some(attrs) = cell_engine_attrs(cell) {
+        options = options.with_engine_attrs(attrs);
+    }
+    let rejected = rejection_reasons(cell);
     if let Some(expansions) = split_expansions(&cell.outputs) {
         // An expanded cell is one unit presented as one cell per expansion, each with its own
         // options.
@@ -76,7 +82,8 @@ pub fn present_cell_step(
             scope,
             presenter_enforces_warning(cell, engine),
             fig,
-        );
+        )
+        .map(|md| (md, rejected));
     }
     let (info, lines) = super::knitr_inputs::original_chunk(language, attr_tail, author_text);
     let inputs = CellInputs::from_cell(cell, engine, (&info, &lines));
@@ -85,7 +92,7 @@ pub fn present_cell_step(
         .is_some()
         .then(|| knitr_header_options(parsed.options))
         .flatten();
-    Ok(present_with_inputs(
+    let markdown = present_with_inputs(
         language,
         &parsed.code,
         cell,
@@ -93,7 +100,8 @@ pub fn present_cell_step(
         header.as_ref(),
         (options, visibility),
         fig,
-    ))
+    );
+    Ok((markdown, rejected))
 }
 
 #[cfg(test)]
@@ -174,10 +182,65 @@ mod tests {
         engine: Option<&EngineEntry>,
         scope: Option<&ConfigValue>,
     ) -> String {
+        present_with_reasons(options, cell, engine, scope).0
+    }
+
+    fn present_with_reasons(
+        options: &str,
+        cell: &RecordCell,
+        engine: Option<&EngineEntry>,
+        scope: Option<&ConfigValue>,
+    ) -> (String, Vec<String>) {
         let dir = tempfile::tempdir().unwrap();
         let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
         let author = format!("{options}\nx\n");
         present_cell_step("python", "", &author, cell, engine, scope, &mut fig).unwrap()
+    }
+
+    // === OPR-7f: the cell\'s `quarto_attrs` reach the wrapper; refusals come back ===
+
+    #[test]
+    fn a_cell_level_quarto_attrs_reaches_the_wrapper() {
+        let def = jupyter_like();
+        let (e, mut c) = (entry(&def), cell(&def, None));
+        c.metadata.extra.insert(
+            "quarto_attrs".into(),
+            json!({"id": "cell-0", "attributes": {"execution_count": "1"}}),
+        );
+        let (md, reasons) = present_with_reasons("", &c, Some(&e), None);
+        assert!(
+            md.contains("::: {#cell-0 .cell execution_count='1'}"),
+            "{md}"
+        );
+        assert!(reasons.is_empty(), "{reasons:?}");
+    }
+
+    #[test]
+    fn refused_cell_and_output_entries_are_returned_and_the_rest_renders() {
+        let def = jupyter_like();
+        let (e, mut c) = (entry(&def), cell(&def, None));
+        c.metadata.extra.insert(
+            "quarto_attrs".into(),
+            json!({"id": "cell-0", "classes": ["9bad"]}),
+        );
+        c.outputs.push(json!({
+            "output_type": "execute_result",
+            "execution_count": 1,
+            "data": {"text/plain": "1"},
+            "metadata": {"quarto_attrs": {"attributes": {"bad key": "v"}}}
+        }));
+        let (md, reasons) = present_with_reasons("", &c, Some(&e), None);
+        assert!(md.contains("#cell-0"), "{md}");
+        assert_eq!(reasons.len(), 2, "{reasons:?}");
+        assert!(reasons[0].contains("9bad"), "{reasons:?}");
+        assert!(reasons[1].contains("bad key"), "{reasons:?}");
+    }
+
+    #[test]
+    fn no_quarto_attrs_means_no_reasons() {
+        let def = jupyter_like();
+        let (e, c) = (entry(&def), cell(&def, None));
+        assert!(present_with_reasons("", &c, Some(&e), None).1.is_empty());
     }
 
     #[test]

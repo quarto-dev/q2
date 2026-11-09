@@ -153,6 +153,36 @@ impl EngineAttrs {
     }
 }
 
+/// The cell\'s own `quarto_attrs` (from `cell.metadata.extra`), or none.
+pub fn cell_engine_attrs(cell: &crate::record::RecordCell) -> Option<EngineAttrs> {
+    cell.metadata
+        .extra
+        .get(QUARTO_ATTRS_KEY)
+        .map(|raw| EngineAttrs::parse(raw).0)
+}
+
+/// One reason per entry of `quarto_attrs` the grammar refuses, on the cell and on every
+/// display_data / execute_result output (the only outputs that keep metadata), in that order.
+pub fn rejection_reasons(cell: &crate::record::RecordCell) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if let Some(raw) = cell.metadata.extra.get(QUARTO_ATTRS_KEY) {
+        reasons.extend(EngineAttrs::parse(raw).1);
+    }
+    for output in &cell.outputs {
+        let keeps_metadata = matches!(
+            output.get("output_type").and_then(Value::as_str),
+            Some("display_data" | "execute_result")
+        );
+        if !keeps_metadata {
+            continue;
+        }
+        if let Some((_, rejected)) = output.get("metadata").and_then(EngineAttrs::from_holder) {
+            reasons.extend(rejected);
+        }
+    }
+    reasons
+}
+
 /// The text between the braces of an attribute head: id, classes, then pairs, joined by
 /// spaces. `classes` are written without the dot, `pairs` as their final text (`key='v'`).
 /// Engine entries merge as the module documentation says.

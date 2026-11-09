@@ -1174,7 +1174,9 @@ mod tests {
         }
         let dir = tempfile::tempdir().unwrap();
         let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
-        present_cell_step("r", "", "a\n", &c, None, Some(&scope), &mut fig).unwrap()
+        present_cell_step("r", "", "a\n", &c, None, Some(&scope), &mut fig)
+            .unwrap()
+            .0
     }
 
     #[test]

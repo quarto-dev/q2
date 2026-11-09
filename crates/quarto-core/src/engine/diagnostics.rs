@@ -527,6 +527,15 @@ pub(crate) fn note_diagnostic(
             };
             image_unusable_diagnostic(mime, reason, location.as_deref())
         }
+        PresentNote::EngineAttrsRejected { reason, .. } => {
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                "Engine Attribute Skipped",
+            )
+            .problem(format!(
+                "the engine asked for an attribute that cannot be written, so it was skipped: {reason}."
+            ))
+            .build()
+        }
         // Jupyter records hold no fallback units; the note exists for the knitr and marimo
         // adapters, which report it themselves.
         PresentNote::MarkdownFormatMismatch { stored, wanted, .. } => {
