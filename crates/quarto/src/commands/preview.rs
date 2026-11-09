@@ -154,6 +154,7 @@ fn resolve_render_flags(
 fn resolve_record_sources(
     metadata: Option<&serde_json::Value>,
     project_root: Option<&Path>,
+    profile: &[String],
 ) -> Result<quarto_core::record::RecordSources> {
     use quarto_core::record::{CommandSources, host_record_sources};
     let cwd = std::env::current_dir().context("reading the working directory")?;
@@ -162,7 +163,7 @@ fn resolve_record_sources(
         metadata,
         base,
         base,
-        &quarto_system_runtime::NativeRuntime::new(),
+        &quarto_preview::render_flags::native_runtime_for(profile),
         &CommandSources::PREVIEW,
     )
     .map_err(|e| anyhow::anyhow!(e.to_string()))?;
@@ -279,8 +280,11 @@ async fn run(args: PreviewArgs) -> Result<()> {
         single_file.as_deref(),
     )?;
 
-    let record_sources =
-        resolve_record_sources(render_flags.metadata.as_ref(), project_root.as_deref())?;
+    let record_sources = resolve_record_sources(
+        render_flags.metadata.as_ref(),
+        project_root.as_deref(),
+        &render_flags.profile,
+    )?;
 
     // Each invocation gets a fresh `TempDir` by default — when this
     // `_temp` binding drops at function end (or after Ctrl-C), the
@@ -1230,7 +1234,7 @@ mod tests {
 
     #[test]
     fn record_sources_default_to_cache_q2_engine() {
-        let got = resolve_record_sources(None, None).unwrap();
+        let got = resolve_record_sources(None, None, &[]).unwrap();
         assert_eq!(got, quarto_core::record::RecordSources::preview_default());
     }
 
@@ -1238,7 +1242,7 @@ mod tests {
     fn record_sources_come_from_the_metadata_flag() {
         use quarto_core::record::RecordSource as S;
         let m = serde_json::json!({"execute": {"record-sources": "positron,engine"}});
-        let got = resolve_record_sources(Some(&m), None).unwrap();
+        let got = resolve_record_sources(Some(&m), None, &[]).unwrap();
         assert_eq!(got.as_slice(), [S::Positron, S::Engine]);
     }
 
@@ -1247,14 +1251,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().canonicalize().unwrap();
         let m = serde_json::json!({"execute": {"record-sources": "./nope,engine"}});
-        let err = resolve_record_sources(Some(&m), Some(&root)).unwrap_err();
+        let err = resolve_record_sources(Some(&m), Some(&root), &[]).unwrap_err();
         assert!(err.to_string().contains("does not exist"), "{err}");
     }
 
     #[test]
     fn record_sources_with_engine_under_off_still_resolve() {
         let m = serde_json::json!({"execute": {"record-sources": "cache,engine"}});
-        let got = resolve_record_sources(Some(&m), None).unwrap();
+        let got = resolve_record_sources(Some(&m), None, &[]).unwrap();
         warn_engine_under_off(&got, EnginePolicy::Off);
         assert!(
             got.contains_engine(),

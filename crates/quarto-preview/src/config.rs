@@ -137,6 +137,89 @@ mod engine_can_run_tests {
     }
 }
 
+#[cfg(test)]
+mod document_sources_tests {
+    use super::*;
+    use quarto_core::record::{RecordSource as S, RecordSources};
+
+    fn doc_with(key: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        let doc = root.join("doc.qmd");
+        std::fs::write(
+            &doc,
+            format!(
+                "---\nexecute:\n  record-sources: \"{key}\"\n---\n\n```{{python}}\nx = 1\n```\n"
+            ),
+        )
+        .unwrap();
+        (tmp, doc)
+    }
+
+    fn cfg(share: bool, host: Vec<S>) -> ReExecuteConfig {
+        let mut c = ReExecuteConfig::new(EnginePolicy::Manual, std::path::PathBuf::from("/unused"));
+        c.share = share;
+        c.sources = RecordSources::new(host);
+        c
+    }
+
+    /// Without `--share` the document key is an ordinary setting: it replaces the host list.
+    #[test]
+    fn without_share_the_document_key_overrides_the_host_list() {
+        let (_t, doc) = doc_with("q2");
+        let c = cfg(false, vec![S::Cache, S::Engine]);
+        let r = c.document_sources(&doc, None).unwrap();
+        assert_eq!(r.sources.as_slice(), [S::Q2]);
+        assert!(r.notes.is_empty());
+        assert!(!c.allows_engine_for(&doc), "the document dropped `engine`");
+        let (_t, doc) = doc_with("positron,engine");
+        assert!(c.allows_engine_for(&doc));
+    }
+
+    /// With `--share` the host list is a ceiling: the document may not add `positron`, and
+    /// `allows_engine_for` follows the ceiling.
+    #[test]
+    fn with_share_a_document_key_outside_the_ceiling_is_ignored_with_a_warning() {
+        let (_t, doc) = doc_with("positron,engine");
+        let c = cfg(true, vec![S::Cache, S::Engine]);
+        let r = c.document_sources(&doc, None).unwrap();
+        assert_eq!(r.sources.as_slice(), [S::Engine]);
+        assert_eq!(r.notes.len(), 1);
+        assert!(r.notes[0].warning && r.notes[0].text.contains("positron"));
+        assert!(c.allows_engine_for(&doc));
+        // The ceiling has no `engine`: the document cannot bring it back.
+        let c = cfg(true, vec![S::Cache]);
+        assert!(!c.allows_engine_for(&doc));
+    }
+
+    /// A document with no key gets the host list, shared or not (this is also what the tests
+    /// that set `sources` directly rely on).
+    #[test]
+    fn a_document_without_the_key_gets_the_host_list() {
+        let tmp = tempfile::tempdir().unwrap();
+        let doc = tmp.path().canonicalize().unwrap().join("d.qmd");
+        std::fs::write(&doc, "---\ntitle: T\n---\n\nbody\n").unwrap();
+        for share in [false, true] {
+            let c = cfg(share, vec![S::Positron, S::Engine]);
+            let r = c.document_sources(&doc, None).unwrap();
+            assert_eq!(
+                r.sources.as_slice(),
+                [S::Positron, S::Engine],
+                "share {share}"
+            );
+        }
+    }
+
+    /// A key that cannot be read fails closed: no engine run starts.
+    #[test]
+    fn an_unknown_entry_refuses_the_engine() {
+        let (_t, doc) = doc_with("engine,bogus");
+        let c = cfg(false, vec![S::Engine]);
+        assert!(c.document_sources(&doc, None).is_err());
+        assert!(!c.allows_engine_for(&doc));
+    }
+}
+
 /// What the preview server should do with engine execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EnginePolicy {
