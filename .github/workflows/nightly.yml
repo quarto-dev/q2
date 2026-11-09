@@ -240,3 +240,19 @@ jobs:
             Write-Host "::error::install.ps1 installed a 0x$machine binary on this runner, expected 0x$env:PE_MACHINE"
             exit 1
           }
+
+      # The documented one-liner, which binds params differently from the
+      # scriptblock form above. It takes no flags, so it installs the
+      # latest stable release to the default location.
+      - name: install.ps1 via irm | iex (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          irm "$env:RAW_BASE/install.ps1" | iex
+          $exe = Join-Path $env:USERPROFILE '.local\bin\q2.exe'
+          $raw = & $exe --version
+          Write-Host $raw
+          if ($LASTEXITCODE -ne 0 -or -not $raw) {
+            Write-Host "::error::q2.exe from the irm | iex install did not run"
+            exit 1
+          }
