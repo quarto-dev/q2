@@ -1,7 +1,7 @@
 ---
 title: 'hub-client main-thread render path: audit fixes'
 date: 2026-10-24
-description: 'Phased fixes from the 2026-10-24 main-thread render-path audit: render coalescing, resolver-only format classification, single-parse AST transport, binary asset transfer, then measurement-gated worker work.'
+description: 'Phased fixes from the 2026-10-24 main-thread render-path audit: render coalescing, resolver-only format classification, untransformed-AST capture elimination and gating, binary asset transfer, then measurement-gated worker work.'
 status: draft
 ---
 
@@ -46,13 +46,50 @@ under a runtime `format`, and the new-export design is replaced by a
 one-line resolver fix plus deletions. The skip is dropped: the call it
 would save costs well under a millisecond.
 
+Revised 2026-11-09 (Phase 3 review): Phase 3 reframed around its
+largest mechanism. `untransformed_ast_json` is captured with a fresh
+`qmd_to_pandoc` parse plus an `include_inline_locations` JSON write on
+every preview render. The core preview renderer performs that capture on
+both single-document and project paths; the project response builder
+performs it again after the project renderer discards its first copy.
+Reusing and gating the capture replaced transport as the headline work.
+
+Revised 2026-11-09 (Phase 3 implementation review): Phase 3 split into
+3A (reuse the project capture), 3B1 (conservative per-render gating),
+3B2 (capture on comment intent), and 3C (deferred transport and manifest
+work). The iframe comment UI also consumes the untransformed AST through
+`sourceIndex`, so the earlier parent-side lazy retry was not reachable
+from a real comment action. Phase 3B1 keeps capture eager whenever
+comments are visible. Phase 3B2 removes that default eager cost with an
+explicit comment-intent action and a generation-safe capture-only protocol.
+
+Revised 2026-11-09 (Phase 3 simplification review): the project capture
+ownership is corrected. Pass 2 uses the canonical `doc_info.input` source
+name, while the response uses the original `active_path`; reusing the
+pass-2 capture in the response is therefore not byte-identical for
+relative-path calls. Phase 3A now skips the discarded pass-2 capture and
+keeps the response capture. Phases 3A and 3B1 share one strand as two
+implementation checkpoints. Phase 3B2 is measurement-gated and uses one
+full armed render from a host-side **Enable comments** action, removing
+the capture-only export, iframe request protocol, generation transport,
+and in-flight top-up. Its target is read mode with visible comments:
+fresh hub defaults have `previewEditing=true` and remain armed. Phase 3C
+stays deferred.
+
+Revised 2026-11-09 (Phase 3 readiness review): Phase 3A remains
+implementation-ready. Phase 3B1 now preserves capture-on behavior for
+omitted WASM options, gates baseline-less comments during transition
+renders, and includes editing state in nested-buffer memo dependencies.
+Phase 3B2 stays deferred; any later activation is direct-iframe-only and
+must distinguish same-content armed and unarmed renders.
+
 ## Findings
 
 | # | Finding | Primary site | Cost class |
 |---|---------|--------------|------------|
 | 1 | Per-keystroke full parse whose AST is discarded (format classification) | `hub-client/src/components/render/PreviewRouter.tsx:134` | wasted work per keystroke |
 | 2 | Renders are debounce-free; stale queued renders still execute | `hub-client/src/components/render/ReactPreview.tsx:768`, `ts-packages/preview-runtime/src/wasmRenderer.ts:494` | N full pipelines per N-keystroke burst |
-| 3 | AST serialized twice, parsed twice per render; untransformed AST always shipped | `ts-packages/preview-runtime/src/wasmRenderer.ts:611`, `hub-client/quarto-hub-sandboxed-preview/src/entry.tsx:330` | multi-MB JSON parse on main thread, discarded |
+| 3 | Untransformed AST captured on every preview render and captured twice on the project path; transformed AST nested as a JSON string in the response envelope | `crates/quarto-core/src/pipeline.rs:2083`, `crates/wasm-quarto-hub-client/src/lib.rs:2947`, `ts-packages/preview-runtime/src/wasmRenderer.ts:835` | redundant QMD parse + serialization; multi-MB JSON scanning |
 | 4 | Systemic JSON-string envelopes on every WASM call; binaries are base64-in-JSON | `ts-packages/preview-runtime/src/wasmRenderer.ts:331` and ~30 sites | boundary tax on every call |
 | 5 | Whole-document semantic tokenization synchronous on main thread | `hub-client/src/services/intelligenceService.ts:263` | editor-blocking tree-sitter per token request |
 | 6 | Asset proxy: base64 + JSON + string postMessage per asset | `hub-client/src/components/render/q2-sandboxed-preview/Q2SandboxedPreviewIframe.tsx:183` | ~33% bloat + copies per asset |
@@ -98,9 +135,10 @@ re-flush, template recompiles) — orthogonal to this plan.
 - End-to-end verification per AGENTS.md: each phase gets a manual smoke
   in the dev server (or states explicitly that browser verification was
   not done). Record the invocation and observed output.
-- File a braid strand per phase when work begins; reference this plan.
-  Snapshot-file changes (Phase 3 likely) get the AGENTS.md snapshot
-  treatment: counts, summary, surprises called out.
+- File a braid strand per independently implemented phase or subphase when
+  work begins; reference this plan.
+  Any snapshot-file changes get the AGENTS.md snapshot treatment: counts,
+  summary, and surprises called out.
 
 ## Phase 0 — Measurement harness and baselines
 
@@ -639,65 +677,409 @@ parse takes the 1x wall from 431 ms to ~350 ms and the 8x wall from
   → 641acc274 + changelog efcad13be; bd-luoo7qgu closed with the
   measurement.
 
-## Phase 3 — Single-parse AST transport (finding 3)
+## Phase 3 — Skip and gate the untransformed AST capture (finding 3)
 
-Today the AST is a JSON string inside the JSON response envelope: the
-main thread parses the whole envelope to extract a string it reposts to
-the iframe, which parses it again. Since bd-73lilznv (2026-10-26) the
-sandbox iframe is cross-origin by default, so the iframe-side re-parse
-runs in a separate process under site isolation; the main-thread costs
-that remain are the envelope parse itself and the parent-side AST
-consumers enumerated below.
+Phases 3A and 3B1 are two implementation checkpoints under one strand.
+Phase 3A removes the duplicate project-side capture without changing
+behavior or the public WASM API. Phase 3B1 makes capture optional with a
+conservative eager-comment policy and preserves capture-on defaults for
+existing callers. Phase 3B2 is deferred: reconsider it only after the
+Phase 3B1 measurements show that a host-side **Enable comments** action is
+worth its UX and implementation cost. Phase 3C transport also stays
+deferred until measurements justify its additional protocol complexity.
 
-- [ ] Test first: characterization test that the exact `astJson` string
-  posted to the iframe is byte-identical before/after (golden fixtures
-  in `goldenParity.wasm.test.ts` style), and that
-  `untransformed_ast_json` is absent from the envelope unless requested.
-- [ ] Rust side: change the render response so `ast_json` (and
-  `untransformed_ast_json` when requested) travel as separate string
-  out-params or a wasm-bindgen multi-return, not nested inside the
-  parsed envelope. Gate `untransformed_ast_json` behind a flag the TS
-  side sets only during rich-text editing sessions.
-- [ ] TS side: `renderPageInProjectWithAttribution` and siblings stop
-  parsing the AST; `ReactPreview` threads the opaque string through.
-  Parent-side consumers that parse the AST as an object today (found
-  2026-10-27; grep `.ast_json` / `astJson` / `JSON.parse(astJson)`
-  outside iframe plumbing to catch any new ones), with scoping verdicts:
-  - `buildProxyAssetManifest` (`proxyAssetManifest.ts:29`, run by
-    `Q2SandboxedPreviewIframe` on every render) — **move iframe-side**
-    (decided 2026-10-27; sub-items below).
-  - `ReactRenderer.tsx:230` (`extractRenderComponentPaths`) — **stays**.
-    Mounted by `ReactPreview.tsx:896`, the direct (non-sandboxed) React
-    preview, which renders on the main thread by design; the opaque
-    string applies to the sandboxed path only.
-  - `useCursorToSlide.ts:29`, `useSlideThumbnails.tsx:94` — **stay**.
-    Parent-side slide UI (Editor.tsx, OutlinePanel.tsx), independent of
-    preview path. Optional follow-up, out of Phase 3 scope: have these
-    share one parsed object instead of each re-parsing.
-- [ ] Move `proxyAssetManifest.ts` (+ its test) into
-  `hub-client/quarto-hub-sandboxed-preview/src/` and build the manifest
-  in `updateAst`, dropping `assetManifest` from the UPDATE_AST payload
-  and the parent `useMemo`. Rationale: the function is pure in
-  `(astJson, currentFilePath)` — both already cross in UPDATE_AST — does
-  no VFS reads, and its output is consumed only iframe-side via
-  `AssetManifestContext` (`PreviewRoot.tsx:1603`). The move also fixes a
-  reverse-import smell (parent code currently reaches into the iframe
-  package for `pageRelativeUrlForVfsPath` via `../../../../`). The
-  "Image never renders before its manifest entry" guarantee is
-  preserved: the manifest is derived from the same UPDATE_AST string,
-  synchronously before `root.render`. Do NOT unify with q2-preview's
-  `buildAssetManifest` (`Q2PreviewIframe.tsx:314`): that one reads VFS
-  bytes and mints origin-scoped blob URLs, so it must stay parent-side —
-  cross-comment both files.
-- [ ] Optional, only if iframe-side profiling cares: derive the manifest
-  from the iframe's already-parsed AST instead of a second
-  `JSON.parse(astJson)` in `updateAst`. Phase 3's target is the hub main
-  thread; a same-string parse in the iframe process is off that thread
-  and acceptable.
-- [ ] Snapshot audit: this touches render-response shape — expect
-  `.snap` updates; report counts and surprises per AGENTS.md.
-- [ ] Measure: envelope `JSON.parse` bytes and AST parse count per
-  render before/after, recorded in the plan.
+The capture inventory verified on 2026-11-09 is:
+
+- `render_qmd_to_preview_ast` captures the untransformed AST with a fresh,
+  parent-less `qmd_to_pandoc` parse and an
+  `include_inline_locations: true` JSON write before running the main
+  pipeline (`crates/quarto-core/src/pipeline.rs:2077`). Single-document
+  preview renders therefore parse the QMD twice: once for this capture and
+  once for the transformed preview AST.
+- The multi-file project renderer calls the same function but drops
+  `preview_output.untransformed_ast_json` when it constructs
+  `WasmPassTwoOutput` (`crates/quarto-core/src/project/pass2_renderer.rs:1251`,
+  `:1341`). The project response builder then reparses the active document
+  to recreate the same payload (`crates/wasm-quarto-hub-client/src/lib.rs:2943`).
+  Project preview renders therefore parse the QMD three times.
+- The two project captures are not interchangeable. Pass 2 names the source
+  with canonical `doc_info.input`; the response names it with the original
+  `active_path`. Hub calls can use relative paths such as `index.qmd`, while
+  the canonical path is `/project/index.qmd`. The name is serialized into
+  the AST context, so moving the pass-2 capture into the response would not
+  preserve bytes for those calls.
+- The untransformed AST is not only an `applyNodeEdit` input. The iframe
+  parses it to build `sourceIndex` (`PreviewRoot.tsx:1507`), which both
+  content editing and comment add/resolve use to find their source nodes.
+  An unarmed render cannot emit the comment edit envisioned by the earlier
+  parent-side lazy-retry design: the comment affordance and handlers need
+  `sourceIndex` before they create a payload.
+
+Phase 2 measured a comparable parse and serialization at about 19 % of
+per-keystroke wall on its fixture. That makes duplicate-capture removal
+and gating worth measuring, not a guaranteed 15–25 % win on this path.
+Use the same-driver before/after and same-build flag-on/flag-off
+measurements below as the evidence.
+
+### Decisions (2026-11-09, readiness review)
+
+- **Keep the separate parent-less parse.** It protects the source-pool and
+  provenance contract used by incremental writes (`pipeline.rs:5262`). Do
+  not derive a baseline from the transformed pipeline AST.
+- **The project response keeps ownership of its capture.** Phase 3A skips
+  the discarded pass-2 capture; it does not carry that capture into
+  `WasmPassTwoOutput`. The response continues to capture with the original
+  `active_path`, preserving both bytes and source-name provenance.
+- **The capture flag is per render and defaults to on.** Add an internal
+  capture-aware core implementation while retaining
+  `render_qmd_to_preview_ast` as a capture-on wrapper for native callers.
+  Add `captureUntransformedAst` to the existing
+  `render_page_for_preview` options object and a trailing options object to
+  `render_page_in_project_with_attribution`. At both WASM boundaries, an
+  omitted options object or flag means capture-on, preserving the existing
+  raw-WASM contract. Only the hub and SPA hot callers need to pass the flag
+  explicitly; unrelated raw-WASM callers and tests need no mechanical
+  edits. Do not add module-global WASM state, which would race with the
+  Phase 1 queue.
+- **Phases 3A and 3B1 share one strand.** Land them as two green,
+  independently revertable implementation checkpoints: first the
+  behavior-preserving project-capture deletion, then per-render gating.
+  Hub-client changelog entries still use their required separate hash
+  commits.
+- **Phase 3B1 preserves comment behavior eagerly.** In hub-client, arm
+  capture for `previewEditing || (commentsMode ?? 'show') !== 'hide'`. In
+  the q2-preview SPA, arm it for `allowEdit`, which governs both content
+  editing and commenting. The unarmed hub case is therefore editing off
+  plus comments hidden. Fresh hub defaults have `previewEditing=true`, so
+  they remain armed in every Phase 3 variant.
+- **Baseline-less comments are read-only in Phase 3B1.** Hidden-to-visible
+  and editing-transition renders temporarily have no new baseline, so this
+  gate cannot wait for Phase 3B2. Derive readiness from
+  `PreviewContext.sourceIndex`; do not add a readiness prop or iframe
+  protocol. `CommentWrapper` must include a missing source index in its
+  read-only gate, suppress resolve controls and new-comment inputs, and
+  hide an input that is already open when the baseline disappears. Existing
+  comments remain readable and no comment text or edit is queued.
+- **Nesting buffers have a separate editing gate and memo dependency.** Hub
+  computes them only for `previewEditing && (unlockNestingCursor ?? true)`
+  and includes `previewEditing` in the memo dependencies. The SPA uses
+  `allowEdit && nestingCursor` and includes `allowEdit`. A comment-armed
+  read-mode render must skip `regenerate_nested_buffers`, and an editing
+  toggle must invalidate any previously computed table even when the AST
+  strings are unchanged.
+- **Phase 3B2 is deferred and direct-iframe-only if activated.** Measure
+  the read-mode, comments-visible configuration after Phase 3B1 before
+  filing an implementation strand. A later host-side **Enable comments**
+  action may request one full armed render through the existing effect and
+  queue. Keep sandbox capture eager throughout any such activation; a
+  separate future sandbox strand must handle its deployment and the
+  existing `editingDisabled` transport gap before baseline-less sandbox
+  renders are allowed.
+- **No capture-only side channel.** Neither Phase 3B1 nor a later Phase
+  3B2 adds a dedicated WASM export, `REQUEST_COMMENT_CAPTURE` message,
+  generation transport, baseline patching, in-flight top-up, or
+  comment-edit queue.
+- **Phase 3B2 request correlation includes the armed bit.** If activated,
+  extend the compound `rendered` state with `sourcePath` and use it for the
+  matching `ReactRenderer` props. Key accepted-render staleness by path +
+  content + capture-armed state, not content alone. Path + content closes
+  the same-content file-switch hole; the armed bit distinguishes the
+  requested armed render from an identical-content unarmed render already
+  in flight. This is request correlation, not a numeric generation
+  protocol.
+- **Transport is independent of Phase 4.** Binary asset transfer changes
+  the VFS read and service-worker response paths, not the AST response
+  shape. AST transport and proxy-manifest relocation therefore wait for
+  post-3B measurements rather than riding on the capture-option API edit.
+
+### Phase 3A — Skip the discarded project capture
+
+No response-shape, TypeScript-call-site, or comment/editing behavior
+change. An armed project render drops from three QMD parses to two;
+single-document rendering remains at two until Phase 3B1. This is the
+first implementation checkpoint in the shared Phase 3A/3B1 strand.
+
+**Status: complete 2026-11-09 (bd-wpmqf039).** Work stopped after this
+checkpoint at the user's request; Phase 3B1 was not started.
+
+- [x] File one Phase 3A/3B1 strand, mark it `in_progress`, and record the
+  current project-path `render.wasm-call` baseline at 1x/8x with the Node
+  driver. Do not block this checkpoint on a new Rust timer: the cited
+  `std::env::var_os("QUARTO_PERF_STATS")` pattern is not available as a
+  browser-WASM profiling mechanism. The same-driver before/after wall-time
+  comparison below measures the deleted capture directly enough.
+  → bd-wpmqf039. Unmodified release WASM, 10 warm-cache project renders per
+  scale (`QUARTO_PERF_STATS=1 ENTRY=project CAPTURE=default SCALES=1,8
+  RENDERS=10 node --import tsx/esm driver.mjs`): **356.940 ms/render at 1x**
+  (99 KB; envelope parse 107,168,994 bytes) and **2811.396 ms/render at 8x**
+  (792 KB; 882,771,214 bytes).
+- [x] Test first, as behavior-preserving characterization: add a focused
+  `hub-client/src/services/previewCapture.wasm.test.ts` test through the
+  raw WASM project entry. Record the current SHA-256 hashes of `ast_json`
+  and `untransformed_ast_json` for a fixed multi-file project so the test
+  pins their exact bytes before the refactor and must remain green after
+  it. Use a relative active path and assert that the original source name,
+  not canonical `/project/...`, remains in the serialized AST context.
+  Keep the existing `applyNodeEdit.wasm.test.ts` round trips unchanged as
+  the proof that the response baseline still matches the retained
+  `renderedContent` bytes.
+  → Green on the unmodified build: transformed
+  `c98fd4c8a875b4f8a8cb5e910153b0ba8b3e6cb1502c0d8bbbe15cd3021afeab`,
+  untransformed
+  `9b22dd9a3495eba60a3ae6b3efecbfbd254e0761125a73ba8587eaa8a2003733`;
+  source name `index.qmd`.
+- [x] Add an internal capture-aware implementation of
+  `render_qmd_to_preview_ast`, retaining the existing public function as a
+  capture-on wrapper. Project pass 2 calls the internal implementation
+  with capture off so its discarded parse and serialization never happen.
+  Leave `render_project_active_page_to_response` and
+  `render_single_doc_to_response` unchanged in this checkpoint. Do not add
+  `untransformed_ast_json` to `WasmPassTwoOutput`.
+- [x] Run focused Rust and raw-WASM regression tests, then the full
+  verification chain in Conventions. No `.snap` changes are expected from
+  this internal plumbing; audit and report any that occur rather than
+  assuming a snapshot round.
+  → Seven focused core tests and strict clippy passed; the rebuilt raw-WASM
+  characterization plus unchanged `applyNodeEdit` round trips passed 27/27.
+  `cargo xtask verify --skip-rust-tests` passed every leg. The final selected
+  workspace run passed **19,193/19,193** tests, excluding the two known
+  R-package-version cases in bd-qwscag8b (`capture_classifies_pieces` and
+  `a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live`) and the
+  load-sensitive `socket_group_relaxes_permissions`. The latter passed in
+  isolation. `head_peek_timeout_closes` also failed once by 136 microseconds
+  under load, then passed in isolation and in the following full run. The
+  unfiltered `cargo xtask verify` is therefore not green on this machine:
+  its first Rust leg stops at the documented `rlang_error`/`simpleError`
+  skew; CI's pinned R environment remains the backstop. No `.snap` files
+  changed.
+- [x] Measure the same project fixture at 1x/8x and record
+  `render.wasm-call` before/after. `wasm-envelope.parse` bytes should be
+  unchanged because the response still carries the same capture; the win
+  is the removed parse and serialization inside the WASM call.
+  → Same driver, release WASM, 10 renders/scale: 1x **356.940 → 284.122 ms**
+  (−72.818 ms, **−20.4%**); 8x **2811.396 → 2211.554 ms** (−599.842 ms,
+  **−21.3%**). Envelope bytes are exactly unchanged at both scales
+  (107,168,994 and 882,771,214).
+- [x] Browser-smoke a multi-file hub project: a rich-text content edit and
+  a comment add/resolve with editing off both land in the QMD. Record the
+  invocation and observed result, or explicitly record the browser debt.
+  Commit this green checkpoint, following the hub-client changelog
+  two-commit workflow when the commits touch `hub-client/`; keep the
+  strand open for Phase 3B1.
+  → Built with `cd hub-client && VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
+  npm run build`, then drove headless Chromium with the project factory's
+  hub on port 3031. A throwaway multi-file spec plus the existing inline-edit
+  control passed 2/2: a paragraph edit reached Automerge, and a comment added
+  and resolved with editing off appeared in and disappeared from `main.qmd`.
+  The throwaway spec was deleted after the run. The existing real-ProseMirror
+  control (`q2-preview-richtext-bold-content-loss.spec.ts`, "bolding a
+  paragraph preserves its content") also passed 1/1 and produced
+  `**Hello world paragraph.**` in Automerge. The output was inspected through
+  the test hooks, not inferred from successful renders alone.
+
+### Phase 3B1 — Conservative checkpoint: eager capture when comments are visible
+
+This is the second green implementation checkpoint in the shared strand.
+An unarmed single-document render drops from two QMD parses to one. An
+unarmed project render drops from two to one relative to Phase 3A (from
+the original three to one overall); an armed project render remains at
+two. The flag-off response omits `untransformed_ast_json`; `ast_json`
+remains byte-identical. Default comments-visible hub renders remain armed
+unless the deferred Phase 3B2 is later activated, and fresh-default
+editing-enabled renders remain armed in every variant.
+
+- [ ] Continue the Phase 3A/3B1 strand and write the Rust and raw-WASM
+  tests first. Cover both single-document and multi-file project paths:
+  flag off omits `untransformed_ast_json`; flag on returns bytes identical
+  to Phase 3A; transformed `ast_json` is identical in both modes. Also pin
+  omitted options and an omitted flag to the same capture-on bytes as an
+  explicit flag-on call. Confirm the new flag-off assertions fail on the
+  unmodified build. Leave existing raw-WASM callers that consume the
+  baseline, including `applyNodeEdit.wasm.test.ts`, unchanged.
+- [ ] Write the TypeScript behavior tests before implementation:
+  - hub `previewEditing=true` arms capture;
+  - hub editing off with `commentsMode='show'` or `'expand'` also arms it,
+    and real `PreviewRoot` read-mode comment add/resolve still works;
+  - hub editing off with `commentsMode='hide'` leaves it unarmed;
+  - entering editing and changing comments from hidden to visible each
+    cause exactly one armed render through the existing effect, with no
+    additional retry render;
+  - SPA `allowEdit=true` arms the first render, while `allowEdit=false`
+    leaves capture, content editing, commenting, and nested regeneration
+    off;
+  - nested buffers are regenerated only in editing mode, never merely
+    because a read-mode render was armed for visible comments, and an
+    editing toggle invalidates a previously computed table even when the
+    AST strings are unchanged.
+- [ ] Extend the real `CommentBlock.readMode.integration.test.tsx` tests
+  before the UI implementation. With no baseline there is no new-node `+`,
+  and existing comments have no input or resolve buttons. Cover both an
+  initial baseline-less mount and an armed-to-unarmed rerender with an
+  existing-comment input already open; the input must be suppressed rather
+  than remaining available for a null-source no-op. Once an armed render
+  supplies the baseline, normal block and span add/resolve UI appears
+  unchanged. Existing unsupported-node and read-only-host cases remain
+  unchanged.
+- [ ] Thread `capture_untransformed_ast` through both hot WASM render
+  paths. Single-document rendering passes it to the internal core
+  implementation from Phase 3A. Project pass 2 remains capture-off; the
+  project response keeps or skips its existing original-`active_path`
+  capture according to the flag. When false, skip the capture entirely —
+  no parse, serialization, or envelope field. Preserve the public core
+  wrapper and both public WASM entries as capture-on when their options or
+  flag are omitted, so unrelated native and raw-WASM tests need no
+  mechanical edits.
+- [ ] Add `captureUntransformedAst` to the two public wrapper option shapes.
+  Use `previewEditing || (commentsMode ?? 'show') !== 'hide'` for hub and
+  `allowEdit` for the SPA. Add those arming inputs to the existing render
+  callback dependencies so the current effect performs the rerender. Do
+  not add pending edits, lazy retries, or a separate entering-editing
+  effect.
+- [ ] Make baseline-less comments read-only in `CommentWrapper` by deriving
+  readiness from `PreviewContext.sourceIndex`. Include a missing source
+  index in the existing read-only gate and suppress the inline input even
+  when it was already open. Add no readiness prop, iframe message, or
+  comment-edit queue.
+- [ ] Make the nested-buffer conditions and memo dependencies explicit in
+  `computeNestedEditBuffers` call sites: hub uses
+  `previewEditing && (unlockNestingCursor ?? true)` with `previewEditing`
+  in the dependency list; the SPA uses `allowEdit && nestingCursor` with
+  `allowEdit` in its dependency list. Update the existing SPA nesting
+  fixtures that currently set `allow_edit: false` while expecting
+  regeneration to use `allow_edit: true`, and add a read-only
+  no-regeneration case. Keep comment-only armed renders from paying the
+  `regenerate_nested_buffers` call.
+- [ ] Run focused Rust, preview-runtime, preview-renderer, hub-client, and
+  SPA tests, then the full verification chain in Conventions. Audit
+  `.snap` files and report counts and surprises if any change; no snapshot
+  churn is assumed from the optional response field.
+- [ ] Measure same-build flag-on/flag-off runs at 1x/8x for both
+  single-document and project paths. Record `render.wasm-call`,
+  `wasm-envelope.parse` bytes, and the arming mode used. Flag-on is the
+  Phase 3A comparison point; flag-off isolates the gating win. The hub
+  unarmed measurement must explicitly use `previewEditing=false` and
+  `commentsMode='hide'`. Include editing-on and comments-visible armed
+  controls; do not present either as an unarmed win.
+- [ ] End-to-end smoke both hosts. In hub, verify content editing after
+  entering edit mode, comment add/resolve with editing off and comments
+  visible, and comments hidden/visible transitions, including the
+  baseline-less interval before the armed render completes. In the SPA,
+  verify a read-only session and an `--allow-edit` session. Record
+  invocations and observed behavior, then finish the hub-client changelog
+  two-commit workflow and close the strand with the measurements.
+
+### Phase 3B2 — Deferred: one armed render on comment intent
+
+Do not file an implementation strand with Phases 3A/3B1. Phase 3B1 leaves
+read-mode, comments-visible renders armed; this deferred phase targets
+only that non-default configuration. Fresh-default hub sessions have
+`previewEditing=true` and remain armed. Reconsider activation only when
+the Phase 3B1 measurements show that the ordinary-render saving justifies
+a new host action and its race handling.
+
+- [ ] Measurement gate only: after Phase 3B1, measure its target
+  configuration at 1x/8x with `previewEditing=false` and
+  `commentsMode='show'`. Record the potential ordinary-render saving and
+  an editing-enabled armed control. Decide explicitly whether to activate
+  this phase; otherwise leave it deferred.
+
+If a later review activates the phase, use these design constraints rather
+than treating them as current implementation work:
+
+- **Direct iframe only.** A host-side **Enable comments** action sets a
+  path-keyed `commentCaptureArmedForPath` React state value. Arm hub
+  capture with
+  `previewEditing || format === 'q2-sandboxed-preview' || commentCaptureArmedForPath === currentFile?.path`.
+  Thus the direct iframe can opt in on comment intent while sandbox
+  capture stays eager. The SPA condition remains `allowEdit`.
+- **Sandbox work is separate.** Do not deploy baseline-less sandbox
+  renders in this phase. A future sandbox strand must handle old or cached
+  iframe deployment and the existing `editingDisabled` transport gap
+  before changing its eager-capture policy. No compatibility handshake is
+  needed for the direct-only activation.
+- **Reuse the full-render path.** The first state change deliberately uses
+  the existing render effect and serial/latest-wins queue, increasing
+  `render.started` exactly once. Repeated activation deduplicates;
+  subsequent natural renders for that path stay armed. Retry invokes the
+  same armed render. Do not use a ref latch, a separate entering-editing
+  effect, or an effect-order-dependent file reset.
+- **Correlate armed and unarmed requests.** Extend the compound `rendered`
+  state with `sourcePath`, use it for the matching `ReactRenderer` props,
+  and key accepted-render staleness by path + content + capture-armed
+  state. Path + content prevents a same-content file switch from accepting
+  the old path's result; the armed bit prevents an identical-content
+  unarmed render already in flight from owning comment-intent pending,
+  failure, Retry, or readiness. The queued armed render publishes the
+  final comment-ready state without a top-up. Add race tests for both
+  cases; no numeric generation protocol is needed.
+- **Reuse the Phase 3B1 read-only gate.** Existing comments remain
+  readable without a baseline, while add/resolve controls and inputs stay
+  suppressed. The Enable comments action belongs to `ReactPreview`, not
+  `PreviewRoot`. Keep it pending until the matching armed baseline is
+  published. No comment text or edit is queued.
+- **Keep editing work separate.** None of these paths enables nested
+  regeneration in read mode; the Phase 3B1 editing guards and memo
+  dependencies remain unchanged.
+- **Add no capture-only side channel.** Reuse the Phase 3B1 flag and
+  existing queue. No dedicated capture export, `REQUEST_COMMENT_CAPTURE`
+  message, iframe pending/error transport, baseline patching, or in-flight
+  top-up is part of this design.
+- **Verify only if activated.** Write the `ReactPreview` behavior and race
+  tests first, run the full verification chain, and browser-smoke the
+  direct iframe: no capture before intent, one armed render on activation,
+  block and span add/resolve, subsequent armed natural renders,
+  failure/Retry, and same-content path and armed-state races. Measure
+  ordinary no-intent cost, first-intent full-render latency, and exactly
+  one `render.started` increase against Phase 3B1. Keep sandbox regression
+  coverage on its eager path.
+
+If the measured first-intent full-render latency is unacceptable, stop and
+write a separate capture-only design justified by those numbers. That
+design must cover original-source-name byte parity, request/generation
+correlation, stale top-up revalidation and failure, direct and sandbox
+`event.source` checks, a real paint-yielding mechanism, and old or cached
+iframe deployment. Do not implement that side channel as part of this
+phase.
+
+### Phase 3C — Deferred: AST transport and proxy-manifest relocation
+
+Do not implement this with Phases 3A/3B. Reconsider it only if post-3B
+profiles still show significant main-thread envelope parsing or
+parent-side AST work; it may then fit better with Phase 5's scoped
+envelope work. It is not a prerequisite for Phase 4.
+
+The activation design must account for the full current consumer and
+deployment inventory:
+
+- `ReactRenderer.tsx:231` parses `astJson` for custom-component paths for
+  `q2-sandboxed-preview` as well as the direct iframe formats. Moving only
+  the proxy manifest therefore does not eliminate parent AST parsing on
+  the sandboxed path.
+- `ReactAstSlideRenderer.tsx:77`, `useCursorToSlide.ts:29`, and
+  `useSlideThumbnails.tsx:94` also parse on the parent side. The SPA has
+  sibling parses for custom components and the document title. Any claim
+  of "single-parse AST transport" must say exactly which parses it removes.
+- A wasm-bindgen out-param or multi-return changes success/error
+  representation, generated and hand-written declarations, wrappers, and
+  direct raw-WASM callers. Design that contract separately rather than
+  treating it as a small addition to the capture-option change.
+- Moving `buildProxyAssetManifest` into `updateAst` remains a plausible
+  follow-up because it is pure in `(astJson, currentFilePath)` and needs no
+  VFS reads. Preserve the current ordering guarantee by deriving the
+  manifest synchronously before `root.render`. The VFS-reading,
+  origin-scoped blob manifest in `Q2PreviewIframe.tsx` stays parent-side.
+- The sandbox iframe is deployed separately. Roll out a dual-mode iframe
+  that derives a manifest when absent and honors a supplied manifest first;
+  remove the parent field only after that deployment. Add real iframe-side
+  tests and a test runner for `quarto-hub-sandboxed-preview` rather than
+  moving the existing test outside hub-client discovery.
+- Sharing the already-parsed AST from `PreviewRoot` is not a free optional
+  cleanup: that parsed object currently lives inside `PreviewRoot`, while
+  `updateAst` runs before `root.render`. Profile before restructuring it.
+- Cross-origin iframes do not guarantee a separate OS process under every
+  browser and local deployment. Measure the actual production-like
+  topology rather than assuming every iframe parse is off the parent event
+  loop.
 
 ## Phase 4 — Binary asset transfer without base64 (finding 6)
 

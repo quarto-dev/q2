@@ -2074,13 +2074,42 @@ pub async fn render_qmd_to_preview_ast(
     engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     captures: CapturePayload,
 ) -> Result<PreviewAstOutput> {
+    render_qmd_to_preview_ast_with_capture(
+        content,
+        source_name,
+        ctx,
+        runtime,
+        engine_registry,
+        captures,
+        true,
+    )
+    .await
+}
+
+/// Capture-aware implementation of [`render_qmd_to_preview_ast`].
+///
+/// Project pass 2 discards the untransformed AST, so it disables the capture;
+/// response-producing callers retain the public capture-on wrapper above.
+pub async fn render_qmd_to_preview_ast_with_capture(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    captures: CapturePayload,
+    capture_untransformed_ast: bool,
+) -> Result<PreviewAstOutput> {
     // Capture the untransformed AST before any pipeline stage runs.
     // This is the baseline `incremental_write` reconciles against (plan:
     // 2026-06-04-target-incremental-writes.md, Phase 1).  We parse the
     // content a second time rather than intercepting the pipeline's own
     // parse so that the returned JSON is wholly self-contained (its own
     // source-info pool) and independent of the main pipeline's run.
-    let untransformed_ast_json = capture_untransformed_ast_json(content, source_name);
+    let untransformed_ast_json = if capture_untransformed_ast {
+        capture_untransformed_ast_json(content, source_name)
+    } else {
+        None
+    };
 
     // Thread the optional engine registry override onto `RenderContext` so
     // `run_pipeline` can apply it to `StageContext` after populating the
