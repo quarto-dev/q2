@@ -132,9 +132,45 @@ merge commits.
    direct ref update.
 7. Verify: `git -C /Users/gordon/src/q2/.worktrees/workspace-1 log --oneline -1` shows your last commit.
 8. Report: the plan id, the landed commit, the gates you ran and their results, snapshot changes (counts and
-   files), and anything Gordon needs to know. Then stop, or pick your lane\'s next startable plan.
+   files), and anything Gordon needs to know. Then end with a handoff (next section).
 
 Leave your branch in place. Do not delete branches or worktrees.
+
+## Ending your session: the handoff
+
+Every session ends with a **handoff**: a self-contained prompt, in your final message, that Gordon can paste into a
+fresh session in the same lane. Write it after you have committed and merged (or, if you could not finish, after you
+have committed your progress). The next agent has none of your context, so the handoff names everything it needs. Do not
+start the next piece of work yourself.
+
+Which handoff depends on how the session went:
+
+1. **Done, no serious problems: hand off the next plan in the lane.** Use this only when your plan is `complete` and
+   landed, every gate was green, and nothing surprising came up (no unexpected failure, no finding that changes another
+   plan\'s boundary, no question left for Gordon). Name the lane\'s next plan: the first plan in your lane\'s list in
+   the epic that is startable, read from the integration branch. If none is startable, say which plans the lane waits
+   on and for what, and write no plan handoff.
+2. **Not done, or a serious problem: hand off to continue your plan.** Choose one:
+   - **Same branch, no merge**, when the work is still the right shape: your commits are on your `opr/...` or `rfu/...`
+     branch, nothing of the plan has landed beyond the claim, and the integration branch has not moved in a way that
+     invalidates the work. Say the branch name, that the workspace must stay on it, and that it must **not** be
+     merged until the plan is finished.
+   - **A new branch from the integration branch**, when the old branch is not a good base: a notes commit or partial
+     work already landed, the plan or the code it touches changed on the integration branch, or you backed out an
+     approach. Name the new branch (the plan\'s name for it, with a suffix such as `-2`), say which commits of the old
+     branch to cherry-pick or ignore, and say the claim has already landed so it need not be repeated.
+3. **Blocked on Gordon:** say what he must decide or flip, and write no handoff to continue; the plan\'s status
+   (`blocked-on-gordon`) is the handoff.
+
+Every handoff contains:
+
+- the lane and workspace path, the plan id and its file, and the branch to use (and whether to create it);
+- the instruction to read this protocol, the epic\'s "Decisions" and the plan, in that order, and to run `pwd` first;
+- what is done, what is not, and the state of the branch (committed, uncommitted, landed or not, the last commit);
+- for a continuation: the reason you stopped, what you tried that did not work, and the next concrete step;
+- anything Gordon told you that is not yet in a plan file (there should be nothing; write it into the plan instead).
+
+Keep it short: a handoff points at files and commits rather than repeating them.
 
 ## When you cannot finish
 
@@ -146,7 +182,7 @@ have), do **not** land a partial plan. Instead:
 3. Set `status: ready` (or `blocked-on-gordon` if only Gordon can unblock it), commit, rebase, and land **only that
    notes commit** with the fast-forward merge above (cherry-pick it onto a fresh branch from the integration branch
    if your work commits cannot go with it).
-4. Report the reason and the branch name in your final message.
+4. Report the reason and the branch name in your final message, and end with a handoff to continue (next section).
 
 ## A plan in another repository (the Positron fork)
 
