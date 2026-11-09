@@ -2,7 +2,7 @@
 title: 'OPR-7f: engines control the attributes and file names of what the presenter writes'
 date: 2026-11-09
 description: 'Adds one general channel by which an engine tells the presenter which id, classes and attributes to put on a cell wrapper or an output div, and has the Julia mapping use it, together with the existing quarto_file_path, so a recorded Julia render keeps the wrapper id, the output execution count, the figure output class and the figure file names of the plain route. Stops the engine route from writing data-quarto (a q2 annotation that the Quarto 1 attribute forwarding leaks into the HTML, with an absolute path) by adding it to the forwarding exclusion list. Removes all five OPR-7c allowlist entries about Julia markup. Lands before OPR-7d. No change to the Julia runner or engine fork.'
-status: ready
+status: in-progress
 depends-on: [opr-4d, opr-7a, opr-7c]
 lane: C
 ---
