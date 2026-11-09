@@ -2,7 +2,7 @@
 title: 'OPR-4d: q2 turns the Julia facts into cell metadata so the presenter uses them'
 date: 2026-11-08
 description: 'Core maps the three facts the Julia runner puts in each cell''s metadata.quarto onto the same cell-metadata keys knitr uses, so the one per-cell step from OPR-1a reads them: interleaved output, exact prompt, numeric echo and numeric warning and message for Julia. With the facts absent, output is unchanged. Julia cells interleave per expression with Julia''s own limits, which is new behavior, not a restoration of Quarto 1.'
-status: ready
+status: in-progress
 depends-on: [opr-4c, opr-1b]
 lane: A
 ---
