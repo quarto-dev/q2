@@ -2,7 +2,7 @@
 title: 'OPR-4a: Julia spike, can the runner report expression starts, anchors and output kinds'
 date: 2026-11-08
 description: 'A pass or fail spike. Decides whether QuartoNotebookRunner can tie each output of a Julia cell to the expression that produced it, report where each expression starts, and tell a message from a warning. Produces a note with a verdict and a proposed set of optional wire fields. Gordon decides, which enables or cancels OPR-4b to OPR-4d.'
-status: in-progress
+status: complete
 depends-on: []
 lane: B
 ---
@@ -48,24 +48,24 @@ The question: can Julia supply them? This is a **spike with a verdict**, not a d
 
 ## Checklist (every box is `[unattended]`)
 
-- [ ] Read the runner source named above, and q2\'s side: `engine/ts_protocol.rs` (`TsRecordInfo`, `UnitResult`,
+- [x] Read the runner source named above, and q2\'s side: `engine/ts_protocol.rs` (`TsRecordInfo`, `UnitResult`,
       `TsExecuteOptions`), `engine/ts_record.rs` (`read_engine_notebook`), and the engine extension under
       `resources/extension-subtrees/julia-engine/src/` (`julia-engine.ts`, `record-wire.ts`).
-- [ ] **Quarto 1 comparison.** Render a two-expression Julia cell with Quarto 1 (`quarto render`) and with q2; record
+- [x] **Quarto 1 comparison.** Render a two-expression Julia cell with Quarto 1 (`quarto render`) and with q2; record
       what each shows (interleaved or source then outputs). This says whether interleaving is new or restored.
-- [ ] **Prototype in a scratch copy** of the runner (a `git worktree` of the runner repo on a scratch branch, outside
+- [x] **Prototype in a scratch copy** of the runner (a `git worktree` of the runner repo on a scratch branch, outside
       q2\'s tree): record, per top-level expression, its starting line, and attribute each display and stream to the
       expression during which it arrived. Demonstrate on a cell with `println`, a value, a plot display and an
       `@warn`: each output tied to its expression, with line numbers. Report timing overhead.
-- [ ] **Message against warning.** Can the runner tell `@info`, `@warn` and `@error` apart (a logger hook), and does
+- [x] **Message against warning.** Can the runner tell `@info`, `@warn` and `@error` apart (a logger hook), and does
       stdout keep order against stderr? Report separately; this is the hardest of the three.
-- [ ] **Propose, do not implement:** the minimal optional per-unit wire fields (names, shapes, versioning) that would
+- [x] **Propose, do not implement:** the minimal optional per-unit wire fields (names, shapes, versioning) that would
       carry the three facts through `ts_protocol.rs`, and which q2 cell-metadata keys they would become (the knitr
       names: `quarto_expression_starts`, `quarto_output_anchors`, `quarto_output_kinds`).
-- [ ] **Verdict per fact** (feasible, feasible with changes to the runner, not feasible) with effort in sessions, and
+- [x] **Verdict per fact** (feasible, feasible with changes to the runner, not feasible) with effort in sessions, and
       a recommendation: which of the three to build, in what order. State the effect on OPR-4b to OPR-4d if the
       verdict is partial (for example expression starts and anchors only).
-- [ ] Render-check the note (`target/debug/q2 render --strict <file>`).
+- [x] Render-check the note (`target/debug/q2 render --strict <file>`).
 
 ## Exit criteria
 
@@ -77,4 +77,15 @@ The question: can Julia supply them? This is a **spike with a verdict**, not a d
 
 ## Notes from the run
 
-(Fill in at landing.)
+Note: [2026-11-09-opr-julia-spike.md](../research/2026-11-09-opr-julia-spike.md). Verdict: all three facts feasible
+with one runner change (no q2 product change; `ts_protocol.rs` untouched).
+
+- Ran: prototype in a scratch worktree of the runner (`spike/opr-4a-expressions`, diff in the note's appendix) on four
+  cells; timing (no measurable overhead); Quarto 1 and q2 renders of the same cell (neither interleaves, so interleaving
+  is new for Julia). Servers were isolated with a scratch HOME and a copy of the runner project.
+- Read only: q2's wire files and the knitr key names.
+- Not done: the runner's own test suite, a Plots.jl figure, a q2 render through the prototype runner.
+- Found (not fixed): the runner drops all stderr at capture when `warning: false`, which contradicts D2's reading of
+  Julia's display-only declaration (OPR-3); fold the fix into OPR-4b. The runner checkout is at `5aa4bd7`, q2 pins `5e04284`.
+- The plan named the note `2026-11-xx-opr-julia-spike.md` under `claude-notes/research/`; it is
+  `2026-11-09-opr-julia-spike.md`.
