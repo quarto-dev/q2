@@ -27,7 +27,7 @@ fn write(path: &Path, text: &str) {
 }
 
 fn root_of(tmp: &TempDir) -> PathBuf {
-    tmp.path().canonicalize().unwrap()
+    quarto_system_runtime::canonicalize(tmp.path()).unwrap()
 }
 
 fn overlaid(overlay: RenderOverlay) -> Arc<dyn SystemRuntime> {

@@ -27,7 +27,7 @@ fn write(path: &Path, content: &str) {
 #[test]
 fn merged_front_matter_root_file_ids_identify_the_documents_own_keys() {
     let tmp = TempDir::new().unwrap();
-    let root = tmp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
     write(
         &root.join("_extensions/acme/_extension.yml"),
         "title: Acme\nversion: 1.0.0\ncontributes:\n  metadata:\n    probe-ext-meta: e\n  formats:\n    html:\n      probe-ext-format: f\n",

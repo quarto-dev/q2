@@ -414,7 +414,7 @@ mod tests {
     /// document at `<root>/a/b/doc.qmd`.
     fn fixture() -> Fixture {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         write(
             &root.join("_quarto.yml"),
             "project:\n  type: default\nprobe: project\n",
@@ -521,7 +521,7 @@ mod tests {
         // No `_quarto.yml`: the document's stand-in project is rooted at its
         // own directory, so `a/_metadata.yml` counts and the parent's does not.
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         write(&root.join("_metadata.yml"), "probe: parent\n");
         write(&root.join("a/_metadata.yml"), "probe: own\n");
         let doc = root.join("a/doc.qmd");

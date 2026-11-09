@@ -98,7 +98,7 @@ fn typst_render_leaves_no_pipeline_temp_dir() {
     }
     let private = private_tmpdir();
     let proj = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     std::fs::write(root.join("a.qmd"), "---\ntitle: T\n---\n\nHello.\n").unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let result = render_to_file(

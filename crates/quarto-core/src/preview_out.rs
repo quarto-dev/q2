@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn creates_under_the_discovered_project_and_cleans_up_on_drop() {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         let doc = project(&root, true);
         let out = PreviewOutDir::create(&doc, &NativeRuntime::new()).unwrap();
         let dir = out.path().to_path_buf();
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn a_project_without_a_config_file_uses_the_document_directory() {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         let doc = project(&root, false);
         let out = PreviewOutDir::create(&doc, &NativeRuntime::new()).unwrap();
         assert!(
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn sweep_removes_only_old_directories_including_nested_projects() {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         let old = root.join(PREVIEW_OUT_REL).join("old");
         let nested = root.join("deep/proj").join(PREVIEW_OUT_REL).join("nested");
         let skipped = root
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn single_project_sweep_does_not_walk() {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         let here = root.join(PREVIEW_OUT_REL).join("a");
         let nested = root.join("sub").join(PREVIEW_OUT_REL).join("b");
         for d in [&here, &nested] {
@@ -244,7 +244,7 @@ mod tests {
     fn a_read_only_project_reports_a_clear_error() {
         use std::os::unix::fs::PermissionsExt;
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         let doc = project(&root, true);
         let ro = std::fs::Permissions::from_mode(0o555);
         std::fs::set_permissions(&root, ro).unwrap();

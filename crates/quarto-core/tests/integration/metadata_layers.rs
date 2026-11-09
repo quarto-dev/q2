@@ -58,7 +58,7 @@ fn merged_json_with_profile(
 /// Each layer sets a `probe-*` key of its own, and `winner` in all of them.
 fn every_layer_fixture() -> (TempDir, std::path::PathBuf, std::path::PathBuf) {
     let tmp = TempDir::new().unwrap();
-    let root = tmp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
     write(
         &root.join("_extensions/acme/_extension.yml"),
         "title: Acme\nversion: 1.0.0\ncontributes:\n  metadata:\n    probe-ext-meta: e\n    winner: ext-meta\n    project:\n      pre-render: x.ts\n  formats:\n    html:\n      probe-ext-format: f\n      winner: ext-format\n",
@@ -124,7 +124,7 @@ fn probe_winner(
     selection: Option<&[&str]>,
 ) -> (LayerKind, Option<std::path::PathBuf>, String, String) {
     let tmp = TempDir::new().unwrap();
-    let root = tmp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
     for (name, body) in files {
         write(&root.join(name), body);
     }
