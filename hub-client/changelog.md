@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-11-09
 
+- [`01b51b131`](https://github.com/quarto-dev/q2/commits/01b51b131): Upgrade pandoc to 3.13 for "Download as" and document import; imported Word tables keep each column's alignment again, imported RTF no longer drops the letter after a non-ASCII character, and in Word output a list item with several paragraphs stays a single list.
 - [`641acc274`](https://github.com/quarto-dev/q2/commits/641acc274): Typing in the editor no longer pays a full document parse just to decide which preview to show — the format check is now a sub-millisecond resolver call, cutting the per-keystroke cost of a live editing session by about a fifth. While a `q2-*` format name is being typed (say `q2-slides`), the pane now says immediately that the partial name can't be shown instead of holding the previous preview, matching what typing `docx` or `revealjs` already did.
 
 ### 2026-11-03
