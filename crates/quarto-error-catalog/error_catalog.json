@@ -2018,7 +2018,7 @@
   "Q-18-12": {
     "subsystem": "engine",
     "title": "knitr Cache Is Off While Recording",
-    "message_template": "A knitr chunk asked for knitr's cache (`cache: true`), and Quarto turned the cache off for the run that records the document, because a cache hit skips the run and leaves nothing to record. The chunks run every time the document is executed, so a document that relies on the cache is slower. The output is the same.",
+    "message_template": "No longer emitted (OPR-7b): a chunk that asks for knitr's cache keeps it and is not recorded. Formerly: a knitr chunk asked for knitr's cache (`cache: true`), and Quarto turned the cache off for the run that records the document, because a cache hit skips the run and leaves nothing to record. The chunks run every time the document is executed, so a document that relies on the cache is slower. The output is the same.",
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-12",
     "since_version": "99.9.9"
   },

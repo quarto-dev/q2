@@ -170,27 +170,18 @@ fn shadow_markdown(name: &str, marker: bool) -> (String, String) {
     (golden, markdown)
 }
 
-/// S2: with the marker on every record cell, 12 of the 13 shadow goldens are byte-identical.
-/// The one that is not, `warning-false-stderr`, differs because `knitr_visibility` does not
-/// read `warning` (OPR-2 moves that enforcement; D2).
+/// S2, after OPR-2: with the marker on every record cell, all 13 shadow goldens are byte-identical.
+/// `warning-false-stderr` used to differ because `knitr_visibility` never read `warning`; the one
+/// rule (D2) reads the record\'s declaration, which lists `warning` display-only for Jupyter.
 #[test]
 fn shadow_goldens_through_the_knitr_entry_path() {
-    let mut differing = Vec::new();
     for name in SHADOW_CASES {
         // The control: with no marker the stand-in reproduces the golden (the oracle test).
         let (golden, unmarked) = shadow_markdown(name, false);
         assert_eq!(unmarked, golden, "{name}: control without the marker");
         let (_, marked) = shadow_markdown(name, true);
-        if marked != golden {
-            differing.push((*name, golden, marked));
-        }
+        assert_eq!(marked, golden, "{name}: through the one path");
     }
-    // OPR-1a: keep this equivalence: the only difference is the `warning` row below.
-    let names: Vec<_> = differing.iter().map(|d| d.0).collect();
-    assert_eq!(names, ["warning-false-stderr"]);
-    let (_, golden, marked) = &differing[0];
-    assert!(!golden.contains("cell-output-stderr"), "{golden}");
-    assert!(marked.contains("cell-output-stderr"), "{marked}");
 }
 
 /// Replays a stored notebook the way `IpynbReplayEngine` does (one record cell per fence that

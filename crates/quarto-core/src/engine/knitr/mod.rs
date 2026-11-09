@@ -303,7 +303,7 @@ impl ExecutionEngine for KnitrEngine {
         };
 
         // Step 8: Call R
-        let result: KnitrExecuteResult = call_r(
+        let mut result: KnitrExecuteResult = call_r(
             "execute",
             &params,
             &ctx.temp_dir,
@@ -333,13 +333,16 @@ impl ExecutionEngine for KnitrEngine {
         };
 
         execute_result.warnings.extend(capture_plan.diagnostic);
-        if !result.cache_disabled.is_empty() {
-            execute_result
-                .warnings
-                .push(super::diagnostics::knitr_cache_disabled_diagnostic(
-                    &result.cache_disabled,
-                ));
-        }
+        // OPR-7b: a chunk that asked for knitr\'s cache keeps it and is not recorded, so it is
+        // not one of the units the record is checked against; its finished markdown is already
+        // in place in the skeleton.
+        let expected_ids: Vec<String> = expected_ids
+            .into_iter()
+            .filter(|id| !result.cached_units.contains(id))
+            .collect();
+        let cached_units = std::mem::take(&mut result.cached_units);
+        result.chunks.retain(|c| !cached_units.contains(&c.id));
+        result.pieces.retain(|c| !is_cached_chunk(c, &cached_units));
         let child_labels: Vec<String> = result
             .pieces
             .iter()
@@ -622,6 +625,15 @@ fn convert_includes(
     result
 }
 
+/// Whether a captured chunk carries the unit id of a chunk that asked for knitr\'s cache.
+fn is_cached_chunk(chunk: &types::KnitrCapturedChunk, cached_units: &[String]) -> bool {
+    chunk
+        .options
+        .get(chunk_records::UNIT_ID_OPTION)
+        .and_then(|v| v.as_str())
+        .is_some_and(|id| cached_units.iter().any(|c| c == id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -664,12 +676,12 @@ mod tests {
     }
 
     #[test]
-    fn knitr_declares_empty_exclusion_lists_and_the_knitr_key() {
+    fn knitr_excludes_only_record_sources_from_the_execute_keys_and_declares_the_knitr_key() {
         let def = KnitrEngine { rscript_path: None }.hash_definition();
         assert_eq!(def.id, "knitr");
         assert_eq!(def.granularity, crate::record::Granularity::Unit);
         assert!(def.presentation_cell_options.is_empty());
-        assert!(def.presentation_execute_keys.is_empty());
+        assert_eq!(def.presentation_execute_keys, ["record-sources"]);
         assert_eq!(def.document_keys, ["knitr"]);
         // KNR-3: the default profile is still the all-options rule; fallback units use it. The
         // `structured` profile is covered in `hash_rule`.

@@ -216,8 +216,8 @@ fn stream(name: &str, text: &str) -> CellOutput {
 
 /// Results `stored.rs` cannot produce (it always sets `ExecuteStatus::Ok`).
 fn direct_cases() -> Vec<(&'static str, CellResult, CellVisibility)> {
-    let visible = || CellVisibility::resolve(None);
-    let with = |json: &str| CellVisibility::resolve(Some(&scope_from_json(json)));
+    let visible = || CellVisibility::resolve(None, true);
+    let with = |json: &str| CellVisibility::resolve(Some(&scope_from_json(json)), true);
     let error_status = || ExecuteStatus::Error {
         ename: "ValueError".to_string(),
         evalue: "bad value".to_string(),

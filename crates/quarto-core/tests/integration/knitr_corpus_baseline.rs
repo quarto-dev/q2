@@ -13,7 +13,7 @@ use serde_json::Value;
 use quarto_core::engine::capture_files::collect_capture_files;
 use quarto_core::engine::units::{CellUnit, Unit, scan_units};
 use quarto_core::engine::{
-    KnitrCapturedChunk, expression_starts, knitr_visibility, output_kinds, pieces_to_cell_anchored,
+    KnitrCapturedChunk, expression_starts, output_kinds, pieces_to_cell_anchored,
 };
 use quarto_core::presenter::cell::{HoldMode, apply_holds, render_cell_interleaved};
 use quarto_core::presenter::figures::FsFigureSink;
@@ -119,9 +119,10 @@ pub fn baseline(source: &str, doc_path: &Path, chunks: &[KnitrCapturedChunk]) ->
     Baseline::Candidate(out)
 }
 
-/// The presenter's visibility from a chunk's recorded options (see `knitr_visibility`).
+/// The presenter's visibility from a chunk's recorded options: knitr's declaration puts
+/// `warning` in the hash, so R enforced it at capture and the presenter does not (D2).
 pub fn visibility(options: &Value) -> CellVisibility {
-    knitr_visibility(options)
+    CellVisibility::from_flags(|k| options.get(k).and_then(Value::as_bool), false)
 }
 
 /// The text starts where the opener's backticks were, so only the following lines carry the

@@ -223,14 +223,15 @@ export interface StartOptions {
    */
   staticMode?: boolean;
   /**
-   * RIU-4: `--records` entries, passed one flag per entry (`['cache']`, `['cache', 'engine']`). Absent
-   * leaves the command's default list (`cache,q2,engine`). A directory source goes through `recordsDir`
-   * instead, because its path is only known once the temp dir exists.
+   * OPR-5: `execute: record-sources` entries (`['cache']`, `['cache', 'engine']`), passed as one
+   * `-M` argument (a comma-separated scalar). Absent leaves the command's default list
+   * (`cache,q2,engine`). A directory source goes through `recordsDir` instead.
    */
   records?: string[];
   /**
-   * RIU-4: seed a scratch directory with these files (Positron-format cache files) and pass it as one
-   * more `--records <dir>` entry, after `records`. Removed on `stop()`.
+   * OPR-5: seed `recs/` inside the project with these files (Positron-format cache files) and add
+   * `./recs` as one more record source, after `records`. A directory source must be inside the
+   * project. Removed with the project on `stop()`.
    */
   recordsDir?: FixtureFile[];
 }
@@ -291,18 +292,19 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
     }
   }
 
-  let recordsDirPath: string | undefined;
   if (opts.recordsDir) {
-    recordsDirPath = await mkdtemp(path.join(tmpdir(), 'q2-preview-e2e-records-'));
     for (const file of opts.recordsDir) {
-      const absPath = path.join(recordsDirPath, file.path);
+      const absPath = path.join(projectDir, 'recs', file.path);
       await mkdir(path.dirname(absPath), { recursive: true });
       await writeFile(absPath, file.content);
     }
   }
-  const recordsArgs = [...(opts.records ?? []), ...(recordsDirPath ? [recordsDirPath] : [])].flatMap(
-    (entry) => ['--records', entry],
-  );
+  const recordSources = [...(opts.records ?? []), ...(opts.recordsDir ? ['./recs'] : [])];
+  // The value is quoted so the commas stay inside the scalar.
+  const recordsArgs =
+    recordSources.length > 0
+      ? ['-M', `execute:{record-sources: "${recordSources.join(',')}"}`]
+      : [];
 
   const proc = spawn(
     Q2_BINARY,
@@ -387,7 +389,6 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
       await Promise.allSettled([
         rm(projectDir, { recursive: true, force: true }),
         rm(dataDir, { recursive: true, force: true }),
-        ...(recordsDirPath ? [rm(recordsDirPath, { recursive: true, force: true })] : []),
       ]);
     },
   };

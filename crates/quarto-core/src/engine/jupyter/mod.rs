@@ -308,6 +308,9 @@ pub(crate) fn jupyter_hash_definition() -> crate::record::HashDefinition {
     let mut def = crate::record::HashDefinition::conservative("jupyter");
     def.presentation_cell_options = DISPLAY_ONLY_KEYS.iter().map(|k| k.to_string()).collect();
     def.presentation_execute_keys = def.presentation_cell_options.clone();
+    // Where a record comes from (OPR-5) is not an input of the run; an `execute:` key only.
+    def.presentation_execute_keys
+        .push("record-sources".to_string());
     def.document_keys = vec!["jupyter".to_string()];
     def
 }
@@ -393,6 +396,15 @@ impl ExecutionEngine for JupyterEngine {
 
 #[cfg(test)]
 mod tests {
+    /// D2: Jupyter lists `warning` display-only, so the presenter enforces it; it has no
+    /// `message` option, which stays in the hash.
+    #[test]
+    fn the_presenter_enforces_jupyter_warning_and_not_message() {
+        let def = jupyter_hash_definition();
+        assert!(def.presenter_enforces(None, "warning"));
+        assert!(!def.presenter_enforces(None, "message"));
+    }
+
     use super::*;
 
     // === EXR-4: hash declarations ===
@@ -437,7 +449,14 @@ mod tests {
         assert_eq!(def.id, "jupyter");
         assert_eq!(def.granularity, crate::record::Granularity::Unit);
         assert_eq!(def.document_keys, ["jupyter"]);
-        assert_eq!(def.presentation_cell_options, def.presentation_execute_keys);
+        // The execute: keys are the cell options plus the record source list (OPR-5).
+        let mut expected = def.presentation_cell_options.clone();
+        expected.push("record-sources".to_string());
+        assert_eq!(def.presentation_execute_keys, expected);
+        assert!(
+            !def.presentation_cell_options
+                .contains(&"record-sources".to_string())
+        );
         for visibility in ["echo", "output", "warning", "include"] {
             assert!(
                 def.presentation_cell_options
@@ -479,6 +498,21 @@ mod tests {
         assert_ne!(
             with(serde_json::json!({"error": true})),
             with(serde_json::json!({"error": false}))
+        );
+    }
+
+    #[test]
+    fn adding_execute_record_sources_leaves_the_jupyter_document_hash() {
+        let def = JupyterEngine { jupyter_path: None }.hash_definition();
+        let with = |execute: serde_json::Value| {
+            doc_hash(
+                &def,
+                serde_json::json!({"jupyter": "python3", "execute": execute}),
+            )
+        };
+        assert_eq!(
+            with(serde_json::json!({"error": true})),
+            with(serde_json::json!({"error": true, "record-sources": "q2,engine"}))
         );
     }
 

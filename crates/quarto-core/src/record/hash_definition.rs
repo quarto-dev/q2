@@ -70,6 +70,35 @@ impl HashDefinition {
             profiles: BTreeMap::new(),
         }
     }
+
+    /// Whether core\'s presenter must enforce `option` (`warning`, `message`) for a unit that
+    /// names `profile` (decision D2, OPR-2).
+    ///
+    /// Exactly when the declaration lists the option as display-only in that profile (the
+    /// default lists, or the named profile\'s): an option in the hash was enforced at capture.
+    /// A declaration that lists nothing in any profile says nothing, so a hash that is
+    /// conservative by omission must not read as "capture enforced everything": the presenter
+    /// enforces. A declaration that lists something (knitr\'s structured profile, Jupyter\'s
+    /// list) is an answer, and an option it leaves out was applied at capture.
+    pub fn presenter_enforces(&self, profile: Option<&str>, option: &str) -> bool {
+        let lists =
+            |cell: &[String], execute: &[String]| cell.iter().chain(execute).any(|k| k == option);
+        let declares_anything = !self.presentation_cell_options.is_empty()
+            || !self.presentation_execute_keys.is_empty()
+            || self.profiles.values().any(|p| {
+                !p.presentation_cell_options.is_empty() || !p.presentation_execute_keys.is_empty()
+            });
+        if !declares_anything {
+            return true;
+        }
+        match profile.and_then(|name| self.profiles.get(name)) {
+            Some(p) => lists(&p.presentation_cell_options, &p.presentation_execute_keys),
+            None => lists(
+                &self.presentation_cell_options,
+                &self.presentation_execute_keys,
+            ),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -90,6 +119,58 @@ mod tests {
             },
         );
         def
+    }
+
+    fn declaring(display_only: &[&str]) -> HashDefinition {
+        let mut def = HashDefinition::conservative("jupyter");
+        def.presentation_cell_options = display_only.iter().map(|s| s.to_string()).collect();
+        def
+    }
+
+    #[test]
+    fn an_option_the_engine_lists_as_display_only_is_enforced_by_the_presenter() {
+        let def = declaring(&["echo", "warning"]);
+        assert!(def.presenter_enforces(None, "warning"));
+        // In the hash: capture enforced it, so the presenter leaves it alone.
+        assert!(!def.presenter_enforces(None, "message"));
+    }
+
+    #[test]
+    fn a_declaration_that_lists_nothing_is_no_declaration_and_the_presenter_enforces() {
+        let def = HashDefinition::conservative("some-ts-engine");
+        assert!(def.presenter_enforces(None, "warning"));
+        assert!(def.presenter_enforces(None, "message"));
+    }
+
+    #[test]
+    fn a_profile_that_declares_something_makes_an_empty_default_a_real_answer() {
+        // knitr: the default profile lists nothing, the `structured` one lists presentation
+        // options but never `warning`: R enforced warning at capture, for both profiles.
+        let mut def = HashDefinition::conservative("knitr");
+        def.profiles.insert(
+            "structured".into(),
+            HashProfile {
+                presentation_cell_options: vec!["echo".into()],
+                presentation_execute_keys: vec![],
+            },
+        );
+        assert!(!def.presenter_enforces(None, "warning"));
+        assert!(!def.presenter_enforces(Some("structured"), "warning"));
+        assert!(!def.presenter_enforces(Some("structured"), "message"));
+    }
+
+    #[test]
+    fn a_named_profile_is_read_instead_of_the_default() {
+        let mut def = declaring(&["echo"]);
+        def.profiles.insert(
+            "p".into(),
+            HashProfile {
+                presentation_cell_options: vec!["warning".into()],
+                presentation_execute_keys: vec![],
+            },
+        );
+        assert!(!def.presenter_enforces(None, "warning"));
+        assert!(def.presenter_enforces(Some("p"), "warning"));
     }
 
     #[test]

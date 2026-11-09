@@ -21,7 +21,7 @@ quarto_capture$slot <- NULL
 quarto_capture$ordinal <- 0L
 quarto_capture$hooks_at_start <- NULL
 quarto_capture$hook_override <- NULL
-quarto_capture$cache_labels <- character()
+quarto_capture$cached_units <- character()
 
 # The knit hooks whose replacement silently changes the markdown the presenter would not see
 # (KNR-1 S5). `chunk`, `document` and `inline` are Quarto's own.
@@ -320,6 +320,13 @@ capture_marker <- function(id) {
 capture_chunk_hook <- function(prev) {
   function(x, options) {
     out <- prev(x, options)
+    id <- options[["quarto-unit-id"]]
+    if (!is.null(id) && id %in% quarto_capture$cached_units) {
+      # a cached chunk (OPR-7b): not recorded, and knitr's own markdown stays in the skeleton.
+      # On a level-1 or level-2 hit this hook runs with no `evaluate` behind it.
+      quarto_capture$slot <- NULL
+      return(out)
+    }
     capture_check_hooks()
     quarto_capture$ordinal <- quarto_capture$ordinal + 1L
     slot <- quarto_capture$slot
@@ -380,7 +387,6 @@ capture_chunk_hook <- function(prev) {
     # trailing newline as the hook's own output keeps the skeleton's line structure, so Rust
     # can swap the finished markdown back in for a chunk it cannot present. A chunk whose hook
     # is overridden, that is not R, or that carries no unit id keeps its real markdown.
-    id <- options[["quarto-unit-id"]]
     if (
       !is.null(quarto_capture$nonce) &&
         !is.null(id) &&
@@ -437,8 +443,9 @@ capture_known_options <- function(format_opts_chunk = list()) {
 }
 
 # Return `knitr` (the options list execute() builds) with the capture wrappers
-# installed. Also turns knitr's cache off for the recording run (S4): an
-# unconditional copy of the hook execute.R installs for `cache: false`.
+# installed. A chunk that asks for knitr's cache keeps it (OPR-7b, reversing S4): its unit id is
+# noted in `quarto_capture$cached_units` and the chunk hook leaves it unrecorded, with knitr's real
+# markdown in place; Rust excludes those ids from the expected unit count.
 capture_install <- function(knitr, nonce = NULL) {
   quarto_capture$nonce <- nonce
   quarto_capture$records <- list()
@@ -446,7 +453,7 @@ capture_install <- function(knitr, nonce = NULL) {
   quarto_capture$ordinal <- 0L
   quarto_capture$hooks_at_start <- NULL
   quarto_capture$hook_override <- NULL
-  quarto_capture$cache_labels <- character()
+  quarto_capture$cached_units <- character()
   quarto_capture$known_options <- capture_known_options(knitr$opts_chunk)
   hooks <- knitr$knit_hooks
   evaluate <- if (is.null(hooks[["evaluate"]])) {
@@ -462,12 +469,23 @@ capture_install <- function(knitr, nonce = NULL) {
   quarto_child_state$on_child <- capture_child_record
   knitr$knit_hooks[["evaluate"]] <- capture_evaluate_hook(evaluate)
   knitr$knit_hooks[["chunk"]] <- capture_chunk_hook(chunk)
+  # `opts_hooks$cache` is the one hook knitr runs for every chunk on a miss and on a hit, at every
+  # cache level (a hit skips `evaluate`, and level 3 skips the chunk hook too). Keep execute.R's own
+  # hook (`cache: false` forces the cache off), then note each chunk still asking for the cache.
+  prev_cache_hook <- knitr$opts_hooks$cache
   knitr$opts_hooks$cache <- function(options) {
-    # knitr runs this hook for every chunk: note only the ones that asked for the cache
-    if (!is.null(options$cache) && !isFALSE(options$cache) && !identical(options$cache, 0)) {
-      quarto_capture$cache_labels <- c(quarto_capture$cache_labels, as.character(options$label))
+    if (is.function(prev_cache_hook)) {
+      options <- prev_cache_hook(options)
     }
-    options$cache <- FALSE
+    id <- options[["quarto-unit-id"]]
+    if (
+      !is.null(id) &&
+        !is.null(options$cache) &&
+        !isFALSE(options$cache) &&
+        !identical(options$cache, 0)
+    ) {
+      quarto_capture$cached_units <- unique(c(quarto_capture$cached_units, as.character(id)))
+    }
     options
   }
   knitr

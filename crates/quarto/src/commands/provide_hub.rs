@@ -51,8 +51,6 @@ pub struct ProvideHubArgs {
     pub token: Option<String>,
     /// `-M/--metadata` arguments, unparsed, as `q2 render -M` (F8-D9).
     pub metadata: Vec<String>,
-    /// `--records`, in order; empty means the provider default (`engine`).
-    pub records: Vec<quarto_core::record::RecordSource>,
 }
 
 const DEFAULT_SERVER_WS: &str = "wss://quarto-hub.com/ws";
@@ -101,9 +99,9 @@ async fn run(args: ProvideHubArgs) -> Result<()> {
     // malformed `-M` fails here, before any network.
     validate_mode(args.watch, &args.file)?;
     // Resolved and checked before any network, like `validate_mode`.
-    let record_sources = resolve_record_sources(args.records)?;
     let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&args.metadata)
         .map_err(|e| anyhow::anyhow!(e))?;
+    let record_sources = resolve_record_sources(&args.metadata)?;
 
     // Build the consent gate up front. `--dangerously-accept-requests` opts out
     // of the prompt entirely; otherwise we prompt interactively, and if there
@@ -178,19 +176,27 @@ fn validate_mode(watch: bool, file: &Option<String>) -> Result<()> {
     Ok(())
 }
 
-/// The `--records` list for this command: the default when absent, `cache` refused (this
-/// command has no cache directory), and every directory source checked once.
-fn resolve_record_sources(
-    records: Vec<quarto_core::record::RecordSource>,
-) -> Result<quarto_core::record::RecordSources> {
-    use quarto_core::record::RecordSources;
-    if records.is_empty() {
-        return Ok(RecordSources::provider_default());
-    }
-    let list = RecordSources::new(records);
-    list.reject_cache("q2 provide-hub")
+/// The host's record source list: `-M 'execute: {record-sources: ...}'`, else `engine`. It is the
+/// ceiling a hub document's own `execute: record-sources` may only reorder or narrow. `cache` and
+/// directories are not available here (ignored with an info line); an unknown entry fails at
+/// start-up.
+fn resolve_record_sources(metadata: &[String]) -> Result<quarto_core::record::RecordSources> {
+    use quarto_core::record::{CommandSources, host_record_sources};
+    let parsed = quarto_core::metadata_flag::parse_metadata_flags(metadata)
         .map_err(|e| anyhow::anyhow!(e))?;
-    list.validate_directories().map_err(|e| anyhow::anyhow!(e))
+    let cwd = std::env::current_dir().context("reading the working directory")?;
+    let resolved = host_record_sources(
+        parsed.as_ref(),
+        &cwd,
+        &cwd,
+        &quarto_system_runtime::NativeRuntime::new(),
+        &CommandSources::PROVIDE_HUB,
+    )
+    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    for note in &resolved.notes {
+        eprintln!("info: {}", note.text);
+    }
+    Ok(resolved.sources)
 }
 
 /// The consent gate to use, decided purely from flags + TTY state (no I/O, so
@@ -292,7 +298,6 @@ mod tests {
             watch: false,
             dangerously_accept_requests: true,
             token: Some("t".to_string()),
-            records: Vec::new(),
             metadata: metadata.iter().map(|s| s.to_string()).collect(),
         }
     }
@@ -374,23 +379,31 @@ mod tests {
     }
 
     #[test]
-    fn records_default_to_engine_only() {
-        let got = resolve_record_sources(Vec::new()).unwrap();
+    fn record_sources_default_to_engine_only() {
+        let got = resolve_record_sources(&[]).unwrap();
         assert_eq!(got, quarto_core::record::RecordSources::provider_default());
     }
 
     #[test]
-    fn records_cache_is_a_startup_error_here() {
+    fn record_sources_read_the_metadata_flag() {
         use quarto_core::record::RecordSource as S;
-        let err = resolve_record_sources(vec![S::Cache, S::Engine]).unwrap_err();
-        assert!(err.to_string().contains("provide-hub"), "{err}");
+        let m = ["execute:{record-sources: 'q2,positron,engine'}".to_string()];
+        let got = resolve_record_sources(&m).unwrap();
+        assert_eq!(got.as_slice(), [S::Q2, S::Positron, S::Engine]);
     }
 
     #[test]
-    fn records_missing_directory_is_a_startup_error() {
+    fn record_sources_cache_and_directories_are_ignored_here() {
         use quarto_core::record::RecordSource as S;
-        let dir = tempfile::tempdir().unwrap();
-        let err = resolve_record_sources(vec![S::Dir(dir.path().join("nope"))]).unwrap_err();
-        assert!(err.to_string().contains("does not exist"), "{err}");
+        let m = ["execute:{record-sources: 'cache,./recs,engine'}".to_string()];
+        let got = resolve_record_sources(&m).unwrap();
+        assert_eq!(got.as_slice(), [S::Engine]);
+    }
+
+    #[test]
+    fn record_sources_unknown_entry_is_a_startup_error() {
+        let m = ["execute:{record-sources: bogus}".to_string()];
+        let err = resolve_record_sources(&m).unwrap_err();
+        assert!(err.to_string().contains("bogus"), "{err}");
     }
 }

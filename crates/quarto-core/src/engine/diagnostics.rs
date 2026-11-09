@@ -192,26 +192,6 @@ pub fn no_runnable_kernel_diagnostic(
         .build()
 }
 
-/// `Q-18-12`: knitr\'s cache is off for the run that records the document. One per document,
-/// naming the chunks that asked for it. Informational: the output is the same, only slower.
-pub fn knitr_cache_disabled_diagnostic(labels: &[String]) -> DiagnosticMessage {
-    let list = labels
-        .iter()
-        .map(|l| format!("`{l}`"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    DiagnosticMessageBuilder::info("knitr Cache Is Off While Recording")
-        .with_code("Q-18-12")
-        .problem(format!(
-            "these chunks asked for knitr\'s cache, and it was turned off for them: {list}."
-        ))
-        .add_detail(
-            "Recording a chunk\'s output needs the chunk to run, and a cache hit skips the run, \
-             so the chunks run every time this document is executed.",
-        )
-        .build()
-}
-
 /// `Q-18-13`: the document replaced a knitr hook, so that chunk and every later one keep
 /// knitr\'s finished markdown. One per document, naming the hook and the first chunk.
 pub fn knitr_hook_override_diagnostic(hook: &str, label: &str) -> DiagnosticMessage {
@@ -292,7 +272,7 @@ pub fn engines_without_record_diagnostic(
     .build()
 }
 
-/// The warning a page shows when no `--records` source supplied a record for a document that
+/// The warning a page shows when no `execute: record-sources` source supplied a record for a document that
 /// has code cells (RIU-4), built from the walk's outcomes: the problem names each source and why
 /// it was passed over, on one line. `None` (silence) for a prose-only document and
 /// when a source did supply.
@@ -325,8 +305,8 @@ pub fn no_record_source_diagnostic(
     Some(
         DiagnosticMessageBuilder::warning("No execution record for this document")
             .problem(format!(
-                "None of the record sources named by `--records` supplied one, so no outputs \
-                 are shown ({reasons}). Add `engine` to `--records` (and leave `preview.engine` \
+                "None of the record sources named by `execute: record-sources` supplied one, so no outputs \
+                 are shown ({reasons}). Add `engine` to `execute: record-sources` (and leave `preview.engine` \
                  on) to run the code."
             ))
             .build(),
@@ -591,7 +571,7 @@ mod tests {
             ),
             outcome(
                 S::Engine,
-                K::Unavailable("`engine` is not in --records".into()),
+                K::Unavailable("`engine` is not in `execute: record-sources`".into()),
             ),
         ];
         let text = no_record_source_diagnostic(&outcomes, true)
@@ -613,7 +593,7 @@ mod tests {
                 outcome(S::Cache, K::Nothing),
                 outcome(
                     S::Engine,
-                    K::Unavailable("`engine` is not in --records".into()),
+                    K::Unavailable("`engine` is not in `execute: record-sources`".into()),
                 ),
             ],
             true,
@@ -625,7 +605,10 @@ mod tests {
             "{problem}"
         );
         assert!(problem.contains("engine: not available"), "{problem}");
-        assert!(problem.contains("Add `engine` to `--records`"), "{problem}");
+        assert!(
+            problem.contains("Add `engine` to `execute: record-sources`"),
+            "{problem}"
+        );
         assert!(!problem.contains('\n'), "one line: {problem:?}");
     }
 

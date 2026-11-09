@@ -27,8 +27,15 @@ use quarto_system_runtime::SystemRuntime;
 pub struct ReExecuteConfig {
     /// `preview.engine`: `off` forbids every engine run.
     pub policy: EnginePolicy,
-    /// The ordered record sources; re-execute needs `engine` in it (epic decision 5).
+    /// The host's record sources: the preview default, or the value of `-M
+    /// 'execute: {record-sources: ...}'`. A document's `execute: record-sources` overrides it
+    /// (see [`Self::document_sources`]); when `share` is set it is the **ceiling** a document
+    /// may only reorder or narrow. Re-execute needs `engine` in the resolved list (epic
+    /// decision 5).
     pub sources: quarto_core::record::RecordSources,
+    /// A `--share` session: guests reach the render routes and re-execute, so a document is not
+    /// trusted to widen the host's list.
+    pub share: bool,
     /// The writer gate (`QUARTO_ENGINE_RECORD_WRITE`), read once at start-up.
     pub record_gate: bool,
     /// The capture cache root (`<data_dir>/captures/` unless overridden).
@@ -42,6 +49,7 @@ impl ReExecuteConfig {
         Self {
             policy,
             sources: quarto_core::record::RecordSources::preview_default(),
+            share: false,
             record_gate: false,
             cache_dir,
         }
@@ -58,6 +66,50 @@ impl ReExecuteConfig {
     /// source list. The one question `claim_and_spawn` asks before it claims a slot.
     pub fn allows_engine(&self) -> bool {
         engine_can_run(self.policy, &self.sources)
+    }
+
+    /// The record sources for one document: its `execute: record-sources` read before any
+    /// pipeline (project, directory, front matter, then `-M`), else the host list. With `share`
+    /// the host list is a ceiling the document may only reorder or narrow. The notes (what was
+    /// ignored and why) come back for the caller to put on the page.
+    pub fn document_sources(
+        &self,
+        abs_path: &std::path::Path,
+        content: Option<&str>,
+    ) -> Result<quarto_core::record::ResolvedSources, String> {
+        use quarto_core::record::{CommandSources, Trust, resolve_record_sources};
+        let runtime = crate::render_flags::runtime_with_overlay();
+        let project = quarto_core::project::ProjectContext::discover(abs_path, runtime.as_ref())
+            .map_err(|e| format!("project discovery failed: {e}"))?;
+        let trust = if self.share {
+            Trust::Ceiling {
+                allowed: &self.sources,
+            }
+        } else {
+            Trust::Override
+        };
+        let mut resolved = resolve_record_sources(
+            &project,
+            abs_path,
+            content,
+            runtime.as_ref(),
+            &CommandSources::PREVIEW,
+            trust,
+        )
+        .map_err(|e| e.to_string())?;
+        if resolved.origin.is_none() {
+            resolved.sources = self.sources.clone();
+        }
+        Ok(resolved)
+    }
+
+    /// Whether an engine run may start for `abs_path`: the policy is not `off` and `engine` is
+    /// in the document's list. A document whose key cannot be read refuses (fail closed).
+    pub fn allows_engine_for(&self, abs_path: &std::path::Path) -> bool {
+        self.policy != EnginePolicy::Off
+            && self
+                .document_sources(abs_path, None)
+                .is_ok_and(|r| r.sources.contains_engine())
     }
 }
 
@@ -82,6 +134,89 @@ mod engine_can_run_tests {
         assert!(!engine_can_run(EnginePolicy::Off, &with));
         assert!(!engine_can_run(EnginePolicy::Manual, &without));
         assert!(!engine_can_run(EnginePolicy::Auto, &without));
+    }
+}
+
+#[cfg(test)]
+mod document_sources_tests {
+    use super::*;
+    use quarto_core::record::{RecordSource as S, RecordSources};
+
+    fn doc_with(key: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        let doc = root.join("doc.qmd");
+        std::fs::write(
+            &doc,
+            format!(
+                "---\nexecute:\n  record-sources: \"{key}\"\n---\n\n```{{python}}\nx = 1\n```\n"
+            ),
+        )
+        .unwrap();
+        (tmp, doc)
+    }
+
+    fn cfg(share: bool, host: Vec<S>) -> ReExecuteConfig {
+        let mut c = ReExecuteConfig::new(EnginePolicy::Manual, std::path::PathBuf::from("/unused"));
+        c.share = share;
+        c.sources = RecordSources::new(host);
+        c
+    }
+
+    /// Without `--share` the document key is an ordinary setting: it replaces the host list.
+    #[test]
+    fn without_share_the_document_key_overrides_the_host_list() {
+        let (_t, doc) = doc_with("q2");
+        let c = cfg(false, vec![S::Cache, S::Engine]);
+        let r = c.document_sources(&doc, None).unwrap();
+        assert_eq!(r.sources.as_slice(), [S::Q2]);
+        assert!(r.notes.is_empty());
+        assert!(!c.allows_engine_for(&doc), "the document dropped `engine`");
+        let (_t, doc) = doc_with("positron,engine");
+        assert!(c.allows_engine_for(&doc));
+    }
+
+    /// With `--share` the host list is a ceiling: the document may not add `positron`, and
+    /// `allows_engine_for` follows the ceiling.
+    #[test]
+    fn with_share_a_document_key_outside_the_ceiling_is_ignored_with_a_warning() {
+        let (_t, doc) = doc_with("positron,engine");
+        let c = cfg(true, vec![S::Cache, S::Engine]);
+        let r = c.document_sources(&doc, None).unwrap();
+        assert_eq!(r.sources.as_slice(), [S::Engine]);
+        assert_eq!(r.notes.len(), 1);
+        assert!(r.notes[0].warning && r.notes[0].text.contains("positron"));
+        assert!(c.allows_engine_for(&doc));
+        // The ceiling has no `engine`: the document cannot bring it back.
+        let c = cfg(true, vec![S::Cache]);
+        assert!(!c.allows_engine_for(&doc));
+    }
+
+    /// A document with no key gets the host list, shared or not (this is also what the tests
+    /// that set `sources` directly rely on).
+    #[test]
+    fn a_document_without_the_key_gets_the_host_list() {
+        let tmp = tempfile::tempdir().unwrap();
+        let doc = tmp.path().canonicalize().unwrap().join("d.qmd");
+        std::fs::write(&doc, "---\ntitle: T\n---\n\nbody\n").unwrap();
+        for share in [false, true] {
+            let c = cfg(share, vec![S::Positron, S::Engine]);
+            let r = c.document_sources(&doc, None).unwrap();
+            assert_eq!(
+                r.sources.as_slice(),
+                [S::Positron, S::Engine],
+                "share {share}"
+            );
+        }
+    }
+
+    /// A key that cannot be read fails closed: no engine run starts.
+    #[test]
+    fn an_unknown_entry_refuses_the_engine() {
+        let (_t, doc) = doc_with("engine,bogus");
+        let c = cfg(false, vec![S::Engine]);
+        assert!(c.document_sources(&doc, None).is_err());
+        assert!(!c.allows_engine_for(&doc));
     }
 }
 

@@ -15,6 +15,11 @@ categories:
 
 ## What this means
 
+**This note is no longer emitted.** A chunk that asks for knitr's cache now keeps it and is not
+recorded; its finished markdown stays in the document.
+
+The text below describes the earlier behavior.
+
 Quarto records what each knitr chunk produced, so it can present the document without
 running the chunks again. A chunk that hits knitr's cache is not run, so there would be
 nothing to record. For that reason Quarto turns knitr's cache off for the run that records

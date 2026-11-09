@@ -64,7 +64,7 @@ pub fn render_expansions(
     scope: Option<&ConfigValue>,
     fig: &mut dyn FigureSink,
 ) -> Result<String, String> {
-    render_each(lang, expansions, scope, fig, false)
+    render_each(lang, expansions, scope, true, fig, false)
 }
 
 /// Present an expanded unit as the engine's own markdown does: the author's cell first,
@@ -78,6 +78,7 @@ pub fn render_expanded_unit(
     own_visibility: CellVisibility,
     expansions: &[Expansion],
     scope: Option<&ConfigValue>,
+    presenter_enforces_warning: bool,
     fig: &mut dyn FigureSink,
 ) -> Result<String, String> {
     let own = render_cell_with(
@@ -88,7 +89,14 @@ pub fn render_expanded_unit(
         fig,
         own_visibility,
     );
-    let rest = render_each(lang, expansions, scope, fig, true)?;
+    let rest = render_each(
+        lang,
+        expansions,
+        scope,
+        presenter_enforces_warning,
+        fig,
+        true,
+    )?;
     Ok(if own.is_empty() {
         rest
     } else if rest.is_empty() {
@@ -102,6 +110,7 @@ fn render_each(
     lang: &str,
     expansions: &[Expansion],
     scope: Option<&ConfigValue>,
+    presenter_enforces_warning: bool,
     fig: &mut dyn FigureSink,
     begin_first: bool,
 ) -> Result<String, String> {
@@ -115,7 +124,7 @@ fn render_each(
         .map_err(|e| e.to_string())?;
         let cell_only = cell_config(parsed.options.clone());
         let resolved = resolve_cell_options(scope, parsed.options);
-        let visibility = CellVisibility::resolve(resolved.as_ref());
+        let visibility = CellVisibility::resolve(resolved.as_ref(), presenter_enforces_warning);
         if i > 0 || begin_first {
             fig.begin_cell();
         }

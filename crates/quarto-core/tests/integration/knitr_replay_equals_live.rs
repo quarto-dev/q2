@@ -183,6 +183,17 @@ fn a_mixed_document_with_fallback_chunks_presents_as_before() {
     );
 }
 
+/// OPR-7b: chunks that ask for knitr\'s cache keep it and are not recorded, so the record holds
+/// only the live chunks, and replay (which has no cached chunk to find) still equals the live run.
+const CACHED_MIXED: &str = "Before.\n\n```{r a}\nx <- 1:3\nx\n```\n\n\
+```{r b}\n#| cache: true\n1 + 1\n```\n\n\
+```{r c}\n#| echo: false\n2 + 2\n```\n";
+
+#[test]
+fn a_replayed_record_with_a_cached_chunk_equals_the_live_run() {
+    assert_replay_equals_live(CACHED_MIXED);
+}
+
 #[test]
 fn a_replayed_knitr_record_presents_what_the_live_engine_produced() {
     assert_replay_equals_live(CHUNKS);

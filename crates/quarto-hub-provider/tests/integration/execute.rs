@@ -715,7 +715,7 @@ fn records_provider(
     )
 }
 
-/// RIU-4: `execute_document` with `--records <dir>` (no `engine`) publishes the imported record
+/// RIU-4: `execute_document` with a `record-sources` directory (no `engine`) publishes the imported record
 /// through the walk without consent and never runs the engine.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn execute_document_with_an_imported_source_publishes_without_consent_or_engine() {
@@ -810,5 +810,94 @@ async fn engine_after_an_empty_source_still_goes_through_consent() {
         provider.execute_document("doc.qmd").await.unwrap(),
         ExecOutcome::Executed(_)
     ));
+    provider.stop().await;
+}
+
+/// A document (as a guest's hub project would carry it) that sets `execute: record-sources`.
+fn python_qmd_with_sources(sources: &str) -> String {
+    format!(
+        "---\ntitle: T\nexecute:\n  record-sources: \"{sources}\"\n---\n\n```{{python}}\nx = 1\n```\n"
+    )
+}
+
+/// OPR-5 Part B: the host list is a ceiling. A guest key that names a source the host did not
+/// allow is ignored, and what is left (`engine`) still runs through the consent gate.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_guest_key_cannot_add_a_source_the_host_did_not_allow() {
+    let text = "---\nengine: test-passthrough\nexecute:\n  record-sources: \"positron,engine\"\n---\n\n```{test-passthrough}\n1 + 1\n```\n";
+    let (repo, index, _server_index) = join_with_doc(text).await;
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysAccept),
+        passthrough_registry(),
+        vec![quarto_core::record::RecordSource::Engine],
+    );
+    assert!(matches!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Executed(_)
+    ));
+    provider.stop().await;
+}
+
+/// OPR-5 Part B: a guest key that narrows the host list to nothing is an error naming the
+/// reason, and the engine (which panics if run) is never reached.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_guest_key_that_narrows_to_nothing_is_an_error_naming_the_reason() {
+    for guest in ["positron", "./recs"] {
+        let (repo, index, server_index) = join_with_doc(&python_qmd_with_sources(guest)).await;
+        let mut registry = EngineRegistry::empty();
+        registry.register(Arc::new(MustNotRun));
+        let provider = records_provider(
+            repo,
+            index,
+            Arc::new(AlwaysAccept),
+            registry,
+            vec![quarto_core::record::RecordSource::Engine],
+        );
+        let err = provider.execute_document("doc.qmd").await.unwrap_err();
+        assert!(
+            err.contains("execute: record-sources") && err.contains("allowed"),
+            "guest {guest:?}: {err}"
+        );
+        assert!(server_index.get_capture("doc.qmd").is_none());
+        provider.stop().await;
+    }
+}
+
+/// OPR-5 Part B: with a wider host list a guest may narrow it. The host allows the cache
+/// directory then the engine; the guest asks for `engine` only, so the cache is not used and
+/// the consent gate decides.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_guest_key_may_narrow_a_wider_host_list() {
+    use quarto_core::record::RecordSource;
+    let cache = positron_cache_dir();
+    let host = || {
+        vec![
+            RecordSource::Dir(cache.path().to_path_buf()),
+            RecordSource::Engine,
+        ]
+    };
+    // No guest key: the host's first source (the cache) supplies without consent.
+    let (repo, index, _s) = join_with_doc(PYTHON_QMD).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let provider = records_provider(repo, index, Arc::new(AlwaysReject), registry, host());
+    assert!(matches!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Executed(_)
+    ));
+    provider.stop().await;
+
+    // Guest narrows to `engine`: the cache is skipped and a rejecting gate refuses.
+    let (repo, index, server_index) = join_with_doc(&python_qmd_with_sources("engine")).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let provider = records_provider(repo, index, Arc::new(AlwaysReject), registry, host());
+    assert_eq!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Rejected
+    );
+    assert!(server_index.get_capture("doc.qmd").is_none());
     provider.stop().await;
 }

@@ -30,7 +30,7 @@ use super::cell::{
 use super::figures::FigureSink;
 use super::options::{CellOptions, OutputKind, config_to_json};
 use super::output::{CellOutput, CellResult};
-use super::visibility::{CellVisibility, knitr_visibility};
+use super::visibility::CellVisibility;
 
 /// The cell-metadata keys this reader consumes.
 pub const ECHOED_CODE_KEY: &str = "quarto_echoed_code";
@@ -78,6 +78,9 @@ pub struct CellInputs {
     pub known_options: Option<Vec<String>>,
     /// The chunk as written (info string, `#|` lines), for `fenced.echo`.
     pub original_chunk: Option<(String, String)>,
+    /// The engine\'s declaration puts `warning` in the hash, so capture enforced it and the
+    /// presenter leaves stderr alone (D2). `false`, the default, is presenter enforcement.
+    pub capture_enforced_warning: bool,
 }
 
 impl CellInputs {
@@ -110,8 +113,19 @@ impl CellInputs {
             resolved_options,
             known_options: engine.and_then(|e| e.known_options.clone()),
             original_chunk,
+            capture_enforced_warning: !presenter_enforces_warning(cell, engine),
         }
     }
+}
+
+/// Decision D2: whether the presenter enforces `warning` for `cell`. Exactly when the cell\'s
+/// engine declares it display-only; an engine with no usable declaration, and a record with no
+/// entry for the cell\'s engine (an imported one), get presenter enforcement.
+pub fn presenter_enforces_warning(cell: &RecordCell, engine: Option<&EngineEntry>) -> bool {
+    engine.is_none_or(|e| {
+        e.hash_definition
+            .presenter_enforces(cell.metadata.quarto_hash_rule.as_deref(), "warning")
+    })
 }
 
 /// Present one cell from its outputs and `inputs`.
@@ -142,7 +156,10 @@ pub fn present_with_inputs(
             );
             let pair = (
                 CellOptions::from_knitr_known(&m, known),
-                knitr_visibility(&m),
+                CellVisibility::from_flags(
+                    |k| m.get(k).and_then(Value::as_bool),
+                    !inputs.capture_enforced_warning,
+                ),
             );
             merged = Some(m);
             pair
@@ -481,7 +498,7 @@ mod tests {
     ) -> Option<String> {
         let inputs = CellInputs::from_cell(cell, engine, original);
         inputs.resolved_options.as_ref()?;
-        let fallback = (CellOptions::default(), CellVisibility::resolve(None));
+        let fallback = (CellOptions::default(), CellVisibility::resolve(None, true));
         Some(present_with_inputs(
             language, code, cell, &inputs, header, fallback, fig,
         ))
@@ -1075,7 +1092,7 @@ mod tests {
             None,
             (
                 CellOptions::from_knitr(&fallback),
-                CellVisibility::resolve(None),
+                CellVisibility::resolve(None, true),
             ),
             &mut fig,
         )

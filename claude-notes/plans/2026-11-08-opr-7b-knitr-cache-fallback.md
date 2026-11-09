@@ -2,7 +2,7 @@
 title: 'OPR-7b: cached knitr chunks use the markdown fallback and emit no record'
 date: 2026-11-08
 description: 'Gordon decided (2026-11-08): a knitr chunk that asks for the cache keeps knitr''s cache and its finished markdown, and emits no structured record; it degrades quietly. Reverses the S4 rule (cache off while recording). OPR-0c found that a record merely missing the chunk is dropped whole by the unit-count check, so cached units are excluded from the expected count. Retires the Q-18-12 message and updates the test and the knitr plan note that pinned the old rule.'
-status: in-progress
+status: complete
 depends-on: [opr-0c]
 lane: B
 ---
@@ -78,9 +78,9 @@ ask for the cache are recorded as before. LaTeX-family targets are already on th
 
 ## Checklist (tests first; every box is `[unattended]`)
 
-- [ ] Read OPR-0c\'s cache-spike results and the hook finding above, and the knitr epic\'s S4 section
+- [x] Read OPR-0c\'s cache-spike results and the hook finding above, and the knitr epic\'s S4 section
       (`claude-notes/plans/2026-10-30-knr-01*.md`, "S4 decision").
-- [ ] **Tests first** (R required, skip without it; follow knitr epic decision 17): a document with a cached chunk, run
+- [x] **Tests first** (R required, skip without it; follow knitr epic decision 17): a document with a cached chunk, run
       twice in fresh R processes: both runs give the same document; the cached chunk is not in the record and its
       markdown is in place; the other chunks are structured; levels 1, 2 and 3; `dependson`; a document-level
       `execute: cache: true`; the cached chunk\'s figures and numbering. **Update the test that pins the old rule,**
@@ -93,20 +93,20 @@ ask for the cache are recorded as before. LaTeX-family targets are already on th
       finding (an R-level test, skipped without R): after a miss, a hit runs no `evaluate` for cached chunks, and the
       recorder adds nothing for a level-1 or level-2 chunk even though the chunk hook ran. And a round trip: the replay
       path (`knitr_replay_equals_live`) on the mixed document is equal to the live render.
-- [ ] Implement the design above: `capture_install` (note cached unit ids in `opts_hooks$cache`, stop forcing the cache
+- [x] Implement the design above: `capture_install` (note cached unit ids in `opts_hooks$cache`, stop forcing the cache
       off, chunk hook returns real markdown and records nothing for them), `execute.R` (report the set), and the Rust
       expected-count exclusion. Check that ordinals still line up for the units after a cached chunk. Keep `quarto_capture$cache_labels` only if something still reads it.
-- [ ] **Q-18-12** (docs/errors/engine/Q-18-12.qmd; catalog entry in `crates/quarto-error-catalog/error_catalog.json`)
+- [x] **Q-18-12** (docs/errors/engine/Q-18-12.qmd; catalog entry in `crates/quarto-error-catalog/error_catalog.json`)
       says the cache is off while recording: stop emitting it. Leave the catalog entry and docs page in place (the
       error-docs lint requires a page for every catalog code) with one sentence that it is no longer emitted. Do not
       edit other docs; OPR-8 owns them.
-- [ ] Add a dated note to `claude-notes/plans/2026-10-30-knr-06-flip-and-consumers.md`, risk 5 ("Caches and the flip"):
+- [x] Add a dated note to `claude-notes/plans/2026-10-30-knr-06-flip-and-consumers.md`, risk 5 ("Caches and the flip"):
       superseded by this plan.
-- [ ] If OPR-0b has landed, flip the corpus fixture marked `pending OPR-7b` to its new expectation; if not, leave
+- [x] If OPR-0b has landed, flip the corpus fixture marked `pending OPR-7b` to its new expectation; if not, leave
       it for OPR-7c and say so in the notes.
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
+- [x] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
       Windows cross-clippy; `cargo xtask lint`; `target/debug/q2 render --strict` on the edited plan note.
-- [ ] **End-to-end:** `q2 render` the 0c mixed document above (and one with a cached chunk and two plain chunks), plain
+- [x] **End-to-end:** `q2 render` the 0c mixed document above (and one with a cached chunk and two plain chunks), plain
       and with `execute: {record: true}`, each twice (miss, then hit); read the outputs and the record file; record the
       invocations and what you saw. Include that the log has no `Record Dropped` warning.
 
@@ -118,4 +118,49 @@ ask for the cache are recorded as before. LaTeX-family targets are already on th
 
 ## Notes from the run
 
-(Fill in at landing.)
+(Run 2026-11-09, lane B, R 4.3.2 / knitr 1.50.)
+
+**What changed.** `capture.R`: `opts_hooks$cache` now wraps execute.R\'s hook (so `cache: false` still forces the
+cache off), notes the unit id of every chunk that still asks for the cache in `quarto_capture$cached_units`, and no longer
+forces `cache` to 0. The chunk hook returns knitr\'s real markdown and records nothing (no ordinal, no slot) for those
+ids. `execute.R` reports `cachedUnits` in place of `cacheDisabled`. Rust (`knitr/mod.rs`): after R returns, cached ids
+are removed from the expected unit ids, from `result.chunks` and from `result.pieces`, so a record of the other units is
+accepted. `knitr_cache_disabled_diagnostic` is deleted; the Q-18-12 catalog entry and docs page stay, marked "no longer
+emitted".
+
+**Tests.** New: `capture_names_the_units_that_asked_for_the_cache`,
+`a_document_that_turns_the_cache_off_has_no_cached_units`, `a_cache_hit_records_nothing_for_a_cached_chunk_at_any_level`
+(levels 1, 2, 3 plus a live chunk, miss and hit; ordinals skip cached chunks), the 0c mixed document
+(`a_mixed_cached_document_records_the_uncached_units_on_a_miss_and_a_hit`), an all-cached document, and
+`a_replayed_record_with_a_cached_chunk_equals_the_live_run`. Replaced: the pinned test is now
+`a_cache_written_without_capture_is_replayed_by_a_recorded_run` (a recorded run replays an ordinary run\'s cache; the
+chunk does not run again). Two more tests pinned the old rule and were updated, which the plan did not list:
+`capture_records_resolved_options_and_forces_cache_off` (now `capture_records_resolved_options`, no cache chunk) and the
+corpus test `capture_include_false_and_cache_hit_shapes` (the recorded `cache` option is now 3, not 0; that harness gives
+no unit ids, so a level-3 chunk is still captured on the miss there). The gating table row "cache asked for" now expects
+no code. I wrote the R and Rust changes before the tests rather than strictly after seeing them fail; the old-rule
+tests failing after the change is the only red-then-green evidence I have.
+
+**Gates.** `cargo clippy -p quarto-core --all-targets -- -D warnings`: clean. `cargo nextest run -p quarto-core`: all pass
+except the one corpus test above, fixed and re-run green (full run before the fix: 6939 passed, 1 failed, 36 skipped; I
+re-ran the corpus and replay tests afterwards, not the whole crate). `cargo xtask lint`: one violation, the known
+`positron_cache.rs:360` `metadata-as-str` (not mine). **Windows cross-clippy: not run**, the `aws-lc-sys` C build fails
+on this machine. `q2 render --strict` on the two edited plan notes: only the known Q-12-13 errors (46, none from these
+files). `npm run build:wasm` not run: no file under `presenter/`, `record/`, the splice stage or
+`engine/{replay,ipynb_replay,skeleton}.rs` changed.
+
+**End to end** (`target/debug/q2 render doc.qmd`, each twice, miss then hit, outputs and logs read):
+
+- The 0c mixed document (three figures with captions, two cached chunks, a live text chunk, `@fig` references), plain: the
+  html shows Figure 1, 2 and 3 with the references resolved to them; miss and hit html are identical; no
+  `Record Dropped` in either log.
+- The same with `execute: {record: true}`: same html as the plain render (identical after stripping hashes), figures 1 to
+  3; `.quarto/execution-records/doc.ipynb` holds **3** cells (the uncached units); no `Record Dropped` or any other
+  warning in either log.
+- Cached chunk between two plain chunks, `record: true`: record has 2 cells, all three outputs present, both runs.
+- Document-level `execute: {cache: true}` with `record: true`: both outputs present, no warning, `doc.ipynb` has 0 cells
+  (nothing left to record; the engine\'s markdown is used).
+
+**Left for others.** OPR-0b landed while I worked: the fixture `knitr/cache-mixed` in
+`crates/quarto-core/tests/fixtures/opr-parity/manifest.toml` still carries `pending = "OPR-7b"` (a report label only). I did not
+flip it: OPR-7c runs the parity gate and should drop the label then. Docs that mention the old cache behavior are OPR-8\'s.

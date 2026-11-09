@@ -111,7 +111,7 @@ pub(crate) mod knitr;
 // KNR-3 without widening the rest of `knitr`.
 #[cfg(not(target_arch = "wasm32"))]
 pub use knitr::pieces_map::{
-    expression_starts, knitr_visibility, output_kinds, pieces_to_cell, pieces_to_cell_anchored,
+    expression_starts, output_kinds, pieces_to_cell, pieces_to_cell_anchored,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use knitr::types::{KnitrCapturedChunk, KnitrPiece};

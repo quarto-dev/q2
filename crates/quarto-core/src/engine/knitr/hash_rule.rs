@@ -26,8 +26,12 @@ pub const STRUCTURED_PROFILE: &str = "structured";
 pub use crate::record::OUTPUT_FORMAT_OPTION;
 
 /// The declaration version. Bumped from EXR-11's 1 when the `structured` profile was added, so
-/// every earlier record reads as stale (KNR-3 decision 1).
-pub const KNITR_HASH_VERSION: u32 = 2;
+/// every earlier record reads as stale (KNR-3 decision 1); to 3 when OPR-5 excluded the
+/// `execute: record-sources` key from the document hash.
+pub const KNITR_HASH_VERSION: u32 = 3;
+
+/// The `execute:` key that says where a record comes from (OPR-5); it never reaches the engine.
+const RECORD_SOURCES_EXECUTE_KEY: &str = "record-sources";
 
 /// Presentation-only options, as KNR-1 S3 closed the list. Each name appears in knitr's dotted
 /// spelling where it has one; [`structured_presentation_options`] adds the dashed twin, because the
@@ -116,9 +120,10 @@ pub fn knitr_hash_definition() -> HashDefinition {
         STRUCTURED_PROFILE.to_string(),
         HashProfile {
             presentation_cell_options: structured_presentation_options(),
-            presentation_execute_keys: Vec::new(),
+            presentation_execute_keys: vec![RECORD_SOURCES_EXECUTE_KEY.to_string()],
         },
     );
+    def.presentation_execute_keys = vec![RECORD_SOURCES_EXECUTE_KEY.to_string()];
     def
 }
 
@@ -152,22 +157,50 @@ mod tests {
         unit_hash(Some(STRUCTURED_PROFILE), options)
     }
 
+    /// OPR-5: `execute: record-sources` says where a record comes from, not what the code
+    /// does, so adding it moves no document hash, under the default profile or `structured`.
+    #[test]
+    fn the_record_sources_key_does_not_move_a_document_hash() {
+        let meta = |execute: Value| -> BTreeMap<String, Value> {
+            BTreeMap::from([("execute".to_string(), execute)])
+        };
+        for profile in [None, Some(STRUCTURED_PROFILE)] {
+            let units = [UnitHashRef { hash: "h", profile }];
+            let def = knitr_hash_definition();
+            let without = hash_document(&def, &meta(json!({"echo": false})), &units).unwrap();
+            let with = hash_document(
+                &def,
+                &meta(json!({"echo": false, "record-sources": "q2,engine"})),
+                &units,
+            )
+            .unwrap();
+            assert_eq!(without, with, "profile {profile:?}");
+            // And another execute: key still counts.
+            let other = hash_document(&def, &meta(json!({"echo": true})), &units).unwrap();
+            assert_ne!(without, other, "profile {profile:?}");
+        }
+    }
+
     #[test]
     fn the_declaration_keeps_the_id_and_stores_the_structured_profile() {
         let def = knitr_hash_definition();
         assert_eq!(def.id, "knitr");
-        assert_eq!(def.version, 2, "bumped from EXR-11's 1");
+        assert_eq!(
+            def.version, 3,
+            "bumped from KNR-3's 2 (record-sources excluded, OPR-5)"
+        );
         assert_eq!(def.document_keys, ["knitr"]);
         assert!(
             def.presentation_cell_options.is_empty(),
             "default profile counts every option"
         );
-        assert!(def.presentation_execute_keys.is_empty());
-        let profile: &HashProfile = &def.profiles[STRUCTURED_PROFILE];
-        assert!(
-            profile.presentation_execute_keys.is_empty(),
-            "every execute: key counts"
+        assert_eq!(
+            def.presentation_execute_keys,
+            ["record-sources"],
+            "only the record source list is excluded; every other execute: key counts"
         );
+        let profile: &HashProfile = &def.profiles[STRUCTURED_PROFILE];
+        assert_eq!(profile.presentation_execute_keys, ["record-sources"]);
         assert_eq!(
             profile.presentation_cell_options,
             structured_presentation_options()
@@ -176,11 +209,9 @@ mod tests {
     }
 
     /// KNR-3 slice 7, D8: `indent` is inert for the presenter, so it is neither hashed nor
-    /// presented. It stays in the presentation list, which keeps every hash and the declaration
-    /// version where they were.
+    /// presented. It stays in the presentation list, which keeps every unit hash where it was.
     #[test]
-    fn an_indent_edit_does_not_move_a_structured_hash_and_the_version_stays_2() {
-        assert_eq!(KNITR_HASH_VERSION, 2);
+    fn an_indent_edit_does_not_move_a_structured_hash() {
         assert!(STRUCTURED_PRESENTATION_OPTIONS.contains(&"indent"));
         let base = structured(json!({"fig.width": 7}));
         assert_eq!(
@@ -393,6 +424,22 @@ mod tests {
                 !list.contains(&name.replace('.', "-")),
                 "{name} (dashed) must count"
             );
+        }
+    }
+
+    /// D2: knitr\'s declaration puts `warning` and `message` in the hash, for the default profile
+    /// and the structured one, so R enforced them at capture and the presenter does not. The
+    /// `Hashed` rows of the splice\'s option sweep rest on this.
+    #[test]
+    fn warning_and_message_are_capture_enforced_in_both_profiles() {
+        let def = knitr_hash_definition();
+        for profile in [None, Some(STRUCTURED_PROFILE)] {
+            for option in ["warning", "message"] {
+                assert!(
+                    !def.presenter_enforces(profile, option),
+                    "{profile:?} {option}"
+                );
+            }
         }
     }
 }

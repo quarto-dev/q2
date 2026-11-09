@@ -84,48 +84,47 @@ impl CellVisibility {
         warning: false,
     };
 
-    pub fn resolve(resolved: Option<&ConfigValue>) -> Self {
-        // Neither the cell nor the document said anything — the
-        // everything-visible default, which is also what q2 did
-        // before any of these options were honoured.
-        if resolved.is_none() {
-            return Self::VISIBLE;
-        }
-        if !resolved_flag(resolved, "include", true) {
+    /// The one rule (decision D2, OPR-2), over any source of boolean options. `echo`,
+    /// `output` and `include` are always presenter-enforced: hiding what capture already hid
+    /// is harmless, and knitr records outputs the presenter must hide. `warning` is read only
+    /// when `presenter_enforces_warning`; otherwise capture applied it and the stderr that is
+    /// left is the author\'s to see. (`message` has no switch: nothing declares it display-only,
+    /// and the presenter cannot tell a message from a warning on a bare stderr stream.)
+    pub fn from_flags(
+        flag: impl Fn(&str) -> Option<bool>,
+        presenter_enforces_warning: bool,
+    ) -> Self {
+        if flag("include") == Some(false) {
             return Self::HIDDEN;
         }
+        let output = flag("output") != Some(false);
         Self {
-            echo: resolved_flag(resolved, "echo", true),
-            output: resolved_flag(resolved, "output", true),
-            // Q1 filters stderr under `output: false` too — the option
-            // suppresses every output, warnings included.
-            warning: resolved_flag(resolved, "warning", true)
-                && resolved_flag(resolved, "output", true),
+            echo: flag("echo") != Some(false),
+            output,
+            // Q1 filters stderr under `output: false` too: the option suppresses every
+            // output, warnings included.
+            warning: output && !(presenter_enforces_warning && flag("warning") == Some(false)),
         }
     }
-}
 
-/// The presenter's visibility from a knitr chunk's recorded options. Only `include`, `output` and
-/// logical `echo` count here. `warning` and `message` are enforced by R at capture, because
-/// they change what runs, so the presenter must not drop stderr for them (a `warning = FALSE`
-/// chunk still shows its messages); numeric `echo` is applied by the presenter itself
-/// (`CellOptions::echo_selection`), so it shows the source here.
-pub fn knitr_visibility(options: &serde_json::Value) -> CellVisibility {
-    let flag = |key: &str| options.get(key).and_then(serde_json::Value::as_bool);
-    if flag("include") == Some(false) {
-        return CellVisibility::HIDDEN;
-    }
-    let output = flag("output") != Some(false);
-    CellVisibility {
-        echo: flag("echo") != Some(false),
-        output,
-        warning: output,
+    /// [`Self::from_flags`] over resolved cell options (`None`: neither the cell nor the
+    /// document said anything, everything visible).
+    pub fn resolve(resolved: Option<&ConfigValue>, presenter_enforces_warning: bool) -> Self {
+        Self::from_flags(
+            |key| resolved.and_then(|r| r.get(key)).and_then(|v| v.as_bool()),
+            presenter_enforces_warning,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The Jupyter case: the presenter enforces `warning`.
+    fn resolve(resolved: Option<&ConfigValue>) -> CellVisibility {
+        CellVisibility::resolve(resolved, true)
+    }
 
     // === bd-nn2fou8h: execute-visibility resolution ===
     //
@@ -143,9 +142,9 @@ mod tests {
 
     #[test]
     fn test_visibility_defaults_to_fully_visible() {
-        assert_eq!(CellVisibility::resolve(None), CellVisibility::VISIBLE);
+        assert_eq!(resolve(None), CellVisibility::VISIBLE);
         assert_eq!(
-            CellVisibility::resolve(resolved("error: true").as_ref()),
+            resolve(resolved("error: true").as_ref()),
             CellVisibility::VISIBLE,
             "an unrelated option must not change visibility"
         );
@@ -153,23 +152,23 @@ mod tests {
 
     #[test]
     fn test_visibility_reads_each_key() {
-        assert!(!CellVisibility::resolve(resolved("echo: false").as_ref()).echo);
-        assert!(!CellVisibility::resolve(resolved("output: false").as_ref()).output);
-        assert!(!CellVisibility::resolve(resolved("warning: false").as_ref()).warning);
+        assert!(!resolve(resolved("echo: false").as_ref()).echo);
+        assert!(!resolve(resolved("output: false").as_ref()).output);
+        assert!(!resolve(resolved("warning: false").as_ref()).warning);
         // Independence: hiding one must not hide the others.
-        let v = CellVisibility::resolve(resolved("echo: false").as_ref());
+        let v = resolve(resolved("echo: false").as_ref());
         assert!(v.output && v.warning);
     }
 
     #[test]
     fn test_include_false_hides_everything() {
         assert_eq!(
-            CellVisibility::resolve(resolved("include: false").as_ref()),
+            resolve(resolved("include: false").as_ref()),
             CellVisibility::HIDDEN
         );
         // include: false wins even when another key says "show me".
         assert_eq!(
-            CellVisibility::resolve(resolved("include: false\necho: true").as_ref()),
+            resolve(resolved("include: false\necho: true").as_ref()),
             CellVisibility::HIDDEN
         );
     }
@@ -179,7 +178,7 @@ mod tests {
     /// its outputs were switched off.
     #[test]
     fn test_output_false_implies_warnings_hidden() {
-        let v = CellVisibility::resolve(resolved("output: false\nwarning: true").as_ref());
+        let v = resolve(resolved("output: false\nwarning: true").as_ref());
         assert!(!v.warning, "output: false must also silence warnings");
     }
 
@@ -213,7 +212,7 @@ mod tests {
         ];
         for yaml in ignored {
             assert_eq!(
-                CellVisibility::resolve(resolved(yaml).as_ref()),
+                resolve(resolved(yaml).as_ref()),
                 CellVisibility::VISIBLE,
                 "`{yaml}` must not change Jupyter visibility"
             );
@@ -225,7 +224,7 @@ mod tests {
             "warning: false",
         ] {
             assert_ne!(
-                CellVisibility::resolve(resolved(yaml).as_ref()),
+                resolve(resolved(yaml).as_ref()),
                 CellVisibility::VISIBLE,
                 "`{yaml}` is one of the four keys Jupyter reads"
             );

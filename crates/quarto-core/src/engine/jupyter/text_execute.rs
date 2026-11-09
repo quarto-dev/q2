@@ -2223,7 +2223,7 @@ mod record_tests {
             "print('hi')",
             &result,
             &mut fig,
-            CellVisibility::resolve(None),
+            CellVisibility::resolve(None, true),
         );
         assert_eq!(out.trim_end(), expected.trim_end());
         assert!(out.contains("hi\n"), "{out}");

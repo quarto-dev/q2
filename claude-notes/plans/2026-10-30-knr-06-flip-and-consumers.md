@@ -463,6 +463,10 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
    once recording is the default (info diagnostic Q-18-12 already says so). Pinned by
    `a_cache_written_without_capture_is_not_replayed_by_a_recorded_run`.
 
+   **Superseded 2026-11-09 by [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md).** A chunk that asks for
+   the cache now keeps it, is not recorded, and is left out of the expected unit count; Q-18-12 is no
+   longer emitted; the pinned test became `a_cache_written_without_capture_is_replayed_by_a_recorded_run`.
+
 ## References
 
 - [EXR-6](2026-10-28-exr-06-jupyter-flip.md), [EXR-14](2026-10-28-exr-14-preview-splice.md),

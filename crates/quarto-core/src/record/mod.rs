@@ -26,6 +26,7 @@ mod positron_export;
 mod positron_import;
 mod positron_record;
 mod reader;
+mod source_key;
 mod sources;
 mod staleness;
 mod types;
@@ -64,6 +65,10 @@ pub use positron_record::{
     imported_record_is_stale, is_imported_record, record_from_positron,
 };
 pub use reader::{ReadError, read_record, read_record_value};
+pub use source_key::{
+    CommandSources, RECORD_SOURCES_KEY, ResolvedSources, SourceKeyError, SourceNote, Trust,
+    describe as describe_sources, host_record_sources, resolve_record_sources,
+};
 pub use sources::{
     Chosen, EngineError, EngineResult, ImportContext, ImportedOnly, LookupError, OutcomeKind,
     ParseSourceError, RecordLookup, RecordSource, RecordSources, Resolution, SourceOutcome,

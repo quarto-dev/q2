@@ -100,7 +100,7 @@ pub struct Provider {
     /// sees, so a `-M` that changes how code runs (`execute:eval:false`,
     /// `jupyter:python3`) reaches the engine. `None` adds nothing.
     overlay: Option<Arc<RenderOverlay>>,
-    /// `--records` (RIU-4). Exactly `engine` (the default) keeps the pre-RIU path: no walk.
+    /// `execute: record-sources` (RIU-4). Exactly `engine` (the default) keeps the pre-RIU path: no walk.
     record_sources: RecordSources,
     /// The writer gate, read once at construction (`QUARTO_ENGINE_RECORD_WRITE`).
     record_gate: bool,
@@ -142,7 +142,7 @@ impl Provider {
         )
     }
 
-    /// [`Provider::new_with_overlay`] with the `--records` list and the writer gate (RIU-4).
+    /// [`Provider::new_with_overlay`] with the `execute: record-sources` list and the writer gate (RIU-4).
     /// With the list exactly `engine` this is the pre-RIU provider. With any other list,
     /// `execute_document` walks it, and `engine` absent means this provider never runs code.
     #[allow(clippy::too_many_arguments)]
@@ -280,12 +280,30 @@ impl Provider {
             return Err(format!("refusing to execute unsafe path '{rel_path}'"));
         }
 
+        // The host list is a ceiling: the document's own `execute: record-sources` may only
+        // reorder or narrow it (OPR-5 Part B). Read it from the materialized project before
+        // anything runs, so a guest can narrow even the default list. The one extra
+        // materialization per request is the price of reading the guest's `_quarto.yml`,
+        // `_metadata.yml` and front matter the way the render will.
+        let resolved = self.resolve_document_sources(rel_path).await;
+
         // The default list (`engine` alone) is the pre-RIU path with no walk and no source
         // inputs. Any other list walks its sources; the engine is reached only through the walk.
-        let result = if self.record_sources == RecordSources::provider_default() {
-            self.run_and_store(rel_path).await
-        } else {
-            self.execute_with_sources(rel_path).await
+        let result = match resolved {
+            Err(msg) => Err(msg),
+            Ok((list, notes)) => {
+                let result = if list == RecordSources::provider_default() {
+                    self.run_and_store(rel_path).await
+                } else {
+                    self.execute_with_sources(rel_path, &list).await
+                };
+                match result {
+                    // A warning on a successful run has no client route yet (strand
+                    // bd-ia3idnvk); the operator log carries it.
+                    Err(msg) if !notes.is_empty() => Err(format!("{msg} ({})", notes.join("; "))),
+                    other => other,
+                }
+            }
         };
 
         // Only flip status once we know a run was actually attempted (consent
@@ -480,7 +498,11 @@ impl Provider {
     /// `execute_document` for a non-default list: walk the sources, publishing what one supplies.
     /// `engine` is reachable only through [`ProviderLookup::run_engine`], which goes through the
     /// consent-gated `run_and_store`.
-    async fn execute_with_sources(&self, rel_path: &str) -> Result<ExecOutcome, String> {
+    async fn execute_with_sources(
+        &self,
+        rel_path: &str,
+        list: &RecordSources,
+    ) -> Result<ExecOutcome, String> {
         let declined = std::cell::Cell::new(false);
         let engine_outcome = std::cell::RefCell::new(None);
         let make = |project_dir: &Path, abs_path: &Path| -> Box<dyn RecordLookup + '_> {
@@ -494,7 +516,7 @@ impl Provider {
             })
         };
         let result = self
-            .walk_and_publish(rel_path, &self.record_sources, self.record_gate, &make)
+            .walk_and_publish(rel_path, list, self.record_gate, &make)
             .await;
         if declined.get() {
             return Ok(ExecOutcome::Rejected);
@@ -599,7 +621,60 @@ impl Provider {
         Ok(Some(ExecOutcome::Executed(doc_id)))
     }
 
-    /// Whether `engine` is in this provider's `--records` list.
+    /// The record sources for one document: the host list (the ceiling) narrowed or reordered
+    /// by the document's own `execute: record-sources`, read from a fresh materialization of
+    /// the project. Out-of-ceiling entries are ignored with a warning (logged here, and
+    /// returned so a failed run can carry them in `last_error`). An empty result is an error
+    /// that names the reason.
+    async fn resolve_document_sources(
+        &self,
+        rel_path: &str,
+    ) -> Result<(RecordSources, Vec<String>), String> {
+        use quarto_core::record::{
+            CommandSources, Trust, describe_sources, resolve_record_sources,
+        };
+        let tmp =
+            tempfile::tempdir().map_err(|e| format!("creating a materialization temp dir: {e}"))?;
+        crate::materialize::materialize_project(&self.repo, &self.index, tmp.path())
+            .await
+            .map_err(|e| format!("materializing the project: {e}"))?;
+        let root = tmp
+            .path()
+            .canonicalize()
+            .map_err(|e| format!("canonicalizing the materialization temp dir: {e}"))?;
+        let abs_path = root.join(rel_path);
+        let plain: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let project = ProjectContext::discover(&abs_path, plain.as_ref())
+            .map_err(|e| format!("project discovery failed: {e}"))?;
+        // The document is read by the layers *below* the operator's `-M`: the runtime layer is
+        // the host's, and the ceiling already carries its value.
+        let resolved = resolve_record_sources(
+            &project,
+            &abs_path,
+            None,
+            plain.as_ref(),
+            &CommandSources::PROVIDE_HUB,
+            Trust::Ceiling {
+                allowed: &self.record_sources,
+            },
+        )
+        .map_err(|e| e.to_string())?;
+        let notes: Vec<String> = resolved.notes.iter().map(|n| n.text.clone()).collect();
+        for note in &resolved.notes {
+            tracing::warn!(path = %rel_path, "{}", note.text);
+            eprintln!("warning: {rel_path}: {}", note.text);
+        }
+        if resolved.sources.as_slice().is_empty() {
+            return Err(format!(
+                "the document's `execute: record-sources` leaves no source this provider \
+                 allows (allowed: {})",
+                describe_sources(&self.record_sources)
+            ));
+        }
+        Ok((resolved.sources, notes))
+    }
+
+    /// Whether `engine` is in this provider's `execute: record-sources` list.
     fn engine_listed(&self) -> bool {
         self.record_sources.contains_engine()
     }
@@ -838,7 +913,8 @@ impl RecordLookup for ProviderLookup<'_> {
     async fn run_engine(&self, _inputs: &SourceInputs) -> Result<EngineResult, EngineError> {
         if !self.provider.engine_listed() {
             return Err(EngineError::Failed(
-                "`engine` is not in --records, so this provider does not run code".into(),
+                "`engine` is not in `execute: record-sources`, so this provider does not run code"
+                    .into(),
             ));
         }
         match self.provider.run_and_store(self.rel_path).await {
