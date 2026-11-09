@@ -954,11 +954,14 @@ mod tests {
             .iter()
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
+        // The path is handed to pandoc as a native argument, so it takes the
+        // platform separator (`\doc\custom.docx` on Windows).
+        let expected_doc = "/doc/custom.docx".replace('/', std::path::MAIN_SEPARATOR_STR);
         assert_eq!(
             joined,
             vec![
                 "--reference-doc",
-                "/doc/custom.docx",
+                expected_doc.as_str(),
                 "--default-image-extension",
                 "png"
             ],
