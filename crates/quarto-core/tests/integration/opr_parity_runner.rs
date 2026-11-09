@@ -596,7 +596,10 @@ mod tests {
     #[test]
     fn the_seeded_allowlist_parses_and_each_entry_is_proposed_or_signed() {
         let list = Allowlist::load(&corpus_root().join("opr-parity-allowlist.toml")).unwrap();
-        assert_eq!(list.entries.len(), 8);
+        // OPR-7f removed the five proposed Julia entries (wrapper id, data-quarto, output
+        // execution count, figure output class, figure file names): the engine route and the
+        // presenter now agree on them, so only the three signed entries are left.
+        assert_eq!(list.entries.len(), 3);
         assert!(
             list.entries
                 .iter()
