@@ -55,7 +55,7 @@ capture splice and is not part of this epic.
   structured record, quietly (OPR-0c, 2026-11-09: the record must not simply lack the chunk, because the unit count check drops
   the whole record; OPR-7b excludes cached units from the expected count instead). The LaTeX family, `pptx`, `context` and unknown knitr targets stay on the engine route, quietly
   (strands `bd-4y5scdhp`, `bd-lo1cs7u5`, `bd-ka76vcrp` track widening; LaTeX notes live in the LaTeX plan on
-  `explore/pandoc-hybrid-latex`). Decided 2026-11-09 (Gordon): the retained knitr fallback survives for plain render, and there is **no opt-out control** (recorded in OPR-7d).
+  `explore/pandoc-hybrid-latex`). Decided 2026-11-09 (Gordon): the retained knitr fallback survives for plain render, and there is **no opt-out control** (recorded in OPR-7d). **Amended 2026-11-09 (Gordon, [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md)):** a cached chunk should be a record cell if that can be done without changing knitr. OPR-7e runs a spike first and implements the levels it supports; what it does not support stays as written here.
 - **D6. `render` reads `execute: record-sources`** (updated by R5, 2026-11-09; there is no render option). Read only
   (writing stays with `execute: record: true`); default `engine`; `cache` is ignored with an info line; the list is
   resolved **per document**; no source and no `engine` warns and leaves cells inert (`--strict` errors; prose-only
@@ -145,6 +145,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-7a](2026-11-08-opr-7a-presentation-handshake-and-record.md) | OPR | Handshake and record without the extra cost, behind a control | 1b, 3, 6 | C | ready |
 | [OPR-7b](2026-11-08-opr-7b-knitr-cache-fallback.md) | OPR | Cached knitr chunks fall back, no record | 0c | B | ready |
 | [OPR-7c](2026-11-08-opr-7c-run-the-parity-gate.md) | OPR | Run the parity gate, fix or propose the allowlist | 0b, 1b, 2, 7b, 4d resolved | D | ready |
+| [OPR-7e](2026-11-09-opr-7e-cache-hits-as-records.md) | OPR | A cached knitr chunk is recorded and presented like any other (spike first); should land before 7d | 7b | B | ready |
 | [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, Gordon\'s decisions | D | blocked-on-gordon |
 | [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved, RFU-8 | D | ready |
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
@@ -161,7 +162,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | Lane | Workspace | Plans, in order |
 |---|---|---|
 | A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3, **RFU-7** (moved from C) |
-| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C) |
+| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, **OPR-7e**, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C) |
 | C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a |
 | D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, OPR-7d, OPR-8 |
 
