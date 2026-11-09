@@ -389,10 +389,7 @@ fn records_is_gone_and_source_uri_is_only_for_positron_ipynb() {
 
 #[test]
 fn q2_record_is_gone() {
-    let out = Command::new(Q2_BIN)
-        .args(["record"])
-        .output()
-        .unwrap();
+    let out = Command::new(Q2_BIN).args(["record"]).output().unwrap();
     assert_eq!(code(&out), USAGE);
 }
 
