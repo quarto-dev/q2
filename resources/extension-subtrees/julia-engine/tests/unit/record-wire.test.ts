@@ -142,10 +142,11 @@ test("engine_returns_hash_definition_in_record_info", () => {
   assert.deepEqual(recordInfo.hashDefinition, JULIA_HASH_DEFINITION);
   assert.deepEqual(JULIA_HASH_DEFINITION, {
     id: "julia",
-    version: 1,
+    version: 2,
     granularity: "document",
     presentationCellOptions: DISPLAY_ONLY,
-    presentationExecuteKeys: DISPLAY_ONLY,
+    // `execute: record-sources` (OPR-5) says where a record comes from, so it is not an input.
+    presentationExecuteKeys: [...DISPLAY_ONLY, "record-sources"],
     documentKeys: ["julia", "format", "fig-width", "fig-height", "fig-format", "fig-dpi"],
   });
 });

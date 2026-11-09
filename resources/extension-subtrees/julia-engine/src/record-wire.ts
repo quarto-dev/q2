@@ -72,13 +72,14 @@ const DISPLAY_ONLY_KEYS: string[] = [
   "tbl-column",
 ];
 
-/** The engine's declared execution-input hash rule (plan EXR-8, task B1a; OPR-3). */
+/** The engine's declared execution-input hash rule (plan EXR-8, task B1a; OPR-3; version 2: OPR-5 excludes `execute: record-sources`). */
 export const JULIA_HASH_DEFINITION = {
   id: "julia",
-  version: 1,
+  version: 2,
   granularity: "document" as const,
   presentationCellOptions: [...DISPLAY_ONLY_KEYS],
-  presentationExecuteKeys: [...DISPLAY_ONLY_KEYS],
+  // `execute: record-sources` (OPR-5) says where a record comes from, so it is not an input.
+  presentationExecuteKeys: [...DISPLAY_ONLY_KEYS, "record-sources"],
   documentKeys: [
     "julia",
     "format",

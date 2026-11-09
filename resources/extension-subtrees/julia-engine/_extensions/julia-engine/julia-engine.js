@@ -110,10 +110,11 @@ var DISPLAY_ONLY_KEYS = [
 ];
 var JULIA_HASH_DEFINITION = {
   id: "julia",
-  version: 1,
+  version: 2,
   granularity: "document",
   presentationCellOptions: [...DISPLAY_ONLY_KEYS],
-  presentationExecuteKeys: [...DISPLAY_ONLY_KEYS],
+  // `execute: record-sources` (OPR-5) says where a record comes from, so it is not an input.
+  presentationExecuteKeys: [...DISPLAY_ONLY_KEYS, "record-sources"],
   documentKeys: [
     "julia",
     "format",
