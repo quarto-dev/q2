@@ -2,7 +2,7 @@
 title: 'OPR-4a: Julia spike, can the runner report expression starts, anchors and output kinds'
 date: 2026-11-08
 description: 'A pass or fail spike. Decides whether QuartoNotebookRunner can tie each output of a Julia cell to the expression that produced it, report where each expression starts, and tell a message from a warning. Produces a note with a verdict and a proposed set of optional wire fields. Gordon decides, which enables or cancels OPR-4b to OPR-4d.'
-status: ready
+status: in-progress
 depends-on: []
 lane: B
 ---
