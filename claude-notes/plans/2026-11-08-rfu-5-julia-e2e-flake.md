@@ -2,7 +2,7 @@
 title: 'RFU-5: the Julia e2e tests are slow and flaky, find the EPIPE closer'
 date: 2026-11-08
 description: 'A research plan. The Julia push tests in the Positron fork passed once, then timed out at 120 s with no outputs. Measures cold and warm runs, re-runs the e2e file three times, and runs the cheapest experiments to find what kills the q2 client while the Julia server writes progress. Writes a note and proposes fork changes; commits nothing to the fork.'
-status: ready
+status: in-progress
 depends-on: []
 lane: B
 ---
