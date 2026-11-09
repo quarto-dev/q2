@@ -122,7 +122,7 @@ async fn preview_ast(
     let temp = tempfile::TempDir::new().unwrap();
     let nb_path = temp.path().join("notebook.ipynb");
     std::fs::write(&nb_path, notebook).unwrap();
-    let nb_path = nb_path.canonicalize().unwrap();
+    let nb_path = quarto_system_runtime::canonicalize(&nb_path).unwrap();
 
     let project = ProjectContext {
         dir: temp.path().to_path_buf(),
@@ -395,7 +395,7 @@ async fn stored_png_output_written_as_figure_file() {
     let temp = tempfile::TempDir::new().unwrap();
     let nb_path = temp.path().join("notebook.ipynb");
     std::fs::write(&nb_path, PNG_OUTPUT_NB).unwrap();
-    let nb_path = nb_path.canonicalize().unwrap();
+    let nb_path = quarto_system_runtime::canonicalize(&nb_path).unwrap();
 
     let project = ProjectContext {
         dir: temp.path().to_path_buf(),

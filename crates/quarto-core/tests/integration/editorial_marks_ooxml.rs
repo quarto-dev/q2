@@ -206,7 +206,7 @@ fn render_fixture(dir: &Path, file: &str, format: &str) -> PathBuf {
 #[test]
 fn the_extensions_docx_examples_produce_its_ooxml_counts() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let comment_id = Regex::new(r#"<w:comment [^>]*w:id="([^"]*)""#).unwrap();
     for expect in DOCX_EXPECTATIONS {
         let docx = render_fixture(&dir, expect.file, "docx");
@@ -302,7 +302,7 @@ fn the_extensions_docx_examples_produce_its_ooxml_counts() {
 #[test]
 fn the_extensions_pptx_example_produces_its_runs() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let pptx = render_fixture(&dir, "06-pptx-marks.qmd", "pptx");
     let parts = zip_parts(&pptx);
     assert_well_formed(&parts, "06-pptx-marks");
@@ -353,7 +353,7 @@ const DEE: &str = r#"{author="Dee" date="2026-09-01T11:00:00Z"}"#;
 #[test]
 fn commented_ranges_survive_word_and_read_back_as_the_equal_range_shape() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     // Each is the qmd P3's import produces for its Word shape, so it must come back equal.
     let cases = [
         // a range with one comment
@@ -394,7 +394,7 @@ fn a_project_that_still_lists_the_extension_renders_the_same_docx() {
     }
     let render_project = |with_extension: bool| -> Vec<(String, Vec<u8>)> {
         let temp = TempDir::new().unwrap();
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let mut config = String::from("project:\n  type: default\n");
         if with_extension {
             config.push_str("\nfilters:\n  - quarto-ooxml-editorial-marks\n");
@@ -488,7 +488,7 @@ fn first_import(name: &str) -> String {
 #[test]
 fn the_round_trip_through_import_is_stable_for_the_import_fixtures() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     for name in [
         "track-changes-docx",
         "highlights-docx",
@@ -507,7 +507,7 @@ fn the_round_trip_through_import_is_stable_for_the_import_fixtures() {
 #[test]
 fn the_shapes_that_dont_invert_come_back_equal_at_the_qmd_level() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let qmd = format!(
         "A point comment[>> Mid-sentence.]{ANN} stays one.\n\n\
          A comment at a paragraph's end.[>> Ends it.]{DEE}\n\n\

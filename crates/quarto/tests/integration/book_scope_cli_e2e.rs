@@ -41,7 +41,7 @@ fn write_file(path: &Path, contents: &str) {
 /// book. `extra_yaml` is appended to `_quarto.yml`.
 fn book(extra_yaml: &str) -> (TempDir, PathBuf) {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write_file(
         &dir.join("_quarto.yml"),
         &format!(

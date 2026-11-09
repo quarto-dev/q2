@@ -130,7 +130,7 @@ fn render_founding_repro(dir: &Path) -> Output {
 /// canonicalize so the path the diagnostic prints and the path we compare
 /// against agree.
 fn canonical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[test]

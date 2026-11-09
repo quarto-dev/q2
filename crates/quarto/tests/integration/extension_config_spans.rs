@@ -50,7 +50,7 @@ fn run_q2_render(project: &Path) -> std::process::Output {
 #[test]
 fn out_of_project_resource_contributed_by_extension_names_extension_yml() {
     let temp = TempDir::new().unwrap();
-    let project = temp.path().canonicalize().unwrap();
+    let project = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write_file(
         &project.join("_quarto.yml"),
         "project:\n  type: website\n  output-dir: _site\n  render:\n    - \"**/*.qmd\"\n    - \"!drafts/\"\n",
@@ -91,7 +91,7 @@ fn out_of_project_resource_contributed_by_extension_names_extension_yml() {
 #[test]
 fn out_of_project_resource_from_metadata_yml_names_metadata_yml() {
     let temp = TempDir::new().unwrap();
-    let project = temp.path().canonicalize().unwrap();
+    let project = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write_file(
         &project.join("_quarto.yml"),
         "project:\n  type: website\n  output-dir: _site\n",
@@ -136,7 +136,7 @@ fn out_of_project_resource_from_metadata_yml_names_metadata_yml() {
 #[test]
 fn out_of_project_resource_declared_in_doc_names_doc() {
     let temp = TempDir::new().unwrap();
-    let project = temp.path().canonicalize().unwrap();
+    let project = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write_file(
         &project.join("_quarto.yml"),
         "project:\n  type: website\n  output-dir: _site\n",
@@ -172,7 +172,7 @@ fn out_of_project_resource_declared_in_doc_names_doc() {
 #[test]
 fn escaping_render_pattern_from_extension_anchors_in_extension_yml() {
     let temp = TempDir::new().unwrap();
-    let project = temp.path().canonicalize().unwrap();
+    let project = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write_file(
         &project.join("_quarto.yml"),
         "project:\n  type: website\n  output-dir: _site\n  render:\n    - \"*.qmd\"\n",
@@ -204,7 +204,7 @@ fn escaping_render_pattern_from_extension_anchors_in_extension_yml() {
 #[test]
 fn missing_theme_from_extension_anchors_in_extension_yml() {
     let temp = TempDir::new().unwrap();
-    let project = temp.path().canonicalize().unwrap();
+    let project = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write_file(
         &project.join("_quarto.yml"),
         "project:\n  type: website\n  output-dir: _site\n",
@@ -235,7 +235,7 @@ fn missing_theme_from_extension_anchors_in_extension_yml() {
 #[test]
 fn missing_theme_from_metadata_yml_anchors_in_metadata_yml() {
     let temp = TempDir::new().unwrap();
-    let project = temp.path().canonicalize().unwrap();
+    let project = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write_file(
         &project.join("_quarto.yml"),
         "project:\n  type: website\n  output-dir: _site\n",

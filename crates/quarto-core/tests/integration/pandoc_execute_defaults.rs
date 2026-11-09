@@ -69,7 +69,7 @@ fn observed_execute_scope(content: &str, to_format: &str) -> Option<ConfigValue>
     // real output file (unlike `render_qmd_to_html`, which returns a
     // string) — it needs a real, writable project directory.
     let temp = tempfile::TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let doc_path = project_dir.join(format!("f-{to_format}.qmd"));
     std::fs::write(&doc_path, content).unwrap();
 

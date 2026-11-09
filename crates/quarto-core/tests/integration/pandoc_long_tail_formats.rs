@@ -62,7 +62,7 @@ fn tier_a_smoke_all_variants() {
 
     for (name, ext) in TIER_A {
         let temp = TempDir::new().unwrap();
-        let project_dir = temp.path().canonicalize().unwrap();
+        let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let input_path = project_dir.join("f.qmd");
         std::fs::write(&input_path, FIXTURE_QMD).unwrap();
 
@@ -115,7 +115,7 @@ fn tier_a_smoke_all_variants() {
 #[test]
 fn textile_fresh_baseline_snapshot() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("textile.qmd");
     std::fs::write(
         &input_path,
@@ -153,7 +153,7 @@ fn textile_fresh_baseline_snapshot() {
 #[test]
 fn gfm_shortcode_round_trip() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("esc.qmd");
     std::fs::write(
         &input_path,
@@ -236,7 +236,7 @@ fn tier_c_smoke_all_variants() {
 
     for (name, ext) in TIER_C {
         let temp = TempDir::new().unwrap();
-        let project_dir = temp.path().canonicalize().unwrap();
+        let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let input_path = project_dir.join("f.qmd");
         std::fs::write(&input_path, TIER_C_FIXTURE_QMD).unwrap();
 
@@ -361,7 +361,7 @@ fn tier_d_smoke_all_variants() {
 
     for (name, ext) in TIER_D {
         let temp = TempDir::new().unwrap();
-        let project_dir = temp.path().canonicalize().unwrap();
+        let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let input_path = project_dir.join("f.qmd");
         std::fs::write(&input_path, TIER_D_FIXTURE_QMD).unwrap();
 

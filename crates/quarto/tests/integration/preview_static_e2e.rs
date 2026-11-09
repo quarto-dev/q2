@@ -40,7 +40,7 @@ fn write(path: &Path, contents: &str) {
 /// A copy of the minimal website in a fresh tempdir. Returns the
 /// canonical project root.
 fn minimal_site(temp: &TempDir) -> PathBuf {
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     for name in ["_quarto.yml", "index.qmd", "about.qmd"] {
         std::fs::copy(fixture_source().join(name), dir.join(name)).unwrap();
     }
@@ -598,7 +598,7 @@ fn a_page_inside_the_project_opens_on_that_page() {
 #[test]
 fn single_file_outside_a_project_redirects_root_to_the_document() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let doc = dir.join("doc.qmd");
     write(&doc, "---\ntitle: Lone Document\n---\n\nStandalone body.\n");
     let server = Server::spawn(&dir, &["doc.qmd"]);
@@ -856,7 +856,7 @@ fn cli_flags_override_project_preview_keys() {
 /// A two-chapter book (`one.qmd`, `two.qmd` after `index.qmd`) whose
 /// project config is `_quarto.yml` with `extra` appended after the book.
 fn book(temp: &TempDir, extra: &str) -> PathBuf {
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(
         &dir.join("_quarto.yml"),
         &format!(
@@ -895,7 +895,7 @@ fn typst_book_renders(dir: &Path, extra_args: &[&str]) -> bool {
         return false;
     }
     let copy = TempDir::new().unwrap();
-    let copy_dir = copy.path().canonicalize().unwrap();
+    let copy_dir = quarto_system_runtime::canonicalize(copy.path()).unwrap();
     for name in ["_quarto.yml", "index.qmd", "one.qmd", "two.qmd"] {
         std::fs::copy(dir.join(name), copy_dir.join(name)).unwrap();
     }

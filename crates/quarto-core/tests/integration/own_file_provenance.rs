@@ -36,7 +36,7 @@ fn write(path: &Path, content: &str) {
 
 async fn observe(files: &[(&str, &str)], doc: &str, format: &str) -> Observed {
     let tmp = TempDir::new().unwrap();
-    let root = tmp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
     for (name, body) in files {
         write(&root.join(name), body);
     }

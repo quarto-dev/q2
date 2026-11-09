@@ -34,7 +34,7 @@ use serde_json::{Value, json};
 /// ```
 fn make_project() -> (TempDir, std::path::PathBuf) {
     let dir = TempDir::new().expect("temp dir");
-    let root = dir.path().canonicalize().expect("canonicalize temp root");
+    let root = quarto_system_runtime::canonicalize(dir.path()).expect("canonicalize temp root");
 
     std::fs::write(
         root.join("_quarto.yml"),

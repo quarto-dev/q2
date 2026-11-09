@@ -38,7 +38,7 @@ fn typst_into_os_temp_dir_fails_on_root() {
     }
     let proj = TempDir::new().unwrap();
     let os = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), "project:\n  title: x\n");
     write(&root.join("a.qmd"), "---\ntitle: T\n---\n\nHello\n");
     let options = RenderToFileOptions {
@@ -58,7 +58,7 @@ use quarto_core::render_to_file::TypstTarget;
 /// and return the file names written to the output directory.
 fn render_with_target(fm: &str, target: Option<TypstTarget>) -> Vec<String> {
     let proj = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), "project:\n  title: x\n");
     write(
         &root.join("a.qmd"),
@@ -157,7 +157,7 @@ fn capture_plots_land_in_the_request_directory_and_typst_finds_them() {
     require_typst!();
     for plot in ["plot.png", "doc_files/figure-typst/cell-1.png"] {
         let proj = TempDir::new().unwrap();
-        let root = proj.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
         write(&root.join("_quarto.yml"), "project:\n  title: x\n");
         write(&root.join("doc.qmd"), CAPTURE_DOC);
         let req = root.join(".quarto/preview-out/t");
@@ -203,10 +203,12 @@ fn capture_plots_reach_a_docx_from_the_request_directory() {
     }
     let proj = TempDir::new().unwrap();
     let os = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), "project:\n  title: x\n");
     write(&root.join("doc.qmd"), CAPTURE_DOC);
-    let req = os.path().canonicalize().unwrap().join("req");
+    let req = quarto_system_runtime::canonicalize(os.path())
+        .unwrap()
+        .join("req");
     let options = RenderToFileOptions {
         output_dir: Some(req.clone()),
         quiet: true,
@@ -236,7 +238,7 @@ fn render_docx_unexecuted(
     policy: quarto_core::engine::ExecutionPolicy,
 ) -> usize {
     let proj = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), "project:\n  title: x\n");
     write(&root.join("doc.qmd"), qmd);
     let options = RenderToFileOptions {
@@ -325,7 +327,7 @@ use quarto_core::render_to_file::render_document_to_file;
 fn typst_renders_into_a_request_directory_and_cleans_up() {
     require_typst!();
     let proj = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), "project:\n  title: x\n");
     write(&root.join("a.qmd"), "---\ntitle: T\n---\n\nHello\n");
     let gone = in_request_dir(&root.join("a.qmd"), None, |r, dir| {
@@ -342,7 +344,7 @@ fn typst_renders_into_a_request_directory_and_cleans_up() {
 fn the_request_directory_is_removed_after_an_error_and_an_abort() {
     require_typst!();
     let proj = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), "project:\n  title: x\n");
     write(&root.join("a.qmd"), "---\ntitle: T\n---\n\nHello\n");
     // Error: a raw typst block that does not compile.
@@ -382,7 +384,7 @@ fn typst_request_directory_renders_images_in_every_project_shape() {
         ("nested", "project:\n  title: x\n", true),
     ] {
         let proj = TempDir::new().unwrap();
-        let root = proj.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
         write(&root.join("_quarto.yml"), yml);
         let doc_dir = if nested_yml {
             write(&root.join("inner/_quarto.yml"), "project:\n  title: y\n");

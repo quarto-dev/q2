@@ -69,7 +69,7 @@ fn pick_free_port() -> u16 {
 /// Boot a preview server over a project holding `files` (relative path, bytes).
 pub async fn boot(files: &[(&str, &[u8])]) -> Server {
     let project = tempfile::TempDir::with_prefix("q2-preview-routes-").unwrap();
-    let root = project.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(project.path()).unwrap();
     for (name, bytes) in files {
         let path = root.join(name);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();

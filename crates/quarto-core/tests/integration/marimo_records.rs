@@ -321,7 +321,7 @@ fn marimo_record_replays_header_include_without_engine() {
     let source = "---\nengine: marimo\n---\n\n```{python .marimo}\n1 + 1\n```\n";
     let (_tmp, record) = record_for(source);
     let (tmp, input) = project_for(source);
-    let input = input.canonicalize().unwrap();
+    let input = quarto_system_runtime::canonicalize(&input).unwrap();
     let _ = &tmp;
 
     let ast_json = tokio::runtime::Builder::new_current_thread()
@@ -376,7 +376,7 @@ fn marimo_record_replays_without_engine() {
 ```{python .marimo}\n1 + 1\n```\n\nAfter.\n";
     let (_tmp, record) = record_for(source);
     let (_tmp2, input) = project_for(source);
-    let input = input.canonicalize().unwrap();
+    let input = quarto_system_runtime::canonicalize(&input).unwrap();
 
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let live_result = render_to_file(

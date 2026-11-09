@@ -303,7 +303,8 @@ fn env_contract_full_render() {
 fn project_dir_env_is_a_plain_path() {
     require_python!();
     let temp = TempDir::new().unwrap();
-    let project = dunce::simplified(&std::fs::canonicalize(temp.path()).unwrap()).to_path_buf();
+    let project =
+        dunce::simplified(&quarto_system_runtime::canonicalize(temp.path()).unwrap()).to_path_buf();
     assert!(
         !project.to_string_lossy().starts_with(r"\\?\"),
         "test setup: the TEMP root gives the fixture no plain path form: {}",
@@ -329,8 +330,8 @@ fn project_dir_env_is_a_plain_path() {
         "QUARTO_PROJECT_DIR must be a plain path, got: {project_dir}"
     );
     assert_eq!(
-        std::fs::canonicalize(project_dir).unwrap(),
-        std::fs::canonicalize(&project).unwrap(),
+        quarto_system_runtime::canonicalize(Path::new(&project_dir)).unwrap(),
+        quarto_system_runtime::canonicalize(&project).unwrap(),
         "QUARTO_PROJECT_DIR should be the project dir, got: {project_dir}"
     );
 }

@@ -36,7 +36,7 @@ fn write(path: &std::path::Path, contents: &str) {
 #[test]
 fn typst_template_partials_shadow_vendored_partials() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,

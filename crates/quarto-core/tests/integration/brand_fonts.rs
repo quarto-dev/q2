@@ -34,7 +34,7 @@ const LIGHT_BYTES: &[u8] = b"wOF2-light-placeholder";
 const DARK_BYTES: &[u8] = b"wOF2-dark-placeholder-different-length";
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn write(path: &Path, contents: &str) {

@@ -23,7 +23,7 @@ fn write_file(path: &Path, contents: &str) {
 
 fn render_website(files: &[(&str, &str)]) -> PathBuf {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     std::mem::forget(temp);
     for (path, contents) in files {
         write_file(&dir.join(path), contents);

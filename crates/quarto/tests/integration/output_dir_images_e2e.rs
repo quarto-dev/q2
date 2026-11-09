@@ -39,7 +39,7 @@ fn write(path: &Path, bytes: &[u8]) {
 /// `<work>/proj` with `sub/a.qmd` + `sub/pic.png`; returns `<work>`.
 fn fixture() -> (TempDir, PathBuf) {
     let temp = TempDir::new().unwrap();
-    let work = temp.path().canonicalize().unwrap();
+    let work = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&work.join("proj/_quarto.yml"), b"project:\n  title: x\n");
     write(
         &work.join("proj/sub/a.qmd"),

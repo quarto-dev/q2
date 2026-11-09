@@ -59,7 +59,7 @@ async fn run(doc: &str) -> (String, String) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("doc.qmd");
     std::fs::write(&path, doc).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let mut reg = EngineRegistry::new();
@@ -122,7 +122,7 @@ async fn labeled_figure_splices_for_any_engine_name() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("doc.qmd");
     std::fs::write(&path, doc).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let doc_info = DocumentInfo::from_path(&path);
@@ -163,7 +163,7 @@ async fn canonical_capture_without_injected_line_splices() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("doc.qmd");
     std::fs::write(&path, doc).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let doc_info = DocumentInfo::from_path(&path);

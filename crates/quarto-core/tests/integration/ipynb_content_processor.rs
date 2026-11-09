@@ -433,7 +433,7 @@ mod seam2 {
         let temp = tempfile::TempDir::new().unwrap();
         let nb_path = temp.path().join("notebook.ipynb");
         std::fs::write(&nb_path, FLAGSHIP_NOTEBOOK).unwrap();
-        let nb_path = nb_path.canonicalize().unwrap();
+        let nb_path = quarto_system_runtime::canonicalize(&nb_path).unwrap();
 
         let project = ProjectContext {
             dir: temp.path().to_path_buf(),
@@ -500,7 +500,7 @@ mod seam2 {
         let temp = tempfile::TempDir::new().unwrap();
         let nb_path = temp.path().join("notebook.ipynb");
         std::fs::write(&nb_path, CROSS_CELL_FENCE_NOTEBOOK).unwrap();
-        let nb_path = nb_path.canonicalize().unwrap();
+        let nb_path = quarto_system_runtime::canonicalize(&nb_path).unwrap();
 
         let project = ProjectContext {
             dir: temp.path().to_path_buf(),

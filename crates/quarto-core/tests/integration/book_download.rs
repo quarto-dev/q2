@@ -77,7 +77,7 @@ impl Fixture {
 
     fn with_ch1(ch1: &str) -> Self {
         let tmp = TempDir::new().unwrap();
-        let root = tmp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
         write(
             &root.join("_quarto.yml"),
             "project:\n  type: book\n\nbook:\n  title: \"Small Book\"\n  author: \"A. Writer\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n",
@@ -401,7 +401,7 @@ fn a_cancelled_token_stops_the_download_and_a_retry_succeeds() {
 #[test]
 fn a_file_outside_a_book_is_refused() {
     let tmp = TempDir::new().unwrap();
-    let root = tmp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
     write(&root.join("_quarto.yml"), "project:\n  title: x\n");
     write(&root.join("a.qmd"), "hello\n");
     let format = Format::from_format_string("typst").unwrap();

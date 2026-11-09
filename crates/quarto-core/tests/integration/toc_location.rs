@@ -50,7 +50,7 @@ fn write(path: &Path, contents: &str) {
 }
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// Render a website project fixture through the real `ProjectPipeline`

@@ -34,7 +34,7 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 const BOOTSTRAP_JS_BASENAME: &str = "bootstrap.bundle.min.js";
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn write_file(path: &Path, contents: &str) {

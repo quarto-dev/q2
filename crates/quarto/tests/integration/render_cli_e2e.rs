@@ -35,7 +35,7 @@ fn write_file(path: &Path, contents: &str) {
 }
 
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+    quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 fn mtime(p: &Path) -> Option<SystemTime> {

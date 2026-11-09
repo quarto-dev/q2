@@ -163,7 +163,7 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
         .prefix("q2-svg-raster-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .unwrap();
-    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let root = quarto_system_runtime::canonicalize(dir.path()).unwrap();
     std::fs::write(root.join("a.svg"), SVG_A).unwrap();
     std::fs::write(root.join("B.SVG"), SVG_B).unwrap();
     std::fs::write(root.join("sp ace.svg"), SVG_A).unwrap();

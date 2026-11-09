@@ -96,7 +96,7 @@ Top [++ added] text.\n\n\
 #[tokio::test]
 async fn marks_inside_a_callout_and_a_tabset_are_converted_where_pandoc_receives_them() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let (mut ast, _) = ast_for_pandoc(&dir, WITH_CONTAINERS, None).await;
 
     // The renderer transforms are excluded for docx, so the containers are still custom
@@ -136,7 +136,7 @@ async fn the_html_stage_list_leaves_marks_alone() {
     // For contrast: the same document through the HTML stage list keeps its marks, since
     // the transform gates itself on the docx and pptx identifiers.
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = dir.join("doc.qmd");
     std::fs::write(&input_path, "Top [++ added] text.\n").unwrap();
     let project = ProjectContext {
@@ -174,7 +174,7 @@ async fn the_html_stage_list_leaves_marks_alone() {
 #[tokio::test]
 async fn attribution_stamps_marks_in_the_real_docx_stage_list() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let qmd = "---\ntitle: T\n---\n\nIt was [++ added] here and [>> why?] too.\n";
     let json = serde_json::json!({
         "runs": [{ "start": 0, "end": qmd.len(), "actor": "alice@example.com", "time": 1_700_000_000 }],
@@ -223,7 +223,7 @@ async fn real_blame_data_stamps_the_local_part_of_the_committers_email() {
             .expect("parse");
 
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = dir.join("doc.qmd");
     let project = ProjectContext {
         dir: dir.clone(),

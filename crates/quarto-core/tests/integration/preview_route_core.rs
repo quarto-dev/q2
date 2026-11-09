@@ -52,7 +52,7 @@ fn odt_render_into_another_directory_keeps_its_image() {
     }
     let proj = TempDir::new().unwrap();
     let out = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("img/dot.png"), PNG);
     write(
         &root.join("a.qmd"),
@@ -92,7 +92,7 @@ fn attribution_json_stamps_the_payload_author_in_a_docx() {
     }
     let proj = TempDir::new().unwrap();
     let out = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     let qmd = "---\ntitle: T\n---\n\nIt was [++ added] here.\n";
     write(&root.join("a.qmd"), qmd);
     let json = serde_json::json!({

@@ -102,7 +102,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
     // on macOS while `TempDir` hands us `/tmp/...` — sync_file
     // canonicalizes both sides, but staying consistent in the test
     // makes the assertions easier to read on failure.
-    let project_root = project.path().canonicalize().unwrap();
+    let project_root = quarto_system_runtime::canonicalize(project.path()).unwrap();
     let qmd_path = project_root.join("doc.qmd");
     std::fs::write(&qmd_path, QMD_INITIAL).unwrap();
 

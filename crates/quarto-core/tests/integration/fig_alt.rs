@@ -105,7 +105,7 @@ fn write(path: &Path, contents: &[u8]) {
 /// A temp project holding `source` as `doc.qmd` plus every case's image.
 fn project(source: &str) -> (TempDir, PathBuf) {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&dir.join("doc.qmd"), source.as_bytes());
     for case in CASES {
         write(&dir.join(format!("{case}.png")), ONE_PIXEL_PNG);

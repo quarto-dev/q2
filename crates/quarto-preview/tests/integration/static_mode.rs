@@ -46,7 +46,7 @@ fn write(path: &Path, contents: &[u8]) {
 /// A rendered-site tree: index, about, a subdirectory with its own
 /// index, an image, a stylesheet, and a custom 404 page.
 fn full_site(temp: &tempfile::TempDir) -> PathBuf {
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&root.join("index.html"), INDEX.as_bytes());
     write(&root.join("about.html"), ABOUT.as_bytes());
     write(&root.join("sub/index.html"), SUB_INDEX.as_bytes());
@@ -134,7 +134,7 @@ fn text(body: &[u8]) -> String {
 #[tokio::test]
 async fn root_shows_the_render_failure_when_nothing_was_rendered() {
     let temp = tempfile::TempDir::new().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let (app, hub) = router(root, None);
 
     hub.set_failure(Some("Error: [Q-1-1] broken <chapter>".to_string()));
@@ -186,7 +186,7 @@ async fn root_serves_index_html_with_client_injected_before_body_end() {
 #[tokio::test]
 async fn root_without_index_redirects_to_the_default_file() {
     let temp = tempfile::TempDir::new().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&root.join("doc.html"), ABOUT.as_bytes());
     let (app, _hub) = router(root, Some("doc.html"));
     let (status, headers, _) = get(&app, "/").await;
@@ -198,7 +198,7 @@ async fn root_without_index_redirects_to_the_default_file() {
 #[tokio::test]
 async fn root_without_index_or_default_lists_the_rendered_pages() {
     let temp = tempfile::TempDir::new().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&root.join("about.html"), ABOUT.as_bytes());
     write(&root.join("posts/one.html"), ABOUT.as_bytes());
     write(&root.join("style.css"), CSS.as_bytes());
@@ -262,7 +262,7 @@ async fn unknown_path_serves_the_custom_404_page_with_client() {
 #[tokio::test]
 async fn unknown_path_without_a_404_page_is_a_plain_404() {
     let temp = tempfile::TempDir::new().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&root.join("index.html"), INDEX.as_bytes());
     let (app, _hub) = router(root, None);
     let (status, headers, body) = get(&app, "/nope.html").await;
@@ -608,7 +608,7 @@ fn pdf_router(
     tempfile::TempDir,
 ) {
     let temp = tempfile::TempDir::new().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&root.join("my doc.pdf"), PDF_BYTES);
     write(&root.join("about.html"), ABOUT.as_bytes());
     let (tx, rx) = tokio::sync::mpsc::channel(16);
@@ -818,7 +818,7 @@ async fn every_redirect_stays_under_the_proxy_prefix() {
     }
 
     let temp = tempfile::TempDir::new().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&root.join("doc.html"), ABOUT.as_bytes());
     let (app, _hub) = router(root, Some("doc.html"));
     let (_, headers, _) = get(&app, "/").await;
@@ -867,7 +867,7 @@ async fn pdf_viewer_redirects_and_file_parameter_stay_under_the_prefix() {
 #[tokio::test]
 async fn listing_links_stay_under_the_prefix() {
     let temp = tempfile::TempDir::new().unwrap();
-    let root = temp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(&root.join("posts/one.html"), ABOUT.as_bytes());
     let (app, _hub) = router(root, None);
     let (_, _, body) = get(&app, "/").await;

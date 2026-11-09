@@ -40,7 +40,7 @@ fn write(path: &Path, contents: &str) {
 #[test]
 fn render_document_to_file_docx_produces_real_output() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(&input_path, "---\ntitle: F\n---\n\nHello docx body.\n");
 
@@ -82,7 +82,7 @@ fn render_document_to_file_docx_produces_real_output() {
 #[test]
 fn render_document_to_file_docx_sink_does_not_truncate_pandoc_output() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(&input_path, "---\ntitle: F\n---\n\nHello docx body.\n");
 
@@ -131,7 +131,7 @@ fn render_document_to_file_docx_sink_does_not_truncate_pandoc_output() {
 #[test]
 fn render_document_to_file_docx_embeds_a_relatively_referenced_image() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
 
     // A minimal valid 1x1 PNG (the smallest well-known valid PNG byte
     // sequence), placed in a subdirectory so the qmd's `img/dot.png`
@@ -243,7 +243,7 @@ async fn user_filters_pre_sees_no_custom_node_post_position_does() {
     // --- Pre position: run everything through user-filters-pre. ---
     {
         let temp = TempDir::new().unwrap();
-        let project_dir = temp.path().canonicalize().unwrap();
+        let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let (project, doc, format) = callout_fixture_ctx(&project_dir);
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
@@ -272,7 +272,7 @@ async fn user_filters_pre_sees_no_custom_node_post_position_does() {
     // user-filters-post runs. ---
     {
         let temp = TempDir::new().unwrap();
-        let project_dir = temp.path().canonicalize().unwrap();
+        let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let (project, doc, format) = callout_fixture_ctx(&project_dir);
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
@@ -308,7 +308,7 @@ async fn user_filters_pre_sees_no_custom_node_post_position_does() {
 fn render_document_to_file_pandoc_hybrid_resolves_citations_for_both_citeproc_spellings() {
     for frontmatter in ["citeproc: true\n", "filters: [quarto, citeproc]\n"] {
         let temp = TempDir::new().unwrap();
-        let project_dir = temp.path().canonicalize().unwrap();
+        let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let input_path = project_dir.join("f.qmd");
         write(
             &input_path,
@@ -352,7 +352,7 @@ fn render_document_to_file_pandoc_hybrid_resolves_citations_for_both_citeproc_sp
 #[test]
 fn render_document_to_file_source_override_replaces_the_disk_copy() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(&input_path, "---\ntitle: T\n---\n\nSTALE disk text.\n");
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());

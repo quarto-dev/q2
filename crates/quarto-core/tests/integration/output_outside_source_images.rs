@@ -130,7 +130,7 @@ fn check_pandoc_zip_format(format: &str, ext: &str, website: bool) {
     require!("pandoc");
     let proj = TempDir::new().unwrap();
     let os = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     let input = fixture(&root, website, true);
     for out in out_dirs(&root, &os, format) {
         let result = render(&input, format, &out);
@@ -173,7 +173,7 @@ fn docx_root_relative_image_resolves_to_the_project_root() {
     require!("pandoc");
     let proj = TempDir::new().unwrap();
     let os = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), b"project:\n  title: x\n");
     write(
         &root.join("sub/a.qmd"),
@@ -194,7 +194,7 @@ fn typst_finds_source_images_in_the_request_directory() {
     require!("typst");
     for website in [false, true] {
         let proj = TempDir::new().unwrap();
-        let root = proj.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
         let input = fixture(&root, website, true);
         let out = root.join(".quarto/preview-out/t");
         let result = render(&input, "typst", &out);
@@ -211,7 +211,7 @@ fn typst_leaves_images_that_exist_in_the_request_directory() {
     require!("pandoc");
     require!("typst");
     let proj = TempDir::new().unwrap();
-    let root = proj.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(proj.path()).unwrap();
     write(&root.join("_quarto.yml"), b"project:\n  title: x\n");
     // No `plot.png` beside the source; only in the request directory.
     write(

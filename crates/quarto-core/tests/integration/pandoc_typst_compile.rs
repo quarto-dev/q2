@@ -39,7 +39,7 @@ fn write(path: &std::path::Path, contents: &str) {
 #[test]
 fn render_document_to_file_typst_compiles_to_real_pdf() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -91,7 +91,7 @@ fn render_document_to_file_typst_compiles_to_real_pdf() {
 #[test]
 fn render_to_file_typst_overrides_multiple_frontmatter_formats() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -122,7 +122,7 @@ fn render_to_file_typst_overrides_multiple_frontmatter_formats() {
 #[test]
 fn render_document_to_file_typst_keep_typ_retains_intermediate() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -180,7 +180,7 @@ fn render_document_to_file_typst_keep_typ_retains_intermediate() {
 #[test]
 fn render_document_to_file_typst_margin_note_compiles_without_network() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -230,7 +230,7 @@ fn render_document_to_file_typst_margin_note_compiles_without_network() {
 #[test]
 fn render_document_to_file_typst_crossref_document_compiles_to_pdf() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -293,7 +293,7 @@ fn render_typst_with_frontmatter(project_dir: &std::path::Path, front: &str) -> 
 #[test]
 fn output_ext_pdf_compiles_like_the_default() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let out = render_typst_with_frontmatter(&dir, "output-ext: pdf\n");
     assert_eq!(out.extension().and_then(|e| e.to_str()), Some("pdf"));
     assert!(std::fs::read(&out).unwrap().starts_with(b"%PDF-"));
@@ -305,7 +305,7 @@ fn output_ext_pdf_compiles_like_the_default() {
 fn output_ext_other_than_pdf_writes_typst_source_literally() {
     for ext in ["typ", "foo"] {
         let temp = TempDir::new().unwrap();
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let out = render_typst_with_frontmatter(&dir, &format!("output-ext: {ext}\n"));
         assert_eq!(out.extension().and_then(|e| e.to_str()), Some(ext));
         assert_eq!(out.file_stem().and_then(|s| s.to_str()), Some("f"));
@@ -335,7 +335,7 @@ fn output_ext_other_than_pdf_writes_typst_source_literally() {
 #[test]
 fn output_ext_under_format_typst_is_honoured() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let out = render_typst_with_frontmatter(&dir, "format:\n  typst:\n    output-ext: typ\n");
     assert_eq!(out.extension().and_then(|e| e.to_str()), Some("typ"));
     assert!(!std::fs::read_to_string(&out).unwrap().starts_with("%PDF-"));
@@ -346,7 +346,7 @@ fn output_ext_under_format_typst_is_honoured() {
 #[test]
 fn output_ext_from_project_config_applies_and_document_overrides() {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     write(
         &dir.join("_quarto.yml"),
         "project:\n  type: default\nformat:\n  typst:\n    output-ext: typ\n",

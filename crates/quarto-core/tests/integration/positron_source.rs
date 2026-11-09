@@ -16,7 +16,7 @@ async fn the_real_registry_owns_python_with_jupyter_and_julia_with_julia() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("doc.qmd");
     std::fs::write(&path, PY_AND_JULIA).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
 
@@ -74,7 +74,7 @@ async fn import_fixture(stem: &str) -> (Record, tempfile::TempDir, std::path::Pa
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("doc.qmd");
     std::fs::write(&path, fixture(&format!("{stem}.qmd"))).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let inputs = compute_source_inputs_with(

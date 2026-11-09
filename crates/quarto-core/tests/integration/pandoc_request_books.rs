@@ -41,7 +41,7 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
         .prefix("q2-r9-books-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .unwrap();
-    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let root = quarto_system_runtime::canonicalize(dir.path()).unwrap();
     // The hub's VFS project root is the runtime's working directory, and
     // capture keys are relative to it (`sidecar_key`). Each nextest test is
     // its own process, so changing the directory is private to the test.

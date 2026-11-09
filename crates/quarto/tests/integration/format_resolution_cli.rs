@@ -99,7 +99,7 @@ struct Fixture {
 
 fn fixture(files: &[(&str, &str)]) -> Fixture {
     let temp = TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     for (name, contents) in files {
         write_file(&dir.join(name), contents);
     }

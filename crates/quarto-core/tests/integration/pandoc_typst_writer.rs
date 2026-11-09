@@ -40,7 +40,7 @@ fn write(path: &Path, contents: &str) {
 #[test]
 fn render_document_to_file_typst_writes_real_typst_source() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -85,7 +85,7 @@ fn render_document_to_file_typst_writes_real_typst_source() {
 #[test]
 fn render_document_to_file_typst_shifts_headings_when_no_level_one_present() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(&input_path, "## Sub Heading\n\nBody text.\n");
 
@@ -129,7 +129,7 @@ fn render_document_to_file_typst_shifts_headings_when_no_level_one_present() {
 #[test]
 fn render_document_to_file_typst_does_not_shift_when_level_one_present() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(&input_path, "# Top Heading\n\n## Sub Heading\n\nBody.\n");
 
@@ -176,7 +176,7 @@ fn render_document_to_file_typst_does_not_shift_when_level_one_present() {
 #[test]
 fn render_document_to_file_typst_forwards_section_numbering_metadata() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -214,7 +214,7 @@ fn render_document_to_file_typst_forwards_section_numbering_metadata() {
 #[test]
 fn render_document_to_file_typst_omits_section_numbering_by_default() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(&input_path, "---\ntitle: F\n---\n\n# Heading\n\nBody.\n");
 
@@ -250,7 +250,7 @@ fn render_document_to_file_typst_omits_section_numbering_by_default() {
 #[test]
 fn render_document_to_file_typst_does_not_wrap_long_lines() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     let long_line = "A very long line that would definitely wrap onto multiple output \
         lines if pandocs default wrap column of seventy something characters were being \
@@ -296,7 +296,7 @@ fn render_document_to_file_typst_does_not_wrap_long_lines() {
 #[test]
 fn render_document_to_file_typst_emits_brand_color_from_inline_brand_block() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -340,7 +340,7 @@ fn render_document_to_file_typst_emits_brand_color_from_inline_brand_block() {
 #[test]
 fn render_document_to_file_typst_forwards_margin_locations_to_lua_filters() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -396,7 +396,7 @@ fn render_document_to_file_typst_forwards_margin_locations_to_lua_filters() {
 #[test]
 fn render_document_to_file_typst_citeproc_true_uses_citeproc_bibliography_in_margin() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -441,7 +441,7 @@ fn render_document_to_file_typst_citeproc_true_uses_citeproc_bibliography_in_mar
 /// Renders `frontmatter` + one citation to Typst source and returns it.
 fn render_citation_to_typst(frontmatter: &str) -> String {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -537,7 +537,7 @@ fn render_document_to_file_typst_explicit_post_citeproc_filter_resolves_citation
 #[test]
 fn render_document_to_file_typst_uses_vendored_template() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -598,7 +598,7 @@ fn render_document_to_file_typst_uses_vendored_template() {
 #[test]
 fn render_document_to_file_typst_crossref_figure_and_equation_use_native_numbering() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(&project_dir.join("img.png"), "");
     write(
@@ -658,7 +658,7 @@ fn render_document_to_file_typst_crossref_figure_and_equation_use_native_numberi
 #[test]
 fn render_document_to_file_typst_forwards_columns_metadata() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -702,7 +702,7 @@ fn render_document_to_file_typst_forwards_columns_metadata() {
 #[test]
 fn render_document_to_file_typst_user_template_overrides_vendored_template() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     let custom_template_path = project_dir.join("custom.typ");
     write(&custom_template_path, "// custom template marker\n$body$\n");
@@ -753,7 +753,7 @@ fn render_document_to_file_typst_user_template_overrides_vendored_template() {
 #[test]
 fn render_document_to_file_typst_filters_unavailable_font_family() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,
@@ -816,7 +816,7 @@ fn render_document_to_file_typst_filters_unavailable_font_family() {
 #[test]
 fn render_document_to_file_typst_resolves_data_uri_image_via_mediabag() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     // A 1x1 transparent PNG, base64-encoded — small enough to inline, real
     // enough that `should_mediabag`'s `data:image/.+;base64,(.+)` pattern
@@ -884,7 +884,7 @@ fn render_document_to_file_typst_resolves_data_uri_image_via_mediabag() {
 #[test]
 fn render_document_to_file_typst_raw_html_table_long_data_uri_images_reach_mediabag() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     let short_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
     // Over the 2000-char threshold; decodes to bytes distinct from `short_png`.

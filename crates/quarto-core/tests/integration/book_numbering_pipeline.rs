@@ -47,7 +47,7 @@ use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn write(path: &Path, contents: &str) {
@@ -197,7 +197,7 @@ fn typst_book_resets_figure_numbering_at_each_chapter() {
 #[test]
 fn typst_top_level_division_alone_does_not_reset_figure_numbering() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("f.qmd");
     write(
         &input_path,

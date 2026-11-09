@@ -23,7 +23,7 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 /// Render `body` (no front matter beyond a title) to `native` and return the output.
 fn render_native(body: &str) -> String {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("esc.qmd");
     std::fs::write(&input_path, format!("---\ntitle: Esc\n---\n\n{body}\n")).unwrap();
 

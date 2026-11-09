@@ -120,7 +120,7 @@ async fn record_for(dir: &Path, source: &str) -> Record {
 async fn record_with(dir: &Path, source: &str, engine: StubEngine) -> Record {
     let path = dir.join("doc.qmd");
     std::fs::write(&path, source).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let mut registry = EngineRegistry::new();
@@ -154,7 +154,7 @@ fn splice_only_registry() -> Arc<EngineRegistry> {
 async fn preview(dir: &Path, source: &str, record: &Record) -> String {
     let path = dir.join("doc.qmd");
     std::fs::write(&path, source).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let doc_info = DocumentInfo::from_path(&path);
@@ -246,7 +246,7 @@ impl PipelineObserver for StalenessObserver {
 async fn splice_report(dir: &Path, source: &str, record: &Record) -> serde_json::Value {
     let path = dir.join("doc.qmd");
     std::fs::write(&path, source).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let observer = Arc::new(StalenessObserver::default());
@@ -386,7 +386,7 @@ async fn a_knitr_labeled_cell_hashes_the_same_at_record_and_splice_time() {
 /// Whether `record` is stale against the document now on disk in `dir`, judged the way the
 /// preview watcher does: the masked, overlay-free pre-engine inputs, no engine loaded.
 async fn stale_now(dir: &Path, record: &Record) -> bool {
-    let path = dir.join("doc.qmd").canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&dir.join("doc.qmd")).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let source = compute_source_inputs(&path, &project, runtime)
@@ -514,7 +514,7 @@ async fn record_splice_matches_legacy_splice_on_the_jupyter_fixtures() {
             std::fs::read_to_string(fixtures().join(format!("jupyter-record-shadow/{name}.qmd")))
                 .unwrap();
         std::fs::write(&path, &source).unwrap();
-        let path = path.canonicalize().unwrap();
+        let path = quarto_system_runtime::canonicalize(&path).unwrap();
 
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
@@ -604,7 +604,7 @@ impl ExecutionEngine for CountingEngine {
 async fn guest_preview(dir: &Path, source: &str, record: &Record) -> (String, usize) {
     let path = dir.join("doc.qmd");
     std::fs::write(&path, source).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let doc_info = DocumentInfo::from_path(&path);

@@ -19,7 +19,7 @@ const REFS_BIB: &str = "@article{doe2020,\n  author = {Doe, Jane},\n  title = {A
 /// HTML and return the output.
 fn render_html(frontmatter: &str, body: &str) -> String {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let input_path = project_dir.join("index.qmd");
     std::fs::write(
         &input_path,

@@ -78,7 +78,7 @@ const KATEX_AUTO_RENDER_SENTINEL: &str = "renderMathInElement";
 #[test]
 fn mathml_method_is_ignored_for_docx() {
     let temp = TempDir::new().unwrap();
-    let project_dir = temp.path().canonicalize().unwrap();
+    let project_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let qmd_path = project_dir.join("doc.qmd");
     write_file(
         &qmd_path,

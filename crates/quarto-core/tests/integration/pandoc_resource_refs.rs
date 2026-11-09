@@ -30,7 +30,7 @@ struct Fixture {
 
 fn fixture() -> Fixture {
     let dir = scratch();
-    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let root = quarto_system_runtime::canonicalize(dir.path()).unwrap();
     let proj = root.join("proj");
     std::fs::create_dir_all(&proj).unwrap();
     Fixture {

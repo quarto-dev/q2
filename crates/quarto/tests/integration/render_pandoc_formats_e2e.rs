@@ -26,7 +26,7 @@ fn write_file(path: &Path, contents: &str) {
 }
 
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+    quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 /// Run `q2 render <args...>` from `cwd`. Returns the exit status and

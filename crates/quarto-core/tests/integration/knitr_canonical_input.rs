@@ -54,7 +54,7 @@ async fn record(engine_name: &'static str, doc: &str) -> Recorded {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("doc.qmd");
     std::fs::write(&path, doc).unwrap();
-    let path = path.canonicalize().unwrap();
+    let path = quarto_system_runtime::canonicalize(&path).unwrap();
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(&path, runtime.as_ref()).unwrap();
     let seen = Arc::new(Mutex::new(Vec::new()));
