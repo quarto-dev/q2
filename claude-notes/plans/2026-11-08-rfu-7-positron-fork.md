@@ -63,7 +63,7 @@ checked out in other worktrees).
       "q2 too old" detection (an older q2 has no `convert`, so it exits 2 on a missing `--to`) and add a vitest for it.
       The fork\'s e2e (`warmJuliaServer`, about line 17 of `quarto-render-and-push.test.ts`) also calls `record
       export-positron` and needs the same change. Verify against the real `target/debug/q2`.
-- [ ] **The extended raw-record experiment** (carried over from the Phase A work): extend the raw-record experiment to the
+- [x] **The extended raw-record experiment** (carried over from the Phase A work): extend the raw-record experiment to the
       two shapes it did not cover and that the export still skips for a stated reason: a **fallback cell** (a
       `text/x-quarto-markdown` output, from a knitr chunk the structured route cannot map, or a LaTeX target) and a
       **marimo** document. Playwright. Write the result as a note in the q2 repository,
@@ -124,7 +124,8 @@ warm-up call; cache location through `_positronQuarto.getOutputCacheDir` (a Posi
 review); R e2e; commands 2 and 3 pass under a non-default profile. The profile failure was the harness: its palette
 helper uses a `Cmd+J E` keybinding that only the default profile has.
 
+**Raw-record experiment:** ran; keep the two export skips ([note](../research/2026-11-09-rfu-7-raw-record-experiment.md)).
+
 **Not done (this plan stays `in-progress`):**
 
-- The raw-record experiment (fallback cell, marimo). It needs the `q2spike.pushRaw` helper, which lives only in another session's scratchpad.
 - The `[Gordon]` box: someone watches the R and Julia e2e once.

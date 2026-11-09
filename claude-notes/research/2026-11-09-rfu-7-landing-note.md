@@ -6,7 +6,7 @@ description: 'The fork branch and its commits, what ran under Playwright, what a
 
 **Plan:** [RFU-7](../plans/2026-11-08-rfu-7-positron-fork.md) \
 **Fork:** `/Users/gordon/src/positron-riu6-a`, branch `q2/rfu-7-demo-followups`, cut from `spike/riu-6-phase-a` at `99aa72fcb4`.
-Seven commits, local only. Nothing was pushed and no other fork branch was touched.
+Eight commits, local only. Nothing was pushed and no other fork branch was touched.
 
 ## Fork commits
 
@@ -19,6 +19,7 @@ Seven commits, local only. Nothing was pushed and no other fork branch was touch
 | `2821b5302b` | e2e: R render-and-push test, and a non-default-profile test (fixme) |
 | `dd1132bbdb` | e2e: the non-default-profile test opens the palette with the standard shortcut |
 | `7251378ab2` | e2e: untitled, q2-too-old and dirty-document cases, and command 1 on R spans |
+| `18e1bdfacb` | e2e: raw-record experiment for knitr fallback cells and marimo |
 
 **For Gordon to review:** `4cbd86bcb4` changes Positron core, not just the extension. It adds the internal command
 `_positronQuarto.getOutputCacheDir` (in `quartoPushOutputs.ts` and `quartoOutputCacheService.ts`), so that command 3
@@ -42,7 +43,7 @@ person has watched any of these runs yet.
 | Dirty document: the saved-file note appears, and the saved file's outputs still arrive | Playwright | pass |
 | Command 1 on R spans (`inline_exprs_r.qmd`) | Playwright | pass (2 values, 42 and 3) |
 | Command 1 on Julia spans | not run | Positron has no Julia kernel in this build, so there is nothing for the command to run on |
-| Raw-record experiment (fallback cell, marimo) | not run | see below |
+| Raw-record experiment (fallback cell, marimo) | Playwright | ran; both shapes show raw markdown or an encoded payload, see below |
 
 All runs used `target/debug/q2` built from this branch.
 
@@ -71,11 +72,13 @@ Nothing in this session. Gordon saw stray "E" characters land in the document du
 appear in the last run. Gordon said to ignore them while they cause no trouble, and I left them alone and did not
 investigate.
 
-## Raw-record experiment: not run
+## Raw-record experiment
 
-The Phase A spike depends on another session's `q2spike.pushRaw` helper extension, which exists only in that session's
-scratchpad. I did not rebuild it. The two export skips (fallback cell, marimo) stay as they are, and I make no
-recommendation about lifting them.
+Ran under Playwright with a rebuilt `q2spike.pushRaw` helper. The push reports every cell matched, but the fallback
+cells and the marimo cells show raw markdown source or a base64 payload instead of outputs. **Recommendation: keep the
+two export skips.** Details, fixtures, the helper source and the run recipe are in the
+[raw-record experiment note](2026-11-09-rfu-7-raw-record-experiment.md). The helper is not committed to the fork
+because its commit hook rejects new `.js` files; the test is committed (`18e1bdfacb`).
 
 ## Fork environment incidents
 
