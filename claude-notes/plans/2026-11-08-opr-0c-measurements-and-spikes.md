@@ -95,3 +95,9 @@ Not done: figure file names, the cache splice through q2 and its pinned test, th
 working marimo run. Surprises: the recorded Julia route leaves `fig-subcap` group references unresolved where the plain
 route resolves them; the shared Julia server failed every render for several minutes after a disk-full event, then
 recovered (my 100-cell rows were rerun after).
+
+Follow-up (2026-11-09, lane D): finished the four "not done" items in the measurements note, product code unchanged,
+status stays complete. Marimo ran (the first try used the wrong cell class and no extension; the repo's e2e passes 8/8).
+Figure files: the two Julia routes name them differently and differ in the output-div class once a cell emits a bare PNG.
+Stored notebook: only the `fig-subcap` group is unresolved on q2, not all three. Cache through q2: the spike's rule alone
+makes the splice drop the record (3 of 5 units), so OPR-7b must also accept unrecorded units; the pinned test passes.
