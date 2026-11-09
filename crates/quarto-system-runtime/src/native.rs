@@ -242,6 +242,18 @@ impl SystemRuntime for NativeRuntime {
         {
             fs::create_dir_all(parent)?;
         }
+        // Pass-2 renders pages on rayon workers, and every page copies the same
+        // shared resources (a site stylesheet, a logo) to the same destination.
+        // Windows opens the destination exclusively, so two concurrent copies to one
+        // path fail with ERROR_SHARING_VIOLATION (os error 32); Unix just overwrites.
+        // Serialize copies there. They are short, and the lock is never held across
+        // anything but the copy itself.
+        let _serialized = cfg!(windows).then(|| {
+            static COPY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+            COPY_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+        });
         fs::copy(src, dst)?;
         Ok(())
     }
@@ -835,6 +847,33 @@ mod tests {
 
         assert!(dst.exists());
         assert_eq!(fs::read_to_string(&dst).unwrap(), "original content");
+    }
+
+    /// Pages rendered in parallel copy the same shared resource to the same
+    /// destination; every copy must succeed (on Windows an unserialized copy fails
+    /// with a sharing violation).
+    #[test]
+    fn test_concurrent_file_copies_to_one_destination_succeed() {
+        let temp = TempFileTempDir::new().unwrap();
+        let src = temp.path().join("shared.css");
+        let dst = temp.path().join("_site").join("shared.css");
+        fs::write(&src, "a { color: red }\n".repeat(4096)).unwrap();
+        let rt = std::sync::Arc::new(runtime());
+
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let (rt, src, dst) = (rt.clone(), src.clone(), dst.clone());
+                std::thread::spawn(move || {
+                    for _ in 0..25 {
+                        rt.file_copy(&src, &dst).expect("concurrent copy succeeds");
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        assert_eq!(fs::read(&dst).unwrap(), fs::read(&src).unwrap());
     }
 
     #[test]
