@@ -48,6 +48,16 @@ impl Default for Variant {
 }
 
 fn build(doc: &str, variant: &Variant) -> (Record, Vec<Unit>) {
+    build_patched(doc, variant, |_| {})
+}
+
+/// [`build`], with `patch` applied to the engine\'s record before it is coalesced (how the
+/// Julia mapping adds `quarto_attrs` after `RecordBuilder::finish`).
+fn build_patched(
+    doc: &str,
+    variant: &Variant,
+    patch: impl FnOnce(&mut crate::record::EngineRecord),
+) -> (Record, Vec<Unit>) {
     let mut units = scan_units(doc);
     let texts = AuthorTexts::from_scanned(&units);
     fill_ids(&mut units, &texts).unwrap();
@@ -66,7 +76,7 @@ fn build(doc: &str, variant: &Variant) -> (Record, Vec<Unit>) {
         )
         .unwrap();
     }
-    let entry = b
+    let mut entry = b
         .finish(EngineEntryInput {
             can_freeze: true,
             owned_languages: vec!["python".into()],
@@ -74,6 +84,7 @@ fn build(doc: &str, variant: &Variant) -> (Record, Vec<Unit>) {
             ..Default::default()
         })
         .unwrap();
+    patch(&mut entry);
     let mut record = coalesce(&[entry], &units).unwrap();
     record.metadata.quarto_overlay = variant.overlay.clone();
     (record, units)
@@ -295,4 +306,55 @@ fn an_extra_per_output_metadata_key_round_trips_and_moves_no_key() {
         "and the bytes are stable"
     );
     assert_eq!(keys(&base), keys(&back), "no key reads output metadata");
+}
+
+/// OPR-7f: `quarto_attrs` (on a cell and on an output) are display data. They survive a write
+/// and read and a coalesce unchanged, move no matching, staleness or reuse key (the unit hash
+/// is computed from kind, language, code, options and attribute tail, never from the cell), and
+/// a record without them reads as before.
+#[test]
+fn quarto_attrs_round_trip_and_move_no_key() {
+    let (base, _) = build(DOC, &Variant::default());
+    let cell_attrs =
+        json!({"id": "cell-0", "classes": ["extra"], "attributes": {"execution_count": "1"}});
+    let output_attrs = json!({"classes": ["cell-output"]});
+    let (with_attrs, _) = build_patched(DOC, &Variant::default(), |entry| {
+        let cell = &mut entry.cells[0];
+        cell.metadata
+            .extra
+            .insert("quarto_attrs".into(), cell_attrs.clone());
+        cell.outputs = vec![json!({
+            "output_type": "display_data",
+            "data": {"text/plain": "<Figure>"},
+            "metadata": {"quarto_attrs": output_attrs.clone()}
+        })];
+    });
+
+    // They survived the coalesce.
+    assert_eq!(
+        with_attrs.cells[0].metadata.extra["quarto_attrs"],
+        cell_attrs
+    );
+    assert_eq!(
+        with_attrs.cells[0].outputs[0]["metadata"]["quarto_attrs"],
+        output_attrs
+    );
+    // No key moved, including the cell\'s own unit hash.
+    assert_eq!(keys(&base), keys(&with_attrs));
+    assert_eq!(
+        base.cells[0].metadata.quarto_exec_hash,
+        with_attrs.cells[0].metadata.quarto_exec_hash
+    );
+
+    // They round-trip through write and read, and the bytes are stable.
+    let bytes = write_record(&with_attrs).unwrap();
+    let back = read_record(&bytes).unwrap();
+    assert_eq!(back, with_attrs);
+    assert_eq!(back.cells[0].metadata.extra["quarto_attrs"], cell_attrs);
+    assert_eq!(write_record(&back).unwrap(), bytes);
+
+    // A record without them reads as today: no key appears.
+    let plain = read_record(&write_record(&base).unwrap()).unwrap();
+    assert!(!plain.cells[0].metadata.extra.contains_key("quarto_attrs"));
+    assert!(!write_record(&base).unwrap().contains("quarto_attrs"));
 }

@@ -30,6 +30,14 @@ formats = ["html"]
 note = "the same group case from a stored notebook (bd-gbaykhth)"
 
 [[document]]
+name = "julia/presentation-attrs"
+dir = "julia/presentation-attrs"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "OPR-7f: an unlabeled cell after prose, a labeled figure cell, two figures, a print before a figure and a value; a hardcoded PNG, no Plots. Wrapper id, execution_count, figure file names and the figure output class must agree"
+
+[[document]]
 name = "julia/plot-website"
 dir = "julia/plot-website"
 file = "plot.qmd"

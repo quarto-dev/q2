@@ -85,6 +85,8 @@ mod ts_engine;
 
 // EXR-7: the TS wire's unit list and notebook-to-record mapping.
 #[cfg(not(target_arch = "wasm32"))]
+mod ts_presentation;
+#[cfg(not(target_arch = "wasm32"))]
 mod ts_record;
 
 // File-backed test engine for exercising multi-engine sequencing

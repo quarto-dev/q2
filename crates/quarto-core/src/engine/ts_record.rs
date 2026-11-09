@@ -31,6 +31,7 @@ use serde_json::{Value, json};
 
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::diagnostics::{EngineRecordProblem, engine_record_diagnostic};
+use crate::engine::ts_presentation::presentation_for;
 use crate::engine::ts_protocol::{TsAlignment, TsCoverage, TsRecordInfo, TsUnit, TsUnitKind};
 use crate::engine::units::{Unit, line_at, locate_units, view_for_engine};
 use crate::presenter::knitr_inputs::{EXPRESSION_STARTS_KEY, OUTPUT_ANCHORS_KEY, OUTPUT_KINDS_KEY};
@@ -86,6 +87,11 @@ pub(super) fn wire_units(input: &str, ctx: &ExecutionContext) -> Option<Vec<TsUn
 
 /// One cell of the engine's notebook, reduced to what core takes from it.
 struct NotebookCell {
+    /// The raw 0-based position among **all** the notebook\'s cells (OPR-7f: the wrapper id).
+    index: usize,
+    /// For a code cell, its 1-based position among the notebook\'s code cells (OPR-7f: the
+    /// figure file name); 0 for any other cell.
+    code_ordinal: usize,
     unit_id: Option<String>,
     is_code: bool,
     result: UnitResult,
@@ -244,6 +250,7 @@ fn read_engine_notebook(nb: &Value) -> Result<Vec<NotebookCell>, String> {
         .and_then(|m| m.get("kernelspec"))
         .and_then(|k| k.get("name"))
         .and_then(Value::as_str);
+    let mut code_cells = 0usize;
     cells
         .iter()
         .enumerate()
@@ -276,10 +283,16 @@ fn read_engine_notebook(nb: &Value) -> Result<Vec<NotebookCell>, String> {
                 }
                 _ => None,
             };
+            let is_code = cell.get("cell_type").and_then(Value::as_str) == Some("code");
+            if is_code {
+                code_cells += 1;
+            }
             Ok(NotebookCell {
+                index: i,
+                code_ordinal: if is_code { code_cells } else { 0 },
                 quarto,
                 unit_id: meta_str("quarto_cell_id"),
-                is_code: cell.get("cell_type").and_then(Value::as_str) == Some("code"),
+                is_code,
                 source: match cell.get("source") {
                     Some(Value::String(s)) => s.clone(),
                     Some(Value::Array(lines)) => {
@@ -321,6 +334,8 @@ struct QnrResult {
     /// The cell's capture facts; `None` for a span and for an expanded cell, whose outputs are
     /// the expansions' and so do not line up with one cell's anchors.
     facts: Option<CaptureFacts>,
+    /// The cell\'s `quarto_attrs` for the wrapper (OPR-7f); `None` for a span and an expanded cell.
+    attrs: Option<Value>,
 }
 
 /// Attach the `m`-th expansion of a unit to its result, as extra outputs. A marker
@@ -381,6 +396,14 @@ fn build_record(
     let mut pairs: Vec<(usize, UnitResult)> = Vec::new();
     // The capture facts of the cells that carried them, by stage unit index.
     let mut facts: BTreeMap<usize, CaptureFacts> = BTreeMap::new();
+    // The wrapper `quarto_attrs` of the annotated cells, by stage unit index (OPR-7f).
+    let mut attrs: BTreeMap<usize, Value> = BTreeMap::new();
+    let stem = ctx
+        .source_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("document")
+        .to_string();
     match info.alignment {
         TsAlignment::Ids => {
             let expected = owned.iter().flatten().count();
@@ -458,12 +481,15 @@ fn build_record(
                         // One of the expansions of the unit just seen.
                         Some(m) if expanding => {
                             let unit = results.last_mut().expect("`expanding` follows a push");
-                            attach_expansion(
-                                &mut unit.result,
-                                m,
+                            let shown = presentation_for(
+                                cell.index,
+                                cell.code_ordinal,
                                 &cell.source,
+                                cell.result.execution_count,
                                 &cell.result.outputs,
+                                &stem,
                             );
+                            attach_expansion(&mut unit.result, m, &cell.source, &shown.outputs);
                         }
                         Some(m) => {
                             return Err(EngineRecordProblem::Malformed {
@@ -475,13 +501,24 @@ fn build_record(
                         }
                         None => {
                             expanding = q.role.as_deref() == Some("expansion_source");
+                            let shown = presentation_for(
+                                cell.index,
+                                cell.code_ordinal,
+                                &cell.source,
+                                cell.result.execution_count,
+                                &cell.result.outputs,
+                                &stem,
+                            );
+                            let mut result = cell.result.clone();
+                            result.outputs = shown.outputs;
                             results.push(QnrResult {
                                 key: UnitKey {
                                     is_cell: true,
                                     code: cell.source.trim().to_string(),
                                 },
-                                result: cell.result.clone(),
+                                result,
                                 facts: (!expanding).then(|| q.facts.clone()),
+                                attrs: (!expanding).then_some(shown.cell_attrs),
                             });
                         }
                     }
@@ -497,6 +534,7 @@ fn build_record(
                             },
                             result: e.result.clone(),
                             facts: None,
+                            attrs: None,
                         }),
                 );
             }
@@ -511,6 +549,9 @@ fn build_record(
                         pairs.push((index, r.result));
                         if let Some(f) = r.facts {
                             facts.insert(index, f);
+                        }
+                        if let Some(a) = r.attrs {
+                            attrs.insert(index, a);
                         }
                     }
                     next += offset + 1;
@@ -564,6 +605,19 @@ fn build_record(
             .find(|c| c.metadata.quarto_cell_id == id)
         {
             cell.metadata.extra.extend(facts_as_cell_metadata(f));
+        }
+    }
+    // Display data too: `quarto_attrs` is outside the hash, like the facts.
+    for (index, a) in attrs {
+        let Some(id) = unit_id(&ctx.units[index]) else {
+            continue;
+        };
+        if let Some(cell) = record
+            .cells
+            .iter_mut()
+            .find(|c| c.metadata.quarto_cell_id == id)
+        {
+            cell.metadata.extra.insert("quarto_attrs".into(), a);
         }
     }
     Ok(record)
@@ -1396,6 +1450,41 @@ fenced = 1
         assert_eq!(result.record.unwrap().cells.len(), 3);
     }
 
+    /// OPR-7f: the mapping stamps what the plain route would (wrapper id from the raw notebook
+    /// index, figure name from the code-cell ordinal, counts, the figure class), on the record
+    /// cell and its outputs, with the unit hash untouched.
+    #[test]
+    fn julia_record_carries_the_plain_routes_ids_names_and_counts() {
+        let doc = "Prose.\n\n```{julia}\nplot()\n```\n";
+        let plot = json!({"output_type": "display_data",
+            "data": {"image/png": "AAAA", "text/plain": "<Plot>"}, "metadata": {}});
+        let cells = vec![
+            qnr_md(vec![]),
+            qnr_code(1, "julia", 3, "plot()", vec![out("hi\n"), plot], 4),
+        ];
+        let (_ctx, result) = run_doc(doc, cells);
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+        let record = result.record.expect("a record");
+        let cell = &record.cells[0];
+        assert_eq!(cell.metadata.extra["quarto_attrs"]["id"], "cell-1");
+        assert_eq!(
+            cell.metadata.extra["quarto_attrs"]["attributes"]["execution_count"],
+            "4"
+        );
+        // One markdown cell, then the code cell: raw index 1, but its figure is cell-2 and,
+        // after the printed line, output 2.
+        assert_eq!(
+            cell.outputs[1]["metadata"]["quarto_file_path"],
+            "doc_files/figure-html/cell-2-output-2.png"
+        );
+        assert_eq!(
+            cell.outputs[1]["metadata"]["quarto_attrs"]["classes"],
+            json!(["cell-output"])
+        );
+        // The stream output is untouched.
+        assert_eq!(cell.outputs[0], out("hi\n"));
+    }
+
     #[test]
     fn julia_eval_false_cell_is_a_unit_with_no_outputs() {
         let ctx = ctx_for(JDOC, &["julia"], true);
@@ -1770,7 +1859,11 @@ fenced = 1
         let result = presented(&ctx, cells).unwrap();
         let md = &result.markdown;
         // The julia cell is a cell div with its output; the inline span is its value.
-        assert!(md.contains("::: {.cell}"), "{md}");
+        // OPR-7f: with the plain route\'s wrapper id (raw notebook index 1) and count.
+        assert!(
+            md.contains("::: {#cell-1 .cell execution_count='1'}"),
+            "{md}"
+        );
         assert!(md.contains("cell-output-stdout"), "{md}");
         assert!(md.contains("Inline VALUE and"), "{md}");
         // The python cell and span belong to nobody here and stay as they were written.

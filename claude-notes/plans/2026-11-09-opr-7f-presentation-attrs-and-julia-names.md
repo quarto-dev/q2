@@ -2,7 +2,7 @@
 title: 'OPR-7f: engines control the attributes and file names of what the presenter writes'
 date: 2026-11-09
 description: 'Adds one general channel by which an engine tells the presenter which id, classes and attributes to put on a cell wrapper or an output div, and has the Julia mapping use it, together with the existing quarto_file_path, so a recorded Julia render keeps the wrapper id, the output execution count, the figure output class and the figure file names of the plain route. Stops the engine route from writing data-quarto (a q2 annotation that the Quarto 1 attribute forwarding leaks into the HTML, with an absolute path) by adding it to the forwarding exclusion list. Removes all five OPR-7c allowlist entries about Julia markup. Lands before OPR-7d. No change to the Julia runner or engine fork.'
-status: in-progress
+status: complete
 depends-on: [opr-4d, opr-7a, opr-7c]
 lane: C
 ---
@@ -179,41 +179,41 @@ nothing and are unchanged.
 
 ## Checklist (tests first; every box is `[unattended]`)
 
-- [ ] **Presenter tests first** (`presenter/cell.rs` tests, and a golden only if a new fixture is needed): a cell and an
+- [x] **Presenter tests first** (`presenter/cell.rs` tests, and a golden only if a new fixture is needed): a cell and an
       output with `quarto_attrs` get the id, classes and attributes in the grammar\'s order; the prepend case for the figure
       class; precedence (a presenter id wins); collisions ignored; each malformed form (including a trailing backslash, a
       newline, `{{<`, a non-letter class start, a non-ASCII id) is skipped with a note and the rest still renders, checked by
       parsing the emitted markdown; a stream or error output and a bare fence drop the attrs; absent attrs are byte-identical.
-- [ ] **Record tests first:** `quarto_attrs` do not change the unit hash or staleness; they round-trip through `write_record`
+- [x] **Record tests first:** `quarto_attrs` do not change the unit hash or staleness; they round-trip through `write_record`
       and `read_record` and through `coalesce`; a record without them reads as today.
-- [ ] **Splice and preview path:** one test that a spliced cell (`record_splice`) and a CaptureSplice/preview record carry the
+- [x] **Splice and preview path:** one test that a spliced cell (`record_splice`) and a CaptureSplice/preview record carry the
       attrs into the emitted markdown (no hub-client file changes, so no changelog entry; if one does change, add it).
-- [ ] Implement Part A: one validate-and-merge function and one head-builder helper, called from `wrap_cell` (via the new
+- [x] Implement Part A: one validate-and-merge function and one head-builder helper, called from `wrap_cell` (via the new
       `CellOptions` field) and from every output emit site listed above.
-- [ ] **Mapping tests first** (`engine/ts_record.rs`, beside the `JDOC` tests), using the repo\'s fixture notebooks
+- [x] **Mapping tests first** (`engine/ts_record.rs`, beside the `JDOC` tests), using the repo\'s fixture notebooks
       (`julia-presenter-parity/`) as the expected values: the wrapper id uses the raw index and the figure name the code-cell
       ordinal plus one (so `[code]` gives `#cell-0` and `cell-2-output-1`, `[md, md, code]` gives `#cell-2` and
       `cell-2-output-1`); a code_prefix or raw cell counts in the first counter only; a cell that prints then plots gets
       `-output-2`; a labeled cell uses its label; the wrapper and execute_result counts are set; a cell with no figure gets no
       `quarto_file_path`.
-- [ ] **Oracle test** (skips without Julia, using `julia_available()` from `tests/integration/julia_engine_e2e.rs`, as
+- [x] **Oracle test** (skips without Julia, using `julia_available()` from `tests/integration/julia_engine_e2e.rs`, as
       `opr_parity_runner.rs` does): add a `julia/` parity fixture (the committed way to get both routes) and show that the
       figure file names, the wrapper id and attributes, the output execution counts and the figure output class (text, in
       order) are equal and that the only difference left is `data-quarto`, which Part C removes from both. Include an
       unlabeled cell after a markdown cell, a labeled figure cell, a cell with two figures, and a cell that prints before it
       plots.
-- [ ] Implement Part B.
-- [ ] **Part C test first** (`ts-packages/quarto-api/src/jupyter/to-markdown.test.ts`, vitest; the file has no forwarding
+- [x] Implement Part B.
+- [x] **Part C test first** (`ts-packages/quarto-api/src/jupyter/to-markdown.test.ts`, vitest; the file has no forwarding
       case today, R9, read): a cell whose metadata has `quarto: {unit: 1, ...}` produces no `quarto=` attribute, while another
       unknown metadata key and a cell option are still forwarded as attributes (so the feature is unchanged for users). Watch
       it fail, then add the exclusion.
-- [ ] **Rebuild and commit the bundle (R1):** `cargo xtask build-engine-host-bundle`; commit
+- [x] **Rebuild and commit the bundle (R1):** `cargo xtask build-engine-host-bundle`; commit
       `ts-packages/quarto-engine-host-node/dist/engine-host-node.mjs`; confirm `git diff --exit-code` on it is clean after a
       second `npm run bundle -w @quarto/engine-host-node` (the CI freshness gate); then `cargo build --bin q2`.
-- [ ] **Part C through the binary** (after the bundle step): `grep -c data-quarto` on the HTML of a plain `q2 render` of a
+- [x] **Part C through the binary** (after the bundle step): `grep -c data-quarto` on the HTML of a plain `q2 render` of a
       Julia document prints 0, and on the recorded route (harness) prints 0; a Jupyter document with a user-authored unknown
       option still gets its `data-` attribute. Record the invocations and counts.
-- [ ] **Allowlist and harness (R10, read):** remove the five entries and the five names from `RULES`
+- [x] **Allowlist and harness (R10, read):** remove the five entries and the five names from `RULES`
       (`opr_parity_harness.rs:109-118`) and their `apply_rule` arms (`:126-157`). The harness tests that use
       `julia-cell-id` or `julia-figure-names` (the `allowlist()` helper at `~:452-470`, `~:477`, `~:612`, `~:629`, and the
       figure-name and cell-output-class tests) are **rewritten around a surviving rule** (`julia-code-leading-newline`), not
@@ -224,22 +224,22 @@ nothing and are unchanged.
       (`OPR_PARITY_ONLY` is a substring match, `opr_parity_runner.rs:82`). The figure-bearing documents are blockers for other
       causes (Plots scripts, bare-PNG size), so read the diffs for leftover id, name, count and class differences instead of
       counting rows. Do not change any other entry or sign anything: signing is Gordon\'s.
-- [ ] **Stale statements (R11):** correct the epic row (\"four of the 7c Julia allowlist entries\" to five), and note in the
+- [x] **Stale statements (R11):** correct the epic row (\"four of the 7c Julia allowlist entries\" to five), and note in the
       OPR-7d and OPR-8 plans only if 7f lands differently from this plan (7d still says the wrapper has no `id=cell-N` unless
       7c kept it; OPR-8 says Julia figure URLs change at the flip). Correct the `.cell-output` readers in the allowlist reasons
       that are removed with them (they name only the dashboard script; `dashboard/structure.rs:482`, the JATS and Hugo Lua
       filters also read it, none checked for a Julia figure).
-- [ ] **End-to-end through the binary:** render the oracle fixture\'s document (a bare plot, a labeled plot, an unlabeled
+- [x] **End-to-end through the binary:** render the oracle fixture\'s document (a bare plot, a labeled plot, an unlabeled
       cell after prose) on the engine route (`q2 render`) and on the recorded route through the parity harness (the committed
       way; `OPR7A_FORCE` is not in the tree). Read both HTML files; record the invocation and the diff.
-- [ ] `cd hub-client && npm run build:wasm` (the presenter and `record/` are in the WASM; builds only, no hub-client source changes).
-- [ ] Update the execution-record format description if one documents `metadata.quarto` or `quarto_file_path` (grep `docs/`
+- [x] `cd hub-client && npm run build:wasm` (the presenter and `record/` are in the WASM; builds only, no hub-client source changes).
+- [x] Update the execution-record format description if one documents `metadata.quarto` or `quarto_file_path` (grep `docs/`
       and `claude-notes/designs/`); add `quarto_attrs`; user docs stay for OPR-8.
-- [ ] `ts-packages/quarto-api` tests (`npm test -w ts-packages/quarto-api`, the package\'s `vitest run`) and its build
+- [x] `ts-packages/quarto-api` tests (`npm test -w ts-packages/quarto-api`, the package\'s `vitest run`) and its build
       (`npm run build -w ts-packages/quarto-api`) pass; the package\'s tests are wired into CI
       (`ts-test-suite.yml:372-374`, \"Run quarto-api tests\", read); the engine-host-node tests and the bundle freshness gate
       are separate steps (R1).
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (includes the
+- [x] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (includes the
       knitr corpus gate, the presenter goldens and `marimo_engine_e2e::`); the Windows cross-clippy (say if it cannot
       run); `cargo xtask lint`; `q2 render --strict` on this file.
 
@@ -260,4 +260,78 @@ are separate decisions or investigations for Gordon. The channel can carry some 
 
 ## Notes from the run
 
-(Fill in at landing.)
+(Run on 2026-11-09, Lane C, branch `opr/7f-presentation-attrs`.)
+
+**What landed (commits, oldest first):** `engine_attrs` module and presenter wiring (wrapper and every output
+emit site); `PresentNote::EngineAttrsRejected` and the cell step reading the cell\'s `quarto_attrs`; record and
+splice tests; `engine/ts_presentation.rs` (the Julia mapping) wired into `build_record`; the `quarto` exclusion in
+`to-markdown.ts` and the rebuilt, committed bundle; the `julia/presentation-attrs` oracle fixture; the five
+allowlist entries and their rules removed.
+
+**Decisions made while implementing (not in the plan):**
+
+- Engine classes go **after** the presenter\'s on the `.cell` wrapper and **before** them on an output div
+  (`ClassPlacement`).
+- A class may not contain a dot (the grammar allows a dot only in the first class), and a value that starts with
+  whitespace is refused, alongside the plan\'s other refusals.
+- Output-level attrs are read from the output\'s own `metadata.quarto_attrs` at the emit site, not from a parallel
+  vector, so `select_by_kind` cannot drift an index.
+- A refused entry becomes `PresentNote::EngineAttrsRejected { unit, reason }`, reported as a warning (the splice
+  keeps its existing note handling). `present_cell_step` now returns `(markdown, reasons)`.
+- Part B lives in `engine/ts_presentation.rs` and is applied to the QuartoNotebookRunner-annotated notebook branch
+  (`Positional` with `metadata.quarto`), so there is no engine-name test (D8). The label is read from the cell\'s
+  `#| label:` line; `pandocAutoIdentifier` is ported without the accent table (a non-ASCII id is dropped for the
+  file name and refused, with a note, for the id).
+- The figure file name uses the label **after** `asHtmlId` (so `Fig:My Plot` is `figmy-plot` in both the id and
+  the file), which is what the plain route does.
+- `warning: false` is read from the cell\'s own `#|` lines only; the document-level `execute: warning` is not
+  consulted when numbering outputs (`k`). The oracle fixture does not cover it.
+- The wrapper `execution_count` is written quoted (`'1'`) by the presenter and unquoted by the plain route: the
+  same HTML.
+
+**Tests changed on purpose (not weakened):** `ts_record::core_presents_the_record_as_the_markdown` and two
+`ts_engine::handshake_tests` asserted a bare `::: {.cell}`; they now assert `{#cell-N .cell execution_count='1'}`.
+`opr_parity_runner::the_seeded_allowlist_parses...` expects 3 entries (was 8). `julia_engine_e2e::j8_record_row_core_presents_the_output` used
+`data-execution_count` as its "core presented it" marker (the engine wrote it, core did not); core now writes it
+too, so the marker is a bare `<div class="cell">` (an expansion wrapper, which has no id: the R8 limit). The harness tests that used the
+removed rules were rewritten around `julia-code-leading-newline`.
+
+**Ran (evidence):**
+
+- Julia 1.12.7: `OPR_PARITY_ONLY=julia/ OPR_PARITY_REPORT=... cargo nextest run -p quarto-core -E
+  'binary(integration) & test(opr_parity_runner::opr_parity_report)' --no-capture` (about 115 s). 7 identical, 0
+  allowlisted, 8 unallowlisted, 1 same-message failure. I read the `presentation-attrs` diff in full and searched every other `julia/` diff for id, name, count and
+  class lines (`id=`, `cell-N-output-M`, `execution_count`, `cell-output `): **none left**; I did not read each of
+  the other seven diffs end to end, so the causes named below are from the lines I saw. The new `julia/presentation-attrs` document differs only by the print-then-figure cell,
+  where the recorded route splits the code block at the output anchors (the out-of-scope interleaving item).
+  The others are unrelated causes: `capture-facts` (interleaving, `data-prompt` not forwarded, stderr),
+  `docs-index-chunk` (requirejs and jQuery scripts, a widget-dependency gap), `engine-reordering` (ANSI escapes),
+  `fig-subcap` (sub-figure group), `plot-website` (bare PNG size, since fixed by OPR-7h after this run), and
+  `positron-cache`.
+- Not checked through the binary: `data-quarto` on the recorded route (the harness showed no `data-quarto` line
+  in any diff, but I did not grep its HTML), and a Jupyter document with a user-authored unknown option (covered
+  only by the vitest case that keeps `foo='bar'`).
+- Binary: `target/debug/q2 render doc.qmd` on the fixture (copied to the scratchpad): `grep -c data-quarto
+  doc.html` printed **0**; the wrappers read `<div id="cell-1" class="cell" data-execution_count="1">` through
+  `cell-9`; the HTML was read. The recorded route is the harness above.
+- Bundle: `cargo xtask build-engine-host-bundle`, committed; a second `npm run bundle -w @quarto/engine-host-node`
+  left `git diff --exit-code` on the file clean.
+- `cd hub-client && npm run build:wasm` succeeded. No hub-client source changed, so no changelog entry.
+- `ts-packages/quarto-api`: `npm test` and `npm run build` pass (new vitest case failed before the exclusion).
+- `cargo clippy -p quarto-core --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-core --no-fail-fast`
+  after the rebase onto `feature/one-presenter` (OPR-7e/7h landed there): 8205 passed, 36 skipped, 0 failed. The
+  pre-rebase run listed 8189 tests; the 52 more are this plan\'s new tests plus the ones the rebase brought in, and I
+  did not separate the two. The 13 presenter goldens, the knitr corpus gate and the marimo tests are in that run
+  and unchanged (no `.snap` or golden file touched).
+- `q2 render --strict` on this plan and on `engine-api-surface.md`: only the known Q-12-13 listing errors.
+
+**Not done or could not run:**
+
+- The Windows cross-clippy (`--target x86_64-pc-windows-msvc`) cannot run here: `wasmtime` and `aws-lc-sys` compile
+  C for the target and fail from macOS. A Windows user should run `cargo clippy -p quarto-core --all-targets -- -D
+  warnings`. The new code uses no platform API and only forward-slash paths in `quarto_file_path`.
+- `cargo xtask lint` reports one violation, `positron_cache.rs:360` (`metadata-as-str`), in a file this plan did
+  not touch (`git diff feature/one-presenter` on it is empty). Not fixed here.
+- Per-expansion wrapper ids (R8) are not handled, as planned; no oracle fixture hit it.
+- Nothing signed, nothing pushed, no fork touched.
+

@@ -3781,7 +3781,9 @@ mod handshake_tests {
         let (result, offered) = run("mock", true, &ctx(true, false));
         assert_eq!(offered, Some(TsPresentedBy::Core));
         assert!(
-            result.markdown.contains("::: {.cell}"),
+            result
+                .markdown
+                .contains("::: {#cell-0 .cell execution_count='1'}"),
             "{}",
             result.markdown
         );
@@ -3813,7 +3815,9 @@ mod handshake_tests {
         let (result, offered) = run("mock", true, &ctx(false, true));
         assert_eq!(offered, Some(TsPresentedBy::Core));
         assert!(
-            result.markdown.contains("::: {.cell}"),
+            result
+                .markdown
+                .contains("::: {#cell-0 .cell execution_count='1'}"),
             "{}",
             result.markdown
         );

@@ -60,6 +60,14 @@ pub enum PresentNote {
         /// Index into the `units` the driver was given.
         unit: usize,
     },
+    /// An engine\'s `quarto_attrs` entry the attribute grammar refuses (a bad id, class, key or
+    /// value) was skipped; the rest of the cell is presented (OPR-7f).
+    EngineAttrsRejected {
+        /// Index into the `units` the driver was given.
+        unit: usize,
+        /// Why the entry was refused.
+        reason: String,
+    },
     /// A cell's image output could not be used (a malformed payload or a failed write),
     /// so the figure is missing from the page (`Q-18-11`).
     ImageUnusable {
@@ -144,6 +152,8 @@ pub struct UnitReport {
     pub unit: usize,
     pub outcome: UnitOutcome,
     pub image_failures: Vec<super::figures::FigureFailure>,
+    /// One reason per engine `quarto_attrs` entry the grammar refused (OPR-7f).
+    pub attr_rejections: Vec<String>,
 }
 
 /// What [`present_units`] reads, besides the matched pairs.
@@ -181,6 +191,7 @@ pub fn present_units(
             unit: ui,
             outcome,
             image_failures: Vec::new(),
+            attr_rejections: Vec::new(),
         };
         // A fallback unit holds finished markdown: splice it in, never present it.
         if let Some((markdown, stored)) = stored_markdown(cell) {
@@ -223,11 +234,13 @@ pub fn present_units(
                     fig,
                 );
                 let image_failures = fig.take_failures();
+                let mut attr_rejections = Vec::new();
                 let outcome = match presented {
                     Err(message) => {
                         UnitOutcome::Error(PresentError::InvalidCellOptions { unit: ui, message })
                     }
-                    Ok(rendered) => {
+                    Ok((rendered, rejected)) => {
+                        attr_rejections = rejected;
                         // `replacement` carries the container prefix and indent onto every line;
                         // the rendered text keeps its own trailing newlines, as it always did.
                         // A header `indent` option is deliberately not applied here (KNR-3 slice
@@ -251,6 +264,7 @@ pub fn present_units(
                     unit: ui,
                     outcome,
                     image_failures,
+                    attr_rejections,
                 });
             }
             Unit::Inline(u) => {
@@ -342,6 +356,12 @@ pub fn present_document(
             UnitOutcome::Skip(SkipReason::EmptyValue) => {}
             UnitOutcome::Error(e) => return Err(e),
         }
+        notes.extend(
+            report
+                .attr_rejections
+                .into_iter()
+                .map(|reason| PresentNote::EngineAttrsRejected { unit, reason }),
+        );
         notes.extend(
             report
                 .image_failures
@@ -1167,6 +1187,37 @@ print(1)
             out.notes[0],
             PresentNote::ImageUnusable { unit: 1, .. }
         ));
+    }
+
+    // ── OPR-7f: engine attributes the grammar refuses are noted per unit ──
+
+    #[test]
+    fn a_refused_engine_attribute_is_noted_against_its_unit_and_the_rest_renders() {
+        let text = "```{python}\nplot()\n```\n";
+        let outputs = vec![json!({
+            "output_type": "display_data",
+            "data": {"image/png": PNG},
+            "metadata": {"quarto_attrs": {"id": "ok-id", "classes": ["1bad"]}}
+        })];
+        let (out, _) = present(text, &[(0, outputs)], None);
+        let [PresentNote::EngineAttrsRejected { unit, reason }] = out.notes.as_slice() else {
+            panic!("expected one EngineAttrsRejected note, got {:?}", out.notes);
+        };
+        assert_eq!(*unit, 0);
+        assert!(reason.contains("1bad"), "{reason}");
+        assert!(out.markdown.contains("#ok-id"), "{}", out.markdown);
+    }
+
+    #[test]
+    fn valid_engine_attributes_raise_no_note() {
+        let text = "```{python}\nplot()\n```\n";
+        let outputs = vec![json!({
+            "output_type": "display_data",
+            "data": {"image/png": PNG},
+            "metadata": {"quarto_attrs": {"id": "ok-id"}}
+        })];
+        let (out, _) = present(text, &[(0, outputs)], None);
+        assert!(out.notes.is_empty(), "{:?}", out.notes);
     }
 
     // ── OPR-1b: the outcome type and `apply_edits` ──

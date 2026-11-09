@@ -16,6 +16,8 @@
 //! byte-identically to a cell without the layer.
 
 use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
+
+use super::engine_attrs::{ClassPlacement, EngineAttrs, build_head};
 use serde_json::Value;
 use yaml_rust2::Yaml;
 
@@ -212,6 +214,9 @@ pub struct CellOptions {
     /// Parallel to the cell\'s outputs: which of them is a message or a warning. Empty when
     /// unknown (a Jupyter cell).
     output_kinds: Vec<Option<OutputKind>>,
+    /// OPR-7f: what the engine said about the `.cell` wrapper (`quarto_attrs` on the record
+    /// cell). Display-only; dropped when the wrapper is not written.
+    engine_attrs: Option<EngineAttrs>,
     /// `classes`: extra classes of the cell div (a leading dot is kept, nothing is split).
     classes: Vec<String>,
     panel: Option<String>,
@@ -434,6 +439,7 @@ impl CellOptions {
             class_warning: words("class.warning"),
             attr_warning: get("attr.warning"),
             output_kinds: Vec::new(),
+            engine_attrs: None,
             classes: get("classes"),
             fig_column: string("fig-column"),
             tbl_column: string("tbl-column"),
@@ -519,17 +525,32 @@ impl CellOptions {
 
     /// Text appended inside the `.cell` div's braces (` .column-margin keep-hidden='true'`).
     pub fn cell_div_attrs(&self) -> String {
+        let (classes, pairs) = self.cell_div_parts();
         let mut out = String::new();
+        for c in &classes {
+            out.push_str(&format!(" .{c}"));
+        }
+        for p in &pairs {
+            out.push_str(&format!(" {p}"));
+        }
+        out
+    }
+
+    /// The presenter\'s own wrapper classes (after `.cell`, without the dot) and key/value
+    /// pairs (`key=text`), in the order [`Self::cell_div_attrs`] writes them.
+    fn cell_div_parts(&self) -> (Vec<String>, Vec<String>) {
+        let mut classes = Vec::new();
+        let mut pairs = Vec::new();
         // hooks.R order: `classes`, panel, column, `fig-column`, `tbl-column`, the three
         // caption locations. A leading dot on a user class is kept, not doubled.
         for c in &self.classes {
-            out.push_str(&format!(" .{}", c.strip_prefix('.').unwrap_or(c)));
+            classes.push(c.strip_prefix('.').unwrap_or(c).to_string());
         }
         if let Some(p) = &self.panel {
-            out.push_str(&format!(" .panel-{p}"));
+            classes.push(format!("panel-{p}"));
         }
         for c in &self.column {
-            out.push_str(&format!(" .column-{c}"));
+            classes.push(format!("column-{c}"));
         }
         for (prefix, value) in [
             ("fig-column", &self.fig_column),
@@ -539,19 +560,46 @@ impl CellOptions {
             ("tbl-cap-location", &self.tbl_cap_location),
         ] {
             if let Some(v) = value {
-                out.push_str(&format!(" .{prefix}-{v}"));
+                classes.push(format!("{prefix}-{v}"));
             }
         }
         for (key, value) in &self.layout {
-            out.push_str(&format!(" {key}=\"{value}\""));
+            pairs.push(format!("{key}=\"{value}\""));
         }
         if let Some(v) = &self.keep_hidden {
-            out.push_str(&format!(" keep-hidden='{v}'"));
+            pairs.push(format!("keep-hidden='{v}'"));
         }
         for (key, value) in &self.unknown {
-            out.push_str(&format!(" {key}='{value}'"));
+            pairs.push(format!("{key}='{value}'"));
         }
-        out
+        (classes, pairs)
+    }
+
+    /// Attach what the engine said about the `.cell` wrapper (OPR-7f).
+    pub fn with_engine_attrs(mut self, attrs: EngineAttrs) -> Self {
+        self.engine_attrs = Some(attrs).filter(|a| !a.is_empty());
+        self
+    }
+
+    /// The text inside the braces of the `.cell` wrapper: the presenter\'s id (a `tbl-` or
+    /// `fig-` label), `.cell` and its classes and pairs, then the engine\'s entries merged by
+    /// [`build_head`].
+    pub fn cell_div_head(&self) -> String {
+        let label = if self.label_on_cell() {
+            self.figure_label.as_ref()
+        } else {
+            self.table_label.as_ref()
+        };
+        let (rest, pairs) = self.cell_div_parts();
+        let mut classes = vec!["cell".to_string()];
+        classes.extend(rest);
+        build_head(
+            label.map(String::as_str),
+            &classes,
+            &pairs,
+            self.engine_attrs.as_ref(),
+            ClassPlacement::After,
+        )
     }
 
     /// `#fig-label ` for an output div, or nothing (hooks.R `output_label`).

@@ -16,41 +16,6 @@
 # (bd-gbaykhth, bd-au5gts6e; OPR-7d decision 3), not an allowlist candidate.
 
 [[entry]]
-name = "julia wrapper id"
-rule = "julia-cell-id"
-scope = "julia/"
-status = "proposed"
-reason = "the engine route stamps id=\"cell-N\" (N from the unit ordinal) on the cell wrapper; the presenter does not. Nothing in crates/, ts-packages/, hub-client/src or resources/ reads it (OPR-0c, grep)"
-
-[[entry]]
-name = "julia wrapper data-quarto"
-rule = "julia-data-quarto"
-scope = "julia/"
-status = "proposed"
-reason = "the engine route stamps data-quarto (unit, language, absolute file path, line) on the cell wrapper; the presenter does not. Nothing reads it (OPR-0c, grep)"
-
-[[entry]]
-name = "julia output data-execution_count"
-rule = "julia-data-execution-count"
-scope = "julia/"
-status = "proposed"
-reason = "the engine route stamps data-execution_count on the output div; the presenter does not. Nothing reads it (OPR-0c, grep)"
-
-[[entry]]
-name = "julia figure output class"
-rule = "julia-cell-output-class"
-scope = "julia/"
-status = "proposed"
-reason = "the presenter drops the generic cell-output class from a figure's output div, to match q2-knitr's figure hook (presenter/cell.rs). The only reader of .cell-output is resources/js/dashboard/quarto-dashboard.js:49, which restyles iTables HTML tables, not figures (OPR-0c)"
-
-[[entry]]
-name = "julia figure file names"
-rule = "julia-figure-names"
-scope = "julia/"
-status = "proposed"
-reason = "the two routes name figure files from different counters (cell-2-output-1.png plain, cell-1-output-1.png recorded): the plain number comes from the unit ordinal, which counts prose, the presenter's counts cells. Quarto 1 matches the plain name for an unlabeled cell only (OPR-0c), so every figure URL changes at the flip"
-
-[[entry]]
 name = "knitr empty cell wrapper"
 rule = "knitr-empty-cell-wrapper"
 scope = "knitr"

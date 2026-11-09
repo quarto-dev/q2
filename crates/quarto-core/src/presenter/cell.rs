@@ -12,6 +12,7 @@
 
 use quarto_source_map::SourceInfo;
 
+use super::engine_attrs::{ClassPlacement, EngineAttrs, build_head};
 use super::figures::FigureSink;
 use super::options::{CellOptions, FenceKind, OutputKind};
 use super::output::{CellOutput, CellResult, ExecuteStatus, extract_text_content};
@@ -358,12 +359,47 @@ fn included_graphic(metadata: &serde_json::Value) -> Option<(String, Option<f64>
 
 /// A figure\'s markdown in its output div, or bare for a linked image under `results = "asis"`
 /// (hooks.R) and for any figure under Jupyter `output: asis` (`jupyter.ts`).
-fn push_figure(output: &mut String, options: &CellOptions, index: usize, md: &str) {
+fn push_figure(
+    output: &mut String,
+    options: &CellOptions,
+    index: usize,
+    md: &str,
+    cell_output: &CellOutput,
+) {
     if options.bare_linked_image(index) || options.output_asis() {
         output.push_str(&format!("\n{md}\n"));
     } else {
-        output.push_str(&format!("\n::: {{.cell-output-display}}\n\n{md}\n\n:::\n"));
+        let head = output_div_head(None, ".cell-output-display", cell_output);
+        output.push_str(&format!("\n::: {{{head}}}\n\n{md}\n\n:::\n"));
     }
+}
+
+/// The engine\'s `quarto_attrs` for an output, when it is a kind that keeps metadata
+/// (display_data, execute_result). Entries the grammar refuses were already reported by the
+/// cell step; here they are skipped silently.
+fn output_engine_attrs(output: &CellOutput) -> Option<EngineAttrs> {
+    match output {
+        CellOutput::DisplayData { metadata, .. } | CellOutput::ExecuteResult { metadata, .. } => {
+            EngineAttrs::from_holder(metadata).map(|(a, _)| a)
+        }
+        CellOutput::Stream { .. } | CellOutput::Error { .. } => None,
+    }
+}
+
+/// The head of an output div: the presenter\'s id (if any) and space-separated `.class`
+/// text, merged with the output\'s engine attributes (engine classes first).
+fn output_div_head(id: Option<&str>, classes: &str, output: &CellOutput) -> String {
+    let classes: Vec<String> = classes
+        .split_whitespace()
+        .map(|c| c.trim_start_matches('.').to_string())
+        .collect();
+    build_head(
+        id,
+        &classes,
+        &[],
+        output_engine_attrs(output).as_ref(),
+        ClassPlacement::Before,
+    )
 }
 
 /// The `width` and `height` a stored output carries for its image (`metadata[mime]`, the
@@ -399,9 +435,8 @@ pub(crate) fn is_plot_output(o: &CellOutput) -> bool {
 fn wrap_cell(options: &CellOptions, body: &str) -> String {
     if options.needs_cell_div() {
         format!(
-            "::: {{{}.cell{}}}\n\n{body}\n{}:::\n",
-            options.cell_div_id(),
-            options.cell_div_attrs(),
+            "::: {{{}}}\n\n{body}\n{}:::\n",
+            options.cell_div_head(),
             options.cell_caption()
         )
     } else {
@@ -734,6 +769,7 @@ fn fenced_output_div(
     text: &str,
     fence_attrs: Option<String>,
     options: &CellOptions,
+    cell_output: Option<&CellOutput>,
 ) -> String {
     let ticks = ticks_for_code(text);
     let open = fence_attrs.map_or_else(|| ticks.clone(), |a| format!("{ticks}{{{a}}}"));
@@ -742,16 +778,26 @@ fn fenced_output_div(
         // Jupyter `output: asis` writes every output without its div (`jupyter.ts`).
         return format!("\n{open}\n{text}\n{ticks}\n");
     }
-    format!("\n::: {{{classes}}}\n\n{open}\n{text}\n{ticks}\n\n:::\n")
+    let head = match cell_output {
+        Some(o) => output_div_head(None, classes, o),
+        None => classes.to_string(),
+    };
+    format!("\n::: {{{head}}}\n\n{open}\n{text}\n{ticks}\n\n:::\n")
 }
 
 /// `body` in a `::: {<classes>}` output div, or bare under Jupyter `output: asis`, which
 /// writes no output div (`jupyter.ts`).
-fn output_div(classes: &str, body: &str, options: &CellOptions) -> String {
+fn output_div(
+    classes: &str,
+    body: &str,
+    options: &CellOptions,
+    cell_output: &CellOutput,
+) -> String {
     if options.output_asis() {
         format!("\n{body}\n")
     } else {
-        format!("\n::: {{{classes}}}\n\n{body}\n\n:::\n")
+        let head = output_div_head(None, classes, cell_output);
+        format!("\n::: {{{head}}}\n\n{body}\n\n:::\n")
     }
 }
 
@@ -866,6 +912,7 @@ fn format_outputs_with(
                         }
                     }),
                     options,
+                    Some(cell_output),
                 ));
             }
             CellOutput::ExecuteResult { data, .. } | CellOutput::DisplayData { data, .. } => {
@@ -892,9 +939,12 @@ fn format_outputs_with(
                         } else {
                             format!("{caption}\n")
                         };
-                        output.push_str(&format!(
-                            "\n::: {{{id}.cell-output-display}}\n\n{s}\n{caption}\n:::\n"
-                        ));
+                        let head = output_div_head(
+                            Some(id.trim().trim_start_matches('#')).filter(|i| !i.is_empty()),
+                            ".cell-output-display",
+                            cell_output,
+                        );
+                        output.push_str(&format!("\n::: {{{head}}}\n\n{s}\n{caption}\n:::\n"));
                     }
                 } else if let Some(html) = data.get("text/html") {
                     let s = extract_text_content(html);
@@ -903,6 +953,7 @@ fn format_outputs_with(
                         ".cell-output .cell-output-display",
                         &format!("{ticks}{{=html}}\n{s}\n{ticks}"),
                         options,
+                        cell_output,
                     ));
                 } else if let Some(markdown) = markdown_output(data) {
                     // Written as markdown itself (Q1's `mdMarkdownOutput`), with the
@@ -911,6 +962,7 @@ fn format_outputs_with(
                         ".cell-output .cell-output-display .cell-output-markdown",
                         &markdown,
                         options,
+                        cell_output,
                     ));
                 } else if let Some((path, width)) = included_graphic(match cell_output {
                     CellOutput::DisplayData { metadata, .. } => metadata,
@@ -922,7 +974,7 @@ fn format_outputs_with(
                     let attrs =
                         options.image_attrs_with(*figures, width.map(|w| w.to_string()), None);
                     let md = options.link_image(*figures, format!("![{alt}]({path}){attrs}"));
-                    push_figure(&mut output, options, *figures, &md);
+                    push_figure(&mut output, options, *figures, &md, cell_output);
                     *figures += 1;
                 } else if let Some(rel_path) = image_entry.and_then(|(mime, value)| {
                     let preferred = match cell_output {
@@ -957,7 +1009,7 @@ fn format_outputs_with(
                     };
                     let attrs = options.plot_image_attrs(*figures, width, height);
                     let md = options.link_image(*figures, format!("![{alt}]({rel_path}){attrs}"));
-                    push_figure(&mut output, options, *figures, &md);
+                    push_figure(&mut output, options, *figures, &md, cell_output);
                     *figures += 1;
                 } else if let Some(text) = data.get("text/plain") {
                     let s = extract_text_content(text);
@@ -966,6 +1018,7 @@ fn format_outputs_with(
                         &options.comment_out(options.trim_output(&s)),
                         options.fence_attrs(FenceKind::Output),
                         options,
+                        Some(cell_output),
                     ));
                 } else if image_entry.is_some() {
                     // An image payload we failed to write (bad base64,
@@ -978,6 +1031,7 @@ fn format_outputs_with(
                         ".cell-output .cell-output-display",
                         "\\[Image output\\]",
                         options,
+                        cell_output,
                     ));
                 }
             }
@@ -991,6 +1045,7 @@ fn format_outputs_with(
                     &options.comment_out(format_error_text(ename, evalue, traceback).trim_end()),
                     options.fence_attrs(FenceKind::Error),
                     options,
+                    Some(cell_output),
                 ));
             }
         }
@@ -1010,6 +1065,7 @@ fn format_outputs_with(
                 &options.comment_out(format_error_text(ename, evalue, traceback).trim_end()),
                 options.fence_attrs(FenceKind::Error),
                 options,
+                None,
             ));
         }
     }
@@ -1724,6 +1780,169 @@ mod tests {
                 CellVisibility::VISIBLE,
             ),
             "::: {.cell}\n\n```{.python .cell-code}\nx = 1\n```\n\n:::\n"
+        );
+    }
+
+    // === OPR-7f: engine attributes (`quarto_attrs`) ===
+
+    fn png_data() -> std::collections::HashMap<String, serde_json::Value> {
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!(PNG_B64_MULTILINE),
+        );
+        data
+    }
+
+    fn engine_attrs(v: serde_json::Value) -> super::super::engine_attrs::EngineAttrs {
+        super::super::engine_attrs::EngineAttrs::parse(&v).0
+    }
+
+    #[test]
+    fn engine_attrs_on_the_cell_wrapper_follow_the_grammar_order() {
+        let options = CellOptions::default().with_engine_attrs(engine_attrs(serde_json::json!({
+            "id": "cell-0",
+            "classes": ["extra"],
+            "attributes": {"execution_count": "1"},
+        })));
+        let result = ok_result(vec![CellOutput::Stream {
+            name: "stdout".into(),
+            text: "x\n".into(),
+        }]);
+        let md = render_cell_with(
+            "python",
+            "print(1)\n",
+            &result,
+            &options,
+            &mut test_fig(),
+            CellVisibility::VISIBLE,
+        );
+        assert!(
+            md.starts_with("::: {#cell-0 .cell .extra execution_count='1'}\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn a_presenter_wrapper_id_wins_over_the_engine_id() {
+        let mut options = CellOptions::default();
+        options = options.with_engine_attrs(engine_attrs(serde_json::json!({"id": "cell-0"})));
+        let md = wrap_cell(&options, "body");
+        assert!(md.starts_with("::: {#cell-0 .cell}"), "{md}");
+    }
+
+    #[test]
+    fn the_cell_wrapper_that_is_not_written_drops_the_cell_attrs() {
+        // `results = "asis"` with nothing else to carry writes no `.cell` div.
+        let options = CellOptions::from_knitr(&serde_json::json!({"results": "asis"}))
+            .with_engine_attrs(engine_attrs(serde_json::json!({"id": "cell-0"})));
+        assert!(!options.needs_cell_div());
+        let md = wrap_cell(&options, "body");
+        assert!(!md.contains("cell-0"), "{md}");
+    }
+
+    #[test]
+    fn output_attrs_on_a_figure_div_put_the_engine_class_first() {
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data: png_data(),
+            metadata: serde_json::json!({
+                "quarto_attrs": {"classes": ["cell-output"]},
+            }),
+        }]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(
+            md.starts_with("\n::: {.cell-output .cell-output-display}\n\n!["),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn output_attrs_on_an_execute_result_carry_the_count() {
+        let mut data = text_plain("2");
+        data.insert("text/html".into(), serde_json::json!("<b>2</b>"));
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({
+                "quarto_attrs": {"attributes": {"execution_count": "3"}},
+            }),
+            execution_count: 3,
+        }]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(
+            md.starts_with("\n::: {.cell-output .cell-output-display execution_count='3'}\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn output_attrs_reach_the_html_and_markdown_divs() {
+        for (mime, value, expected) in [
+            (
+                "text/html",
+                "<b>x</b>",
+                "::: {#h .cell-output .cell-output-display k='v'}",
+            ),
+            (
+                "text/markdown",
+                "**x**",
+                "::: {#h .cell-output .cell-output-display .cell-output-markdown k='v'}",
+            ),
+        ] {
+            let result = display(&[(mime, serde_json::json!(value))]);
+            let CellOutput::DisplayData { data, .. } = &result.outputs[0] else {
+                unreachable!()
+            };
+            let result = ok_result(vec![CellOutput::DisplayData {
+                data: data.clone(),
+                metadata: serde_json::json!({
+                    "quarto_attrs": {"id": "h", "attributes": {"k": "v"}},
+                }),
+            }]);
+            let md = format_outputs(&result, &mut test_fig(), true);
+            assert!(md.contains(expected), "{mime}: {md}");
+        }
+    }
+
+    #[test]
+    fn a_bare_fence_drops_the_output_attrs_by_design() {
+        let options = CellOptions::from_knitr(&serde_json::json!({"collapse": true}));
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({"quarto_attrs": {"id": "dropped"}}),
+            execution_count: 1,
+        }]);
+        let md = format_outputs_with(&result, &mut test_fig(), true, &options, &mut 0, 0);
+        assert!(!md.contains("dropped") && !md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn malformed_output_attrs_are_skipped_and_the_rest_renders() {
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({"quarto_attrs": {
+                "id": "caf\u{e9}",
+                "classes": ["1bad", "ok"],
+                "attributes": {"bad": "a\nb", "good": "v"},
+            }}),
+            execution_count: 1,
+        }]);
+        let md = format_outputs(&result, &mut test_fig(), true);
+        assert!(
+            md.starts_with("\n::: {.ok .cell-output .cell-output-display good='v'}\n"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn output_without_attrs_is_byte_identical() {
+        let result = ok_result(vec![CellOutput::ExecuteResult {
+            data: text_plain("2"),
+            metadata: serde_json::json!({}),
+            execution_count: 1,
+        }]);
+        assert_eq!(
+            format_outputs(&result, &mut test_fig(), true),
+            "\n::: {.cell-output .cell-output-display}\n\n```\n2\n```\n\n:::\n"
         );
     }
 }
