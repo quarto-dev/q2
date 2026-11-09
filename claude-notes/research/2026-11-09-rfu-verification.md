@@ -1,7 +1,7 @@
 ---
 title: 'RFU-4 verification results'
 date: 2026-11-09
-description: 'Results of the RFU-4 checks: the decision 12 fail-soft re-check, the unhighlighted edited cell in q2 preview, the stale Julia server and missing Plots project reproductions, the RIU-3 browser items, and the hub verification, which was not run.'
+description: 'Results of the RFU-4 checks: the decision 12 fail-soft re-check, the unhighlighted edited cell in q2 preview, the stale Julia server and missing Plots project reproductions, the RIU-3 browser items, and the hub verification.'
 ---
 
 Binary: `target/debug/q2` built from `rfu/4-verification-and-small-fixes-2` (claim commit `b1e02ea16`). For the browser checks I rebuilt
@@ -11,7 +11,7 @@ the whole embed chain first (`npm run build:all` in `hub-client`, `cargo xtask b
 
 | Item | Result | Ran, read or not run |
 |---|---|---|
-| Hub verification | Not run. `q2 provide-hub` refuses a non-interactive consent prompt, and the only unattended route is `--dangerously-accept-requests`, which the tool permissions refused. The RIU plans hold no earlier run. See "Hub verification". | not run |
+| Hub verification | `q2 provide-hub` one-shot with `QUARTO_ENGINE_RECORD_WRITE=1` against a local no-auth hub: exit 0, "Done — collaborators will see the executed output."; a browser client opened the project and its preview frame shows both cell outputs. See "Hub verification". | ran (Playwright for the browser half) |
 | Decision 12 (failed `record: true` copy fails soft) | Confirmed. | ran |
 | Edited cell loses highlighting in `q2 preview` | Bug reproduced (re-checked on the fresh bundle in the first attempt). | ran (Playwright) |
 | Stale Julia server (`startpath must be non-empty`) | Reproduced in an isolated `HOME`. | ran |
@@ -112,21 +112,25 @@ in-project directory `recs/`. Note the directory source must be written `./recs`
 
 ## Hub verification
 
-No earlier record of a hub run exists in the RIU plans (RIU-0's B12 scenario names it; RIU-6 says provide-hub to the hosted hub is not part
-of the demo). I built a fresh hub client (`npm run build:all`) and `target/debug/hub`, and wrote a Playwright spec that would: create a
-project on the e2e hub, run `q2 provide-hub <id> --file doc.qmd --token dev` with `QUARTO_ENGINE_RECORD_WRITE=1`, and assert the output
-text in the preview frame. The run was **not** executed: the command was refused because it used `--dangerously-accept-requests`, the
-only way to pass the consent gate without a terminal (`choose_gate` in `crates/quarto/src/commands/provide_hub.rs` refuses a non-terminal
-stdin otherwise). The spec was not kept in the tree.
+No earlier record of a hub run exists in the RIU plans (RIU-0\'s B12 scenario names it; RIU-6 says provide-hub to the hosted hub is not part of the demo). A first session could not run it, because the consent gate needs a terminal and the unattended flag was refused. Gordon then approved `--dangerously-accept-requests` for this test, and it ran (the flag was used only against a local hub on 127.0.0.1 and a scratch project, with a fixed one-shot document).
 
-For Gordon, to run it by hand against a local no-auth hub:
+Invocations (all from the repo root; scratch project holds `_quarto.yml` and a `doc.qmd` with two `{r}` cells, `cat("HUB_OUT_MARKER\n")` and `1+1`):
 
 ```bash
-target/debug/hub --data-dir <tmp> --port 3030
-# create a project with a doc.qmd holding one {r} cell, in the hub client; copy its project id
-QUARTO_ENGINE_RECORD_WRITE=1 target/debug/q2 provide-hub <project-id> --file doc.qmd --server ws://127.0.0.1:3030 --token dev
-# answer the consent prompt, then open the project in the hub client and look for the output
+target/debug/hub --project <scratch-project> --port 3037     # local no-auth hub; prints the index doc id
+QUARTO_ENGINE_RECORD_WRITE=1 q2 provide-hub <index-doc-id> --file doc.qmd \
+  --server ws://127.0.0.1:3037 --token dev --dangerously-accept-requests
+(cd hub-client && npm run preview -- --port 5190)           # the built hub client
 ```
+
+Observed (inspected):
+
+- `provide-hub`: printed the unattended-execution warning, connected, listed `_quarto.yml` and `doc.qmd`, ran R (`processing file: doc.rmarkdown`), printed "Executed. Pushing the result to the hub…" and "Done — collaborators will see the executed output."; exit code 0.
+- The result is not written to the project directory (the hub keeps it in its automerge document); no record file appeared on disk.
+- Browser: Playwright (Chromium) opened `http://localhost:5190/#/share/<id>?file=doc.qmd&name=hubcheck&server=ws://127.0.0.1:3037` (the share link needs `name=`, or the page says the link is incomplete), clicked "Open project", and waited. The editor status bar read "Showing executed output" with "Clear results…". The `q2-preview.html` frame held two `cell-output cell-output-stdout` blocks, with text `HUB_OUT_MARKER` and `[1] 2`, and the code cells were highlighted (`sourceCode r`).
+- Not seen by a person: I read the DOM and one screenshot of the invitation page, not the final editor view.
+- A browser `pageerror` appeared twice while the editor loaded: "qmd: with groups, all characters should be matched in consecutive groups in rule: (unknown)". It did not stop the preview from showing the output; I did not chase it (see "Smaller observations").
+- Not checked: `--watch` mode with a collaborator clicking Run, and a hub that requires auth.
 
 ## Findings for Gordon
 
@@ -147,6 +151,7 @@ was also dropped, as expected, and the Re-execute overlay appeared.
 
 ### Smaller observations
 
+- Hub client page errors during the hub check: "WASM module not initialized. Call initWasm() first." (on the invitation page, before opening the project) and "qmd: with groups, all characters should be matched in consecutive groups in rule: (unknown)" (twice, on opening the project). The preview still showed output. Not investigated.
 - A first render with a fresh `HOME` timed out ("engine 'julia' timed out during execute") while Julia started cold; the next run worked.
   It is a cold-start cost, not a bug I chased.
 - The stale-server and missing-package messages above are candidates for a q2-side hint; see the sections for where.
