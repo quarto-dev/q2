@@ -17,16 +17,6 @@ use serde_json::Value;
 /// The only Positron cache version this importer understands.
 pub const POSITRON_CACHE_VERSION: u64 = 1;
 
-/// The engine that owns plain kernel-language units, the only ones Positron outputs may enter.
-pub const JUPYTER_ENGINE: &str = "jupyter";
-
-/// The engine that owns `{r}` units by default; its units also take Positron outputs (KNR-5).
-pub const KNITR_ENGINE: &str = "knitr";
-
-/// The engine that owns `{julia}` units; its plain-language units take Positron outputs too
-/// (RIU-3a, from spike J: a Julia cell's owner is `julia`).
-pub const JULIA_ENGINE: &str = "julia";
-
 /// Where imported outputs came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provenance {
@@ -140,24 +130,24 @@ impl PositronImport {
     /// silently). Pairing the nth unit with the nth cached cell of the same hash is the
     /// occurrence rule for duplicates.
     ///
-    /// The language gate: outputs go only to a unit the Jupyter engine owns whose language
-    /// token is a plain kernel language, or to a unit knitr owns whose token is exactly `r`
-    /// (KNR-5). Never to `python.marimo` (Positron reads it as `python`), to a unit another
-    /// engine owns, or to a fallback unit (`fallback`: the unit's recorded output carries the
-    /// `text/x-quarto-markdown` mime, which only the caller can see; it is opaque to Positron).
-    /// It cannot catch a cell of a different language with identical text, since the hash has
-    /// no language.
+    /// The gate: outputs go only to a unit whose owning engine declares **kernel equivalence**
+    /// for the unit's language (`kernel_equivalent`, from
+    /// [`ExecutionEngine::kernel_equivalence`](crate::engine::ExecutionEngine::kernel_equivalence):
+    /// the same text gives the same outputs in a plain Positron kernel), and whose language token
+    /// is a plain kernel language. `None` (undeclared, or no owner) is not admitted. Never to
+    /// `python.marimo` (Positron reads it as `python`; the token is not plain), or to a fallback
+    /// unit (`fallback`: the unit's recorded output carries the `text/x-quarto-markdown` mime,
+    /// which only the caller can see; it is opaque to Positron). It cannot catch a cell of a
+    /// different language with identical text, since the hash has no language.
     pub fn outputs_for(
         &self,
         content_hash: &str,
         occurrence: usize,
-        owner: &str,
+        kernel_equivalent: Option<bool>,
         lang: &str,
         fallback: bool,
     ) -> Option<&DisplayOnlyOutputs> {
-        let admitted = ((owner == JUPYTER_ENGINE || owner == JULIA_ENGINE)
-            && is_plain_language(lang))
-            || (owner == KNITR_ENGINE && lang == "r");
+        let admitted = kernel_equivalent == Some(true) && is_plain_language(lang);
         if fallback || !admitted {
             return None;
         }
@@ -296,6 +286,20 @@ mod tests {
         .unwrap()
     }
 
+    /// The kernel-equivalence declaration of the engine named `owner`, as the real engines
+    /// state it. `julia` is the extension engine, whose manifest declares `true`; any other
+    /// name stands for an engine with no declaration.
+    fn declared(owner: &str, lang: &str) -> Option<bool> {
+        use crate::engine::ExecutionEngine;
+        use crate::extension::types::KernelEquivalence;
+        match owner {
+            "jupyter" => crate::engine::jupyter::JupyterEngine::new().kernel_equivalence(lang),
+            "knitr" => crate::engine::knitr::KnitrEngine::new().kernel_equivalence(lang),
+            "julia" => Some(KernelEquivalence::Any.covers(lang)),
+            _ => None,
+        }
+    }
+
     fn with_version(v: Value) -> Vec<u8> {
         let mut file: Value = serde_json::from_slice(&positron_file()).unwrap();
         file["metadata"]["quarto_cache_version"] = v;
@@ -307,19 +311,37 @@ mod tests {
         let imp = import_positron_cache(&positron_file()).unwrap();
         assert_eq!(imp.len(), 2);
         let got = imp
-            .outputs_for("aaaaaaaaaaaaaaaa", 0, "jupyter", "python", false)
+            .outputs_for(
+                "aaaaaaaaaaaaaaaa",
+                0,
+                declared("jupyter", "python"),
+                "python",
+                false,
+            )
             .unwrap();
         assert_eq!(got.provenance(), Provenance::Positron);
         assert_eq!(got.outputs().len(), 2);
         // Unmatched or stale: skipped silently.
         assert!(
-            imp.outputs_for("cccccccccccccccc", 0, "jupyter", "python", false)
-                .is_none()
+            imp.outputs_for(
+                "cccccccccccccccc",
+                0,
+                declared("jupyter", "python"),
+                "python",
+                false
+            )
+            .is_none()
         );
         // A second unit with the same hash has no second cached cell.
         assert!(
-            imp.outputs_for("aaaaaaaaaaaaaaaa", 1, "jupyter", "python", false)
-                .is_none()
+            imp.outputs_for(
+                "aaaaaaaaaaaaaaaa",
+                1,
+                declared("jupyter", "python"),
+                "python",
+                false
+            )
+            .is_none()
         );
     }
 
@@ -335,7 +357,13 @@ mod tests {
         });
         let imp = import_positron_cache(&serde_json::to_vec(&file).unwrap()).unwrap();
         let out = &imp
-            .outputs_for("aaaaaaaaaaaaaaaa", 0, "jupyter", "python", false)
+            .outputs_for(
+                "aaaaaaaaaaaaaaaa",
+                0,
+                declared("jupyter", "python"),
+                "python",
+                false,
+            )
             .unwrap()
             .outputs()[1];
         assert_eq!(
@@ -348,7 +376,13 @@ mod tests {
     fn a_rich_execute_result_imports_as_standard_display_data() {
         let imp = import_positron_cache(&positron_file()).unwrap();
         let out = &imp
-            .outputs_for("aaaaaaaaaaaaaaaa", 0, "jupyter", "python", false)
+            .outputs_for(
+                "aaaaaaaaaaaaaaaa",
+                0,
+                declared("jupyter", "python"),
+                "python",
+                false,
+            )
             .unwrap()
             .outputs()[1];
         assert_eq!(out["output_type"], "display_data");
@@ -358,7 +392,13 @@ mod tests {
         assert_eq!(out["metadata"], json!({"k": "v"}));
         // `stream` passes through.
         let stream = &imp
-            .outputs_for("aaaaaaaaaaaaaaaa", 0, "jupyter", "python", false)
+            .outputs_for(
+                "aaaaaaaaaaaaaaaa",
+                0,
+                declared("jupyter", "python"),
+                "python",
+                false,
+            )
             .unwrap()
             .outputs()[0];
         assert_eq!(stream["output_type"], "stream");
@@ -368,7 +408,13 @@ mod tests {
     fn string_valued_json_mimes_become_objects() {
         let imp = import_positron_cache(&positron_file()).unwrap();
         let out = &imp
-            .outputs_for("aaaaaaaaaaaaaaaa", 0, "jupyter", "python", false)
+            .outputs_for(
+                "aaaaaaaaaaaaaaaa",
+                0,
+                declared("jupyter", "python"),
+                "python",
+                false,
+            )
             .unwrap()
             .outputs()[1];
         assert_eq!(out["data"]["application/json"], json!({"a": 1}));
@@ -381,7 +427,13 @@ mod tests {
     fn an_invalid_json_string_is_kept_with_a_notice() {
         let imp = import_positron_cache(&positron_file()).unwrap();
         let out = &imp
-            .outputs_for("bbbbbbbbbbbbbbbb", 0, "jupyter", "python", false)
+            .outputs_for(
+                "bbbbbbbbbbbbbbbb",
+                0,
+                declared("jupyter", "python"),
+                "python",
+                false,
+            )
             .unwrap()
             .outputs()[0];
         assert_eq!(out["data"]["application/json"], "not json {");
@@ -393,40 +445,82 @@ mod tests {
     fn the_language_gate_runs_on_the_q2_side() {
         let imp = import_positron_cache(&positron_file()).unwrap();
         let h = "aaaaaaaaaaaaaaaa";
-        assert!(imp.outputs_for(h, 0, "jupyter", "python", false).is_some());
-        assert!(imp.outputs_for(h, 0, "jupyter", "Python", false).is_some());
+        assert!(
+            imp.outputs_for(h, 0, declared("jupyter", "python"), "python", false)
+                .is_some()
+        );
+        assert!(
+            imp.outputs_for(h, 0, declared("jupyter", "Python"), "Python", false)
+                .is_some()
+        );
         // Positron reads `{python.marimo}` as python; q2 owns it with marimo.
         assert!(
-            imp.outputs_for(h, 0, "jupyter", "python.marimo", false)
+            imp.outputs_for(
+                h,
+                0,
+                declared("jupyter", "python.marimo"),
+                "python.marimo",
+                false
+            )
+            .is_none()
+        );
+        assert!(
+            imp.outputs_for(
+                h,
+                0,
+                declared("marimo", "python.marimo"),
+                "python.marimo",
+                false
+            )
+            .is_none()
+        );
+        // Another engine's unit never receives Positron outputs.
+        assert!(
+            imp.outputs_for(h, 0, declared("other", "r"), "r", false)
+                .is_none()
+        );
+        // A fallback unit never receives them either, whoever owns it.
+        assert!(
+            imp.outputs_for(h, 0, declared("jupyter", "python"), "python", true)
                 .is_none()
         );
         assert!(
-            imp.outputs_for(h, 0, "marimo", "python.marimo", false)
+            imp.outputs_for(h, 0, declared("knitr", "r"), "r", true)
                 .is_none()
         );
-        // Another engine's unit never receives Positron outputs.
-        assert!(imp.outputs_for(h, 0, "other", "r", false).is_none());
-        // A fallback unit never receives them either, whoever owns it.
-        assert!(imp.outputs_for(h, 0, "jupyter", "python", true).is_none());
-        assert!(imp.outputs_for(h, 0, "knitr", "r", true).is_none());
         // Documented gap: the hash has no language, so a `{julia}` unit with the same text as
         // a Positron `{python}` cell still matches. Only the owner check and the occurrence
         // rule guard it.
-        assert!(imp.outputs_for(h, 0, "jupyter", "julia", false).is_some());
+        assert!(
+            imp.outputs_for(h, 0, declared("jupyter", "julia"), "julia", false)
+                .is_some()
+        );
     }
 
     #[test]
     fn knitr_owns_r_and_only_the_exact_token_r_passes_the_gate() {
         let imp = import_positron_cache(&positron_file()).unwrap();
         let h = "aaaaaaaaaaaaaaaa";
-        assert!(imp.outputs_for(h, 0, "knitr", "r", false).is_some());
-        assert!(imp.outputs_for(h, 0, "knitr", "R", false).is_none());
         assert!(
-            imp.outputs_for(h, 0, "knitr", "r.something", false)
+            imp.outputs_for(h, 0, declared("knitr", "r"), "r", false)
+                .is_some()
+        );
+        assert!(
+            imp.outputs_for(h, 0, declared("knitr", "R"), "R", false)
                 .is_none()
         );
-        assert!(imp.outputs_for(h, 0, "knitr", "python", false).is_none());
-        assert!(imp.outputs_for(h, 0, "knitr", "", false).is_none());
+        assert!(
+            imp.outputs_for(h, 0, declared("knitr", "r.something"), "r.something", false)
+                .is_none()
+        );
+        assert!(
+            imp.outputs_for(h, 0, declared("knitr", "python"), "python", false)
+                .is_none()
+        );
+        assert!(
+            imp.outputs_for(h, 0, declared("knitr", ""), "", false)
+                .is_none()
+        );
     }
 
     /// RIU-3a: the Julia engine owns `{julia}` units (spike J), and a plain-language Julia unit
@@ -435,8 +529,10 @@ mod tests {
     fn the_gate_table_admits_jupyter_julia_and_knitr_r_and_nothing_else() {
         let imp = import_positron_cache(&positron_file()).unwrap();
         let h = "aaaaaaaaaaaaaaaa";
-        let admitted =
-            |owner: &str, lang: &str| imp.outputs_for(h, 0, owner, lang, false).is_some();
+        let admitted = |owner: &str, lang: &str| {
+            imp.outputs_for(h, 0, declared(owner, lang), lang, false)
+                .is_some()
+        };
         assert!(admitted("jupyter", "python"));
         assert!(admitted("julia", "julia"), "the julia owner is admitted");
         assert!(admitted("knitr", "r"));
@@ -446,7 +542,10 @@ mod tests {
         assert!(!admitted("marimo", "python.marimo"));
         assert!(!admitted("mystery", "python"));
         // A fallback unit is refused whoever owns it.
-        assert!(imp.outputs_for(h, 0, "julia", "julia", true).is_none());
+        assert!(
+            imp.outputs_for(h, 0, declared("julia", "julia"), "julia", true)
+                .is_none()
+        );
     }
 
     #[test]

@@ -12,8 +12,8 @@
 
 use quarto_core::engine::units::{Unit, scan_units};
 use quarto_core::record::{
-    AuthorTexts, EngineEntryInput, HashDefinition, JUPYTER_ENGINE, RecordBuilder, UnitResult,
-    coalesce, fill_ids, import_positron_cache, write_record,
+    AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, coalesce, fill_ids,
+    import_positron_cache, write_record,
 };
 use serde_json::json;
 
@@ -105,7 +105,16 @@ fn reports_a_positron_cache() {
     for (u, a) in units.iter().zip(&texts.0) {
         let occ = seen.entry(a.content_hash.clone()).or_default();
         let lang = u.lang();
-        let found = import.outputs_for(&a.content_hash, *occ, JUPYTER_ENGINE, lang, false);
+        let found = import.outputs_for(
+            &a.content_hash,
+            *occ,
+            quarto_core::engine::ExecutionEngine::kernel_equivalence(
+                &quarto_core::engine::JupyterEngine::new(),
+                lang,
+            ),
+            lang,
+            false,
+        );
         *occ += 1;
         let what = match found {
             None => "no match".to_string(),

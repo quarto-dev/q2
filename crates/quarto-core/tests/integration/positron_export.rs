@@ -11,6 +11,16 @@ use serde_json::Value;
 
 use super::positron_conformance::{LoaderVerdict, positron_loader};
 
+/// The kernel-equivalence declaration of the real engine named `owner` (RFU-2).
+fn declared(owner: &str, lang: &str) -> Option<bool> {
+    use quarto_core::engine::{ExecutionEngine, JupyterEngine, KnitrEngine};
+    match owner {
+        "knitr" => KnitrEngine::new().kernel_equivalence(lang),
+        "jupyter" => JupyterEngine::new().kernel_equivalence(lang),
+        _ => None,
+    }
+}
+
 fn fixture(name: &str) -> Record {
     let text = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -51,7 +61,13 @@ fn round_trip(record: &Record, owner: &str) -> ExportedCache {
         let hash = &cell.metadata.quarto_content_hash;
         let occurrence = seen.entry(hash.clone()).or_default();
         let got = import
-            .outputs_for(hash, *occurrence, owner, &cell.metadata.quarto_lang, false)
+            .outputs_for(
+                hash,
+                *occurrence,
+                declared(owner, &cell.metadata.quarto_lang),
+                &cell.metadata.quarto_lang,
+                false,
+            )
             .unwrap_or_else(|| panic!("no outputs back for {}", cell.metadata.quarto_cell_id));
         *occurrence += 1;
         assert_eq!(

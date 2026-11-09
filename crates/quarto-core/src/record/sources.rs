@@ -547,6 +547,7 @@ mod tests {
             metadata: Default::default(),
             sugared_blocks: Vec::new(),
             ownership: None,
+            kernel_equivalence: None,
         }
     }
 
@@ -1010,6 +1011,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     mod imported {
         use super::*;
+        use crate::engine::preview_record::KernelEquivalenceOracle;
         use crate::record::content_hash;
 
         const DOC_URI: &str = "file:///virtual/doc.qmd";
@@ -1018,6 +1020,9 @@ mod tests {
             SourceInputs {
                 input_qmd: b"```{python}\nx = 1\n```\n".to_vec(),
                 ownership: Some([("python".to_string(), "jupyter".to_string())].into()),
+                kernel_equivalence: Some(KernelEquivalenceOracle::new(|lang| {
+                    Some(lang == "python")
+                })),
                 ..Default::default()
             }
         }

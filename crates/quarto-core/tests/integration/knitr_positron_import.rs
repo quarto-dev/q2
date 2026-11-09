@@ -12,8 +12,8 @@ use quarto_core::presenter::document::present_document;
 use quarto_core::presenter::figures::FsFigureSink;
 use quarto_core::presenter::inline::InlineTarget;
 use quarto_core::record::{
-    AuthorTexts, EngineEntryInput, HashDefinition, KNITR_ENGINE, RecordBuilder, UnitResult,
-    fill_ids, import_positron_cache,
+    AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, fill_ids,
+    import_positron_cache,
 };
 
 /// A 1x1 PNG.
@@ -48,12 +48,24 @@ fn positron_cache(hash: &str) -> Vec<u8> {
     .unwrap()
 }
 
+const KNITR_ENGINE: &str = "knitr";
+
+/// The kernel-equivalence declaration of the real engine named `owner` (RFU-2).
+fn declared(owner: &str, lang: &str) -> Option<bool> {
+    use quarto_core::engine::{ExecutionEngine, JupyterEngine, KnitrEngine};
+    match owner {
+        "knitr" => KnitrEngine::new().kernel_equivalence(lang),
+        "jupyter" => JupyterEngine::new().kernel_equivalence(lang),
+        _ => None,
+    }
+}
+
 fn present(doc: &str, owner: &str, fallback: bool, tmp: &TempDir) -> (String, bool) {
     let (units, texts) = staged(doc);
     let hash = &texts.0[0].content_hash;
     let import = import_positron_cache(&positron_cache(hash)).unwrap();
     let lang = units[0].lang().to_string();
-    let Some(found) = import.outputs_for(hash, 0, owner, &lang, fallback) else {
+    let Some(found) = import.outputs_for(hash, 0, declared(owner, &lang), &lang, fallback) else {
         return (doc.to_string(), false);
     };
     let def = HashDefinition::conservative(KNITR_ENGINE);
@@ -300,7 +312,7 @@ fn an_imported_output_with_only_an_unknown_mime_presents_nothing_for_it() {
     .unwrap();
     let import = import_positron_cache(&file).unwrap();
     let found = import
-        .outputs_for(hash, 0, KNITR_ENGINE, "r", false)
+        .outputs_for(hash, 0, declared(KNITR_ENGINE, "r"), "r", false)
         .unwrap();
     let def = HashDefinition::conservative(KNITR_ENGINE);
     let mut b = RecordBuilder::new(KNITR_ENGINE, &def, &units, &texts).unwrap();
@@ -346,7 +358,7 @@ fn a_real_ark_cache_presents_through_the_knitr_layer() {
     let mut b = RecordBuilder::new(KNITR_ENGINE, &def, &units, &texts).unwrap();
     for (i, u) in units.iter().enumerate() {
         let hash = &texts.0[i].content_hash;
-        let found = import.outputs_for(hash, 0, KNITR_ENGINE, u.lang(), false);
+        let found = import.outputs_for(hash, 0, declared(KNITR_ENGINE, u.lang()), u.lang(), false);
         eprintln!(
             "KS2 unit {i} lang={} hash={hash} imported={}",
             u.lang(),

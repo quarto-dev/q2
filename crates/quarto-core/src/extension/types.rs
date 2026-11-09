@@ -136,10 +136,32 @@ pub enum EngineContribution {
         /// Unconditional static `claims_file` — extensions claimed WITHOUT content
         /// inspection (§3.3 `claims-files:`). `None` = fall back to dynamic claims_file.
         claims_files: Option<Vec<FileClaim>>,
+        /// Static declaration of kernel equivalence (RFU-2, `kernel-equivalence:`): for which
+        /// languages a unit this engine owns is ordinary kernel code, so the same text gives the
+        /// same outputs in a plain Positron kernel. `None` = undeclared (never admitted).
+        kernel_equivalence: Option<KernelEquivalence>,
     },
     /// A bare engine name string — reordering hint that moves a previously
     /// registered engine to higher priority.
     Reorder { name: String },
+}
+
+/// The `kernel-equivalence:` declaration of an external engine: `true` for every plain
+/// language, or a list of language tokens (compared exactly). `false` declares none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KernelEquivalence {
+    Any,
+    Languages(Vec<String>),
+}
+
+impl KernelEquivalence {
+    /// Whether the declaration covers `language`.
+    pub fn covers(&self, language: &str) -> bool {
+        match self {
+            KernelEquivalence::Any => true,
+            KernelEquivalence::Languages(l) => l.iter().any(|x| x == language),
+        }
+    }
 }
 
 /// One static file-claim entry. Extension is stored **undotted, lowercase**
@@ -649,6 +671,7 @@ mod tests {
             claims: Some(HashMap::new()),
             file_extensions: Some(vec![]),
             claims_files: Some(vec![]),
+            kernel_equivalence: None,
         }
     }
 
@@ -676,6 +699,7 @@ mod tests {
             } else {
                 Some(vec![])
             },
+            kernel_equivalence: None,
         }
     }
 
@@ -799,6 +823,7 @@ mod tests {
                     })
                     .collect()
             }),
+            kernel_equivalence: None,
         }
     }
 

@@ -205,6 +205,9 @@ pub struct TsEngine {
     /// the claim verbs only.
     load_failed: OnceLock<()>,
 
+    /// The manifest's `kernel-equivalence:` declaration (RFU-2); `None` = undeclared.
+    kernel_equivalence: Mutex<Option<crate::extension::types::KernelEquivalence>>,
+
     // ── Registry sinks (leaf-Arc sharing; no cycle back to EngineRegistry) ───
     extension_id: ExtensionId,
     aliases: Arc<Mutex<HashMap<String, ExtensionId>>>,
@@ -212,6 +215,15 @@ pub struct TsEngine {
 }
 
 impl TsEngine {
+    /// Record the manifest's `kernel-equivalence:` declaration. Called once at construction,
+    /// like [`Self::set_extension_yml_path`].
+    pub fn set_kernel_equivalence(
+        &self,
+        declaration: Option<crate::extension::types::KernelEquivalence>,
+    ) {
+        *self.kernel_equivalence.lock().unwrap() = declaration;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: impl Into<String>,
@@ -244,6 +256,7 @@ impl TsEngine {
             static_file_answers: Mutex::new(Vec::new()),
             conversion_cache: Mutex::new(HashMap::new()),
             load_failed: OnceLock::new(),
+            kernel_equivalence: Mutex::new(None),
             extension_id,
             aliases,
             diagnostics,
@@ -960,6 +973,14 @@ impl ExecutionEngine for TsEngine {
         self.claims_files
             .as_ref()
             .map(|cf| cf.iter().any(|c| c.extension == ext))
+    }
+
+    fn kernel_equivalence(&self, language: &str) -> Option<bool> {
+        self.kernel_equivalence
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|d| d.covers(language))
     }
 
     fn extension_yml_path(&self) -> Option<PathBuf> {
@@ -2850,6 +2871,21 @@ mod tests {
                 "manifest must claim .jl via the percent processor"
             );
 
+            // RFU-2: the manifest declares kernel equivalence, and the engine reports it.
+            let declaration = extension
+                .contributes
+                .engines
+                .iter()
+                .find_map(|c| match c {
+                    crate::extension::types::EngineContribution::External {
+                        kernel_equivalence,
+                        ..
+                    } => kernel_equivalence.clone(),
+                    _ => None,
+                })
+                .expect("bundled julia-engine manifest must declare kernel-equivalence");
+            assert_eq!(declaration, crate::extension::types::KernelEquivalence::Any);
+
             let (write, read, mock) = MockTransport::pair_with_handle();
             let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
@@ -2868,6 +2904,13 @@ mod tests {
                 aliases,
                 diag,
             );
+            assert_eq!(
+                engine.kernel_equivalence("julia"),
+                None,
+                "an engine with no declaration is undeclared, never admitted"
+            );
+            engine.set_kernel_equivalence(Some(declaration));
+            assert_eq!(engine.kernel_equivalence("julia"), Some(true));
 
             let dir = tempfile::tempdir().unwrap();
             let file = dir.path().join("script.jl");

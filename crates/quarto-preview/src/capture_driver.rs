@@ -3065,7 +3065,7 @@ mod tests {
             quarto_core::record::import_positron_cache(file.to_string().as_bytes()).unwrap();
         let mut record =
             quarto_core::record::record_from_positron(&import, &units, &authors, None, &|_| {
-                "jupyter".into()
+                Some(true)
             });
         let meta = Default::default();
         assert!(

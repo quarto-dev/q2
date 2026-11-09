@@ -32,7 +32,8 @@ pub const UNCLAIMED_KEY: &str = "quarto_unclaimed_cache_cells";
 
 /// Build a record from `import`. `units` have their ids filled and `authors` come from
 /// `author_texts(&units, sugared_blocks)`, the inputs the splice itself uses (never a raw scan).
-/// `owner` maps a unit's language token to the engine that owns it.
+/// `kernel_equivalent` maps a unit's language token to the owning engine's kernel-equivalence
+/// declaration (`None`: undeclared or unowned, which no unit takes outputs under).
 ///
 /// The occurrence of a unit is counted per content hash across **all** units, then the language
 /// gate decides, so a gated-out duplicate still shifts the pairing the way Positron's own
@@ -47,7 +48,7 @@ pub fn record_from_positron(
     units: &[Unit],
     authors: &AuthorTexts,
     source: Option<String>,
-    owner: &dyn Fn(&str) -> String,
+    kernel_equivalent: &dyn Fn(&str) -> Option<bool>,
 ) -> Record {
     let mut seen: BTreeMap<String, usize> = BTreeMap::new();
     let mut cells = Vec::new();
@@ -64,7 +65,9 @@ pub fn record_from_positron(
             claimed += 1;
         }
         let lang = unit.lang();
-        let Some(found) = import.outputs_for(&hash, occurrence, &owner(lang), lang, false) else {
+        let Some(found) =
+            import.outputs_for(&hash, occurrence, kernel_equivalent(lang), lang, false)
+        else {
             continue;
         };
         let (kind, id) = match unit {
@@ -135,8 +138,8 @@ pub(crate) fn scan_inputs(
 
 /// Convert an imported cache for the document described by `inputs`: scan the same masked
 /// document the splice scans, take the author texts from the same sugared snapshot, and the
-/// owner of each language from `inputs.ownership` (computed on request, see
-/// `SourceInputsOptions::ownership`; without it no unit is owned and none takes outputs).
+/// kernel-equivalence declaration of each language's owner from `inputs.kernel_equivalence`
+/// (computed on request, see `SourceInputsOptions::ownership`; without it no unit takes outputs).
 pub fn import_record_source(
     import: &PositronImport,
     inputs: &crate::engine::preview_record::SourceInputs,
@@ -144,7 +147,7 @@ pub fn import_record_source(
 ) -> Record {
     let (units, authors) = scan_inputs(inputs);
     record_from_positron(import, &units, &authors, source, &|lang| {
-        inputs.owner_of(lang)
+        inputs.kernel_equivalent(lang)
     })
 }
 
@@ -230,16 +233,13 @@ mod tests {
         import_positron_cache(file.to_string().as_bytes()).unwrap()
     }
 
-    /// The owner a real registry would give: marimo for a dotted token, `knitr` for `r`,
-    /// `julia` for `julia`, jupyter for the rest.
-    fn owner(lang: &str) -> String {
+    /// The kernel-equivalence declaration a real registry would give: marimo (dotted token) and
+    /// `observable` declare nothing; the rest stand for jupyter, julia or knitr `r`.
+    fn owner(lang: &str) -> Option<bool> {
         match lang {
-            l if l.contains('.') => "marimo",
-            "r" => "knitr",
-            "julia" => "julia",
-            _ => "jupyter",
+            l if l.contains('.') => None,
+            _ => Some(true),
         }
-        .to_string()
     }
 
     fn stdout(cell: &crate::record::RecordCell) -> String {
@@ -381,12 +381,7 @@ mod tests {
             (&authors.0[1].content_hash, "ojs\n"),
         ]);
         let only_python = |lang: &str| {
-            if lang == "python" {
-                "jupyter"
-            } else {
-                "observable"
-            }
-            .to_string()
+            if lang == "python" { Some(true) } else { None }
         };
         let record = record_from_positron(&import, &units, &authors, None, &only_python);
         assert_eq!(record.cells.len(), 1);
@@ -413,7 +408,7 @@ mod tests {
         let doc = "```{r}\nc <- 3\n```\n";
         let (units, authors) = scanned(doc);
         let import = cache(&[(&authors.0[0].content_hash, "r\n")]);
-        let record = record_from_positron(&import, &units, &authors, None, &|_| "other".into());
+        let record = record_from_positron(&import, &units, &authors, None, &|_| None);
         assert!(record.cells.is_empty());
     }
 
@@ -452,7 +447,7 @@ mod tests {
             (&authors.0[0].content_hash, "r\n"),
             (&authors.0[1].content_hash, "marimo\n"),
         ]);
-        let record = record_from_positron(&import, &units, &authors, None, &|_| "other".into());
+        let record = record_from_positron(&import, &units, &authors, None, &|_| None);
         assert!(record.cells.is_empty());
         assert_eq!(unclaimed(&record), 0);
     }
@@ -540,14 +535,7 @@ mod tests {
             (&content_hash("x = 1"), "a\n"),
             (&content_hash("z = 3"), "ojs\n"),
         ]);
-        let only_python = |l: &str| {
-            if l == "python" {
-                "jupyter"
-            } else {
-                "observable"
-            }
-            .to_string()
-        };
+        let only_python = |l: &str| if l == "python" { Some(true) } else { None };
         let record = record_from_positron(&import, &units, &authors, None, &only_python);
         assert_eq!(record.cells.len(), 1);
         assert!(

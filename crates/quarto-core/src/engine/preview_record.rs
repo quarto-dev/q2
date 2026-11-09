@@ -294,6 +294,44 @@ pub struct SourceInputs {
     /// `None` unless the caller asked for it ([`SourceInputsOptions::ownership`]): only the
     /// Positron import needs it (the language gate), so every other caller pays nothing.
     pub ownership: Option<std::collections::BTreeMap<String, String>>,
+    /// Whether the engine that owns a language declares kernel equivalence for it (RFU-2): the
+    /// Positron import gate reads this and no engine name. Requested together with `ownership`.
+    pub kernel_equivalence: Option<KernelEquivalenceOracle>,
+}
+
+/// Answers "does the engine that owns this language declare kernel equivalence for it?",
+/// built from the resolution's ownership map and the engine registry.
+#[derive(Clone)]
+pub struct KernelEquivalenceOracle(Arc<dyn Fn(&str) -> Option<bool> + Send + Sync>);
+
+impl KernelEquivalenceOracle {
+    pub fn new(f: impl Fn(&str) -> Option<bool> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(f))
+    }
+
+    /// Owner lookup is case-insensitive (as [`SourceInputs::owner_of`]); the declaration is
+    /// asked about the unit's own token, so an engine that compares exactly sees it as written.
+    pub fn from_registry(
+        ownership: std::collections::BTreeMap<String, String>,
+        registry: Arc<crate::engine::EngineRegistry>,
+    ) -> Self {
+        Self::new(move |lang| {
+            let owner = ownership
+                .get(lang)
+                .or_else(|| ownership.get(&lang.to_ascii_lowercase()))?;
+            registry.get(owner)?.kernel_equivalence(lang)
+        })
+    }
+
+    pub fn declared(&self, lang: &str) -> Option<bool> {
+        (self.0)(lang)
+    }
+}
+
+impl std::fmt::Debug for KernelEquivalenceOracle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("KernelEquivalenceOracle(..)")
+    }
 }
 
 impl SourceInputs {
@@ -307,6 +345,12 @@ impl SourceInputs {
             .or_else(|| map.get(&lang.to_ascii_lowercase()))
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// The kernel-equivalence declaration of `lang`'s owner; `None` when undeclared, unowned,
+    /// or not requested, which no gate admits.
+    pub fn kernel_equivalent(&self, lang: &str) -> Option<bool> {
+        self.kernel_equivalence.as_ref()?.declared(lang)
     }
 }
 
@@ -385,18 +429,19 @@ pub async fn compute_source_inputs_with(
     // The owner of each language, resolved on the parsed document before it is masked, exactly
     // as `EngineExecutionStage` resolves it. Resolution may load extension engines but never
     // runs a cell.
-    let ownership = options.ownership.then(|| {
-        crate::engine::resolve_engines_for_document(
-            &doc_ast.ast.meta,
-            &doc_ast.ast,
-            &ctx.registry,
-            ctx.claimed_engine_name.as_deref(),
-            Some(crate::engine::DOCUMENT_OWN_FILE_ID),
-        )
-        .ownership
-        .into_iter()
-        .collect()
-    });
+    let ownership: Option<std::collections::BTreeMap<String, String>> =
+        options.ownership.then(|| {
+            crate::engine::resolve_engines_for_document(
+                &doc_ast.ast.meta,
+                &doc_ast.ast,
+                &ctx.registry,
+                ctx.claimed_engine_name.as_deref(),
+                Some(crate::engine::DOCUMENT_OWN_FILE_ID),
+            )
+            .ownership
+            .into_iter()
+            .collect()
+        });
 
     // nested-cell-masking (spec § "The engine capture — asymmetric, by
     // necessity" / `compute_input_qmd`'s three-consumer table): these bytes
@@ -416,6 +461,9 @@ pub async fn compute_source_inputs_with(
         input_qmd: buf,
         metadata,
         sugared_blocks: std::mem::take(&mut ctx.sugared_blocks),
+        kernel_equivalence: ownership
+            .clone()
+            .map(|o| KernelEquivalenceOracle::from_registry(o, Arc::clone(&ctx.registry))),
         ownership,
     })
 }
