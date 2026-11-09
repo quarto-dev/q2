@@ -2,7 +2,7 @@
 title: 'RFU-3: the EXR-16 sweep and the labeled-cell fig-cap splice test'
 date: 2026-11-08
 description: 'Two test plans for the Positron import path that RIU-3 left open. A table-driven sweep over the 21 conformance cases (build a Positron-style cache, import, convert and splice, and assert which units receive outputs), and a labeled Python cell with fig-cap carried through import and splice. Runs after the one-presenter loop merge so it pins the final splice behavior.'
-status: ready
+status: in-progress
 depends-on: [opr-1b]
 lane: A
 ---
