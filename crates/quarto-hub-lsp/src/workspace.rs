@@ -17,6 +17,7 @@ use quarto_hub::resource::{DocumentType, detect_document_type};
 use quarto_hub_provider::dial_hub;
 use samod::{DocHandle, DocumentId, Repo};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 use crate::comments::{JsonComment, ParseFailure, comments_in_qmd};
@@ -75,7 +76,25 @@ pub struct HubWorkspace {
 struct Inner {
     repo: Repo,
     projects: Mutex<BTreeMap<String, Followed>>,
+    /// Projects whose `follow` is still loading. A receiver resolves (with
+    /// an error, when its sender drops) once that follow has finished,
+    /// successfully or not.
+    in_flight: Mutex<BTreeMap<String, watch::Receiver<()>>>,
     hints: UnboundedSender<ChangeHint>,
+}
+
+/// Marks one project's follow as in flight for as long as it lives. Dropping
+/// it removes the mark, then drops the sender, which wakes every waiter.
+struct FollowInFlight<'a> {
+    inner: &'a Inner,
+    project: &'a str,
+    _done: watch::Sender<()>,
+}
+
+impl Drop for FollowInFlight<'_> {
+    fn drop(&mut self) {
+        self.inner.in_flight.lock().unwrap().remove(self.project);
+    }
 }
 
 struct Followed {
@@ -101,17 +120,44 @@ impl HubWorkspace {
         let inner = Arc::new(Inner {
             repo,
             projects: Mutex::new(BTreeMap::new()),
+            in_flight: Mutex::new(BTreeMap::new()),
             hints,
         });
         Ok((Self { inner }, receiver))
     }
 
     /// Start following the project whose index document is `index_doc_id`.
-    /// Following a project already followed does nothing.
+    /// Following a project already followed does nothing, and a second
+    /// caller while the first is still loading waits for it.
     pub async fn follow(&self, index_doc_id: &str) -> Result<(), WorkspaceError> {
         if self.is_following(index_doc_id) {
             return Ok(());
         }
+        let done = {
+            let mut in_flight = self.inner.in_flight.lock().unwrap();
+            if in_flight.contains_key(index_doc_id) {
+                None
+            } else {
+                let (done, receiver) = watch::channel(());
+                in_flight.insert(index_doc_id.to_string(), receiver);
+                Some(done)
+            }
+        };
+        let Some(done) = done else {
+            self.wait_for_follow_in_flight(index_doc_id).await;
+            return if self.is_following(index_doc_id) {
+                Ok(())
+            } else {
+                Err(WorkspaceError::IndexNotFound(index_doc_id.to_string()))
+            };
+        };
+        // Held until this follow has loaded the index and found its files,
+        // so a query waiting on it sees the whole project.
+        let _in_flight = FollowInFlight {
+            inner: &self.inner,
+            project: index_doc_id,
+            _done: done,
+        };
         let index = IndexDocument::load(&self.inner.repo, index_doc_id)
             .await
             .map_err(|e| WorkspaceError::Hub(e.to_string()))?
@@ -166,11 +212,33 @@ impl HubWorkspace {
             .contains_key(index_doc_id)
     }
 
+    /// Wait until a `follow` of this project that is still loading has
+    /// finished. Returns at once when none is.
+    async fn wait_for_follow_in_flight(&self, index_doc_id: &str) {
+        let receiver = self
+            .inner
+            .in_flight
+            .lock()
+            .unwrap()
+            .get(index_doc_id)
+            .cloned();
+        if let Some(mut receiver) = receiver {
+            // Nothing is ever sent: this returns when the sender drops.
+            let _ = receiver.changed().await;
+        }
+    }
+
     /// The comments of every `.qmd` file the project's index lists now.
+    ///
+    /// A project whose `follow` is still loading is waited for, so a client
+    /// may add a workspace folder and ask about it at once: LSP gives the
+    /// folder notification no response to wait for, and tower-lsp handles
+    /// the two concurrently.
     pub async fn project_comments(
         &self,
         index_doc_id: &str,
     ) -> Result<ProjectComments, WorkspaceError> {
+        self.wait_for_follow_in_flight(index_doc_id).await;
         if !self.is_following(index_doc_id) {
             return Err(WorkspaceError::UnknownProject(index_doc_id.to_string()));
         }

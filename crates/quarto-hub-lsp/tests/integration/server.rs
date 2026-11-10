@@ -215,6 +215,38 @@ async fn an_added_workspace_folder_is_followed_and_a_removed_one_is_dropped() {
 }
 
 #[tokio::test]
+async fn project_comments_sent_right_after_adding_its_folder_waits_for_the_follow() {
+    // A client adds a folder and asks about it at once, without waiting:
+    // the notification has no response to wait for. tower-lsp handles the
+    // two concurrently, so the request must wait for the follow in flight
+    // instead of answering that the project is unknown.
+    let (hub, ws_url) = spawn_hub().await;
+    let (index, _) = create_project(&hub, &[("a.qmd", "[>> asked at once ]\n")]).await;
+    let project = format!("automerge:{}", index.document_id());
+    let mut client = TestClient::connect(ws_url).await;
+    client.start(&[]).await;
+
+    let added = Request::build("workspace/didChangeWorkspaceFolders")
+        .params(json!({"event": {"added": [{"uri": project, "name": "p"}], "removed": []}}))
+        .finish();
+    let asked = Request::build("quarto/projectComments")
+        .params(json!({"project": project}))
+        .id(100)
+        .finish();
+    let added = client.service.ready().await.unwrap().call(added);
+    let asked = client.service.ready().await.unwrap().call(asked);
+    let (added, asked) = tokio::join!(added, asked);
+
+    assert!(added.unwrap().is_none());
+    let (_, body) = asked.unwrap().expect("a response").into_parts();
+    let result = body.expect("projectComments succeeds once the follow completes");
+    assert_eq!(
+        comment_texts(&result),
+        vec![("a.qmd".to_string(), vec!["asked at once".to_string()])]
+    );
+}
+
+#[tokio::test]
 async fn a_hub_side_edit_produces_a_documents_changed_notification() {
     let (hub, ws_url) = spawn_hub().await;
     let (index, ids) = create_project(&hub, &[("a.qmd", "Text.\n")]).await;
