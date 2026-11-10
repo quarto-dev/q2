@@ -493,6 +493,10 @@ fn build_item_map(
         TemplateValue::String(img_html.clone()),
     );
     m.insert(
+        "image-placeholder-html".to_string(),
+        TemplateValue::String(helpers::image_placeholder_html(listing)),
+    );
+    m.insert(
         "metadata-attrs".to_string(),
         TemplateValue::String(helpers::metadata_attrs(item, index, listing)),
     );

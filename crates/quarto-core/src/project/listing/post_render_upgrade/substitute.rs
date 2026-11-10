@@ -33,6 +33,7 @@ use regex::RegexBuilder;
 use crate::Result;
 use crate::error::QuartoError;
 use crate::project::ProjectContext;
+use crate::project::listing::helpers::image_height_style;
 use crate::project::listing::placeholders::{DESC_REGEX, IMG_REGEX};
 
 use super::reader::{PreviewImage, ReaderOptions, RenderedExtraction, extract};
@@ -296,20 +297,32 @@ fn substitute_images(
     Ok(out)
 }
 
-/// Build the substituted `<img>` tag. v1 emits a fixed shape
-/// matching Q1's `progressive=false, height=, lazy=true` defaults;
-/// the `attrs` field from the marker is preserved verbatim as
-/// extra attributes (placeholder for follow-ups that wire
-/// `listing.image-height` etc. through).
-fn build_thumbnail_img(src: &str, pi: &PreviewImage, _attrs: &str) -> String {
+/// Build the substituted `<img>` tag — Q1's `imageSrc`
+/// (`website-listing-read.ts`): `class="thumbnail-image card-img"`
+/// and the marker's `height=` as an inline height (GH #1155).
+/// `progressive=` / `lazy=` are not wired through yet; the tag is
+/// always eager-`src` with `loading="lazy"`.
+fn build_thumbnail_img(src: &str, pi: &PreviewImage, attrs: &str) -> String {
     let alt = pi.alt.as_deref().unwrap_or("").replace('"', "&quot;");
     let lazy = r#" loading="lazy""#;
     format!(
-        r#"<img src="{}" class="thumbnail-image" alt="{}"{}>"#,
+        r#"<img src="{}" class="thumbnail-image card-img"{} alt="{}"{}>"#,
         escape_attr(src),
+        image_height_style(marker_height(attrs)),
         alt,
         lazy
     )
+}
+
+/// The `height=` value from an image marker's attrs
+/// (`progressive=false, height=150px, lazy=true`), or `None` when
+/// absent or empty.
+fn marker_height(attrs: &str) -> Option<&str> {
+    attrs
+        .split(',')
+        .find_map(|kv| kv.trim().strip_prefix("height="))
+        .map(str::trim)
+        .filter(|h| !h.is_empty())
 }
 
 fn escape_attr(s: &str) -> String {
@@ -774,7 +787,7 @@ mod tests {
 
         let after = read_file(&host_path);
         assert!(
-            after.contains(r#"class="thumbnail-image""#),
+            after.contains(r#"class="thumbnail-image card-img""#),
             "expected substituted thumbnail; got: {after}"
         );
         // src is resolved relative to host: from index.html →
@@ -819,7 +832,7 @@ mod tests {
             after.contains(&format!(r#"src="{}""#, default_url)),
             "expected listing-default URL substituted; got: {after}"
         );
-        assert!(after.contains(r#"class="thumbnail-image""#));
+        assert!(after.contains(r#"class="thumbnail-image card-img""#));
         assert!(!after.contains("img-begin"));
     }
 
@@ -882,6 +895,58 @@ mod tests {
         let after = read_file(&host_path);
         assert!(!after.contains("desc-begin"), "{after}");
         assert!(diags.is_empty(), "expected silence, got {diags:?}");
+    }
+
+    #[test]
+    fn substitute_image_applies_marker_height_and_card_img() {
+        // Q1's `imageSrc`: the substituted preview `<img>` carries
+        // `card-img` and the listing's image-height (GH #1155).
+        let temp = TempDir::new().unwrap();
+        let project = make_project(temp.path());
+        let host_path = temp.path().join("index.html");
+        let sibling_path = temp.path().join("posts").join("p.html");
+        let inner = r#"<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>"#;
+        let envelope = format!(
+            "{}\n{}\n{}",
+            placeholders::image_placeholder_begin(
+                "listing-1",
+                0,
+                "posts/p.html",
+                "progressive=false, height=150px, lazy=true",
+                ""
+            ),
+            inner,
+            placeholders::image_placeholder_end()
+        );
+        write_file(&host_path, &format!("<html><body>{envelope}</body></html>"));
+        write_file(
+            &sibling_path,
+            r#"<html><body><main class="content">
+<img src="figures/preview-image.png">
+</main></body></html>"#,
+        );
+
+        let runtime = NativeRuntime::new();
+        let mut diags = vec![];
+        substitute_listing_placeholders(&project, &[host_path.clone()], &runtime, &mut diags)
+            .unwrap();
+
+        let after = read_file(&host_path);
+        assert!(
+            after.contains(r#"class="thumbnail-image card-img""#),
+            "got: {after}"
+        );
+        assert!(after.contains(r#"style="height: 150px;""#), "got: {after}");
+    }
+
+    #[test]
+    fn marker_height_parses_attrs() {
+        assert_eq!(
+            marker_height("progressive=false, height=150px, lazy=true"),
+            Some("150px")
+        );
+        assert_eq!(marker_height("progressive=false, height=, lazy=true"), None);
+        assert_eq!(marker_height(""), None);
     }
 
     // L7 plan §"Tests" Phase 4 #33
