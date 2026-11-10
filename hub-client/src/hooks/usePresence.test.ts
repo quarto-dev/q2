@@ -278,6 +278,24 @@ describe('usePresence — remote cursor tracking across content edits', () => {
     });
   });
 
+  it('rewrites a peer\'s cursor style only when its name or color changes', () => {
+    const editor = createMockEditor('hello world');
+    const { result } = renderHook(() => usePresence('test.qmd'));
+    act(() => {
+      result.current.onEditorMount(editor as never);
+    });
+
+    emitPresences([makePresence({ userName: 'Ada', cursor: cursorAt(1) })]);
+    const style = document.getElementById('presence-user-remote-1')!;
+    const first = style.firstChild;
+
+    emitPresences([makePresence({ userName: 'Ada', cursor: cursorAt(6) })]);
+    expect(style.firstChild).toBe(first);
+
+    emitPresences([makePresence({ userName: 'Grace', cursor: cursorAt(6) })]);
+    expect(style.textContent).toContain("content: 'Grace'");
+  });
+
   it('deletion in an earlier paragraph does not shift a remote cursor in a later paragraph (PR #94)', () => {
     // "abcdef\n\nghi\n\njkl" — 'k' (later paragraph) is at offset 14.
     const editor = createMockEditor('abcdef\n\nghi\n\njkl');

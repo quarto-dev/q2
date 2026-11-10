@@ -75,17 +75,28 @@
 
         var rect = leaf.getBoundingClientRect();
         var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        // Keep in sync with attributionBadgePlacement in
+        // ts-packages/preview-renderer/src/framework/attribution.tsx.
         var margin = 8;
         var maxWidth = 320;
-        var preferredMinWidth = Math.min(160, Math.max(0, viewportWidth - 2 * margin));
+        var room = viewportWidth - 2 * margin;
+        var preferredMinWidth = Math.min(160, Math.max(0, room));
         var left = Math.max(margin, rect.left);
-        if (viewportWidth - left - margin < preferredMinWidth) {
-            left = Math.max(margin, rect.left - maxWidth);
-        }
+        var right = Math.max(margin, viewportWidth - rect.right);
         badge.style.position = 'fixed';
         badge.style.top = (rect.bottom + 2) + 'px';
-        badge.style.left = left + 'px';
-        badge.style.maxWidth = Math.max(0, Math.min(maxWidth, viewportWidth - left - margin)) + 'px';
+        if (viewportWidth - margin - left >= preferredMinWidth) {
+            // Room to the right: start at the leaf's left edge.
+            badge.style.left = left + 'px';
+            badge.style.maxWidth = Math.min(maxWidth, viewportWidth - margin - left) + 'px';
+        } else if (viewportWidth - margin - right >= preferredMinWidth) {
+            // Near the right edge: end at the leaf's right edge.
+            badge.style.right = right + 'px';
+            badge.style.maxWidth = Math.min(maxWidth, viewportWidth - margin - right) + 'px';
+        } else {
+            badge.style.left = margin + 'px';
+            badge.style.maxWidth = Math.max(0, Math.min(maxWidth, room)) + 'px';
+        }
 
         document.body.appendChild(badge);
         currentBadge = badge;

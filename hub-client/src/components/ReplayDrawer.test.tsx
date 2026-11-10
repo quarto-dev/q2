@@ -155,7 +155,6 @@ describe('ReplayDrawer', () => {
       const { readFileSync } = await import('node:fs');
       const styles = readFileSync('src/components/ReplayDrawer.css', 'utf8');
       expect(styles).toMatch(/\.replay-drawer__actor\s*\{[^}]*min-width:\s*0;/s);
-      expect(styles).toMatch(/\.replay-drawer__actor-name\s*\{[^}]*min-width:\s*0;/s);
 
       fireEvent.focus(actorName.closest('.replay-drawer__actor')!);
       expect(screen.getByRole('tooltip').textContent).toBe(longName);

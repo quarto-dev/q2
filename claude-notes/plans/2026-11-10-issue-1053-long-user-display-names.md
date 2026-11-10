@@ -23,6 +23,15 @@ GitHub issue #1053 asks `updateUserName` to accept real full names longer than 5
 - [x] Align validation with Connect's two 256-code-point fields plus their separating space.
 - [x] Rerun focused and required hub-client verification.
 
+### Review follow-ups
+
+- [x] Anchor the attribution badge to the hovered text's right edge near the viewport edge, instead of shifting it left by a fixed 320px (a short badge landed far from its text).
+- [x] Keep each collaborator `<li>` a direct child of its `<ul>` in the Status tab; the tooltip now wraps the name inside the item.
+- [x] Reuse each peer's cursor style element across presence updates and rebuild it only when the name or color changes.
+- [x] Count code points in `isValidUserName` only when the UTF-16 length is between the limit and twice the limit.
+- [x] Drop `min-width: 0` declarations made redundant by `.qh-truncate`, and the badge's CSS `max-width` (the inline value always applies).
+- [x] Rerun the hub-client build and test suites on the follow-ups (`npm run build:all`, `npm run test:ci`, preview-renderer `npm test`, and `cargo nextest run -p quarto-core attribution_viewer` passed; not re-inspected in a browser).
+
 ## Details
 
 - Source issue: https://github.com/quarto-dev/q2/issues/1053

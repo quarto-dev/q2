@@ -16,13 +16,16 @@ const sample = (
 ];
 
 describe('attributionBadgePlacement', () => {
-    it('flips left near the right edge so the full badge stays in the viewport', () => {
-        expect(attributionBadgePlacement(1200, 1280)).toEqual({ left: 880, maxWidth: 320 });
-        expect(attributionBadgePlacement(1200, 1280).left + 320).toBeLessThanOrEqual(1272);
+    it('anchors at the leaf\'s left edge when there is room to its right', () => {
+        expect(attributionBadgePlacement(100, 180, 1280)).toEqual({ left: 100, maxWidth: 320 });
     });
 
-    it('bounds the badge by viewport margins on narrow screens', () => {
-        expect(attributionBadgePlacement(40, 200)).toEqual({ left: 8, maxWidth: 184 });
+    it('anchors to the leaf\'s right edge near the viewport edge, so a short badge stays adjacent', () => {
+        expect(attributionBadgePlacement(1200, 1210, 1280)).toEqual({ right: 70, maxWidth: 320 });
+    });
+
+    it('spans the viewport margins when neither side has room', () => {
+        expect(attributionBadgePlacement(40, 60, 200)).toEqual({ left: 8, maxWidth: 184 });
     });
 });
 

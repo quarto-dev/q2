@@ -69,15 +69,17 @@ export default function StatusTab({
             </div>
             <ul className="user-names">
               {remoteUsers.map((user) => (
-                <Tooltip key={user.peerId} content={user.userName} block>
-                  <li tabIndex={0}>
-                    <span
-                      className="user-color-dot"
-                      style={{ backgroundColor: user.userColor }}
-                    />
-                    <span className="user-name qh-truncate">{user.userName}</span>
-                  </li>
-                </Tooltip>
+                <li key={user.peerId}>
+                  <span
+                    className="user-color-dot"
+                    style={{ backgroundColor: user.userColor }}
+                  />
+                  <Tooltip content={user.userName} block>
+                    <span className="user-name qh-truncate" tabIndex={0}>
+                      {user.userName}
+                    </span>
+                  </Tooltip>
+                </li>
               ))}
             </ul>
           </div>

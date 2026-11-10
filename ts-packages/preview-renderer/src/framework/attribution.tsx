@@ -52,22 +52,29 @@ export function authorInitials(name: string, actor: string): string | null {
     return letters.join('').toUpperCase();
 }
 
-/** Keep the badge inside the viewport, flipping left when right-side space is tight. */
+/**
+ * Keep the badge inside the viewport: start at the leaf's left edge, or
+ * end at its right edge when right-side space is tight. Keep in sync with
+ * `resources/attribution/viewer.js`.
+ */
 export function attributionBadgePlacement(
     rectLeft: number,
+    rectRight: number,
     viewportWidth: number,
-): { left: number; maxWidth: number } {
+): { left: number; maxWidth: number } | { right: number; maxWidth: number } {
     const margin = 8;
     const maxWidth = 320;
-    const preferredMinWidth = Math.min(160, Math.max(0, viewportWidth - 2 * margin));
-    let left = Math.max(margin, rectLeft);
-    if (viewportWidth - left - margin < preferredMinWidth) {
-        left = Math.max(margin, rectLeft - maxWidth);
+    const room = viewportWidth - 2 * margin;
+    const preferredMinWidth = Math.min(160, Math.max(0, room));
+    const left = Math.max(margin, rectLeft);
+    const right = Math.max(margin, viewportWidth - rectRight);
+    if (viewportWidth - margin - left >= preferredMinWidth) {
+        return { left, maxWidth: Math.min(maxWidth, viewportWidth - margin - left) };
     }
-    return {
-        left,
-        maxWidth: Math.max(0, Math.min(maxWidth, viewportWidth - left - margin)),
-    };
+    if (viewportWidth - margin - right >= preferredMinWidth) {
+        return { right, maxWidth: Math.min(maxWidth, viewportWidth - margin - right) };
+    }
+    return { left: margin, maxWidth: Math.max(0, Math.min(maxWidth, room)) };
 }
 
 export function AttributionBadge({
@@ -239,6 +246,7 @@ export function useAttributionHover(): {
     const [hovered, setHovered] = useState<{
         record: NodeAttributionIdentity;
         rect: DOMRect;
+        viewportWidth: number;
     } | null>(null);
 
     const handleMouseOver = useCallback((e: React.MouseEvent) => {
@@ -254,7 +262,11 @@ export function useAttributionHover(): {
         if (Number.isNaN(sid)) return;
         const record = ctx.get(sid);
         if (record) {
-            setHovered({ record, rect: wrap.getBoundingClientRect() });
+            setHovered({
+                record,
+                rect: wrap.getBoundingClientRect(),
+                viewportWidth: document.documentElement.clientWidth || window.innerWidth,
+            });
         }
     }, []);
 
@@ -278,17 +290,17 @@ export function useAttributionHover(): {
     const stylesheet = enabled ? (
         <style>{attributionStyles + actorStyles}</style>
     ) : null;
-    const placement = hovered
-        ? attributionBadgePlacement(hovered.rect.left, window.innerWidth)
-        : null;
-    const overlay = hovered && placement ? (
+    const overlay = hovered ? (
         <AttributionBadge
             record={hovered.record}
             style={{
                 position: 'fixed',
                 top: hovered.rect.bottom + 2,
-                left: placement.left,
-                maxWidth: placement.maxWidth,
+                ...attributionBadgePlacement(
+                    hovered.rect.left,
+                    hovered.rect.right,
+                    hovered.viewportWidth,
+                ),
             }}
         />
     ) : null;

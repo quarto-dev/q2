@@ -90,6 +90,8 @@ describe('ephemeral storage consumers', () => {
     expect(fullName.length).toBeGreaterThan(513);
     expect(isValidUserName(fullName)).toBe(true);
     expect(isValidUserName(`${fullName}C`)).toBe(false);
+    expect(isValidUserName('😀'.repeat(514))).toBe(false);
+    expect(isValidUserName('A'.repeat(100_000))).toBe(false);
   });
 
   it('projectSetStorage pointer and collections round-trip in memory', async () => {

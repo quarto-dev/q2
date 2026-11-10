@@ -63,16 +63,21 @@ interface UsePresenceResult {
  */
 function ensureUserCursorStyle(peerId: string, color: string, userName: string): void {
   const styleId = `presence-user-${peerId}`;
-  const escapedName = userName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  // This runs for every peer on every presence update; skip the rebuild
+  // unless the peer's name or color changed.
+  const styleKey = `${color}\n${userName}`;
 
   let style = document.getElementById(styleId) as HTMLStyleElement | null;
+  if (style?.dataset.presenceKey === styleKey) return;
   if (!style) {
     style = document.createElement('style');
     style.id = styleId;
     document.head.appendChild(style);
   }
+  style.dataset.presenceKey = styleKey;
 
-  const newContent = `
+  const escapedName = userName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  style.textContent = `
     .presence-cursor-${peerId} {
       position: relative;
       background-color: ${color};
@@ -113,9 +118,6 @@ function ensureUserCursorStyle(peerId: string, color: string, userName: string):
       background-color: ${color}22;
     }
   `;
-  if (style.textContent !== newContent) {
-    style.textContent = newContent;
-  }
 }
 
 /**
@@ -330,18 +332,25 @@ export function usePresence(
       newDecorations
     );
 
-    // Cleanup on unmount
     return () => {
       if (editor && decorationIdsRef.current.length > 0) {
         editor.deltaDecorations(decorationIdsRef.current, []);
         decorationIdsRef.current = [];
       }
-      for (const peerId of activePeerStylesRef.current) {
-        removeUserCursorStyle(peerId);
-      }
-      activePeerStylesRef.current.clear();
     };
   }, [editor, enabled, remoteUsers, modelVersion, currentFilePath]);
+
+  // Remove peer styles only on unmount: the effect above re-runs on every
+  // presence update, and its style elements are reused across runs.
+  useEffect(() => {
+    const activePeerStyles = activePeerStylesRef.current;
+    return () => {
+      for (const peerId of activePeerStyles) {
+        removeUserCursorStyle(peerId);
+      }
+      activePeerStyles.clear();
+    };
+  }, []);
 
   // Track local cursor/selection changes
   useEffect(() => {

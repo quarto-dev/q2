@@ -108,7 +108,6 @@
   align-items: center;
   align-self: stretch;
   gap: 8px;
-  min-width: 0;
   margin-inline-start: 8px;
   text-overflow: ellipsis;
   overflow: hidden;
@@ -140,10 +139,6 @@
   border-radius: var(--radius-xs);
   padding: 0 4px;
   background: var(--alpha-white-05);
-}
-
-.replay-drawer__actor-name {
-  min-width: 0;
 }
 
 .replay-drawer__actor-dot {

@@ -26,9 +26,9 @@ describe('attribution viewer script', () => {
 
         const badge = document.querySelector<HTMLElement>('.q2-attr-badge')!;
         expect(badge.textContent).toContain('A'.repeat(100));
-        expect(badge.style.left).toBe('880px');
+        // Anchored to the leaf's right edge, so a short badge stays adjacent.
+        expect(badge.style.left).toBe('');
+        expect(badge.style.right).toBe('70px');
         expect(badge.style.maxWidth).toBe('320px');
-        expect(Number.parseFloat(badge.style.left) + Number.parseFloat(badge.style.maxWidth))
-            .toBeLessThanOrEqual(1272);
     });
 });

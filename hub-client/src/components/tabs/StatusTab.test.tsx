@@ -2,13 +2,10 @@
  * @vitest-environment jsdom
  */
 
-import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PresenceState } from '../../services/presenceService';
 import StatusTab from './StatusTab';
-
-const styles = readFileSync('src/components/tabs/StatusTab.css', 'utf8');
 
 const longName = 'A'.repeat(100);
 const remoteUser: PresenceState = {
@@ -38,9 +35,10 @@ describe('StatusTab', () => {
 
     const name = screen.getByText(longName);
     expect(name.className).toContain('qh-truncate');
-    expect(styles).toMatch(/\.user-name\s*\{[^}]*min-width:\s*0;/s);
+    // The list item stays a direct child of the list (valid list markup).
+    expect(name.closest('li')!.parentElement!.tagName).toBe('UL');
 
-    fireEvent.focus(name.closest('li')!);
+    fireEvent.focus(name);
     expect(screen.getByRole('tooltip').textContent).toBe(longName);
   });
 });

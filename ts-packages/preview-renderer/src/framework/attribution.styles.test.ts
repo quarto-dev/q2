@@ -27,7 +27,7 @@ describe('attributionStyles', () => {
 
     it('bounds the badge and wraps long author names without hiding text', () => {
         expect(attributionStyles).toMatch(
-            /\.q2-attr-badge\s*\{[^}]*box-sizing:\s*border-box;[^}]*max-width:\s*min\(320px, calc\(100vw - 16px\)\);[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s,
+            /\.q2-attr-badge\s*\{[^}]*box-sizing:\s*border-box;[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s,
         );
     });
 
