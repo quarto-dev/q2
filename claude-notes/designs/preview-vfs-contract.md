@@ -62,10 +62,10 @@ discovery, and a user Lua filter's directory, which is mounted whole into
 the pandoc request. Every such directory is one the author pointed at.
 
 The browser caches every answer. Positive answers live in the VFS. Negative
-answers (a missing path, an empty listing) are cached until the VFS
-generation counter changes; the server bumps that counter on watcher events,
-as it already does for project caches. A cached negative is a definite miss
-with no fetch.
+answers (a missing path, an empty listing) are cached until the browser
+VFS's generation counter changes, which it does whenever sync adds or
+removes a file, as project caches already rely on. A cached negative is a
+definite miss with no fetch.
 
 **Latency facts.** Measured 2026-11-10 (headless Chromium, dedicated worker,
 synchronous XHR, debug-build server, cache-busted URLs; method and tables in
@@ -159,7 +159,8 @@ A listing answer contains only names the policy would admit.
 ### D5. Single-file mode: nothing is read, listed or synced until a render asks
 
 For `q2 preview file.qmd`, the server walks nothing and pushes nothing beyond
-the deck and its declared config. `theme:`, `render-components:`,
+the deck itself (a `_metadata.yml` beside it arrives through the read arm).
+`theme:`, `render-components:`,
 `resources:`, images, bibliographies and partials arrive through the miss
 path like everything else, and the policy bounds what can be asked for,
 rooted at the deck's directory.
@@ -185,6 +186,16 @@ re-run its code; the project is what the policy admits, and a pull cannot
 reach outside it. If a host-only mode is ever wanted, it is a flag on the
 pull route gated by a host token, not a change to this contract.
 
+The miss routes carry no authentication of their own. The preview server
+binds loopback and the existing `render_download` and `import` routes
+inherit that posture; the three arms inherit it too. The only widening is
+in single-file mode, where anyone who can reach the port can read any
+policy-admitted file under the deck directory rather than only the synced
+closure; in project mode the admitted set and the synced set already
+coincide. Accepted (decided 2026-11-10). `--host` on a non-loopback address
+is a pre-existing exposure, not one this contract adds. If a gate is ever
+needed, it is a per-session token minted at boot and handed to the SPA.
+
 ### D7. The server promotes, the browser never creates
 
 A pulled file is added to the Automerge index by the server (the single
@@ -198,8 +209,10 @@ checkpoint and no disk file is written *to* disk by write-back.
 The server's watch set grows with demand. A pulled file is watched like any
 synced file (it is one, after D7). A directory whose listing or probe the
 server answered is watched, and a file created in it that the policy admits
-is enrolled into the index and bumps the generation counter so the browser's
-negative cache clears. Nothing is watched that no render asked about, so a
+is enrolled: synced whole into the index like any project file. Its arrival
+in the browser bumps the browser's own VFS generation, which is the
+negative-cache key, so no server-side counter exists. Nothing is watched
+that no render asked about, so a
 deck in a large directory watches that directory and whatever the render
 reached, not the subtree.
 

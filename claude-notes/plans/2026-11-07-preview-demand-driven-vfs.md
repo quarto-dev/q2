@@ -29,9 +29,11 @@ or prefetch is added only when the Phase 2 and 3 measurements, local and
 with injected latency, show a cold render needs it.
 
 Out of scope here: the `preview-scss-theme` branch itself. Its project-mode
-change (sync `.css`/`.scss` found by the walk) ships on its own after its
-`_files` suffix rule is replaced by the provenance rule from Phase 0 and its
-single-file theme heuristic is removed; that branch is tracked separately.
+change (sync `.css`/`.scss` found by the walk) ships on its own; its
+single-file theme heuristic is already removed. Phase 0 branches off `main`
+without waiting for it (decided 2026-11-10); whichever lands second rebases
+onto the other, and the theme branch then adopts the policy module in place
+of its own provenance check in `discovery.rs`.
 
 ## Phase 0: exposure policy
 
@@ -71,6 +73,9 @@ Implementation:
 - [ ] `WatchFilter::PreviewBroad` and `static_mode/watch_policy.rs` use the
   policy for the generated-dir decision.
 - [ ] `output-dir` is read from the project config and passed to the policy.
+- [ ] Canonical containment is correct on Windows: `\\?\` verbatim prefixes
+  and case-insensitive roots compare equal to the canonical root (follow
+  whatever the repo already does for canonicalize comparisons).
 - [ ] `cargo clippy -p quarto-hub -p quarto-preview --all-targets -- -D warnings`
   on the host and with `--target x86_64-pc-windows-msvc`.
 
@@ -113,9 +118,9 @@ Implementation:
   watcher; create events in watched directories go through the policy and
   `import_path`; the frozen allow-list in `FileWatcher::new` is removed.
   Project mode keeps its tree watch and gains enrolment.
-- [ ] Generation counter: bumps on enrolment and removal so the browser's
-  negative cache clears (it already bumps for project caches; confirm the
-  single-file path shares it).
+- [ ] Enrolment syncs the new file whole; its arrival bumps the browser
+  VFS's generation, which is the negative-cache key. No server-side
+  counter. Confirm single-file mode's sync path adds to the same index.
 - [ ] Quarto 1 check: when a quarto-cli checkout is available, compare its
   preview watch rules (input plus the render's reported resource files) and
   note any case ours misses here.
