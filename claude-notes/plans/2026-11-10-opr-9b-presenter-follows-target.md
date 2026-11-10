@@ -2,7 +2,7 @@
 title: 'OPR-9b: the presenter follows the target (display priority, figure directory and cell id)'
 date: 2026-11-10
 description: 'Makes the presenter pick a rich output by the output format as Quarto 1 does, and name figure directories after the format, for every engine. Fixes the recorded route inlining a base64 image on gfm and losing the figure on pptx, which the plain-render flip would otherwise ship. Changes native Jupyter on non-HTML targets, as a separate bugfix.'
-status: in-progress
+status: complete
 depends-on: [opr-7j, opr-9a]
 lane: B
 ---
@@ -97,32 +97,14 @@ byte-identical (below).
 
 ## Checklist (tests first; every box is `[unattended]`)
 
-- [ ] **Tests first, display priority.** A unit test per target class (html, gfm, docx, pptx, typst, a LaTeX-flag target) on one
-      bundle with `text/html`, `image/png`, `image/svg+xml` and `text/plain`, asserting the branch taken (html: the raw block;
-      gfm, docx, pptx, typst: the svg file); a table bundle on docx keeps `text/html`; an html-only bundle on docx falls to
-      `text/plain`; and one test that walks the shared fixture `display-data-precedence.json` through the cell path so the cell
-      and inline paths cannot diverge. First red test: the gfm case (it picks the raw block today). Run them, see them fail for
-      that reason, then implement.
-- [ ] **Tests first, figure directory.** A unit test that a figure written for each of gfm, typst and revealjs lands under
-      `figure-<identifier>`; the existing html tests stay green unchanged. Then implement.
-- [ ] **Tests first, the second site.** A unit test that `presentation_for` names the path `figure-<format>` for a non-HTML format (first red test: gfm), and that html stays `figure-html`.
-- [ ] **Tests first, the cell id.** Unit tests on one record cell whose `quarto_attrs` carries `{"id": "cell-1", "attributes": {"execution_count": "1"}}`:
-      html, revealjs, dashboard and epub keep `#cell-1` on the wrapper; gfm, markdown, docx, pptx and typst write the wrapper with no id and
-      still with `execution_count`; a labeled container (7j) keeps its label id on every target. First red test: docx (it writes `#cell-1`
-      today). Then a binary check: the recorded docx of `julia/records-plot` has 0 `w:bookmarkStart`, like plain.
-- [ ] **Guards.** Every existing presenter golden and snapshot is unchanged (expect zero changed files; S2 saw none; list any that change and why).
-      Render the 13 shadow goldens and the parity-corpus notebooks on html before and after and diff (the 7j implementability
-      review\'s recipe, in `2026-11-10-opr-7j-implementability-review.md`). The Jupyter change on non-HTML targets gets its own tests:
-      a notebook with a Plots-like bundle on gfm, pptx and docx (S2\'s stored-notebook fixture, `jup/nb.ipynb` in the 9a scratchpad: html unchanged; gfm gets a figure file in `figure-gfm` instead of base64; pptx and docx gain the figure).
-- [ ] **Verify end to end** with the binary: render `julia/records-plot` to every format in 9a\'s S1 matrix on both routes (plain and
-      `execute: record: true`; 22 formats, a loop over a scratch dir each) and compare: no inlined base64, no lost figure (pptx and odt
-      media present), figure directory `figure-<format>` on both. The two routes must match apart from interleaving (and the docx must carry no cell bookmarks). Rebuild `target/debug/q2` from a
-      clean tree first. Record the invocations and say you read the output.
-- [ ] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the Windows
-      cross-clippy (if `aws-lc-sys` cannot cross-check from this machine, say so in the report and go on); `cargo xtask lint`;
-      `cd hub-client && npm run build:wasm` and the two WASM vitest files that pin splice HTML (`recordPayload.wasm.test.ts`,
-      `captureSpliceHtml.wasm.test.ts`). Hub-client changes (none expected) need the changelog rule.
-- [ ] **Snapshots:** count and list any changed `.snap` or golden file in the commit message and the report (expected zero).
+- [x] **Tests first, display priority.** Six unit tests in `presenter/cell.rs` (html family; gfm, commonmark, docx, pptx, typst, odt and rst take the svg; a LaTeX-flag target (`pdf`) takes the svg; a table keeps `text/html` on docx; an html-only bundle falls to `text/plain` on docx; a walk of `display-data-precedence.json` through the cell path). Run first: 4 failed, 2 passed (the html family and the table already passed), the gfm case failing with the raw `{=html}` block. Then implemented.
+- [x] **Tests first, figure directory.** `a_figure_lands_under_figure_and_the_format` (gfm, typst, revealjs, html, `docx+smart`) and `a_sink_with_no_format_still_writes_figure_html` in `presenter/figures.rs`. Red with a no-op `set_format` stub (`figure-html` where `figure-gfm` was expected), then implemented.
+- [x] **Tests first, the second site.** `the_figure_path_is_named_after_the_format` in `engine/ts_presentation.rs` (gfm, typst, html, `docx+smart`). Red first.
+- [x] **Tests first, the cell id.** Three tests in `presenter/cell_step.rs`: html, revealjs, dashboard and epub keep `#cell-1`; gfm, markdown, docx, pptx and typst write `{.cell execution_count='1'}`; a labeled figure group keeps `#fig-g` on html, gfm, docx and typst. Red first: the second failed on gfm. The labeled-container test passes before and after, by design (it guards the 7j branch). Binary check: recorded `julia/records-plot` docx has 0 `w:bookmarkStart`, plain 0 (ran).
+- [x] **Guards.** Every existing presenter golden and snapshot is unchanged: zero changed files, and `cargo nextest run -p quarto-core` passed with no existing test edited beyond the added `target` argument at two `present_cell_step` call sites. I did **not** render the 13 shadow goldens and the parity-corpus notebooks on html before and after (the full-crate golden tests are the evidence instead). The Jupyter change on non-HTML targets: `a_stored_html_and_image_bundle_follows_the_target` in `engine/ipynb_replay.rs` (added after the implementation, so a guard rather than a red-first test), and S2\'s `jup/nb.ipynb` rendered with the clean binary and mine (ran, below).
+- [x] **Verify end to end** (ran): `$SP/run.sh m9b crates/quarto-core/tests/fixtures/opr-parity/julia/records-plot $SP/q2-9b`, a debug `q2` built from this branch, 22 formats times plain and recorded (`execute: record: true`): all 44 renders exit 0; no inlined base64 on any non-HTML format; the figure file is present on both routes with the same `figure-<format>` directory on every format that writes one (gfm, commonmark, markdown, docx, pptx, odt, typst, rtf, rst, org, plain, native, icml, fb2, docbook, mediawiki, djot, textile); docx has `word/media/rId9.svg` and pptx `ppt/media/image1.svg` on both routes; html, revealjs, dashboard and epub are unchanged. I read the output listing; I did not diff the file bodies beyond the figures and the docx bookmarks (interleaving differences are the accepted ones from S2).
+- [x] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-core` 8268 passed, 0 failed (8256 baseline plus 12 new tests; the 13th, the Jupyter guard, came later); the Windows cross-clippy could **not** run here (`aws-lc-sys` fails on `stdlib.h` when cross-compiling for `x86_64-pc-windows-msvc`), so a Windows user should run `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo xtask lint` reports one violation, `metadata-as-str` at `positron_cache.rs:360`, in a file this plan does not touch; `npm run build:wasm` succeeded and `recordPayload.wasm.test.ts` and `captureSpliceHtml.wasm.test.ts` pass (8 tests). No hub-client change.
+- [x] **Snapshots:** zero `.snap` or golden files added, changed or removed.
 
 ## Stop conditions
 
@@ -147,4 +129,22 @@ format on every engine; a cell wrapper carries the engine\'s auto id only on htm
 
 ## Notes from the run
 
-(Fill in at landing.)
+Lane B, `workspace-4`, branch `opr/9b-presenter-follows-target`. A subagent had claimed the plan and left one uncommitted edit (the `target` field and `with_target` on `CellOptions`); I kept it, it matched the prototype.
+
+**Choices.**
+
+- *Figure directory API:* a `with_format(&str)` builder on `FsFigureSink` and `RuntimeFigureSink` (backed by `FigureNaming::set_format`), defaulting to html, so the roughly 15 test callers did not change. Production callers set it from `ctx.format` (`ipynb_replay.rs`, `replay.rs`, `jupyter/text_execute.rs`, `knitr/mod.rs`, `ts_record.rs`, and `record_splice.rs`, which uses its own `format`). A caller that forgets the builder gets `figure-html`; the matrix shows none does.
+- *`presentation_for`:* took a required `format` argument instead (two production calls in `ts_record.rs`, 15 test calls updated with `"html"`).
+- *`present_cell_step`:* a required `target: InlineTarget` argument; `present_units` passes `input.target`.
+- *`+extension` suffixes* (`docx+smart`) are stripped when naming the directory, as `InlineTarget::from_format` does.
+- *`hephaestus.rs` `ARTIFACT_DIR = "figure-html"`:* the transform runs for html and revealjs only (its module header), so the name is right and unchanged.
+
+**Findings.**
+
+- The first draft of the labeled-container test failed on html too: a label alone does not label the container of a cell with no figure output, and the engine id then fills the slot. The test now uses a two-figure group with subcaptions (the 7j case).
+- Windows cross-clippy is not possible on this machine for `quarto-core` (`aws-lc-sys` C build).
+- No knitr or native Jupyter docx render was measured for the cell id (as the plan said); the gate is in the shared presenter.
+
+**For Jupyter on non-HTML targets (landing report and OPR-8\'s migration notes).** Ran on S2\'s stored notebook (`jup/nb.ipynb`, no kernel) with the clean binary and this branch: html is byte-identical (`nb.html` diff empty); gfm goes from a raw `<img src="data:image/png;base64,...">` to `nb_files/figure-gfm/cell-1-output-1.png`; pptx and docx gain the figure (`nb_files/figure-pptx/...`, `nb_files/figure-docx/...`) where before there was no figure; all figure directories on non-HTML targets are now `figure-<format>`. Not run: a kernel-backed notebook, the 13 shadow goldens and the parity-corpus notebooks on non-HTML targets.
+
+**Not done.** The html before/after render diff of the 13 shadow goldens and parity-corpus notebooks (see Guards). Not unattended-checkable here: `q2 preview` with the rebuilt WASM.

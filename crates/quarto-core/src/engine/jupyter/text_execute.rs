@@ -709,7 +709,7 @@ async fn execute_blocks_inner(
         .finish(EngineEntryInput::default())
         .map_err(record_failed)?
         .cells;
-    let mut fig = FsFigureSink::new(&ctx.source_path);
+    let mut fig = FsFigureSink::new(&ctx.source_path).with_format(&ctx.format);
     let presented = present_document(
         &cells,
         input,

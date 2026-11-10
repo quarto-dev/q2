@@ -139,7 +139,7 @@ impl ReplayEngine {
             let texts = AuthorTexts::from_scanned(&units);
             fill_ids(&mut units, &texts).map_err(|e| fail(format!("replay: {e}")))?;
         }
-        let mut fig = FsFigureSink::new(&ctx.source_path);
+        let mut fig = FsFigureSink::new(&ctx.source_path).with_format(&ctx.format);
         // A whole-document engine (knitr) recorded a skeleton: present over it, not over the
         // input text, so the spans and chunks its own run substituted are already in place.
         let (markdown, files_written, notes, note_units, derived_includes) = if let Some(skeleton) =

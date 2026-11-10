@@ -91,6 +91,20 @@ pub fn engine_error_diagnostic(err: &ExecutionError) -> DiagnosticMessage {
         ExecutionError::NoHandlerForLanguage { engine, language } => {
             no_runnable_kernel_diagnostic(engine, std::slice::from_ref(language), true)
         }
+        ExecutionError::ReservedOption { engine, key, chunk } => {
+            DiagnosticMessageBuilder::error("Reserved Chunk Option")
+                .with_code("Q-18-17")
+                .problem(format!(
+                    "the `{engine}` chunk option `{key}` (in code chunk {chunk} of the document) is reserved by Quarto \
+                     for execution records, so a document cannot set it."
+                ))
+                .add_detail(
+                    "Quarto adds its own `quarto-unit-id` option to every chunk it records. \
+                     A second one makes the engine stop with a duplicate-key error.",
+                )
+                .add_hint(format!("Remove the `{key}` line from the chunk."))
+                .build()
+        }
         other => DiagnosticMessage::error(other.to_string()),
     }
 }

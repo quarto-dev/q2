@@ -2,7 +2,7 @@
 title: 'OPR-9c: a reserved option key gets a diagnostic (quarto-unit-id)'
 date: 2026-11-10
 description: 'The record path writes a quarto-unit-id option line into every knitr chunk it owns. A chunk that already carries the key makes R fail with Duplicate map key. Gordon decided the key is reserved and a diagnostic says so. The plain-render flip would otherwise expose the crash to every knitr render.'
-status: in-progress
+status: complete
 depends-on: [opr-9a]
 lane: C
 ---
@@ -55,15 +55,15 @@ S5 ran Julia only; a Jupyter cell was not run. Widening to the whole `quarto_`/`
 
 ## Checklist (tests first; every box is `[unattended]`)
 
-- [ ] **Tests first.** (1) A unit test on `insert_unit_ids`: a chunk with `#| quarto-unit-id: abc123` returns the diagnostic naming the
+- [x] **Tests first.** (1) A unit test on `insert_unit_ids`: a chunk with `#| quarto-unit-id: abc123` returns the diagnostic naming the
       key; a chunk with other options and no key is unchanged; a chunk in a `{sql}` fence (comment prefix `--`) with the key is also
       caught. (2) The existing integration test `knitr_chunk_records::knitr_chunk_id_is_not_emitted_as_an_attribute` changes
       meaning: it now asserts that the render fails with the diagnostic (or move its leak assertion to a chunk without the key).
       Watch (1) fail first, for that reason. Skip cleanly when R is absent, as the knitr tests do.
-- [ ] **Implement** in `insert_unit_ids`; add the catalog code, docs page and sidebar entry if a `Q-*` code is used.
-- [ ] **End to end** through the binary: `q2 render` of a knitr document with the key, once with `execute: record: true` (fails with
+- [x] **Implement** in `insert_unit_ids`; add the catalog code, docs page and sidebar entry if a `Q-*` code is used.
+- [x] **End to end** through the binary: `q2 render` of a knitr document with the key, once with `execute: record: true` (fails with
       the diagnostic today after this plan) and a normal one without the key (renders). Record the invocation and the message you saw.
-- [ ] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the Windows
+- [x] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the Windows
       cross-clippy; `cargo xtask lint`.
 
 ## Stop conditions
@@ -86,4 +86,26 @@ no render with the key reaches R\'s duplicate-key error.
 
 ## Notes from the run
 
-(Fill in at landing.)
+- **Implementation.** `insert_unit_ids` now returns `Result` and fails with the new `ExecutionError::ReservedOption`
+  (mapped in `engine/diagnostics.rs` to `Q-18-17`, "Reserved Chunk Option"; catalog entry, `docs/errors/engine/Q-18-17.qmd` and
+  the sidebar entry are in the same commit). The check reads the chunk's option block (`#|` or the language prefix plus `|`,
+  inside the blockquote prefix) and stops at the first non-option line, so the key written as code is not flagged.
+- **Decision (mine): chunk ordinal, not a line number.** The first draft reported a line, but the engine text is not the
+  author's file (the e2e run printed line 140 for a line-8 option). The message names "code chunk N of the document"
+  (`cell.index + 1`) instead.
+- **Tests (red first).** Unit tests in `chunk_records.rs` (key caught, ordinal, `--|` prefix in `{sql}`, blockquote, no record means
+  no check, code-line not an option, `Q-18-17` mapping). I disabled the check and saw `a_chunk_that_sets_the_reserved_key_is_an_error_naming_it`
+  fail (got `None`, wanted the key) before enabling it. nextest stops at the first failure, so the other new tests were
+  not individually seen red. Integration: `knitr_chunk_that_sets_the_reserved_key_fails_with_q_18_17` added;
+  `knitr_chunk_id_is_not_emitted_as_an_attribute` now renders with `execute: record: true` and no author key, so its leak
+  assertion checks core\'s own injected id (before, a plain render built no record and the key was the author\'s).
+- **End to end (ran, inspected).** `target/debug/q2 render bad.qmd` (knitr, `execute: record: true`, chunk with
+  `#| quarto-unit-id: abc123`) printed `Error [Q-18-17]: Reserved Chunk Option ... the knitr chunk option quarto-unit-id (in code
+  chunk 1 of the document) is reserved by Quarto for execution records` and `1 error`, with no R duplicate-key text. The same
+  document without the key rendered normally through knitr.
+- **Gates (ran).** `cargo clippy -p quarto-core --all-targets -- -D warnings` clean; `cargo nextest run -p quarto-core`: 8262 passed, 36 skipped.
+  `cargo xtask lint`: one violation, `metadata-as-str` at `positron_cache.rs:360`, a file this plan does not touch (pre-existing
+  on the integration branch; not mine, not fixed here). The Windows cross-clippy could not run: `aws-lc-sys` needs
+  MSVC headers (`stdlib.h`, `windows.h`) on this machine. The change uses no platform API.
+- **Not done.** No WASM build (the change is in `engine/knitr`, native-only; not under the protocol\'s WASM list). No Julia/Jupyter run (out of scope).
+- **Snapshots.** None changed.

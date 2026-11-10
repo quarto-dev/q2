@@ -231,7 +231,7 @@ impl ExecutionEngine for KnitrEngine {
         // edits below change cell bodies (the label re-insertion adds option lines, which
         // would stop `locate_units` matching those cells).
         let engine_input = input;
-        let (input, expected_ids) = chunk_records::insert_unit_ids(input, ctx);
+        let (input, expected_ids) = chunk_records::insert_unit_ids(input, ctx)?;
         let input = input.as_str();
 
         // Step 2: Preprocess markdown (resolve inline R expressions)
@@ -419,7 +419,8 @@ impl ExecutionEngine for KnitrEngine {
                     .collect(),
             };
             let units = super::units::units_for_engine(&ctx.units, engine_input);
-            let mut fig = crate::presenter::figures::FsFigureSink::new(&ctx.source_path);
+            let mut fig = crate::presenter::figures::FsFigureSink::new(&ctx.source_path)
+                .with_format(&ctx.format);
             let presented = super::skeleton::present_skeleton(
                 &execute_result.markdown,
                 &nonce,

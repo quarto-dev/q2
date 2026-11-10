@@ -199,6 +199,9 @@ pub enum OutputKind {
 /// Resolved options that shape cell markup.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CellOptions {
+    /// The output target; `None` means html (the historical behavior, so every caller that does
+    /// not set it renders as before).
+    target: Option<super::inline::InlineTarget>,
     class_source: Vec<String>,
     attr_source: Vec<String>,
     class_output: Vec<String>,
@@ -336,6 +339,18 @@ impl CellOptions {
         me
     }
 
+    /// Set the output target (OPR-9b): it decides which rich output the presenter picks.
+    pub fn with_target(mut self, target: super::inline::InlineTarget) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    /// The output target; html when none was set.
+    pub fn target(&self) -> super::inline::InlineTarget {
+        self.target
+            .unwrap_or_else(|| super::inline::InlineTarget::from_format("html"))
+    }
+
     /// Forward the cell options nothing handles as cell attributes (Phase 7g): Quarto 1\'s
     /// `jupyter.ts` and hooks.R\'s `unknown_opts` do the same. `cell` is the cell\'s own options,
     /// not the document scope merged under them, so a document-level `execute:` key is not
@@ -431,6 +446,7 @@ impl CellOptions {
         };
         let collapse = get("collapse").first().map(String::as_str) == Some("true");
         Self {
+            target: None,
             class_source: words("class.source"),
             attr_source: get("attr.source"),
             class_output: words("class.output"),

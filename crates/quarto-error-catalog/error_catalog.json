@@ -2050,6 +2050,13 @@
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-16",
     "since_version": "99.9.9"
   },
+  "Q-18-17": {
+    "subsystem": "engine",
+    "title": "Reserved Chunk Option",
+    "message_template": "A chunk sets an option that Quarto reserves for its own use (`quarto-unit-id`). Quarto adds this option to every chunk it records, so a second one makes the engine fail. Remove the option line from the chunk.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-17",
+    "since_version": "99.9.9"
+  },
   "Q-19-1": {
     "subsystem": "image",
     "title": "Plot Document Not Found",

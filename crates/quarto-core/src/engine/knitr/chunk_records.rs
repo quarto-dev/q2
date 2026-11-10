@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 
+use crate::engine::ExecutionError;
 use crate::engine::context::{ExecuteResult, ExecutionContext};
 use crate::engine::diagnostics::{EngineRecordProblem, engine_record_diagnostic};
 use crate::engine::units::{Unit, locate_units, view_for_engine};
@@ -58,9 +59,16 @@ fn owns(ctx: &ExecutionContext, lang: &str) -> bool {
 /// output introduced has no id and is left alone. Returns `text` unchanged when no
 /// record is wanted or the context carries no units, which keeps the live path
 /// byte-identical.
-pub(super) fn insert_unit_ids(text: &str, ctx: &ExecutionContext) -> (String, Vec<String>) {
+///
+/// A chunk whose option lines already name `quarto-unit-id` is an error
+/// ([`ExecutionError::ReservedOption`], `Q-18-17`): the key is reserved, and a second one makes
+/// R stop with `Duplicate map key`.
+pub(super) fn insert_unit_ids(
+    text: &str,
+    ctx: &ExecutionContext,
+) -> Result<(String, Vec<String>), ExecutionError> {
     if !ctx.builds_record() || ctx.units.is_empty() {
-        return (text.to_string(), Vec::new());
+        return Ok((text.to_string(), Vec::new()));
     }
     let located = locate_units(&ctx.units, text);
     let mut edits: Vec<(usize, String)> = Vec::new();
@@ -73,6 +81,13 @@ pub(super) fn insert_unit_ids(text: &str, ctx: &ExecutionContext) -> (String, Ve
             continue;
         };
         let syntax = crate::cell_options::comment_syntax_for(&cell.lang);
+        if sets_reserved_key(text, cell, opener_len, syntax.prefix) {
+            return Err(ExecutionError::ReservedOption {
+                engine: KNITR.to_string(),
+                key: UNIT_ID_OPTION.to_string(),
+                chunk: cell.index + 1,
+            });
+        }
         // knitr reads option lines under one comment prefix and stops at the first line that uses
         // another. It accepts `#|` in any chunk, so an author's `#|` lines in a `{sql}` chunk
         // (whose scanner prefix is `--`) must not be split from the options by a `--|` line.
@@ -105,7 +120,39 @@ pub(super) fn insert_unit_ids(text: &str, ctx: &ExecutionContext) -> (String, Ve
     for (at, line) in edits.into_iter().rev() {
         out.insert_str(at, &line);
     }
-    (out, ids)
+    Ok((out, ids))
+}
+
+/// Whether the chunk's option block sets [`UNIT_ID_OPTION`].
+///
+/// The option block is the run of lines right after the opener that start with `#|` (knitr
+/// accepts it in every chunk) or the language's comment prefix followed by `|`.
+fn sets_reserved_key(
+    text: &str,
+    cell: &crate::engine::units::CellUnit,
+    opener_len: usize,
+    prefix: &str,
+) -> bool {
+    let body = cell.start + opener_len + 1;
+    let lang_marker = format!("{prefix}|");
+    for line in text[body..].lines() {
+        let Some(line) = line.strip_prefix(cell.container_prefix.as_str()) else {
+            return false;
+        };
+        let line = line.trim_start_matches(' ');
+        let Some(rest) = line
+            .strip_prefix("#|")
+            .or_else(|| line.strip_prefix(lang_marker.as_str()))
+        else {
+            return false;
+        };
+        if let Some(after) = rest.trim_start().strip_prefix(UNIT_ID_OPTION)
+            && after.trim_start().starts_with(':')
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// The record's one output for a chunk: its finished markdown as `display_data`, tagged
@@ -328,7 +375,7 @@ y = 2
     #[test]
     fn no_ids_are_sent_unless_a_record_is_wanted() {
         let c = ctx(DOC, &["r"], false);
-        assert_eq!(insert_unit_ids(DOC, &c), (DOC.to_string(), vec![]));
+        assert_eq!(insert_unit_ids(DOC, &c).unwrap(), (DOC.to_string(), vec![]));
         let bare = ExecutionContext::new(
             PathBuf::from("/tmp"),
             PathBuf::from("/proj"),
@@ -336,7 +383,61 @@ y = 2
             "html",
         )
         .with_want_record(true);
-        assert_eq!(insert_unit_ids(DOC, &bare), (DOC.to_string(), vec![]));
+        assert_eq!(
+            insert_unit_ids(DOC, &bare).unwrap(),
+            (DOC.to_string(), vec![])
+        );
+    }
+
+    fn reserved(doc: &str, owned: &[&str]) -> Option<(String, usize)> {
+        match insert_unit_ids(doc, &ctx(doc, owned, true)) {
+            Err(ExecutionError::ReservedOption { key, chunk, .. }) => Some((key, chunk)),
+            Err(e) => panic!("unexpected error: {e}"),
+            Ok(_) => None,
+        }
+    }
+
+    #[test]
+    fn a_chunk_that_sets_the_reserved_key_is_an_error_naming_it() {
+        let doc =
+            "# T\n\n```{r}\ny\n```\n\n```{r}\n#| echo: false\n#| quarto-unit-id: abc123\nx\n```\n";
+        assert_eq!(reserved(doc, &["r"]), Some(("quarto-unit-id".into(), 2)));
+    }
+
+    #[test]
+    fn chunks_without_the_key_are_unchanged() {
+        let doc = "```{r}\n#| echo: false\nx\n```\n";
+        assert_eq!(reserved(doc, &["r"]), None);
+        // The key as ordinary code, outside the option block, is not an option.
+        let doc = "```{r}\nx <- 1\n#| quarto-unit-id: abc\n```\n";
+        assert_eq!(reserved(doc, &["r"]), None);
+    }
+
+    #[test]
+    fn the_key_is_caught_under_the_language_comment_prefix() {
+        let doc = "```{sql}\n--| quarto-unit-id: abc\nselect 1\n```\n";
+        assert_eq!(reserved(doc, &["sql"]), Some(("quarto-unit-id".into(), 1)));
+        let doc = "```{sql}\n#| quarto-unit-id: abc\nselect 1\n```\n";
+        assert_eq!(reserved(doc, &["sql"]), Some(("quarto-unit-id".into(), 1)));
+    }
+
+    #[test]
+    fn the_key_is_caught_in_a_blockquote_and_no_record_means_no_check() {
+        let doc = "> ```{r}\n> #| quarto-unit-id: abc\n> x\n> ```\n";
+        assert_eq!(reserved(doc, &["r"]), Some(("quarto-unit-id".into(), 1)));
+        let c = ctx(doc, &["r"], false);
+        assert!(insert_unit_ids(doc, &c).is_ok());
+    }
+
+    #[test]
+    fn the_error_maps_to_q_18_17() {
+        let d =
+            crate::engine::diagnostics::engine_error_diagnostic(&ExecutionError::ReservedOption {
+                engine: "knitr".into(),
+                key: "quarto-unit-id".into(),
+                chunk: 1,
+            });
+        assert_eq!(d.code.as_deref(), Some("Q-18-17"));
     }
 
     /// knitr reads a chunk's option lines under one comment prefix and stops at the first line
@@ -349,7 +450,7 @@ y = 2
                    ```{sql}\n--| connection: con\nSELECT 2\n```\n\n\
                    ```{sql}\nSELECT 3\n```\n";
         let c = ctx(doc, &["sql"], true);
-        let (text, ids) = insert_unit_ids(doc, &c);
+        let (text, ids) = insert_unit_ids(doc, &c).unwrap();
         assert_eq!(ids.len(), 3, "{text}");
         let line = |i: usize, prefix: &str| format!("{prefix}| quarto-unit-id: \"{}\"\n", ids[i]);
         assert!(
@@ -372,7 +473,7 @@ y = 2
     #[test]
     fn an_id_line_follows_the_opener_of_each_owned_cell_only() {
         let c = ctx(DOC, &["r"], true);
-        let (text, ids) = insert_unit_ids(DOC, &c);
+        let (text, ids) = insert_unit_ids(DOC, &c).unwrap();
         assert_eq!(
             ids.len(),
             2,
@@ -406,7 +507,7 @@ y = 2
     #[test]
     fn ids_come_back_in_document_order_and_match_the_shared_list() {
         let c = ctx(DOC, &["r", "python"], true);
-        let (_, ids) = insert_unit_ids(DOC, &c);
+        let (_, ids) = insert_unit_ids(DOC, &c).unwrap();
         let shared: Vec<String> = c
             .units
             .iter()
@@ -420,7 +521,7 @@ y = 2
     fn a_cell_an_earlier_engine_introduced_gets_no_id() {
         let c = ctx(DOC, &["r"], true);
         let text = format!("{DOC}\n```{{r}}\nnew\n```\n");
-        let (out, ids) = insert_unit_ids(&text, &c);
+        let (out, ids) = insert_unit_ids(&text, &c).unwrap();
         assert_eq!(ids.len(), 2);
         assert_eq!(out.matches("quarto-unit-id").count(), 2);
     }
@@ -428,7 +529,7 @@ y = 2
     #[test]
     fn matching_chunks_build_a_record_of_rendered_markdown_units() {
         let c = ctx(DOC, &["r"], true);
-        let (_, ids) = insert_unit_ids(DOC, &c);
+        let (_, ids) = insert_unit_ids(DOC, &c).unwrap();
         let mut with_files = chunk(&ids[1], "::: cell\nz\n:::\n");
         with_files.files = vec!["doc_files/figure-html/a-1.png".to_string()];
         let chunks = vec![chunk(&ids[0], "x\n"), with_files];
@@ -463,7 +564,7 @@ y = 2
     #[test]
     fn a_short_record_is_a_warning_naming_both_counts_and_no_record() {
         let c = ctx(DOC, &["r"], true);
-        let (_, ids) = insert_unit_ids(DOC, &c);
+        let (_, ids) = insert_unit_ids(DOC, &c).unwrap();
         let mut result = ExecuteResult::default();
         attach_chunk_records(
             &c,
@@ -484,7 +585,7 @@ y = 2
     #[test]
     fn unknown_duplicate_and_out_of_order_ids_drop_the_record() {
         let c = ctx(DOC, &["r"], true);
-        let (_, ids) = insert_unit_ids(DOC, &c);
+        let (_, ids) = insert_unit_ids(DOC, &c).unwrap();
         let def = HashDefinition::conservative("knitr");
         for (chunks, needle) in [
             (vec![chunk(&ids[0], ""), chunk("nope", "")], "nope"),
@@ -510,7 +611,7 @@ y = 2
     /// The unit exec hash of the single `r` chunk in `doc`, through the knitr declaration.
     fn exec_hash(doc: &str) -> String {
         let c = ctx(doc, &["r"], true);
-        let (_, ids) = insert_unit_ids(doc, &c);
+        let (_, ids) = insert_unit_ids(doc, &c).unwrap();
         let chunks: Vec<_> = ids.iter().map(|id| chunk(id, "")).collect();
         let mut result = ExecuteResult::default();
         let def = {
@@ -582,7 +683,7 @@ y = 2
 
     /// Chunk ids, span ids and the chunk records for `DOC` (two `r` chunks, one `r` span).
     fn doc_ids(c: &ExecutionContext) -> (Vec<String>, Vec<String>, Vec<KnitrChunkRecord>) {
-        let (text, ids) = insert_unit_ids(DOC, c);
+        let (text, ids) = insert_unit_ids(DOC, c).unwrap();
         let span_ids = super::super::span_records::SpanPlan::new(&text, c).expected;
         let chunks = ids.iter().map(|id| chunk(id, "c\n")).collect();
         (ids, span_ids, chunks)

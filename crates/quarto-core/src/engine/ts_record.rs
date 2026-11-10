@@ -488,6 +488,7 @@ fn build_record(
                                 cell.result.execution_count,
                                 &cell.result.outputs,
                                 &stem,
+                                &ctx.format,
                             );
                             attach_expansion(&mut unit.result, m, &cell.source, &shown.outputs);
                         }
@@ -508,6 +509,7 @@ fn build_record(
                                 cell.result.execution_count,
                                 &cell.result.outputs,
                                 &stem,
+                                &ctx.format,
                             );
                             let mut result = cell.result.clone();
                             result.outputs = shown.outputs;
@@ -709,7 +711,7 @@ pub(super) fn present_from_record(
         return Ok(());
     };
     let units = locate_units(&ctx.units, input);
-    let mut fig = FsFigureSink::new(&ctx.source_path);
+    let mut fig = FsFigureSink::new(&ctx.source_path).with_format(&ctx.format);
     let presented = present_document(
         &record.cells,
         input,

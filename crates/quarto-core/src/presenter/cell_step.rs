@@ -57,6 +57,7 @@ pub fn present_cell_step(
     engine: Option<&EngineEntry>,
     scope: Option<&ConfigValue>,
     fig: &mut dyn FigureSink,
+    target: super::inline::InlineTarget,
 ) -> Result<(String, Vec<String>), String> {
     let parsed =
         partition_cell_options(language, author_text, SourceInfo::generated(By::unknown()))
@@ -65,8 +66,17 @@ pub fn present_cell_step(
     let resolved = resolve_cell_options(scope, parsed.options.clone());
     let visibility =
         CellVisibility::resolve(resolved.as_ref(), presenter_enforces_warning(cell, engine));
-    let mut options = CellOptions::from_config(resolved.as_ref()).forwarding(cell_only.as_ref());
+    let mut options = CellOptions::from_config(resolved.as_ref())
+        .forwarding(cell_only.as_ref())
+        .with_target(target);
     if let Some(attrs) = cell_engine_attrs(cell) {
+        // Q1 `jupyter.ts:1366-1376`: the auto cell id goes on the wrapper only for ipynb, JATS and
+        // html-family output. `InlineTarget.to_html` is the same identifier list as `isHtmlOutput`.
+        let attrs = if target.to_html {
+            attrs
+        } else {
+            attrs.without_id()
+        };
         options = options.with_engine_attrs(attrs);
     }
     let rejected = rejection_reasons(cell);
@@ -191,10 +201,21 @@ mod tests {
         engine: Option<&EngineEntry>,
         scope: Option<&ConfigValue>,
     ) -> (String, Vec<String>) {
+        present_for("html", options, cell, engine, scope)
+    }
+
+    fn present_for(
+        format: &str,
+        options: &str,
+        cell: &RecordCell,
+        engine: Option<&EngineEntry>,
+        scope: Option<&ConfigValue>,
+    ) -> (String, Vec<String>) {
         let dir = tempfile::tempdir().unwrap();
         let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
         let author = format!("{options}\nx\n");
-        present_cell_step("python", "", &author, cell, engine, scope, &mut fig).unwrap()
+        let target = super::super::inline::InlineTarget::from_format(format);
+        present_cell_step("python", "", &author, cell, engine, scope, &mut fig, target).unwrap()
     }
 
     // === OPR-7j: a group on the fallback path ===
@@ -239,6 +260,66 @@ mod tests {
             "{md}"
         );
         assert!(reasons.is_empty(), "{reasons:?}");
+    }
+
+    // === OPR-9b: the engine's auto cell id goes on the wrapper only for html-family targets ===
+
+    fn cell_with_auto_id(def: &HashDefinition) -> RecordCell {
+        let mut c = cell(def, None);
+        c.metadata.extra.insert(
+            "quarto_attrs".into(),
+            json!({"id": "cell-1", "attributes": {"execution_count": "1"}}),
+        );
+        c
+    }
+
+    #[test]
+    fn the_auto_cell_id_stays_on_the_wrapper_for_html_family_targets() {
+        let def = jupyter_like();
+        let (e, c) = (entry(&def), cell_with_auto_id(&def));
+        for format in ["html", "revealjs", "dashboard", "epub"] {
+            let (md, _) = present_for(format, "", &c, Some(&e), None);
+            assert!(
+                md.contains("::: {#cell-1 .cell execution_count='1'}"),
+                "{format}: {md}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_auto_cell_id_is_dropped_on_other_targets_and_the_rest_of_the_attrs_stay() {
+        let def = jupyter_like();
+        let (e, c) = (entry(&def), cell_with_auto_id(&def));
+        for format in ["gfm", "markdown", "docx", "pptx", "typst"] {
+            let (md, _) = present_for(format, "", &c, Some(&e), None);
+            assert!(
+                md.contains("::: {.cell execution_count='1'}"),
+                "{format}: {md}"
+            );
+            assert!(!md.contains("#cell-1"), "{format}: {md}");
+        }
+    }
+
+    #[test]
+    fn a_labeled_container_keeps_its_label_id_on_every_target() {
+        // A figure group: the label labels the `.cell` container (OPR-7j), engine id or not.
+        const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+        let def = knitr_like();
+        let e = entry(&def);
+        let mut c = cell_with_auto_id(&def);
+        c.outputs = (0..2)
+            .map(|_| json!({"output_type": "display_data", "data": {"image/png": PNG}, "metadata": {}}))
+            .collect();
+        for format in ["html", "gfm", "docx", "typst"] {
+            let (md, _) = present_for(
+                format,
+                "#| label: fig-g\n#| fig-cap: A group\n#| fig-subcap:\n#|   - First\n#|   - Second",
+                &c,
+                Some(&e),
+                None,
+            );
+            assert!(md.contains("#fig-g .cell"), "{format}: {md}");
+        }
     }
 
     #[test]

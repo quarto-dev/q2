@@ -46,7 +46,9 @@ pub(super) fn presentation_for(
     execution_count: Option<u64>,
     outputs: &[Value],
     stem: &str,
+    format: &str,
 ) -> CellPresentation {
+    let format = format.split('+').next().unwrap_or(format);
     let label = cell_label(source).map(|l| auto_identifier(&l, false));
     let label = label.filter(|l| !l.is_empty());
     let id = label.clone().unwrap_or_else(|| format!("cell-{index}"));
@@ -80,7 +82,7 @@ pub(super) fn presentation_for(
             if let Some((mime, ext)) = image_mime(&output) {
                 let _ = mime;
                 path = Some(format!(
-                    "{stem}_files/figure-html/{base}-output-{kept}.{ext}"
+                    "{stem}_files/figure-{format}/{base}-output-{kept}.{ext}"
                 ));
                 out_attrs.insert("classes".into(), json!(["cell-output"]));
             }
@@ -223,7 +225,7 @@ mod tests {
     /// `[code]` (the fixture `cell-classes`): wrapper `#cell-0`, figure `cell-2-output-1`.
     #[test]
     fn the_only_code_cell_is_cell_0_with_a_cell_2_figure() {
-        let p = presentation_for(0, 1, "plot_png()", Some(1), &[png()], "notebook");
+        let p = presentation_for(0, 1, "plot_png()", Some(1), &[png()], "notebook", "html");
         assert_eq!(p.cell_attrs["id"], "cell-0");
         assert_eq!(p.cell_attrs["attributes"]["execution_count"], "1");
         assert_eq!(
@@ -241,25 +243,56 @@ mod tests {
     /// `#cell-1` with `cell-2`. (The fixture\'s `cell-3` has two code cells before the plot.)
     #[test]
     fn the_two_counters_are_independent() {
-        let p = presentation_for(1, 1, "plot_png()", Some(2), &[png()], "notebook");
+        let p = presentation_for(1, 1, "plot_png()", Some(2), &[png()], "notebook", "html");
         assert_eq!(p.cell_attrs["id"], "cell-1");
         assert_eq!(
             path_of(&p.outputs[0]),
             Some("notebook_files/figure-html/cell-2-output-1.png")
         );
         // `[md, code, code]`: the second code cell has id `cell-2` and figure `cell-3`.
-        let p = presentation_for(2, 2, "plot_png()", Some(3), &[png()], "notebook");
+        let p = presentation_for(2, 2, "plot_png()", Some(3), &[png()], "notebook", "html");
         assert_eq!(p.cell_attrs["id"], "cell-2");
         assert_eq!(
             path_of(&p.outputs[0]),
             Some("notebook_files/figure-html/cell-3-output-1.png")
         );
         // `[md, md, code]`: `cell-2` and `cell-2`.
-        let p = presentation_for(2, 1, "plot_png()", Some(1), &[png()], "notebook");
+        let p = presentation_for(2, 1, "plot_png()", Some(1), &[png()], "notebook", "html");
         assert_eq!(p.cell_attrs["id"], "cell-2");
         assert_eq!(
             path_of(&p.outputs[0]),
             Some("notebook_files/figure-html/cell-2-output-1.png")
+        );
+    }
+
+    #[test]
+    fn the_figure_path_is_named_after_the_format() {
+        // The sink prefers a producer path over its own name, so this directory is the one
+        // Julia figures land in (OPR-9b).
+        for (format, dir) in [
+            ("gfm", "figure-gfm"),
+            ("typst", "figure-typst"),
+            ("html", "figure-html"),
+        ] {
+            let p = presentation_for(0, 1, "plot_png()", Some(1), &[png()], "notebook", format);
+            assert_eq!(
+                path_of(&p.outputs[0]),
+                Some(format!("notebook_files/{dir}/cell-2-output-1.png").as_str()),
+                "{format}"
+            );
+        }
+        let p = presentation_for(
+            0,
+            1,
+            "plot_png()",
+            Some(1),
+            &[png()],
+            "notebook",
+            "docx+smart",
+        );
+        assert_eq!(
+            path_of(&p.outputs[0]),
+            Some("notebook_files/figure-docx/cell-2-output-1.png")
         );
     }
 
@@ -272,6 +305,7 @@ mod tests {
             Some(1),
             &[stdout("1\n"), png()],
             "n",
+            "html",
         );
         assert_eq!(path_of(&p.outputs[0]), None);
         assert_eq!(
@@ -283,7 +317,7 @@ mod tests {
     #[test]
     fn two_figures_are_numbered_in_order_with_their_own_extension() {
         let svg = json!({"output_type": "display_data", "data": {"image/svg+xml": "<svg/>"}, "metadata": {}});
-        let p = presentation_for(0, 1, "x", Some(1), &[png(), svg], "n");
+        let p = presentation_for(0, 1, "x", Some(1), &[png(), svg], "n", "html");
         assert_eq!(
             path_of(&p.outputs[0]),
             Some("n_files/figure-html/cell-2-output-1.png")
@@ -296,7 +330,15 @@ mod tests {
 
     #[test]
     fn a_label_replaces_the_base_and_the_id() {
-        let p = presentation_for(4, 3, "#| label: fig-plot\nplot()", Some(1), &[png()], "n");
+        let p = presentation_for(
+            4,
+            3,
+            "#| label: fig-plot\nplot()",
+            Some(1),
+            &[png()],
+            "n",
+            "html",
+        );
         assert_eq!(p.cell_attrs["id"], "fig-plot");
         assert_eq!(
             path_of(&p.outputs[0]),
@@ -305,7 +347,15 @@ mod tests {
         // A label is normalized as the plain route does (`asHtmlId`): punctuation such as `:`
         // is removed, spaces become hyphens, letters are lower-cased; the file base is the
         // same text, because the plain route derives it from the normalized label.
-        let p = presentation_for(0, 1, "#| label: Fig:My Plot\nx", Some(1), &[png()], "n");
+        let p = presentation_for(
+            0,
+            1,
+            "#| label: Fig:My Plot\nx",
+            Some(1),
+            &[png()],
+            "n",
+            "html",
+        );
         assert_eq!(p.cell_attrs["id"], "figmy-plot");
         assert_eq!(
             path_of(&p.outputs[0]),
@@ -316,12 +366,20 @@ mod tests {
     #[test]
     fn stderr_is_not_counted_when_warnings_are_hidden_and_is_when_shown() {
         let outs = [stderr("w\n"), png()];
-        let shown = presentation_for(0, 1, "plot()", Some(1), &outs, "n");
+        let shown = presentation_for(0, 1, "plot()", Some(1), &outs, "n", "html");
         assert_eq!(
             path_of(&shown.outputs[1]),
             Some("n_files/figure-html/cell-2-output-2.png")
         );
-        let hidden = presentation_for(0, 1, "#| warning: false\nplot()", Some(1), &outs, "n");
+        let hidden = presentation_for(
+            0,
+            1,
+            "#| warning: false\nplot()",
+            Some(1),
+            &outs,
+            "n",
+            "html",
+        );
         assert_eq!(
             path_of(&hidden.outputs[1]),
             Some("n_files/figure-html/cell-2-output-1.png")
@@ -331,7 +389,7 @@ mod tests {
     #[test]
     fn a_discardable_value_next_to_an_image_is_not_counted() {
         let outs = [value("<Plot>", 1), png()];
-        let p = presentation_for(0, 1, "plot()", Some(1), &outs, "n");
+        let p = presentation_for(0, 1, "plot()", Some(1), &outs, "n", "html");
         assert_eq!(
             path_of(&p.outputs[1]),
             Some("n_files/figure-html/cell-2-output-1.png")
@@ -344,13 +402,14 @@ mod tests {
             Some(1),
             &[value("<Plot>", 1), stdout("a\n")],
             "n",
+            "html",
         );
         assert_eq!(p.outputs.len(), 2);
     }
 
     #[test]
     fn execute_results_carry_their_count_and_displays_do_not() {
-        let p = presentation_for(0, 1, "x", Some(7), &[value("42", 7), png()], "n");
+        let p = presentation_for(0, 1, "x", Some(7), &[value("42", 7), png()], "n", "html");
         assert_eq!(p.cell_attrs["attributes"]["execution_count"], "7");
         assert_eq!(
             p.outputs[0]["metadata"]["quarto_attrs"]["attributes"]["execution_count"],
@@ -361,7 +420,7 @@ mod tests {
 
     #[test]
     fn a_cell_with_no_figure_gets_no_file_path_and_no_count_means_no_attribute() {
-        let p = presentation_for(3, 2, "x", None, &[stdout("a\n")], "n");
+        let p = presentation_for(3, 2, "x", None, &[stdout("a\n")], "n", "html");
         assert_eq!(p.cell_attrs["id"], "cell-3");
         assert!(p.cell_attrs.get("attributes").is_none());
         assert!(path_of(&p.outputs[0]).is_none());

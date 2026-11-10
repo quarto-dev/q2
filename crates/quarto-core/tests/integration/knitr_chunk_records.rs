@@ -70,7 +70,7 @@ fn render_html(tmp: &TempDir, source: &str) -> String {
     std::fs::read_to_string(&result.output_path).expect("read rendered HTML")
 }
 
-/// S1: the id option is not emitted as a div attribute.
+/// S1: the id option core injects (a record is wanted) is not emitted as a div attribute.
 #[test]
 fn knitr_chunk_id_is_not_emitted_as_an_attribute() {
     if skip("knitr_chunk_id_is_not_emitted_as_an_attribute") {
@@ -79,16 +79,55 @@ fn knitr_chunk_id_is_not_emitted_as_an_attribute() {
     let tmp = TempDir::new().unwrap();
     let html = render_html(
         &tmp,
-        "---\ntitle: Id\nengine: knitr\n---\n\n\
+        "---\ntitle: Id\nengine: knitr\nexecute:\n  record: true\n---\n\n\
 ```{r}\n\
-#| quarto-unit-id: abc123\n\
 #| echo: false\n\
 1 + 1\n\
 ```\n",
     );
     assert!(
-        !html.contains("quarto-unit-id") && !html.contains("abc123"),
+        !html.contains("quarto-unit-id"),
         "id option leaked into the HTML:\n{html}"
+    );
+}
+
+/// OPR-9c: `quarto-unit-id` is reserved. An author who sets it gets `Q-18-17`, not R's
+/// `Duplicate map key`.
+#[test]
+fn knitr_chunk_that_sets_the_reserved_key_fails_with_q_18_17() {
+    if skip("knitr_chunk_that_sets_the_reserved_key_fails_with_q_18_17") {
+        return;
+    }
+    let tmp = TempDir::new().unwrap();
+    let input = tmp.path().join("doc.qmd");
+    std::fs::write(
+        &input,
+        "---\ntitle: Id\nengine: knitr\nexecute:\n  record: true\n---\n\n\
+```{r}\n\
+#| quarto-unit-id: abc123\n\
+#| echo: false\n\
+1 + 1\n\
+```\n",
+    )
+    .unwrap();
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let project = ProjectContext::discover(&input, runtime.as_ref()).unwrap();
+    let err = render_document_to_file(
+        &input,
+        "html",
+        &RenderToFileOptions::default(),
+        Some(&project),
+        runtime.clone(),
+        None,
+        None,
+        None,
+    )
+    .expect_err("a chunk that sets the reserved key must fail the render");
+    let msg = format!("{err:?}");
+    assert!(msg.contains("Q-18-17"), "expected Q-18-17, got: {msg}");
+    assert!(
+        !msg.contains("Duplicate map key"),
+        "reached R's duplicate-key error: {msg}"
     );
 }
 

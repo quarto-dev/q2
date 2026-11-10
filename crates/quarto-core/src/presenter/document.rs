@@ -259,6 +259,7 @@ pub fn present_units(
                     engine_entry_for(input.engines, cell),
                     input.scope,
                     fig,
+                    input.target,
                 );
                 let image_failures = fig.take_failures();
                 let mut attr_rejections = Vec::new();

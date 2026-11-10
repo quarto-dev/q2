@@ -230,8 +230,10 @@ fn replay_stored_outputs(
         .cells;
 
     let mut fig: Box<dyn FigureSink> = match runtime {
-        Some(runtime) => Box::new(RuntimeFigureSink::new(runtime.clone(), &ctx.source_path)),
-        None => Box::new(FsFigureSink::new(&ctx.source_path)),
+        Some(runtime) => Box::new(
+            RuntimeFigureSink::new(runtime.clone(), &ctx.source_path).with_format(&ctx.format),
+        ),
+        None => Box::new(FsFigureSink::new(&ctx.source_path).with_format(&ctx.format)),
     };
     // Document-level defaults for cell options: the same merged
     // `execute:` scope a live engine execution receives.
@@ -314,6 +316,10 @@ mod tests {
     /// (see its Plan 7c decision 6 block). Returns the context and the
     /// converted markdown (what the engine's `input` is in production).
     fn ctx_for(notebook: &str, dir: &Path) -> (ExecutionContext, String) {
+        ctx_for_format(notebook, dir, "html")
+    }
+
+    fn ctx_for_format(notebook: &str, dir: &Path, format: &str) -> (ExecutionContext, String) {
         let nb_path = dir.join("notebook.ipynb");
         let converted = convert_notebook(&nb_path, notebook).expect("notebook must convert");
         let mut sc = SourceContext::new();
@@ -329,7 +335,7 @@ mod tests {
         for cell_file in &converted.files {
             sc.add_file(cell_file.label.clone(), Some(cell_file.text.clone()));
         }
-        let ctx = ExecutionContext::new(dir.to_path_buf(), dir.to_path_buf(), nb_path, "html")
+        let ctx = ExecutionContext::new(dir.to_path_buf(), dir.to_path_buf(), nb_path, format)
             .with_source_info(converted.source_info, Arc::new(sc));
         (ctx, converted.markdown)
     }
@@ -398,6 +404,34 @@ mod tests {
             "exactly one echoed code cell — the markdown cell's literal fence must not become one:\n{}",
             out.markdown
         );
+    }
+
+    /// What Plots-style output looks like in a stored notebook: an html `<img>` plus the image.
+    const HTML_AND_PNG_NB: &str = r##"{"cells":[{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"display_data","data":{"text/html":["<img src=\"data:image/png;base64,AAAA\">"],"image/png":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==","text/plain":["<Plot>"]},"metadata":{}}],"source":["plot()\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"##;
+
+    /// OPR-9b: native Jupyter follows the target too. A bundle with `text/html` and an image
+    /// keeps the raw html on html and takes the image file, in `figure-<format>`, elsewhere.
+    #[test]
+    fn a_stored_html_and_image_bundle_follows_the_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let (ctx, markdown) = ctx_for_format(HTML_AND_PNG_NB, dir.path(), "html");
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
+        assert!(out.markdown.contains("{=html}"), "html:\n{}", out.markdown);
+        assert!(!out.markdown.contains("figure-"), "html:\n{}", out.markdown);
+
+        for format in ["gfm", "pptx", "docx", "typst"] {
+            let dir = tempfile::tempdir().unwrap();
+            let (ctx, markdown) = ctx_for_format(HTML_AND_PNG_NB, dir.path(), format);
+            let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
+            let rel = format!("notebook_files/figure-{format}/cell-1-output-1.png");
+            assert!(out.markdown.contains(&rel), "{format}:\n{}", out.markdown);
+            assert!(
+                !out.markdown.contains("{=html}"),
+                "{format}:\n{}",
+                out.markdown
+            );
+            assert!(dir.path().join(&rel).is_file(), "{format}: figure written");
+        }
     }
 
     #[test]

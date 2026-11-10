@@ -41,6 +41,16 @@ pub struct EngineAttrs {
     attributes: Vec<(String, String)>,
 }
 
+impl EngineAttrs {
+    /// The same attributes without the engine\'s `id` (OPR-9b): Quarto 1 writes the auto cell id
+    /// on the wrapper only for html-family output, so other targets keep the classes and
+    /// attributes but not the id.
+    pub fn without_id(mut self) -> Self {
+        self.id = None;
+        self
+    }
+}
+
 /// Where engine classes go relative to the presenter\'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClassPlacement {

@@ -350,7 +350,7 @@ y
         found: &[KnitrCapturedChunk],
         fallback: &[KnitrChunkRecord],
     ) -> Result<EngineRecord, EngineRecordProblem> {
-        let (_, ids) = insert_unit_ids(DOC, c);
+        let (_, ids) = insert_unit_ids(DOC, c).unwrap();
         let known = known();
         build_structured(
             c,
@@ -367,7 +367,7 @@ y
     }
 
     fn ids(c: &ExecutionContext) -> Vec<String> {
-        insert_unit_ids(DOC, c).1
+        insert_unit_ids(DOC, c).unwrap().1
     }
 
     #[test]
@@ -432,7 +432,7 @@ x
         .with_units(units)
         .with_author_texts(texts)
         .with_want_record(true);
-        let (_, ids) = insert_unit_ids(doc, &c);
+        let (_, ids) = insert_unit_ids(doc, &c).unwrap();
         let found = vec![chunk(
             &ids[0],
             "x",

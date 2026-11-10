@@ -233,10 +233,13 @@ fn splice_units(
     // 4. Present and substitute.
     let doc_scope =
         merge_execute_scope(ctx.format.identifier, doc.ast.meta.get("execute").cloned());
-    let mut fig: Box<dyn FigureSink> = Box::new(RuntimeFigureSink::new(
-        ctx.runtime.clone(),
-        &doc_dir.join(doc.path.file_name().unwrap_or_default()),
-    ));
+    let mut fig: Box<dyn FigureSink> = Box::new(
+        RuntimeFigureSink::new(
+            ctx.runtime.clone(),
+            &doc_dir.join(doc.path.file_name().unwrap_or_default()),
+        )
+        .with_format(&format),
+    );
     // The pairs the splice presents: a matched unit, except a cell recorded for the metadata.
     let matched: Vec<(usize, &crate::record::RecordCell)> = matching
         .assignment

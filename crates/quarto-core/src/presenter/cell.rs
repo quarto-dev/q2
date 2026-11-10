@@ -962,7 +962,13 @@ fn format_outputs_with(
                         );
                         output.push_str(&format!("\n::: {{{head}}}\n\n{s}\n{caption}\n:::\n"));
                     }
-                } else if let Some(html) = data.get("text/html") {
+                } else if let Some(html) = data.get("text/html").filter(|_| {
+                    // Q1's `displayDataMimeType`: `text/html` leads only for an HTML-compatible
+                    // target; elsewhere it comes last, or only for a table (OPR-9b).
+                    options.target().to_html
+                        || super::inline::display_data_mime_type(data, options.target())
+                            == Some("text/html")
+                }) {
                     let s = extract_text_content(html);
                     let ticks = ticks_for_code(&s);
                     output.push_str(&output_div(
@@ -1699,6 +1705,155 @@ mod tests {
         let md = format_outputs(&result, &mut test_fig(), true);
         assert!(md.contains("fallback"), "got:\n{md}");
         assert!(!md.contains("Image output"), "got:\n{md}");
+    }
+
+    // === OPR-9b: the display priority follows the target ===
+
+    /// What Plots writes: an html `<img>`, two images and a text fallback in one bundle.
+    fn plots_like_bundle() -> std::collections::HashMap<String, serde_json::Value> {
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "text/html".to_string(),
+            serde_json::json!("<img src=\"data:image/png;base64,AAAA\">"),
+        );
+        data.insert(
+            "image/png".to_string(),
+            serde_json::json!(PNG_B64_MULTILINE),
+        );
+        data.insert("image/svg+xml".to_string(), serde_json::json!("<svg/>"));
+        data.insert("text/plain".to_string(), serde_json::json!("Plot()"));
+        data
+    }
+
+    /// Present one display-data output for `format` and return the markdown and the directory
+    /// the figure sink wrote under.
+    fn present_bundle(
+        data: std::collections::HashMap<String, serde_json::Value>,
+        format: &str,
+    ) -> String {
+        let result = ok_result(vec![CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({}),
+        }]);
+        let options = CellOptions::default()
+            .with_target(crate::presenter::inline::InlineTarget::from_format(format));
+        format_outputs_with(&result, &mut test_fig(), true, &options, &mut 0, 0)
+    }
+
+    #[test]
+    fn test_display_priority_html_family_takes_the_raw_html() {
+        for format in ["html", "revealjs", "dashboard", "epub"] {
+            let md = present_bundle(plots_like_bundle(), format);
+            assert!(md.contains("```{=html}"), "{format}: raw html; got:\n{md}");
+            assert!(!md.contains("!["), "{format}: no image; got:\n{md}");
+        }
+    }
+
+    #[test]
+    fn test_display_priority_non_html_targets_take_the_image() {
+        // gfm (markdown class), docx, pptx, typst and odt (no class): Q1 picks the svg.
+        for format in ["gfm", "commonmark", "docx", "pptx", "typst", "odt", "rst"] {
+            let md = present_bundle(plots_like_bundle(), format);
+            assert!(!md.contains("{=html}"), "{format}: no raw html; got:\n{md}");
+            assert!(
+                md.contains("![](") && md.contains("cell-1-output-1.svg"),
+                "{format}: the svg file; got:\n{md}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_display_priority_latex_target_does_not_take_the_html() {
+        // `pdf` has the LaTeX flag: images first, never `text/html`.
+        let md = present_bundle(plots_like_bundle(), "pdf");
+        assert!(!md.contains("{=html}"), "got:\n{md}");
+        assert!(md.contains("cell-1-output-1.svg"), "got:\n{md}");
+    }
+
+    #[test]
+    fn test_display_priority_table_keeps_the_html_on_docx() {
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "text/html".to_string(),
+            serde_json::json!("<table><tr><td>1</td></tr></table>"),
+        );
+        data.insert("text/plain".to_string(), serde_json::json!("1"));
+        let md = present_bundle(data, "docx");
+        assert!(
+            md.contains("```{=html}"),
+            "a table keeps its html; got:\n{md}"
+        );
+    }
+
+    #[test]
+    fn test_display_priority_html_only_bundle_falls_to_plain_text_on_docx() {
+        let mut data = std::collections::HashMap::new();
+        data.insert("text/html".to_string(), serde_json::json!("<b>5</b>"));
+        data.insert("text/plain".to_string(), serde_json::json!("5"));
+        let md = present_bundle(data, "docx");
+        assert!(!md.contains("{=html}"), "got:\n{md}");
+        assert!(md.contains('5'), "the plain text shows; got:\n{md}");
+    }
+
+    #[test]
+    fn test_display_priority_cell_path_agrees_with_the_shared_fixture() {
+        // The same cases the inline path is checked against (and the TypeScript port): the cell
+        // path must take `text/html` exactly when `display_data_mime_type` says so.
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../ts-packages/quarto-api/src/jupyter/__fixtures__/display-data-precedence.json",
+        );
+        let fixture: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let handled = [
+            "text/html",
+            "text/markdown",
+            "text/plain",
+            "image/png",
+            "image/svg+xml",
+            "image/jpeg",
+        ];
+        let mut checked = 0;
+        for case in fixture["cases"].as_array().unwrap() {
+            let flag = |k: &str| case["flags"][k].as_bool().unwrap_or(false);
+            let target = crate::presenter::inline::InlineTarget {
+                to_html: flag("toHtml"),
+                to_latex: flag("toLatex"),
+                to_markdown: flag("toMarkdown"),
+            };
+            let mut data = std::collections::HashMap::new();
+            for (k, v) in case["data"].as_object().unwrap() {
+                data.insert(k.clone(), v.clone());
+            }
+            // Only bundles the cell path has a branch for: no widget, script or latex keys.
+            if !data.keys().all(|k| handled.contains(&k.as_str())) || target.to_latex {
+                continue;
+            }
+            for k in ["image/png", "image/svg+xml", "image/jpeg"] {
+                if data.contains_key(k) {
+                    let v = if k == "image/svg+xml" {
+                        serde_json::json!("<svg/>")
+                    } else {
+                        serde_json::json!(PNG_B64_MULTILINE)
+                    };
+                    data.insert(k.to_string(), v);
+                }
+            }
+            let expected = case["expected"].as_str();
+            let result = ok_result(vec![CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({}),
+            }]);
+            let options = CellOptions::default().with_target(target);
+            let md = format_outputs_with(&result, &mut test_fig(), true, &options, &mut 0, 0);
+            assert_eq!(
+                md.contains("{=html}"),
+                expected == Some("text/html"),
+                "case {}: expected {expected:?}; got:\n{md}",
+                case["name"]
+            );
+            checked += 1;
+        }
+        assert!(checked >= 8, "the filter left too few cases: {checked}");
     }
 
     #[test]
