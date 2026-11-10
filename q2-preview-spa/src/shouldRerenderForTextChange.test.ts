@@ -1,97 +1,59 @@
 /**
- * Unit tests for `shouldRerenderForTextChange` (Phase D.6, bd-kw93.12;
- * `.md` dep-filtering added in bd-6d2wj4zp Phase 5).
+ * Unit tests for `shouldRerenderForTextChange` (preview VFS contract D11).
  *
- * With hub-wide extension-based sync (D10), *every* `.md` in the project
- * syncs and watches — including never-rendered ones (README, notes). The
- * dep filter is what keeps those edits from re-rendering the active page:
- * source files (`.qmd` AND `.md`) only trigger a re-render when they are
- * in the active page's dep set; non-source files (config, CSS, .tsx)
- * remain project-wide signals that always pass.
+ * The render reports what it read, probed and listed; a text change
+ * re-renders the active page when the render depended on it. Before the
+ * first render answers (or on a PDF page, which the server compiles) every
+ * change passes. This replaced the Phase D.6 filter on the
+ * `/api/preview/deps` single-hop include set.
  */
 
 import { describe, it, expect } from 'vitest';
 import { shouldRerenderForTextChange } from './PreviewApp';
 
+const readSet = {
+  page: 'index.qmd',
+  paths: new Set(['index.qmd', '_quarto.yml', 'refs.bib', 'included.qmd', 'partials/_vars.scss']),
+  dirs: new Set(['assets']),
+};
+
 describe('shouldRerenderForTextChange', () => {
-  const deps = new Set(['included.qmd', 'snippets/part.md']);
-
   it('always re-renders when there is no active file', () => {
-    expect(shouldRerenderForTextChange('anything.md', null, deps)).toBe(true);
+    expect(shouldRerenderForTextChange('anything.md', null, readSet)).toBe(true);
   });
 
-  it('fails open when the dep set has not arrived yet', () => {
+  it('fails open when no read set has arrived yet', () => {
     expect(shouldRerenderForTextChange('other.qmd', 'index.qmd', null)).toBe(true);
-    expect(shouldRerenderForTextChange('other.md', 'index.qmd', null)).toBe(true);
+    expect(shouldRerenderForTextChange('README.md', 'index.qmd', null)).toBe(true);
   });
 
-  it('passes non-source project-wide signals through', () => {
-    expect(shouldRerenderForTextChange('_quarto.yml', 'index.qmd', deps)).toBe(true);
-    expect(shouldRerenderForTextChange('styles.css', 'index.qmd', deps)).toBe(true);
-    expect(shouldRerenderForTextChange('Widget.tsx', 'index.qmd', deps)).toBe(true);
+  it('fails open when the read set belongs to another page', () => {
+    expect(shouldRerenderForTextChange('other.css', 'about.qmd', readSet)).toBe(true);
   });
 
-  it('filters .qmd edits by the dep set (pre-existing behavior)', () => {
-    expect(shouldRerenderForTextChange('included.qmd', 'index.qmd', deps)).toBe(true);
-    expect(shouldRerenderForTextChange('unrelated.qmd', 'index.qmd', deps)).toBe(false);
+  it('re-renders for a path the render read or probed', () => {
+    expect(shouldRerenderForTextChange('index.qmd', 'index.qmd', readSet)).toBe(true);
+    expect(shouldRerenderForTextChange('included.qmd', 'index.qmd', readSet)).toBe(true);
+    expect(shouldRerenderForTextChange('refs.bib', 'index.qmd', readSet)).toBe(true);
+    expect(shouldRerenderForTextChange('_quarto.yml', 'index.qmd', readSet)).toBe(true);
+    // Probed and missed, now created.
+    expect(shouldRerenderForTextChange('partials/_vars.scss', 'index.qmd', readSet, true)).toBe(true);
   });
 
-  it('filters .md edits by the dep set (bd-6d2wj4zp Phase 5)', () => {
-    // An unrelated .md (README, notes) must NOT re-render the active page…
-    expect(shouldRerenderForTextChange('README.md', 'index.qmd', deps)).toBe(false);
-    // …but a .md the active page includes must.
-    expect(shouldRerenderForTextChange('snippets/part.md', 'index.qmd', deps)).toBe(true);
+  it('re-renders for a file created in a directory the render listed, not an edit there', () => {
+    expect(shouldRerenderForTextChange('assets/new.css', 'index.qmd', readSet, true)).toBe(true);
+    expect(shouldRerenderForTextChange('assets/old.css', 'index.qmd', readSet, false)).toBe(false);
   });
 
-  it('re-renders when the active .md page itself is edited', () => {
-    // The deps fetch always seeds the set with the active page itself
-    // (PreviewApp's "edit my own page" convention) — mirror that shape.
-    const mdDeps = new Set(['admin/index.md', 'snippets/part.md']);
-    expect(
-      shouldRerenderForTextChange('admin/index.md', 'admin/index.md', mdDeps),
-    ).toBe(true);
+  it('ignores an unrelated sibling, whatever its type', () => {
+    expect(shouldRerenderForTextChange('unrelated.qmd', 'index.qmd', readSet)).toBe(false);
+    expect(shouldRerenderForTextChange('README.md', 'index.qmd', readSet)).toBe(false);
+    expect(shouldRerenderForTextChange('other.css', 'index.qmd', readSet)).toBe(false);
+    expect(shouldRerenderForTextChange('data.csv', 'index.qmd', readSet)).toBe(false);
   });
 
-  it('is case-insensitive on the extension', () => {
-    expect(shouldRerenderForTextChange('NOTES.MD', 'index.qmd', deps)).toBe(false);
-    expect(shouldRerenderForTextChange('OTHER.QMD', 'index.qmd', deps)).toBe(false);
-  });
-
-  // Preview VFS contract D11: with the render's read set for the active
-  // page, an edit re-renders exactly when the render read or probed its
-  // path, or listed its directory.
-  describe('with a read set', () => {
-    const readSet = {
-      page: 'index.qmd',
-      paths: new Set(['index.qmd', '_quarto.yml', 'refs.bib', 'partials/_vars.scss']),
-      dirs: new Set(['assets']),
-    };
-
-    it('re-renders for a path the render read or probed', () => {
-      expect(shouldRerenderForTextChange('refs.bib', 'index.qmd', null, readSet)).toBe(true);
-      expect(shouldRerenderForTextChange('_quarto.yml', 'index.qmd', null, readSet)).toBe(true);
-      // Probed and missed, now created.
-      expect(shouldRerenderForTextChange('partials/_vars.scss', 'index.qmd', null, readSet)).toBe(true);
-    });
-
-    it('re-renders for a file created in a directory the render listed, not an edit there', () => {
-      expect(shouldRerenderForTextChange('assets/new.css', 'index.qmd', null, readSet, true)).toBe(true);
-      expect(shouldRerenderForTextChange('assets/old.css', 'index.qmd', null, readSet, false)).toBe(false);
-    });
-
-    it('ignores an unrelated sibling, whatever its type', () => {
-      expect(shouldRerenderForTextChange('notes.md', 'index.qmd', deps, readSet)).toBe(false);
-      expect(shouldRerenderForTextChange('other.css', 'index.qmd', deps, readSet)).toBe(false);
-      expect(shouldRerenderForTextChange('data.csv', 'index.qmd', deps, readSet)).toBe(false);
-    });
-
-    it('always passes custom components, which the main thread compiles', () => {
-      expect(shouldRerenderForTextChange('Widget.tsx', 'index.qmd', null, readSet)).toBe(true);
-    });
-
-    it("falls back to the dep filter when the set belongs to another page", () => {
-      expect(shouldRerenderForTextChange('other.css', 'about.qmd', deps, readSet)).toBe(true);
-      expect(shouldRerenderForTextChange('unrelated.qmd', 'about.qmd', deps, readSet)).toBe(false);
-    });
+  it('always passes custom components, which the main thread compiles', () => {
+    expect(shouldRerenderForTextChange('Widget.tsx', 'index.qmd', readSet)).toBe(true);
+    expect(shouldRerenderForTextChange('ui/Button.TSX', 'index.qmd', readSet)).toBe(true);
   });
 });

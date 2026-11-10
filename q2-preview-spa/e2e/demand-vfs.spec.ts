@@ -151,3 +151,36 @@ test('project: the read set decides which edits re-render', async ({ page }) => 
   await expect.poll(() => ticks(page), { timeout: 15_000 }).toBeGreaterThan(base);
   await expect.poll(() => iframeText(page), { timeout: 15_000 }).toContain('Created later');
 });
+
+// Phase 3: single-file mode syncs only the deck. Nested includes arrive
+// through the render's reads; images the page loads after the render
+// arrive because the render touches the assets its AST references.
+test('single-file: nested includes and their images arrive without any up-front sync', async ({ page }) => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="red"/></svg>';
+  server = await startPreviewServer({
+    targetFile: 'deck.qmd',
+    fixtureFiles: [
+      { path: 'deck.qmd', content: '# Top\n\n![](img/one.svg)\n\n{{< include parts/a.qmd >}}\n' },
+      { path: 'parts/a.qmd', content: '## Part A\n\n![](img/two.svg)\n\n{{< include sub/b.qmd >}}\n' },
+      { path: 'parts/sub/b.qmd', content: '## Part B\n\nNested text.\n' },
+      { path: 'img/one.svg', content: svg },
+      { path: 'img/two.svg', content: svg },
+      { path: 'unrelated.qmd', content: '# Not read\n' },
+    ],
+  });
+  await page.goto(server.url);
+  await expect.poll(() => iframeText(page), { timeout: 30_000 }).toContain('Nested text');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          Array.from(document.querySelector('iframe')?.contentDocument?.querySelectorAll('img') ?? []).filter(
+            (img) => img.complete && img.naturalWidth > 0,
+          ).length,
+        ),
+      { timeout: 10_000 },
+    )
+    .toBe(2);
+  expect(await ticks(page)).toBe(1);
+});
+

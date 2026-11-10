@@ -150,12 +150,6 @@ beforeEach(() => {
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url.includes('/api/preview/deps')) {
-        return new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
       if (url.includes('/api/preview/diagnostics')) {
         return new Response(JSON.stringify([]), {
           status: 200,

@@ -151,21 +151,10 @@ interface PreviewAppState {
    */
   themeFingerprint: string | null | undefined;
   /**
-   * Phase D.6 (bd-kw93.12): dep set for the *current* `activeFile`,
-   * fetched from `/api/preview/deps`. `null` means "unknown yet";
-   * the filter in `onFileContent` falls back to pre-D.6 behaviour
-   * (every change bumps `contentTick`) when null — fail-open is
-   * correct because a missed re-render is the worse failure mode
-   * here. Paths in the set are project-relative forward-slash
-   * strings; `activeFile` itself is included in the set for a
-   * single comparison call.
-   */
-  deps: Set<string> | null;
-  /**
    * Preview VFS contract D11: what the last successful render of `page`
    * read and probed (`paths`) and listed (`dirs`), project-relative. The
-   * re-render filter uses it in preference to `deps`. A failed render
-   * keeps the previous set; `null` until the first render answers.
+   * re-render filter uses it. A failed render keeps the previous set;
+   * `null` until the first render answers (every change passes then).
    */
   readSet: PageReadSet | null;
   /**
@@ -193,9 +182,8 @@ interface PreviewAppState {
   /**
    * Server-side diagnostics for the active page, fetched from
    * `GET /api/preview/diagnostics?page=<rel>` (bd-b9kzg). Sourced
-   * from the per-server `DiagnosticSink` populated by the three
-   * Phase 3 callsite migrations (`capture_driver`, `deps`,
-   * `re_execute`). Distinct from the WASM render's own
+   * from the per-server `DiagnosticSink` populated by the Phase 3
+   * callsite migrations (`capture_driver`, `re_execute`). Distinct from the WASM render's own
    * `result.warnings` so the overlay can render them in their own
    * visual lane (the user knows where each diagnostic came from).
    */
@@ -429,7 +417,6 @@ function buildInitialState(): PreviewAppState {
     untransformedAstJson: null,
     renderedContent: '',
     themeFingerprint: undefined,
-    deps: null,
     readSet: null,
     error: null,
     render: EMPTY_RENDER_STATUS,
@@ -452,6 +439,23 @@ function buildInitialState(): PreviewAppState {
   };
 }
 
+/**
+ * A component's source: the synced file, or (preview VFS contract D2) the
+ * server's copy when sync has not brought it. The server promotes a pulled
+ * file, so it syncs and is watched from then on; its arrival bumps
+ * `tsxTick` like any `.tsx` change. Null when neither has it.
+ */
+async function readComponentSource(path: string): Promise<string | null> {
+  const synced = getFileContent(path);
+  if (synced !== null && synced !== undefined) return synced;
+  try {
+    const resp = await fetch(serverUrl(`/api/preview/file?path=${encodeURIComponent(path)}`));
+    return resp.ok ? await resp.text() : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The read set of one page's render (see `PreviewAppState.readSet`). */
 export interface PageReadSet {
   page: string;
@@ -469,39 +473,29 @@ function pageReadSet(page: string, set: ReadSet): PageReadSet {
 }
 
 /**
- * Phase D.6 (bd-kw93.12): decide whether a text-file change at
- * `changedPath` should trigger a re-render of the page named by
- * `activeFile`, given the cached dep set `deps`.
+ * Decide whether a text-file change at `changedPath` should re-render the
+ * page named by `activeFile` (preview VFS contract D11).
  *
- * The filter is intentionally narrow: it ONLY filters *source-file*
- * edits (`.qmd`, and `.md` since bd-6d2wj4zp Phase 5 — with hub-wide
- * extension-based sync, never-rendered `.md` like a README also watch,
- * and must not re-render the active page). Non-source files (CSS,
- * _quarto.yml, _metadata.yml, .tsx custom components, …) are
- * project-wide signals that affect rendering regardless of the active
- * page's include-shortcode set, so they always pass.
- *
- * Returns true (fail-open) when `deps` is null — the server response
- * hasn't landed yet, and we'd rather over-render than miss a change.
- * (The deps fetch seeds the set with the active page itself, so "edit
- * my own page" needs no special case here.)
- *
- * Preview VFS contract D11: when `readSet` holds the active page's last
- * render, it decides instead, for every file type: a change re-renders
- * when the render read or probed the path (a probe that missed covers a
- * file created where the render looked), or when the file is new (`added`)
- * in a directory the render listed. A listing depends only on names, so
- * an edit of an existing file there does not count. `.tsx`
+ * With `readSet` holding the active page's last render, a change
+ * re-renders when the render read or probed the path (a probe that missed
+ * covers a file created where the render looked), or when the file is new
+ * (`added`) in a directory the render listed. A listing depends only on
+ * names, so an edit of an existing file there does not count. `.tsx`
  * custom components always pass: the main thread compiles them, the
  * render never reads them.
+ *
+ * Without a read set for the active page (before its first render, or on
+ * a PDF page, which the server compiles) every change passes: a missed
+ * re-render is the worse failure. This replaced the Phase D.6 filter on
+ * `/api/preview/deps`, which guessed the page's dependencies from its
+ * single-hop includes.
  *
  * Exported for unit testing.
  */
 export function shouldRerenderForTextChange(
   changedPath: string,
   activeFile: string | null,
-  deps: Set<string> | null,
-  readSet: PageReadSet | null = null,
+  readSet: PageReadSet | null,
   added = false,
 ): boolean {
   if (!activeFile) return true;
@@ -511,13 +505,7 @@ export function shouldRerenderForTextChange(
     const dir = slash === -1 ? '' : changedPath.slice(0, slash);
     return readSet.paths.has(changedPath) || (added && readSet.dirs.has(dir));
   }
-  // Non-source edits always pass: they're either config (_quarto.yml,
-  // _metadata.yml) or project-wide assets (CSS, custom components)
-  // that the include-shortcode dep extractor doesn't track.
-  const lower = changedPath.toLowerCase();
-  if (!lower.endsWith('.qmd') && !lower.endsWith('.md')) return true;
-  if (deps === null) return true;
-  return deps.has(changedPath);
+  return true;
 }
 
 /**
@@ -861,12 +849,12 @@ export default function PreviewApp() {
           },
           onFileContent: (path: string, _content: string, _patches: unknown, added?: boolean) => {
             if (cancelled) return;
-            // Phase D.6 filter: read `activeFile` + `deps` via the
+            // Read-set filter: read `activeFile` + `readSet` via the
             // setState callback so the filter sees the *latest*
             // values (the closure was set up at boot time and would
             // otherwise capture stale state).
             setState((s) => {
-              if (!shouldRerenderForTextChange(path, s.activeFile, s.deps, s.readSet, added)) {
+              if (!shouldRerenderForTextChange(path, s.activeFile, s.readSet, added)) {
                 return s;
               }
               // GH #402: `.tsx` touches additionally bump tsxTick so the
@@ -1075,58 +1063,10 @@ export default function PreviewApp() {
     };
   }, []);
 
-  // Phase D.6 (bd-kw93.12): fetch the dep set for the active page
-  // from `/api/preview/deps`. Re-fetch whenever the active file
-  // itself changes (different page), or whenever its content was
-  // just edited (a new include shortcode might have been added or
-  // removed). The dep set is consumed by `onFileContent`'s filter
-  // above; null = unknown ⇒ fail-open.
-  useEffect(() => {
-    if (!state.activeFile) return;
-    let cancelled = false;
-    const activePath = state.activeFile;
-    void (async () => {
-      try {
-        const resp = await fetch(
-          serverUrl(`/api/preview/deps?page=${encodeURIComponent(activePath)}`),
-        );
-        if (cancelled) return;
-        if (!resp.ok) {
-          // Fail-open: leave `deps` as null so the filter accepts
-          // everything (pre-D.6 behaviour). A 400 here means the
-          // server hasn't indexed the page yet; the next refetch
-          // (driven by the activeFile/contentTick deps below) will
-          // try again.
-          console.warn(
-            `deps fetch returned ${resp.status} for ${activePath}; filter falls open`,
-          );
-          return;
-        }
-        const body = (await resp.json()) as { deps?: string[] };
-        if (cancelled) return;
-        const list = body.deps ?? [];
-        // Include the active page itself in the set so the filter
-        // doesn't need a special-case for "edit my own page."
-        const set = new Set<string>([activePath, ...list]);
-        setState((s) =>
-          s.activeFile === activePath ? { ...s, deps: set } : s,
-        );
-      } catch (e) {
-        // Network errors etc. — fail-open, just log.
-        console.warn(
-          `deps fetch threw for ${activePath}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [state.activeFile, state.contentTick]);
-
   // bd-b9kzg: fetch the server-side diagnostic list for the
-  // active page. Same trigger as the dep fetch above (activeFile
-  // change + every contentTick bump) so a fresh diagnostic from
-  // the capture driver / re_execute / deps path becomes visible
+  // active page. Triggered on an activeFile change and every
+  // contentTick bump so a fresh diagnostic from
+  // the capture driver / re_execute path becomes visible
   // shortly after the file change that produced it. Fail-open:
   // a fetch failure leaves `serverDiagnostics` at its prior
   // value with a console warning — losing visibility on a
@@ -1197,11 +1137,7 @@ export default function PreviewApp() {
     const activePath = state.activeFile;
     void (async () => {
       try {
-        const result = await buildCustomComponentsCode(
-          componentPathsKey,
-          activePath,
-          getFileContent,
-        );
+        const result = await buildCustomComponentsCode(componentPathsKey, activePath, readComponentSource);
         if (cancelled) return;
         setState((s) =>
           s.activeFile === activePath ? { ...s, customComponents: result } : s,

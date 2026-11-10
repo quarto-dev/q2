@@ -184,6 +184,23 @@ impl Demand {
         }
     }
 
+    /// Make sure a file the render depends on without reading it (an image
+    /// the page loads from the VFS after the render) is in the VFS:
+    /// record it as read and pull it if the VFS lacks it. Unlike
+    /// [`read_file`](Self::read_file), a local hit copies nothing.
+    pub fn touch(&self, vfs: &RwLock<VirtualFileSystem>, path: &Path) {
+        let local = vfs.read().unwrap().is_file(path);
+        if local {
+            let rel = {
+                let vfs = vfs.read().unwrap();
+                project_rel(&vfs, &vfs.normalize_path(path))
+            };
+            self.note(&rel, |s| &mut s.reads);
+        } else {
+            let _ = self.read_file(vfs, path);
+        }
+    }
+
     /// Whether `path` exists (as `kind`), asking on a miss.
     pub fn exists(
         &self,
@@ -659,6 +676,26 @@ mod tests {
         vfs.write().unwrap().add_file(Path::new("x.qmd"), vec![]);
         demand.list_dir(&vfs, Path::new("dir")).unwrap();
         assert_eq!(disk.lists.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn touch_pulls_a_missing_file_once_and_records_it() {
+        let (disk, vfs, demand) = setup(&[("img/a.svg", "<svg/>")], &["img"]);
+        demand.begin_read_set();
+        demand.touch(&vfs, Path::new("img/a.svg"));
+        demand.touch(&vfs, Path::new("img/a.svg"));
+        demand.touch(&vfs, Path::new("img/missing.png"));
+        assert_eq!(disk.reads.load(Ordering::SeqCst), 2, "one pull, one miss");
+        assert_eq!(
+            vfs.read()
+                .unwrap()
+                .read_file(Path::new("img/a.svg"))
+                .unwrap(),
+            b"<svg/>"
+        );
+        let set = demand.take_read_set().unwrap();
+        assert!(set.reads.contains("img/a.svg"));
+        assert!(set.reads.contains("img/missing.png"));
     }
 
     #[test]

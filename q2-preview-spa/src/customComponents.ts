@@ -75,14 +75,16 @@ export function extractComponentPathsKey(astJson: string | null): string {
  * @param currentFilePath   project-root-relative path of the document
  *                          (relative entries resolve against its dir)
  * @param getContent        text-file lookup, keyed by project-root-
- *                          relative path without a leading slash (the
- *                          SPA passes `getFileContent` from
- *                          `@quarto/preview-runtime`)
+ *                          relative path without a leading slash. The
+ *                          SPA reads the synced file and, when sync has
+ *                          not brought it, pulls it from the server
+ *                          (preview VFS contract D2), so the lookup may
+ *                          answer asynchronously.
  */
 export async function buildCustomComponentsCode(
   componentPathsKey: string,
   currentFilePath: string,
-  getContent: (path: string) => string | null,
+  getContent: (path: string) => string | null | Promise<string | null>,
 ): Promise<CustomComponentsResult> {
   if (!componentPathsKey) {
     return EMPTY_CUSTOM_COMPONENTS;
@@ -99,7 +101,7 @@ export async function buildCustomComponentsCode(
   const warnings: Diagnostic[] = [];
   for (const path of componentPaths) {
     const lookupPath = resolveComponentPath(path, currentFilePath);
-    const tsxCode = getContent(lookupPath);
+    const tsxCode = await getContent(lookupPath);
     if (tsxCode === null || tsxCode === undefined) {
       console.warn(`[PreviewApp] Component file not found: ${path}`);
       warnings.push({

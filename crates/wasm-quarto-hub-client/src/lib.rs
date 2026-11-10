@@ -2432,6 +2432,29 @@ pub fn classify_import_failure(kind: &str, status: Option<i32>, stderr: &str) ->
     serde_json::json!({ "diagnostics": import_diagnostics_json(&diagnostics) }).to_string()
 }
 
+/// Make sure the local assets a preview AST references are in the VFS
+/// (preview VFS contract D2). The page loads images from the VFS after the
+/// render, so the render never reads them; in a VFS filled on demand they
+/// would never arrive. Touching each one pulls it on a miss and records it
+/// in the render's read set. URLs resolve against the document's
+/// directory, as the page's asset walker resolves them; a leading `/` is
+/// the project root.
+fn touch_referenced_assets(doc_path: &Path, urls: &[String]) {
+    let runtime = get_runtime();
+    let doc_dir = doc_path.parent().unwrap_or_else(|| Path::new(""));
+    for url in urls {
+        let url = url.split(['?', '#']).next().unwrap_or_default();
+        if url.is_empty() || url.contains("://") || url.starts_with("data:") {
+            continue;
+        }
+        let target = match url.strip_prefix('/') {
+            Some(rooted) => std::path::PathBuf::from(rooted),
+            None => doc_dir.join(url),
+        };
+        runtime.touch(&target);
+    }
+}
+
 thread_local! {
     /// Discovered projects, keyed by the directory the lookup started from and
     /// valid for one VFS generation (`VirtualFileSystem::generation`). A
@@ -2691,13 +2714,16 @@ async fn render_single_doc_to_response(
             )
             .await
             {
-                Ok(out) => (
-                    None,
-                    Some(out.ast_json),
-                    out.untransformed_ast_json,
-                    out.diagnostics,
-                    out.source_context,
-                ),
+                Ok(out) => {
+                    touch_referenced_assets(path, &out.referenced_assets);
+                    (
+                        None,
+                        Some(out.ast_json),
+                        out.untransformed_ast_json,
+                        out.diagnostics,
+                        out.source_context,
+                    )
+                }
                 Err(e) => return render_error_response(e),
             }
         }

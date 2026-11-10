@@ -470,6 +470,13 @@ impl WasmRuntime {
         self.demand.set_handler(handler);
     }
 
+    /// Make sure a file the page needs after the render (a referenced
+    /// image) is in the VFS, pulling it on a miss, and record it as read.
+    /// See [`Demand::touch`].
+    pub fn touch(&self, path: &Path) {
+        self.demand.touch(&self.vfs, path);
+    }
+
     /// Start recording the read set of a render (contract D11).
     pub fn begin_read_set(&self) {
         self.demand.begin_read_set();

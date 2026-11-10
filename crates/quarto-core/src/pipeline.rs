@@ -263,6 +263,11 @@ pub struct PreviewAstOutput {
     /// baseline in `apply_node_edit` (Phase 1 of the target-incremental-
     /// writes plan).
     pub untransformed_ast_json: Option<String>,
+    /// Local asset URLs the transformed AST references (images and the
+    /// like), as written, relative to the document. The preview page loads
+    /// them from the VFS after the render, so a host that fills its VFS on
+    /// demand must make sure they are there (preview VFS contract D2).
+    pub referenced_assets: Vec<String>,
     /// Diagnostics emitted by the head pipeline plus every Pass-2
     /// stage that ran. Pipe to `RenderResponse.warnings` after
     /// translation via `diagnostics_to_json`.
@@ -2172,6 +2177,7 @@ pub async fn render_qmd_to_preview_ast_with_capture(
         attribution_actors,
         ..Default::default()
     };
+    let referenced_assets = crate::transforms::collect_referenced_asset_urls(&ast.ast.blocks);
     let mut buf = Vec::new();
     pampa::writers::json::write_with_config(&ast.ast, &ast_context, &mut buf, &json_config)
         .map_err(|e| {
@@ -2184,6 +2190,7 @@ pub async fn render_qmd_to_preview_ast_with_capture(
     Ok(PreviewAstOutput {
         ast_json,
         untransformed_ast_json,
+        referenced_assets,
         diagnostics,
         source_context,
     })

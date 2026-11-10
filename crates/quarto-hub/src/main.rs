@@ -516,9 +516,6 @@ async fn main() -> anyhow::Result<()> {
         // Standalone `hub` server: resources-scoped `.html` sync is a
         // preview-only concern (bd-kjrpya2d).
         resource_files: Vec::new(),
-        // Single-file asset sync is a preview-only concern (bd-kpuweafo).
-        single_file_assets: Vec::new(),
-        single_file_text_deps: Vec::new(),
         // The hub does not parse `_quarto.yml`; only the default output
         // directories are excluded.
         output_dir: None,

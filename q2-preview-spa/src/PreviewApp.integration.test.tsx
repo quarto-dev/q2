@@ -1247,12 +1247,6 @@ describe('PreviewApp diagnostics surface (bd-b9kzg)', () => {
             { status: 200, headers: { 'content-type': 'application/json' } },
           );
         }
-        if (url.includes('/api/preview/deps')) {
-          return new Response(JSON.stringify({ deps: [] }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          });
-        }
         return new Response('not found', { status: 404 });
       }),
     );
@@ -1564,36 +1558,20 @@ describe('PreviewApp: live PDF pane for typst pages (Plan 11)', () => {
     expect(screen.queryByText(/initializing/i)).not.toBeNull();
   });
 
-  it('a non-active-file edit (image, _quarto.yml) recompiles a typst page; an unrelated .qmd does not', async () => {
+  // A PDF page is compiled by the server, so no browser render reports a
+  // read set for it: every change recompiles it (preview VFS contract D11
+  // fails open; the old `/api/preview/deps` single-hop guess is gone).
+  it('any edit recompiles a typst page, which has no read set', async () => {
     runtimeMockState.formatKey = 'typst-pdf';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.endsWith('/health')) {
-          return new Response(JSON.stringify({ status: 'ok', index_document_id: 'automerge:x' }), { status: 200 });
-        }
-        if (url.includes('/api/preview/deps')) {
-          return new Response(JSON.stringify({ deps: ['images/fig.png', '_quarto.yml'] }), { status: 200 });
-        }
-        return new Response('not found', { status: 404 });
-      }),
-    );
     render(<PreviewApp />);
     await waitFor(() => expect(screen.queryByTestId('pdf-pane-mock')).not.toBeNull());
-    // Let the dependency set arrive before editing (until then every change falls open).
-    await waitFor(() =>
-      expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([u]) => String(u).includes('/api/preview/deps'))).toBe(true),
-    );
-    await act(async () => void (await new Promise((r) => setTimeout(r, 20))));
-    const unrelatedBefore = latestPdf().contentTick;
-    await act(async () => (await handlers()).onFileContent('unrelated.qmd', 'x'));
-    expect(latestPdf().contentTick).toBe(unrelatedBefore);
     const base = latestPdf().contentTick;
-    await act(async () => (await handlers()).onFileContent('images/fig.png', 'x'));
+    await act(async () => (await handlers()).onFileContent('unrelated.qmd', 'x'));
     expect(latestPdf().contentTick).toBe(base + 1);
-    await act(async () => (await handlers()).onFileContent('_quarto.yml', 'x'));
+    await act(async () => (await handlers()).onFileContent('images/fig.png', 'x'));
     expect(latestPdf().contentTick).toBe(base + 2);
+    await act(async () => (await handlers()).onFileContent('_quarto.yml', 'x'));
+    expect(latestPdf().contentTick).toBe(base + 3);
   });
 
   describe('Back button', () => {

@@ -889,10 +889,9 @@ fn trim_one_trailing_newline(bytes: &[u8]) -> &[u8] {
 /// (bd-1fz3vh99).
 ///
 /// Public so other crates that need the same "what does this page
-/// include?" answer (Phase D.6's `/api/preview/deps` endpoint) share
-/// the *exact* recognition rules `IncludeExpansionStage` uses — no
-/// drift between "what the renderer treats as an include" and "what
-/// the preview dep filter considers a dependency."
+/// include?" answer share the *exact* recognition rules
+/// `IncludeExpansionStage` uses — no drift between "what the renderer
+/// treats as an include" and what another consumer considers one.
 pub fn extract_include_path(block: &Block) -> Option<String> {
     let inlines = match block {
         Block::Paragraph(para) => &para.content,

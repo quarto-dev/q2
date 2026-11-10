@@ -28,7 +28,6 @@ pub mod asset_manifest;
 pub mod cache;
 pub mod capture_driver;
 pub mod config;
-pub mod deps;
 pub mod diagnostics;
 pub mod host_gate;
 pub mod import_route;
@@ -677,24 +676,10 @@ fn shutdown_message(share: bool) -> &'static str {
 }
 
 fn build_hub_config(config: &PreviewConfig) -> HubConfig {
-    // bd-9cyza5vy: in single-file mode (no `_quarto.yml`), the deck's
-    // transitive dependencies aren't found by a dir walk. Resolve the full
-    // closure once — included `.qmd` (text) + referenced images (binary) — by
-    // running the renderer's own include-expansion natively (quarto-preview has
-    // the qmd parser + quarto-core). Supersedes the old direct-image-only
-    // `resolve_single_file_assets`.
-    let single_file_deps = match (
-        config.project_root.as_deref(),
-        config.single_file.as_deref(),
-    ) {
-        (Some(root), Some(rel)) => config::resolve_single_file_deps(
-            root,
-            rel,
-            std::sync::Arc::new(render_flags::native_runtime()),
-        ),
-        _ => config::SingleFileDeps::default(),
-    };
-
+    // Preview VFS contract D5: single-file mode syncs only the deck (and a
+    // sibling `_brand.yml`). Everything else a render needs (includes,
+    // images, themes and their partials, bibliographies, components)
+    // arrives through the miss routes when the render asks for it.
     HubConfig {
         port: config.port,
         host: config.host.clone(),
@@ -714,13 +699,6 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         // resolved at session start, carried into the VFS as text so the
         // preview iframe post-processor can inline them via `srcdoc`.
         resource_files: config.resource_html_files.clone(),
-        // bd-kpuweafo / bd-9cyza5vy: sibling images the deck references —
-        // including images inside `{{< include >}}`d files — sync into the VFS
-        // like project mode (resolved above via the real expansion pass).
-        single_file_assets: single_file_deps.binary_files,
-        // bd-9cyza5vy: the deck's transitive `{{< include >}}` closure, synced
-        // as invisible text deps so includes expand in the WASM pipeline.
-        single_file_text_deps: single_file_deps.qmd_files,
         // Preview VFS contract D4: the exposure policy refuses the
         // project's output directory. Single-file mode renders beside the
         // deck and has none.
@@ -798,10 +776,6 @@ pub fn extend_with_preview(
             "/api/preview/re-execute",
             post(re_execute::re_execute_handler),
         )
-        // Phase D.6 (bd-kw93.12): SPA fetches the active page's
-        // include-shortcode dep set here so it can filter unrelated
-        // sibling edits out of `onFileContent`-driven re-renders.
-        .route("/api/preview/deps", get(deps::deps_handler))
         // pandoc-wasm H4b (D7): "Download as" for the embedded hub, which
         // carries no pandoc.wasm; renders natively and returns the file.
         // grown by hub-parity Plan 9 into the general download route (odt,

@@ -1,10 +1,9 @@
 //! Server-side diagnostic sink for `q2 preview` (bd-b9kzg).
 //!
-//! Three callsites in this crate currently emit `tracing::warn!`s
+//! Two callsites in this crate currently emit `tracing::warn!`s
 //! into stderr that the SPA never sees:
 //!
 //!   * `capture_driver.rs` — sibling-file eager-capture failures,
-//!   * `deps.rs` — include-shortcode parse failures,
 //!   * `re_execute.rs` — engine re-execute failures (also fed into
 //!     `CaptureRef.last_error` for the existing `StaleCaptureOverlay`).
 //!
@@ -115,8 +114,8 @@ impl DiagnosticSink {
 
 /// Process-wide handle to the sink. Set once by
 /// [`crate::run_with_on_ready`] at server boot; read by the
-/// `/api/preview/diagnostics` handler AND by the three Phase-3
-/// migration callsites (`capture_driver`, `deps`, `re_execute`).
+/// `/api/preview/diagnostics` handler AND by the Phase-3
+/// migration callsites (`capture_driver`, `re_execute`).
 /// Same OnceLock pattern as `SPA_DIR_OVERRIDE` and
 /// `re_execute::CACHE_DIR` — keeps signatures stable.
 ///
@@ -175,7 +174,7 @@ pub async fn diagnostics_handler(
             // wire format the SPA consumes carries 1-based
             // line/column positions, which requires a
             // `SourceContext` to map. The server-side callsites
-            // we migrate in Phase 3 (capture_driver, deps,
+            // we migrate in Phase 3 (capture_driver,
             // re_execute) don't currently produce location-bearing
             // diagnostics — they emit "engine failed" /
             // "could not parse" titles without source spans — so

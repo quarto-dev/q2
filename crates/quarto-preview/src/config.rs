@@ -328,9 +328,16 @@ pub fn resolve_project_resource_files(
         .collect()
 }
 
-/// The transitive static dependency closure of a single-file deck — the
-/// sibling files `q2 preview deck.qmd` must sync into the preview VFS so the
-/// deck renders like `q2 render` / project-mode preview, without walking the
+/// The transitive static dependency closure of a single-file deck.
+///
+/// Now used only as the watch set of `q2 preview --static` for a document
+/// outside a project (a native render, outside the preview VFS contract).
+/// The browser preview no longer syncs this closure up front: its render
+/// pulls what it reads on demand (preview VFS contract D5), so do not add
+/// dependency classes here to make the live preview find a file.
+///
+/// Historically: the sibling files `q2 preview deck.qmd` synced into the
+/// preview VFS so the deck rendered like `q2 render`, without walking the
 /// deck's directory (the `bd-tnm3k` safety property). Supersedes the earlier
 /// direct-image-only resolution (bd-kpuweafo): the closure now also includes
 /// `{{< include >}}`d `.qmd` files (transitively) and the images referenced

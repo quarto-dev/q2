@@ -86,30 +86,6 @@ pub struct HubConfig {
     /// Empty for the standalone `quarto hub` server.
     pub resource_files: Vec<PathBuf>,
 
-    /// Single-file mode (bd-kpuweafo): binary **asset** siblings the deck
-    /// references (project-root-relative paths), e.g. `![](./img.png)`.
-    ///
-    /// Single-file mode does not walk the directory (the `bd-tnm3k` safety
-    /// property), so the bare `single_file` discovery never finds these.
-    /// `q2 preview` resolves them upstream in `quarto-preview` (which has the
-    /// qmd parser) via `config::resolve_single_file_assets` and injects them
-    /// here so they reach [`ProjectFiles::with_binary_files`] and flow through
-    /// the same automerge → VFS → blob-URL path project mode uses. Empty for
-    /// project mode (the dir walk finds binaries) and the `quarto hub` server.
-    pub single_file_assets: Vec<PathBuf>,
-
-    /// Single-file mode (bd-9cyza5vy): included `.qmd` files the deck pulls in
-    /// via `{{< include >}}` (transitively), project-root-relative.
-    ///
-    /// Single-file mode does not walk the directory, so the bare `single_file`
-    /// discovery never finds these. `q2 preview` resolves the deck's transitive
-    /// include closure upstream in `quarto-preview` (which has the qmd parser)
-    /// via `config::resolve_single_file_deps` and injects them here so they reach
-    /// [`ProjectFiles::with_text_deps`] — synced into the VFS as text (readable
-    /// by the WASM include-expansion stage) but kept out of `qmd_files` (invisible
-    /// dependencies). Empty for project mode and the `quarto hub` server.
-    pub single_file_text_deps: Vec<PathBuf>,
-
     /// The project's `output-dir` (absolute, or relative to `project_root`).
     /// The exposure policy treats it as generated: discovery does not sync
     /// it and the preview watcher drops events inside it. `q2 preview`
@@ -193,8 +169,6 @@ impl Default for HubConfig {
             watch_filter: WatchFilter::default(),
             single_file: None,
             resource_files: Vec::new(),
-            single_file_assets: Vec::new(),
-            single_file_text_deps: Vec::new(),
             output_dir: None,
             auth_config: None,
             allow_insecure_auth: false,
@@ -331,16 +305,13 @@ impl HubContext {
                 // that references `brand: _brand.yml` needs that sibling in the
                 // VFS. Pick up the conventionally-named brand file next to the
                 // target without walking the directory (stays narrow).
-                Some(rel) => ProjectFiles::single_file(rel.clone())
-                    .with_config_siblings(project_root, rel)
-                    // bd-kpuweafo: sync the sibling images the deck references
-                    // (resolved upstream by quarto-preview) so they reach the
-                    // VFS like project mode, without walking the directory.
-                    .with_binary_files(config.single_file_assets.clone())
-                    // bd-9cyza5vy: sync the deck's transitive `{{< include >}}`
-                    // closure as invisible text deps (also resolved upstream)
-                    // so includes expand in the WASM pipeline.
-                    .with_text_deps(config.single_file_text_deps.clone()),
+                //
+                // Preview VFS contract D5: nothing else is synced up front.
+                // Includes, images and everything else the render reads
+                // arrive through the miss routes when it asks.
+                Some(rel) => {
+                    ProjectFiles::single_file(rel.clone()).with_config_siblings(project_root, rel)
+                }
                 // bd-kjrpya2d: the bare walk can't see resources-scoped
                 // `.html` (it falls through every category), so the
                 // caller-resolved set is injected here to ride the text
@@ -355,7 +326,6 @@ impl HubContext {
                 extension_count = files.extension_files.len(),
                 source_count = files.source_files.len(),
                 resource_count = files.resource_files.len(),
-                text_dep_count = files.text_dep_files.len(),
                 "Discovered project files"
             );
             Some(files)
@@ -1320,41 +1290,6 @@ mod tests {
         // File should be in the index
         let files = ctx.index().get_all_files();
         assert_eq!(files.len(), 1);
-    }
-
-    /// bd-9cyza5vy: in single-file mode, included `.qmd` injected via
-    /// `single_file_text_deps` must be synced into the index as invisible text
-    /// deps — present in the VFS (so includes expand) but NOT in `qmd_files`.
-    #[tokio::test]
-    async fn test_single_file_mode_syncs_text_deps_invisibly() {
-        let temp = TempDir::new().unwrap();
-        std::fs::write(temp.path().join("main.qmd"), "{{< include part.qmd >}}\n").unwrap();
-        std::fs::write(temp.path().join("part.qmd"), "## Included\n").unwrap();
-
-        let storage = StorageManager::new(temp.path()).unwrap();
-        let config = HubConfig {
-            single_file: Some(PathBuf::from("main.qmd")),
-            single_file_text_deps: vec![PathBuf::from("part.qmd")],
-            ..HubConfig::default()
-        };
-
-        let ctx = HubContext::new(storage, config).await.unwrap();
-
-        let pf = ctx.project_files().unwrap();
-        // The deck is the only nav qmd; the include is an invisible text dep.
-        assert_eq!(pf.qmd_files, vec![PathBuf::from("main.qmd")]);
-        assert_eq!(pf.text_dep_files, vec![PathBuf::from("part.qmd")]);
-
-        // Both reach the index (so both are in the VFS for include expansion).
-        let files = ctx.index().get_all_files();
-        assert!(
-            files.iter().any(|(f, _)| f.as_str() == "main.qmd"),
-            "deck missing from index: {files:?}"
-        );
-        assert!(
-            files.iter().any(|(f, _)| f.as_str() == "part.qmd"),
-            "included text dep missing from index: {files:?}"
-        );
     }
 
     /// Build an automerge text document with the given content.
