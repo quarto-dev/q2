@@ -27,37 +27,37 @@ const CONTENT = '# Hello\n';
 const AST = '{"pandoc-api-version":[1,23,0],"meta":{},"blocks":[]}';
 const REGEN_RESULT = { '0:0-10:0': '- item\n' };
 
-describe('computeNestedEditBuffers (P3.2 SPA helper)', () => {
-  it('does NOT call regen when unlock is false', () => {
+describe('computeNestedEditBuffers (P3.2 SPA helper)', async () => {
+  it('does NOT call regen when unlock is false', async () => {
     const mockRegen = vi.fn(() => REGEN_RESULT);
-    const result = computeNestedEditBuffers(false, CONTENT, AST, mockRegen);
+    const result = await computeNestedEditBuffers(false, CONTENT, AST, mockRegen);
     expect(mockRegen).not.toHaveBeenCalled();
     expect(result).toEqual({});
   });
 
-  it('calls regen with both inputs when unlock is true', () => {
+  it('calls regen with both inputs when unlock is true', async () => {
     const mockRegen = vi.fn(() => REGEN_RESULT);
-    const result = computeNestedEditBuffers(true, CONTENT, AST, mockRegen);
+    const result = await computeNestedEditBuffers(true, CONTENT, AST, mockRegen);
     expect(mockRegen).toHaveBeenCalledWith(CONTENT, AST);
     expect(result).toEqual(REGEN_RESULT);
   });
 
-  it('does NOT call regen when unlock is true but content is empty', () => {
+  it('does NOT call regen when unlock is true but content is empty', async () => {
     const mockRegen = vi.fn(() => REGEN_RESULT);
-    computeNestedEditBuffers(true, '', AST, mockRegen);
+    await computeNestedEditBuffers(true, '', AST, mockRegen);
     expect(mockRegen).not.toHaveBeenCalled();
   });
 
-  it('does NOT call regen when unlock is true but ast is null', () => {
+  it('does NOT call regen when unlock is true but ast is null', async () => {
     const mockRegen = vi.fn(() => REGEN_RESULT);
-    computeNestedEditBuffers(true, CONTENT, null, mockRegen);
+    await computeNestedEditBuffers(true, CONTENT, null, mockRegen);
     expect(mockRegen).not.toHaveBeenCalled();
   });
 
-  it('returns the same stable reference on off-path calls', () => {
+  it('returns the same stable reference on off-path calls', async () => {
     const mockRegen = vi.fn(() => REGEN_RESULT);
-    const r1 = computeNestedEditBuffers(false, CONTENT, AST, mockRegen);
-    const r2 = computeNestedEditBuffers(false, CONTENT, AST, mockRegen);
+    const r1 = await computeNestedEditBuffers(false, CONTENT, AST, mockRegen);
+    const r2 = await computeNestedEditBuffers(false, CONTENT, AST, mockRegen);
     expect(r1).toBe(r2);
   });
 });
@@ -81,11 +81,12 @@ type RuntimeMockState = {
 let runtimeMockState: RuntimeMockState;
 let mockRegenerateNestedBuffers: ReturnType<typeof vi.fn>;
 
-vi.mock('@quarto/preview-runtime', () => {
+vi.mock('@quarto/preview-runtime', async () => {
+  const { withAsyncEngineHelpers } = await import('./test-utils/asyncEngineHelpers');
   const mockRegen = vi.fn(() => ({ '0:0-10:0': '- item\n' }));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).__mockRegenerateNestedBuffers__ = mockRegen;
-  return {
+  return withAsyncEngineHelpers({
     initWasm: vi.fn().mockResolvedValue(undefined),
     isWasmReady: vi.fn(() => true),
     resolvePandocFormats: vi.fn(() => ({ success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] })),
@@ -106,7 +107,7 @@ vi.mock('@quarto/preview-runtime', () => {
     diffToEditorChanges: vi.fn(() => []),
     getFileContent: vi.fn(),
     regenerateNestedBuffers: mockRegen,
-  };
+  });
 });
 
 // Imported after vi.mock so the mocks are in place.

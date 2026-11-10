@@ -55,7 +55,8 @@ type RuntimeMockState = {
 };
 let runtimeMockState: RuntimeMockState;
 
-vi.mock('@quarto/preview-runtime', () => ({
+vi.mock('@quarto/preview-runtime', async () =>
+  (await import('./test-utils/asyncEngineHelpers')).withAsyncEngineHelpers({
   initWasm: vi.fn().mockResolvedValue(undefined),
   isWasmReady: vi.fn(() => true),
   // P11: the format the active page resolves to; tests flip `formatKey` to make a page typst-pdf.

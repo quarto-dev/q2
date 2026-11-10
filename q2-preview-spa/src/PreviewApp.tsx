@@ -45,13 +45,13 @@ import {
   setSyncHandlers,
   renderPageForPreview,
   getBinaryDocById,
-  applyNodeEdit,
-  parseQmdContentSync,
+  applyNodeEditAsync,
+  parseQmdContentAsync,
   vfsAddFile,
   getFileContent,
   diffToEditorChanges,
   applyEditorOperations,
-  regenerateNestedBuffers,
+  regenerateNestedBuffersAsync,
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { extractMetaString } from '@quarto/preview-renderer/framework';
@@ -363,7 +363,7 @@ export function parseRichTextParam(search: string): boolean {
 }
 
 /**
- * P3.2: module-level empty object returned by the nestedEditBuffers memo
+ * P3.2: module-level empty object the nestedEditBuffers state holds
  * when nestingCursor is off. Referentially stable so the iframe effect dep
  * never churns on an off-render.
  */
@@ -378,8 +378,9 @@ const EMPTY_NESTED_BUFFERS: Record<string, string> = {};
  *   - `content` is absent/empty, OR
  *   - `ast` is absent/empty.
  *
- * The `regen` callback is required — pass `regenerateNestedBuffers` at
- * production call sites; pass a `vi.fn()` in tests. This avoids a
+ * The `regen` callback is required — pass `regenerateNestedBuffersAsync` at
+ * production call sites (the engine runs in the render worker, so the
+ * answer is asynchronous); pass a `vi.fn()` in tests. This avoids a
  * problematic default-parameter reference to the import (which breaks when
  * other test files mock @quarto/preview-runtime without the export).
  *
@@ -387,17 +388,17 @@ const EMPTY_NESTED_BUFFERS: Record<string, string> = {};
  * fail-on-revert: removing `!unlock` from the guard causes the "flag off"
  * assertion to call regen and turn RED.
  */
-export function computeNestedEditBuffers(
+export async function computeNestedEditBuffers(
   unlock: boolean,
   content: string | undefined,
   ast: string | null | undefined,
-  regen: (c: string, a: string) => Record<string, string>,
-): Record<string, string> {
+  regen: (c: string, a: string) => Record<string, string> | Promise<Record<string, string>>,
+): Promise<Record<string, string>> {
   if (!unlock || !content || !ast) {
     return EMPTY_NESTED_BUFFERS;
   }
   try {
-    return regen(content, ast);
+    return await regen(content, ast);
   } catch {
     return EMPTY_NESTED_BUFFERS;
   }
@@ -602,12 +603,27 @@ export default function PreviewApp() {
   }, []);
 
   // P11-D1: a `format: typst` page shows as a live PDF instead of going through the HTML render.
-  // Recomputed whenever the content changes, since an edit to `format:` flips the kind.
-  const pageKind: 'html' | 'pdf' = useMemo(
-    () => (state.boot === 'ready' && state.activeFile !== null && isTypstPdf(state.activeFile, state.renderFlags) ? 'pdf' : 'html'),
+  // Recomputed whenever the content changes, since an edit to `format:` flips the kind. The
+  // engine answers in the render worker, so the kind arrives asynchronously and is recorded with
+  // the page it describes; until the active page has one, `pageKind` is null and nothing renders
+  // (rendering a PDF page through the HTML path would flash a "no live preview" overlay).
+  const [pageKindOf, setPageKindOf] = useState<{ path: string; kind: 'html' | 'pdf' } | null>(null);
+  useEffect(() => {
+    if (state.boot !== 'ready' || state.activeFile === null) return;
+    const path = state.activeFile;
+    let cancelled = false;
+    void isTypstPdf(path, state.renderFlags).then((pdf) => {
+      if (cancelled) return;
+      const kind = pdf ? 'pdf' : 'html';
+      setPageKindOf((prev) => (prev?.path === path && prev.kind === kind ? prev : { path, kind }));
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.boot, state.activeFile, state.contentTick, state.files, state.renderFlags],
-  );
+  }, [state.boot, state.activeFile, state.contentTick, state.files, state.renderFlags]);
+  const pageKind: 'html' | 'pdf' | null =
+    pageKindOf !== null && pageKindOf.path === state.activeFile ? pageKindOf.kind : null;
 
   // Force-refresh trigger (bd-b5hf): bumping `contentTick` re-fires
   // the render useEffect. Reuses the same channel `onFileContent`
@@ -631,7 +647,7 @@ export default function PreviewApp() {
   // UI — `editingDisabled` keeps the edit surface inert — but a stray
   // payload is dropped anyway as defense in depth.
   const handleSetAst = useCallback(
-    (payload: any) => {
+    async (payload: any) => {
       const edit = payload as PreviewNodeEditPayload;
       if (!edit.__isPreviewNodeEdit) return;
       if (!state.allowEdit) return;
@@ -643,7 +659,7 @@ export default function PreviewApp() {
         let modifiedSubtreeJson: string;
         if (edit.channel === 'text') {
           // Text channel: parse raw QMD → Pandoc JSON → apply_node_edit.
-          const parseResult = parseQmdContentSync(edit.newText);
+          const parseResult = await parseQmdContentAsync(edit.newText);
           if (!parseResult.success || !parseResult.ast) {
             console.error('parse_qmd_content failed in PreviewApp:', parseResult.error);
             return;
@@ -653,7 +669,7 @@ export default function PreviewApp() {
           // Subtree channel: render-component already produced Pandoc JSON.
           modifiedSubtreeJson = edit.modifiedSubtreeJson;
         }
-        const newQmd = applyNodeEdit(
+        const newQmd = await applyNodeEditAsync(
           state.renderedContent,
           state.untransformedAstJson,
           edit.destinationSourceInfoJson,
@@ -1165,8 +1181,9 @@ export default function PreviewApp() {
   // Render the active page whenever it (or its content) changes.
   useEffect(() => {
     if (!state.activeFile) return;
-    // A typst-pdf page is compiled server-side by <PdfPane>, not rendered here.
-    if (pageKind === 'pdf') return;
+    // A typst-pdf page is compiled server-side by <PdfPane>, not rendered here;
+    // and until the page's kind is known, nothing is rendered.
+    if (pageKind !== 'html') return;
     let cancelled = false;
     void (async () => {
       try {
@@ -1362,16 +1379,21 @@ export default function PreviewApp() {
   // source of truth. Returns EMPTY_NESTED_BUFFERS in read-only mode, when
   // nestingCursor is off, or when either render input is missing, keeping the
   // iframe dep stable.
-  const nestedEditBuffers = useMemo(
-    () =>
-      computeNestedEditBuffers(
-        state.allowEdit && state.nestingCursor,
-        state.renderedContent,
-        state.untransformedAstJson,
-        regenerateNestedBuffers,
-      ),
-    [state.allowEdit, state.nestingCursor, state.renderedContent, state.untransformedAstJson],
-  );
+  const [nestedEditBuffers, setNestedEditBuffers] = useState(EMPTY_NESTED_BUFFERS);
+  useEffect(() => {
+    let cancelled = false;
+    void computeNestedEditBuffers(
+      state.allowEdit && state.nestingCursor,
+      state.renderedContent,
+      state.untransformedAstJson,
+      regenerateNestedBuffersAsync,
+    ).then((buffers) => {
+      if (!cancelled) setNestedEditBuffers(buffers);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.allowEdit, state.nestingCursor, state.renderedContent, state.untransformedAstJson]);
 
   // ── Render ────────────────────────────────────────────────────────────
 

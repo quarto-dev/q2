@@ -4,6 +4,12 @@
 // running tests) handle the actual resolution at build/test time; this
 // file just makes `tsc` happy.
 
+// `?worker&url`: the URL of a worker entry Vite bundles separately.
+declare module '*?worker&url' {
+  const url: string;
+  export default url;
+}
+
 // `?url` suffix for asset imports (web-tree-sitter's WASM URL).
 declare module '*.wasm?url' {
   const url: string;
@@ -24,4 +30,14 @@ declare module '/src/wasm-js-bridge/*.js' {
   ): void;
   export function jsSassAvailable(): boolean;
   export function jsSassCompilerName(): string;
+  // rasterize.js: the SVG rasterizer (main thread only; a worker
+  // installs a proxy to the main thread through `setRasterizer`).
+  export function setRasterizer(
+    fn: ((svg: Uint8Array, maxSide: number) => Promise<Uint8Array>) | null,
+  ): void;
+  export function jsRasterizeSvg(
+    svg: Uint8Array,
+    maxSide: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array>;
 }

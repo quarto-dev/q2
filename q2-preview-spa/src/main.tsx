@@ -7,6 +7,7 @@
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { startWorkerEngine } from '@quarto/preview-runtime/worker/engineClient';
 import PreviewApp from './PreviewApp';
 
 // The viewer only ever runs inside `q2 preview`, whose sessions are
@@ -17,6 +18,11 @@ import PreviewApp from './PreviewApp';
 // ts-packages/wasm-js-bridge/src/cache.js; must be set before the WASM
 // first touches the cache.
 (globalThis as Record<string, unknown>).__Q2_EPHEMERAL_STORAGE__ = true;
+
+// Preview VFS contract D3: the render engine runs in a dedicated worker.
+// The worker receives the flag above in its init message. Installed before
+// PreviewApp calls `initWasm`, which then starts the worker's engine.
+startWorkerEngine();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

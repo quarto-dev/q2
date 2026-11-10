@@ -4,10 +4,10 @@
  * claude-notes/instructions/performance-profiling.md).
  *
  * TWO COPIES OF THIS FILE EXIST and must be kept in sync:
- *   - hub-client/src/utils/perfCounters.ts   (this one)
- *   - ts-packages/preview-runtime/src/perfCounters.ts
+ *   - ts-packages/preview-runtime/src/perfCounters.ts   (this one)
+ *   - hub-client/src/utils/perfCounters.ts
  * The duplication is deliberate (bd-k8ptcrd9): hub-client app code cannot
- * import the package copy through the package boundary without breaking
+ * import this package's copy through the package boundary without breaking
  * the repo's many PARTIAL `vi.mock('@quarto/preview-runtime', ...)` test
  * mocks (any export they don't stub goes undefined). Both copies delegate
  * all state to a `globalThis` sink, so there is exactly ONE gauge table
@@ -200,13 +200,29 @@ export function setPerfOverrideForTests(value: boolean | null): void {
   }
 }
 
+/**
+ * Set the startup flag from the host page. A worker can read neither
+ * `localStorage` nor the page URL, so the render worker receives the
+ * page's flag in its init message and applies it here.
+ */
+export function setPerfEnabled(value: boolean): void {
+  enabled = value;
+  installBrowserConveniences();
+}
+
 // Browser conveniences: periodic dump + manual dump handle, installed at
 // most once per realm (guarded via the sink). Skipped in Node drivers
-// (they call perfDump themselves at checkpoints).
-{
-  if (perfEnabled() && !enabledByNodeEnv && !S.intervalInstalled && typeof window !== 'undefined') {
+// (they call perfDump themselves at checkpoints). A worker gets the
+// periodic dump only; `quartoPerfDump` lives on the page.
+function installBrowserConveniences(): void {
+  if (!perfEnabled() || enabledByNodeEnv || S.intervalInstalled) return;
+  if (typeof window !== 'undefined') {
     S.intervalInstalled = true;
     window.setInterval(perfDump, 5000);
     (window as unknown as { quartoPerfDump: () => void }).quartoPerfDump = perfDump;
+  } else if ((globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope !== undefined) {
+    S.intervalInstalled = true;
+    setInterval(perfDump, 5000);
   }
 }
+installBrowserConveniences();

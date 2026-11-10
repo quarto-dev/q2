@@ -21,6 +21,11 @@
       "source": "./src/test-utils/*.ts",
       "import": "./dist/test-utils/*.js"
     },
+    "./worker/*": {
+      "types": "./src/worker/*.ts",
+      "source": "./src/worker/*.ts",
+      "import": "./dist/worker/*.js"
+    },
     "./userGrammar/*": {
       "types": "./src/userGrammar/*.ts",
       "source": "./src/userGrammar/*.ts",

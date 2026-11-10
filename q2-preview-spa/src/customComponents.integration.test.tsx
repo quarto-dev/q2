@@ -44,7 +44,8 @@ type RuntimeMockState = {
 };
 let runtimeMockState: RuntimeMockState;
 
-vi.mock('@quarto/preview-runtime', () => ({
+vi.mock('@quarto/preview-runtime', async () =>
+  (await import('./test-utils/asyncEngineHelpers')).withAsyncEngineHelpers({
   initWasm: vi.fn().mockResolvedValue(undefined),
   isWasmReady: vi.fn(() => true),
   resolvePandocFormats: vi.fn(() => ({ success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] })),

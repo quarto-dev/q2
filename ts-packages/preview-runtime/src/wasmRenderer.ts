@@ -30,7 +30,7 @@ import { loadUserGrammar } from './userGrammar/Highlight';
 import { perfEnabled, perfNow, perfSegment, perfMark, perfExtra } from './perfCounters';
 
 // Response types from WASM module
-interface VfsResponse {
+export interface VfsResponse {
   success: boolean;
   error?: string;
   files?: string[];
@@ -204,10 +204,60 @@ let htmlTemplateBundle: string | null = null;
 let runtimeSettings: Record<string, unknown> = {};
 
 /**
+ * Where the engine runs when it is not in this realm (preview VFS contract
+ * D3). The q2 preview SPA installs a backend that runs the engine in a
+ * render worker ({@link startWorkerEngine} in `./worker/engineClient`);
+ * hub-client installs none and keeps the engine in-process.
+ *
+ * With a backend installed, `initWasm` starts it, the VFS exports read and
+ * write the backend's main-thread mirror (writes are forwarded to the
+ * worker), `renderPageForPreview` renders in the worker, and the `...Async`
+ * helpers below call the worker. The synchronous engine helpers
+ * (`resolvePandocFormats`, `parseQmdContentSync`, `applyNodeEdit`,
+ * `regenerateNestedBuffers`, ...) have no engine in this realm and throw.
+ */
+export interface EngineBackend {
+  init(): Promise<void>;
+  isReady(): boolean;
+  vfsAddFile(path: string, content: string): VfsResponse;
+  vfsAddBinaryFile(path: string, content: Uint8Array): VfsResponse;
+  vfsRemoveFile(path: string): VfsResponse;
+  vfsClear(): VfsResponse;
+  vfsListFiles(): VfsResponse;
+  vfsReadFile(path: string): VfsResponse;
+  vfsReadBinaryFile(path: string): VfsResponse;
+  renderPageForPreview(
+    path: string,
+    captureGzJson?: Uint8Array,
+    options?: RenderPageForPreviewOptions,
+  ): Promise<PreviewRenderResponse>;
+  resolvePandocFormats(
+    path: string,
+    options?: ResolvePandocFormatsOptions,
+  ): Promise<ResolvePandocFormatsResponse>;
+  parseQmdContent(text: string): Promise<AstResponse>;
+  applyNodeEdit(
+    content: string,
+    untransformedAstJson: string,
+    destinationSourceInfoJson: string,
+    modifiedSubtreeJson: string,
+  ): Promise<string>;
+  regenerateNestedBuffers(content: string, untransformedAstJson: string): Promise<Record<string, string>>;
+}
+
+let backend: EngineBackend | null = null;
+
+/** Install (or with `null`, remove) the engine backend for this realm. */
+export function installEngineBackend(next: EngineBackend | null): void {
+  backend = next;
+}
+
+/**
  * Initialize the WASM module. Safe to call multiple times - will only
  * initialize once.
  */
 export async function initWasm(): Promise<void> {
+  if (backend) return backend.init();
   if (wasmModule) return;
 
   if (!initPromise) {
@@ -311,6 +361,7 @@ async function setupSassVfsCallbacks(): Promise<void> {
  * Check if WASM is initialized
  */
 export function isWasmReady(): boolean {
+  if (backend) return backend.isReady();
   return wasmModule !== null;
 }
 
@@ -368,6 +419,7 @@ function parseEnvelope<T>(json: string): T {
  * Add a text file to the virtual filesystem
  */
 export function vfsAddFile(path: string, content: string): VfsResponse {
+  if (backend) return backend.vfsAddFile(path, content);
   const wasm = getWasm();
   // Full document text crosses the JS→WASM boundary here on every
   // keystroke (the render-path plan's "amplifier"); count, time and size
@@ -388,6 +440,7 @@ export function vfsAddFile(path: string, content: string): VfsResponse {
  * Add a binary file to the virtual filesystem
  */
 export function vfsAddBinaryFile(path: string, content: Uint8Array): VfsResponse {
+  if (backend) return backend.vfsAddBinaryFile(path, content);
   const wasm = getWasm();
   if (!perfEnabled()) {
     return JSON.parse(wasm.vfs_add_binary_file(path, content));
@@ -405,6 +458,7 @@ export function vfsAddBinaryFile(path: string, content: Uint8Array): VfsResponse
  * Remove a file from the virtual filesystem
  */
 export function vfsRemoveFile(path: string): VfsResponse {
+  if (backend) return backend.vfsRemoveFile(path);
   const wasm = getWasm();
   return parseEnvelope(wasm.vfs_remove_file(path));
 }
@@ -413,6 +467,7 @@ export function vfsRemoveFile(path: string): VfsResponse {
  * List all files in the virtual filesystem
  */
 export function vfsListFiles(): VfsResponse {
+  if (backend) return backend.vfsListFiles();
   const wasm = getWasm();
   return parseEnvelope(wasm.vfs_list_files());
 }
@@ -421,6 +476,7 @@ export function vfsListFiles(): VfsResponse {
  * Clear all files from the virtual filesystem.
  */
 export function vfsClear(): VfsResponse {
+  if (backend) return backend.vfsClear();
   const wasm = getWasm();
   return parseEnvelope(wasm.vfs_clear());
 }
@@ -429,6 +485,7 @@ export function vfsClear(): VfsResponse {
  * Read a file from the virtual filesystem
  */
 export function vfsReadFile(path: string): VfsResponse {
+  if (backend) return backend.vfsReadFile(path);
   const wasm = getWasm();
   return parseEnvelope(wasm.vfs_read_file(path));
 }
@@ -438,6 +495,7 @@ export function vfsReadFile(path: string): VfsResponse {
  * Returns the content as a base64-encoded string.
  */
 export function vfsReadBinaryFile(path: string): VfsResponse {
+  if (backend) return backend.vfsReadBinaryFile(path);
   const wasm = getWasm();
   return parseEnvelope(wasm.vfs_read_binary_file(path));
 }
@@ -901,6 +959,7 @@ export async function renderPageForPreview(
   // (preview VFS contract D9): a queued render a newer one supersedes
   // rejects with `RenderSupersededError`, which the SPA swallows.
   return enqueueRender(async () => {
+    if (backend) return backend.renderPageForPreview(path, captureGzJson, options);
     // Read the source inside the slot, as the render starts: this is the
     // text the render sees, so byte offsets in the result belong to it.
     const source = vfsReadFile(path);
@@ -1120,6 +1179,49 @@ export interface ResolvePandocFormatsOptions {
  */
 export function resolvePandocFormats(path: string, options?: ResolvePandocFormatsOptions): ResolvePandocFormatsResponse {
   return parseEnvelope(getWasm().resolve_pandoc_formats(path, options));
+}
+
+// ---- Async forms of the engine helpers ------------------------------------
+//
+// The same calls as their synchronous namesakes, answered by the engine
+// backend when one is installed (the render worker) and in-process
+// otherwise. Code that may run with the engine in a worker uses these.
+
+/** {@link resolvePandocFormats}, wherever the engine runs. */
+export async function resolvePandocFormatsAsync(
+  path: string,
+  options?: ResolvePandocFormatsOptions,
+): Promise<ResolvePandocFormatsResponse> {
+  if (backend) return backend.resolvePandocFormats(path, options);
+  return resolvePandocFormats(path, options);
+}
+
+/** {@link parseQmdContentSync}, wherever the engine runs. */
+export async function parseQmdContentAsync(qmdText: string): Promise<AstResponse> {
+  if (backend) return backend.parseQmdContent(qmdText);
+  return parseQmdContentSync(qmdText);
+}
+
+/** {@link applyNodeEdit}, wherever the engine runs. */
+export async function applyNodeEditAsync(
+  content: string,
+  untransformedAstJson: string,
+  destinationSourceInfoJson: string,
+  modifiedSubtreeJson: string,
+): Promise<string> {
+  if (backend) {
+    return backend.applyNodeEdit(content, untransformedAstJson, destinationSourceInfoJson, modifiedSubtreeJson);
+  }
+  return applyNodeEdit(content, untransformedAstJson, destinationSourceInfoJson, modifiedSubtreeJson);
+}
+
+/** {@link regenerateNestedBuffers}, wherever the engine runs. */
+export async function regenerateNestedBuffersAsync(
+  content: string,
+  untransformedAstJson: string,
+): Promise<Record<string, string>> {
+  if (backend) return backend.regenerateNestedBuffers(content, untransformedAstJson);
+  return regenerateNestedBuffers(content, untransformedAstJson);
 }
 
 /**

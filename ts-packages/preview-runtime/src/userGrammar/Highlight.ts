@@ -63,8 +63,11 @@ let parserInitPromise: Promise<void> | null = null;
 function ensureParserInit(): Promise<void> {
   if (parserInitPromise === null) {
     parserInitPromise = (async () => {
+      // A browser page or a browser worker (the render worker) loads the
+      // bundled wasm by URL; node reads it from disk.
+      const inBrowser = typeof window !== 'undefined' || (globalThis as { WorkerGlobalScope?: unknown }).WorkerGlobalScope !== undefined;
       const opts: Parameters<typeof Parser.init>[0] | undefined =
-        typeof window === 'undefined'
+        !inBrowser
           ? undefined
           : {
               locateFile: (filename: string) =>
@@ -80,7 +83,7 @@ function ensureParserInit(): Promise<void> {
 // and gives us the final URL at build time. In node (vitest, no Vite),
 // this import is still valid because Vite handles `?url` in dev/test
 // via its own plugin; however, since we only consult it inside the
-// `typeof window !== 'undefined'` branch, node never executes it.
+// browser branch (a page or a worker), node never executes it.
 import webTreeSitterWasmUrl from 'web-tree-sitter/web-tree-sitter.wasm?url';
 
 /**

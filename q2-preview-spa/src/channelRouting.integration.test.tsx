@@ -42,7 +42,8 @@ let mockState: MockState;
 // write-back test can assert applyEditorOperations receives them verbatim.
 const SENTINEL_CHANGES = [{ rangeOffset: 0, rangeLength: 5, text: 'updated' }];
 
-vi.mock('@quarto/preview-runtime', () => ({
+vi.mock('@quarto/preview-runtime', async () =>
+  (await import('./test-utils/asyncEngineHelpers')).withAsyncEngineHelpers({
   initWasm: vi.fn().mockResolvedValue(undefined),
   isWasmReady: vi.fn(() => true),
   resolvePandocFormats: vi.fn(() => ({ success: true, source: 'default', formats: [{ key: 'html', class: 'preview' }] })),
@@ -125,7 +126,7 @@ async function mountAndGetSetAst(): Promise<(payload: unknown) => void> {
     expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull();
   });
   const props = capturedIframeProps[capturedIframeProps.length - 1];
-  return props.setAst as (payload: unknown) => void;
+  return props.setAst as (payload: unknown) => void | Promise<void>;
 }
 
 // ── Channel routing tests ─────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ describe('PreviewApp channel routing (Plan 2b)', () => {
       newText: 'Updated paragraph text.\n',
     };
 
-    setAst(payload);
+    await setAst(payload);
 
     expect(parseQmdContentSync).toHaveBeenCalledOnce();
     expect(parseQmdContentSync).toHaveBeenCalledWith('Updated paragraph text.\n');
@@ -163,7 +164,7 @@ describe('PreviewApp channel routing (Plan 2b)', () => {
       modifiedSubtreeJson: modifiedJson,
     };
 
-    setAst(payload);
+    await setAst(payload);
 
     expect(parseQmdContentSync).not.toHaveBeenCalled();
     expect(applyNodeEdit).toHaveBeenCalledOnce();
@@ -183,7 +184,7 @@ describe('PreviewApp channel routing (Plan 2b)', () => {
       ast: expectedAst,
     });
 
-    setAst({
+    await setAst({
       __isPreviewNodeEdit: true,
       channel: 'text' as const,
       destinationSourceInfoJson: '{"t":0,"r":[0,12],"d":0}',
@@ -198,7 +199,7 @@ describe('PreviewApp channel routing (Plan 2b)', () => {
     const { applyNodeEdit } = await import('@quarto/preview-runtime');
     const setAst = await mountAndGetSetAst();
 
-    setAst({ channel: 'text', newText: 'should be ignored' });
+    await setAst({ channel: 'text', newText: 'should be ignored' });
 
     expect(applyNodeEdit).not.toHaveBeenCalled();
   });
@@ -219,7 +220,7 @@ describe('PreviewApp edit write-back (bd-ov4gqk3m)', () => {
       await import('@quarto/preview-runtime');
     const setAst = await mountAndGetSetAst();
 
-    setAst(TEXT_PAYLOAD);
+    await setAst(TEXT_PAYLOAD);
 
     // Diff base is the Automerge-side content; target is applyNodeEdit's output.
     expect(getFileContent).toHaveBeenCalledWith('index.qmd');
@@ -238,7 +239,7 @@ describe('PreviewApp edit write-back (bd-ov4gqk3m)', () => {
     const setAst = await mountAndGetSetAst();
     (vfsAddFile as ReturnType<typeof vi.fn>).mockClear();
 
-    setAst(TEXT_PAYLOAD);
+    await setAst(TEXT_PAYLOAD);
 
     expect(applyNodeEdit).not.toHaveBeenCalled();
     expect(applyEditorOperations).not.toHaveBeenCalled();
@@ -251,7 +252,7 @@ describe('PreviewApp edit write-back (bd-ov4gqk3m)', () => {
       await import('@quarto/preview-runtime');
     const setAst = await mountAndGetSetAst();
 
-    setAst(TEXT_PAYLOAD);
+    await setAst(TEXT_PAYLOAD);
 
     expect(applyNodeEdit).not.toHaveBeenCalled();
     expect(applyEditorOperations).not.toHaveBeenCalled();

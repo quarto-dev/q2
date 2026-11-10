@@ -1,4 +1,4 @@
-import { isWasmReady, resolvePandocFormats } from '@quarto/preview-runtime';
+import { isWasmReady, resolvePandocFormatsAsync } from '@quarto/preview-runtime';
 import { wasmRenderOptions, type RenderBlock } from './previewConfig';
 
 /**
@@ -7,10 +7,10 @@ import { wasmRenderOptions, type RenderBlock } from './previewConfig';
  * A document whose `output-ext` is not `pdf` resolves to the `typst` (source) key, so it keeps the
  * "no live preview" overlay; the download route's E8 behaviour does not apply here.
  */
-export function isTypstPdf(path: string, render?: RenderBlock): boolean {
+export async function isTypstPdf(path: string, render?: RenderBlock): Promise<boolean> {
   if (!isWasmReady()) return false;
   // The session's `--to` and `-M` (F8): `--to typst` makes every page a PDF, `-M format:typst` likewise.
-  const resolved = resolvePandocFormats(path, wasmRenderOptions(render));
+  const resolved = await resolvePandocFormatsAsync(path, wasmRenderOptions(render));
   if (!resolved.success) return false;
   return resolved.key === 'typst-pdf' && resolved.class === 'download';
 }

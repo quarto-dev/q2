@@ -85,6 +85,14 @@ export default defineConfig({
       },
     },
   },
+  // Preview VFS contract D3: the render engine runs in a module worker
+  // (`@quarto/preview-runtime/worker/engineClient`). Its dynamic imports
+  // (the WASM glue, dart-sass, the JS bridges) need code-splitting, which
+  // the default IIFE worker format cannot do. hub-client's config is
+  // separate and unaffected.
+  worker: {
+    format: 'es',
+  },
   server: {
     port: 5175,
     fs: {
