@@ -5,6 +5,15 @@ description: 'A review of the OPR-7d plan against the code and real rendered pag
 ---
 
 **Plan:** [OPR-7d](../plans/2026-11-08-opr-7d-switch-plain-render.md) at `76c93f12f`.
+**Addendum (same day, after Gordon\'s answers):** items 15 and 16 are superseded. The pre-epic render shows the plain
+route is unchanged by the epics, and the lost group caption plus the lost panel ids and references are a regression of
+the flip that Gordon does not accept. [OPR-7j](../plans/2026-11-10-opr-7j-group-caption-and-panel-ids.md) fixes them for
+every engine (prototype: Julia recorded matches plain; Jupyter gains the caption and references; knitr unchanged; 810
+presenter, knitr and Julia end-to-end tests passed). The `julia-subfigure-group` normalizer is dropped, the interleaving
+normalizer stays, `julia/capture-facts` gets a pinned exact-difference entry, and the gate runs before the flip with the
+harness kept afterward as a regression test (Gordon: "2 sounds good", "3 yes keep harness"). The 7d plan, the 7j outline,
+the subfloat draft and the epic table were edited to fit. Correction to item 15: `tbl-one` renders as a table with its
+caption on all three engines, not as a literal pipe-table paragraph.
 **Method:** I read the plan, the protocol, the 7g gate report, the harness and the 7i draft (from its branch), then ran two
 sub-agents in parallel (A: normalizer design, opus; B: flip, gates and gaps, sonnet). I wrote this report myself.
 Marks: (read), (ran), (relied) for a sub-agent claim I did not re-check. Review only: no code, plan edit, allowlist
