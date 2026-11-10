@@ -2088,7 +2088,7 @@ mod tests {
             coverage: TsCoverage::Subset,
             hash_definition: Some(hash_def),
             presented_by: Some(TsPresentedBy::Core),
-            dependency_data: None,
+            dependency_data: Some("jupyter-outputs".to_string()),
         };
         // `TsUnit` has skipped optionals; the fixture instance is the unit with all of them.
         let full_unit = TsUnit {
