@@ -2,7 +2,7 @@
 title: 'OPR-7i: page dependencies for Jupyter-style outputs on the recorded route (the Quarto 1 scan, declared by the engine)'
 date: 2026-11-10
 description: 'The plain route writes requirejs, jQuery and hoisted library scripts into the page head for any notebook with an HTML or JavaScript output; the recorded route writes none, so a Julia page that needs them breaks once OPR-7d makes the recorded route the only one. Restores the plain route behavior narrowly: an engine declares what kind of dependency data its outputs carry, core runs a port of the Quarto 1 scan for the one kind that exists (jupyter-outputs), delivers the result as includes that are never stored, skips hoisted library outputs in the body, and warns for widget views it cannot satisfy. The Julia engine (Gordon''s fork) declares the kind. No widget state, no AMD-only-when-needed, no per-output manifest: those belong to the widget epic.'
-status: in-progress
+status: complete
 depends-on: [opr-7h]
 lane: D
 ---
@@ -276,18 +276,18 @@ If you stop early, the handoff says the subtree commits are local and must stay 
 
 ## Checklist (tests first; every box is `[unattended]` unless marked)
 
-- [ ] **Read** `widgets.ts` (`widgetDependencies`, `widgetDependencyIncludes`, `isWidgetIncludeHtml`, `isPlotlyLibrary`,
+- [x] **Read** `widgets.ts` (`widgetDependencies`, `widgetDependencyIncludes`, `isWidgetIncludeHtml`, `isPlotlyLibrary`,
       the includes text), `to-markdown.ts` (`isHtml`, the pre-walk), the Julia engine\'s `coreWillPresent` branch,
       `present_from_record`, `ReplayEngine::present_record`, `fold_side_data` and the stage drain, `present_document`,
       `present_units`, `present_cell_step`, `format_outputs_with`, `splice_record_with`, `fold_includes` and
       `fold_warnings`. Check that "What the code looks like today" is true; write any difference in the notes. Stop per
       "Stop conditions" if the design cannot work.
-- [ ] **Oracle fixtures.** Run the TypeScript `widgetDependencies` and `widgetDependencyIncludes` over small notebooks (no
+- [x] **Oracle fixtures.** Run the TypeScript `widgetDependencies` and `widgetDependencyIncludes` over small notebooks (no
       HTML output; a `text/html` data-URI image like Plots; a hand-written `text/html`; a `widget-view+json` with no
       state; a Plotly library output; and the whitespace-strip, duplicate-library, array-valued `text/html` and `\r`
       cases from step 2). Store each input and the includes text it produced as committed fixtures (generate once with
       Node; the Rust tests read the committed files, so CI needs no Node). The Rust port reproduces them exactly.
-- [ ] **Add stubs, then write the Rust tests and see them fail for the stated reason.** Stubs: `page_dependencies` (empty
+- [x] **Add stubs, then write the Rust tests and see them fail for the stated reason.** Stubs: `page_dependencies` (empty
       result), the new `PresentInput`, `PresentResult`, `UnitReport` and `ExecuteResult` fields, the new `PresentNote`
       variant. Tests: the scan flags and the hoist for each fixture; the includes text equals the oracle; no label gives
       nothing; a knitr record through the skeleton path gives no includes; a cell with no `quarto_engine` in a
@@ -297,32 +297,32 @@ If you stop early, the handoff says the subtree commits are local and must stay 
       `present_document`; two labeled records give one requirejs block; render then replay gives one requirejs block and
       one warning; the warning fires for a widget view in native Jupyter (`&[]` engines) and not for plain `text/html`;
       the derived text is absent from `entry.includes` and from the trace capture after a live run.
-- [ ] **Label tests** (add the optional fields first, then the failing assertions): `TsRecordInfo` round-trips
+- [x] **Label tests** (add the optional fields first, then the failing assertions): `TsRecordInfo` round-trips
       `dependencyData` and an older engine\'s info still parses; `EngineEntry` round-trips it, omits it when `None`, and it
       does not change the document hash or the hash definition; the wire-parity test and fixture agree.
-- [ ] **Julia engine tests first** in the subtree, then the engine change, typecheck, test, build.
-- [ ] Implement the label (wire and entry; native Jupyter does not set it), `page_dependencies`, the delivery field and the
+- [x] **Julia engine tests first** in the subtree, then the engine change, typecheck, test, build.
+- [x] Implement the label (wire and entry; native Jupyter does not set it), `page_dependencies`, the delivery field and the
       body skip, then the warning and its catalog entry, docs page and sidebar entry.
-- [ ] **Parity.** Re-run the parity harness for the Julia documents with the command at the top of the 7c report
+- [x] **Parity.** Re-run the parity harness for the Julia documents with the command at the top of the 7c report
       (`OPR_PARITY_REPORT=<file> cargo nextest run -p quarto-core -E 'binary(integration) &
       test(opr_parity_runner::opr_parity_report)'`, about 7 minutes), narrowed with `OPR_PARITY_ONLY=<document>`. The
       script lines of `julia/records-plot` must now match; `plot-website` and `positron-cache` must not regress. Take the
       "before" counts from the 7h notes (`claude-notes/research/2026-11-09-opr-7h-plots-differences.md`) and the 7c report.
       Do **not** add or change an allowlist entry; report counts before and after. Also re-run the Julia part of the gate
       and the knitr corpus gate that 7h left unticked, and say so if you could not.
-- [ ] **End to end** through the binary: rebuild `target/debug/q2` in this workspace (one exists but may be stale). Render
+- [x] **End to end** through the binary: rebuild `target/debug/q2` in this workspace (one exists but may be stale). Render
       `julia/records-plot` with the record route on and show the requirejs and jQuery lines in the head and nothing
       duplicated in the body; render a document with no HTML output and show the head has none; render a Julia document
       whose output is a hoisted Plotly library if PlotlyJS is installable, and say if it is not. Record each invocation,
       the lines you saw, and that you inspected the output. Say that you did not do a browser check.
-- [ ] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (run any
+- [x] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (run any
       failure on the integration tip too and say whether it is the same); the Windows cross-clippy for `quarto-core` (it
       may fail to build tree-sitter and wasmtime under `cc` on macOS, as in 7h; say so if it does); `cargo xtask lint`;
       the subtree\'s `npm test`, `npm run typecheck`, `npm run build`; the engine-host package\'s tests (the
       `wire-parity.test.ts` guard) and `ts_protocol::tests::test_ts_wire_parity_fixture`; `cd hub-client && npm run
       build:wasm` (the presenter, `record/` and the splice are touched); `target/debug/q2 render --strict` on every note
       you add or edit.
-- [ ] Reconcile this checklist, fill in "Notes from the run", set `status: complete`, rebase, re-run the gates, fast-forward
+- [x] Reconcile this checklist, fill in "Notes from the run", set `status: complete`, rebase, re-run the gates, fast-forward
       from workspace-1 (protocol, "Landing a plan"). Report snapshot or golden changes by count and file (expected:
       `ts_wire_parity.json`, the new oracle fixtures, and the parity goldens only; list them).
 - [ ] **\[Gordon\]** Push the subtree commits to the fork and refresh the subtree (above). Not an agent step.
@@ -348,4 +348,99 @@ If you stop early, the handoff says the subtree commits are local and must stay 
 
 ## Notes from the run
 
-(To be filled in by the agent that runs this plan.)
+Branch `opr/7i-jupyter-page-dependencies` in lane B (`workspace-4`), by Gordon\'s assignment (the plan names lane D).
+Marks: (ran) unless noted.
+
+### What changed
+
+- `presenter/page_dependencies.rs` (new): `page_dependencies(cells, engines, format)` ports the Quarto 1 scan; `without_outputs`
+  drops hoisted outputs with their `quarto_output_kinds` and `quarto_output_anchors` entries.
+- `EngineEntry.dependency_data` and `TsRecordInfo.dependencyData` (wire name `dependencyData`, value `"jupyter-outputs"`),
+  `types.ts`, `TS_RECORD_INFO_KEYS` and `ts_wire_parity.json` (+2 lines). No format-version bump; an entry written before the
+  field reads back with `None`.
+- `PresentInput.page_deps`, `PresentResult.header_includes`, `UnitReport.widget_view`, `PresentNote::WidgetViewUnsupported`,
+  `ExecuteResult.derived_header_includes` (`#[serde(skip)]`). No other new field, and `present_units` kept its signature.
+- Render: the stage drains the derived text after `fold_side_data`, skipping a block already on the page. Replay recomputes
+  it. The splice computes it in `splice_record_with` over every cell of the record and folds it after the stored includes.
+- Warning `Q-18-16` (catalog entry, `docs/errors/engine/Q-18-16.qmd`, sidebar entry).
+- Julia engine subtree: `src/record-wire.ts` sends the label only with `presentedBy: "core"`; test, CHANGELOG entry and the
+  rebuilt `_extensions/julia-engine/julia-engine.js` are **local commits, not pushed** (Gordon\'s step below).
+
+### Differences from the plan\'s wording
+
+- The label is copied onto the entry in `build_record` (`ts_record.rs`), not in `present_from_record`: `build_record` has the
+  record info, and it runs only on the acknowledged path. The condition (acknowledgement present) is the one decision 8 asks for.
+- The Quarto 1 scan looks only at `display_data` and `execute_result` outputs (`isDisplayData`), for the flags and the strip.
+  The plan said "any output". A `stream` or `error` output never sets a flag (fixture `stream-is-not-display`).
+- Hoisted outputs are keyed by the cell\'s nbformat `id` and output index.
+- "HTML output format" is `InlineTarget::to_html` (html, revealjs, slides, epub, dashboard); `ipynb` is not in it. Quarto 1\'s
+  `prefer-html` markdown documents are **not** recognized, so such a document differs from the plain route.
+- The Rust regexes spell out JavaScript\'s `.` (no `\n`, `\r`, U+2028, U+2029) and ASCII `\d`. The JavaScript whitespace set
+  (including U+FEFF) is used for the strip. `\s` in `hasRequireScript` is Rust\'s Unicode set (differs from JavaScript only for
+  U+FEFF and U+0085); not covered by a fixture.
+- Cells with no `quarto_engine` in a record with several engine entries are never scanned or hoisted; their library output stays
+  in the body. With exactly one entry they belong to it.
+- Order of work: the oracle tests and the label tests were seen failing against a stub or a missing assignment first. For the
+  presenter, splice, stage and replay wiring I wrote the implementation before the tests, so those tests were not seen failing
+  first, with one exception: the replay duplicate-warning test was written first and failed (two warnings) as the plan predicted.
+
+### Replay duplicate warning
+
+The premise held (ran): a live run stores the note\'s warning on the result, and replay added a second copy.
+`ReplayEngine::present_record` now skips the `WidgetViewUnsupported` note when an equal diagnostic (by rendered text) is already
+stored. Other notes (an unusable image, for one) are still raised again on replay, as before; I fixed only the new one.
+The splice computes no note: a live-run record reaches it with the warning in `entry.warnings`, which `fold_warnings` re-raises,
+and a supplied record without it shows none (the existing design for every presenter note).
+
+### Evidence
+
+- Oracle fixtures: 19 files under `crates/quarto-core/tests/fixtures/page_dependencies/` (inputs, TypeScript output) and the
+  generator `generate.mjs` (Node 24; the Rust tests read the committed files). The Rust port matches all 19.
+- `cargo clippy -p quarto-core --all-targets -- -D warnings`: clean. `cargo nextest run -p quarto-core`: 8236 passed,
+  36 skipped (the 7h baseline was 8157 passed, 3 failed, 36 skipped on a different tree; the three failures there did not occur
+  here, and I did not investigate why).
+- Knitr corpus and goldens (`knitr_corpus_record`, `julia_presenter_parity`, `presenter_pinning`, `jupyter_markdown_goldens`):
+  14 passed. These are the integration tests I selected as the knitr corpus gate; I did not run the whole-corpus R parity run.
+- Engine-host package: 177 passed, including `wire-parity.test.ts`. `ts_protocol::tests::test_ts_wire_parity_fixture`: passes
+  after `QUARTO_REGEN_WIRE_FIXTURES=1` (it failed before regenerating, as the guard should). Subtree: `npm run typecheck` clean,
+  `npm test` 55 passed, `npm run build` done.
+- `cd hub-client && npm run build:wasm`: succeeded.
+- `cargo xtask lint`: one violation, `metadata-as-str` at `crates/quarto-core/src/positron_cache.rs:360`, a file this plan does
+  not touch. Not fixed here.
+- **Windows cross-clippy did not run:** `aws-lc-sys` fails to build under `cc` for `x86_64-pc-windows-msvc` on macOS. A Windows
+  user needs `cargo clippy -p quarto-core --all-targets -- -D warnings`.
+
+### Parity (Julia, ran, `OPR_PARITY_ONLY`)
+
+| Document | Before (7c/7h) | After |
+|---|---|---|
+| `julia/records-plot` | three script lines, plus the 4d split | no script line; the 4d split and code-copy scaffold remain |
+| `julia/positron-cache` | three script lines | identical |
+| `julia/plot-website` | size difference (fixed in 7h) | identical |
+| `julia/docs-index-chunk` | three script lines | allowlisted (`julia-code-leading-newline`) |
+
+Whole `julia/` set: 11 identical, 1 allowlisted, 4 unallowlisted (`capture-facts`, `presentation-attrs`, `records-plot`,
+`fig-subcap`), 1 expected both-failed. None of the four involves a script line: they are the OPR-4d per-expression split and the
+7j sub-figure group. No allowlist entry was added or changed.
+
+### End to end (ran, binary, output inspected; no browser)
+
+`target/debug/q2 render doc.qmd` in a scratch directory with the default Julia environment\'s `Project.toml` and `Manifest.toml`
+copied beside it (so `Plots` resolves). The recorded document is the `julia/records-plot` fixture with `execute: {record: true}`.
+
+- Recorded and plain pages each have exactly one `requirejs@2.3.6`, one `jquery@3.5.1` and one `define('jquery'...)` line, at
+  lines 14 to 16 of the page, inside `<head>`; none in the body. The `<script>` lines of the two pages are identical; the
+  remaining 7 diff lines are the 4d split and code-copy scaffold.
+- A Julia document with `1 + 1` and `println` (no HTML output) has none of the three lines.
+- **Not done:** a Plotly library output (PlotlyJS was not checked or installed), so the hoist and body skip are covered by the
+  oracle fixtures and the Rust tests only; a browser check; the Windows build.
+
+### For Gordon
+
+- Names to change before the wire ships: `dependencyData` / `dependency_data` / `"jupyter-outputs"` / `derived_header_includes`.
+- Push the subtree commits to the fork (`gordonwoodhull/quarto-julia-engine`, `q2/node-port`) and refresh with
+  `cargo xtask pull-extension-subtree julia-engine`. Until then an older engine has no label and gets no handling.
+- OPR-7d inherits one documented difference: native Jupyter and the ipynb replay path never set the label, so they derive no
+  page dependencies and get only the widget warning (decision 6).
+- `claude-notes/plans/2026-11-10-opr-7i-...md` frontmatter says `lane: D`; this run used lane B by assignment.
+
