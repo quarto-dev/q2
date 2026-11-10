@@ -2,7 +2,7 @@
 title: 'Preview demand-driven VFS: exposure policy, miss route, render worker'
 date: 2026-11-07
 description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, a render-reported read set, and removal of the dependency predictors.'
-status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0 and 1 implemented
+status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0, 1 and 2a implemented
 ---
 
 ## Overview
@@ -263,53 +263,130 @@ against it.
 
 Tests first:
 
-- [ ] `ts-packages/preview-runtime`: the async client facade exposes the
+- [x] `ts-packages/preview-runtime`: the async client facade exposes the
   same names as today. The synchronous engine exports (`initWasm`,
   `vfsAddFile`, `vfsClear` and the rest) stay importable beside it: about
   eight of the `*.wasm.test.ts` files under `hub-client/src` import them,
   and hub-client keeps running the engine in-process (Phase 4). The other
   WASM tests load the raw `wasm-quarto-hub-client` module and are not
   affected.
-- [ ] Worker RPC unit test: request/response ids, error propagation, the
+- [x] Worker RPC unit test: request/response ids, error propagation, the
   init message carrying the ephemeral-storage and perf flags.
-- [ ] VFS write ordering: a sync-client write forwarded to the worker
+- [x] VFS write ordering: a sync-client write forwarded to the worker
   while a render is running is applied after that render and before the
   next one (unit test on the worker\'s message loop).
-- [ ] Playwright: `renderPageForPreview` is queued (two rapid edits produce
+- [x] Playwright: `renderPageForPreview` is queued (two rapid edits produce
   one final render with the latest content; no torn render).
-- [ ] The existing preview e2e suite passes unchanged.
+- [x] The existing preview e2e suite passes unchanged.
 
 Implementation:
 
-- [ ] `renderPageForPreview` goes through `enqueueRender`. This is
+- [x] `renderPageForPreview` goes through `enqueueRender`. This is
   independent of the worker and lands first, on the main thread.
-- [ ] Worker shell and generic RPC (`new Worker(new URL(...), {type:
+- [x] Worker shell and generic RPC (`new Worker(new URL(...), {type:
   'module'})`, following `hub-client/src/pandoc/pandocService.ts`); init
   message sets `__Q2_EPHEMERAL_STORAGE__` and perf flags in the worker.
-- [ ] `wasmRenderer.ts` becomes the engine inside the worker; a facade with
+- [x] `wasmRenderer.ts` becomes the engine inside the worker; a facade with
   the same API on the main thread; fixed tables (formats, import table,
   project choices, share tree and typst versions) prefetched at init.
-- [ ] The sync client\'s VFS writes (`vfsAddFile`, `vfsAddBinaryFile`,
+- [x] The sync client\'s VFS writes (`vfsAddFile`, `vfsAddBinaryFile`,
   `vfsRemoveFile`, `vfsClear` in `automergeSync.ts`) are forwarded to the
   worker as messages, ordered against renders as contract D9 requires.
-- [ ] Sync-to-async rework: `resolvePandocFormats` (five sites, including a
+- [x] Sync-to-async rework: `resolvePandocFormats` (five sites, including a
   render body and a `useMemo`), `handleSetAst`, `regenerateNestedBuffers`
   moved into the render response, `renderPandocRequest` abort and progress
   proxied.
-- [ ] Render responses carry the resources main-thread readers need: theme
+- [x] Render responses carry the resources main-thread readers need: theme
   CSS, the asset manifest bytes, the artifacts `iframePostProcessor` and
   the slide renderer read, the printable inliner\'s inputs.
-- [ ] Bridge: `rasterize.js` proxied to the main thread through
+- [x] Bridge: `rasterize.js` proxied to the main thread through
   `setRasterizer`; `userGrammar/Highlight.ts` `typeof window` fix; perf
   wiring.
-- [ ] dart-sass importer stays sync, inside the worker.
-- [ ] Vite: worker format decision (`format: 'es'` versus the global IIFE
+- [x] dart-sass importer stays sync, inside the worker.
+- [x] Vite: worker format decision (`format: 'es'` versus the global IIFE
   plus `inlineDynamicImports`); the embed build\'s exactly-one hashed `.wasm`
   check and the viewer/editor dedupe still hold; `cargo xtask
   build-q2-preview-spa` and `cargo build --bin q2` verified end to end.
-- [ ] Parity recorded here: cold and warm render wall time before and
+- [x] Parity recorded here: cold and warm render wall time before and
   after the move, on the same deck, and a note that the rendered output
   was inspected.
+
+### Phase 2a record (2026-11-10)
+
+Shape, and where it differs from the sketch above:
+
+- The facade is not a second module. `wasmRenderer.ts` gained a pluggable
+  `EngineBackend` (`installEngineBackend`). The SPA installs the worker
+  backend (`startWorkerEngine` in
+  `ts-packages/preview-runtime/src/worker/engineClient.ts`, imported by
+  subpath so hub-client never bundles the worker); hub-client installs
+  none. With the backend installed, `initWasm` starts the worker, the VFS
+  exports read a main-thread mirror (`worker/vfsMirror.ts`) and forward
+  writes in order, and `renderPageForPreview` renders in the worker. The
+  synchronous engine helpers throw there; `...Async` forms
+  (`resolvePandocFormatsAsync`, `parseQmdContentAsync`,
+  `applyNodeEditAsync`, `regenerateNestedBuffersAsync`) answer in either
+  mode. `automergeSync.ts` and `preview-renderer` are unchanged.
+- "Render responses carry the resources main-thread readers need" is done
+  by the mirror. It holds every synced file (so the asset manifest, the
+  PDF pane and the post-processor read sources as before), and each
+  `renderPreview` answer carries the `/.quarto/` artifacts the render
+  changed (the theme CSS). The worker diffs artifacts against what it
+  last sent; the diff costs under 1 ms.
+- Ordering (contract D9): the worker's RPC is serial, so a write that
+  arrives during a render waits for it. The main thread keeps the
+  coalescing render queue, so at most one render is in flight.
+- `renderedSource` (the first commit of this phase) replaced the SPA's
+  pre-render VFS snapshot, which a queued or worker render could outlive.
+- `isTypstPdf` is asynchronous. The page kind is recorded per path, and
+  the render effect waits until the active page has one, so a PDF page
+  never flashes the HTML overlay. `regenerateNestedBuffers` runs from an
+  effect after the render rather than inside the render response; same
+  result, one less coupling.
+- Not needed by the SPA, so not built: prefetching the fixed tables
+  (formats, import table, project choices, share tree, typst versions)
+  and proxying `renderPandocRequest` abort and progress. The SPA calls
+  none of them; downloads and PDFs go through server routes. They belong
+  to hub-client's move (Phase 4).
+- Worker build: `worker.format: 'es'` in the SPA's Vite config only (the
+  engine's dynamic imports need code-splitting). hub-client's global
+  IIFE worker config is untouched. The embed's exactly-one hashed `.wasm`
+  check holds; `cargo xtask build-q2-preview-spa` and
+  `cargo build --bin q2` verified.
+- Opaque-origin sandbox (`sandbox="allow-scripts"`): Chromium refuses a
+  module worker from the page's `blob:` URL and a worker from the
+  server's URL. The SPA starts a classic blob worker that loads the real
+  one with a dynamic `import()` and replays messages that arrived first.
+  `sandboxed-frame-theme.spec.ts` caught this.
+- hub-client's copy of `perfCounters.ts` is kept byte-identical (a test
+  enforces it). That sync is its only change; it is not user-facing, so
+  no changelog entry.
+
+Parity, Chromium, on a 60-section themed document (navigation to first
+render; force-refresh to the next render, median of 12; three runs
+each, all within a few ms of each other):
+
+| Build | Cold | Warm median |
+|---|---|---|
+| Main thread (worker off) | 1010 ms | 33 ms |
+| Worker | 1040 ms | 47 ms |
+
+Inside the worker the render takes 12 to 13 ms and the artifact diff
+under 1 ms. The added warm time is the boundary: the response (a 226 KB
+AST) is cloned across, and a refresh also asks for the page kind. The
+page's main thread no longer runs the render. Revisit if Phase 2b or 3
+measurements show the clone matters.
+
+E2E: the Chromium project passes as before (60 passed, 6 skipped; the 7
+`typst-pdf-preview.spec.ts` failures are the local pandoc 3.12.1 against
+the required 3.13, identical on the main-thread build). New specs:
+`render-queue.spec.ts`, `render-worker.spec.ts` (the worker exists, the
+page never fetches the engine `.wasm`, and the theme compiled in the
+worker reaches the iframe). The Firefox project could not run locally:
+Playwright's Firefox fails to launch on this machine ("Could not find
+profile folder") with or without the worker, so CI is the check there.
+Output was inspected through those specs' assertions on the rendered
+iframe DOM.
 
 ## Phase 2b: the miss path and the read set (preview SPA)
 
