@@ -2,7 +2,7 @@
 title: 'Listing thumbnails honor image-height (GH #1155)'
 date: 2026-11-10
 description: 'Grid listings ignored image-height, so large thumbnails rendered at full size; emit the inline height and card-img class the way Quarto 1 does.'
-status: active
+status: done
 braid:
   strand: bd-xgwaawhf
 ---
