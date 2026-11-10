@@ -52,6 +52,24 @@ export function authorInitials(name: string, actor: string): string | null {
     return letters.join('').toUpperCase();
 }
 
+/** Keep the badge inside the viewport, flipping left when right-side space is tight. */
+export function attributionBadgePlacement(
+    rectLeft: number,
+    viewportWidth: number,
+): { left: number; maxWidth: number } {
+    const margin = 8;
+    const maxWidth = 320;
+    const preferredMinWidth = Math.min(160, Math.max(0, viewportWidth - 2 * margin));
+    let left = Math.max(margin, rectLeft);
+    if (viewportWidth - left - margin < preferredMinWidth) {
+        left = Math.max(margin, rectLeft - maxWidth);
+    }
+    return {
+        left,
+        maxWidth: Math.max(0, Math.min(maxWidth, viewportWidth - left - margin)),
+    };
+}
+
 export function AttributionBadge({
     record,
     style,
@@ -260,13 +278,17 @@ export function useAttributionHover(): {
     const stylesheet = enabled ? (
         <style>{attributionStyles + actorStyles}</style>
     ) : null;
-    const overlay = hovered ? (
+    const placement = hovered
+        ? attributionBadgePlacement(hovered.rect.left, window.innerWidth)
+        : null;
+    const overlay = hovered && placement ? (
         <AttributionBadge
             record={hovered.record}
             style={{
                 position: 'fixed',
                 top: hovered.rect.bottom + 2,
-                left: hovered.rect.left,
+                left: placement.left,
+                maxWidth: placement.maxWidth,
             }}
         />
     ) : null;

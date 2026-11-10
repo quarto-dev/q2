@@ -100,6 +100,9 @@ function ensureUserCursorStyle(peerId: string, color: string, userName: string):
       font-weight: 600;
       line-height: 1;
       white-space: nowrap;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
       pointer-events: none;
       z-index: 10;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

@@ -258,6 +258,26 @@ describe('usePresence — remote cursor tracking across content edits', () => {
     document.head.querySelectorAll('style[id^="presence-user-"]').forEach((s) => s.remove());
   });
 
+  it('bounds long cursor labels while preserving the full name on hover', () => {
+    const userName = 'A'.repeat(100);
+    const editor = createMockEditor('hello world');
+    const { result } = renderHook(() => usePresence('test.qmd'));
+    act(() => {
+      result.current.onEditorMount(editor as never);
+    });
+
+    emitPresences([makePresence({ userName, cursor: cursorAt(6) })]);
+
+    const style = document.getElementById('presence-user-remote-1');
+    expect(style?.textContent).toContain(`content: '${userName}'`);
+    expect(style?.textContent).toMatch(/max-width:\s*200px/);
+    expect(style?.textContent).toMatch(/overflow:\s*hidden/);
+    expect(style?.textContent).toMatch(/text-overflow:\s*ellipsis/);
+    expect(editor._cursorDecorationsFor('remote-1')[0].options.hoverMessage).toEqual({
+      value: userName,
+    });
+  });
+
   it('deletion in an earlier paragraph does not shift a remote cursor in a later paragraph (PR #94)', () => {
     // "abcdef\n\nghi\n\njkl" — 'k' (later paragraph) is at offset 14.
     const editor = createMockEditor('abcdef\n\nghi\n\njkl');

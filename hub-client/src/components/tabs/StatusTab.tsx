@@ -8,6 +8,7 @@
 
 import type { PresenceState } from '../../services/presenceService';
 import { common, tabs } from '../../strings';
+import Tooltip from '../Tooltip';
 import './StatusTab.css';
 
 type WasmStatus = 'loading' | 'ready' | 'error';
@@ -68,13 +69,15 @@ export default function StatusTab({
             </div>
             <ul className="user-names">
               {remoteUsers.map((user) => (
-                <li key={user.peerId}>
-                  <span
-                    className="user-color-dot"
-                    style={{ backgroundColor: user.userColor }}
-                  />
-                  <span className="user-name">{user.userName}</span>
-                </li>
+                <Tooltip key={user.peerId} content={user.userName} block>
+                  <li tabIndex={0}>
+                    <span
+                      className="user-color-dot"
+                      style={{ backgroundColor: user.userColor }}
+                    />
+                    <span className="user-name qh-truncate">{user.userName}</span>
+                  </li>
+                </Tooltip>
               ))}
             </ul>
           </div>

@@ -554,7 +554,7 @@ function ReplayHarness() {
                 className="replay-drawer__actor-dot"
                 style={{ backgroundColor: '#447099' }}
               />
-              Ada Lovelace
+              <span className="replay-drawer__actor-name qh-truncate">Ada Lovelace</span>
               <span className="replay-drawer__actor-you">(you)</span>
             </span>
             <span className="replay-drawer__actor">
@@ -562,7 +562,7 @@ function ReplayHarness() {
                 className="replay-drawer__actor-dot"
                 style={{ backgroundColor: '#E91E63' }}
               />
-              Grace Hopper
+              <span className="replay-drawer__actor-name qh-truncate">Grace Hopper</span>
             </span>
           </div>
           <ReplayDrawer

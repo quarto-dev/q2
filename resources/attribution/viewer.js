@@ -74,9 +74,18 @@
         if (!badge) return;
 
         var rect = leaf.getBoundingClientRect();
+        var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        var margin = 8;
+        var maxWidth = 320;
+        var preferredMinWidth = Math.min(160, Math.max(0, viewportWidth - 2 * margin));
+        var left = Math.max(margin, rect.left);
+        if (viewportWidth - left - margin < preferredMinWidth) {
+            left = Math.max(margin, rect.left - maxWidth);
+        }
         badge.style.position = 'fixed';
         badge.style.top = (rect.bottom + 2) + 'px';
-        badge.style.left = rect.left + 'px';
+        badge.style.left = left + 'px';
+        badge.style.maxWidth = Math.max(0, Math.min(maxWidth, viewportWidth - left - margin)) + 'px';
 
         document.body.appendChild(badge);
         currentBadge = badge;

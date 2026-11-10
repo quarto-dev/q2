@@ -13,6 +13,7 @@ import {
   generateAnonymousName,
   isValidHexColor,
   isValidUserName,
+  MAX_USER_NAME_LENGTH,
 } from './storage';
 
 /**
@@ -82,7 +83,7 @@ export async function updateUserName(name: string): Promise<UserSettings> {
   const trimmedName = name.trim();
 
   if (!isValidUserName(trimmedName)) {
-    throw new Error('Invalid user name: must be 1-50 characters');
+    throw new Error(`Invalid user name: must be 1-${MAX_USER_NAME_LENGTH} characters`);
   }
 
   const db = await getDb();

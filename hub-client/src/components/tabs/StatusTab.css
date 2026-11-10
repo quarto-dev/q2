@@ -105,6 +105,7 @@
 }
 
 .user-name {
+  min-width: 0;
   font-size: 13px;
   color: var(--editor-text-dim);
 }

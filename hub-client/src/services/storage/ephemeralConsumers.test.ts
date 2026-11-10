@@ -64,6 +64,34 @@ describe('ephemeral storage consumers', () => {
     expect(await userSettings.getUserId()).toBe(identity.userId);
   });
 
+  it('accepts and stores the longest Connect API full display name', async () => {
+    const { isValidUserName } = await import('./utils');
+    const fullName = `${'A'.repeat(256)} ${'B'.repeat(256)}`;
+    const tooLongName = `${'A'.repeat(257)} ${'B'.repeat(256)}`;
+
+    expect(isValidUserName(fullName)).toBe(true);
+    expect(isValidUserName(tooLongName)).toBe(false);
+
+    const renamed = await userSettings.updateUserName(`  ${fullName}  `);
+    expect(renamed.userName).toBe(fullName);
+    expect((await userSettings.getUserIdentity()).userName).toBe(fullName);
+
+    await expect(userSettings.updateUserName(tooLongName)).rejects.toThrow(
+      'Invalid user name: must be 1-513 characters',
+    );
+    expect((await userSettings.getUserIdentity()).userName).toBe(fullName);
+  });
+
+  it('counts Unicode code points like Connect', async () => {
+    const { isValidUserName } = await import('./utils');
+    const fullName = `${'😀'.repeat(256)} ${'環'.repeat(256)}`;
+
+    expect(Array.from(fullName)).toHaveLength(513);
+    expect(fullName.length).toBeGreaterThan(513);
+    expect(isValidUserName(fullName)).toBe(true);
+    expect(isValidUserName(`${fullName}C`)).toBe(false);
+  });
+
   it('projectSetStorage pointer and collections round-trip in memory', async () => {
     expect(await projectSetStorage.getProjectSetPointer()).toBeNull();
     expect(await projectSetStorage.getCollectionPointers()).toEqual([]);
