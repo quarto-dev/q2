@@ -1,0 +1,19 @@
+{
+  "name": "no-html",
+  "cells": [
+    [
+      {
+        "output_type": "stream",
+        "name": "stdout",
+        "text": "hi\n"
+      }
+    ]
+  ],
+  "expected": {
+    "javascriptWidgets": false,
+    "jupyterWidgets": false,
+    "htmlLibraries": [],
+    "hoisted": [],
+    "head": null
+  }
+}
