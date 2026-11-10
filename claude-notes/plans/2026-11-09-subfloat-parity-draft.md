@@ -54,6 +54,59 @@ symptom of the missing synthesis or of the attribute-forwarding step (`to-markdo
 don\'t know about"); how much of Quarto 1\'s subfloat behavior is in `jupyter.ts` and `hooks.R` (engine side) and how much
 in the Lua filters (pandoc side); what typst, LaTeX and docx need.
 
+## Subtables are in scope (added 2026-11-10)
+
+Sub-tables (`tbl-cap` with `tbl-subcap`, shown as "Table 1 (a)") are half of this plan\'s goal, not an afterthought, and
+they are in worse shape than sub-figures. [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) fixes the
+figure group\'s caption and panel ids for every engine and **deliberately leaves tables alone**, because no engine handles
+them and the one-presenter flip does not make them worse. This section says what the 2026-11-10 renders showed, so Phase 0
+starts from a measured baseline.
+
+**What happens today (ran, 2026-11-10).** One cell with a label, `tbl-cap` and `tbl-subcap` holding two markdown tables,
+on Julia, knitr and Jupyter, plain and recorded routes, plus the pre-epic commit `7016d595a` for Julia and knitr: every
+page is the same.
+
+| Element | Result on every engine and route |
+|---|---|
+| Group `tbl-two` | exists; `@tbl-two` resolves ("Table 2") |
+| Group caption text | lost; "Table 2" alone, class `quarto-uncaptioned` |
+| Panel ids and captions | none; the subcaptions are not rendered as panel captions |
+| `@tbl-two-1`, `@tbl-two-2` | `?tbl-two-N?`, unresolved, two warnings |
+| A single labeled table next to it | correct ("Table 1: One table.") |
+
+The seed cell (Julia; the knitr and Jupyter versions use `kable` and two `text/markdown` outputs):
+
+```julia
+#| label: tbl-two
+#| tbl-cap: A table group.
+#| tbl-subcap:
+#|   - First table.
+#|   - Second table.
+display(MIME("text/markdown"), md"| a | b |\n|---|---|\n| 1 | 2 |")
+display(MIME("text/markdown"), md"| c | d |\n|---|---|\n| 3 | 4 |")
+```
+
+**How tables differ from figures.** For figures, plain Julia and knitr write one id per panel (`fig-x-1`, `fig-x-2`), so
+the panels exist as separate figures with wrong numbers, and the missing piece is the `parent` link. For tables nothing
+writes panel ids on any engine, so the missing pieces are both the panel identity *and* the `parent` link, and even the
+group caption is lost. So a table fix is the bigger of the two: it cannot start from "reuse the figure ids and add
+`parent`". I did not read `hooks.R` or `to-markdown.ts` for why tables get no panel ids; Phase 1 must.
+
+**What this plan commits to for tables.**
+
+- Phase 0 puts at least these table cases in the corpus, on all three engines and in Quarto 1: the seed cell; the same
+  without a parent caption; a table group beside an ordinary table; the references `@tbl-x`, `@tbl-x-1`, `@tbl-x-2`;
+  and a group with a `layout-ncol`. (The figure cases are already listed there.)
+- Phase 1\'s note covers the table path in Quarto 1 explicitly (`crossref/tables.lua`, the `tbl-subcap` handling in
+  `jupyter.ts` and `hooks.R`) and says whether tables and figures share one mechanism there.
+- Phase 2\'s baseline report has a table section, and says how many cases are a regression against nothing (there is no
+  earlier correct behavior to regress from) and how many differ from Quarto 1 in a nameable way.
+- Phase 3\'s decision (the existing "do tables and figures ship together" question) is made with this baseline. If
+  tables ship later, the plan\'s first slice is figures only, on top of 7j, and tables are a named second slice, not an
+  open end.
+- Phase 4 builds the panel identity and the `parent` link for tables as well, with the group caption restored first
+  (it is the cheapest visible fix and independent of the numbering), then panel ids, then the "(a)" numbering.
+
 ## The central design question (decision for Gordon, after Phase 2)
 
 **Where is panel identity created** (the ids `fig-x-1`, `fig-x-2`, the panel captions, the parent and child link)?
@@ -146,8 +199,8 @@ how, do not assume).
   the model in Phase 4 needs, so the later work reads it, adds the `parent` link and the "(a)" numbering, and removes
   7j\'s ids only if the chosen option creates them elsewhere.
 - That epic keeps real subfloats out of scope (OPR-7d decision 3, replaced on 2026-11-10 by 7j, and the 7c report cite
-  the strands). After 7j the flip changes nothing about figure groups; tables are unchanged by the flip (the probe
-  above). Nothing here blocks the epic any more than it already is by 7j, which is a prerequisite of 7d.
+  the strands). After 7j the flip changes nothing about figure groups; tables are unchanged by the flip (see "Subtables are in scope"
+  above, which is where they get fixed). Nothing here blocks the epic any more than it already is by 7j, which is a prerequisite of 7d.
 - If option B is chosen, the work lands on `presenter/cell.rs`, `presenter/options.rs` and `engine/ts_record.rs`, which
   OPR-7f changed and 7j changes. Start Phase 4 only after OPR-7f, 7j and 7d have landed. Phases 0 to 2 do not touch them.
 - OPR-7f, Part C, stops `metadata.quarto` from being forwarded as `data-quarto`. It does **not** stop `tbl-cap` and
@@ -157,6 +210,7 @@ how, do not assume).
 
 - After 7j the Julia and Jupyter figure paths share the presenter\'s knitr-derived group rules. The corpus may show that
   Quarto 1 does something different for Jupyter (where it wins over `hooks.R`); parity then needs a stated choice per case.
+- Tables may need a separate design from figures (see "Subtables are in scope": no engine writes table panel ids today).
 - It assumes the right unit of work is "subfloats" as one feature. The corpus may show that tables, figures and
   `layout-*` options each need separate handling.
 - Option B is a lean, not a finding. It needs a look at how much of the Jupyter-dialect `subcap` handling the presenter
