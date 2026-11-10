@@ -31,12 +31,12 @@ attribute source (`a`) and with argument Spans that pampa currently places at
 
 ## Generating JSON
 
-To regenerate the JSON files from the .qmd sources, run from **this directory**
-(`ts-packages/annotated-qmd/examples`):
+To regenerate the JSON files from the .qmd sources, run from the
+**repository root**:
 
 ```bash
-for q in *.qmd; do
-  cargo run --quiet --bin pampa -- -t json -i "$q" > "${q%.qmd}.json"
+for f in ts-packages/annotated-qmd/examples/*.qmd; do
+  cargo run --quiet --bin pampa -- -t json -i "$f" > "${f%.qmd}.json"
 done
 ```
 
@@ -44,9 +44,12 @@ Two details matter:
 
 - The binary is **`pampa`** (it was once called `quarto-markdown-pandoc`; that
   name no longer exists).
-- Run it **from this directory**, not from the repository root. `pampa` records
-  the input path it was given in `astContext.files[].name`, so invoking it with
-  a longer path bakes that path into every example.
+- Run it **from the repository root**, with the repo-relative paths above.
+  `pampa` records the input path it was given in `astContext.files[].name`,
+  and the CI guard
+  `crates/pampa/tests/integration/annotated_qmd_fixture_guard.rs` regenerates
+  every fixture the same way and fails on any byte difference. Running from
+  this directory records bare file names and fails the guard.
 
 Some of these fixtures deliberately contain malformed constructs and will emit
 warnings on stderr; the JSON on stdout is still what the tests consume.
