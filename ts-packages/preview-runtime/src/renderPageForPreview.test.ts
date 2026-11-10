@@ -47,6 +47,7 @@ beforeAll(() => {
       });
     }),
     vfs_read_file: () => JSON.stringify({ success: true, content: state.content }),
+    vfs_take_read_set: () => 'null',
   });
 });
 

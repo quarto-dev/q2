@@ -33,6 +33,7 @@ function fakeEngine(): EngineApi {
     parseQmdContentSync: (text) => ({ success: true, ast: text.toUpperCase() }) as never,
     applyNodeEdit: (content) => `${content} edited`,
     regenerateNestedBuffers: () => ({}),
+    vfsSetMissHandler: () => {},
   };
 }
 

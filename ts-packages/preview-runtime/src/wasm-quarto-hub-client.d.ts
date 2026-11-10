@@ -12,6 +12,9 @@ declare module 'wasm-quarto-hub-client' {
   export function vfs_get_runtime_metadata(): string;
   export function vfs_read_file(path: string): string;
   export function vfs_read_binary_file(path: string): string;
+  export function vfs_is_file(path: string): boolean;
+  export function vfs_set_miss_handler(handler: unknown): void;
+  export function vfs_take_read_set(): string;
   /**
    * JS-interop user-grammar provider — hand-in to `render_qmd` /
    * `render_qmd_content` so the render pipeline consults

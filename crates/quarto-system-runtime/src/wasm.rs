@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
+use crate::demand::{Demand, MissEntry, MissHandler, MissStat, ReadSet};
 use crate::traits::validate_fetch_url;
 use crate::traits::{
     CommandOutput, FetchPolicy, PathKind, PathMetadata, RuntimeError, RuntimeResult, SassOutput,
@@ -259,6 +260,74 @@ unsafe impl<T> Send for SingleThreaded<T> {}
 // SAFETY: as above.
 unsafe impl<T> Sync for SingleThreaded<T> {}
 
+/// A [`MissHandler`] backed by a JS object (see
+/// [`WasmRuntime::set_js_miss_handler`]). In the q2 preview SPA the render
+/// worker installs one whose methods are synchronous XHRs to the preview
+/// server's miss routes.
+struct JsMissHandler(SingleThreaded<JsValue>);
+
+impl JsMissHandler {
+    /// Call `method(rel)`; a throw or a missing method is `undefined`.
+    fn call(&self, method: &str, rel: &str) -> JsValue {
+        let target = &self.0.0;
+        js_sys::Reflect::get(target, &JsValue::from_str(method))
+            .ok()
+            .and_then(|f| f.dyn_into::<js_sys::Function>().ok())
+            .and_then(|f| f.call1(target, &JsValue::from_str(rel)).ok())
+            .unwrap_or(JsValue::UNDEFINED)
+    }
+}
+
+fn js_bool(object: &JsValue, key: &str) -> bool {
+    js_sys::Reflect::get(object, &JsValue::from_str(key))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+impl MissHandler for JsMissHandler {
+    fn read(&self, rel: &str) -> Option<Vec<u8>> {
+        let value = self.call("read", rel);
+        value
+            .dyn_ref::<js_sys::Uint8Array>()
+            .map(|bytes| bytes.to_vec())
+    }
+
+    fn stat(&self, rel: &str) -> MissStat {
+        let value = self.call("stat", rel);
+        if !value.is_object() {
+            return MissStat::default();
+        }
+        MissStat {
+            exists: js_bool(&value, "exists"),
+            is_file: js_bool(&value, "isFile"),
+            is_dir: js_bool(&value, "isDir"),
+        }
+    }
+
+    fn list(&self, rel: &str) -> Option<Vec<MissEntry>> {
+        let value = self.call("list", rel);
+        let array = value.dyn_ref::<js_sys::Array>()?;
+        Some(
+            array
+                .iter()
+                .filter_map(|entry| {
+                    let name = js_sys::Reflect::get(&entry, &JsValue::from_str("name"))
+                        .ok()?
+                        .as_string()?;
+                    let kind = js_sys::Reflect::get(&entry, &JsValue::from_str("kind"))
+                        .ok()
+                        .and_then(|k| k.as_string());
+                    Some(MissEntry {
+                        name,
+                        is_dir: kind.as_deref() == Some("dir"),
+                    })
+                })
+                .collect(),
+        )
+    }
+}
+
 // =============================================================================
 // Monotonic clock: performance.now()
 // =============================================================================
@@ -302,6 +371,10 @@ pub struct WasmRuntime {
     /// `fetch_url_hardened` hands to `fetch` (design D8.5: aborting the
     /// click stops its downloads). `None` on the live runtime.
     abort_signal: Option<SingleThreaded<JsValue>>,
+
+    /// Fills VFS misses on demand and records read sets (preview VFS
+    /// contract D2, D11). Without a handler, every answer is local.
+    demand: Demand,
 }
 
 impl WasmRuntime {
@@ -311,6 +384,7 @@ impl WasmRuntime {
             vfs: RwLock::new(VirtualFileSystem::new()),
             runtime_metadata: RwLock::new(None),
             abort_signal: None,
+            demand: Demand::default(),
         }
     }
 
@@ -320,6 +394,7 @@ impl WasmRuntime {
             vfs: RwLock::new(vfs),
             runtime_metadata: RwLock::new(None),
             abort_signal: None,
+            demand: Demand::default(),
         }
     }
 
@@ -336,6 +411,8 @@ impl WasmRuntime {
             vfs: RwLock::new(self.vfs.read().unwrap().clone()),
             runtime_metadata: RwLock::new(self.runtime_metadata.read().unwrap().clone()),
             abort_signal: None,
+            // A snapshot answers from what it copied; it never pulls.
+            demand: Demand::default(),
         }
     }
 
@@ -368,6 +445,39 @@ impl WasmRuntime {
     /// change how a project is discovered, so it can key a project cache.
     pub fn vfs_generation(&self) -> u64 {
         self.vfs.read().unwrap().generation()
+    }
+
+    /// Write `contents` unless identical bytes are already there (preview
+    /// VFS contract D2: a sync write of identical bytes is a no-op and does
+    /// not move the generation). Returns whether anything changed.
+    pub fn add_file_if_changed(&self, path: &Path, contents: &[u8]) -> bool {
+        self.vfs
+            .write()
+            .unwrap()
+            .add_file_if_changed(path, contents)
+    }
+
+    /// Install a JS miss handler (preview VFS contract D2): an object with
+    /// synchronous `read(path)` (a `Uint8Array`, or null when absent),
+    /// `stat(path)` (`{ exists, isFile, isDir }`) and `list(path)` (an
+    /// array of `{ name, kind: 'file' | 'dir' }`, or null). Paths are
+    /// project-relative. `null`/`undefined` removes the handler. A handler
+    /// that throws answers "absent".
+    pub fn set_js_miss_handler(&self, handler: JsValue) {
+        let handler: Option<std::sync::Arc<dyn MissHandler>> = (!handler.is_null()
+            && !handler.is_undefined())
+        .then(|| std::sync::Arc::new(JsMissHandler(SingleThreaded(handler))) as _);
+        self.demand.set_handler(handler);
+    }
+
+    /// Start recording the read set of a render (contract D11).
+    pub fn begin_read_set(&self) {
+        self.demand.begin_read_set();
+    }
+
+    /// The read set recorded since [`begin_read_set`](Self::begin_read_set).
+    pub fn take_read_set(&self) -> Option<ReadSet> {
+        self.demand.take_read_set()
     }
 
     /// Update a file in the virtual filesystem.
@@ -465,7 +575,7 @@ fn js_error_text(e: &JsValue) -> String {
 #[async_trait(?Send)]
 impl SystemRuntime for WasmRuntime {
     fn file_read(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
-        self.vfs.read().unwrap().read_file(path)
+        self.demand.read_file(&self.vfs, path)
     }
 
     fn file_write(&self, path: &Path, contents: &[u8]) -> RuntimeResult<()> {
@@ -483,14 +593,8 @@ impl SystemRuntime for WasmRuntime {
     }
 
     fn path_exists(&self, path: &Path, kind: Option<PathKind>) -> RuntimeResult<bool> {
-        let vfs = self.vfs.read().unwrap();
-        let exists = match kind {
-            None => vfs.exists(path),
-            Some(PathKind::File) => vfs.is_file(path),
-            Some(PathKind::Directory) => vfs.is_directory(path),
-            Some(PathKind::Symlink) => false, // VFS doesn't support symlinks
-        };
-        Ok(exists)
+        // VFS doesn't support symlinks; the demand layer answers false.
+        Ok(self.demand.exists(&self.vfs, path, kind))
     }
 
     fn canonicalize(&self, path: &Path) -> RuntimeResult<PathBuf> {
@@ -499,6 +603,16 @@ impl SystemRuntime for WasmRuntime {
     }
 
     fn path_metadata(&self, path: &Path) -> RuntimeResult<PathMetadata> {
+        // A file that exists only on disk is pulled (a render that asks for
+        // its metadata reads it next anyway).
+        if !self.vfs.read().unwrap().exists(path)
+            && self.demand.exists(&self.vfs, path, Some(PathKind::File))
+        {
+            self.file_read(path)?;
+        }
+        let directory_on_demand = self
+            .demand
+            .exists(&self.vfs, path, Some(PathKind::Directory));
         let vfs = self.vfs.read().unwrap();
 
         if vfs.is_file(path) {
@@ -510,7 +624,7 @@ impl SystemRuntime for WasmRuntime {
                 accessed: None,
                 readonly: false,
             })
-        } else if vfs.is_directory(path) {
+        } else if vfs.is_directory(path) || directory_on_demand {
             Ok(PathMetadata {
                 kind: PathKind::Directory,
                 size: 0,
@@ -554,7 +668,7 @@ impl SystemRuntime for WasmRuntime {
     }
 
     fn dir_list(&self, path: &Path) -> RuntimeResult<Vec<PathBuf>> {
-        self.vfs.read().unwrap().list_directory(path)
+        self.demand.list_dir(&self.vfs, path)
     }
 
     fn cwd(&self) -> RuntimeResult<PathBuf> {

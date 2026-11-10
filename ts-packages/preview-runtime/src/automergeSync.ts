@@ -38,7 +38,11 @@ type FilesChangeHandler = (files: FileEntry[]) => void;
 type IdentitiesChangeHandler = (identities: Record<string, ActorIdentity>) => void;
 type CapturesChangeHandler = (captures: Record<string, CaptureRef>) => void;
 type FoldersChangeHandler = (folders: string[]) => void;
-type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
+/**
+ * `added` is true when the file is new to the client (a create, or its
+ * first arrival), false for an edit of a file it already had.
+ */
+type FileContentHandler = (path: string, content: string, patches: Patch[], added?: boolean) => void;
 type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
 type ErrorHandler = (error: Error) => void;
@@ -95,22 +99,25 @@ export function setSyncHandlers(handlers: {
  */
 function createInternalCallbacks(): SyncClientCallbacks {
   return {
+    // Preview VFS contract D2: a write of bytes the VFS already holds (the
+    // sync echo of a file the render pulled from disk, a reconnect) changed
+    // nothing, so it signals no content change and starts no render.
     onFileAdded: (path: string, file: FilePayload) => {
       if (file.type === 'text') {
-        vfsAddFile(path, file.text);
-        onFileContent?.(path, file.text, []);
+        if (vfsAddFile(path, file.text).changed === false) return;
+        onFileContent?.(path, file.text, [], true);
       } else {
-        vfsAddBinaryFile(path, file.data);
+        if (vfsAddBinaryFile(path, file.data).changed === false) return;
         onBinaryContent?.(path, file.data, file.mimeType);
       }
     },
     onFileChanged: (path: string, text: string, patches: Patch[]) => {
-      vfsAddFile(path, text);
+      const changed = vfsAddFile(path, text).changed !== false;
       immediateFileChangeCallback?.(path, text);
-      onFileContent?.(path, text, patches);
+      if (changed) onFileContent?.(path, text, patches, false);
     },
     onBinaryChanged: (path: string, data: Uint8Array, mimeType: string) => {
-      vfsAddBinaryFile(path, data);
+      if (vfsAddBinaryFile(path, data).changed === false) return;
       onBinaryContent?.(path, data, mimeType);
     },
     onFileRemoved: (path: string) => {

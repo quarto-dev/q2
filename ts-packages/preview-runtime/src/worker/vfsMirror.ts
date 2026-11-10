@@ -59,17 +59,41 @@ function base64ToBytes(base64: string): Uint8Array {
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
+/** Whether an entry holds exactly `bytes`. */
+function sameContent(entry: Entry, bytes: Uint8Array): boolean {
+  const held = 'text' in entry ? new TextEncoder().encode(entry.text) : entry.bytes;
+  if (held.length !== bytes.length) return false;
+  for (let i = 0; i < held.length; i++) if (held[i] !== bytes[i]) return false;
+  return true;
+}
+
 export class VfsMirror {
   private readonly files = new Map<string, Entry>();
 
+  /**
+   * Write a text file. `changed` is false when identical content was
+   * already there (preview VFS contract D2): the worker's VFS skips the
+   * same write, and the sync client skips signalling a content change.
+   */
   addText(path: string, content: string): VfsResponse {
-    this.files.set(normalizeVfsPath(path), { text: content });
-    return { success: true };
+    const key = normalizeVfsPath(path);
+    const existing = this.files.get(key);
+    if (existing && sameContent(existing, new TextEncoder().encode(content))) {
+      return { success: true, changed: false };
+    }
+    this.files.set(key, { text: content });
+    return { success: true, changed: true };
   }
 
+  /** Write a binary file; `changed` as for {@link addText}. */
   addBinary(path: string, content: Uint8Array): VfsResponse {
-    this.files.set(normalizeVfsPath(path), { bytes: content });
-    return { success: true };
+    const key = normalizeVfsPath(path);
+    const existing = this.files.get(key);
+    if (existing && sameContent(existing, content)) {
+      return { success: true, changed: false };
+    }
+    this.files.set(key, { bytes: content });
+    return { success: true, changed: true };
   }
 
   remove(path: string): VfsResponse {

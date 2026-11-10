@@ -47,6 +47,7 @@ function fakeEngine() {
     parseQmdContentSync: (text) => ({ success: true, ast: `ast(${text})` }) as never,
     applyNodeEdit: (content) => `${content}!`,
     regenerateNestedBuffers: () => ({ a: 'b' }),
+    vfsSetMissHandler: vi.fn(),
   };
   return { engine, files, log, gates };
 }
@@ -121,5 +122,36 @@ describe('serveEngine', () => {
     await expect(main.call('regenerateNestedBuffers', ['c', ''])).resolves.toEqual({ a: 'b' });
     delete g.__Q2_EPHEMERAL_STORAGE__;
     close();
+  });
+
+  it('installs the miss handler and returns the files a render pulled', async () => {
+    const { engine, files } = fakeEngine();
+    let onPull: ((path: string, bytes: Uint8Array) => void) | undefined;
+    const channel = new MessageChannel();
+    serveEngine(channel.port2, engine, {
+      createMissHandler: (_base, options) => {
+        onPull = options?.onPull;
+        return {
+          read: () => null,
+          stat: () => ({ exists: false, isFile: false, isDir: false }),
+          list: () => null,
+          counts: () => ({ 'read.200': 1 }),
+        };
+      },
+    });
+    const main = new Rpc(channel.port1, {});
+    await main.call('init', [{ ephemeralStorage: false, perf: false, missBaseUrl: 'http://h/api/preview/' }]);
+    expect(engine.vfsSetMissHandler).toHaveBeenCalled();
+
+    // The render pulls a file (the engine calls the handler, which reports it).
+    engine.renderPageForPreview = async () => {
+      onPull?.('refs.bib', new Uint8Array([64]));
+      return { success: true, ast_json: '{}', renderedSource: '' };
+    };
+    files.set('a.qmd', 'x');
+    const result = await main.call<{ pulled: unknown[] }>('renderPreview', ['a.qmd']);
+    expect(result.pulled).toEqual([{ path: 'refs.bib', bytes: new Uint8Array([64]) }]);
+    await expect(main.call('missStats', [])).resolves.toEqual({ 'read.200': 1 });
+    channel.port1.close();
   });
 });

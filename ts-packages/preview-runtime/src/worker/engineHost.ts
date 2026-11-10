@@ -21,6 +21,7 @@ import type {
 } from 'wasm-quarto-hub-client';
 import { Rpc, type Endpoint } from './rpc';
 import type { ArtifactDelta } from './vfsMirror';
+import { createXhrMissHandler, type MissHandlerObject } from './missShim';
 
 /** The engine surface the worker serves. `wasmRenderer.ts` satisfies it. */
 export interface EngineApi {
@@ -47,6 +48,7 @@ export interface EngineApi {
     modifiedSubtreeJson: string,
   ): string;
   regenerateNestedBuffers(content: string, untransformedAstJson: string): Record<string, string>;
+  vfsSetMissHandler(handler: unknown): void;
 }
 
 /** What the main thread sends at start-up: flags a worker cannot read itself. */
@@ -55,12 +57,19 @@ export interface EngineInit {
   ephemeralStorage: boolean;
   /** Whether perf counters are on in the host page. */
   perf: boolean;
+  /**
+   * The preview server's miss routes, ending in `/api/preview/` (preview
+   * VFS contract D2). Absent: no miss handler, every answer is local.
+   */
+  missBaseUrl?: string;
 }
 
 /** A `renderPreview` answer. */
 export interface RenderPreviewResult {
   response: PreviewRenderResponse;
   artifacts: ArtifactDelta;
+  /** Files pulled from the server during the render, for the page's mirror. */
+  pulled: Array<{ path: string; bytes: Uint8Array }>;
 }
 
 /** Hooks the worker entry installs (the perf flag, the rasterizer bridge). */
@@ -75,7 +84,16 @@ export interface EngineHostHooks {
 /** VFS prefixes whose files are render artifacts the main thread reads. */
 const ARTIFACT_PREFIXES = ['/.quarto/', '/project/.quarto/'];
 
-export function serveEngine(endpoint: Endpoint, engine: EngineApi, hooks: EngineHostHooks = {}): Rpc {
+export function serveEngine(
+  endpoint: Endpoint,
+  engine: EngineApi,
+  hooks: EngineHostHooks & {
+    /** Build the miss handler (tests substitute a fake transport). */
+    createMissHandler?: typeof createXhrMissHandler;
+  } = {},
+): Rpc {
+  let missHandler: MissHandlerObject | null = null;
+  let pulled: RenderPreviewResult['pulled'] = [];
   // What the main thread's mirror holds for each artifact, as last sent.
   const sent = new Map<string, string>();
 
@@ -118,7 +136,14 @@ export function serveEngine(endpoint: Endpoint, engine: EngineApi, hooks: Engine
           rpc.call<Uint8Array>('rasterize', [svg, maxSide]),
         );
         await engine.initWasm();
+        if (init.missBaseUrl) {
+          missHandler = (hooks.createMissHandler ?? createXhrMissHandler)(init.missBaseUrl, {
+            onPull: (path, bytes) => pulled.push({ path, bytes }),
+          });
+          engine.vfsSetMissHandler(missHandler);
+        }
       },
+      missStats: () => missHandler?.counts() ?? {},
       vfsAddFile: (path: string, content: string) => engine.vfsAddFile(path, content),
       vfsAddBinaryFile: (path: string, content: Uint8Array) => engine.vfsAddBinaryFile(path, content),
       vfsRemoveFile: (path: string) => engine.vfsRemoveFile(path),
@@ -131,8 +156,11 @@ export function serveEngine(endpoint: Endpoint, engine: EngineApi, hooks: Engine
         captureGzJson?: Uint8Array,
         options?: RenderPageForPreviewOptions,
       ): Promise<RenderPreviewResult> => {
+        pulled = [];
         const response = await engine.renderPageForPreview(path, undefined, captureGzJson, options);
-        return { response, artifacts: artifactDelta() };
+        const result = { response, artifacts: artifactDelta(), pulled };
+        pulled = [];
+        return result;
       },
       resolvePandocFormats: (path: string, options?: unknown) =>
         engine.resolvePandocFormats(path, options),

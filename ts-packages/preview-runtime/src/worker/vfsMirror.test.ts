@@ -54,4 +54,16 @@ describe('VfsMirror', () => {
     m.clear();
     expect(m.listFiles().files).toEqual([]);
   });
+
+  it('reports an identical write as unchanged, for text and binary', () => {
+    const m = new VfsMirror();
+    expect(m.addText('a.qmd', 'x').changed).toBe(true);
+    expect(m.addText('a.qmd', 'x').changed).toBe(false);
+    expect(m.addText('a.qmd', 'y').changed).toBe(true);
+    expect(m.addBinary('b.png', new Uint8Array([1, 2])).changed).toBe(true);
+    expect(m.addBinary('b.png', new Uint8Array([1, 2])).changed).toBe(false);
+    // A pulled file mirrored as bytes, echoed back by sync as text.
+    m.addBinary('refs.bib', new TextEncoder().encode('@a'));
+    expect(m.addText('refs.bib', '@a').changed).toBe(false);
+  });
 });

@@ -63,6 +63,7 @@ describe('capture option forwarding (Phase 3B1)', () => {
       render_page_in_project_with_attribution: renderProject,
       // `renderPageForPreview` reads the source it renders in its queue slot.
       vfs_read_file: () => JSON.stringify({ success: true, content: '' }),
+      vfs_take_read_set: () => 'null',
     });
     const options = { captureUntransformedAst: false };
 

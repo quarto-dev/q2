@@ -32,7 +32,19 @@ async function rasterizeOnMainThread(svg: Uint8Array, maxSide: number): Promise<
   return new Transfer(png, [png.buffer]);
 }
 
-export function createWorkerBackend(endpoint: Endpoint): EngineBackend & { mirror: VfsMirror } {
+/** Options for the worker engine. */
+export interface WorkerEngineOptions {
+  /**
+   * The preview server's miss routes, ending in `/api/preview/` (preview VFS
+   * contract D2). Absent: the worker's VFS answers only what sync wrote.
+   */
+  missBaseUrl?: string;
+}
+
+export function createWorkerBackend(
+  endpoint: Endpoint,
+  options: WorkerEngineOptions = {},
+): EngineBackend & { mirror: VfsMirror; missStats(): Promise<Record<string, number>> } {
   const mirror = new VfsMirror();
   const rpc = new Rpc(endpoint, { rasterize: rasterizeOnMainThread });
   let initPromise: Promise<void> | null = null;
@@ -53,6 +65,7 @@ export function createWorkerBackend(endpoint: Endpoint): EngineBackend & { mirro
           ephemeralStorage:
             (globalThis as Record<string, unknown>).__Q2_EPHEMERAL_STORAGE__ === true,
           perf: perfEnabled(),
+          missBaseUrl: options.missBaseUrl,
         };
         await rpc.call('init', [init]);
         ready = true;
@@ -89,6 +102,9 @@ export function createWorkerBackend(endpoint: Endpoint): EngineBackend & { mirro
         options,
       ]);
       mirror.applyArtifacts(result.artifacts);
+      // Pulled files join the mirror, so main-thread readers (the asset
+      // manifest) see them and their sync echo is an identical write.
+      for (const { path, bytes } of result.pulled) mirror.addBinary(path, bytes);
       return result.response;
     },
     resolvePandocFormats: (path, options) => rpc.call('resolvePandocFormats', [path, options]),
@@ -97,6 +113,7 @@ export function createWorkerBackend(endpoint: Endpoint): EngineBackend & { mirro
       rpc.call('applyNodeEdit', [content, untransformed, destination, modified]),
     regenerateNestedBuffers: (content, untransformed) =>
       rpc.call('regenerateNestedBuffers', [content, untransformed]),
+    missStats: () => rpc.call('missStats', []),
   };
 }
 
@@ -144,12 +161,14 @@ function spawnWorker(url: URL): Worker {
  * `@quarto/preview-runtime` engine API to it. Call once, before
  * `initWasm` (which then starts the worker's engine).
  */
-export function startWorkerEngine(): EngineBackend {
+export function startWorkerEngine(
+  options: WorkerEngineOptions = {},
+): EngineBackend & { missStats(): Promise<Record<string, number>> } {
   const worker = spawnWorker(new URL(engineWorkerUrl, globalThis.location?.href));
   worker.addEventListener('error', (event) => {
     console.error('[render worker] failed', event.message);
   });
-  const backend = createWorkerBackend(worker);
+  const backend = createWorkerBackend(worker, options);
   installEngineBackend(backend);
   return backend;
 }

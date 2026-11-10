@@ -9,6 +9,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { startWorkerEngine } from '@quarto/preview-runtime/worker/engineClient';
 import PreviewApp from './PreviewApp';
+import { serverUrl } from './serverUrl';
 
 // The viewer only ever runs inside `q2 preview`, whose sessions are
 // ephemeral (a fresh origin per session): keep the WASM bridge's
@@ -21,8 +22,13 @@ import PreviewApp from './PreviewApp';
 
 // Preview VFS contract D3: the render engine runs in a dedicated worker.
 // The worker receives the flag above in its init message. Installed before
-// PreviewApp calls `initWasm`, which then starts the worker's engine.
-startWorkerEngine();
+// PreviewApp calls `initWasm`, which then starts the worker's engine. On a
+// VFS miss the worker asks the server's miss routes (contract D2).
+const engine = startWorkerEngine({ missBaseUrl: serverUrl('/api/preview/') });
+// Test hook (like `__renderTicks`): the render worker's miss-route calls,
+// keyed `<arm>.<status>` (preview VFS contract D2).
+(window as unknown as { __q2MissStats?: () => Promise<Record<string, number>> }).__q2MissStats =
+  () => engine.missStats();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

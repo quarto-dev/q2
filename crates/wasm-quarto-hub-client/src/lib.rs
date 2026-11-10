@@ -357,6 +357,13 @@ struct VfsResponse {
 }
 
 impl VfsResponse {
+    /// A write's answer: `{ success: true, changed }`. `changed` is false
+    /// when identical bytes were already there (preview VFS contract D2), so
+    /// the caller can skip signalling a content change.
+    fn written(changed: bool) -> String {
+        serde_json::json!({ "success": true, "changed": changed }).to_string()
+    }
+
     fn ok() -> String {
         serde_json::to_string(&VfsResponse {
             success: true,
@@ -412,8 +419,8 @@ impl VfsResponse {
 /// JSON: `{ "success": true }` or `{ "success": false, "error": "..." }`
 #[wasm_bindgen]
 pub fn vfs_add_file(path: &str, content: &str) -> String {
-    get_runtime().add_file(Path::new(path), content.as_bytes().to_vec());
-    VfsResponse::ok()
+    let changed = get_runtime().add_file_if_changed(Path::new(path), content.as_bytes());
+    VfsResponse::written(changed)
 }
 
 /// Add a binary file to the virtual filesystem.
@@ -426,8 +433,40 @@ pub fn vfs_add_file(path: &str, content: &str) -> String {
 /// JSON: `{ "success": true }` or `{ "success": false, "error": "..." }`
 #[wasm_bindgen]
 pub fn vfs_add_binary_file(path: &str, content: &[u8]) -> String {
-    get_runtime().add_file(Path::new(path), content.to_vec());
-    VfsResponse::ok()
+    let changed = get_runtime().add_file_if_changed(Path::new(path), content);
+    VfsResponse::written(changed)
+}
+
+/// Whether `path` is a file, asking the miss handler (one existence check,
+/// cached negatively per VFS generation) when the VFS does not hold it.
+/// dart-sass's importer probes up to about fourteen candidate names per
+/// `@import`; this keeps each probe a `stat`, not a pull.
+#[wasm_bindgen]
+pub fn vfs_is_file(path: &str) -> bool {
+    get_runtime()
+        .path_exists(Path::new(path), Some(quarto_system_runtime::PathKind::File))
+        .unwrap_or(false)
+}
+
+/// Install the VFS miss handler (preview VFS contract D2): an object with
+/// synchronous `read`, `stat` and `list` methods answering for
+/// project-relative paths the VFS does not hold. See
+/// `WasmRuntime::set_js_miss_handler`. `null` removes it; hub-client never
+/// installs one.
+#[wasm_bindgen]
+pub fn vfs_set_miss_handler(handler: JsValue) {
+    get_runtime().set_js_miss_handler(handler);
+}
+
+/// The read set of the last render (preview VFS contract D11), as JSON
+/// `{ reads, probes, listings }` of project-relative paths, or `null` when
+/// none was recorded. Each `render_page_for_preview` starts a new one.
+#[wasm_bindgen]
+pub fn vfs_take_read_set() -> String {
+    match get_runtime().take_read_set() {
+        Some(set) => serde_json::to_string(&set).unwrap_or_else(|_| "null".to_string()),
+        None => "null".to_string(),
+    }
 }
 
 /// Remove a file from the virtual filesystem.
@@ -1520,6 +1559,9 @@ async fn render_page_for_preview_with_overlay(
     requested_format: Option<&str>,
     capture_untransformed_ast: bool,
 ) -> String {
+    // Preview VFS contract D11: record what this render reads, probes and
+    // lists; the host takes it with `vfs_take_read_set` after the render.
+    get_runtime().begin_read_set();
     let runtime_arc = render_runtime(overlay.as_ref());
     let runtime = runtime_arc.as_ref();
     let path_buf = std::path::PathBuf::from(path);

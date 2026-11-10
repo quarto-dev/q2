@@ -24,6 +24,7 @@ mod traits;
 // In-memory virtual filesystem. Compiled on every target: WASM uses it
 // as WasmRuntime's backing store; native builds use it in tests and in
 // perf-harness drivers that exercise the WASM flush path (bd-q3bxnq2e).
+mod demand;
 mod vfs;
 
 // Shared canonicalize, on every target: some callers compile for wasm32
@@ -49,6 +50,7 @@ mod wasm;
 // Re-export core types (API surface)
 pub use cache_lru::{CACHE_LRU_INDEX_KEY, SASS_CACHE_BUDGET_BYTES, cache_get_lru, cache_set_lru};
 pub use cache_versioning::{CACHE_VERSION_KEY, ensure_namespace_version};
+pub use demand::{Demand, MissEntry, MissHandler, MissStat, ReadSet};
 pub use traits::{
     CacheEntryInfo, CommandOptions, CommandOutput, FetchPolicy, PathKind, PathMetadata,
     RuntimeError, RuntimeResult, SassOutput, SystemRuntime, TempDir, XdgDirKind,

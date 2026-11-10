@@ -26,9 +26,11 @@ pub(crate) fn not_found_error(path: &Path) -> RuntimeError {
 }
 
 /// Paths whose writes never move [`VirtualFileSystem::generation`]: render
-/// artifacts and the embedded resources.
+/// artifacts, the embedded resources, and render scratch under `/tmp`.
 fn is_generation_free_path(normalized: &Path) -> bool {
-    normalized.starts_with("/.quarto") || normalized.starts_with("/__quarto_resources__")
+    normalized.starts_with("/.quarto")
+        || normalized.starts_with("/__quarto_resources__")
+        || normalized.starts_with("/tmp")
 }
 
 /// A write that leaves the discovered project as it was: under a free prefix,
@@ -146,6 +148,21 @@ impl VirtualFileSystem {
         }
     }
 
+    /// Insert a file pulled from disk on a VFS miss (preview VFS contract
+    /// D2). The file was on disk all along, so from the pipeline's point of
+    /// view nothing was created: unlike [`add_file`](Self::add_file), this
+    /// never moves the [generation](Self::generation). A file created on
+    /// disk later arrives through sync, which does.
+    pub fn insert_pulled(&mut self, path: &Path, contents: Vec<u8>) {
+        let normalized = self.normalize_path(path);
+        if let Some(parent) = normalized.parent() {
+            self.add_directory_and_parents(parent);
+        }
+        self.stats.writes += 1;
+        self.stats.bytes_written += contents.len();
+        self.files.insert(normalized, contents);
+    }
+
     /// A counter over the writes that can change how the project around a
     /// document is discovered or configured (bd-f6 format resolution cache).
     ///
@@ -153,7 +170,10 @@ impl VirtualFileSystem {
     /// or `.ipynb` (the keystroke case: the editor writes the buffer here on
     /// every change), nor for anything under `/.quarto/` or
     /// `/__quarto_resources__/` (artifact flushes create files there on every
-    /// render). Every other write moves it: a create or remove of any path, a
+    /// render) or `/tmp/` (render scratch), nor for a file pulled on a miss
+    /// ([`insert_pulled`](Self::insert_pulled)), nor for a write of
+    /// identical bytes through [`add_file_if_changed`](Self::add_file_if_changed).
+    /// Every other write moves it: a create or remove of any path, a
     /// config, brand or `_extensions/` file, a directory change and every
     /// `clear*`. The rule is an exclusion list, so a mistake errs toward an
     /// extra cache miss, never a stale project.
@@ -515,6 +535,58 @@ mod tests {
         assert!(gen_after(&mut vfs, |v| v
             .clear_preserving_prefix("/__quarto_resources__")));
         assert!(gen_after(&mut vfs, |v| v.clear()));
+    }
+
+    /// Preview VFS contract D2: a file pulled from disk on a miss was there
+    /// all along, so inserting it does not move the generation, for a
+    /// document, a config file or a binary.
+    #[test]
+    fn a_pull_insert_does_not_move_the_generation() {
+        let mut vfs = VirtualFileSystem::new();
+        for p in [
+            "/project/part.qmd",
+            "/project/_metadata.yml",
+            "/project/img/a.png",
+        ] {
+            assert!(
+                !gen_after(&mut vfs, |v| v.insert_pulled(Path::new(p), vec![1])),
+                "{p}"
+            );
+            assert_eq!(vfs.read_file(Path::new(p)).unwrap(), vec![1]);
+        }
+        assert!(vfs.is_directory(Path::new("/project/img")));
+    }
+
+    /// Render scratch under `/tmp` is not project structure.
+    #[test]
+    fn generation_is_free_for_render_scratch() {
+        let mut vfs = VirtualFileSystem::new();
+        assert!(!gen_after(&mut vfs, |v| v.add_directory(Path::new("/tmp/render-1"))));
+        assert!(!gen_after(&mut vfs, |v| v
+            .add_file(Path::new("/tmp/render-1/a.json"), vec![1])));
+    }
+
+    /// Preview VFS contract D2: a sync write of identical bytes is a no-op,
+    /// for text and binary, and reports that nothing changed.
+    #[test]
+    fn an_identical_write_does_not_move_the_generation() {
+        let mut vfs = VirtualFileSystem::new();
+        vfs.add_file(Path::new("/project/img/a.png"), vec![1, 2]);
+        vfs.add_file(Path::new("/project/refs.bib"), b"@a".to_vec());
+        assert!(!gen_after(&mut vfs, |v| {
+            assert!(!v.add_file_if_changed(Path::new("/project/img/a.png"), &[1, 2]));
+            assert!(!v.add_file_if_changed(Path::new("/project/refs.bib"), b"@a"));
+        }));
+        // Different bytes, a create and a remove still move it.
+        assert!(gen_after(&mut vfs, |v| {
+            assert!(v.add_file_if_changed(Path::new("/project/img/a.png"), &[3]));
+        }));
+        assert!(gen_after(&mut vfs, |v| {
+            v.add_file_if_changed(Path::new("/project/new.bib"), b"@b");
+        }));
+        assert!(gen_after(&mut vfs, |v| {
+            v.remove_file(Path::new("/project/refs.bib"));
+        }));
     }
 
     #[test]

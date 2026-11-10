@@ -32,6 +32,11 @@ import { perfEnabled, perfNow, perfSegment, perfMark, perfExtra } from './perfCo
 // Response types from WASM module
 export interface VfsResponse {
   success: boolean;
+  /**
+   * On a write: false when identical bytes were already there (preview VFS
+   * contract D2). Callers skip signalling a content change then.
+   */
+  changed?: boolean;
   error?: string;
   files?: string[];
   content?: string;
@@ -51,6 +56,9 @@ interface WasmModuleExtended {
   vfs_clear: () => string;
   vfs_read_file: (path: string) => string;
   vfs_read_binary_file: (path: string) => string;
+  vfs_is_file: (path: string) => boolean;
+  vfs_set_miss_handler: (handler: unknown) => void;
+  vfs_take_read_set: () => string;
   vfs_set_runtime_metadata: (yaml: string) => string;
   vfs_get_runtime_metadata: () => string;
   render_qmd: (
@@ -335,11 +343,10 @@ async function setupSassVfsCallbacks(): Promise<void> {
       return null;
     };
 
-    // Create VFS file check callback
-    const isFileFn = (path: string): boolean => {
-      const result = vfsReadFile(path);
-      return result.success && result.content !== undefined;
-    };
+    // Create VFS file check callback: an existence check, not a read, so a
+    // missing import candidate costs one cached probe (preview VFS
+    // contract D2).
+    const isFileFn = (path: string): boolean => vfsIsFile(path);
 
     // Create VFS list callback
     const listFn = (): string[] => {
@@ -498,6 +505,36 @@ export function vfsReadBinaryFile(path: string): VfsResponse {
   if (backend) return backend.vfsReadBinaryFile(path);
   const wasm = getWasm();
   return parseEnvelope(wasm.vfs_read_binary_file(path));
+}
+
+/** Whether `path` is a file, asking the miss handler when one is installed. */
+export function vfsIsFile(path: string): boolean {
+  if (backend) return backend.vfsReadFile(path).success;
+  return getWasm().vfs_is_file(path);
+}
+
+/**
+ * The project paths a render read, probed and listed (preview VFS contract
+ * D11), project-relative.
+ */
+export interface ReadSet {
+  reads: string[];
+  probes: string[];
+  listings: string[];
+}
+
+/**
+ * Install the engine's VFS miss handler (preview VFS contract D2): synchronous
+ * `read`, `stat` and `list` for project paths the VFS does not hold. Only the
+ * q2 preview SPA's render worker installs one; `null` removes it.
+ */
+export function vfsSetMissHandler(handler: unknown): void {
+  getWasm().vfs_set_miss_handler(handler ?? null);
+}
+
+/** The read set of the last render, or null when none was recorded. */
+export function vfsTakeReadSet(): ReadSet | null {
+  return JSON.parse(getWasm().vfs_take_read_set()) as ReadSet | null;
 }
 
 // ============================================================================
@@ -969,7 +1006,7 @@ export async function renderPageForPreview(
       const response: RenderResponse = JSON.parse(
         await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
       );
-      return { ...response, renderedSource };
+      return { ...response, renderedSource, readSet: vfsTakeReadSet() };
     }
     perfMark('render.started');
     const t0 = performance.now();
@@ -977,7 +1014,7 @@ export async function renderPageForPreview(
       const response = parseEnvelope<RenderResponse>(
         await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
       );
-      return { ...response, renderedSource };
+      return { ...response, renderedSource, readSet: vfsTakeReadSet() };
     } finally {
       perfSegment('render.wasm-call', t0);
       perfMark('render.completed');
@@ -991,7 +1028,14 @@ export async function renderPageForPreview(
  * none). Byte offsets in `ast_json` and `untransformed_ast_json` refer to
  * `renderedSource`.
  */
-export type PreviewRenderResponse = RenderResponse & { renderedSource: string };
+export type PreviewRenderResponse = RenderResponse & {
+  renderedSource: string;
+  /**
+   * What the render read, probed and listed (preview VFS contract D11), or
+   * null when nothing was recorded. A failed render's set is partial.
+   */
+  readSet?: ReadSet | null;
+};
 
 // ---- pandoc-wasm epic (R2): the request exports --------------------------
 

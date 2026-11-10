@@ -52,6 +52,7 @@ import {
   diffToEditorChanges,
   applyEditorOperations,
   regenerateNestedBuffersAsync,
+  type ReadSet,
 } from '@quarto/preview-runtime';
 import { Q2PreviewIframe } from '@quarto/preview-renderer/iframe/Q2PreviewIframe';
 import { extractMetaString } from '@quarto/preview-renderer/framework';
@@ -160,6 +161,13 @@ interface PreviewAppState {
    * single comparison call.
    */
   deps: Set<string> | null;
+  /**
+   * Preview VFS contract D11: what the last successful render of `page`
+   * read and probed (`paths`) and listed (`dirs`), project-relative. The
+   * re-render filter uses it in preference to `deps`. A failed render
+   * keeps the previous set; `null` until the first render answers.
+   */
+  readSet: PageReadSet | null;
   /**
    * Boot-time failure (e.g. `/health` 5xx, samod connect throws). When
    * set, the SPA replaces the UI with `<PreviewErrorOverlay>` — there's
@@ -422,6 +430,7 @@ function buildInitialState(): PreviewAppState {
     renderedContent: '',
     themeFingerprint: undefined,
     deps: null,
+    readSet: null,
     error: null,
     render: EMPTY_RENDER_STATUS,
     serverDiagnostics: [],
@@ -443,6 +452,22 @@ function buildInitialState(): PreviewAppState {
   };
 }
 
+/** The read set of one page's render (see `PreviewAppState.readSet`). */
+export interface PageReadSet {
+  page: string;
+  paths: Set<string>;
+  dirs: Set<string>;
+}
+
+/** Build a {@link PageReadSet} from a render response's `readSet`. */
+function pageReadSet(page: string, set: ReadSet): PageReadSet {
+  return {
+    page,
+    paths: new Set([...set.reads, ...set.probes]),
+    dirs: new Set(set.listings),
+  };
+}
+
 /**
  * Phase D.6 (bd-kw93.12): decide whether a text-file change at
  * `changedPath` should trigger a re-render of the page named by
@@ -461,14 +486,31 @@ function buildInitialState(): PreviewAppState {
  * (The deps fetch seeds the set with the active page itself, so "edit
  * my own page" needs no special case here.)
  *
+ * Preview VFS contract D11: when `readSet` holds the active page's last
+ * render, it decides instead, for every file type: a change re-renders
+ * when the render read or probed the path (a probe that missed covers a
+ * file created where the render looked), or when the file is new (`added`)
+ * in a directory the render listed. A listing depends only on names, so
+ * an edit of an existing file there does not count. `.tsx`
+ * custom components always pass: the main thread compiles them, the
+ * render never reads them.
+ *
  * Exported for unit testing.
  */
 export function shouldRerenderForTextChange(
   changedPath: string,
   activeFile: string | null,
   deps: Set<string> | null,
+  readSet: PageReadSet | null = null,
+  added = false,
 ): boolean {
   if (!activeFile) return true;
+  if (changedPath.toLowerCase().endsWith('.tsx')) return true;
+  if (readSet !== null && readSet.page === activeFile) {
+    const slash = changedPath.lastIndexOf('/');
+    const dir = slash === -1 ? '' : changedPath.slice(0, slash);
+    return readSet.paths.has(changedPath) || (added && readSet.dirs.has(dir));
+  }
   // Non-source edits always pass: they're either config (_quarto.yml,
   // _metadata.yml) or project-wide assets (CSS, custom components)
   // that the include-shortcode dep extractor doesn't track.
@@ -817,14 +859,14 @@ export default function PreviewApp() {
             if (cancelled) return;
             setState((s) => ({ ...s, files }));
           },
-          onFileContent: (path: string) => {
+          onFileContent: (path: string, _content: string, _patches: unknown, added?: boolean) => {
             if (cancelled) return;
             // Phase D.6 filter: read `activeFile` + `deps` via the
             // setState callback so the filter sees the *latest*
             // values (the closure was set up at boot time and would
             // otherwise capture stale state).
             setState((s) => {
-              if (!shouldRerenderForTextChange(path, s.activeFile, s.deps)) {
+              if (!shouldRerenderForTextChange(path, s.activeFile, s.deps, s.readSet, added)) {
                 return s;
               }
               // GH #402: `.tsx` touches additionally bump tsxTick so the
@@ -1240,8 +1282,10 @@ export default function PreviewApp() {
           // success, in warning mode. `failure` and `diagnostics`
           // (which only appear on failures) are cleared so the
           // previous failure overlay (if any) goes away.
+          const readSet = result.readSet ? pageReadSet(state.activeFile!, result.readSet) : null;
           setState((s) => ({
             ...s,
+            readSet: readSet ?? s.readSet,
             astJson: result.ast_json ?? null,
             untransformedAstJson: result.untransformed_ast_json ?? null,
             renderedContent: capturedContent,

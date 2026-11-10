@@ -90,11 +90,13 @@ test.afterEach(async () => {
   await server?.stop();
 });
 
-test('editing CSS in _extensions/ triggers a re-render', async ({ page }) => {
+// Preview VFS contract D11: the render reports what it read, and a text
+// edit re-renders only when the render read that file. This stylesheet sits
+// in `_extensions/` but belongs to no extension the document uses, so the
+// render never reads it and its edit (which still syncs) re-renders nothing.
+// Before the read set, every non-source edit re-rendered (Phase D.3).
+test('editing CSS in _extensions/ that no render reads does not re-render', async ({ page }) => {
   await page.goto(server.url);
-  // Wait for the first render to complete. The basic-preview spec
-  // pins the heading-in-iframe contract; here we just need the
-  // counter to start ticking.
   await page.waitForFunction(
     () => {
       const w = window as unknown as { __renderTicks?: number };
@@ -103,21 +105,16 @@ test('editing CSS in _extensions/ triggers a re-render', async ({ page }) => {
     null,
     { timeout: 30_000 },
   );
-
+  await page.waitForTimeout(1000);
   const baseline = await getRenderTicks(page);
 
-  // Edit the CSS asset on disk. The watcher allow-list was
-  // extended for `.css` in D.3 (crates/quarto-hub/src/watch.rs);
-  // without that change this write would be silently ignored.
   await writeFile(
     path.join(server.projectDir, '_extensions', 'sentinel', 'sentinel.css'),
     EDITED_CSS,
   );
+  await page.waitForTimeout(2500);
 
-  await waitForRenderTickAbove(page, baseline);
-
-  const after = await getRenderTicks(page);
-  expect(after).toBeGreaterThan(baseline);
+  expect(await getRenderTicks(page)).toBe(baseline);
 });
 
 test('editing an image (SVG) triggers a re-render', async ({ page }) => {

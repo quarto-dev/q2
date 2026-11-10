@@ -56,4 +56,42 @@ describe('shouldRerenderForTextChange', () => {
     expect(shouldRerenderForTextChange('NOTES.MD', 'index.qmd', deps)).toBe(false);
     expect(shouldRerenderForTextChange('OTHER.QMD', 'index.qmd', deps)).toBe(false);
   });
+
+  // Preview VFS contract D11: with the render's read set for the active
+  // page, an edit re-renders exactly when the render read or probed its
+  // path, or listed its directory.
+  describe('with a read set', () => {
+    const readSet = {
+      page: 'index.qmd',
+      paths: new Set(['index.qmd', '_quarto.yml', 'refs.bib', 'partials/_vars.scss']),
+      dirs: new Set(['assets']),
+    };
+
+    it('re-renders for a path the render read or probed', () => {
+      expect(shouldRerenderForTextChange('refs.bib', 'index.qmd', null, readSet)).toBe(true);
+      expect(shouldRerenderForTextChange('_quarto.yml', 'index.qmd', null, readSet)).toBe(true);
+      // Probed and missed, now created.
+      expect(shouldRerenderForTextChange('partials/_vars.scss', 'index.qmd', null, readSet)).toBe(true);
+    });
+
+    it('re-renders for a file created in a directory the render listed, not an edit there', () => {
+      expect(shouldRerenderForTextChange('assets/new.css', 'index.qmd', null, readSet, true)).toBe(true);
+      expect(shouldRerenderForTextChange('assets/old.css', 'index.qmd', null, readSet, false)).toBe(false);
+    });
+
+    it('ignores an unrelated sibling, whatever its type', () => {
+      expect(shouldRerenderForTextChange('notes.md', 'index.qmd', deps, readSet)).toBe(false);
+      expect(shouldRerenderForTextChange('other.css', 'index.qmd', deps, readSet)).toBe(false);
+      expect(shouldRerenderForTextChange('data.csv', 'index.qmd', deps, readSet)).toBe(false);
+    });
+
+    it('always passes custom components, which the main thread compiles', () => {
+      expect(shouldRerenderForTextChange('Widget.tsx', 'index.qmd', null, readSet)).toBe(true);
+    });
+
+    it("falls back to the dep filter when the set belongs to another page", () => {
+      expect(shouldRerenderForTextChange('other.css', 'about.qmd', deps, readSet)).toBe(true);
+      expect(shouldRerenderForTextChange('unrelated.qmd', 'about.qmd', deps, readSet)).toBe(false);
+    });
+  });
 });

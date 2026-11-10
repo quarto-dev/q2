@@ -26,11 +26,13 @@ import {
   _getCallbacksForTesting,
 } from './automergeSync';
 import { createMockSyncClient, type MockSyncClient } from './test-utils/mockSyncClient';
+import { vfsAddFile } from './wasmRenderer';
 
 // Mock the wasmRenderer module to avoid WASM initialization
 vi.mock('./wasmRenderer', () => ({
-  vfsAddFile: vi.fn(),
-  vfsAddBinaryFile: vi.fn(),
+  // Writes answer like the real VFS: something changed.
+  vfsAddFile: vi.fn(() => ({ success: true, changed: true })),
+  vfsAddBinaryFile: vi.fn(() => ({ success: true, changed: true })),
   vfsRemoveFile: vi.fn(),
   vfsClear: vi.fn(),
   initWasm: vi.fn().mockResolvedValue(undefined),
@@ -391,6 +393,23 @@ describe('automergeSync', () => {
       // Verify both handlers actually fired (not a vacuous pass)
       expect(immediateCallbackFired).toBe(true);
       expect(onFileContentCalled).toBe(true);
+    });
+
+    // Preview VFS contract D2: the sync echo of a file a render pulled (or
+    // any write of bytes the VFS already holds) signals no content change,
+    // so it starts no second render.
+    it('signals no content change when the VFS reports nothing changed', async () => {
+      await mockClient.createFile('refs.bib', '@a');
+      const onFileContent = vi.fn();
+      setSyncHandlers({ onFileContent });
+      const write = vfsAddFile as unknown as ReturnType<typeof vi.fn>;
+
+      write.mockReturnValueOnce({ success: true, changed: false });
+      mockClient._simulateRemoteChange('refs.bib', '@a');
+      expect(onFileContent).not.toHaveBeenCalled();
+
+      mockClient._simulateRemoteChange('refs.bib', '@b');
+      expect(onFileContent).toHaveBeenCalledOnce();
     });
 
     it('should receive correct path for different files', async () => {
