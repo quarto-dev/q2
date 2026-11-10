@@ -53,12 +53,7 @@ const TEST_MARKERS: &[&str] = &["npm test", "npm run test", "vitest"];
 /// Packages deliberately not gated, with the reason. Keep this list short and
 /// always name the tracking strand or issue — an entry here is a promise to
 /// come back, not a place to park work.
-pub(crate) const EXCUSED: &[(&str, &str)] = &[(
-    "@quarto/annotated-qmd",
-    "83 of 161 tests fail: the reconstructor does not know SourceInfo kinds 3 and 4 \
-     (bd-htza1cii), on top of the source-tracking off-by-one in bd-1d6io. \
-     Wire it in once both strands close.",
-)];
+pub(crate) const EXCUSED: &[(&str, &str)] = &[];
 
 /// Expand the root `package.json` `workspaces` globs into package directories.
 ///

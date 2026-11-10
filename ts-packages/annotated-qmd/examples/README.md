@@ -24,6 +24,11 @@ Demonstrates inline elements:
 - Inline code
 - Block quotes with nested links
 
+### `shortcode.qmd` / `shortcode.json`
+Shortcodes, which reach the JSON as `quarto-shortcode__` Spans with no
+attribute source (`a`) and with argument Spans that pampa currently places at
+`[0, 0]` (bd-1f3cfv2k).
+
 ## Generating JSON
 
 To regenerate the JSON files from the .qmd sources, run from **this directory**

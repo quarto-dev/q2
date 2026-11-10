@@ -1,7 +1,7 @@
 {
   "name": "@quarto/annotated-qmd",
   "version": "0.2.0",
-  "description": "Convert quarto-markdown-pandoc JSON output to AnnotatedParse structures",
+  "description": "Convert the JSON AST from Quarto 2's qmd parser (pampa) to AnnotatedParse structures",
   "license": "MIT",
   "author": {
     "name": "Posit PBC"

@@ -377,6 +377,10 @@ jobs:
         shell: bash
         run: npm test -w ts-packages/quarto-automerge-schema
 
+      - name: Run annotated-qmd tests
+        shell: bash
+        run: npm test -w ts-packages/annotated-qmd
+
       - name: Run wasm-js-bridge tests
         shell: bash
         run: npm test -w ts-packages/wasm-js-bridge
