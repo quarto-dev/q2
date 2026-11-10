@@ -1,6 +1,6 @@
 # Preview VFS contract: everything on demand, one exposure policy, render in a worker
 
-**Date:** 2026-11-07, revised 2026-11-10 (twice).  **Status:** design settled (D1 to D11), except the request gate in D6, which is an open decision; execution is the epic in [`../plans/2026-11-07-preview-demand-driven-vfs.md`](../plans/2026-11-07-preview-demand-driven-vfs.md).
+**Date:** 2026-11-07, revised 2026-11-10 (twice).  **Status:** design settled (D1 to D11); the D6 request gate was decided 2026-11-10 (a `Host` allow-list); execution is the epic in [`../plans/2026-11-07-preview-demand-driven-vfs.md`](../plans/2026-11-07-preview-demand-driven-vfs.md).
 **Evidence:** [`../research/2026-11-07-preview-vfs-options.md`](../research/2026-11-07-preview-vfs-options.md) (how files reach the render today, every option costed, the facts that decided it, and the measured round-trip costs).
 **Supersedes:** the mechanism of bd-tnm3k (single-file closure built by per-channel extractors) and the draft `../plans/2026-06-16-single-file-preview-vfs-bootstrapping.md`. Keeps their intent.
 **Resolves:** bd-teh4hbli (explicit upload boundary), and Phase 7 of `../plans/2026-10-24-hub-client-main-thread-render-path.md` for the preview SPA only (render worker: adopt). hub-client is deferred to its own decision (D10).
@@ -211,7 +211,7 @@ What a guest can learn in single-file mode is the names in directories a
 render listed or probed, and the contents of files a render read. That is
 accepted under D6.
 
-### D6. Share guests: the join string is the capability; the policy is the bound; the request gate is open
+### D6. Share guests: the join string is the capability; the policy is the bound; a `Host` gate covers the server
 
 The server does not distinguish host from guest (the tunnel is a raw
 loopback proxy) and this design does not add that distinction. The share
@@ -235,8 +235,8 @@ re-execute, render and import routes, and write to disk under
 `--allow-edit`. The default port is assigned by the OS, so the page has to
 find it first. That is the only obstacle.
 
-So the gate is a property of the whole server, not of the miss routes, and
-it is an **open decision**, tracked as the first item of the plan's Phase 1:
+So the gate is a property of the whole server, not of the miss routes. Two
+options were weighed:
 
 - A `Host` allow-list as a router-wide layer (loopback names plus the
   `--host` value) is small and invisible to users, but a reverse proxy
@@ -248,7 +248,18 @@ it is an **open decision**, tracked as the first item of the plan's Phase 1:
   the join string.
 
 Single-file mode makes the question sharper, because the deck directory is
-often `~/Downloads`. The miss routes ship behind whichever gate is chosen.
+often `~/Downloads`.
+
+**Decided 2026-11-10: the `Host` allow-list.** One layer over the whole
+preview router (`crates/quarto-preview/src/host_gate.rs`) refuses, with
+403, any request whose `Host` is not an IP literal, `localhost` or a
+`*.localhost` name, the `--host` value, or a name listed in
+`QUARTO_PREVIEW_ALLOWED_HOSTS` (comma-separated; `*` turns the gate off).
+That variable is the reverse-proxy escape. IP literals pass because a
+rebinding page always sends a DNS name. A request with no `Host` cannot
+come from a browser and passes. `--join` guests pass because their browser
+talks to the guest's own loopback port. The preview URL and the join
+string are unchanged.
 
 ### D7. The server promotes, the browser never creates
 

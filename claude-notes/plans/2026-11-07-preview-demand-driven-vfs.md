@@ -2,7 +2,7 @@
 title: 'Preview demand-driven VFS: exposure policy, miss route, render worker'
 date: 2026-11-07
 description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, a render-reported read set, and removal of the dependency predictors.'
-status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate in Phase 1 is an open decision
+status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0 and 1 implemented
 ---
 
 ## Overview
@@ -144,7 +144,7 @@ Server side only. Contract D2, D6, D7, D8.
 
 Decide first:
 
-- [ ] The request gate (contract D6). The preview server validates neither
+- [x] The request gate (contract D6). The preview server validates neither
   `Host` nor a token, so a DNS-rebinding page is same-origin with it and
   can already read the project over `/ws`. The miss routes widen that, in
   single-file mode, to every admitted file under the deck directory.
@@ -157,57 +157,102 @@ Decide first:
 
 Tests first:
 
-- [ ] The gate: a request whose `Host` (or token) fails the chosen rule is
+- [x] The gate: a request whose `Host` (or token) fails the chosen rule is
   refused on `/api/*`, `/health` and the `/ws` upgrade; a `--join` guest
   through the tunnel and a request through a configured proxy pass.
 
-- [ ] `crates/quarto-preview/tests/integration/`: `GET /api/preview/file?path=`
+- [x] `crates/quarto-preview/tests/integration/`: `GET /api/preview/file?path=`
   returns bytes for an admitted path, 404 for an absent one, 403 with a
   reason for a refused path (traversal, symlink escape, hidden, generated,
   extension, size), and never follows a path outside the root (the route
   test reuses the Phase 0 fixtures).
-- [ ] `GET /api/preview/stat?path=` answers exists/is-file/is-dir for
+- [x] `GET /api/preview/stat?path=` answers exists/is-file/is-dir for
   admitted paths and 403 for refused ones; a refused path is
   indistinguishable from an absent one to the caller only in that both
   are "no" (the 403 reason is for diagnostics).
-- [ ] `GET /api/preview/list?path=` returns only names the policy admits;
+- [x] `GET /api/preview/list?path=` returns only names the policy admits;
   a listing of a refused or absent directory is 403 or 404, never partial.
-- [ ] After a successful file pull the path is in the Automerge index and a
+- [x] After a successful file pull the path is in the Automerge index and a
   disk edit to it is synced (promotion plus watch).
-- [ ] After a stat or list answer for a directory, a file created in it that
+- [x] After a stat or list answer for a directory, a file created in it that
   the policy admits appears in the index and bumps the VFS generation;
   a file created in a directory nothing asked about does not.
-- [ ] Project mode: a file created after boot that the policy admits appears
+- [x] Project mode: a file created after boot that the policy admits appears
   in the index without restart (the existing gap).
-- [ ] Single-file mode: nothing outside the deck and its declared config is
+- [x] Single-file mode: nothing outside the deck and its declared config is
   synced, listed or watched until a route asks for it.
 
 Implementation:
 
-- [ ] The gate chosen above, as one layer over the router.
-- [ ] `HubContext::import_path(rel)`: one iteration of
+- [x] The gate chosen above, as one layer over the router.
+- [x] `HubContext::import_path(rel)`: one iteration of
   `reconcile_files_with_index` factored out, idempotent, records a
   checkpoint under the `sync_state` mutex.
-- [ ] Routes `file`, `stat`, `list` under `/api/preview/` in
+- [x] Routes `file`, `stat`, `list` under `/api/preview/` in
   `extend_with_preview`, each calling the policy first; `file` then calls
   `import_path` and returns the bytes.
-- [ ] Watch set: a directory the server has answered for is added to the
+- [x] Watch set: a directory the server has answered for is added to the
   watcher; create events in watched directories go through the policy and
   `import_path`; the frozen allow-list in `FileWatcher::new` is removed.
   Project mode keeps its tree watch and gains enrolment.
-- [ ] Enrolment syncs the new file whole; its arrival bumps the browser
+- [x] Enrolment syncs the new file whole; its arrival bumps the browser
   VFS's generation, which is the negative-cache key. No server-side
   counter. Confirm single-file mode's sync path adds to the same index.
-- [ ] `.bib` and `.csl` (and the other classes in the policy's allow-list
+- [x] `.bib` and `.csl` (and the other classes in the policy's allow-list
   that the walk does not classify today) are admitted by the three routes
   in both modes; a route test pulls a `.bib` in project mode and in
   single-file mode.
 - [ ] Quarto 1 check: when a quarto-cli checkout is available, compare its
   preview watch rules (input plus the render's reported resource files) and
   note any case ours misses here.
-- [ ] `--join` guests: confirm the routes tunnel like other `/api/*`
+- [x] `--join` guests: confirm the routes tunnel like other `/api/*`
   routes (they should; add a tunnel test if the existing ones do not cover
   a new route).
+
+### Phase 1 record (2026-11-10)
+
+- Gate: the `Host` allow-list (contract D6 records the rule). The proxy
+  escape is the `QUARTO_PREVIEW_ALLOWED_HOSTS` environment variable rather
+  than a CLI flag, so it reaches `q2 preview` through Workbench-style
+  launchers without new plumbing; Phase 5 documents it.
+- Wire shapes. `file` answers the bytes as `application/octet-stream`.
+  `stat` answers `{exists, isFile, isDir}`, with `exists: false` (200) for
+  an absent path that passes the lexical checks. `list` answers
+  `{entries: [{name, kind}]}`, `kind` being `file` or `dir`, sorted by
+  name. Refusals are 403 with the reason as text; an absent file or
+  directory (and a `list` of a file) is 404.
+- `stat` of a missing path watches its parent directory, so the file is
+  enrolled when it appears (the Sass-probe case).
+- Enrolment is creation-only in single-file mode: a watched directory
+  records the names it held when first watched, and only a name not among
+  them is enrolled. Otherwise editing an untouched sibling in a probed
+  directory would sync its contents, which contract D5 forbids. Project
+  mode enrols what the boot walk would have synced
+  (`ProjectFiles::walk_syncs`), so a new file arrives as if the preview had
+  restarted.
+- `WatchFilter::PreviewBroad` is now the policy's class list
+  (`exposure::classify`), and the watcher drops events the policy refuses
+  lexically (hidden, generated, unknown type). Without this, edits to a
+  pulled `.bib` or `.scss` would never surface.
+- The size cap applies to pulls (`file`, and single-file enrolment), not to
+  project mode's eager walk.
+- `join_frontend` test helpers sent `Host: join-frontend-test`; they now
+  send `localhost`, which is what a guest's browser sends. A new test
+  pulls through the tunnel and checks that the gate refuses a foreign
+  `Host` that arrives through it.
+- Quarto 1 check not done: no quarto-cli checkout is in the tree.
+
+End-to-end check: `q2 preview <dir>/deck.qmd --no-browser --port 47823`
+on a deck citing `refs.bib`, beside `notes.qmd`, `.env` and empty
+`partials/` and `other/`. Observed, with output inspected: the index at
+boot is `["deck.qmd"]`; `file?path=refs.bib` returns the bibliography
+(200) and the index becomes `["deck.qmd","refs.bib"]`; `.env` returns 403
+"hidden paths are not served"; `../x.qmd` returns 403 "the path climbs
+above the project root"; `stat?path=partials/_v.scss` returns
+`{"exists":false,...}`. After creating `partials/_v.scss` and
+`other/o.scss`, the index is `["deck.qmd","partials/_v.scss","refs.bib"]`.
+`curl -H 'Host: evil.example' /health` returns 403, and
+`http://localhost:<port>/health` returns 200.
 
 ## Phase 2a: render worker, no change in behaviour (preview SPA)
 
