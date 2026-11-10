@@ -502,5 +502,11 @@
 # none; border: none; … }` and friends). Verified the only delta is that SCSS
 # hunk: rendering with it removed reproduces the previous hash (27ffc075…)
 # exactly. doc.html hash unchanged.
+# Re-captured 2026-11-09 (bd-kwgtllvn): doc_files/styles.css gained Q1's
+# `.top-right { position: absolute; top: 1em; right: 1em }` utility
+# (`_quarto-rules.scss:3-7`), which positions the color-mode runtime's
+# floating fallback toggle. The same branch's other SCSS edits are
+# comment-only: with them alone, the previous hash (d9a3a2de…) still
+# matched. doc.html hash unchanged.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css d9a3a2debf57bcb1b7c19f715bd8961035ba67d921ff55b0acfcefc4df38ce9d
+doc_files/styles.css 3b565f1d55ac519cecbd032e63ca174fe7881176c8bcb9167052a9bb268f7ade

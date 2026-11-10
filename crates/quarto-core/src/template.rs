@@ -1195,7 +1195,10 @@ pub fn render_with_compiled_template(
         ctx.insert(
             "color-mode-script",
             TemplateValue::String(format!(
-                "<script id=\"quarto-color-mode\" data-author-prefers-dark=\"{author_prefers_dark}\" data-respect-user-color-scheme=\"{respect}\">{}</script>",
+                "<script id=\"quarto-color-mode\" data-author-prefers-dark=\"{author_prefers_dark}\" data-respect-user-color-scheme=\"{respect}\" data-toggle-label=\"{}\">{}</script>",
+                // Names the runtime's floating fallback toggle
+                // (bd-kwgtllvn); attribute-escaped like any term.
+                escape_html_attr(&crate::language::toggle_dark_mode_label(meta)),
                 COLOR_MODE_JS
             )),
         );
