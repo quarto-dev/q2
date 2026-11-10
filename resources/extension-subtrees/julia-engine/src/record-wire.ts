@@ -98,6 +98,12 @@ export interface RecordInfo {
   hashDefinition: typeof JULIA_HASH_DEFINITION;
   /** Present exactly when this engine honored core's `presentedBy: "core"` offer (D8). */
   presentedBy?: "core";
+  /**
+   * What kind of page-dependency data the outputs carry (OPR-7i). `"jupyter-outputs"`: the cell
+   * outputs are nbformat outputs, and core derives requirejs, jQuery and hoisted libraries from
+   * their MIME types. Present only together with `presentedBy`.
+   */
+  dependencyData?: "jupyter-outputs";
 }
 
 /**
@@ -126,7 +132,12 @@ export function buildRecordResult<N>(
   }
   // The acknowledgement mirrors the decision the engine acts on (`coreWillPresent`), so
   // core can present from the record exactly when the engine skipped its own markdown.
-  const presentedBy = options && coreWillPresent(options) ? { presentedBy: "core" as const } : {};
+  const presents = options !== undefined && coreWillPresent(options);
+  const presentedBy = presents ? { presentedBy: "core" as const } : {};
+  // Declared only when core presents (OPR-7i, decision 8). When the engine presents itself,
+  // `toMarkdown` has already put these page dependencies into the result's includes, and a
+  // label would make core derive them a second time.
+  const dependencyData = presents ? { dependencyData: "jupyter-outputs" as const } : {};
   return {
     notebook: structuredClone(nb),
     recordInfo: {
@@ -137,6 +148,7 @@ export function buildRecordResult<N>(
       alignment: "positional",
       hashDefinition: JULIA_HASH_DEFINITION,
       ...presentedBy,
+      ...dependencyData,
     },
   };
 }

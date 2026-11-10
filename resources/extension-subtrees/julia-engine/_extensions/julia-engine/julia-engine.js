@@ -132,7 +132,9 @@ function buildRecordResult(nb, units, options) {
   if (!Array.isArray(units)) {
     return {};
   }
-  const presentedBy = options && coreWillPresent(options) ? { presentedBy: "core" } : {};
+  const presents = options !== void 0 && coreWillPresent(options);
+  const presentedBy = presents ? { presentedBy: "core" } : {};
+  const dependencyData = presents ? { dependencyData: "jupyter-outputs" } : {};
   return {
     notebook: structuredClone(nb),
     recordInfo: {
@@ -142,7 +144,8 @@ function buildRecordResult(nb, units, options) {
       // QNR's index is positional; it never sees core's unit ids.
       alignment: "positional",
       hashDefinition: JULIA_HASH_DEFINITION,
-      ...presentedBy
+      ...presentedBy,
+      ...dependencyData
     }
   };
 }

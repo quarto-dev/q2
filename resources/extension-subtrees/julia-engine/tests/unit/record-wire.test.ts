@@ -183,6 +183,26 @@ test("record_info_acknowledges_core_presentation_exactly_when_offered", () => {
   assert.deepEqual(buildRecordResult({ cells: [] }, undefined, { presentedBy: "core" }), {});
 });
 
+test("record_info_declares_the_dependency_data_only_with_the_presentation_acknowledgement", () => {
+  // OPR-7i decision 8: a label with no acknowledgement would make core derive a second copy of
+  // the includes the engine's own `toMarkdown` already stored.
+  const ack = buildRecordResult({ cells: [] }, UNITS, { presentedBy: "core", units: UNITS });
+  assert.equal(ack.recordInfo?.dependencyData, "jupyter-outputs");
+  // core sent units but no offer: the engine presented itself, so no label
+  const noOffer = buildRecordResult({ cells: [] }, UNITS, { units: UNITS });
+  assert.ok(noOffer.recordInfo);
+  assert.ok(!("dependencyData" in noOffer.recordInfo));
+  // the two-argument call shape: no label
+  const legacy = buildRecordResult({ cells: [] }, UNITS);
+  assert.ok(legacy.recordInfo);
+  assert.ok(!("dependencyData" in legacy.recordInfo));
+  // an offer core made but the engine did not honor is not an acknowledgement
+  const other = buildRecordResult({ cells: [] }, UNITS, { presentedBy: "engine", units: UNITS });
+  assert.ok(!("dependencyData" in other.recordInfo!));
+  // no units: no record at all
+  assert.deepEqual(buildRecordResult({ cells: [] }, undefined, { presentedBy: "core" }), {});
+});
+
 test("engine_uses_core_located_lines", () => {
   // core re-located these lines into the text this engine received; the engine
   // forwards them and never recomputes a position
