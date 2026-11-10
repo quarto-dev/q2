@@ -2,7 +2,7 @@
 title: 'OPR-7i: page dependencies for Jupyter-style outputs on the recorded route (the Quarto 1 scan, declared by the engine)'
 date: 2026-11-10
 description: 'The plain route writes requirejs, jQuery and hoisted library scripts into the page head for any notebook with an HTML or JavaScript output; the recorded route writes none, so a Julia page that needs them breaks once OPR-7d makes the recorded route the only one. Restores the plain route behavior narrowly: an engine declares what kind of dependency data its outputs carry, core runs a port of the Quarto 1 scan for the one kind that exists (jupyter-outputs), delivers the result as includes that are never stored, skips hoisted library outputs in the body, and warns for widget views it cannot satisfy. The Julia engine (Gordon''s fork) declares the kind. No widget state, no AMD-only-when-needed, no per-output manifest: those belong to the widget epic.'
-status: ready
+status: in-progress
 depends-on: [opr-7h]
 lane: D
 ---
