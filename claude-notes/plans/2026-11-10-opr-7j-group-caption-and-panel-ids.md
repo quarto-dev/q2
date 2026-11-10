@@ -253,6 +253,14 @@ own work under the subfloat draft (knitr writes no table panel ids either in the
       `opr-parity-allowlist.toml`; 7d\'s checklist updates it for the interleaving entries, so whichever plan lands
       second makes the final edit), and reword the `julia/fig-subcap` manifest note that says "blocker".
 
+- [ ] **THE FLIP** (Gordon, 2026-11-10: this box moved here from OPR-7g, because 7j is the last prerequisite). Set
+      OPR-7d\'s `status:` from `blocked-on-gordon` to `ready` and its epic-table row to match, **only if all hold**: every plan in
+      7d\'s `depends-on` is `complete`; the parity gate shows no unallowlisted difference except the four interleaving
+      cases that 7d itself allowlists (its decision 5: a step of 7d, not a prerequisite); every existing allowlist entry is
+      `signed`, or you list the `proposed` ones for Gordon and do not flip (signing stays Gordon\'s); no plan note says
+      "needs Gordon" about anything still open. Change nothing else in 7d except that line, and say in the landing report
+      that you flipped it, or exactly what blocked it.
+
 ## Exit criteria
 
 - A labeled `fig-subcap` group with two or more plots renders the same group caption, panel ids and resolved references

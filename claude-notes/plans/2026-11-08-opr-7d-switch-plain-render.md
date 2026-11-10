@@ -21,7 +21,7 @@ decisions below are recorded (2026-11-09). If the allowlist is unsigned or the s
 `crates/quarto-core/tests/fixtures/opr-parity/opr-parity-allowlist.toml` (`knitr-empty-cell-wrapper`,
 `knitr-adjacent-blockquotes`, `julia-code-leading-newline`; each reason ends "Signed: Gordon, 2026-11-09"). The five
 Julia markup entries are not signed: [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) removes them.
-Anything OPR-7h proposes is `proposed` until Gordon signs it. The flip to `ready` still waits on 7f, 7g and 7h, and on [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) (added
+Anything OPR-7h proposes is `proposed` until Gordon signs it. The flip to `ready` still waits on 7f, 7g and 7h (all complete), and on [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) (added
 2026-11-10): the recorded route writes no requirejs or jQuery for a Julia or Jupyter page that needs them, which the
 plain route does, so switching first would break those pages.
 

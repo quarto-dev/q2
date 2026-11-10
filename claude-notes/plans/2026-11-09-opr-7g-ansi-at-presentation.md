@@ -195,7 +195,7 @@ change the pin only if 7g itself adds or removes an entry (it should not).
       report): re-run only that document narrowed and say so. Write the report in `claude-notes/research/` in the 7c
       report\'s style with the counts: identical, allowlisted, unallowlisted (**the target is zero**), rejected, skipped.
       Also run the knitr corpus gate. If anything is unallowlisted, list each with its cause and **stop at box B**.
-- [ ] (not flipped, by design: the final gate had 6 unallowlisted; Gordon authorizes this edit) **B. THE FLIP** (Gordon authorizes this one edit). Set OPR-7d\'s `status:` from `blocked-on-gordon` to `ready`
+- [ ] (not done in 7g; moved to OPR-7j on 2026-11-10, see its checklist) **B. THE FLIP** (Gordon authorizes this one edit). Set OPR-7d\'s `status:` from `blocked-on-gordon` to `ready`
       (`claude-notes/plans/2026-11-08-opr-7d-switch-plain-render.md`) **only if all hold**: 7f, 7g and 7h are `complete`;
       the final gate has zero unallowlisted differences; every allowlist entry is `signed` (none `proposed`), or you list
       the proposed ones for Gordon and do not flip; no plan note says "needs Gordon" about anything still open. Otherwise
@@ -269,6 +269,10 @@ Positron traceback check.
 verified on the integration branch). The marimo tests ran and passed.
 
 **Box B: not flipped.** The final gate has six unallowlisted differences, and the 7h notes hold an open proposal
-(Plots scripts) that needs Gordon's decision. OPR-7d stays `blocked-on-gordon`. What it waits on: a whole-document
-allowlist form for the 4d interleaving (7d decision 4 says to add one), a decision on the Plots scripts, and
-signing or fixing `fig-subcap`.
+(Plots scripts) that needs Gordon's decision. OPR-7d stays `blocked-on-gordon`.
+
+*Reconciled 2026-11-10 (the run's list of what 7d waits on, corrected).* The whole-document allowlist form for the 4d
+interleaving is **a step inside 7d** (its decision 5), not something 7d waits for. The Plots-script decision was answered
+by OPR-7i (Gordon's decisions of 2026-11-10 adopt the proposal's first option; the parity re-run in 7i's notes shows the
+script lines gone from `julia/records-plot` and `julia/positron-cache`). `julia/fig-subcap` is OPR-7j's. The flip itself
+moved to OPR-7j, the last prerequisite (its exit criteria).
