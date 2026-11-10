@@ -1349,7 +1349,7 @@ unchanged.
 
 Measure before choosing between a cheaper algorithmic fix and a worker.
 
-- [ ] Baseline the real producer using the 2026-04-23 attribution profiling
+- [x] Baseline the real producer using the 2026-04-23 attribution profiling
   session as the template; the `requestIdleCallback` override is mandatory.
   Use geometric history, source-length, and run-count scales. Cover cold
   builds, debounced incremental updates, and DOCX/PPTX download attribution.
@@ -1357,29 +1357,492 @@ Measure before choosing between a cheaper algorithmic fix and a worker.
   distinguish CPU from idle scheduling. Measure the unchunked cold-build
   prefix separately: `history()`, `getAllChanges`, and a `decodeChange` of
   every change for the hash index all run before the first yield.
-- [ ] Remove dead bookkeeping: `updateRunListAttribution` calls
+- [x] Remove dead bookkeeping: `updateRunListAttribution` calls
   `handle.history()` (a full `topoHistoryTraversal`) after every nonempty
   delta solely to set `processedHistoryIndex`. Neither that field nor
   `processedHeads` has a consumer; delete both.
-- [ ] Try unifying the cold build with the incremental path: replay
+- [x] Try unifying the cold build with the incremental path: replay
   `getAllChanges(doc)` in order from `init()`, chunked, instead of walking
   `history()`. This drops the traversal, the hash index, the second
   `decodeChange` per change, and `decodeHeads`, and leaves one replay loop
   (which also subsumes the 6a catch-up). It depends on `getAllChanges`
   returning a causally valid order; confirm that first, then require the
   existing `attribution-runs.test.ts` invariant suite to pass unchanged.
-- [ ] Regression: payload identical before and after on fixtures with
+- [x] Regression: payload identical before and after on fixtures with
   concurrent mixed author/actor histories, Unicode offsets, and incremental
   updates; toggle on/off flicker-free.
-- [ ] Re-measure. Only if the numbers still warrant a worker, write a design
+- [x] Re-measure. Only if the numbers still warrant a worker, write a design
   section before any implementation (wire shape, ongoing change feed,
   staleness and cancellation, failure fallback, download path), keeping the
   `{ runs, identities }` payload contract unchanged. Note that `DocHandle`
   objects do not transfer via export/import: `Repo.export()` serializes the
   full document on the calling thread, and `Repo.import()` sets up no sync.
-- [ ] Verify end-to-end in a real browser with attribution enabled, including
+- [x] Verify end-to-end in a real browser with attribution enabled, including
   an edit burst and toggle cycle. Record the invocation, inspected overlay
   output, and before/after main-thread measurements.
+- [x] Follow-up review (see "Phase 6b follow-up" below): batch consecutive
+  changes that share an attribution key and time into one `applyChanges` call.
+- [x] Follow-up: yield the cold build on a time budget instead of a fixed
+  change count.
+- [x] Follow-up: collapse the cold loop, the 6a catch-up loop, and the
+  incremental update into one replay loop.
+
+### Phase 6b baseline
+
+Baseline completed on 2026-11-10 under bd-kckdpt8j, before producer changes.
+The throwaway driver in
+`/tmp/pa-502/6007c0d1-1233-4599-abe4-7193998e72be/attribution-perf/`
+loads the real `attribution-runs.ts`, `buildAttributionPayload`, and
+`attributionJsonFor` through `tsx`. A resolve-hook shim supplies only
+`getFileHandle`; Automerge, the producer, payload builder, and DOCX/PPTX
+attribution helper are the production implementations. It does not measure the
+subsequent pandoc document conversion.
+
+The driver installs the mandatory `requestIdleCallback` override before
+importing production code. Immediate callbacks measure synchronous work; a
+separate 2 ms delayed run prices idle scheduling. `main ms` below is the sum of
+main-thread synchronous slices, not whole-process CPU (which includes `tsx`
+loader threads). Each matrix entry is the median of three runs. `longest ms` is
+the longest synchronous slice, including the unchunked prefix and first replay
+chunk. Cold builds are measured before an eight-edit burst; incremental updates
+apply that burst in one debounced update. The history column recorded by the
+raw JSON therefore includes the eight later changes. Invocation from the repo
+root:
+
+```bash
+QUARTO_PERF_STATS=1 node --enable-source-maps --import tsx/esm \
+  --import "$PA_SCRATCH_DIR/attribution-perf/register.mjs" \
+  "$PA_SCRATCH_DIR/attribution-perf/driver.mjs"
+```
+
+Raw output: `attribution-perf/baseline-main-thread.json`. Every measured cold,
+incremental, DOCX, and PPTX payload agreed.
+
+| History scale | Cold main ms | Longest ms | Elapsed with 2 ms idle delay | Incremental main ms | DOCX main ms | PPTX main ms |
+|---:|---:|---:|---:|---:|---:|---:|
+| 250 | 510.6 | 510.6 | 538.9 | 41.1 | 540.5 | 539.9 |
+| 500 | 530.1 | 530.1 | 575.4 | 42.1 | 561.2 | 559.0 |
+| 1000 | 603.2 | 533.2 | 651.5 | 45.9 | 640.2 | 634.6 |
+| 2000 | 866.5 | 547.6 | 910.5 | 51.2 | 903.1 | 902.2 |
+| 4000 | 1865.4 | 568.0 | 1932.2 | 62.7 | 1903.4 | 1919.9 |
+
+The delayed run is separate and includes ordinary run-to-run noise. At 4000
+changes there are seven nominal 2 ms idle waits, against 1.87 seconds of
+synchronous work: scheduling is not the bottleneck. DOCX and PPTX downloads pay
+the same cold-build cost as enabling the overlay.
+
+| Source chars at 1000 changes | Runs after burst | Cold main ms | Longest ms | Incremental main ms | Payload main ms |
+|---:|---:|---:|---:|---:|---:|
+| 25,364 | 217 | 726.4 | 660.0 | 54.8 | 0.08 |
+| 50,364 | 217 | 1343.9 | 1275.6 | 103.7 | 0.16 |
+| 100,364 | 217 | 2567.7 | 2498.6 | 199.3 | 0.21 |
+| 200,364 | 217 | 5076.8 | 5005.9 | 392.4 | 0.39 |
+| 400,364 | 217 | 9968.0 | 9899.4 | 773.6 | 0.77 |
+
+| Text-edit scale at 2000 changes | Runs after burst | Cold main ms | Longest ms | Incremental main ms |
+|---:|---:|---:|---:|---:|
+| 50 | 117 | 680.6 | 344.4 | 52.0 |
+| 100 | 217 | 881.5 | 554.7 | 51.8 |
+| 200 | 417 | 1282.4 | 979.0 | 52.8 |
+| 400 | 812 | 2117.1 | 1864.5 | 54.7 |
+| 800 | 1594 | 3973.5 | 2347.1 | 58.3 |
+
+The separate prefix probe calls the same three operations as the current cold
+build. `decode + index` includes its own `getAllChanges` call, matching the
+producer loop; the middle column isolates retrieval for comparison.
+
+| Fixture | `history()` ms | `getAllChanges` ms | `decode + index` ms |
+|---|---:|---:|---:|
+| 258 changes, 20k chars | 6.8 | 5.5 | 35.3 |
+| 4008 changes, 20k chars | 28.8 | 11.8 | 53.6 |
+| 1008 changes, 400k chars | 107.5 | 103.2 | 650.1 |
+| 2008 changes, 1594 runs | 18.0 | 9.0 | 46.5 |
+
+The longest cold slice is larger than this prefix because it also includes the
+first replay chunk. In particular, replay around the 400k initial text dominates
+the 9.90-second slice; the prefix is still an unchunked 0.76 seconds and the
+incremental path repeats `history()` solely for dead bookkeeping. Payload
+construction is not a useful optimization target.
+
+A separate V8 CPU profile used `--cpu-prof-interval=200` and was analyzed with
+`hub-client/scripts/perf/analyze-cpuprofile.mjs`. Its 164.8 seconds of samples
+include fixture generation and the whole matrix. Automerge WASM frames
+(`OpIter`, `BatchApply`, and `Untangler`) dominate self-time; only 173 ms is
+attributed directly to `attribution-runs.ts` frames and 5 ms to the payload
+builder. This confirms that the replay itself, not TypeScript payload plumbing,
+is the cost to evaluate after removing redundant traversal and decoding.
+
+### Phase 6b implementation and re-measurement
+
+The producer no longer stores `processedHeads` or `processedHistoryIndex`, and
+incremental updates no longer call `history()`. Cold builds replay
+`getAllChanges(doc)` from `init()` through the same `replayChange` function as
+incremental updates. The topology traversal, hash index, second decode per
+change, and head decoding are removed. The 6a live-delta catch-up loop remains
+unchanged. Test handles no longer implement `history()`, so an accidental cold
+or incremental dependency fails instead of silently restoring the traversal.
+
+A fail-first regression observed one incremental `history()` call before the
+fix and zero after it. The existing invariant suite is unchanged and passes. A
+new concurrent fixture with legacy actors, an author-bearing session, a seq-2
+change, Unicode offsets, and an incremental merge proves every
+`getAllChanges` entry is immediately applicable in order and pins the exact
+cold/incremental `{ runs, identities }` payload.
+
+The identical after driver wrote
+`attribution-perf/after-main-thread.json`; all cold, incremental, DOCX, and
+PPTX payload comparisons passed again. Values below are before → after
+main-thread milliseconds from the same three-run medians.
+
+| History scale | Cold main ms | Longest slice ms | Incremental main ms |
+|---:|---:|---:|---:|
+| 250 | 510.6 → 474.3 | 510.6 → 474.3 | 41.1 → 34.5 |
+| 500 | 530.1 → 491.1 | 530.1 → 491.1 | 42.1 → 33.9 |
+| 1000 | 603.2 → 560.7 | 533.2 → 492.8 | 45.9 → 35.9 |
+| 2000 | 866.5 → 808.4 | 547.6 → 494.0 | 51.2 → 34.8 |
+| 4000 | 1865.4 → 1807.9 | 568.0 → 505.9 | 62.7 → 34.8 |
+
+| Source chars | Cold main ms | Longest slice ms | Incremental main ms |
+|---:|---:|---:|---:|
+| 25,364 | 726.4 → 675.8 | 660.0 → 609.8 | 54.8 → 43.4 |
+| 50,364 | 1343.9 → 1255.1 | 1275.6 → 1189.4 | 103.7 → 84.5 |
+| 100,364 | 2567.7 → 2418.1 | 2498.6 → 2351.6 | 199.3 → 169.5 |
+| 200,364 | 5076.8 → 4750.2 | 5005.9 → 4682.8 | 392.4 → 338.3 |
+| 400,364 | 9968.0 → 9326.5 | 9899.4 → 9260.9 | 773.6 → 663.2 |
+
+| Text-edit scale | Cold main ms | Incremental main ms |
+|---:|---:|---:|
+| 50 | 680.6 → 614.3 | 52.0 → 34.3 |
+| 100 | 881.5 → 807.9 | 51.8 → 34.4 |
+| 200 | 1282.4 → 1211.7 | 52.8 → 35.5 |
+| 400 | 2117.1 → 2048.4 | 54.7 → 37.2 |
+| 800 | 3973.5 → 3891.6 | 58.3 → 40.4 |
+
+| History scale | DOCX main ms | PPTX main ms |
+|---:|---:|---:|
+| 250 | 540.5 → 509.8 | 539.9 → 509.7 |
+| 500 | 561.2 → 535.9 | 559.0 → 535.8 |
+| 1000 | 640.2 → 592.6 | 634.6 → 593.6 |
+| 2000 | 903.1 → 849.5 | 902.2 → 851.6 |
+| 4000 | 1903.4 → 1823.6 | 1919.9 → 1826.7 |
+
+Cold cost falls by 3–10 percent; incremental cost falls by 14–45 percent.
+Those are worthwhile constant-factor wins, but they do not change the
+complexity or the user-blocking result. The 400k fixture still has a 9.26-second
+synchronous slice and a 663 ms eight-edit incremental update. Further
+main-thread micro-tuning is therefore rejected and the worker design below is
+required before any worker implementation.
+
+**Superseded in part by the follow-up below.** The 9.26-second slice was an
+artifact of count-based chunking, not of the initial 400k change, and replay
+cost depends on the number of `applyChanges` calls rather than the number of
+changes. Re-measure with a typing-shaped fixture before starting the worker.
+
+### Phase 6b attribution-worker design
+
+#### Scope and shared replay core
+
+Implementation follow-up: bd-arh0obkp. Use a dedicated attribution worker,
+separate from the Phase 7 render-worker evaluation. Move Automerge document
+replay, run-list mutation, and the
+actor-to-author map off the main thread. Keep UTF-16-to-UTF-8 conversion,
+identity resolution, and JSON serialization on the main thread: the 400k
+payload measurement is only 0.77 ms. The wire payload remains exactly
+`{ runs, identities }`, so the Rust renderer and DOCX/PPTX consumers do not
+change.
+
+Extract the existing replay operations into one internal replay-session core
+used by both the worker and the main-thread fallback. It owns `_workDoc`,
+`runs`, and `_authorByActor`; worker and fallback must not grow separate replay
+implementations. The public hook/download behavior stays the same even though
+incremental worker updates become asynchronous.
+
+#### Request and response wire
+
+Do not transfer `DocHandle` objects. `Repo.export()` would serialize the whole
+document on the calling thread, and `Repo.import()` would not establish sync.
+Send encoded Automerge changes instead:
+
+```ts
+type AttributionWorkerRequest =
+  | {
+      type: 'init';
+      sessionId: number;
+      requestId: number;
+      textFieldName: string;
+      changes: Uint8Array[];
+      heads: string[];
+    }
+  | {
+      type: 'append';
+      sessionId: number;
+      requestId: number;
+      textFieldName: string;
+      baseHeads: string[];
+      heads: string[];
+      changes: Uint8Array[];
+    }
+  | { type: 'cancel'; sessionId: number };
+
+type AttributionWorkerResponse =
+  | {
+      type: 'runs';
+      sessionId: number;
+      requestId: number;
+      heads: string[];
+      runs: AttributionRun[];
+    }
+  | {
+      type: 'error';
+      sessionId: number;
+      requestId: number;
+      message: string;
+    };
+```
+
+Start with structured-cloned `Uint8Array` values, which cannot detach buffers
+owned by Automerge. Transfer only freshly owned copies if profiling later
+shows clone cost matters. Worker `heads` and `baseHeads` are synchronization
+metadata, not a reason to restore the deleted public bookkeeping fields.
+
+#### Cold bootstrap and ongoing change feed
+
+For a cold session, the main thread snapshots `doc`, calls
+`getAllChanges(doc)`, and posts those changes with `getHeads(doc)`. The worker
+replays from `init()`. This leaves one measured main-thread extraction cost:
+103 ms for the 400k/1000-change fixture after this phase, rather than 9.33
+seconds of replay. Do not claim worker cold starts are zero-cost. If that
+residual becomes a measured gate, evaluate reading the persisted change log in
+the worker as a separate design; do not move `Repo.export()` onto the main
+thread as a shortcut.
+
+The client retains `lastSentDoc`. On each debounced update it computes
+`getChanges(lastSentDoc, handle.doc())`, posts the encoded delta and new heads,
+then advances `lastSentDoc`. This keeps change extraction on the main thread
+but moves all `applyChanges`, patch generation, and run-list work to the worker.
+Messages for one session are ordered. The worker checks `baseHeads` against its
+own heads before applying an append and queues an append that arrives while a
+cold replay chunk is in progress.
+
+Before any cold or incremental result is finalised, the client repeats the
+catch-up delta until `getChanges(lastSentDoc, handle.doc())` is empty. This is
+the worker equivalent of the 6a producer loop and prevents pairing stale runs
+with newer text. The hook awaits the latest response while retaining the
+previous payload and `generating: true`; identities-only changes can reuse the
+worker runs and rebuild the payload without replay.
+
+#### Staleness, cancellation, and lifecycle
+
+Use one monotonically increasing session ID per enabled file and a request ID
+per build/update. File switches, disable, and component cleanup abort the main
+request, post `cancel`, and terminate a worker that is no longer shared. Every
+response is checked against the current session and request IDs before state is
+updated, so a late completion cannot revive an old file or disabled overlay.
+The worker checks cancellation at replay-chunk boundaries and yields to its
+own event loop often enough to receive cancel messages; these yields are not
+main-thread scheduling costs.
+
+#### Failure fallback
+
+Keep the current in-main producer as the correctness fallback for unsupported
+workers, worker startup failure, or a worker error. Log the failure, terminate
+the failed session, and run the shared replay core on the main thread once.
+Retain the previous valid payload until the fallback completes; never install
+partial runs. A fallback failure follows current behavior: the overlay reports
+the build failure and stops generating, while a download proceeds without
+attribution rather than failing the file conversion.
+
+#### DOCX/PPTX downloads
+
+Route `attributionJsonFor` through the same worker-client registry keyed by
+project and file. If the overlay already owns a warm session, a download sends
+the latest delta and reuses it. With the overlay off, it creates an ephemeral
+session, catches up to the handle's current heads, and terminates it after the
+request. Both paths call the existing main-thread `buildAttributionPayload`
+with the current identities, preserving the exact DOCX/PPTX transport and
+best-effort behavior.
+
+Moving pandoc conversion or the render pipeline is outside this design; Phase
+7 evaluates that separately.
+
+### Phase 6b browser verification
+
+Real Chromium verification used the throwaway spec and config in
+`attribution-perf/attribution-e2e/` (not committed). It seeded 501 real
+Automerge edits, reloaded through the real sync/VFS path, enabled Authors,
+typed `BURSTMARK!` into Monaco, checked the marker in Automerge and the preview,
+inspected the attribution wrapper and hover badge, then toggled Authors off and
+on. Invocation:
+
+```bash
+VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws \
+  VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html \
+  npm run build -w hub-client
+npm exec -w hub-client -- playwright test \
+  --config="$PA_SCRATCH_DIR/attribution-perf/attribution-e2e/playwright.config.ts" \
+  --project=chromium --workers=1 --retries=0
+```
+
+Observed output (the long `restoredText` value is abridged here):
+
+```text
+ATTRIBUTION_HISTORY 502
+ATTRIBUTION_EDIT {"marker":"BURSTMARK!","actor":"e2e7e1f02a30000000000000000007e1","color":"#607D8B","badge":"Noble Wolf just now"}
+ATTRIBUTION_TOGGLE {"offWrappers":0,"restoredActor":"e2e7e1f02a30000000000000000007e1","restoredText":"Start…BURSTMARK!"}
+1 passed (7.6s)
+```
+
+Both `attribution-edit.png` and `attribution-toggle.png` were inspected. The
+Monaco marker is present, the preview has the author-colored wrapper, and the
+visible badge reads `Noble Wolf just now`. Off removes every attribution
+wrapper; re-enabling restores the same actor and marker with no stale payload.
+The before/after main-thread measurements are recorded in the tables above.
+
+### Phase 6b verification
+
+- The fail-first incremental-history regression failed with one call before the
+  fix. After the fix, 31 focused attribution tests passed, including cold-build
+  races, exact payload characterization, and both download formats.
+- `npm run preflight -w hub-client` passed, including release WASM, the sandbox
+  bundle, and TypeScript typechecking. Scoped ESLint passed for every changed
+  TypeScript file.
+- `npm run test:ci -w hub-client` passed: 1,757 unit, 240 integration, and 478
+  WASM tests; preview/render DOM parity passed 109/109 opted-in fixtures.
+- `npm run build:all -w hub-client` passed, including release WASM, the sandbox
+  bundle, production TypeScript/Vite build, and service-worker precache check.
+- `cargo xtask verify --skip-rust-tests --skip-hub-build` passed every enabled
+  leg, including custom lints, clippy, formatting, all 1,702 strict
+  `claude-notes` files, ts-packages, hub-client tests, and preview SPA.
+- The full Rust workspace run used an official scratch pandoc 3.13 because the
+  system binary is 3.12.1. With `--no-fail-fast`, it completed 19,203 tests:
+  19,186 passed, 201 skipped, and 17 failed. Two are the same local knitr
+  failures recorded for Phases 5 and 6a: `capture_classifies_pieces`
+  (bd-54odm3rz, bd-qwscag8b) and
+  `knitr_replay_equals_live::a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live`
+  (bd-b95dt1ia). The other 15 are Marimo tests whose engine stage timed out
+  fetching `https://pypi.org/simple/marimo/`; they are unrelated network
+  failures and no Rust source changed. Commit awaits user approval because the
+  full workspace run is not green.
+- No snapshot files changed.
+
+### Phase 6b follow-up — batched replay and time-budgeted yields
+
+Review of the 6b producer on 2026-11-10 (still bd-kckdpt8j) found where the
+replay time goes, which changes two conclusions above.
+
+**One `applyChanges` call costs time proportional to the text length, however
+many changes it carries.** Measured against Automerge 3.5 with throwaway
+probes:
+
+| Text size | One text-edit change per call | 100 changes in one call |
+|---:|---:|---:|
+| 20k chars | about 4 ms each | not measured |
+| 100k chars | about 21 ms each | not measured |
+| 400k chars | about 82 ms each | 90 ms total |
+
+The cost is the same without `patchCallback`, through `loadIncremental`, on a
+`load(save())` copy, and through the low-level handle with `diffIncremental`.
+Changes that do not touch the text cost about 0.1 ms. So the only lever on
+replay CPU is fewer calls.
+
+Two earlier statements are therefore wrong:
+
+- The baseline says replay around the 400k initial text dominates the
+  9.90-second slice. The initial change costs about 0.8 seconds (264 ms to
+  apply, 560 ms in `decodeChange`). The other 8.2 seconds is the fixture\'s 100
+  text edits at 82 ms each, which all fall in the first 500-change chunk.
+- The `CHUNK_SIZE` comment assumed about 15 µs per entry and a 7–8 ms slice.
+  500 text edits on a 20k document take about 2 seconds.
+
+**Changes made:**
+
+1. **Batching.** Automerge stamps a change with whole seconds by default, and
+   the sync client\'s `handle.change` calls pass no time. A typing burst
+   therefore produces consecutive changes with the same attribution key and
+   time. Every character such changes insert gets the same run whether they
+   are applied one at a time or together, so the producer applies them in one
+   call. A batch is capped at `MAX_BATCH_SIZE` (500) changes.
+2. **Time-budgeted yields.** The cold build yields between batches once
+   `SLICE_BUDGET_MS` (8 ms) has passed, instead of every 500 changes. One
+   batch is the smallest unit, so a slice can overrun by one `applyChanges`
+   call.
+3. **One replay loop.** `getChanges(init(), doc)` returns the same list as
+   `getAllChanges(doc)` at the same cost (100.8 ms for both at 400k). A
+   generator, `replayPending`, replays `getChanges(workDoc, handle.doc())`
+   until it is empty. The cold build drives it with yields; the incremental
+   update drains it synchronously. It never yields after the last batch of a
+   round and re-checks after every pause, so the 6a guarantee holds: the
+   returned state is at the handle\'s current heads.
+
+Not done: replacing `decodeChange` with `getChangesMetaSince`. It would save
+the 560 ms decode of a 400k paste (34 ms at 20k), and its order matched
+`getChanges` hash-for-hash over 2,018 changes of concurrent history, but that
+order is undocumented.
+
+**Tests** (`attribution-runs.batching.test.ts`, all six failed before the
+change): one call per author-and-second burst for cold and incremental
+replay; the batch cap; runs equal to a change-by-change reference replay over
+60 random three-peer histories with inserts, deletes, replacements, whole-text
+puts and merges (the test also requires that at least a quarter of the calls
+were batched away); yields at every batch boundary when the budget is spent;
+no yields within budget for 600 changes. The cold-build fixture now pauses on
+a stubbed clock instead of the change count.
+
+**Measurements** (before → after; throwaway driver, real producer, immediate
+idle callbacks, single run, both versions in one process). The typing fixture
+is 2,000 single-character changes at six per second.
+
+| Fixture | Cold main ms | Longest slice ms | Yields | Runs identical |
+|---|---:|---:|---:|---|
+| Typing, 20k chars | 9370 → 1641 | 2415 → 52 | 4 → 167 | yes |
+| Typing, 100k chars | 44945 → 7633 | 11257 → 241 | 4 → 335 | yes |
+| Distinct times, 20k, 1000 changes | 620 → 626 | 510 → 49 | 2 → 66 | yes |
+| Distinct times, 400k, 1000 changes | 9835 → 9848 | 9764 → 950 | 1 → 113 | yes |
+
+| Eight-edit incremental update | Before ms | After ms |
+|---|---:|---:|
+| Typing fixture, 20k, burst within one second | 39 | 5 |
+| 400k, burst within one second | 706 | 90 |
+| 400k, burst over eight seconds | 707 | 697 |
+
+The remaining longest slice is the initial change: one call and one decode
+(950 ms at 400k). The plan\'s original driver gives every change its own
+millisecond-scale time, so it cannot batch; its totals are unchanged and only
+its longest slice improves. Total CPU still scales with batches times text
+length, so the worker (bd-arh0obkp) remains the fix for very large documents;
+decide on it from a typing-shaped fixture.
+
+**Browser verification.** The 6b throwaway Playwright spec was copied to the
+session scratch directory and rerun against a fresh e2e build. Its 501 seeded
+edits and its typed marker both fall in same-second bursts, so it exercises
+batching. Invocation:
+
+```bash
+VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws \
+  VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html \
+  npm run build -w hub-client
+npm exec -w hub-client -- playwright test \
+  --config="$SCRATCH/e2e/playwright.config.ts" \
+  --project=chromium --workers=1 --retries=0
+```
+
+Observed output (the long `restoredText` value is abridged):
+
+```text
+ATTRIBUTION_HISTORY 502
+ATTRIBUTION_EDIT {"marker":"BURSTMARK!","actor":"e2e7e1f02a30000000000000000007e1","color":"#607D8B","badge":"Clever Penguin just now"}
+ATTRIBUTION_TOGGLE {"offWrappers":0,"restoredActor":"e2e7e1f02a30000000000000000007e1","restoredText":"Start…BURSTMARK!"}
+1 passed (8.2s)
+```
+
+`attribution-edit.png` was inspected: the marker is in Monaco, the preview
+paragraph has the attribution outline, and the badge reads
+`Clever Penguin just now`.
+
+**Verification.** `npm run test:ci -w hub-client` passed: 1,763 unit, 240
+integration, and 478 WASM tests. `npm run build:all -w hub-client` passed,
+including the precache check. `npm run typecheck -w hub-client` and scoped
+ESLint passed. No Rust source and no snapshot files changed.
 
 ## Phase 7 — Render-worker architecture evaluation (design only)
 
