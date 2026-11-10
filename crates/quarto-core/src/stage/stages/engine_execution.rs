@@ -831,6 +831,13 @@ impl PipelineStage for EngineExecutionStage {
             ctx.includes
                 .header_includes
                 .extend(result.includes.header_includes);
+            // Derived page dependencies (OPR-7i), after `fold_side_data` so they never reach the
+            // stored entry, and deduplicated against what is already on the page.
+            for derived in std::mem::take(&mut result.derived_header_includes) {
+                if !ctx.includes.header_includes.contains(&derived) {
+                    ctx.includes.header_includes.push(derived);
+                }
+            }
             ctx.includes
                 .include_before
                 .extend(result.includes.include_before);
@@ -2969,6 +2976,79 @@ mod tests {
         fn is_available(&self) -> bool {
             true
         }
+    }
+
+    /// OPR-7i: an engine whose result carries derived page dependencies as well as an include of
+    /// its own that is identical to one of them.
+    struct MockDerivedEngine;
+
+    impl crate::engine::ExecutionEngine for MockDerivedEngine {
+        fn name(&self) -> &str {
+            "mock-derived"
+        }
+
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "mock-derived" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
+
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            Ok(crate::engine::ExecuteResult {
+                markdown: input.to_string(),
+                includes: crate::stage::PandocIncludes {
+                    header_includes: vec!["<A/>".to_string()],
+                    ..Default::default()
+                },
+                derived_header_includes: vec!["<A/>".to_string(), "<B/>".to_string()],
+                ..Default::default()
+            })
+        }
+
+        fn is_available(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn derived_page_dependencies_reach_the_head_once_and_skip_one_already_there() {
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(MockDerivedEngine));
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        let content = b"---\nengine: mock-derived\n---\n\n```{mock-derived}\nx\n```\n";
+        EngineExecutionStage::new()
+            .run(
+                PipelineData::DocumentAst(parse_qmd_to_ast(content, "/project/test.qmd")),
+                &mut ctx,
+            )
+            .await
+            .unwrap();
+        // The engine's own include stays as it is; the derived text is added once, skipping the
+        // block that is already on the page.
+        assert_eq!(ctx.includes.header_includes, vec!["<A/>", "<B/>"]);
+    }
+
+    #[test]
+    fn derived_page_dependencies_stay_out_of_the_trace_capture() {
+        let result = crate::engine::ExecuteResult {
+            derived_header_includes: vec!["<B/>".to_string()],
+            ..Default::default()
+        };
+        let v = serde_json::to_value(&result).unwrap();
+        assert!(v.get("derived_header_includes").is_none(), "{v}");
+        assert!(!v.to_string().contains("<B/>"), "{v}");
     }
 
     /// Mock engine that appends a fresh paragraph to the input — lets us

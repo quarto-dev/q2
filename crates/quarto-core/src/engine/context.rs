@@ -549,6 +549,13 @@ pub struct ExecuteResult {
     #[serde(skip)]
     pub record: Option<crate::record::EngineRecord>,
 
+    /// Page dependencies core derived from the record at present time (OPR-7i): head text for
+    /// an engine whose entry carries a dependency-data label. Never stored: the stage drains it
+    /// into the page's header includes after the record's side data is folded, and a replay or
+    /// a splice derives it again. Skipped by serde so it stays out of the trace capture.
+    #[serde(skip)]
+    pub derived_header_includes: Vec<String>,
+
     /// KNR-6: the skeleton a whole-document engine built the document around, with the nonce
     /// its markers carry. `markdown` holds the final presented text; replay presents the
     /// record over `skeleton.text` again. `None` for an engine with no skeleton (Jupyter) and

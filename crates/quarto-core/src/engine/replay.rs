@@ -62,7 +62,7 @@ use super::error::ExecutionError;
 use super::skeleton::{Shipped, present_skeleton};
 use super::traits::ExecutionEngine;
 use super::units::units_for_engine;
-use crate::presenter::document::present_document;
+use crate::presenter::document::{PresentNote, present_document};
 use crate::presenter::figures::FsFigureSink;
 use crate::presenter::inline::InlineTarget;
 use crate::record::{AuthorTexts, EngineRecord, fill_ids, read_record_value};
@@ -142,7 +142,7 @@ impl ReplayEngine {
         let mut fig = FsFigureSink::new(&ctx.source_path);
         // A whole-document engine (knitr) recorded a skeleton: present over it, not over the
         // input text, so the spans and chunks its own run substituted are already in place.
-        let (markdown, files_written, notes, note_units) = if let Some(skeleton) =
+        let (markdown, files_written, notes, note_units, derived_includes) = if let Some(skeleton) =
             stored.skeleton.as_ref()
         {
             // The markers are keyed by unit id, so every unit needs one (a stage that did not
@@ -180,6 +180,8 @@ impl ReplayEngine {
                 presented.files_written,
                 presented.notes,
                 presented.ranged_units,
+                // A skeleton is a whole-document engine's (knitr): it carries no label.
+                Vec::new(),
             )
         } else {
             let presented = present_document(
@@ -202,17 +204,28 @@ impl ReplayEngine {
                 presented.files_written,
                 presented.notes,
                 units.clone(),
+                // Derived again, never read from the stored result: one copy on replay.
+                presented.header_includes,
             )
         };
 
         let mut result = stored;
         result.markdown = markdown;
         result.supporting_files = files_written;
-        result.warnings.extend(
-            notes
-                .iter()
-                .map(|note| crate::engine::diagnostics::note_diagnostic(note, &note_units, ctx)),
-        );
+        result.derived_header_includes = derived_includes;
+        let stored_text: Vec<String> = result.warnings.iter().map(|w| w.to_text(None)).collect();
+        for note in &notes {
+            let diagnostic = crate::engine::diagnostics::note_diagnostic(note, &note_units, ctx);
+            // A live run stored the widget warning on the result, so presenting again would raise
+            // it twice (OPR-7i). Only this note is guarded; the others (an unusable image, for
+            // one) are raised again as they always were.
+            if matches!(note, PresentNote::WidgetViewUnsupported { .. })
+                && stored_text.contains(&diagnostic.to_text(None))
+            {
+                continue;
+            }
+            result.warnings.push(diagnostic);
+        }
         result.record = record
             .metadata
             .quarto_engines
@@ -703,6 +716,73 @@ mod tests {
         assert!(for_docx.contains("plain"), "{for_docx}");
         assert!(!for_docx.contains("<b>rich</b>"), "{for_docx}");
         assert_ne!(for_html, for_docx);
+    }
+
+    // ── OPR-7i: derived page dependencies and the widget warning on replay ──
+
+    fn widget_view() -> Vec<Value> {
+        vec![json!({
+            "output_type": "display_data",
+            "data": {"application/vnd.jupyter.widget-view+json": {"model_id": "a"}, "text/plain": "w"},
+            "metadata": {}
+        })]
+    }
+
+    /// A jupyter capture whose engine entry carries the label, as a live run stored it.
+    fn labeled_capture(text: &str, outputs: Vec<Value>) -> EngineCapture {
+        let mut capture = jupyter_capture(text, &[(0, outputs)], "", None);
+        capture.record.as_mut().unwrap()["metadata"]["quarto_engines"][0]["dependency_data"] =
+            json!("jupyter-outputs");
+        capture
+    }
+
+    #[test]
+    fn replay_derives_the_page_dependencies_again_and_stores_none() {
+        let text = "```{python}\n1\n```\n";
+        let capture = labeled_capture(text, plain_and_html("x", "<b>hi</b>"));
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        assert_eq!(result.derived_header_includes.len(), 1);
+        assert!(result.derived_header_includes[0].contains("requirejs@2.3.6"));
+        // The stored includes are untouched: one copy, never two.
+        assert!(result.includes.header_includes.is_empty());
+        // A non-HTML target derives nothing.
+        let (_dir2, docx) = tmp_context("docx");
+        let capture = labeled_capture(text, plain_and_html("x", "<b>hi</b>"));
+        let result = ReplayEngine::new(capture).execute(text, &docx).unwrap();
+        assert!(result.derived_header_includes.is_empty());
+    }
+
+    #[test]
+    fn replay_raises_the_widget_warning_once_when_the_stored_result_already_has_it() {
+        use crate::engine::diagnostics::widget_view_unsupported_diagnostic;
+        let text = "```{python}\n1\n```\n";
+        let mut capture = labeled_capture(text, widget_view());
+        // What a live run stored: the note became a warning on the result.
+        capture.result["warnings"] =
+            json!([serde_json::to_value(widget_view_unsupported_diagnostic(None)).unwrap()]);
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        let count = result
+            .warnings
+            .iter()
+            .filter(|w| w.code.as_deref() == Some("Q-18-16"))
+            .count();
+        assert_eq!(count, 1, "{:?}", result.warnings);
+    }
+
+    #[test]
+    fn replay_raises_the_widget_warning_when_the_stored_result_has_none() {
+        let text = "```{python}\n1\n```\n";
+        let capture = labeled_capture(text, widget_view());
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        let count = result
+            .warnings
+            .iter()
+            .filter(|w| w.code.as_deref() == Some("Q-18-16"))
+            .count();
+        assert_eq!(count, 1, "{:?}", result.warnings);
     }
 
     // ── knitr traces (bd-js24dold) ──────────────────────────

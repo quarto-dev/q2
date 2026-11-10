@@ -1,0 +1,41 @@
+---
+title: "Interactive Widget Not Supported"
+description: "A code cell shows an interactive widget that Quarto cannot draw yet, so the page shows its text representation."
+code: Q-18-16
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-16` — Interactive Widget Not Supported
+
+> A code cell shows an interactive widget that Quarto cannot draw yet, so
+> the page shows its text representation instead.
+
+## What this means
+
+Some Jupyter packages, such as ipywidgets, show an interactive control or
+chart in a cell's output. To draw it on a page, Quarto needs the widget's
+saved state, and it does not capture that state yet.
+
+This warning means that one cell produced such a widget. The page shows the
+widget's text representation (for example `IntSlider(value=3)`) in its
+place. The render continues, and the rest of the output in the document is
+unaffected.
+
+## How to fix
+
+Replace the widget with a static output in that cell, such as a plot or a
+table. Or accept the text representation.
+
+Use `--strict` to make this warning stop the render:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-18-11`](Q-18-11.qmd) — a code cell's image output could not be used.

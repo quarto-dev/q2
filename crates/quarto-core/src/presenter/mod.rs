@@ -26,6 +26,7 @@ mod jupyter_option_sweep;
 pub mod knitr_inputs;
 pub mod options;
 pub mod output;
+pub mod page_dependencies;
 #[cfg(test)]
 pub(crate) mod recording_runtime;
 pub mod visibility;

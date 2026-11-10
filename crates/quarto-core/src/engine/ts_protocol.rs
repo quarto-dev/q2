@@ -573,6 +573,11 @@ pub struct TsRecordInfo {
     /// exactly when this is `Core` (`acknowledged_presentation`, OPR-7a).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presented_by: Option<TsPresentedBy>,
+    /// What kind of page-dependency data the engine's outputs carry (OPR-7i); the one value is
+    /// `"jupyter-outputs"`. Core stores it on the engine's entry, only together with the
+    /// `presented_by` acknowledgement. Absent from an older engine: no handling.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_data: Option<String>,
 }
 
 fn is_default_coverage(c: &TsCoverage) -> bool {
@@ -1894,6 +1899,7 @@ mod tests {
                 coverage: TsCoverage::Owned,
                 hash_definition: None,
                 presented_by: None,
+                dependency_data: None,
             }),
             ..Default::default()
         };
@@ -1920,6 +1926,7 @@ mod tests {
             coverage: TsCoverage::Owned,
             hash_definition: Some(def.clone()),
             presented_by: None,
+            dependency_data: None,
         };
         let v = serde_json::to_value(&info).unwrap();
         assert_eq!(v["hashDefinition"]["presentationCellOptions"][0], "echo");
@@ -1958,6 +1965,25 @@ mod tests {
         assert_eq!(v["presentedBy"], "core");
         let back: TsRecordInfo = serde_json::from_value(v).unwrap();
         assert_eq!(back, acked);
+    }
+
+    #[test]
+    fn record_info_dependency_data_is_optional_and_roundtrips() {
+        // An older engine sends no field: it parses as `None` and `None` is not written back.
+        let old: TsRecordInfo = serde_json::from_str(r#"{"version":1}"#).unwrap();
+        assert_eq!(old.dependency_data, None);
+        assert!(
+            serde_json::to_value(&old)
+                .unwrap()
+                .get("dependencyData")
+                .is_none()
+        );
+        let labeled: TsRecordInfo =
+            serde_json::from_str(r#"{"version":1,"dependencyData":"jupyter-outputs"}"#).unwrap();
+        assert_eq!(labeled.dependency_data.as_deref(), Some("jupyter-outputs"));
+        let v = serde_json::to_value(&labeled).unwrap();
+        assert_eq!(v["dependencyData"], "jupyter-outputs");
+        assert_eq!(serde_json::from_value::<TsRecordInfo>(v).unwrap(), labeled);
     }
 
     #[test]
@@ -2062,6 +2088,7 @@ mod tests {
             coverage: TsCoverage::Subset,
             hash_definition: Some(hash_def),
             presented_by: Some(TsPresentedBy::Core),
+            dependency_data: Some("jupyter-outputs".to_string()),
         };
         // `TsUnit` has skipped optionals; the fixture instance is the unit with all of them.
         let full_unit = TsUnit {

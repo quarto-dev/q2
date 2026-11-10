@@ -32,7 +32,7 @@ need, and degrade cleanly, one input at a time, for one that does not. The scope
    option is removed and `-M` is the command-line way (decision R5, 2026-11-09).
 
 Jupyter output stays byte-identical unless a cell sets a new option (knitr epic decision 12), except for the two
-documented preview and hub fixes in OPR-1a and OPR-1b. **Marimo is a documented exception**: it uses the legacy
+documented preview and hub fixes in OPR-1a and OPR-1b and the one group fix in OPR-7j (D14). **Marimo is a documented exception**: it uses the legacy
 capture splice and is not part of this epic.
 
 ## Decisions (Gordon, 2026-11-08; not to be reopened by a plan)
@@ -81,6 +81,13 @@ capture splice and is not part of this epic.
 - **D12. Marimo is a documented exception.**
 - **D13. Strands.** `bd-nn2fou8h` (execute-visibility options) is referenced by OPR-1a and OPR-2; `bd-gbaykhth` (Jupyter
   has no subfloat synthesis) and `bd-au5gts6e` (knitr sub-figure numbering) are out of scope.
+- **D14. A third Jupyter exception: figure groups (Gordon, 2026-11-10).** The OPR-7d review found that the flip would
+  make Julia `fig-subcap` groups worse (the group caption and the panel ids are lost), and that native Jupyter already
+  has the same two gaps. [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) applies knitr\'s group rules to every
+  engine, so a Jupyter `fig-subcap` cell now renders its group caption and resolves its panel references. Gordon accepted
+  that this changes Jupyter output and overrides the byte-identical rule for this one case; every other Jupyter output
+  stays byte-identical, and 7j tests that. Real subfloats and tables (`tbl-subcap`, which no engine handles and the flip
+  does not worsen) stay out of scope (D13).
 
 ## What the spikes and reviews found (evidence)
 
@@ -149,7 +156,9 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) | OPR | Engines control the attributes and file names the presenter writes (a general `attrs` channel); Julia uses it and `quarto_file_path`, so five of the 7c Julia allowlist entries go | 4d, 7a, 7c | C | ready |
 | [OPR-7g](2026-11-09-opr-7g-ansi-at-presentation.md) | OPR | ANSI escapes removed at presentation from one function, across engines; record stays raw; closes the 7c ANSI difference | 7f, 7h | A | ready |
 | [OPR-7h](2026-11-09-opr-7h-plots-scripts-and-png-size.md) | OPR | Investigate the two remaining Julia parity differences (Plots script elements, bare-PNG size): find the cause, then fix, allowlist or propose | 7c | D | ready |
-| [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, 7f, 7g, 7h, Gordon\'s decisions | D | blocked-on-gordon |
+| [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) | OPR | Page dependencies for Jupyter-style outputs on the recorded route: the engine declares the data kind (Julia fork change), core runs the Quarto 1 scan and writes requirejs and jQuery includes, warns for widget views; restores the plain route\'s behavior so OPR-7d does not regress widget pages | 7h | D | ready |
+| [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) | OPR | Group caption and per-panel `label-N` ids for `fig-subcap` cells on every engine (knitr\'s hooks.R rules in the presenter), so the flip does not lose the Julia group caption or its panel references; real subfloats stay out of scope | 7f | D | blocked-on-gordon (outline) |
+| [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, 7f, 7g, 7h, 7i, 7j, Gordon\'s decisions | D | blocked-on-gordon |
 | [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved, RFU-8 | D | ready |
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |
 | [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | RFU | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
@@ -167,7 +176,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3, **RFU-7** (moved from C), **OPR-7g** (moved from C, 2026-11-09) |
 | B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, **OPR-7e**, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C) |
 | C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a, **OPR-7f** |
-| D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, **OPR-7h**, OPR-7d, OPR-8 |
+| D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, **OPR-7h**, **OPR-7i**, **OPR-7j**, OPR-7d, OPR-8 |
 
 > **Lane change, 2026-11-09.** Lanes A and B went idle (all their plans complete) while C and D still held startable plans, so three plans were **reassigned**: RFU-7 from lane C to **lane A** (`workspace-3`), RFU-4 from lane C to **lane B** (`workspace-4`), and RFU-8 from lane D to **lane B** (`workspace-4`). Dependencies are unchanged. The Lane column and lane lists below show the new lanes; the plan files and the lanes diagram carry the same change.
 
@@ -215,7 +224,7 @@ for work only Gordon can do.
 
 ## Constraints that hold across the plans
 
-- Jupyter output is byte-identical except for the two documented preview and hub fixes (D9); the goldens never exercised a
+- Jupyter output is byte-identical except for the two documented preview and hub fixes (D9) and the figure-group fix (D14); the goldens never exercised a
   document `execute:` scope, so OPR-0a\'s fixtures are the guard.
 - The `.cell` wrapper contract holds: one `Div.cell` per executed cell, the empty string when echo and every output
   are suppressed, exactly one wrapper per cell for the preview splice.

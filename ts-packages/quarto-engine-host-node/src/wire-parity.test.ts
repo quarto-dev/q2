@@ -135,6 +135,7 @@ const TS_RECORD_INFO_KEYS = [
   "coverage",
   "hashDefinition",
   "presentedBy",
+  "dependencyData",
 ] as const satisfies readonly (keyof TsRecordInfo)[];
 type _ExhaustiveTsRecordInfo =
   Exclude<keyof TsRecordInfo, (typeof TS_RECORD_INFO_KEYS)[number]> extends never

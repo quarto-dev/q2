@@ -126,6 +126,16 @@ pub struct EngineEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub known_options: Option<Vec<String>>,
 
+    /// What kind of page-dependency data the engine's outputs carry (OPR-7i), a label core maps to
+    /// a strategy at present time. The one value today is `"jupyter-outputs"`: the cell outputs
+    /// are nbformat outputs, and the page dependencies (requirejs, jQuery, hoisted libraries) are
+    /// derived from their MIME types. Absent means no handling, so knitr, marimo, an older engine
+    /// and any unknown engine are unchanged. Set only for a record core presented itself
+    /// (`presentedBy: "core"` acknowledged), so "present" means "core presents, so derive".
+    /// Outside the hash definition; optional, so `quarto_record_version` stays 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_data: Option<String>,
+
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -293,6 +303,7 @@ mod tests {
             resource_files: vec!["a.png".into()],
             warnings: vec![json!({"title": "w"})],
             known_options: None,
+            dependency_data: None,
             extra: BTreeMap::new(),
         }
     }
@@ -495,5 +506,27 @@ mod tests {
         }]);
         assert_eq!(texts.len(), 1);
         assert!(texts.get(1).is_none());
+    }
+
+    // === OPR-7i: the dependency-data label ===
+
+    #[test]
+    fn dependency_data_roundtrips_and_is_omitted_when_none() {
+        let mut e = entry();
+        let v = serde_json::to_value(&e).unwrap();
+        assert!(v.get("dependency_data").is_none(), "{v}");
+        e.dependency_data = Some("jupyter-outputs".into());
+        let v = serde_json::to_value(&e).unwrap();
+        assert_eq!(v["dependency_data"], "jupyter-outputs");
+        let back: EngineEntry = serde_json::from_value(v).unwrap();
+        assert_eq!(back.dependency_data.as_deref(), Some("jupyter-outputs"));
+        assert!(back.extra.is_empty(), "{:?}", back.extra);
+    }
+
+    #[test]
+    fn an_entry_written_before_the_label_still_reads() {
+        let v = serde_json::to_value(entry()).unwrap();
+        let back: EngineEntry = serde_json::from_value(v).unwrap();
+        assert_eq!(back.dependency_data, None);
     }
 }

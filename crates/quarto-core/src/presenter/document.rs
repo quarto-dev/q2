@@ -24,6 +24,7 @@
 use std::path::PathBuf;
 
 use quarto_pandoc_types::ConfigValue;
+use serde_json::Value;
 
 use super::cell_step::{engine_entry_for, present_cell_step};
 use super::figures::FigureSink;
@@ -32,6 +33,7 @@ use super::inline::{
     render_inline,
 };
 use super::output::CellResult;
+use super::page_dependencies::{PageDependencies, page_dependencies, without_outputs};
 use crate::engine::units::{InlineUnit, Unit};
 use crate::record::EngineEntry;
 use crate::record::{
@@ -49,6 +51,9 @@ pub struct PresentResult {
     pub files_written: Vec<PathBuf>,
     /// What the driver could not present and left in place, for the caller to report.
     pub notes: Vec<PresentNote>,
+    /// The page dependencies derived from the record (OPR-7i): head text for the engines whose
+    /// entry carries a dependency-data label. Derived at present time and never stored.
+    pub header_includes: Vec<String>,
 }
 
 /// A unit the driver left in place although a record cell matched it.
@@ -77,6 +82,12 @@ pub enum PresentNote {
         mime: String,
         /// Why it could not be used.
         reason: String,
+    },
+    /// A cell shows an ipywidgets view (`application/vnd.jupyter.widget-view+json`) but no
+    /// widget state is captured, so the page shows its text representation (`Q-18-16`).
+    WidgetViewUnsupported {
+        /// Index into the `units` the driver was given.
+        unit: usize,
     },
     /// A fallback unit (finished `text/x-quarto-markdown`) stored for another output
     /// format than the one being presented (or for none): the unit stays as written,
@@ -154,6 +165,8 @@ pub struct UnitReport {
     pub image_failures: Vec<super::figures::FigureFailure>,
     /// One reason per engine `quarto_attrs` entry the grammar refused (OPR-7f).
     pub attr_rejections: Vec<String>,
+    /// A fenced cell has an ipywidgets view output (OPR-7i), whatever the engine.
+    pub widget_view: bool,
 }
 
 /// What [`present_units`] reads, besides the matched pairs.
@@ -171,6 +184,9 @@ pub struct PresentInput<'a> {
     pub format: &'a str,
     /// The record\'s engine entries; each cell\'s own is looked up by its `quarto_engine`.
     pub engines: &'a [EngineEntry],
+    /// The page dependencies of the whole record, computed once by the caller from all of its
+    /// cells (OPR-7i): the hoisted outputs are left out of the body.
+    pub page_deps: &'a PageDependencies,
 }
 
 /// Present every already-matched `(unit index, cell)` pair, in document order, and return one
@@ -192,6 +208,7 @@ pub fn present_units(
             outcome,
             image_failures: Vec::new(),
             attr_rejections: Vec::new(),
+            widget_view: false,
         };
         // A fallback unit holds finished markdown: splice it in, never present it.
         if let Some((markdown, stored)) = stored_markdown(cell) {
@@ -221,6 +238,16 @@ pub fn present_units(
         }
         match &units[ui] {
             Unit::Cell(u) => {
+                let widget_view = has_widget_view(cell);
+                // The hoisted outputs are in the head: the body presents the cell without them.
+                let without;
+                let cell = match input.page_deps.hoisted.get(&cell.id) {
+                    Some(hoisted) => {
+                        without = without_outputs(cell, hoisted);
+                        &without
+                    }
+                    None => cell,
+                };
                 let author = input.author_texts.0[ui].text.as_str();
                 // Every presented cell, visible or not, keeps its figure number.
                 fig.begin_cell();
@@ -265,6 +292,7 @@ pub fn present_units(
                     outcome,
                     image_failures,
                     attr_rejections,
+                    widget_view,
                 });
             }
             Unit::Inline(u) => {
@@ -328,6 +356,7 @@ pub fn present_document(
     // The author text of each unit: its scanned text without the container prefix and indent,
     // which `replacement` puts back on every line of what it splices.
     let author_texts = crate::record::AuthorTexts::from_scanned(units);
+    let page_deps = page_dependencies(cells, engines, format);
     let input = PresentInput {
         text: document_text,
         units,
@@ -336,6 +365,7 @@ pub fn present_document(
         target,
         format,
         engines,
+        page_deps: &page_deps,
     };
     let mut notes = Vec::new();
     let mut edits = Vec::new();
@@ -362,6 +392,9 @@ pub fn present_document(
                 .into_iter()
                 .map(|reason| PresentNote::EngineAttrsRejected { unit, reason }),
         );
+        if report.widget_view {
+            notes.push(PresentNote::WidgetViewUnsupported { unit });
+        }
         notes.extend(
             report
                 .image_failures
@@ -383,6 +416,16 @@ pub fn present_document(
             .into_iter()
             .collect(),
         notes,
+        header_includes: page_deps.header_includes,
+    })
+}
+
+/// Whether any output of `cell` carries an ipywidgets view MIME type.
+fn has_widget_view(cell: &RecordCell) -> bool {
+    cell.outputs.iter().any(|o| {
+        o.get("data")
+            .and_then(Value::as_object)
+            .is_some_and(|d| d.contains_key("application/vnd.jupyter.widget-view+json"))
     })
 }
 
@@ -1245,6 +1288,7 @@ print(1)
             target: InlineTarget::from_format("html"),
             format,
             engines: &[],
+            page_deps: &PageDependencies::default(),
         };
         (present_units(&input, &matched, &mut fig), dir)
     }
@@ -1329,6 +1373,7 @@ print(1)
             target: InlineTarget::from_format("html"),
             format: "html",
             engines: &[],
+            page_deps: &PageDependencies::default(),
         };
         let reports = present_units(&input, &[(0, &cells[0])], &mut fig);
         assert!(

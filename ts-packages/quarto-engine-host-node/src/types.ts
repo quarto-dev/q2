@@ -247,6 +247,11 @@ export interface TsRecordInfo {
   /** The engine honored core's `presentedBy: "core"` offer: it returned the notebook and made
    *  no markdown of its own. Omitted when it presented itself (OPR-3, decision D8). */
   presentedBy?: "core";
+  /** What kind of page-dependency data this engine's outputs carry (OPR-7i). The one value is
+   *  `"jupyter-outputs"`: the cell outputs are nbformat outputs, and core derives the page
+   *  dependencies (requirejs, jQuery, hoisted libraries) from their MIME types. Honored only
+   *  together with `presentedBy: "core"`; omit it for any other engine. */
+  dependencyData?: "jupyter-outputs";
 }
 
 // ==================== Dependencies options ====================

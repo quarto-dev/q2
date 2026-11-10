@@ -2043,6 +2043,13 @@
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-15",
     "since_version": "99.9.9"
   },
+  "Q-18-16": {
+    "subsystem": "engine",
+    "title": "Interactive Widget Not Supported",
+    "message_template": "A code cell shows an interactive widget (an ipywidgets view, the `application/vnd.jupyter.widget-view+json` output type). Quarto does not capture a widget's state yet, so it cannot draw the widget, and the page shows the widget's text representation instead. Other output in the document is unaffected. The render continues.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-16",
+    "since_version": "99.9.9"
+  },
   "Q-19-1": {
     "subsystem": "image",
     "title": "Plot Document Not Found",

@@ -594,6 +594,12 @@ fn build_record(
             ..Default::default()
         })
         .map_err(build)?;
+    // The label is set only with the presentation acknowledgement (OPR-7i, decision 8): an
+    // engine that presented itself stored its own `toMarkdown` includes in the entry, so "label
+    // present" must mean "core presents, so core derives". Outside the hash definition.
+    if acknowledged_presentation(Some(info)) {
+        record.engine.dependency_data = info.dependency_data.clone();
+    }
     // The `quarto_` keys are outside the unit hash, so this changes nothing the record hashes.
     for (index, f) in &facts {
         let Some(id) = unit_id(&ctx.units[*index]) else {
@@ -718,6 +724,7 @@ pub(super) fn present_from_record(
         ExecutionError::execution_failed(engine, format!("presenting the record failed: {e}"))
     })?;
     result.markdown = presented.markdown;
+    result.derived_header_includes = presented.header_includes;
     result.supporting_files.extend(presented.files_written);
     result.warnings.extend(
         presented
@@ -959,6 +966,42 @@ z = 3
         );
     }
 
+    /// A record built from `info` over the document's owned cells.
+    fn entry_label(info: TsRecordInfo) -> Option<String> {
+        let ctx = ctx_for(DOC, &["python"], true);
+        let cells: Vec<Value> = owned_python_ids(&ctx)
+            .iter()
+            .map(|id| cell(Some(id), "o\n", None))
+            .collect();
+        let result = run(&ctx, Some(notebook(cells)), Some(info));
+        result.record.expect("a record").engine.dependency_data
+    }
+
+    fn labeled_info(
+        presented_by: Option<crate::engine::ts_protocol::TsPresentedBy>,
+    ) -> TsRecordInfo {
+        let mut info = default_record_info();
+        info.alignment = TsAlignment::Ids;
+        info.presented_by = presented_by;
+        info.dependency_data = Some("jupyter-outputs".into());
+        info
+    }
+
+    #[test]
+    fn the_label_reaches_the_entry_only_with_the_presentation_acknowledgement() {
+        use crate::engine::ts_protocol::TsPresentedBy;
+        // OPR-7i decision 8: an engine that presented itself stored its own includes in the
+        // entry, so a label there would make core derive a second copy.
+        assert_eq!(
+            entry_label(labeled_info(Some(TsPresentedBy::Core))).as_deref(),
+            Some("jupyter-outputs")
+        );
+        assert_eq!(entry_label(labeled_info(None)), None);
+        let mut unlabeled = labeled_info(Some(TsPresentedBy::Core));
+        unlabeled.dependency_data = None;
+        assert_eq!(entry_label(unlabeled), None);
+    }
+
     #[test]
     fn declared_hash_definition_is_carried_into_the_entry() {
         let ctx = ctx_for(DOC, &["python"], true);
@@ -977,6 +1020,7 @@ z = 3
             coverage: Default::default(),
             hash_definition: Some(def.clone()),
             presented_by: None,
+            dependency_data: None,
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
         assert_eq!(record.engine.hash_definition, def);
@@ -997,6 +1041,7 @@ z = 3
             coverage: Default::default(),
             hash_definition: None,
             presented_by: None,
+            dependency_data: None,
         };
         let record = run(&ctx, Some(notebook(cells)), Some(info)).record.unwrap();
         let ids: Vec<_> = record
@@ -1047,6 +1092,7 @@ z = 3
             coverage: Default::default(),
             hash_definition: Some(def),
             presented_by: None,
+            dependency_data: None,
         }
     }
 
@@ -1271,6 +1317,7 @@ fenced = 1
             coverage: Default::default(),
             hash_definition: None,
             presented_by: None,
+            dependency_data: None,
         }
     }
 

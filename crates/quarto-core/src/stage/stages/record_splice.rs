@@ -107,11 +107,26 @@ pub(crate) fn splice_record_with(
     doc_dir: &Path,
     stamp: bool,
 ) -> (DocumentAst, SpliceReport) {
-    let (mut doc, report) = splice_units(doc, record, ctx, doc_dir, stamp);
+    // Derived at present time from every cell of the record, as render does, and never stored.
+    let page_deps = crate::presenter::page_dependencies::page_dependencies(
+        &record.cells,
+        &record.metadata.quarto_engines,
+        &ctx.format.identifier.to_string(),
+    );
+    let (mut doc, report) = splice_units(doc, record, ctx, doc_dir, stamp, &page_deps);
     // Includes must reach the pane even when no unit splices, so they are folded here rather
     // than by the merge. (Before bd-8svy3p89's metadata reconcile the merge replaced the meta
     // with the reparsed text's, which also dropped anything folded earlier.)
     fold_includes(record, &mut doc);
+    // After the stored entries, which are never deduplicated; the derived head text is deduplicated
+    // within `page_dependencies`.
+    super::include_resolve::append_pandoc_includes(
+        &mut doc.ast.meta,
+        &crate::stage::data::PandocIncludes {
+            header_includes: page_deps.header_includes.clone(),
+            ..Default::default()
+        },
+    );
     fold_warnings(record, ctx);
     (doc, report)
 }
@@ -145,6 +160,7 @@ fn splice_units(
     ctx: &mut StageContext,
     doc_dir: &Path,
     stamp: bool,
+    page_deps: &crate::presenter::page_dependencies::PageDependencies,
 ) -> (DocumentAst, SpliceReport) {
     let format = ctx.format.identifier.to_string();
 
@@ -237,6 +253,7 @@ fn splice_units(
         target: InlineTarget::from_format(&format),
         format: &format,
         engines: &record.metadata.quarto_engines,
+        page_deps,
     };
     // The splice keeps the source on every skip and every error, and ignores a front-matter span.
     let mut edits: Vec<Edit> = Vec::new();
@@ -1263,6 +1280,7 @@ mod tests {
     mod layering;
     mod opr_pinning;
     mod option_sweep;
+    mod page_dependencies;
     mod stamp;
 
     const MIXED: &str =
