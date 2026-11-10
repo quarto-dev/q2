@@ -45,8 +45,12 @@ div, and the id `label-N` on panel N. After this plan a Julia, Jupyter and knitr
 
 Real subfloats: the model where panels are numbered "Figure 2 (a)" under one parent (`bd-plcqhfcn`). Numbers stay as
 they are today for knitr and plain Julia: each panel counts as its own figure, and the group is numbered after its
-panels (Figure 4). That wrongness predates this plan and the subfloat plan fixes it, by making the Rust crossref index
-carry `parent`. It also does not change tables (below), layout options, other formats, or `bd-au5gts6e`.
+panels (Figure 4). That wrongness predates this plan for knitr and Julia, and the subfloat plan fixes it, by making the
+Rust crossref index carry `parent`. **For Jupyter it is not predated:** today the group is not a figure at all, so every
+later figure is numbered one too low against Quarto 1; after 7j the group counts as three figures, so every later figure is
+one too high (see "Open for Gordon" below). Quarto 1 itself numbers the group "Figure 2" with panels "(a)" and "(b)", and
+the next figure "Figure 3" (review report, item 1). The plan also does not change tables (below), layout options, other
+formats\' differences that exist today, or `bd-au5gts6e`.
 
 ## Fit with the subfloat draft
 
@@ -60,7 +64,14 @@ alone, so the later work reads the same markup. Two cautions, both for the plan 
   the notes, and say that Phase 3 may move it. The knitr path (option A) is unchanged, so the draft\'s "who wins" rule is
   not triggered.
 - The draft says nothing in it blocks 7d; this plan does block 7d, as a prerequisite. Update the draft\'s "Interaction"
-  paragraph when this lands.
+  paragraph when this lands. The 7j review added the Jupyter later-figure numbers to that paragraph and to the draft\'s
+  Phase 2 baseline (done in the review session).
+- The review found that the markup 7j writes (the cell id, the closing group caption, `label-N` on each panel) is Quarto 1\'s
+  own (`jupyter.ts`: the per-output `label + "-" + nextOutputSuffix++` and `cellCaption` closing the div; ran on a stored
+  notebook, relied from the sub-agent), so every option in the draft reads it. Only the numbers are a q2 accident.
+- 7i (in progress in lane D) also edits `presenter/cell.rs`. Whichever of 7i and 7j lands second rebases onto the other;
+  7i touches the page-dependency scan, not the group rules, so no semantic conflict is expected (relied: I did not diff
+  7i\'s branch).
 
 ## Prototype evidence (review branch, reverted; patch kept)
 
@@ -77,25 +88,65 @@ with the review branch `q2` (all four marked ran):
 
 With both edits, 810 presenter, knitr, subfigure and Julia end-to-end tests passed (ran; `-E 'test(presenter) | test(knitr) |
 test(fig_subcap) | test(subfig) | test(julia_engine_e2e)'`). The full `quarto-core` suite, clippy and the other parity
-cases were not run. The combined patch is `group-caption-and-panel-ids-prototype.patch` in the review session\'s
-scratchpad (`/private/tmp/claude-502/-Users-gordon-src-q2/a2aca94d-da29-41a9-bb45-3d647af619f1/scratchpad/`); the first
-edit alone is `group-caption-prototype.patch`. The prototype is not the implementation: the cases below
-are untested.
+cases were not run, and the 7j review could not re-run the 810 either (its throwaway build did not finish on a loaded
+machine). The patch is not committed (prototype code does not go in the tree) and lives only in a session scratchpad, so
+the two edits are spelled out here: (1) `label_on_cell` drops its `figure_count.is_some()` term; (2) `plot_image_id`,
+when `figure_count` is `None`, returns `#label-<index+1>` if `label_on_cell()`. A third piece, an engine-id branch in
+`cell_caption` with a one-line `EngineAttrs::id()` getter, was in the first patch; the review found it unreachable once
+`label_on_cell` is relaxed (see open question 1), so do not add it. The prototype is not the implementation: the cases
+below are covered by the review only as listed in its report.
 
-## Open questions for the implementer (settle in tests first)
+## Settled by the review, and what remains for the implementer
 
-1. **Is the engine-id branch needed?** The first edit also made `cell_caption` accept an engine-written `fig-` id.
-   After `label_on_cell` was relaxed, check whether that branch can go.
-2. **Edge cases.** `fig-subcap` with one entry; `fig-cap` without `fig-subcap` (unchanged: the cell div keeps its
-   current handling); `fig-subcap` without a label; a panel count different from the subcap count; `fig-subcap: true`;
-   a cell where the engine already wrote `label-N` ids; a group cell whose engine id and the presenter\'s label differ.
-   A single-figure labeled cell must not get a doubled id.
-3. **Count from the outputs, not from the subcaps.** The prototype numbers panels by position. Hooks.R numbers by the
-   plot count. Compute the figure count generically (from the cell\'s plot outputs) so the knitr rule applies as written.
-4. **Tables:** decided above (left alone; not a regression, not fixed by the prototype). Add one test that the table
-   group page is unchanged by this plan.
-5. **Preview and splice.** The splice route (`present_units`) and the render route share the cell step; add one splice
-   test so preview and render produce the same bytes.
+The 7j review (see "Review findings") turned the outline\'s five open questions into the rules below. The implementer
+confirms each in a test before the code.
+
+1. **The engine-id branch goes (default).** `cell_caption`\'s engine-id branch only fires when the presenter has no
+   figure label but the engine wrote a `fig-` id, which is a different gate from the one 7j relaxes; `build_head` already
+   lets the presenter id win over the engine id (read). Write the Julia group test without the branch first. If it passes,
+   do not add the branch or the `EngineAttrs::id()` getter. If it fails, the branch needs a stated case.
+2. **A group needs two plots (decision, replaces "count from the outputs").** The prototype writes `label-1` for a
+   one-plot group, so a Julia cell with one plot and one `fig-subcap` entry renders two figures ("Figure 1: Only." and
+   "Figure 2: Grp A.") where knitr renders one ("Figure 1: Grp A.") and plain Julia renders one (ran, re-run in the
+   review). Do **not** fix this by filling `figure_count` for every cell: OPR-1a records that the builder fills it only
+   for cells with resolved options because filling it for Jupyter would change figure output, and `plot_image_id` with
+   `Some(1)` writes a bare `#label` on the image, which would change single-figure labeled Jupyter cells and break the
+   byte-identical rule (D14). Instead add one generic input, the cell\'s plot count (`is_plot_output` and not
+   `is_included_graphic`, the same filter `from_cell` uses), filled for every cell, and consulted only when
+   `figure_count` is `None`: `label_on_cell` is true on that path only for a plot count of two or more, and the panel
+   id is `label-<index+1>` as in the prototype. A one-plot group then renders as it does today (the label stays on the
+   image, `fig-cap` is the caption; Quarto 1 does the same, `labels.ts` `shouldLabelCellContainer`). Knitr keeps its own
+   `Some(n)` path untouched.
+3. **Edge cases, each with a test (the review rendered them with the prototype; "same" means the same page as knitr
+   unless stated).** Same as knitr and plain Julia: more subcaps than plots; `layout-ncol` and `layout-nrow` (panel
+   references resolve); `fig-cap` without `fig-subcap` (unchanged); `fig-subcap` without a label (no ids);
+   `echo: false`, `results: asis`, `include: false` (nothing renders; references stay unresolved as today).
+   Different from plain Julia, accepted (it is knitr\'s rule): fewer subcaps than plots recycles the subcaps
+   (C1, C2, C1; plain left the third panel uncaptioned); `fig-cap` as a list uses the first entry as the group caption
+   (knitr itself fails on a list `fig-cap` in these renders, a separate engine bug). `output: false` gives the group
+   caption with no panels, as plain does. **Do not promise** resolved panel references for `fig-subcap: true`: they stay
+   unresolved on every engine, head and knitr included. A non-`fig-` label (`foo`) keeps the recorded route\'s behavior
+   (only `foo` on the cell, no panel ids; plain Julia wrote `foo-1`, `foo-2`); 7j does not change it, so the flip
+   changes it. List it as a known difference in 7d\'s notes; it is outside figure groups.
+4. **A user-written panel id (decision: accept, pin with a test).** A group cell whose own output writes
+   `{#fig-l-1}` plus two plots gets `id="fig-l-1"` twice and a broken caption (ran; head had no duplicate). The presenter
+   cannot see an id the engine put in an output\'s markdown. Treat it as author error, add a test that pins the output
+   (so a later change is a visible decision), and say so in the notes. If Gordon wants the presenter to skip ids that
+   clash, that is a separate plan.
+5. **Mixed groups and the counter.** `*figures` in `interleave_group` is declared once per cell group and is not reset per
+   run, so a group of plots from two display calls numbers `label-1`, `label-2` (ran, real Julia cell with `println` and two
+   `display` calls, echoed and not). It also counts included graphics (which carry no id), so a group that mixes an
+   `include_graphics` image with plots numbers the plot by position. Test a plot plus an included graphic and a plot plus
+   a widget; the review did not render them.
+6. **A knitr fallback chunk** (no resolved options, so no `figure_count`) with a label, `fig-cap` and `fig-subcap` now
+   takes this generic path. Confirm in a test whether such a chunk reaches the cell step at all; if it does, name the
+   change in the notes (it is the same intended change as Julia and Jupyter).
+7. **Tables:** decided above (left alone). Add one test that the table group page is unchanged by this plan.
+8. **Preview and splice.** `present_document` and the splice stage both call `present_units`, which reaches the cell
+   step (read, relied from the sub-agent: `document.rs`, `record_splice.rs`), so a test at the `present_units` level covers
+   both. The splice writes the AST back as qmd with its own attribute quoting (OPR-1a, Deviations), so the claim is
+   "the same AST and page", not "the same bytes".
+9. **`cell_div_id` has no caller** (read); keep it consistent (it reads `label_on_cell`) but do not give it new work.
 
 ## Decision (Gordon, 2026-11-10): apply to every engine, Jupyter included
 
@@ -103,6 +154,23 @@ The epic said Jupyter output stays byte-identical unless a cell sets a new optio
 silently loses its group caption and its panel references, and this plan fixes that. Gordon accepted the change and
 overrode the byte-identical rule for this one case; it is recorded as D14 in the epic. The rest of Jupyter output must
 stay byte-identical, and a checklist box tests that.
+
+**Open for Gordon (found by the 7j review; D14 does not cover it).** The decision above was made on the group caption
+and the panel references. The review also found that a Jupyter `fig-subcap` group changes the number of every **later**
+figure in the document (ran, a stored notebook with a one-figure cell, a group, then one more figure; Quarto 1 numbers the
+last figure 3, relied from the sub-agent\'s Quarto 1 run):
+
+| Build | Group | Later figure |
+|---|---|---|
+| Quarto 1 | Figure 2, panels (a) and (b) | Figure 3 |
+| q2 today | no figure (caption lost) | Figure 2 (one too low) |
+| q2 with 7j | panels 2 and 3, group 4 | Figure 5 (two too high) |
+
+knitr and plain Julia already number this way (each panel its own figure, the group after them), so after 7j all three
+engines agree with each other and disagree with Quarto 1; today Jupyter was wrong the other way. Recommendation: **accept**
+it. The references now resolve, three engines agree, and the real fix (a `parent` link so panels are "Figure 2 (a)") is the
+subfloat plan\'s, `bd-plcqhfcn`. The alternative, making the Jupyter group count as one figure in 7j, needs the same
+`parent` link and is not small. If Gordon does not accept it, 7j must wait for the subfloat work. Say which in D14.
 
 ## Tables (tested 2026-11-10; out of scope here, nothing for the flip to fix)
 
@@ -118,39 +186,78 @@ own work under the subfloat draft (knitr writes no table panel ids either in the
 
 ## Checklist (tests first; every box is `[unattended]`)
 
-- [ ] **Tests first.** Unit tests in `presenter/options.rs` and `presenter/cell.rs` for a labeled cell with `fig-cap`
-      and `fig-subcap` and no figure count: the cell div carries the label, the closing caption is the `fig-cap`, panel N
-      has the id `label-N`. Watch them fail on today\'s code, for that reason.
-- [ ] **Jupyter byte-identity guard (D14).** Every existing Jupyter golden and parity fixture except a `fig-subcap`
-      group renders byte-identically before and after; list the fixtures compared. The Jupyter `fig-subcap` fixture is
-      the one expected change, with the group caption and panel ids as in the prototype table.
-- [ ] A test per open question 2 case, including the single-figure cell with no doubled id and the knitr output
-      unchanged (an existing knitr group test pins it).
-- [ ] A test through the binary (model `crates/quarto/tests/integration/no_execute_cli.rs`): a Jupyter notebook
-      with a `fig-subcap` group renders the group caption and resolves `@fig-x` and the panel references, with no
-      unresolved-crossref warning. Julia and knitr versions skip cleanly when the engine is absent.
-- [ ] Implement: remove the knitr-only gate as described, reusing the knitr presenter functions
-      (`label_on_cell`, `cell_caption`, `plot_image_id`); do not add a second code path.
+- [ ] **Tests first.** Unit tests in `presenter/options.rs` and `presenter/cell.rs` (the knitr pins named in the review
+      are `the_label_moves_to_the_cell_div_with_both_fig_cap_and_fig_subcap`, `several_plots_number_the_figure_label`,
+      `each_figure_takes_its_own_subcaption`, `captions_count_figures_across_interleaved_runs`; none has a figure count
+      of `None`). First test, and its negative control, are in the review report. Watch them fail on today\'s code, for
+      that reason.
+- [ ] **Jupyter byte-identity guard (D14), with a mechanism.** The parity harness cannot guard Jupyter: both of its routes
+      present through the same function, so `jupyter/fig-subcap` compares a render with itself. Instead render every
+      Jupyter fixture (the parity corpus notebooks, the 13 shadow goldens and the six `ipynb-*` goldens through
+      `present_document`) with a binary built at the merge base and one built with the change, and diff the HTML and the
+      markdown; list the fixtures compared. The existing goldens are the standing guard (OPR-1a exit criteria); expect
+      **zero** changed `.snap` or golden files (read: no Jupyter golden contains a real `fig-subcap` cell, the strings in
+      `jupyter-markdown-goldens/*.record.json` are option-name lists). The Jupyter `fig-subcap` fixture is the one
+      expected change. Add one test that a single-figure labeled Jupyter cell is byte-identical (the case a generic
+      figure count would have broken).
+- [ ] A test per item 3 to 6 of "Settled by the review", including the one-plot group, the user-id collision (pinned
+      as author error), a plot plus an included graphic, a plot plus a widget, and the knitr output unchanged.
+- [ ] **A test through the binary** (model `crates/quarto/tests/integration/no_execute_cli.rs`): a stored `.ipynb` with a
+      `fig-subcap` group renders the group caption and resolves `@fig-x` and the panel references, with no
+      unresolved-crossref warning. This one **runs in CI**: `q2 render doc.ipynb` uses the stored outputs and needs no
+      kernel (ran in the review). Julia and knitr versions skip cleanly when the engine is absent and are local evidence
+      only (CI installs a Jupyter venv, neither R nor Julia).
+- [ ] **A splice test at the `present_units` level** (covers render and preview): same AST and page, not the same bytes.
+- [ ] Implement: relax the gate as described in "Settled by the review", reusing `label_on_cell`, `cell_caption` and
+      `plot_image_id`; do not add a second code path, and do not add the engine-id branch unless its test needs it.
+- [ ] **Targets.** The group markup is format-agnostic presenter output (read), and the review rendered a Jupyter group on
+      html, revealjs, gfm, typst, docx, epub and pptx with the prototype: html and revealjs match knitr; typst writes the
+      same `quarto_super` shape as knitr recorded; docx matches knitr; epub shows "(a)", "(b)" captions as knitr does;
+      pptx shows the group on no slide, as before. Add `gfm`, `typst` and `revealjs` to the `formats` of the
+      `julia/fig-subcap` manifest entry (all three entries list only `html`), so the harness compares them; 7d adds the zip
+      formats. The gfm `figure-html` directory is presenter-wide (`FsFigureSink`, `figures.rs`), not Julia-specific, and
+      is 7d\'s item.
 - [ ] Parity gate: run the harness; `julia/fig-subcap` differs from plain only by the interleaved code blocks, and
-      `jupyter/fig-subcap` and `knitr/fig-subcap` remain identical on both routes (their text changes for Jupyter).
-      Report the pages\' caption and reference lines before and after.
-- [ ] Snapshots: count and list any changed `.snap` or golden files, per the protocol.
+      `knitr/fig-subcap` stays identical on both routes. Report the caption and reference lines of the three fixtures
+      before and after. (`jupyter/fig-subcap` cannot differ between routes; its evidence is the guard above.)
+- [ ] Stale comments: `crossref/codeblock_shorthand.rs` (about lines 164 to 175 and 1165 to 1181) says a `fig-subcap`
+      cell is left unwrapped "so the engine can synthesize" the panel ids; after 7j the presenter does that for Jupyter and
+      Julia too. Reword them; behavior does not change.
+- [ ] Snapshots: count and list any changed `.snap` or golden files, per the protocol (expected zero; a new committed
+      Jupyter group golden would be three new files: markdown, preview markdown, record JSON).
 - [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
-      Windows cross-clippy; `cargo xtask lint`; `cd hub-client && npm run build:wasm` (the presenter compiles for wasm32).
+      Windows cross-clippy; `cargo xtask lint`; `cd hub-client && npm run build:wasm` (the presenter compiles for wasm32)
+      and the two WASM vitest files that pin splice HTML (`recordPayload.wasm.test.ts`, `captureSpliceHtml.wasm.test.ts`,
+      as OPR-1a ran them).
 - [x] OPR-7d and the subfloat draft are updated to fit this plan (done in the 7d review session, 2026-11-10): 7d
       depends on `opr-7j`, its decision 3 is replaced, the `julia-subfigure-group` normalizer is dropped from its
-      design, and the draft\'s "Interaction" paragraph and known-facts table say what 7j does. At landing, re-read both
-      and correct anything this plan\'s implementation changed (for example if tables end up in scope).
+      design, and the draft\'s "Interaction" paragraph and known-facts table say what 7j does. The 7j review session
+      (2026-11-10) added the Jupyter later-figure numbers to the draft and corrected two items of 7d\'s Julia non-HTML
+      checklist. At landing, re-read both and correct anything this plan\'s implementation changed.
+- [ ] Docs note for OPR-8: `docs/guides/authoring/figures.qmd` (about line 476) promises "(a)" subcaptions for computed
+      output; HTML shows "Figure 2: First." on every engine, and q2 numbers later figures differently from Quarto 1. The
+      migration notes say so (the `migrating-markdown` page has no subfigure entry today).
 - [ ] Remove the allowlist header sentence that calls group references "not an allowlist candidate" (the header is in
       `opr-parity-allowlist.toml`; 7d\'s checklist updates it for the interleaving entries, so whichever plan lands
-      second makes the final edit).
+      second makes the final edit), and reword the `julia/fig-subcap` manifest note that says "blocker".
 
 ## Exit criteria
 
-- A labeled `fig-subcap` group renders the same group caption, panel ids and resolved references for Julia, Jupyter and
-  knitr; the Julia recorded page matches plain Julia on those; the parity case differs only by interleaving.
-- No new warnings; knitr output unchanged; the splice route matches the render route.
-- Panel numbering is not changed (Figure 2, 3, 4 as today) and the notes say real subfloats remain `bd-plcqhfcn`.
+- A labeled `fig-subcap` group with two or more plots renders the same group caption, panel ids and resolved references
+  for Julia, Jupyter and knitr; the Julia recorded page matches plain Julia on those; the parity case differs only by
+  interleaving.
+- No new warnings; knitr output unchanged; the splice route matches the render route; every Jupyter output other than a
+  `fig-subcap` group is byte-identical (the guard above).
+- Panel numbering is not changed for knitr and Julia (Figure 2, 3, 4 as today); Jupyter\'s later-figure numbers change as
+  in "Open for Gordon", with Gordon\'s answer recorded in D14; the notes say real subfloats remain `bd-plcqhfcn`.
+
+## Review findings
+
+The review is [the OPR-7j plan review](../research/2026-11-10-opr-7j-plan-review.md). Its changes to this plan: the
+engine-id branch is dropped; a one-plot group is not a group (a generic plot count, not `figure_count`); edge cases and
+the user-id collision are decided; the Jupyter byte-identity guard has a mechanism (the harness cannot be one); the
+binary test runs in CI; targets and manifest formats are added; the Jupyter later-figure numbering is a question for
+Gordon; stale comments and a docs note are added.
 
 ## Notes from the run
 

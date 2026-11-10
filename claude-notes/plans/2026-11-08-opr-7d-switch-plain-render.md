@@ -162,8 +162,8 @@ presenter, as a recorded render does. Concretely:
   a Julia document (a `println`, a labeled figure, a labeled table, a bare expression; plain against recorded, 7d review
   session, ran) found: `docx` and `epub` differ only in where the `println` output sits relative to the figure (4d
   interleaving); `pptx` slide text is identical; `gfm` differs in a way the interleaving does not explain (the recorded
-  route writes figures to `doc_files/figure-html/` where plain writes `figure-gfm/`; I did not check whether that is
-  Julia-specific or presenter-wide); `typst` rendered on both routes and was not diffed; `latex` and `beamer` give
+  route writes figures to `doc_files/figure-html/` where plain writes `figure-gfm/`; the 7j review found it is
+  presenter-wide: `FsFigureSink` hardcodes `figure-html`, and native Jupyter does it today); `typst` rendered on both routes and was not diffed; `latex` and `beamer` give
   "Unknown format" in this tree (LaTeX lives on `explore/pandoc-hybrid-latex`) and there is no TeX, so they are not
   measurable. The rule: a target class goes through the presenter for Julia only when a parity case for it differs from
   the plain route by the accepted interleaving alone. A class with no case, or a failing case, stays on the engine route
@@ -171,7 +171,7 @@ presenter, as a recorded render does. Concretely:
   reuse knitr\'s own list, which excludes pptx). `pdf`, `latex` and `beamer` stay gated until the LaTeX work exists. A
   class graduates by adding its case and removing it from the list.
 - **Native Jupyter takes no flag.** `text_execute.rs` gates only on `ctx.want_record` and already presents through
-  `present_document` on every render, so the flip changes nothing for it (a Jupyter `fig-subcap` group does change, but through 7j, which lands first: epic D14); the only difference from the plain route
+  `present_document` on every render, so the flip changes nothing for it (a Jupyter `fig-subcap` group does change, and so does every later figure number in that document, but through 7j, which lands first: epic D14 and 7j\'s "Open for Gordon"); the only difference from the plain route
   that [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) leaves (decision 6) is that native Jupyter and the ipynb
   replay path get the widget warning but not the page-dependency scan. 7d carries that as a known, documented
   difference, and OPR-8\'s notes say so.
@@ -213,12 +213,10 @@ recorded route with itself and proves nothing.
       cleanly when the engine is absent and **are local evidence only**: CI installs a Jupyter venv but neither R nor
       Julia (a grep of `.github/workflows` finds none), so say that, and name the unit tests CI does run.
 - [ ] **Julia on non-HTML targets (decided above).** Tests first: (1) add one Julia parity case per class to
-      `manifest.toml` (gfm, typst, docx, pptx, epub; the document of the review\'s hand run is a good seed) and teach the
+      `manifest.toml` (gfm, typst, docx, pptx, epub; the review\'s hand-run document plus a `fig-subcap` group cell, so that each class exercises 7j\'s markup; the three `fig-subcap` manifest entries list only `html`) and teach the
       harness to compare zip formats by member (extract `word/document.xml`, the pptx slide XML, the epub xhtml; strip
       relationship ids; the review did this by hand); (2) a unit test that Julia\'s `offers_presentation` returns false for
-      a gated target and true for the graduated ones, with the list as data; (3) the gfm figure directory: find out
-      whether `figure-html` for gfm is a presenter-wide naming bug (check knitr and Jupyter) or Julia-specific, and fix it
-      in the presenter or gate gfm; (4) run the cases, graduate each class whose difference is the interleaving alone, and
+      a gated target and true for the graduated ones, with the list as data; (3) the gfm figure directory: `figure-html` is presenter-wide (`FsFigureSink` in `presenter/figures.rs` hardcodes it; native Jupyter writes it on gfm today; knitr names its own `figure-gfm`; Quarto 1 writes `figure-commonmark`), so it is not a reason to gate Julia: either normalize the name for gfm in the presenter or normalize it in the harness, and say which; (4) run the cases, graduate each class whose difference is the interleaving alone, and
       leave the others in the list with a line in the notes saying why. Include the gate report\'s per-class table. A
       knitr target keeps its own list (decision D5). Add a binary test per graduated class that skips when Julia is absent.
 - [ ] **Flip the default (no opt-out, decision 2) in `EngineExecutionStage::new()`.** `new()` is called at
