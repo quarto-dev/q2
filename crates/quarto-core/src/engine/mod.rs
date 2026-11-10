@@ -96,6 +96,11 @@ mod fixture;
 // Native-only modules
 #[cfg(not(target_arch = "wasm32"))]
 pub mod jupyter;
+// The execute environment code cells see (GH #1131). Native-only: only
+// subprocess engines (knitr, Jupyter) deliver it, and it reuses knitr's
+// `ExecuteConfig` defaults.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod execute_info;
 // `pub(crate)`, not private: Plan 7b Phase 6's launch-free test
 // (`stage::stages::source_conversion`) reads `knitr::subprocess::
 // rscript_spawn_count()` from outside the `engine` module tree.

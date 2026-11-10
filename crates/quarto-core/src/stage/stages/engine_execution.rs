@@ -507,6 +507,24 @@ impl PipelineStage for EngineExecutionStage {
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
+        // GH #1131: the execute environment Quarto 1 gives code cells,
+        // built once per document and only when code actually runs (the
+        // markdown fast path above returned already). Stored replay runs no
+        // code, so it gets none.
+        #[cfg(not(target_arch = "wasm32"))]
+        let execute_env = if notebook_replay {
+            Vec::new()
+        } else {
+            prepare_execute_env(
+                ctx,
+                &doc_ast.ast.meta,
+                &doc_ast.source_context,
+                &document_metadata,
+            )?
+        };
+        #[cfg(target_arch = "wasm32")]
+        let execute_env: Vec<(String, String)> = Vec::new();
+
         // Thread the AST, the merged (multi-slot) ASTContext, and warnings
         // through the sequence. Slot 0 is the original `.qmd`; each engine
         // appends one intermediate slot. Note `filenames` and
@@ -668,6 +686,7 @@ impl PipelineStage for EngineExecutionStage {
             .with_author_texts(shared_author_texts.clone().unwrap_or_default())
             .with_want_record(want_record)
             .with_metadata(document_metadata.clone())
+            .with_execute_env(execute_env.clone())
             .with_project_env({
                 let mut pairs = crate::project::environment::env_for_subprocess(&ctx.project_env);
                 // QUARTO_PROFILE is applied unconditionally (it may
@@ -1322,6 +1341,122 @@ fn format_execute_defaults(
 /// no defaults for this format **and** no document scope, preserving the
 /// pre-Task-5 behavior exactly (a bare `ast.meta.get("execute").cloned()`)
 /// for every non-docx/pptx format.
+/// Build the per-document execute environment (GH #1131, bd-8fmuyh4d) and
+/// write the `QUARTO_EXECUTE_INFO` file into the document's temp dir.
+///
+/// Returns the variables every engine delivers to the code it runs; see
+/// [`crate::engine::execute_info`]. Nothing here touches q2's own process
+/// environment. A brand that fails to resolve is left out of the file
+/// rather than failing the render: the theme and Typst stages own brand
+/// diagnostics, and reporting it here too would duplicate them.
+#[cfg(not(target_arch = "wasm32"))]
+fn prepare_execute_env(
+    ctx: &mut StageContext,
+    meta: &quarto_pandoc_types::ConfigValue,
+    source_context: &quarto_source_map::SourceContext,
+    document_metadata: &std::collections::HashMap<
+        String,
+        crate::engine::ts_protocol::TsMetadataValue,
+    >,
+) -> Result<Vec<(String, String)>, PipelineError> {
+    use crate::engine::execute_info::{
+        BrandModesJson, EXECUTE_INFO_FILE_NAME, ExecuteInfoInput, FigOptions, FormatIdentity,
+        build_execute_info, path_env,
+    };
+    use crate::engine::knitr::format::ExecuteConfig;
+
+    let started = std::time::Instant::now();
+
+    let base_format = ctx.format.identifier.as_str();
+    // A dashboard is written by pandoc's `html` writer (as knitr's
+    // `format_config` reasons).
+    let writer = if base_format == "dashboard" {
+        "html"
+    } else {
+        base_format
+    };
+    let mut execute = ExecuteConfig::with_defaults_for_format(writer);
+    if let Some(scope) = merge_execute_scope(ctx.format.identifier, meta.get("execute").cloned()) {
+        execute.overlay_document_scope(&scope);
+    }
+
+    let brand = {
+        let brand_path_ctx = crate::config_paths::PathCtx::for_document(
+            Some(source_context),
+            &ctx.project.dir,
+            &ctx.document.input,
+        );
+        let resolve_brand_path = crate::config_paths::brand_path_resolver(meta, brand_path_ctx);
+        match quarto_sass::resolve_brand_modes(meta, ctx.runtime.as_ref(), &resolve_brand_path) {
+            Ok(modes) => modes.map(|modes| BrandModesJson {
+                light: brand_json(&modes.light),
+                dark: modes.dark.as_ref().map(brand_json),
+            }),
+            Err(e) => {
+                trace_event!(
+                    ctx,
+                    EventLevel::Debug,
+                    "execute info: brand not resolved ({e}); omitted"
+                );
+                None
+            }
+        }
+    };
+
+    let document_path =
+        std::path::absolute(&ctx.document.input).unwrap_or_else(|_| ctx.document.input.clone());
+    let metadata = match serde_json::to_value(document_metadata) {
+        Ok(serde_json::Value::Object(map)) => map,
+        _ => serde_json::Map::new(),
+    };
+    let identity = FormatIdentity {
+        target_format: ctx.format.target_format.clone(),
+        base_format: base_format.to_string(),
+        display_name: ctx.format.display_name.clone(),
+        extension_name: ctx.format.extension_name.clone(),
+    };
+    let info = build_execute_info(&ExecuteInfoInput {
+        document_path: &document_path,
+        metadata: &metadata,
+        identity: &identity,
+        writer,
+        execute: &execute,
+        brand: brand.as_ref(),
+    });
+    let bytes = serde_json::to_vec(&info)
+        .map_err(|e| PipelineError::other(format!("serialize execute info: {e}")))?;
+    let built = started.elapsed();
+
+    let info_path = ctx.temp_dir()?.join(EXECUTE_INFO_FILE_NAME);
+    ctx.runtime.file_write(&info_path, &bytes).map_err(|e| {
+        PipelineError::other(format!("write execute info {}: {e}", info_path.display()))
+    })?;
+
+    if std::env::var_os("QUARTO_PERF_STATS").is_some_and(|v| v == "1") {
+        eprintln!(
+            "perf.execute-info doc={} bytes={} build_us={} total_us={}",
+            document_path.display(),
+            bytes.len(),
+            built.as_micros(),
+            started.elapsed().as_micros()
+        );
+    }
+
+    let mut env = path_env(&ctx.project.dir, &document_path, &info_path);
+    env.extend(FigOptions::from_execute(&execute).env());
+    Ok(env)
+}
+
+/// One brand mode in Quarto 1's JSON shape: Q1 serializes its `Brand` class,
+/// whose `data` field is the brand as written (the field code cells read).
+#[cfg(not(target_arch = "wasm32"))]
+fn brand_json(brand: &quarto_brand::ResolvedBrand) -> serde_json::Value {
+    serde_json::json!({
+        "data": serde_json::to_value(&brand.brand).unwrap_or(serde_json::Value::Null),
+        "brandDir": brand.dir.as_ref().map(|d| d.to_string_lossy().into_owned()),
+    })
+}
+
 /// The metadata map sent to TS engines (`TsFormatInfo.metadata`): the
 /// merged document metadata, lowered, with its `execute` entry replaced by
 /// the format-merged scope ([`merge_execute_scope`]).

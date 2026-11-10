@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-fn jupyter_available() -> bool {
+pub(crate) fn jupyter_available() -> bool {
     quarto_core::engine::EngineRegistry::default()
         .get("jupyter")
         .is_some_and(|e| e.is_available())
@@ -39,7 +39,7 @@ fn jupyter_available() -> bool {
 /// skip, not fail (bd-ce4fftg8); any other discovery error fails the
 /// test. The error message names the kernel, the searched dirs, and
 /// the kernels that *were* found.
-fn python3_kernel_available() -> bool {
+pub(crate) fn python3_kernel_available() -> bool {
     // find_kernelspec is async and runtimelib's `jupyter --paths`
     // probe needs a Tokio reactor; pollster provides none. This test
     // is deliberately not #[tokio::test], so build a short-lived
