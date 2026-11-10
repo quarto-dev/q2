@@ -160,13 +160,26 @@ pub fn navbar_to_html(
     // here later (bd-fod3 / bd-ld-toggle-into-tools-hpae7m9r). Markup
     // mirrors Q1's `navdarktoggle.ejs`: the `.alternate` class (synced
     // by the color-mode runtime) drives the on/off icon via CSS.
+    //
+    // It is a `<button role="switch">`, not Q1's former `<a href="">`
+    // (quarto-cli #14739, bd-kwgtllvn): a link role made Space inert and
+    // the state never reached assistive tech. The runtime keeps
+    // `aria-checked` in sync; it starts `false` like Q1's template. Both
+    // `title` (hover tooltip) and `aria-label` carry the label, as in Q1.
     if navbar.dark_mode_toggle {
-        html.push_str("      <div class=\"quarto-navbar-tools\">\n");
-        html.push_str(
-            "        <a href=\"\" class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
-             onclick=\"window.quartoToggleColorScheme(); return false;\" \
-             title=\"Toggle dark mode\"><i class=\"bi\"></i></a>\n",
+        let label = escape_attr(
+            navbar
+                .dark_toggle_label
+                .as_deref()
+                .unwrap_or(DEFAULT_TOGGLE_DARK_MODE_LABEL),
         );
+        html.push_str("      <div class=\"quarto-navbar-tools\">\n");
+        html.push_str(&format!(
+            "        <button type=\"button\" role=\"switch\" aria-checked=\"false\" \
+             class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
+             onclick=\"window.quartoToggleColorScheme(); return false;\" \
+             title=\"{label}\" aria-label=\"{label}\"><i class=\"bi\"></i></button>\n",
+        ));
         html.push_str("      </div>\n");
     }
     html.push_str("    </div>\n");
@@ -546,6 +559,10 @@ pub struct SidebarRenderOptions<'a> {
     /// table pass [`DEFAULT_TOGGLE_SECTION_LABEL`].
     pub toggle_section_label: &'a str,
 }
+
+/// English `toggle-dark-mode` term (`resources/language/_language.yml`),
+/// the fallback for [`Navbar::dark_toggle_label`].
+pub const DEFAULT_TOGGLE_DARK_MODE_LABEL: &str = "Toggle dark mode";
 
 /// English `toggle-section` term (`resources/language/_language.yml`),
 /// the fallback for [`SidebarRenderOptions::toggle_section_label`].
@@ -2225,6 +2242,68 @@ mod tests {
         let collapse_pos = html.find("navbar-collapse").unwrap();
         assert!(box_pos > collapse_pos, "box follows the menu; got: {html}");
         assert!(html.contains("title=\"Buscar\""));
+    }
+
+    // --- Color-scheme toggle (bd-kwgtllvn, Q1 #14739) ----------------
+
+    /// The navbar dark-mode toggle is a switch, not a link: `<a
+    /// href="">` had a link role (Space did nothing) and conveyed its
+    /// state only through an icon swap. `aria-checked` starts `false`;
+    /// the color-mode runtime syncs it on load and on every toggle.
+    #[test]
+    fn navbar_dark_toggle_is_a_labelled_switch() {
+        let navbar = Navbar {
+            dark_mode_toggle: true,
+            dark_toggle_label: Some("Basculer le mode sombre".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            html.contains(
+                "<button type=\"button\" role=\"switch\" aria-checked=\"false\" \
+                 class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
+                 onclick=\"window.quartoToggleColorScheme(); return false;\" \
+                 title=\"Basculer le mode sombre\" aria-label=\"Basculer le mode sombre\">\
+                 <i class=\"bi\"></i></button>"
+            ),
+            "toggle must be a localized switch button; got: {html}"
+        );
+        assert!(
+            !html.contains("<a href=\"\" class=\"quarto-color-scheme-toggle"),
+            "toggle must not be a link; got: {html}"
+        );
+    }
+
+    /// Without a resolved term (standalone renders) the label falls back
+    /// to the English default, and a localized label is attribute-escaped.
+    #[test]
+    fn navbar_dark_toggle_label_defaults_and_escapes() {
+        let html = navbar_to_html(
+            &Navbar {
+                dark_mode_toggle: true,
+                ..Navbar::with_defaults()
+            },
+            None,
+            "./",
+        );
+        assert!(
+            html.contains("title=\"Toggle dark mode\" aria-label=\"Toggle dark mode\""),
+            "English fallback expected; got: {html}"
+        );
+
+        let html = navbar_to_html(
+            &Navbar {
+                dark_mode_toggle: true,
+                dark_toggle_label: Some("Mode \"sombre\"".to_string()),
+                ..Navbar::with_defaults()
+            },
+            None,
+            "./",
+        );
+        assert!(
+            html.contains("aria-label=\"Mode &quot;sombre&quot;\""),
+            "label must be attribute-escaped; got: {html}"
+        );
     }
 
     #[test]

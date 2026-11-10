@@ -23,9 +23,14 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-10
+
+- [`c7bc73610`](https://github.com/quarto-dev/q2/commits/c7bc73610): Previews with editing off and comments hidden now skip an unused source-AST parse and serialization, cutting render time and response size by about half in the measurement fixture; enabling editing or showing comments still captures the baseline needed for edits, and comments are read-only until that baseline arrives.
+
 ### 2026-11-09
 
 - [`01b51b131`](https://github.com/quarto-dev/q2/commits/01b51b131): Upgrade pandoc to 3.13 for "Download as" and document import; imported Word tables keep each column's alignment again, imported RTF no longer drops the letter after a non-ASCII character, and in Word output a list item with several paragraphs stays a single list.
+- [`3010beb04`](https://github.com/quarto-dev/q2/commits/3010beb04): Multi-file project previews are about 20% faster in the measurement fixture because rendering no longer parses and serializes a source AST that it immediately discarded; preview output and editing/comment data are unchanged.
 - [`641acc274`](https://github.com/quarto-dev/q2/commits/641acc274): Typing in the editor no longer pays a full document parse just to decide which preview to show — the format check is now a sub-millisecond resolver call, cutting the per-keystroke cost of a live editing session by about a fifth. While a `q2-*` format name is being typed (say `q2-slides`), the pane now says immediately that the partial name can't be shown instead of holding the previous preview, matching what typing `docx` or `revealjs` already did.
 
 ### 2026-11-03
