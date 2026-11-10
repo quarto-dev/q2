@@ -2,7 +2,7 @@
 title: 'Preview demand-driven VFS: exposure policy, miss route, render worker'
 date: 2026-11-07
 description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, a render-reported read set, and removal of the dependency predictors.'
-status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0, 1, 2a and 2b implemented
+status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0 to 3 implemented
 ---
 
 ## Overview
@@ -555,19 +555,19 @@ reads the file. Worth a look separately.
 
 Contract D5, D11. Depends on Phases 1 and 2b.
 
-- [ ] Measure first: with the extractors on and off, on loopback and behind
+- [x] Measure first: with the extractors on and off, on loopback and behind
   the delay proxy at 50 ms, count pulls per cold render and wall time on a
   deck with nested includes, images and a themed partial tree
   (`perf.vfs-pull`). Record the numbers here.
-- [ ] Remove the image walk, the `resources:` expansion, the
+- [x] Remove the image walk, the `resources:` expansion, the
   `render-components:` block and the theme block from
   `resolve_single_file_deps`; keep the include closure only if the
   measurement says the first-render cost is user-visible, and say so here.
-- [ ] `SingleFileDeps`, `single_file_text_deps` and `single_file_assets`
+- [x] `SingleFileDeps`, `single_file_text_deps` and `single_file_assets`
   removed from `HubConfig` if nothing feeds them.
-- [ ] The bd-tnm3k tests that pin "no siblings synced" stay as they are and
+- [x] The bd-tnm3k tests that pin "no siblings synced" stay as they are and
   gain "until a render reads them".
-- [ ] Remove `/api/preview/deps`: `crates/quarto-preview/src/deps.rs`, its
+- [x] Remove `/api/preview/deps`: `crates/quarto-preview/src/deps.rs`, its
   route, the SPA\'s fetch effect and `deps` state, and the
   `Q-PREVIEW-DEPS-1` diagnostic. Its only caller is `PreviewApp.tsx`.
 - [ ] Project mode, same question: measure a project render with the walk's
@@ -576,6 +576,75 @@ Contract D5, D11. Depends on Phases 1 and 2b.
   slower, file the simplification as a follow-up; the walk then provides
   only sources and config and the two modes converge. Record the numbers
   here either way.
+
+### Phase 3 record (2026-11-10)
+
+Measured first (Chromium, single-file deck with a custom theme and two
+partials, a bibliography, an include nesting two deep, and two images;
+time from navigation to a render showing the theme, the nested text and
+the citation):
+
+| Extractors | RTT | Cold render | Images | Miss-route calls |
+|---|---|---|---|---|
+| on | 0 ms | 1130 ms | 2 of 2 | 3 list, 4 read |
+| on | 50 ms | 2100 ms | 2 of 2 | 3 list, 4 read |
+| off | 0 ms | 1180 ms | 0 of 2 | 3 list, 6 read |
+| off | 50 ms | 2180 ms | 0 of 2 | 3 list, 6 read |
+
+Pulling the includes instead of syncing them costs two reads, about one
+RTT each: not user-visible, so the include closure goes with the rest.
+The images, though, never arrived: in the preview AST the page loads
+images from the VFS after the render, and the render never reads them.
+So before deleting the image walk, the render was made to *touch* the
+local assets its AST references (`PreviewAstOutput::referenced_assets`,
+`touch_referenced_assets` in `wasm-quarto-hub-client`,
+`Demand::touch`): pulled on a miss, recorded in the read set, never
+copied on a hit. Single-document branch only (single-file mode);
+project mode syncs images up front. With that, extractors off:
+
+| RTT | Cold render | Images | Miss-route calls |
+|---|---|---|---|
+| 0 ms | 1230 ms | 2 of 2 | 3 list, 8 read |
+| 50 ms | 2290 ms | 2 of 2 | 3 list, 8 read |
+
+One render in every case.
+
+Removed: the browser preview's call to `resolve_single_file_deps`,
+`HubConfig::single_file_assets` and `single_file_text_deps`,
+`ProjectFiles::with_binary_files`, `with_text_deps` and `text_dep_files`
+(with the tests that exercised only them), `crates/quarto-preview/src/deps.rs`
+and its route, the SPA's `deps` state and fetch, and the
+`Q-PREVIEW-DEPS-1` / `-2` diagnostics it emitted (not in the error
+catalog). The bd-tnm3k test that pins "no siblings synced" stays, worded
+"until a render reads them".
+
+Kept, deliberately: `resolve_single_file_deps` itself. `q2 preview
+--static` (a native render, outside this contract) uses it as the watch
+set of a single document outside a project. Its doc comment now says so
+and warns against adding classes to it for the live preview.
+
+`render-components:` in single-file mode: the main thread compiles
+components from the synced documents, so the SPA now pulls a component
+the sync has not brought from the `file` route (`readComponentSource`);
+the server promotes it, so it syncs and its edits re-transpile.
+
+Behaviour change: a PDF (typst) page has no read set (the server
+compiles it), so with the `deps` guess gone every text change recompiles
+it, unrelated `.qmd` files included. That fails open, which is the safe
+direction (a chapter's PDF can depend on other chapters). The SPA
+integration test now pins that.
+
+Project-mode measurement (the unchecked item): not meaningful yet. The
+project render path does not touch referenced assets, so turning off the
+walk's eager images would break them, as it did in single-file mode
+before the touch. Follow-up: touch assets in the project branch
+(`Pass2Payload::AstJson`), then measure the walk with only sources and
+config.
+
+E2E: `demand-vfs.spec.ts` gains a single-file test (nested includes and
+their images arrive with nothing synced but the deck; one render). The
+Chromium project otherwise matches Phase 2b (the seven
+`typst-pdf-preview` failures are the local pandoc version).
 
 ## Phase 4: hub-client on the worker (deferred; not part of this epic)
 
