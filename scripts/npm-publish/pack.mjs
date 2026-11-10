@@ -4,7 +4,9 @@
 //   node scripts/npm-publish/pack.mjs --out <dir> \
 //     [--already-published <name>]... [--check-unpublished] <package-dir>...
 //
-// For each package (in dependency order):
+// First, workspace siblings the run depends on but does not publish are built
+// (their `dist/` is what the run's tests import). Then, for each package (in
+// dependency order):
 //
 // 1. `npm run clean` (if present) and `npm run build` in the workspace, then
 //    `npm test` (if present). A failing suite stops the run: we never pack a
@@ -37,7 +39,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { outOfRunWorkspaceDeps, publishManifest, sortByDependencies } from './manifest.mjs';
+import { outOfRunWorkspaceDeps, publishManifest, sortByDependencies, workspaceDepsToBuild } from './manifest.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -73,7 +75,7 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-/** Every package matched by the root `workspaces` globs: dir -> {name, version}. */
+/** Every package matched by the root `workspaces` globs: dir -> {name, version, pkg}. */
 function workspacePackages() {
   const found = new Map();
   for (const glob of readJson(join(repoRoot, 'package.json')).workspaces ?? []) {
@@ -85,8 +87,8 @@ function workspacePackages() {
     for (const dir of dirs) {
       const pj = join(repoRoot, dir, 'package.json');
       if (existsSync(pj)) {
-        const { name, version } = readJson(pj);
-        if (name) found.set(dir, { name, version });
+        const pkg = readJson(pj);
+        if (pkg.name) found.set(dir, { name: pkg.name, version: pkg.version, pkg });
       }
     }
   }
@@ -155,6 +157,21 @@ if (args.checkUnpublished) {
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'stage'), { recursive: true });
+
+// Build the workspace siblings the run depends on but does not publish. Their
+// `dist/` is what the run's own build and tests import, and a clean checkout
+// (CI) has none.
+const dirByName = new Map([...workspace].map(([dir, { name }]) => [name, dir]));
+const workspaceByName = new Map([...workspace.values()].map(({ name, pkg }) => [name, pkg]));
+for (const dep of workspaceDepsToBuild(
+  requested.map((r) => r.pkg),
+  publishSet,
+  workspaceByName,
+)) {
+  if (!dep.scripts?.build) continue;
+  console.log(`\n=== building dependency ${dep.name} (not published in this run)`);
+  run('npm', ['run', 'build', '--workspace', dirByName.get(dep.name)]);
+}
 
 const packed = [];
 for (const { dir, pkg } of ordered) {
