@@ -24,15 +24,19 @@ use quarto_pandoc_types::inline::{
 use quarto_pandoc_types::inlines_to_plain_text;
 use quarto_source_map::{By, SourceInfo};
 
-use super::config::{ColumnType, Listing};
+use super::config::{ColumnType, Listing, ListingType};
 use super::item::ListingItem;
 use super::placeholders;
 use crate::dates::parse_date;
 
 /// Build the `<img>` HTML string for a listing item, or an empty
-/// string when no image was discovered. Intentionally minimal in
-/// v1: no `srcset`, no responsive sizing — Q1 produces the same
-/// shape for static `image:` values.
+/// string when no image was discovered. No `srcset`, no responsive
+/// sizing — Q1 produces the same shape for static `image:` values.
+///
+/// Mirrors Q1's `utilities.img` (`website-listing-template.ts`): the
+/// listing's `image-height` becomes an inline `style="height: …;"`,
+/// and grid items add `card-img` (`item-grid.ejs.md`). Without the
+/// height a large image renders at full size (GH #1155).
 ///
 /// The template emits this verbatim (e.g. inside a `<a>` thumbnail
 /// wrapper) so the markup must already be self-contained HTML.
@@ -54,11 +58,38 @@ pub fn image_html(item: &ListingItem, listing: &Listing, host_dir: &str) -> Stri
         .image_lazy_loading
         .unwrap_or_else(|| listing.image_lazy_loading.unwrap_or(true));
     let lazy_attr = if lazy { r#" loading="lazy""# } else { "" };
+    let class = if listing.kind == ListingType::Grid {
+        "thumbnail-image card-img"
+    } else {
+        "thumbnail-image"
+    };
     format!(
-        r#"<img src="{}" class="thumbnail-image" alt="{}"{}>"#,
+        r#"<img src="{}" class="{}"{} alt="{}"{}>"#,
         escape_attr(src),
+        class,
+        image_height_style(listing.image_height.as_deref()),
         alt,
         lazy_attr
+    )
+}
+
+/// The inline ` style="height: …;"` attribute (leading space
+/// included) for a listing's `image-height`, or an empty string when
+/// unset. Shared by the item `<img>`, the empty placeholder div, and
+/// the L7-substituted `<img>` so all three size alike, as in Q1.
+pub(crate) fn image_height_style(height: Option<&str>) -> String {
+    match height.map(str::trim).filter(|h| !h.is_empty()) {
+        Some(h) => format!(r#" style="height: {};""#, escape_attr(h)),
+        None => String::new(),
+    }
+}
+
+/// The empty-thumbnail placeholder div for an item with no image —
+/// Q1's `emptyDiv(height)` (`website-listing-read.ts`).
+pub fn image_placeholder_html(listing: &Listing) -> String {
+    format!(
+        r#"<div class="listing-item-img-placeholder card-img-top"{}>&nbsp;</div>"#,
+        image_height_style(listing.image_height.as_deref())
     )
 }
 
@@ -212,14 +243,23 @@ pub fn description_placeholder_end() -> String {
 /// to find listing config at substitution time — see plan
 /// §"Architecture: image-placeholder cascade in detail".
 ///
-/// `attrs` is fixed at `progressive=false, height=, lazy=true` in
-/// v1 (matching Q1's emission shape). Wiring `listing.image_height`
-/// / `listing.image_lazy_loading` into the substituted `<img>` is a
-/// follow-up; v1 emits the static defaults verbatim.
+/// `attrs` follows Q1's emission shape
+/// `progressive=false, height=<image-height>, lazy=true`. The height
+/// reaches the substituted `<img>` (GH #1155); wiring
+/// `listing.image_lazy_loading` through is a follow-up. `]` and `,`
+/// would break the marker's attrs grammar, so they are dropped from
+/// the height (no CSS length needs them).
 pub fn image_placeholder_begin(item: &ListingItem, listing: &Listing, idx: usize) -> String {
     use base64::Engine;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    let attrs = "progressive=false, height=, lazy=true";
+    let height: String = listing
+        .image_height
+        .as_deref()
+        .unwrap_or("")
+        .chars()
+        .filter(|c| !matches!(c, ']' | ','))
+        .collect();
+    let attrs = format!("progressive=false, height={}, lazy=true", height.trim());
     let b64_default = listing
         .image_placeholder
         .as_deref()
@@ -229,7 +269,7 @@ pub fn image_placeholder_begin(item: &ListingItem, listing: &Listing, idx: usize
         &listing.id,
         idx,
         item.target.output_href().unwrap_or(""),
-        attrs,
+        &attrs,
         &b64_default,
     )
 }
@@ -597,6 +637,60 @@ mod tests {
         assert!(html.contains(r#"src="img.png""#));
         assert!(html.contains(r#"class="thumbnail-image""#));
         assert!(html.contains(r#"loading="lazy""#));
+    }
+
+    #[test]
+    fn image_html_grid_carries_height_style_and_card_img() {
+        // Q1's grid `<img>`: `class="thumbnail-image card-img"` plus an
+        // inline `style="height: <image-height>;"` (GH #1155).
+        let item = make_item_with_image(Some("img.png"));
+        let mut listing = make_listing();
+        listing.kind = ListingType::Grid;
+        listing.image_height = Some("150px".to_string());
+        let html = image_html(&item, &listing, "");
+        assert!(
+            html.contains(r#"class="thumbnail-image card-img""#),
+            "got: {html}"
+        );
+        assert!(html.contains(r#"style="height: 150px;""#), "got: {html}");
+    }
+
+    #[test]
+    fn image_html_default_type_has_no_card_img_and_style_only_when_set() {
+        let item = make_item_with_image(Some("img.png"));
+        let mut listing = make_listing();
+        let html = image_html(&item, &listing, "");
+        assert!(!html.contains("card-img"), "got: {html}");
+        assert!(!html.contains("style="), "got: {html}");
+        listing.image_height = Some("80px".to_string());
+        let html = image_html(&item, &listing, "");
+        assert!(html.contains(r#"style="height: 80px;""#), "got: {html}");
+    }
+
+    #[test]
+    fn image_placeholder_html_carries_height_style() {
+        let mut listing = make_listing();
+        assert_eq!(
+            image_placeholder_html(&listing),
+            r#"<div class="listing-item-img-placeholder card-img-top">&nbsp;</div>"#
+        );
+        listing.image_height = Some("150px".to_string());
+        assert_eq!(
+            image_placeholder_html(&listing),
+            r#"<div class="listing-item-img-placeholder card-img-top" style="height: 150px;">&nbsp;</div>"#
+        );
+    }
+
+    #[test]
+    fn image_placeholder_begin_carries_image_height() {
+        let item = make_item_with_image(None);
+        let mut listing = make_listing();
+        listing.image_height = Some("150px".to_string());
+        let comment = image_placeholder_begin(&item, &listing, 4);
+        assert!(
+            comment.contains("[progressive=false, height=150px, lazy=true]"),
+            "got: {comment}"
+        );
     }
 
     #[test]
