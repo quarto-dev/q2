@@ -181,6 +181,14 @@ policy, manifest, promotion into Automerge) is the same as the worker's.
   every first miss, one per level of nested includes. Rejected as a
   stepping stone on the principle of preferring the long-term shape over a
   cheaper interim.
+- Added 2026-11-10 (review): this option is not dominated, and the record
+  should say so. It fetches a whole pass of misses in one request, so over
+  a slow link it pays the RTT once per level of nesting where the worker
+  pays it once per probe. Its cost is local: every pass re-runs the render
+  up to the miss, which for a Bootstrap theme means recompiling it. The
+  worker is still the choice, because the local cold render is the common
+  case and the worker takes rendering off the main thread as well; the
+  remote case is left to the prefetch the latency run may call for.
 
 ### Mirror the deck dir in single-file mode
 
@@ -271,4 +279,100 @@ What it says:
 
 Scripts used: a Playwright driver and the delay proxy, both under 60 lines,
 kept in the session scratchpad; the plan asks for the proxy to be checked
-in with the Phase 2 latency test.
+in with the Phase 2b latency test.
+
+## Review findings (2026-11-10)
+
+A review of the contract and plan, each finding then checked against the
+code by a second read-only pass. File references are as of `main` at
+`960b406c`.
+
+**The negative cache could not be keyed on the generation as designed.**
+The contract assumed the generation moves when sync adds or removes a
+file. It moves more often than that.
+
+- Any create of a path outside `/.quarto` and `/__quarto_resources__` moves
+  it (`crates/quarto-system-runtime/src/vfs.rs`, `is_generation_free_write`
+  and `add_file`), so the insert that completes a pull would flush every
+  cached negative in the middle of the render.
+- The promoted file then arrives over sync. `vfs_add_file` and
+  `vfs_add_binary_file` call plain `add_file`
+  (`crates/wasm-quarto-hub-client/src/lib.rs`) with no check for identical
+  bytes; only an existing `.qmd`, `.md` or `.ipynb` is exempt.
+  `add_file_if_changed` exists but only `WasmRuntime::file_write` and the
+  artifact flush use it.
+- That echo also starts a render. `onFileAdded` calls `onFileContent` or
+  `onBinaryContent` (`ts-packages/preview-runtime/src/automergeSync.ts`);
+  `shouldRerenderForTextChange` passes every path that is not `.qmd` or
+  `.md`, the binary handler passes everything
+  (`q2-preview-spa/src/PreviewApp.tsx`), and `renderPageForPreview` has no
+  queue and no content guard.
+- The only other consumer of the generation is the project cache in
+  `wasm-quarto-hub-client`. A generation-neutral pull insert is safe for
+  it: what discovery reads or probes is pulled within the same call, and a
+  later creation on disk arrives through sync.
+- A directory that is partly in the VFS answers `dir_list` from what it
+  holds, without a miss. The list arm needs a per-directory "listed
+  completely" bit.
+
+**There is a predictor the documents did not mention.**
+`/api/preview/deps` (`crates/quarto-preview/src/deps.rs`) parses the page
+on the server and returns its single-hop include targets. The SPA refetches
+it on every change of active file or content and uses it to decide whether
+an edit to another `.qmd` or `.md` re-renders the page. Its only caller is
+`PreviewApp.tsx`. A read set reported by the render replaces it exactly,
+with four conditions: it must include probes and listings; a render served
+from the project cache does not re-read the config, so the cache entry\'s
+reads are added; a failed render keeps the previous set; reads from the
+main thread through the same exports are excluded.
+
+**Bibliographies are missing in both modes.** `resolve_single_file_deps`
+handles includes, images, `resources:` and `render-components:`. The
+project walk classifies `.qmd`/`.md`, `.tsx`, config, `_extensions/` and
+the binary extensions, and `.bib` and `.csl` are in none of them. Citeproc
+runs in the browser and reads through the runtime, so nothing on the
+server makes up for it. Today the only way to get citations in preview is
+to list the file under `resources:`.
+
+**The auth posture was understated.** The preview hub runs with no auth
+config, and the router has no `Host` check, no CORS layer and no token.
+The WebSocket origin check compares `Origin` with `Host`, which agree
+under DNS rebinding. A rebinding page can therefore read `/health` (which
+holds the index document id) and `/api/files`, sync the project over
+`/ws`, post to re-execute, render and import, and write to disk under
+`--allow-edit`. The default port is assigned by the OS, which is the only
+obstacle. The miss routes add un-synced admitted siblings in single-file
+mode to that. The gate belongs on the whole router.
+
+**The hub-client worker move was decided without its evidence.** In
+`../plans/2026-10-24-hub-client-main-thread-render-path.md`, Phases 0 and 1
+are done with numbers (431 ms of main-thread work per keystroke at 1x);
+Phases 2 to 7 are not started. Phase 7 asks for a decision on the Phase 0
+and Phase 5 numbers, and the Phase 5 numbers do not exist. hub-client gets
+nothing from the miss path.
+
+**The worker and the miss path separate cleanly.** Nothing in the worker
+move needs the miss hook. Two corrections to the plan\'s Phase 2 list came
+out of the check: forwarding the sync client\'s VFS writes to the worker
+was missing from it, and the `*.wasm.test.ts` files are almost all under
+`hub-client/src` (46 of 47); most load the raw WASM module, and about
+eight import the synchronous engine exports from `@quarto/preview-runtime`,
+which therefore have to stay importable.
+
+**Promotion was kept, with its alternative recorded.** What depends on a
+file being in the index: the watcher\'s allow-list, the periodic sync and
+write-back (`crates/quarto-hub/src/sync.rs`), guest delivery over `/ws`,
+and the SPA\'s file list (used for link handling and picking the initial
+page; the preview SPA has no file sidebar). There is no push channel from
+server to browser other than `/ws`; the captures sidecar document is the
+precedent for carrying server metadata over Automerge without index
+entries, and is how a read-through cache would have announced changes.
+
+**Considered and not adopted: replaying the previous read set.** Sending
+the last render\'s read set to the server as one batch, to shorten a remote
+cold start. Promotion already replays the positive reads (they are in the
+index and sync eagerly on reload), so it would add only negatives and
+listings, it does not help the first cold render, and a batch route needs
+POST, binary framing and an aggregate cap. The "directory names on a
+probe" prefetch covers the same ground more simply, if the latency run
+asks for anything.

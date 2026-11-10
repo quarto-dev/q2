@@ -1,15 +1,23 @@
 # Preview VFS contract: everything on demand, one exposure policy, render in a worker
 
-**Date:** 2026-11-07, revised 2026-11-10.  **Status:** design settled (D1 to D10); execution is the epic in [`../plans/2026-11-07-preview-demand-driven-vfs.md`](../plans/2026-11-07-preview-demand-driven-vfs.md).
+**Date:** 2026-11-07, revised 2026-11-10 (twice).  **Status:** design settled (D1 to D11), except the request gate in D6, which is an open decision; execution is the epic in [`../plans/2026-11-07-preview-demand-driven-vfs.md`](../plans/2026-11-07-preview-demand-driven-vfs.md).
 **Evidence:** [`../research/2026-11-07-preview-vfs-options.md`](../research/2026-11-07-preview-vfs-options.md) (how files reach the render today, every option costed, the facts that decided it, and the measured round-trip costs).
 **Supersedes:** the mechanism of bd-tnm3k (single-file closure built by per-channel extractors) and the draft `../plans/2026-06-16-single-file-preview-vfs-bootstrapping.md`. Keeps their intent.
-**Resolves:** Phase 7 of `../plans/2026-10-24-hub-client-main-thread-render-path.md` (render-worker decision: adopt), and bd-teh4hbli (explicit upload boundary).
+**Resolves:** bd-teh4hbli (explicit upload boundary), and Phase 7 of `../plans/2026-10-24-hub-client-main-thread-render-path.md` for the preview SPA only (render worker: adopt). hub-client is deferred to its own decision (D10).
 
 **Revision 2026-11-10.** The first draft pushed the *names* of every
 in-scope file eagerly as a manifest and pulled only contents. That was a
 cache in front of the mechanism, not part of it, and it walked and exposed
 the whole deck directory in single-file mode. It was dropped after measuring
 the round-trip cost (D2). D2, D5 and D8 changed; the rest stands.
+
+**Second revision 2026-11-10 (review).** A review checked the design against
+the code (findings in the research note, "Review findings"). Four things
+changed. The negative cache could not be keyed on the VFS generation as
+written, because a pull and its own sync echo both move it (D2, D7). The
+render now reports its read set, which replaces the `/api/preview/deps`
+predictor (D11). The auth paragraph understated what is already exposed
+(D6). And hub-client's worker move is no longer decided here (D10).
 
 **Audience:** anyone changing what `q2 preview` syncs into the browser, adding a dependency class the render reads (a stylesheet, an include target, a bibliography, a component), touching the hub's discovery or watcher, or moving work between the browser and the preview server.
 
@@ -20,11 +28,16 @@ preview server fills from disk through Automerge sync. A file the server did
 not push does not exist for the render. So the server has had to *predict*
 the set of files a render will read, one dependency class at a time
 (include closure, image walk, declared resources, declared components, and
-most recently a Sass-partial heuristic). Each predictor is a second
+most recently a Sass-partial heuristic). A further predictor,
+`/api/preview/deps`, guesses which edits should re-render the page from the
+page's single-hop includes. Each predictor is a second
 implementation of a resolver the renderer already has, it is only as fresh as
 its last run, and each new class adds another one. The Sass heuristic on
 `preview-scss-theme` was the fourth, and it was wrong in three ways on its
-first review. This contract replaces prediction with a mechanism.
+first review. Bibliographies and CSL styles have no predictor at all, in
+either mode: the walk does not classify `.bib` or `.csl`, so citations
+resolve in preview only when the file is listed under `resources:`. This
+contract replaces prediction with a mechanism.
 
 ## Decisions
 
@@ -63,9 +76,27 @@ the pandoc request. Every such directory is one the author pointed at.
 
 The browser caches every answer. Positive answers live in the VFS. Negative
 answers (a missing path, an empty listing) are cached until the browser
-VFS's generation counter changes, which it does whenever sync adds or
-removes a file, as project caches already rely on. A cached negative is a
-definite miss with no fetch.
+VFS's generation counter changes. A cached negative is a definite miss with
+no fetch.
+
+For the generation to be a usable key it must move only when the project
+really changed, and today it moves for every create of a new path and for
+every rewrite of a non-document file, identical bytes included. Two rules
+fix that, and both are part of the contract:
+
+- **A pull insert is generation-neutral.** The file was on disk all along;
+  from the pipeline's point of view nothing was created. This is safe for
+  the one other consumer of the generation, the project cache: anything
+  discovery reads or probes is pulled inside that same call, and a file
+  created on disk later arrives through sync, which still moves it.
+- **A sync write of identical bytes is a no-op.** It does not move the
+  generation and does not signal a content change. Without this, the echo
+  of a promoted file (D7) flushes every negative and starts a second render
+  that asks them all again.
+
+A directory the VFS holds only in part must not answer a listing from what
+it happens to hold. The VFS records, per directory, whether a complete
+listing has been pulled; until then a listing is a miss.
 
 **Latency facts.** Measured 2026-11-10 (headless Chromium, dedicated worker,
 synchronous XHR, debug-build server, cache-busted URLs; method and tables in
@@ -177,7 +208,7 @@ What a guest can learn in single-file mode is the names in directories a
 render listed or probed, and the contents of files a render read. That is
 accepted under D6.
 
-### D6. Share guests: the join string is the capability; the policy is the bound
+### D6. Share guests: the join string is the capability; the policy is the bound; the request gate is open
 
 The server does not distinguish host from guest (the tunnel is a raw
 loopback proxy) and this design does not add that distinction. The share
@@ -186,15 +217,35 @@ re-run its code; the project is what the policy admits, and a pull cannot
 reach outside it. If a host-only mode is ever wanted, it is a flag on the
 pull route gated by a host token, not a change to this contract.
 
-The miss routes carry no authentication of their own. The preview server
-binds loopback and the existing `render_download` and `import` routes
-inherit that posture; the three arms inherit it too. The only widening is
-in single-file mode, where anyone who can reach the port can read any
-policy-admitted file under the deck directory rather than only the synced
-closure; in project mode the admitted set and the synced set already
-coincide. Accepted (decided 2026-11-10). `--host` on a non-loopback address
-is a pre-existing exposure, not one this contract adds. If a gate is ever
-needed, it is a per-session token minted at boot and handed to the SPA.
+The miss routes carry no authentication of their own, like every other
+route on the preview server. What they add is narrow: in single-file mode,
+anyone who can reach the port can read any policy-admitted file under the
+deck directory rather than only the synced closure; in project mode the
+admitted set and the synced set already coincide.
+
+What is already exposed is wider than the first draft said. Binding
+loopback keeps other machines out, but not other web pages: the server
+checks neither `Host` nor a token, so a page that rebinds its DNS name to
+`127.0.0.1` is same-origin with the preview. Today such a page can read
+`/health` and `/api/files`, sync the whole project over `/ws`, post to the
+re-execute, render and import routes, and write to disk under
+`--allow-edit`. The default port is assigned by the OS, so the page has to
+find it first. That is the only obstacle.
+
+So the gate is a property of the whole server, not of the miss routes, and
+it is an **open decision**, tracked as the first item of the plan's Phase 1:
+
+- A `Host` allow-list as a router-wide layer (loopback names plus the
+  `--host` value) is small and invisible to users, but a reverse proxy
+  (Posit Workbench, a container port-forward) presents its own host name,
+  so it needs an explicit escape.
+- A per-session token in the URL the CLI opens works through any proxy,
+  but it cannot be handed to the SPA by an unauthenticated route (a
+  rebinding page would fetch it too), so it changes the preview URL and
+  the join string.
+
+Single-file mode makes the question sharper, because the deck directory is
+often `~/Downloads`. The miss routes ship behind whichever gate is chosen.
 
 ### D7. The server promotes, the browser never creates
 
@@ -203,6 +254,16 @@ A pulled file is added to the Automerge index by the server (the single
 sits inside the boot-time reconcile loop). The browser never creates index
 entries for disk files: under `--allow-edit`, an index entry with no
 checkpoint and no disk file is written *to* disk by write-back.
+
+The alternative was weighed in the 2026-11-10 review: leave pulled files
+out of Automerge and treat them as a read-through HTTP cache, with the
+server announcing changes on a sidecar document as it does for captures.
+That would avoid an Automerge document per pulled image and the echo
+described in D2. It was not taken, because promotion reuses the one
+change-propagation path that exists (the watcher, the periodic sync, guest
+delivery over `/ws`, the SPA's file list), where the cache would need a
+second one. Its condition is the identical-bytes rule in D2: the echo of a
+promoted file must cost nothing.
 
 ### D8. The watcher watches what has been served
 
@@ -230,12 +291,44 @@ starts; VFS writes from sync are processed between renders. All render
 entry points go through the serial render queue (`renderPageForPreview`
 does not today). The artifact flush writes through to the live VFS.
 
-### D10. One architecture for both apps
+### D10. hub-client's worker move is its own decision
 
-hub-client moves into the same worker, sequenced after the preview SPA. Its
-miss handler is null (there is no server to pull from; its VFS is complete
-by construction), so its behaviour is unchanged. Two apps on two threading
-models is not an end state.
+The preview SPA moves to the worker because the miss path needs a thread
+that may block. hub-client gains nothing from the miss path: there is no
+server to pull from, and its VFS is complete by construction. Its only
+reason to move is to take rendering off the main thread, and that is the
+question Phase 7 of the main-thread render plan asked to be decided on that
+plan's own measurements. Its Phase 0 baseline (431 ms of main-thread work
+per keystroke on the reference document) argues for the move; its
+Phases 2 to 5, which lower that number without a worker, are not done.
+
+So this contract does not decide it. The facade (D3) is built so that
+hub-client can adopt it with a null miss handler, and the synchronous
+engine stays importable beside it, as the WASM tests already need. Two
+apps on two threading models is acceptable until that decision is made
+with numbers.
+
+### D11. The render reports what it read
+
+The worker records every path a render read, every path it probed and
+every directory it listed, and returns that read set with the render
+response. It is the exact form of what the predictors approximated, and
+the preview's re-render filter uses it: an edit re-renders the page when
+its path is in the read set. `/api/preview/deps` and its single-hop
+include extractor are removed.
+
+The rules that keep the filter sound:
+
+- Probes and listings are part of the set. Otherwise a file created where
+  the render looked for one never triggers a re-render.
+- A render that answers from the project cache does not re-read the
+  project config, so the set is the union of the render's reads and the
+  reads recorded when the cache entry was built.
+- A failed render yields a partial set; the previous set is kept, and with
+  no previous set the filter passes everything, as it does today before
+  the first answer.
+- Only reads made during a render count. Reads from the main thread
+  through the same exports (the `.tsx` transpile path) are outside it.
 
 ## Consequences for authors
 
@@ -253,6 +346,10 @@ models is not an end state.
   aborts on contention.
 - A prefetch (a wider answer than asked) is allowed; a predictor the render
   depends on is not. See the prediction rule in D2.
+- A write into the VFS that changes nothing (a pull, an echo of identical
+  bytes) must not move the generation or signal a change. See D2.
+- "Which edits re-render this page" is answered by the read set (D11), not
+  by parsing the page on the server.
 
 ## Non-goals
 
@@ -261,3 +358,4 @@ models is not an end state.
   it.
 - Demand-loading on quarto-hub.com. There is nothing to load from.
 - A host/guest identity. See D6.
+- Moving hub-client into the worker. See D10.

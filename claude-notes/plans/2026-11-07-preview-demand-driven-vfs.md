@@ -1,8 +1,8 @@
 ---
 title: 'Preview demand-driven VFS: exposure policy, miss route, render worker'
 date: 2026-11-07
-description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, and removal of the single-file closure extractors.'
-status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10
+description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, a render-reported read set, and removal of the dependency predictors.'
+status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate in Phase 1 is an open decision
 ---
 
 ## Overview
@@ -15,17 +15,25 @@ answer a read, an existence check or a directory listing, the worker asks
 the preview server over a synchronous XHR, the server applies one exposure
 policy and answers from disk, pulled files are promoted into Automerge, and
 the server watches what it has served. Nothing is pushed that a render did
-not ask for. The single-file dependency extractors go away.
+not ask for. The render reports what it read, and that read set decides
+which edits re-render the page. The single-file dependency extractors and
+the `/api/preview/deps` predictor go away.
 
 Each phase is a separate worktree and PR off `main` (or off the previous
 phase's branch when it depends on it). Tests come first in every phase.
-Phases 0 and 1 are pure Rust; Phase 2 is the worker and the miss path;
-Phase 3 measures and removes the extractors; Phase 4 moves hub-client;
-Phase 5 is docs.
+Phases 0 and 1 are pure Rust; Phase 2a moves the preview SPA's render into
+a worker with no change in behaviour; Phase 2b adds the miss path on top;
+Phase 3 measures and removes the predictors; Phase 5 is docs. Phase 4
+(hub-client on the worker) is no longer part of this epic; see its section.
+
+Phase 2 was one phase until the 2026-11-10 review. It is split because the
+worker move is a large refactor that can be verified on its own by parity,
+and the miss path is small once the worker exists. Landing them together
+would have put every user-visible fix behind the whole of both.
 
 Measure before optimising. The loopback cost of a round trip is 0.3 ms and
 a remote link costs its RTT per sequential trip (contract D2). Any batching
-or prefetch is added only when the Phase 2 and 3 measurements, local and
+or prefetch is added only when the Phase 2b and 3 measurements, local and
 with injected latency, show a cold render needs it.
 
 Out of scope here: the `preview-scss-theme` branch itself. Its project-mode
@@ -81,9 +89,26 @@ Implementation:
 
 ## Phase 1: miss route, promotion, demand-driven watch
 
-Server side only. Contract D2, D7, D8.
+Server side only. Contract D2, D6, D7, D8.
+
+Decide first:
+
+- [ ] The request gate (contract D6). The preview server validates neither
+  `Host` nor a token, so a DNS-rebinding page is same-origin with it and
+  can already read the project over `/ws`. The miss routes widen that, in
+  single-file mode, to every admitted file under the deck directory.
+  Choose between a router-wide `Host` allow-list (loopback names plus the
+  `--host` value, with an escape for a reverse proxy such as Posit
+  Workbench) and a per-session token in the URL the CLI opens (works
+  through proxies, changes the preview URL and the join string). This is
+  the user\'s call; record it in the contract. The routes below ship behind
+  it, and the gate covers the whole router, not only the new routes.
 
 Tests first:
+
+- [ ] The gate: a request whose `Host` (or token) fails the chosen rule is
+  refused on `/api/*`, `/health` and the `/ws` upgrade; a `--join` guest
+  through the tunnel and a request through a configured proxy pass.
 
 - [ ] `crates/quarto-preview/tests/integration/`: `GET /api/preview/file?path=`
   returns bytes for an admitted path, 404 for an absent one, 403 with a
@@ -108,6 +133,7 @@ Tests first:
 
 Implementation:
 
+- [ ] The gate chosen above, as one layer over the router.
 - [ ] `HubContext::import_path(rel)`: one iteration of
   `reconcile_files_with_index` factored out, idempotent, records a
   checkpoint under the `sync_state` mutex.
@@ -121,6 +147,10 @@ Implementation:
 - [ ] Enrolment syncs the new file whole; its arrival bumps the browser
   VFS's generation, which is the negative-cache key. No server-side
   counter. Confirm single-file mode's sync path adds to the same index.
+- [ ] `.bib` and `.csl` (and the other classes in the policy's allow-list
+  that the walk does not classify today) are admitted by the three routes
+  in both modes; a route test pulls a `.bib` in project mode and in
+  single-file mode.
 - [ ] Quarto 1 check: when a quarto-cli checkout is available, compare its
   preview watch rules (input plus the render's reported resource files) and
   note any case ours misses here.
@@ -128,31 +158,100 @@ Implementation:
   routes (they should; add a tunnel test if the existing ones do not cover
   a new route).
 
-## Phase 2: render worker and the miss path (preview SPA)
+## Phase 2a: render worker, no change in behaviour (preview SPA)
 
-Contract D3, D9. Preview SPA only; hub-client keeps the main-thread engine
-until Phase 4.
+Contract D3, D9. Preview SPA only. Nothing here touches the miss path: the
+worker renders against the VFS that sync fills, exactly as the main thread
+does today, and the phase is done when the existing e2e suite passes
+against it.
 
 Tests first:
 
-- [ ] `ts-packages/preview-runtime`: the async client facade exposes the same
-  names as today; existing `*.wasm.test.ts` run unchanged against the
-  in-process engine.
+- [ ] `ts-packages/preview-runtime`: the async client facade exposes the
+  same names as today. The synchronous engine exports (`initWasm`,
+  `vfsAddFile`, `vfsClear` and the rest) stay importable beside it: about
+  eight of the `*.wasm.test.ts` files under `hub-client/src` import them,
+  and hub-client keeps running the engine in-process (Phase 4). The other
+  WASM tests load the raw `wasm-quarto-hub-client` module and are not
+  affected.
 - [ ] Worker RPC unit test: request/response ids, error propagation, the
   init message carrying the ephemeral-storage and perf flags.
+- [ ] VFS write ordering: a sync-client write forwarded to the worker
+  while a render is running is applied after that render and before the
+  next one (unit test on the worker\'s message loop).
+- [ ] Playwright: `renderPageForPreview` is queued (two rapid edits produce
+  one final render with the latest content; no torn render).
+- [ ] The existing preview e2e suite passes unchanged.
+
+Implementation:
+
+- [ ] `renderPageForPreview` goes through `enqueueRender`. This is
+  independent of the worker and lands first, on the main thread.
+- [ ] Worker shell and generic RPC (`new Worker(new URL(...), {type:
+  'module'})`, following `hub-client/src/pandoc/pandocService.ts`); init
+  message sets `__Q2_EPHEMERAL_STORAGE__` and perf flags in the worker.
+- [ ] `wasmRenderer.ts` becomes the engine inside the worker; a facade with
+  the same API on the main thread; fixed tables (formats, import table,
+  project choices, share tree and typst versions) prefetched at init.
+- [ ] The sync client\'s VFS writes (`vfsAddFile`, `vfsAddBinaryFile`,
+  `vfsRemoveFile`, `vfsClear` in `automergeSync.ts`) are forwarded to the
+  worker as messages, ordered against renders as contract D9 requires.
+- [ ] Sync-to-async rework: `resolvePandocFormats` (five sites, including a
+  render body and a `useMemo`), `handleSetAst`, `regenerateNestedBuffers`
+  moved into the render response, `renderPandocRequest` abort and progress
+  proxied.
+- [ ] Render responses carry the resources main-thread readers need: theme
+  CSS, the asset manifest bytes, the artifacts `iframePostProcessor` and
+  the slide renderer read, the printable inliner\'s inputs.
+- [ ] Bridge: `rasterize.js` proxied to the main thread through
+  `setRasterizer`; `userGrammar/Highlight.ts` `typeof window` fix; perf
+  wiring.
+- [ ] dart-sass importer stays sync, inside the worker.
+- [ ] Vite: worker format decision (`format: 'es'` versus the global IIFE
+  plus `inlineDynamicImports`); the embed build\'s exactly-one hashed `.wasm`
+  check and the viewer/editor dedupe still hold; `cargo xtask
+  build-q2-preview-spa` and `cargo build --bin q2` verified end to end.
+- [ ] Parity recorded here: cold and warm render wall time before and
+  after the move, on the same deck, and a note that the rendered output
+  was inspected.
+
+## Phase 2b: the miss path and the read set (preview SPA)
+
+Contract D2, D7, D11. Depends on Phases 1 and 2a.
+
+Tests first:
+
 - [ ] Rust: `WasmRuntime` miss hook unit test with a stub shim: a read miss
   calls the shim once, inserts, and a second read does not call it; a
   negative exists answer is cached and not re-asked until the generation
   changes; the lock is not held across the call (test with a re-entrant
   stub).
+- [ ] Rust, `vfs.rs`: a pull insert of a new path does not move the
+  generation; a sync write of identical bytes to an existing path does not
+  move it, for text and for binary; a sync write of different bytes, a
+  create and a remove still do.
+- [ ] Rust: a directory that holds some files but has not been listed
+  answers `dir_list` through the list arm, once; after that the listing is
+  local until the generation changes.
+- [ ] Rust: the read set of a render holds the paths read, the paths
+  probed (hits and misses) and the directories listed, scoped to that
+  render; a render answered from the project cache still reports the
+  project config among its reads.
+- [ ] TS: the echo of a promoted file (the same bytes arriving through
+  `onFileAdded` or `onBinaryChanged`) does not bump `contentTick`.
 - [ ] Playwright, single-file deck: `theme: styles/deck.scss` importing
   `partials/_vars.scss` (a subdirectory) renders with the variable applied;
   adding a new `@import` to `_vars.scss` that pulls in a file created
   mid-session re-themes the page without restart.
-- [ ] Playwright, project mode: a `.bib` outside the eager set resolves
-  citations on first render.
-- [ ] Playwright: `renderPageForPreview` is queued (two rapid edits produce
-  one final render with the latest content; no torn render).
+- [ ] Playwright, both modes: a `.bib` beside the document resolves
+  citations on first render with no `resources:` entry.
+- [ ] Playwright, one cold render: the render count is one. The pulls of
+  that render and their echoes do not start a second render, and a forced
+  second render makes no request to the miss routes (`perf.vfs-pull`
+  stays flat).
+- [ ] Playwright, read-set filter: editing a file in the read set
+  re-renders; editing an unrelated sibling does not; creating a file at a
+  path the render probed and missed does.
 - [ ] Playwright, latency: the same deck behind a delay proxy at 0, 20, 50
   and 100 ms (the proxy used for the 2026-11-10 measurement is a 20-line
   Node script; check it in under the e2e helpers). Record cold-render wall
@@ -161,48 +260,43 @@ Tests first:
 
 Implementation:
 
-- [ ] Worker shell and generic RPC (`new Worker(new URL(...), {type:
-  'module'})`, following `hub-client/src/pandoc/pandocService.ts`); init
-  message sets `__Q2_EPHEMERAL_STORAGE__` and perf flags in the worker.
-- [ ] `wasmRenderer.ts` becomes the engine inside the worker; a facade with
-  the same API on the main thread; fixed tables (formats, import table,
-  project choices, share tree and typst versions) prefetched at init.
-- [ ] Sync-to-async rework: `resolvePandocFormats` (five sites, including a
-  render body and a `useMemo`), `handleSetAst`, `regenerateNestedBuffers`
-  moved into the render response, `renderPandocRequest` abort and progress
-  proxied.
-- [ ] Render responses carry the resources main-thread readers need: theme
-  CSS, the asset manifest bytes, the artifacts `iframePostProcessor` and
-  the slide renderer read, the printable inliner's inputs.
-- [ ] Bridge: `rasterize.js` proxied to the main thread through
-  `setRasterizer`; `userGrammar/Highlight.ts` `typeof window` fix; perf
-  wiring.
 - [ ] `WasmRuntime` miss hook: sync externs for the three arms
   (`vfs_miss_read(path) -> Option<Uint8Array>`, `vfs_miss_stat(path)`,
   `vfs_miss_list(path)`) with `catch`, an eligible-prefix check (not
   `/__quarto_resources__`, not `/.quarto/`, not `/tmp/`), a negative cache
   keyed by the VFS generation; the read guard is dropped before the call
   and the write lock taken after.
+- [ ] Generation rules (contract D2): the hook inserts through a
+  generation-neutral path; `vfs_add_file` and `vfs_add_binary_file` go
+  through `add_file_if_changed` (it exists; only `file_write` and the
+  artifact flush use it today) and report whether anything changed, and
+  `automergeSync.ts` skips `onFileContent` / `onBinaryContent` when
+  nothing did.
+- [ ] A per-directory "listed completely" bit in the VFS, set by the list
+  arm, cleared with the generation.
 - [ ] JS shim: synchronous `XMLHttpRequest` with `responseType =
   'arraybuffer'` to the three routes; null on 404 or 403; a
   `perf.vfs-pull` gauge counting calls per arm and status, dumped with the
   other perf counters.
-- [ ] dart-sass importer stays sync; `vfsIsFile` goes through the exists arm
-  with the same negative cache, so a probe is asked once per generation.
-- [ ] `renderPageForPreview` goes through `enqueueRender`.
-- [ ] Vite: worker format decision (`format: 'es'` versus the global IIFE
-  plus `inlineDynamicImports`); the embed build's exactly-one hashed `.wasm`
-  check and the viewer/editor dedupe still hold; `cargo xtask
-  build-q2-preview-spa` and `cargo build --bin q2` verified end to end.
+- [ ] `vfsIsFile` goes through the exists arm with the same negative cache,
+  so a Sass probe is asked once per generation.
+- [ ] Read set (contract D11): `WasmRuntime` records reads, probes and
+  listings in a per-render scope; the project cache stores the reads made
+  while an entry was built and a cache hit adds them; the render response
+  carries the set.
+- [ ] `PreviewApp.tsx`: `shouldRerenderForTextChange` and the binary
+  handler filter on the read set (previous set kept after a failed render;
+  no set yet means pass everything). The `/api/preview/deps` fetch stays
+  until Phase 3 removes the endpoint.
 - [ ] End-to-end check recorded here: the exact `q2 preview` invocation, the
   observed re-theme, and a note that the output was inspected.
 - [ ] Decision recorded here from the latency run: no batching, or which
   prefetch (directory names on a probe, stylesheet closure on a pull) and
   why, with the before/after counts.
 
-## Phase 3: measure, then remove the single-file extractors
+## Phase 3: measure, then remove the predictors
 
-Contract D5. Depends on Phases 1 and 2.
+Contract D5, D11. Depends on Phases 1 and 2b.
 
 - [ ] Measure first: with the extractors on and off, on loopback and behind
   the delay proxy at 50 ms, count pulls per cold render and wall time on a
@@ -216,6 +310,9 @@ Contract D5. Depends on Phases 1 and 2.
   removed from `HubConfig` if nothing feeds them.
 - [ ] The bd-tnm3k tests that pin "no siblings synced" stay as they are and
   gain "until a render reads them".
+- [ ] Remove `/api/preview/deps`: `crates/quarto-preview/src/deps.rs`, its
+  route, the SPA\'s fetch effect and `deps` state, and the
+  `Q-PREVIEW-DEPS-1` diagnostic. Its only caller is `PreviewApp.tsx`.
 - [ ] Project mode, same question: measure a project render with the walk's
   eager contents for non-source classes (images, stylesheets, data) turned
   off, so they arrive by pull. If the cold render is not user-visibly
@@ -223,30 +320,39 @@ Contract D5. Depends on Phases 1 and 2.
   only sources and config and the two modes converge. Record the numbers
   here either way.
 
-## Phase 4: hub-client on the worker
+## Phase 4: hub-client on the worker (deferred; not part of this epic)
 
-Contract D10. Depends on Phase 2.
+Contract D10. Removed from this epic by the 2026-11-10 review. hub-client\'s
+miss handler would be null, so the move brings it nothing from this work;
+its case is main-thread time, and that is Phase 7 of
+`2026-10-24-hub-client-main-thread-render-path.md`, which asks for a
+decision record on that plan\'s own numbers. Phase 2a leaves the facade
+ready for it. The work that decision would schedule, kept here so it is not
+lost:
 
-- [ ] hub-client adopts the facade; its miss handler is null.
-- [ ] `intelligenceService` write-then-read becomes one RPC
+- hub-client adopts the facade; its miss handler is null.
+- `intelligenceService` write-then-read becomes one RPC
   (`semanticTokensForContent`).
-- [ ] `renderToHtml` CSS-version read moves into the render response.
-- [ ] `MorphIframe`, `DoubleBufferedIframe`, `useIframePostProcessor`,
+- `renderToHtml` CSS-version read moves into the render response.
+- `MorphIframe`, `DoubleBufferedIframe`, `useIframePostProcessor`,
   `ReactAstSlideRenderer`, `printableDocument` take resources from the
   response.
-- [ ] PWA: decide whether the worker chunk is precached; offline test after
+- PWA: decide whether the worker chunk is precached; offline test after
   first load.
-- [ ] `npm run build:all` and `npm run test:ci` in `hub-client/`; e2e.
+- `npm run build:all` and `npm run test:ci` in `hub-client/`; e2e.
 
 ## Phase 5: docs and notes
 
 - [ ] `docs/guides/projects/preview.qmd`: what single-file preview exposes
-  (only what a render reads or lists, bounded by the deck directory), and
-  the share banner wording if it changes.
+  (only what a render reads or lists, bounded by the deck directory), the
+  request gate if it is visible to users (a token in the URL, or the proxy
+  escape), and the share banner wording if it changes.
 - [ ] `claude-notes/designs/pandoc-wasm-architecture.md`: main-thread
-  placement is no longer an accepted decision; point at the contract.
+  placement is no longer an accepted decision for the preview SPA; point
+  at the contract.
 - [ ] `claude-notes/plans/2026-10-24-hub-client-main-thread-render-path.md`
-  Phase 7: mark decided, link here.
+  Phase 7: note that the preview SPA has moved and the facade exists, and
+  that the hub-client decision is still owed there (contract D10).
 - [ ] `AGENTS.md` architecture notes: a short "Preview VFS" entry pointing
   at the contract, beside the path-resolution entry.
 
@@ -261,6 +367,21 @@ synchronous XHR from a worker on loopback, independent of payload up to
 The mechanism is therefore built plain, and the remote case is handled by
 measuring the sequential chain length of real decks before deciding on
 prefetch.
+
+### The echo, and why the generation rules exist
+
+Found in the 2026-11-10 review and checked against the code. A pulled file
+is promoted, so the same bytes come back over sync a moment later. As the
+code stands, that echo calls plain `add_file`, which moves the generation
+for any file that is not a `.qmd`, `.md` or `.ipynb`, and it reaches
+`onFileContent`, whose filter passes every non-source path. The result
+would be a second full render after every cold render, and that render
+would ask every negative probe again because the echo flushed them. On
+loopback that is wasted work; at 50 ms it doubles the probe chain the
+negative cache is there to remove. The pull insert itself has the same
+effect inside a render, since creating a path also moves the generation.
+Hence the two rules in contract D2 and the "render count is one" test in
+Phase 2b.
 
 ### Why the policy comes first
 
@@ -282,4 +403,4 @@ shim, then takes the write lock to insert. The negative cache is a
 inlines the lazy `import('sass')` and web-tree-sitter into its bundle,
 which is acceptable off the main thread but changes the lazy-sass
 property. Switching to `format: 'es'` is global and means re-testing the
-typst and pandoc workers. Decide in Phase 2 with a size measurement.
+typst and pandoc workers. Decide in Phase 2a with a size measurement.
