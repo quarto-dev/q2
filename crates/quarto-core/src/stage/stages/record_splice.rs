@@ -1256,6 +1256,7 @@ mod tests {
     mod layering;
     mod opr_pinning;
     mod option_sweep;
+    mod page_dependencies;
     mod stamp;
 
     const MIXED: &str =
