@@ -27,8 +27,9 @@
 //
 // `--check-unpublished` fails when a package's version is already on the
 // registry (npm rejects republishing a version, staged or not).
-// `--already-published <name>` lets a package depend on a workspace sibling
-// that is not part of this run because it is already on the registry.
+// A workspace sibling that is a dependency but not part of the run is looked
+// up on the registry and must already be published at its workspace version;
+// `--already-published <name>` asserts that without the lookup.
 
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -36,7 +37,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { publishManifest, sortByDependencies } from './manifest.mjs';
+import { outOfRunWorkspaceDeps, publishManifest, sortByDependencies } from './manifest.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -119,6 +120,27 @@ const requested = args.dirs.map((d) => {
 const byName = new Map(requested.map((r) => [r.pkg.name, r]));
 const ordered = sortByDependencies(requested.map((r) => r.pkg)).map((p) => byName.get(p.name));
 const publishSet = new Set(byName.keys());
+
+// A workspace sibling left out of the run must already be on the registry at
+// the version the published manifest will depend on (`^<its version>`).
+// Checked against the registry, so the workflow needs no extra input for it;
+// `--already-published` skips the lookup (offline use, tests).
+for (const { name, version } of outOfRunWorkspaceDeps(
+  requested.map((r) => r.pkg),
+  publishSet,
+  versions,
+)) {
+  if (args.alreadyPublished.has(name)) continue;
+  if (!isPublished(name, version)) {
+    console.error(
+      `${name}@${version} is a dependency of this run but is neither in it nor on the registry; ` +
+        'add its directory to the run',
+    );
+    process.exit(1);
+  }
+  console.log(`${name}@${version} is already on the registry; depending on ^${version}`);
+  args.alreadyPublished.add(name);
+}
 
 if (args.checkUnpublished) {
   const taken = ordered.filter(({ pkg }) => isPublished(pkg.name, pkg.version));
