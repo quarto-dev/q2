@@ -13,7 +13,7 @@ lane: D
 [OPR-7c parity report](../research/2026-11-09-opr-7c-parity-report.md).
 **Implements early, narrowly:** phase 1 of [WGT-2](2026-11-02-wgt-02-dependency-contract.md) (the warning, then derive in
 core), inside the [widget epic](2026-11-02-widget-epic.md)\'s option A. This plan edits no widget-epic file.
-**Branch:** `opr/7i-jupyter-page-dependencies` · **Lane D** (`workspace-6`) · **Blocks:** OPR-7d.
+**Branch:** `opr/7i-jupyter-page-dependencies` · **Lane D** (`workspace-6`, once 7h has landed and that workspace is free; until then the branch may be checked out in another lane workspace, as it was for the implementability review) · **Blocks:** OPR-7d.
 **Needs:** Node 24; Julia 1.12 with `Plots` for the end-to-end rows (they skip when absent, say so if they did).
 **Before you start:** run `git status` and `git branch --show-current` in the workspace; if another agent is using it
 (a branch other than yours, uncommitted work), stop and tell Gordon. Before claiming, read the integration branch for
@@ -23,7 +23,7 @@ file collisions); if one is `in-progress`, wait for it.
 ## Branch and land (explicit)
 
 ```bash
-cd /Users/gordon/src/q2/.worktrees/workspace-6 && pwd
+cd <the lane workspace where this branch is checked out, or workspace-6 once 7h has landed> && pwd
 git switch -c opr/7i-jupyter-page-dependencies feature/one-presenter   # already exists if the plan commit is on it
 # claim: set status: in-progress in this file, commit, land (protocol, "Claiming a plan")
 # ... work; commit often ...
@@ -99,30 +99,53 @@ Option<String>`; the one value is `"jupyter-outputs"`. Rename freely before the 
 engine, `TsRecordInfo` and the record.
 
 - Wire: an optional field on the engine\'s returned record info (`TsRecordInfo`, `engine/ts_protocol.rs`), absent from an
-  older engine (serde default), additive and versioned like `presentedBy` was (OPR-3).
+  older engine (serde default), additive and versioned like `presentedBy` was (OPR-3). The wire-parity guard must move
+  with it: add the key to `ts-packages/quarto-engine-host-node/src/types.ts` and to `TS_RECORD_INFO_KEYS` in
+  `wire-parity.test.ts` (a `keyof TsRecordInfo` type check fails otherwise), and regenerate
+  `crates/quarto-core/tests/fixtures/ts_wire_parity.json` through `ts_protocol::tests::test_ts_wire_parity_fixture`.
+  `TsRecordInfo` has no `Default`, so the 7 struct literals (in `ts_record.rs` and `ts_protocol.rs` tests) need the
+  field. `types.ts` is type-only and `dist/` is untracked, so no engine-host bundle changes; verify at gate time.
 - Record: an optional field on `EngineEntry` (`record/types.rs`), filled through `EngineEntryInput`
-  (`record/builder.rs`), `skip_serializing_if` when `None`, outside `HashDefinition`. Check whether the record format
-  version needs a bump or a note (the execution-records epic\'s decision 5 and RIU stamping); say what you found.
+  (`record/builder.rs`; all its literals use a `..` spread, so only `builder.rs` and the one test literal in
+  `record/types.rs` change), `skip_serializing_if` when `None`, outside `HashDefinition`. Format version: no bump. The
+  precedent is `known_options`, an optional `EngineEntry` field that stayed at version 1 (`EngineEntry` also has a
+  `#[serde(flatten)]` extra map). Say so in the notes; bump only if a round-trip test of an old record fails.
 - Native Jupyter, knitr and marimo set nothing (decision 6).
 
 **Where the scan runs (read in the plan review; re-check by symbol).** `present_document` takes `&cells` and an engines
 slice; `text_execute.rs` and `ipynb_replay.rs` pass `&[]`, so no entry is at hand there, and the splice calls
 `present_units` directly, never `present_document` (`stage/stages/record_splice.rs`). So:
 
-- The per-cell step (`present_cell_step`, which takes `engine: Option<&EngineEntry>` and serves both presenter loops)
-  reads the label and skips hoisted-library outputs before it renders a cell's outputs (filter the output list; do not
-  skip mid-loop). An engine with no label never skips.
+- **The scan is per record; the skip is per cell.** The whole-record flags and the hoist list are computed **once per
+  engine record from all of `record.cells`** (stale and metadata cells count, as in Quarto 1) by the caller:
+  `present_document` for render, `splice_record_with` for the splice. `present_units` receives only matched cells, so
+  scanning inside it would miss cells Quarto 1 counts. The per-cell step (`present_cell_step`, which takes
+  `engine: Option<&EngineEntry>` and serves both presenter loops) receives the hoist list and skips those outputs before
+  it renders a cell's outputs. The skip filters `outputs`, `output_kinds` and `anchors` **together** (as `select_by_kind`
+  in `presenter/cell.rs` does), never mid-loop: `format_outputs_with` indexes `output_kinds` by position. Cover the
+  expanded path too (`render_expanded_unit`, `expansion.rs`). A cell left with no outputs follows the existing
+  empty-output rules (Quarto 1 does the same: `widgetDependencies` strips `cell.outputs` before `jupyterToMarkdown`).
+  An engine with no label never skips. `UnitReport` has no includes or warnings field today; the splice computes both
+  in `splice_record_with` from `record.cells`, so `UnitReport` needs no new field.
 - The includes text is computed where the label is visible: per engine record, from the record\'s cells and the
   format, and delivered through a field on the presenter result that each caller folds. Render
-  (`present_from_record`) pushes it onto `ExecuteResult.includes.header_includes` (push, never assign: the engine may
-  have set some). The splice route folds it into `meta.rendered.includes` the way `fold_includes` does for stored
-  entries.
+  (`present_from_record`) puts it on a new `#[serde(skip)]` field of `ExecuteResult` (not on `result.includes`, which
+  the trace capture serializes and `fold_side_data` copies into the entry). The field is set in `present_from_record`
+  and in `ReplayEngine::present_record` (replay recomputes it; it keeps the stored includes untouched), and the stage
+  drains it into `ctx.includes.header_includes` after `fold_side_data` (read in the review: `fold_side_data` runs at
+  `engine_execution.rs:793`, the drain at 812). `PresentResult` has one construction site (`present_document`); add the
+  field there. `ipynb_replay.rs`, `skeleton.rs` and the knitr callers carry no label and ignore it. The splice route
+  computes the text in `splice_record_with`, right after `fold_includes` (not inside `splice_units`, whose reconcile
+  drops anything folded earlier), and folds it into `meta.rendered.includes` with `append_pandoc_includes`, after the
+  stored entries.
 - Derived text never reaches `entry.includes`: `fold_side_data` copies `result.includes` into the entry, so the
-  derived text must be kept out of that copy (for example by delivering it on a separate field that the stage drains
-  into `ctx.includes` after `fold_side_data`). A test renders, then replays, and expects one requirejs block.
+  derived text rides on the separate `serde(skip)` field above. A test renders, then replays, and expects one
+  requirejs block.
 - Replay (`engine/replay.rs`) keeps the stored result\'s includes; it must not add the derived text a second time.
-- Across engine records the same block is emitted once (exact-string dedupe of the requirejs, jQuery and shim block and
-  of each hoisted library text); the stage extends `ctx.includes` with no dedupe today.
+- Across engine records the same block is emitted once: a `push_unique` on the **derived strings only**, called from the
+  stage drain and from the splice fold (the stage extends `ctx.includes` with no dedupe today; do not dedupe stored or
+  engine-authored includes, so marimo and knitr output is untouched by construction). Only Julia is labeled today, so
+  this is cheap insurance; a test with two labeled records covers it.
 
 **The strategy `jupyter-outputs`,** a core function taking the label, the record\'s cells and the format, run once per
 engine record whose entry carries the label. It is a port of `widgets.ts`:
@@ -139,7 +162,7 @@ engine record whose entry carries the label. It is a port of `widgets.ts`:
    `execute_result`; `text/html` as a string or an array joined with `""`; and that the scan sets the
    JavaScript-widgets flag **before** the strip, so a Plotly library output also turns on requirejs and jQuery. The
    `isPlotlyLibrary` regexes port to the Rust `regex` crate; JS `.` excludes `\r`, ` ` and ` ` while Rust `.`
-   excludes only `\n`, so check `hasModuleScript` for that.
+   excludes only `\n`, so check `hasModuleScript` for that: add an oracle fixture whose text carries `\r` (and the other two characters) between the pattern's anchors, and make the Rust regex reproduce the TypeScript result.
 3. The includes text: requirejs 2.3.6, jQuery 3.5.1, the `define('jquery')` shim, then the libraries, then the
    html-manager fragment when the Jupyter-widgets flag is set. Port the literal text and the ordering from
    `widgetDependencyIncludes` (`widgets.ts`); do not paraphrase it. The head is one string, `head.join("\n") + "\n"`
@@ -147,7 +170,8 @@ engine record whose entry carries the label. It is a port of `widgets.ts`:
 4. Only for HTML-compatible formats and not ipynb output (Quarto 1: `toHtml && !toIpynb`, where the Julia engine
    computes `toHtml` as `quarto.format.isHtmlCompatible(format)`; Q1\'s definition is `isHtmlOutput`, or markdown with
    `prefer-html`, or ipynb; `external-sources/quarto-cli/src/config/format.ts`). `InlineTarget::from_format` cannot see
-   `prefer-html`: either port that case, or record in the notes that a `prefer-html` markdown document differs. Test
+   `prefer-html`: do not port that case; record in the notes that a `prefer-html` markdown document differs (a known,
+   documented difference from the plain route). Test
    revealjs, a non-HTML format and ipynb output.
 5. **No widget state.** Records carry no notebook `metadata.widgets`, so nothing here reads or writes widget state, and
    the state-script and `</script>` escape variant of `widgetDependencyIncludes` are **not ported** (they belong to
@@ -158,8 +182,12 @@ diagnostic per cell, naming it, saying the page will show the widget\'s text rep
 `quarto-error-catalog/error_catalog.json`, its `docs/errors/<subsystem>/<code>.qmd` page and its `docs/_quarto.yml`
 sidebar entry in the same commit (the lint rules `error-docs-page-missing` and `error-docs-sidebar-unlisted`). Pick the
 next free number in the subsystem section the other presenter or engine warnings use; do not leave `Q-?-?`. The warning
-is a presenter note, and notes are stored in `entry.warnings` and re-raised by `fold_warnings`; check how existing notes
-avoid firing twice on a replayed record, and test that a replayed record shows this one once. Native Jupyter and the
+is a presenter note, and notes are stored in `entry.warnings` and re-raised by `fold_warnings`. **Decide the replay rule
+before writing the test:** `present_from_record` puts notes on `result.warnings` before `fold_side_data`, and
+`ReplayEngine::present_record` extends the stored result's warnings with the presenter's notes again, so a replayed
+record can raise the same note twice. Trace `fold_warnings` and the replay path first. The rule: on replay, raise this
+note only if it is not already in the stored warnings. If existing notes (for example `ImageUnusable`) duplicate today,
+say so in the notes and keep this plan's fix to the new warning. Test that a replayed record shows it once. Native Jupyter and the
 ipynb replay path also get this warning (decision 6), so the warning is **independent of the label**: it runs in the
 per-cell step on any record. Draft of the message:
 
@@ -177,12 +205,13 @@ rendering a widget output, or say you did not.
 Made in the q2 tree, in the subtree `resources/extension-subtrees/julia-engine`, as ordinary commits (OPR-3 precedent):
 not a subtree merge, and **no push**.
 
-- `src/record-wire.ts`: `RecordInfo` gains the optional field; `buildRecordResult` sets `"jupyter-outputs"` whenever it
-  builds a `recordInfo` (the label describes the data, not who presents it, so it is not tied to `presentedBy`).
-  Consequence to test: when the engine presents itself, `toMarkdown` already put its includes in the entry, and the
-  label is set too; core derives only for a record it presents, and never adds derived text to a record whose engine
-  presented (the entry then already holds the engine\'s includes). State this rule in code and test it.
-- `tests/unit/record-wire.test.ts` first: the label is present in a record info and absent when core sent no units.
+- `src/record-wire.ts`: `RecordInfo` gains the optional field; `buildRecordResult` sets `"jupyter-outputs"` **only when
+  it also sets `presentedBy: "core"`** (Gordon, 2026-11-10, after the implementability review). `EngineEntry` records no
+  presenter, so core cannot otherwise tell a record whose engine presented itself (its `toMarkdown` includes are already
+  stored in the entry) from one core presents; tying the label to the acknowledgement makes "label present" mean
+  "core presents, derive". An engine that ignores the offer sets neither, so no derived text is added to its stored
+  includes. Test both directions in `record-wire.test.ts`, and state the rule in a code comment.
+- `tests/unit/record-wire.test.ts` first: the label is present when `presentedBy: "core"` is acknowledged, and absent when core sent no units or the engine did not acknowledge. Keep the existing test that `buildRecordResult(..., undefined)` is `{}` passing.
 - Then `npm run typecheck`, `npm test` and `npm run build` in the subtree; commit the rebuilt bundle
   `_extensions/julia-engine/julia-engine.js` (the fork\'s CI verifies it matches the source).
 - A `CHANGELOG.md` entry under `## Unreleased` in the subtree (the fork\'s rule for meaningful changes).
@@ -204,22 +233,24 @@ not a subtree merge, and **no push**.
       `present_units` and not `present_document`, that `text_execute.rs` and `ipynb_replay.rs` pass no entry, that
       `fold_side_data` stores `result.includes`, and that the stage extends `ctx.includes` without dedupe. If any
       finding is wrong or the "Where the scan runs" design cannot work, say so and size the extra plumbing before
-      writing code; if it makes this more than a small plan, stop and tell Gordon (the protocol\'s "When you cannot
-      finish").
+      writing code; stop and tell Gordon (the protocol\'s "When you cannot finish") if the fix needs a new
+      field on more than `ExecuteResult` and `PresentResult`, a signature change to `present_units` or the
+      `AstTransform`-level stage API, or a change to `@quarto/api`.
 - [ ] **Oracle fixture.** Run the TypeScript `widgetDependencies` and `widgetDependencyIncludes` over a small set of
       notebooks (no HTML output; a `text/html` data-URI image like Plots; a hand-written `text/html`; a
       `widget-view+json` with no state; a Plotly library output; the whitespace-strip, duplicate-library and
       array-valued `text/html` cases from step 2) and store each input notebook and the includes text it produced as
       committed test fixtures (generate once with Node; the Rust tests read the committed files, so CI needs no Node).
       The Rust port must reproduce them exactly.
-- [ ] **Rust unit tests first**: the scan flags and the hoist for each fixture; the includes text equals the oracle;
+- [ ] **Add stubs, then Rust unit tests first** (the new fields and the scan function as empty stubs so the tests compile and fail for the stated reason; today `present_cell_step` returns `Result<(String, Vec<String>), String>` and `PresentResult`, `UnitReport` and `ExecuteResult` have no includes field): the scan flags and the hoist for each fixture; the includes text equals the oracle;
       the label absent gives nothing; a knitr record gives nothing; a non-HTML format and ipynb output give nothing;
       hidden outputs still count; a hoisted-library output is not in the presented body; the warning fires for a
       widget-view without state and not for plain `text/html`; **the same results through `present_units` (the splice
-      route) as through `present_document`**; two label-bearing records give one requirejs block; render then replay
+      route) as through `present_document`**; a hoisted output followed by a warning-kind output keeps the right kinds;
+      the skeleton (knitr) path gives nothing; two label-bearing records give one requirejs block; render then replay
       gives one requirejs block and one warning; a record whose engine presented itself gets no derived text added; the
       derived text is absent from `entry.includes` after a live run.
-- [ ] **Label tests first**: `TsRecordInfo` round-trips `dependencyData` and an old engine\'s info still parses;
+- [ ] **Label tests first** (add the two optional fields first, then the failing assertions): `TsRecordInfo` round-trips `dependencyData` and an old engine\'s info still parses; the wire-parity test and fixture agree;
       `EngineEntry` round-trips it, omits it when `None`, and it does not change the document hash or the hash
       definition.
 - [ ] **Julia engine tests first** in the subtree (see above), then implement the engine change, typecheck, test, build.
@@ -227,11 +258,15 @@ not a subtree merge, and **no push**.
       (in `present_cell_step`) and the warning, following "Where the scan runs".
 - [ ] **Parity.** Re-run the parity harness for the Julia documents, narrowed with `OPR_PARITY_ONLY` (the 7c report has
       the command): the script lines of `julia/records-plot` must now match, and `plot-website` and `positron-cache`
-      must not regress (7h fixed their image size). Do **not** add or change an allowlist entry; report the counts
+      must not regress (7h fixed their image size). The full command is at the top of the 7c report
+      (`OPR_PARITY_REPORT=... cargo nextest run -p quarto-core -E 'binary(integration) & test(opr_parity_runner::opr_parity_report)'`,
+      about 7 minutes; a transient Julia server timeout is known, so re-run once narrowed with `OPR_PARITY_ONLY` before
+      calling it a regression). Take the "before" counts from the 7h final report on the integration branch
+      (`claude-notes/research/2026-11-09-opr-7h-plots-differences.md`, and the 7c report for the baseline). Do **not** add or change an allowlist entry; report the counts
       before and after. Re-run the Julia part of the gate and the knitr corpus gate that 7h left unticked, and say
       so if you could not.
-- [ ] **End to end** through the binary: render `julia/records-plot` with `target/debug/q2 render` (build it in this
-      workspace first; it is not there today) with the record route on, and show the requirejs and jQuery lines in the
+- [ ] **End to end** through the binary: render `julia/records-plot` with `target/debug/q2 render` (`target/debug/q2` exists here but may be stale: rebuild it in this
+      workspace first) with the record route on, and show the requirejs and jQuery lines in the
       head and nothing duplicated in the body; render a document with no HTML output and show the head has none; render
       a Julia document whose output is a hoisted Plotly library, if PlotlyJS is installable, and say if it is not.
       Record each invocation, the lines you saw, and that you inspected the output. A browser check is not required;
@@ -240,12 +275,13 @@ not a subtree merge, and **no push**.
       failures were seen in 7h on this workspace: reveal assets vs npm, merged bibliography language, orange-book
       Typst; run them on the integration tip too and say whether they are the same); the Windows cross-clippy for
       `quarto-core` (it fails to build tree-sitter and wasmtime under `cc` on macOS, as in 7h; say so if it does);
-      `cargo xtask lint`; the subtree\'s `npm test`, `npm run typecheck`, `npm run build`; `cd hub-client && npm run
+      `cargo xtask lint`; the subtree\'s `npm test`, `npm run typecheck`, `npm run build` (the fork\'s CI diffs the rebuilt bundle against the source; if the engine-host bundle check says stale, say so and do not rebuild it); the engine-host package\'s tests (`wire-parity.test.ts`); the Rust wire test `ts_protocol::tests::test_ts_wire_parity_fixture`; `cd hub-client && npm run
       build:wasm` (the presenter and `record/` are touched); `target/debug/q2 render --strict` on every note you add
       or edit.
 - [ ] Reconcile the plan checklist, fill in "Notes from the run", set `status: complete`, rebase, re-run the gates,
       fast-forward from workspace-1 (protocol, "Landing a plan"). Report snapshot or golden changes by count and file
       (expected: none, or the parity goldens only; list them).
+- [ ] Hand-off note: if you stop early, the handoff must say the subtree commits are local and unpushed and must stay so, and that a pre-existing red test other than the three named is a finding to report, not to fix.
 - [ ] **\[Gordon\]** Push the subtree commits to the fork and refresh the subtree (above). Not an agent step.
 
 ## Exit criteria
