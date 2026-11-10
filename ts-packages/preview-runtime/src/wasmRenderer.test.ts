@@ -61,6 +61,8 @@ describe('capture option forwarding (Phase 3B1)', () => {
     _setWasmModuleForTest({
       render_page_for_preview: renderPreview,
       render_page_in_project_with_attribution: renderProject,
+      // `renderPageForPreview` reads the source it renders in its queue slot.
+      vfs_read_file: () => JSON.stringify({ success: true, content: '' }),
     });
     const options = { captureUntransformedAst: false };
 

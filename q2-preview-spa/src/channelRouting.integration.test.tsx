@@ -82,6 +82,8 @@ beforeEach(async () => {
       ast_json: '{"blocks":[{"t":"Para","c":[{"t":"Str","c":"hello"}]}]}',
       untransformed_ast_json:
         '{"blocks":[{"t":"Para","s":0,"c":[]}],"astContext":{"p":[{"t":0,"r":[0,12],"d":0}]}}',
+      // The source the render read (captured in its queue slot).
+      renderedSource: 'hello world\n',
     },
     // Channel-routing tests exercise the edit path, which since
     // bd-ov4gqk3m only runs when the server allows editing.

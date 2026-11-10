@@ -48,7 +48,6 @@ import {
   applyNodeEdit,
   parseQmdContentSync,
   vfsAddFile,
-  vfsReadFile,
   getFileContent,
   diffToEditorChanges,
   applyEditorOperations,
@@ -1184,14 +1183,6 @@ export default function PreviewApp() {
           captureGzJson = binaryDoc?.content;
         }
 
-        // Task 3 (block-editing): snapshot the VFS content for the
-        // active file immediately before the render so the captured
-        // text is byte-for-byte what the WASM renderer reads. The byte
-        // offsets in the resulting astJson / untransformedAstJson
-        // belong to this snapshot, not to any later live-edit content.
-        const vfsSnap = vfsReadFile(state.activeFile!);
-        const capturedContent = vfsSnap.success && vfsSnap.content ? vfsSnap.content : '';
-
         const result = await renderPageForPreview(
           state.activeFile!,
           undefined,
@@ -1202,6 +1193,12 @@ export default function PreviewApp() {
           },
         );
         if (cancelled) return;
+        // Task 3 (block-editing): the VFS content the render read,
+        // captured inside its render-queue slot as it started, so the
+        // text is byte-for-byte what the WASM renderer saw. The byte
+        // offsets in the resulting astJson / untransformedAstJson
+        // belong to this snapshot, not to any later live-edit content.
+        const capturedContent = result.renderedSource;
         // Phase D.3 (bd-kw93.9) + bd-0mji: a test-only render
         // counter on `window`. Lets Playwright / SPA tests assert
         // "this edit reached the SPA and produced a (re-)render"
@@ -1288,6 +1285,11 @@ export default function PreviewApp() {
         }
       } catch (err) {
         if (cancelled) return;
+        // A render a newer one superseded while it waited in the render
+        // queue never ran; the newer render reports instead. Matched on
+        // `name`, like hub-client's previews, so partial test doubles of
+        // the runtime need not export the class.
+        if (err instanceof Error && err.name === 'RenderSupersededError') return;
         // Phase D.3: bump the render counter on the catch path too
         // so "an edit triggered a render attempt" stays a reliable
         // signal even when the render threw.

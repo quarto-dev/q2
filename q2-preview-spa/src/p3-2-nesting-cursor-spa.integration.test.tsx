@@ -125,6 +125,8 @@ beforeEach(() => {
       // Include untransformed_ast_json so the gating helper receives a
       // non-empty ast argument and execution reaches the flag check.
       untransformed_ast_json: AST,
+      // The source the render read (captured in its queue slot).
+      renderedSource: CONTENT,
     },
   };
 

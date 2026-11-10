@@ -591,6 +591,7 @@ export class RenderSupersededError extends Error {
 // Different entry points serialize but never supersede each other.
 const RENDER_TO_HTML_KEY = 'renderToHtml';
 const RENDER_PAGE_RENDER_KEY = 'renderPageInProject';
+const RENDER_PAGE_FOR_PREVIEW_KEY = 'renderPageForPreview';
 // `renderPrintable` serializes but never supersedes (see the header
 // comment): each call enqueues under a fresh key no waiting slot can
 // match.
@@ -895,24 +896,43 @@ export async function renderPageForPreview(
   userGrammars?: unknown,
   captureGzJson?: Uint8Array,
   options?: RenderPageForPreviewOptions,
-): Promise<RenderResponse> {
-  const wasm = getWasm();
-  if (!perfEnabled()) {
-    return JSON.parse(
-      await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
-    );
-  }
-  perfMark('render.started');
-  const t0 = performance.now();
-  try {
-    return parseEnvelope(
-      await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
-    );
-  } finally {
-    perfSegment('render.wasm-call', t0);
-    perfMark('render.completed');
-  }
+): Promise<PreviewRenderResponse> {
+  // Serialised and latest-wins coalesced like the other page renders
+  // (preview VFS contract D9): a queued render a newer one supersedes
+  // rejects with `RenderSupersededError`, which the SPA swallows.
+  return enqueueRender(async () => {
+    // Read the source inside the slot, as the render starts: this is the
+    // text the render sees, so byte offsets in the result belong to it.
+    const source = vfsReadFile(path);
+    const renderedSource = source.success ? (source.content ?? '') : '';
+    const wasm = getWasm();
+    if (!perfEnabled()) {
+      const response: RenderResponse = JSON.parse(
+        await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
+      );
+      return { ...response, renderedSource };
+    }
+    perfMark('render.started');
+    const t0 = performance.now();
+    try {
+      const response = parseEnvelope<RenderResponse>(
+        await wasm.render_page_for_preview(path, userGrammars, captureGzJson, options),
+      );
+      return { ...response, renderedSource };
+    } finally {
+      perfSegment('render.wasm-call', t0);
+      perfMark('render.completed');
+    }
+  }, RENDER_PAGE_FOR_PREVIEW_KEY);
 }
+
+/**
+ * A {@link renderPageForPreview} result: the render response plus the
+ * source text of `path` as the render read it (empty when the VFS had
+ * none). Byte offsets in `ast_json` and `untransformed_ast_json` refer to
+ * `renderedSource`.
+ */
+export type PreviewRenderResponse = RenderResponse & { renderedSource: string };
 
 // ---- pandoc-wasm epic (R2): the request exports --------------------------
 
