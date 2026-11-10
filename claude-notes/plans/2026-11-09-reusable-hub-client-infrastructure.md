@@ -2,7 +2,7 @@
 title: 'Reusable hub-client and q2-preview infrastructure: npm packages and an override API (bd-kf7za8ey)'
 date: 2026-11-09
 description: 'Assessment of how Posit Connect (quartohub satellite) and Posit Assistant (Canvas) consume q2 today, and a layered proposal (groundwork, published packages, a documented component and chrome override API, an embedding protocol) for making that consumption direct.'
-status: draft  # direction decided in 2026-11-09 review; implementation strands not yet filed (except N1)
+status: in-progress  # direction decided 2026-11-09; N1 (npm automation) done, first package @quarto/pandoc-types 0.1.0 published
 braid:
   strand: bd-kf7za8ey
   priority: P2
@@ -633,7 +633,7 @@ What needs you on npmjs.com, or in a terminal with your 2FA:
 Your local npm is 11.6.2; `npm trust` and `npm stage` need 11.15 or
 later. Everything else, including dry-runs, an agent can prepare.
 
-### N1 progress (2026-11-09, branch `braid/bd-korgbhew-npm-publishing-automation-quarto`)
+### N1 progress (2026-11-09; PR #1128)
 
 **The pilot changed from `annotated-qmd` to `pandoc-types`.** Two things
 came up:
@@ -694,23 +694,54 @@ Built and checked:
   `annotated-qmd` in `crates/xtask/src/lint/ci_test_wiring.rs` is
   updated.
 
-Remaining, in order:
+Pilot, completed 2026-11-09:
 
-- [ ] Create the `npm-publish` GitHub environment. It does not exist yet,
-  although `publish-hub-mcp.yml` references it. Give it a required
-  reviewer and deployment branches limited to `main`.
-- [ ] Merge the branch to `main`. GitHub only dispatches a workflow that
-  exists on the default branch, so no run is possible before that.
-- [ ] Dispatch a dry-run from `main` with `packages:
-  ts-packages/pandoc-types`.
-- [ ] You: `node scripts/npm-publish/bootstrap-placeholder.mjs
-  ts-packages/pandoc-types`.
-- [ ] You: `npm trust github @quarto/pandoc-types …`. Within 2 days,
-  dispatch with `dry-run` off.
-- [ ] You: `npm stage approve`, then `npm deprecate
-  @quarto/pandoc-types@0.0.0 …`, then set Publishing access to "Require
-  two-factor authentication and disallow tokens".
-- [ ] Later: move the npm half of `publish-hub-mcp.yml` onto
-  `publish-npm.yml`, when `@quarto/hub-mcp` is ready to ship.
-- [ ] Later: wire the tooling tests into a CI workflow that runs on PRs,
-  plus its `cargo xtask verify` counterpart.
+- [x] Created the `npm-publish` GitHub environment, with required
+  reviewer `cscheid` and deployments limited to `main`.
+- [x] PR #1128 merged (`c38b82dd`). Its CI had one unrelated WebKit
+  timing flake (bd-mc451ftq), which passed on re-run.
+- [x] Dry-run dispatch from `main`
+  ([run 42736594661](https://github.com/quarto-dev/q2/actions/runs/42736594661)):
+  12/12 tooling tests, `pandoc-types@0.1.0` packed (10 files), smoke
+  import passed, `stage` skipped.
+- [x] Reserved `@quarto/pandoc-types@0.0.0` with
+  `bootstrap-placeholder.mjs`. npm also lists a `0.0.0-stage`
+  placeholder, which it creates when a package is first staged.
+- [x] `npm trust github @quarto/pandoc-types --repo quarto-dev/q2 --file
+  publish-npm.yml --env npm-publish --allow-stage-publish`. `npm trust
+  list` shows `permissions: stage publish`.
+- [x] Real dispatch
+  ([run 42737685258](https://github.com/quarto-dev/q2/actions/runs/42737685258)).
+  After the environment gate was approved, the job staged
+  `@quarto/pandoc-types@0.1.0` through OIDC, with stage id
+  `5e9ae3fb-af71-4ebf-9af4-09b6015b6e6e`, and signed provenance (sigstore
+  log index 3775027817). The shasum `69270b64a3d2…` is identical to the
+  local pack.
+- [x] `npm stage approve`; both placeholders deprecated ("placeholder; use
+  a later version"); Publishing access set to "Require two-factor
+  authentication and disallow tokens".
+- [x] Verified from the registry: `latest` is `0.1.0`, and `repository`
+  is `quarto-dev/q2` with `directory: ts-packages/pandoc-types`. In an
+  empty project, `npm install` succeeds, `npm audit signatures` reports
+  "1 package has a verified registry signature" and "1 package has a
+  verified attestation", and `import()` returns `isBlock` and `isInline`.
+
+The procedure for every later package is in the header of
+`.github/workflows/publish-npm.yml`:
+
+1. bump the version;
+2. for a new name only: reserve it with the placeholder script, then run
+   `npm trust github …` within 2 days of the first real dispatch;
+3. dispatch the workflow;
+4. approve the environment gate;
+5. `npm stage approve`.
+
+Follow-ups, filed under bd-kf7za8ey:
+
+- bd-htza1cii: fix `annotated-qmd` (SourceInfo kinds 3 and 4), then
+  publish `@quarto/annotated-qmd` 0.2.0. Its name already exists, so it
+  needs only `npm trust`.
+- bd-brotphji: move the npm half of `publish-hub-mcp.yml` onto
+  `publish-npm.yml` and drop `NPM_TOKEN`.
+- bd-5f98vdw2: run the tooling tests and a pack dry-run on PRs, with the
+  matching `cargo xtask verify` step.
