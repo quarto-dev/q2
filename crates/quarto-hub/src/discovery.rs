@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 use walkdir::WalkDir;
 
+use crate::exposure::{Class, ExposurePolicy};
 use crate::resource::is_binary_extension;
 
 /// Discovered files in a Quarto project.
@@ -68,94 +69,107 @@ pub struct ProjectFiles {
 }
 
 impl ProjectFiles {
-    /// Discover all editable files in a Quarto project.
-    ///
-    /// Walks the project directory, skipping:
-    /// - Hidden directories (starting with `.`)
-    /// - `node_modules`
-    /// - `_site`, `_book`, and other output directories
+    /// Discover all editable files in a Quarto project, under the default
+    /// [`ExposurePolicy`] for `project_root` (no configured output
+    /// directory). See [`discover_with`](Self::discover_with).
     pub fn discover(project_root: &Path) -> Self {
+        Self::discover_with(&ExposurePolicy::new(project_root))
+    }
+
+    /// Discover all editable files under `policy`'s root.
+    ///
+    /// Every directory and file is put to the exposure policy (preview VFS
+    /// contract D4): hidden paths, generated directories (by provenance,
+    /// plus the policy's output directory), symlinks that leave the root
+    /// and types off the allow-list are skipped. Of what the policy admits,
+    /// the walk keeps the categories below; other admitted types (data,
+    /// stylesheets, bibliographies, ...) reach the browser on demand.
+    pub fn discover_with(policy: &ExposurePolicy) -> Self {
+        let project_root = policy.root();
         let mut files = ProjectFiles::default();
 
         let walker = WalkDir::new(project_root)
             .follow_links(false)
             .into_iter()
-            .filter_entry(|e| !is_ignored(e));
+            .filter_entry(|e| {
+                e.depth() == 0
+                    || !e.file_type().is_dir()
+                    || e.path()
+                        .strip_prefix(project_root)
+                        .is_ok_and(|rel| policy.admit_dir_lexically(rel).is_ok())
+            });
 
         for entry in walker.filter_map(|e| e.ok()) {
             let path = entry.path();
+            if entry.file_type().is_dir() {
+                continue;
+            }
+            let Ok(relative) = path.strip_prefix(project_root) else {
+                continue;
+            };
+            let Ok(admitted) = policy.admit(relative) else {
+                continue;
+            };
+            let relative = admitted.rel.as_path();
 
-            if path.is_file() {
-                // Files inside _extensions/ are included wholesale (Lua filters,
-                // JSON manifests, YAML metadata, etc. are all needed at render time).
-                // Binary files within _extensions/ go into binary_files; everything
-                // else is treated as text and goes into extension_files.
-                let in_extensions = path.components().any(|c| c.as_os_str() == "_extensions");
-
-                if in_extensions {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                        if is_binary_extension(ext) {
-                            debug!(?relative, "Discovered extension binary file");
-                            files.binary_files.push(relative.to_path_buf());
-                        } else {
-                            debug!(?relative, "Discovered extension text file");
-                            files.extension_files.push(relative.to_path_buf());
-                        }
-                    }
-                    continue;
-                }
-
-                // Check for config files first (by name).
-                // `_brand.yml`/`_brand.yaml` are project-level config like
-                // `_quarto.yml` (they feed theme/brand resolution); syncing them
-                // into the preview VFS lets `q2 preview` read a deck's brand
-                // (bd-y259zb57) instead of failing with "Path not found:
-                // /project/_brand.yml".
-                if let Some(file_name) = path.file_name()
-                    && (file_name == "_quarto.yml"
-                        || file_name == "_quarto.yaml"
-                        || file_name == "_metadata.yml"
-                        || file_name == "_metadata.yaml"
-                        || file_name == "_brand.yml"
-                        || file_name == "_brand.yaml")
-                {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered config file");
-                        files.config_files.push(relative.to_path_buf());
-                    }
-                    continue;
-                }
-
-                // Get file extension for further checks
-                let ext = path.extension().and_then(|e| e.to_str());
-
-                // Check for source files (.qmd, .md — see module docs re D10)
-                if ext == Some("qmd") || ext == Some("md") {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered source file");
-                        files.qmd_files.push(relative.to_path_buf());
-                    }
-                    continue;
-                }
-
-                // Check for .tsx source files
-                if ext == Some("tsx") {
-                    if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered .tsx source file");
-                        files.source_files.push(relative.to_path_buf());
-                    }
-                    continue;
-                }
-
-                // Check for binary resource files (images, PDFs, etc.)
-                if let Some(ext_str) = ext
-                    && is_binary_extension(ext_str)
-                    && let Ok(relative) = path.strip_prefix(project_root)
-                {
-                    debug!(?relative, "Discovered binary file");
+            // Files inside _extensions/ are included wholesale (Lua filters,
+            // JSON manifests, YAML metadata, etc. are all needed at render time).
+            // Binary files within _extensions/ go into binary_files; everything
+            // else is treated as text and goes into extension_files.
+            if admitted.class == Class::Extension {
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if is_binary_extension(ext) {
+                    debug!(?relative, "Discovered extension binary file");
                     files.binary_files.push(relative.to_path_buf());
+                } else {
+                    debug!(?relative, "Discovered extension text file");
+                    files.extension_files.push(relative.to_path_buf());
                 }
+                continue;
+            }
+
+            // Check for config files first (by name).
+            // `_brand.yml`/`_brand.yaml` are project-level config like
+            // `_quarto.yml` (they feed theme/brand resolution); syncing them
+            // into the preview VFS lets `q2 preview` read a deck's brand
+            // (bd-y259zb57) instead of failing with "Path not found:
+            // /project/_brand.yml".
+            if let Some(file_name) = path.file_name()
+                && (file_name == "_quarto.yml"
+                    || file_name == "_quarto.yaml"
+                    || file_name == "_metadata.yml"
+                    || file_name == "_metadata.yaml"
+                    || file_name == "_brand.yml"
+                    || file_name == "_brand.yaml")
+            {
+                debug!(?relative, "Discovered config file");
+                files.config_files.push(relative.to_path_buf());
+                continue;
+            }
+
+            // Get file extension for further checks
+            let ext = path.extension().and_then(|e| e.to_str());
+
+            // Check for source files (.qmd, .md — see module docs re D10)
+            if ext == Some("qmd") || ext == Some("md") {
+                debug!(?relative, "Discovered source file");
+                files.qmd_files.push(relative.to_path_buf());
+                continue;
+            }
+
+            // Check for .tsx source files
+            if ext == Some("tsx") {
+                debug!(?relative, "Discovered .tsx source file");
+                files.source_files.push(relative.to_path_buf());
+                continue;
+            }
+
+            // Check for binary resource files (images, PDFs, etc.)
+            if let Some(ext_str) = ext
+                && is_binary_extension(ext_str)
+            {
+                debug!(?relative, "Discovered binary file");
+                files.binary_files.push(relative.to_path_buf());
             }
         }
 
@@ -295,27 +309,6 @@ impl ProjectFiles {
             .chain(self.resource_files.iter())
             .chain(self.text_dep_files.iter())
     }
-}
-
-/// Check if a directory entry should be ignored during traversal.
-fn is_ignored(entry: &walkdir::DirEntry) -> bool {
-    // Never filter the root directory (depth 0)
-    if entry.depth() == 0 {
-        return false;
-    }
-
-    let name = entry.file_name().to_string_lossy();
-
-    // Skip hidden directories (but not the root, which we already handled)
-    if name.starts_with('.') && entry.file_type().is_dir() {
-        return true;
-    }
-
-    // Skip common non-source directories
-    matches!(
-        name.as_ref(),
-        "node_modules" | "_site" | "_book" | "_freeze" | "renv" | "venv" | "__pycache__" | "target"
-    )
 }
 
 #[cfg(test)]
@@ -825,6 +818,80 @@ mod tests {
         assert_eq!(
             files.resource_files,
             vec![PathBuf::from("a/one.html"), PathBuf::from("b/two.html")]
+        );
+    }
+
+    /// Discovery asks the exposure policy (preview VFS contract D4): a
+    /// sidecar beside its source, `site_libs` at any depth and the
+    /// configured output directory are generated and skipped; a sidecar-
+    /// shaped directory with no source beside it is an author's directory.
+    #[test]
+    fn test_discover_skips_generated_dirs_by_provenance() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        fs::write(root.join("index.qmd"), "# Hello").unwrap();
+        for rel in [
+            "index_files/figure-html/plot.png",
+            "static_files/logo.png",
+            "deep/site_libs/icon.svg",
+            "public/img.png",
+            "img/ok.png",
+        ] {
+            let path = root.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, [0x89, 0x50]).unwrap();
+        }
+
+        let files = ProjectFiles::discover(root);
+        assert_eq!(
+            files.binary_files,
+            vec![
+                PathBuf::from("img/ok.png"),
+                PathBuf::from("public/img.png"),
+                PathBuf::from("static_files/logo.png"),
+            ]
+        );
+
+        let policy = ExposurePolicy::new(root).with_output_dir(Path::new("public"));
+        let files = ProjectFiles::discover_with(&policy);
+        assert_eq!(
+            files.binary_files,
+            vec![
+                PathBuf::from("img/ok.png"),
+                PathBuf::from("static_files/logo.png"),
+            ]
+        );
+    }
+
+    /// Hidden *files* are refused like hidden directories.
+    #[test]
+    fn test_discover_skips_hidden_files() {
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::write(temp.path().join(".draft.qmd"), "# Draft").unwrap();
+        let files = ProjectFiles::discover(temp.path());
+        assert_eq!(files.qmd_files, vec![PathBuf::from("index.qmd")]);
+    }
+
+    /// A symlink that resolves outside the project root is not synced.
+    #[cfg(unix)]
+    #[test]
+    fn test_discover_skips_symlink_escaping_the_root() {
+        let outside = TempDir::new().unwrap();
+        fs::write(outside.path().join("secret.qmd"), "secret").unwrap();
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("secret.qmd"),
+            temp.path().join("leak.qmd"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(temp.path().join("index.qmd"), temp.path().join("alias.qmd"))
+            .unwrap();
+        let files = ProjectFiles::discover(temp.path());
+        assert_eq!(
+            files.qmd_files,
+            vec![PathBuf::from("alias.qmd"), PathBuf::from("index.qmd")]
         );
     }
 

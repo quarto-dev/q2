@@ -11,6 +11,7 @@ pub mod auth;
 pub mod context;
 pub mod discovery;
 pub mod error;
+pub mod exposure;
 pub mod index;
 pub mod login_state;
 pub mod peer;

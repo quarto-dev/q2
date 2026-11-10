@@ -57,15 +57,6 @@ impl Action {
     }
 }
 
-/// Directory names Quarto or its engines own outright. A change inside
-/// one is never a source edit.
-const GENERATED_DIRS: &[&str] = &["node_modules", "__pycache__", "_freeze", "site_libs"];
-
-/// Suffixes of engine sidecar directories (`<stem>_files/`,
-/// `<stem>_cache/`). Matched on every component, so a nested sidecar
-/// is caught wherever it sits.
-const GENERATED_DIR_SUFFIXES: &[&str] = &["_files", "_cache"];
-
 /// Extensions `ProjectContext::discover` admits as inputs.
 const INPUT_EXTENSIONS: &[&str] = &["qmd", "md", "ipynb", "Rmd", "rmd"];
 
@@ -74,7 +65,9 @@ const INPUT_EXTENSIONS: &[&str] = &["qmd", "md", "ipynb", "Rmd", "rmd"];
 /// Rules, in order (each has a unit test below):
 /// 1. Outside the project, under the output directory (when that is
 ///    a separate directory), an output the last render wrote, inside a
-///    dot-directory or generated directory, or an editor temporary:
+///    dot-directory or a generated directory (as
+///    `quarto_hub::exposure::in_generated_dir` decides), or an editor
+///    temporary:
 ///    [`Action::Ignore`]. Dot-*files* are ignored too, except `.env*`,
 ///    which Quarto reads as config.
 /// 2. A known input that still exists: [`Action::Subset`] of itself.
@@ -107,13 +100,15 @@ pub fn classify(path: &Path, ctx: &WatchContext) -> Action {
         if name.starts_with('.') && !(last && name.starts_with(".env")) {
             return Action::Ignore;
         }
-        if GENERATED_DIRS.contains(name) || GENERATED_DIR_SUFFIXES.iter().any(|s| name.ends_with(s))
-        {
-            return Action::Ignore;
-        }
         if last && is_editor_temporary(name) {
             return Action::Ignore;
         }
+    }
+    // Generated directories are the exposure policy's call (preview VFS
+    // contract D4): owned names at any depth, and `<stem>_files/` or
+    // `<stem>_cache/` only beside their `<stem>` document.
+    if quarto_hub::exposure::in_generated_dir(&ctx.project_dir, rel) {
+        return Action::Ignore;
     }
     if ctx.inputs.contains(path) {
         return if path.exists() {
@@ -321,6 +316,19 @@ mod tests {
         ] {
             let p = c.project_dir.join(rel);
             assert_eq!(classify(&p, &c), Action::Ignore, "{rel}");
+        }
+    }
+
+    /// Generated means provenance (preview VFS contract D4): a sidecar-
+    /// shaped directory with no document beside it is an author's, so an
+    /// edit there re-renders.
+    #[test]
+    fn a_sidecar_name_without_its_source_is_a_source_dir() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let c = ctx(&temp, true);
+        for rel in ["static_files/brand.scss", "posts/two_files/img.png"] {
+            let p = c.project_dir.join(rel);
+            assert_eq!(classify(&p, &c), Action::Full, "{rel}");
         }
     }
 

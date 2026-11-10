@@ -714,6 +714,18 @@ fn build_hub_config(config: &PreviewConfig) -> HubConfig {
         // bd-9cyza5vy: the deck's transitive `{{< include >}}` closure, synced
         // as invisible text deps so includes expand in the WASM pipeline.
         single_file_text_deps: single_file_deps.qmd_files,
+        // Preview VFS contract D4: the exposure policy refuses the
+        // project's output directory. Single-file mode renders beside the
+        // deck and has none.
+        output_dir: match (
+            config.project_root.as_deref(),
+            config.single_file.as_deref(),
+        ) {
+            (Some(root), None) => {
+                config::resolve_project_output_dir(root, &render_flags::native_runtime())
+            }
+            _ => None,
+        },
         // Light periodic sync — the user can Ctrl-C any time, and
         // shutdown does a final sync anyway. 5 seconds is a reasonable
         // crash-resilience window for a *preview* invocation.

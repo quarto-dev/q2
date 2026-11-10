@@ -519,6 +519,9 @@ async fn main() -> anyhow::Result<()> {
         // Single-file asset sync is a preview-only concern (bd-kpuweafo).
         single_file_assets: Vec::new(),
         single_file_text_deps: Vec::new(),
+        // The hub does not parse `_quarto.yml`; only the default output
+        // directories are excluded.
+        output_dir: None,
         auth_config,
         allow_insecure_auth: args.allow_insecure_auth,
         register_root_ws: true,

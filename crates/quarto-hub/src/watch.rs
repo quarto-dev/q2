@@ -13,6 +13,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
+use crate::exposure::ExposurePolicy;
 
 /// Default debounce duration for filesystem events (in milliseconds).
 /// This batches rapid file saves into a single event.
@@ -118,6 +119,12 @@ pub struct WatchConfig {
     /// (`project_root.join(rel)`) so paths match the events `notify`
     /// echoes back.
     pub single_file_deps: Vec<PathBuf>,
+
+    /// The project's `output-dir`, project-relative or absolute. Under
+    /// [`WatchFilter::PreviewBroad`] an event inside it, or inside any
+    /// other generated directory, is dropped; see
+    /// [`ExposurePolicy::dir_is_generated`].
+    pub output_dir: Option<PathBuf>,
 }
 
 impl Default for WatchConfig {
@@ -127,6 +134,7 @@ impl Default for WatchConfig {
             filter: WatchFilter::default(),
             single_file: None,
             single_file_deps: Vec::new(),
+            output_dir: None,
         }
     }
 }
@@ -139,6 +147,7 @@ impl WatchConfig {
             filter,
             single_file: None,
             single_file_deps: Vec::new(),
+            output_dir: None,
         }
     }
 }
@@ -180,6 +189,18 @@ impl FileWatcher {
             });
         let event_allowed = allowed.clone();
 
+        // Preview VFS contract D4: the preview watcher drops events inside
+        // generated directories (a sidecar beside its source, `site_libs`,
+        // the output directory, ...) by asking the exposure policy, so a
+        // render's own output never looks like an author's edit.
+        let generated_policy = (filter == WatchFilter::PreviewBroad).then(|| {
+            let policy = ExposurePolicy::new(&project_root);
+            match config.output_dir.as_deref() {
+                Some(out) => policy.with_output_dir(out),
+                None => policy,
+            }
+        });
+
         // Create a debounced watcher
         let mut debouncer = new_debouncer(
             Duration::from_millis(config.debounce_ms),
@@ -194,6 +215,11 @@ impl FileWatcher {
                             // files are watched.
                             if let Some(ref allow) = event_allowed
                                 && !allow.contains(&event.path)
+                            {
+                                continue;
+                            }
+                            if let Some(policy) = &generated_policy
+                                && policy.event_in_generated_dir(&event.path)
                             {
                                 continue;
                             }
@@ -457,6 +483,7 @@ mod tests {
                 filter: WatchFilter::SourcesOnly,
                 single_file: None,
                 single_file_deps: Vec::new(),
+                output_dir: None,
             },
         )
         .unwrap();
@@ -497,6 +524,7 @@ mod tests {
                 filter: WatchFilter::SourcesOnly,
                 single_file: None,
                 single_file_deps: Vec::new(),
+                output_dir: None,
             },
         )
         .unwrap();
@@ -540,6 +568,7 @@ mod tests {
                 filter: WatchFilter::PreviewBroad,
                 single_file: None,
                 single_file_deps: Vec::new(),
+                output_dir: None,
             },
         )
         .unwrap();
@@ -575,6 +604,7 @@ mod tests {
                 filter: WatchFilter::SourcesOnly,
                 single_file: None,
                 single_file_deps: Vec::new(),
+                output_dir: None,
             },
         )
         .unwrap();
@@ -615,6 +645,7 @@ mod tests {
                 filter: WatchFilter::PreviewBroad,
                 single_file: Some(target.clone()),
                 single_file_deps: Vec::new(),
+                output_dir: None,
             },
         )
         .unwrap();
@@ -656,6 +687,7 @@ mod tests {
                 filter: WatchFilter::PreviewBroad,
                 single_file: Some(deck.clone()),
                 single_file_deps: vec![dep.clone()],
+                output_dir: None,
             },
         )
         .unwrap();
@@ -673,6 +705,58 @@ mod tests {
             ),
             Ok(None) => panic!("Watcher stopped unexpectedly"),
             Err(_) => panic!("Timeout waiting for included-dep change event"),
+        }
+    }
+
+    /// The preview watcher asks the exposure policy whether an event lies
+    /// in a generated directory (preview VFS contract D4): a sidecar beside
+    /// its source and the configured output directory are dropped; a
+    /// sidecar-shaped directory with no source beside it is an author's.
+    #[tokio::test]
+    async fn test_watcher_preview_broad_drops_generated_dirs() {
+        let temp = TempDir::new().unwrap();
+        let temp_path = temp.path().canonicalize().unwrap();
+        std::fs::write(temp_path.join("index.qmd"), "# Hi").unwrap();
+        for dir in ["index_files", "public", "static_files"] {
+            std::fs::create_dir(temp_path.join(dir)).unwrap();
+        }
+        let generated = [
+            temp_path.join("index_files/plot.png"),
+            temp_path.join("public/out.png"),
+        ];
+        let admitted = temp_path.join("static_files/logo.png");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let mut watcher = FileWatcher::new(
+            &temp_path,
+            WatchConfig {
+                debounce_ms: 100,
+                filter: WatchFilter::PreviewBroad,
+                single_file: None,
+                single_file_deps: Vec::new(),
+                output_dir: Some(PathBuf::from("public")),
+            },
+        )
+        .unwrap();
+
+        for path in &generated {
+            std::fs::write(path, [0x89]).unwrap();
+        }
+        std::fs::write(&admitted, [0x89]).unwrap();
+
+        let mut seen = Vec::new();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        while let Ok(Some(WatchEvent::Modified(path))) =
+            tokio::time::timeout_at(deadline, watcher.recv()).await
+        {
+            seen.push(path);
+        }
+        assert!(
+            seen.contains(&admitted),
+            "expected {admitted:?} in {seen:?}"
+        );
+        for path in &generated {
+            assert!(!seen.contains(path), "{path:?} must not surface: {seen:?}");
         }
     }
 }

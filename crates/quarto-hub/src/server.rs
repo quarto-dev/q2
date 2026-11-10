@@ -2014,6 +2014,7 @@ where
     let watch_enabled = config.watch_enabled;
     let watch_debounce_ms = config.watch_debounce_ms;
     let watch_filter = config.watch_filter;
+    let watch_output_dir = config.output_dir.clone();
     let watch_single_file = config.single_file.clone();
     let project_root = storage.project_root().map(|p| p.to_path_buf());
     let has_project = project_root.is_some();
@@ -2176,6 +2177,7 @@ where
             filter: watch_filter,
             single_file: single_file_abs,
             single_file_deps,
+            output_dir: watch_output_dir,
         };
         match FileWatcher::new(&project_root, watch_config) {
             Ok(watcher) => {

@@ -16,6 +16,7 @@ use tracing::{debug, info, warn};
 use crate::auth::{self, AuthConfig, AuthState, OidcClaims};
 use crate::discovery::ProjectFiles;
 use crate::error::Result;
+use crate::exposure::ExposurePolicy;
 use crate::index::{IndexDocument, load_or_create_index};
 use crate::peer::spawn_peer_connection;
 use crate::resource::{create_binary_document, detect_mime_type};
@@ -107,6 +108,14 @@ pub struct HubConfig {
     /// dependencies). Empty for project mode and the `quarto hub` server.
     pub single_file_text_deps: Vec<PathBuf>,
 
+    /// The project's `output-dir` (absolute, or relative to `project_root`).
+    /// The exposure policy treats it as generated: discovery does not sync
+    /// it and the preview watcher drops events inside it. `q2 preview`
+    /// resolves it from the project config (`quarto-hub` does not parse
+    /// `_quarto.yml`); `None` leaves only the default output directories
+    /// (`_site`, `_book`) excluded.
+    pub output_dir: Option<PathBuf>,
+
     /// OAuth2 auth configuration. None = auth disabled.
     pub auth_config: Option<AuthConfig>,
 
@@ -184,6 +193,7 @@ impl Default for HubConfig {
             resource_files: Vec::new(),
             single_file_assets: Vec::new(),
             single_file_text_deps: Vec::new(),
+            output_dir: None,
             auth_config: None,
             allow_insecure_auth: false,
             register_root_ws: true,
@@ -292,6 +302,13 @@ impl HubContext {
         // path is already known, and walking the parent directory
         // would index sibling files the user didn't ask for.
         let project_files = if let Some(ref project_root) = project_root {
+            // Preview VFS contract D4: the walk asks the exposure policy,
+            // which also refuses the configured output directory.
+            let policy = ExposurePolicy::new(project_root);
+            let policy = match config.output_dir.as_deref() {
+                Some(out) => policy.with_output_dir(out),
+                None => policy,
+            };
             let files = match config.single_file.as_ref() {
                 // bd-ggvq1j68: single-file mode skips the WalkDir, but a deck
                 // that references `brand: _brand.yml` needs that sibling in the
@@ -311,7 +328,7 @@ impl HubContext {
                 // `.html` (it falls through every category), so the
                 // caller-resolved set is injected here to ride the text
                 // sync path into the VFS.
-                None => ProjectFiles::discover(project_root)
+                None => ProjectFiles::discover_with(&policy)
                     .with_resource_files(config.resource_files.clone()),
             };
             info!(

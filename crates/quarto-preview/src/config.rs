@@ -262,6 +262,20 @@ pub fn resolve_project_resource_html(
     html
 }
 
+/// The project's resolved output directory (absolute), for the exposure
+/// policy (preview VFS contract D4): discovery does not sync it and the
+/// watcher drops events inside it. `None` when the project renders beside
+/// its sources (the default type), or when discovery fails.
+pub fn resolve_project_output_dir(
+    project_root: &std::path::Path,
+    runtime: &dyn SystemRuntime,
+) -> Option<std::path::PathBuf> {
+    let project =
+        quarto_core::project::ProjectContext::discover_with_profile(project_root, runtime, None)
+            .ok()?;
+    (project.output_dir != project.dir).then_some(project.output_dir)
+}
+
 /// Resolve the project's **full** `resources:` set to `(output-relative URL
 /// path, absolute source path on disk)` pairs. (bd-kjrpya2d)
 ///
@@ -417,15 +431,13 @@ pub fn resolve_single_file_deps(
         .unwrap_or_else(|_| project_root.to_path_buf());
 
     // Re-express a canonical absolute path as project-root-relative, keeping
-    // only existing files that stay under the deck dir (no `../` escape).
+    // only existing files that stay under the deck dir (no `../` escape) and
+    // that the exposure policy admits (preview VFS contract D4: not hidden,
+    // not generated, an allowed type).
+    let policy = quarto_hub::exposure::ExposurePolicy::new(project_root);
     let to_in_tree_rel = |canon: PathBuf| -> Option<PathBuf> {
-        if !canon.is_file() || !canon.starts_with(&canonical_root) {
-            return None;
-        }
-        canon
-            .strip_prefix(&canonical_root)
-            .ok()
-            .map(Path::to_path_buf)
+        let rel = canon.strip_prefix(&canonical_root).ok()?;
+        policy.admit(rel).ok().map(|admitted| admitted.rel)
     };
 
     // Text deps: the `.qmd` files the stage actually spliced (transitive,
@@ -505,8 +517,9 @@ pub fn resolve_single_file_deps(
                 },
             ) {
                 for r in resolved {
-                    let rel = PathBuf::from(&r.output_relative);
-                    if seen_bin.insert(rel.clone()) {
+                    if let Some(rel) = to_in_tree_rel(r.source)
+                        && seen_bin.insert(rel.clone())
+                    {
                         binary_files.push(rel);
                     }
                 }
@@ -614,6 +627,31 @@ mod tests {
                 qmd_files: vec![std::path::PathBuf::from("part.qmd")],
                 binary_files: vec![std::path::PathBuf::from("inc.png")],
             }
+        );
+    }
+
+    /// The closure is bounded by the exposure policy (preview VFS contract
+    /// D4): a reference into a generated sidecar beside the deck, or into a
+    /// hidden directory, is not synced, while an ordinary subdirectory is.
+    #[test]
+    fn single_file_deps_are_bounded_by_the_exposure_policy() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        for rel in ["main_files/fig.png", ".hidden/secret.png", "img/ok.png"] {
+            let path = root.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, b"\x89PNG\r\n").unwrap();
+        }
+        std::fs::write(
+            root.join("main.qmd"),
+            "![](main_files/fig.png)\n\n![](.hidden/secret.png)\n\n![](img/ok.png)\n",
+        )
+        .unwrap();
+
+        let deps = resolve_single_file_deps(root, std::path::Path::new("main.qmd"), native_arc());
+        assert_eq!(
+            deps.binary_files,
+            vec![std::path::PathBuf::from("img/ok.png")]
         );
     }
 
@@ -1073,6 +1111,32 @@ mod tests {
                 std::path::PathBuf::from("decks/b.html"),
             ]
         );
+    }
+
+    /// The exposure policy refuses the project's output directory (preview
+    /// VFS contract D4); `quarto-hub` cannot parse `_quarto.yml`, so the
+    /// preview resolves it. A project that renders beside its sources has
+    /// none to exclude.
+    #[test]
+    fn project_output_dir_is_resolved_from_the_config() {
+        let runtime = NativeRuntime::new();
+        let cases = [
+            ("project:\n  type: website\n", Some("_site")),
+            ("project:\n  type: book\n", Some("_book")),
+            (
+                "project:\n  type: website\n  output-dir: public\n",
+                Some("public"),
+            ),
+            ("project:\n  type: default\n", None),
+        ];
+        for (yaml, want) in cases {
+            let temp = TempDir::new().unwrap();
+            std::fs::write(temp.path().join("_quarto.yml"), yaml).unwrap();
+            std::fs::write(temp.path().join("index.qmd"), "# Hi").unwrap();
+            let got = resolve_project_output_dir(temp.path(), &runtime);
+            let canonical = quarto_system_runtime::canonicalize(temp.path()).unwrap();
+            assert_eq!(got, want.map(|w| canonical.join(w)), "{yaml}");
+        }
     }
 
     #[test]
