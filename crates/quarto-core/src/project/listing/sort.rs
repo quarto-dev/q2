@@ -20,6 +20,7 @@ use std::cmp::Ordering;
 
 use super::config::{ListingSort, SortDirection};
 use super::item::ListingItem;
+use crate::dates::parse_date;
 
 /// Sort `items` in place according to the given multi-key spec.
 /// Each key is applied in reverse order using a stable sort,
@@ -78,13 +79,36 @@ fn compare_items(a: &ListingItem, b: &ListingItem, key: &ListingSort) -> Orderin
         (None, Some(_)) => Ordering::Greater,
         (Some(_), None) => Ordering::Less,
         (Some(a), Some(b)) => {
-            let ord = natural_compare(a, b);
-            match key.direction {
-                SortDirection::Asc => ord,
-                SortDirection::Desc => ord.reverse(),
+            if is_date_field(&key.field) {
+                // Unparseable dates sort after parsed ones, like
+                // missing values, regardless of direction.
+                match (parse_date(a), parse_date(b)) {
+                    (Some(ad), Some(bd)) => {
+                        return directed(ad.unix_millis().cmp(&bd.unix_millis()), key.direction);
+                    }
+                    (Some(_), None) => return Ordering::Less,
+                    (None, Some(_)) => return Ordering::Greater,
+                    (None, None) => {}
+                }
             }
+            directed(natural_compare(a, b), key.direction)
         }
     }
+}
+
+fn directed(ord: Ordering, direction: SortDirection) -> Ordering {
+    match direction {
+        SortDirection::Asc => ord,
+        SortDirection::Desc => ord.reverse(),
+    }
+}
+
+/// Fields that hold the author's date text (`5/5/2023`, `2023-05-05`).
+/// They sort by the parsed date, as Q1 does (it reads them into `Date`
+/// values): comparing the text would put `01/5/2024` before `5/5/2023`
+/// (GH #1154). Zero-padded ISO dates order the same either way.
+fn is_date_field(field: &str) -> bool {
+    matches!(field, "date" | "date-modified")
 }
 
 /// Natural string comparison with a numeric-prefix bias: strings
@@ -233,6 +257,120 @@ mod tests {
         assert_eq!(items[0].title_text(), "b"); // newer date first
         assert_eq!(items[1].title_text(), "a"); // tied dates → title asc
         assert_eq!(items[2].title_text(), "c");
+    }
+
+    fn date_sort(field: &str, direction: SortDirection) -> Vec<ListingSort> {
+        vec![ListingSort {
+            field: field.to_string(),
+            direction,
+        }]
+    }
+
+    fn titles(items: &[ListingItem]) -> Vec<String> {
+        items.iter().map(|i| i.title_text()).collect()
+    }
+
+    // GH #1154: M/D/YYYY dates sort by the parsed date, not the text
+    // (whose order would be Alpha, Bravo, Charlie). Q1 order.
+    #[test]
+    fn sort_by_us_style_dates_is_chronological() {
+        let make = || {
+            vec![
+                make_item("Alpha", Some("01/5/2024")),
+                make_item("Bravo", Some("5/5/2023")),
+                make_item("Charlie", Some("6/1/2023")),
+            ]
+        };
+        let mut items = make();
+        apply_sort(
+            &mut items,
+            &date_sort("date", SortDirection::Asc),
+            &mut Vec::new(),
+        );
+        assert_eq!(titles(&items), ["Bravo", "Charlie", "Alpha"]);
+
+        let mut items = make();
+        apply_sort(
+            &mut items,
+            &date_sort("date", SortDirection::Desc),
+            &mut Vec::new(),
+        );
+        assert_eq!(titles(&items), ["Alpha", "Charlie", "Bravo"]);
+    }
+
+    // The issue's list form: `sort: ["date", "title desc"]`.
+    #[test]
+    fn sort_by_us_style_dates_in_multi_key_sort() {
+        let mut items = vec![
+            make_item("a", Some("01/5/2024")),
+            make_item("b", Some("6/1/2023")),
+            make_item("c", Some("06/01/2023")),
+            make_item("d", Some("5/5/2023")),
+        ];
+        let sort = vec![
+            ListingSort {
+                field: "date".to_string(),
+                direction: SortDirection::Asc,
+            },
+            ListingSort {
+                field: "title".to_string(),
+                direction: SortDirection::Desc,
+            },
+        ];
+        apply_sort(&mut items, &sort, &mut Vec::new());
+        // `6/1/2023` and `06/01/2023` are the same date → title desc.
+        assert_eq!(titles(&items), ["d", "c", "b", "a"]);
+    }
+
+    // ISO and US forms in one listing compare as dates; date-modified
+    // gets the same treatment.
+    #[test]
+    fn sort_by_mixed_date_forms_is_chronological() {
+        let make = |title: &str, d: &str| {
+            let mut item = make_item(title, None);
+            item.date_modified = Some(d.to_string());
+            item
+        };
+        let mut items = vec![
+            make("late", "2024-02-01T09:30:00"),
+            make("early", "12/31/2023"),
+            make("mid", "1/15/2024"),
+        ];
+        apply_sort(
+            &mut items,
+            &date_sort("date-modified", SortDirection::Asc),
+            &mut Vec::new(),
+        );
+        assert_eq!(titles(&items), ["early", "mid", "late"]);
+    }
+
+    // A date value that doesn't parse sorts after every parsed date
+    // (in both directions); two unparseable values compare as text.
+    #[test]
+    fn unparseable_dates_sort_after_parsed_dates() {
+        let make = || {
+            vec![
+                make_item("zeta", Some("sometime")),
+                make_item("new", Some("2024-01-01")),
+                make_item("alpha", Some("eventually")),
+                make_item("old", Some("1/1/2020")),
+            ]
+        };
+        let mut items = make();
+        apply_sort(
+            &mut items,
+            &date_sort("date", SortDirection::Asc),
+            &mut Vec::new(),
+        );
+        assert_eq!(titles(&items), ["old", "new", "alpha", "zeta"]);
+
+        let mut items = make();
+        apply_sort(
+            &mut items,
+            &date_sort("date", SortDirection::Desc),
+            &mut Vec::new(),
+        );
+        assert_eq!(titles(&items), ["new", "old", "zeta", "alpha"]);
     }
 
     #[test]
