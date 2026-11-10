@@ -139,11 +139,21 @@ impl ConfigPath {
     /// Capture a value's path string and provenance; `None` for a
     /// non-string value.
     pub fn from_value(value: &ConfigValue) -> Option<Self> {
+        Self::from_value_in(value, None)
+    }
+
+    /// [`ConfigPath::from_value`], reading a markdown-parsed string from
+    /// its source text when `source_context` has it
+    /// ([`config_value_text`]).
+    pub fn from_value_in(
+        value: &ConfigValue,
+        source_context: Option<&SourceContext>,
+    ) -> Option<Self> {
         if let ConfigValueKind::Path(marked) = &value.value {
             return Some(ConfigPath::Marked(marked.clone()));
         }
         Some(ConfigPath::Raw {
-            raw: value.as_plain_text()?,
+            raw: config_value_text(value, source_context)?,
             source: value.source_info.clone(),
         })
     }
@@ -212,8 +222,78 @@ pub fn resolve_config_path(value: &ConfigValue, ctx: &PathCtx<'_>) -> Option<Res
     if let ConfigValueKind::Path(marked) = &value.value {
         return Some(resolve_marked(marked, ctx));
     }
-    let raw = value.as_plain_text()?;
+    let raw = config_value_text(value, ctx.source_context)?;
     Some(resolve_config_path_str(&raw, &value.source_info, ctx))
+}
+
+/// The string a config value holds, as the author (or the engine
+/// round-trip's serializer) wrote it.
+///
+/// A string in document front matter is parsed as markdown, and so is
+/// every metadata string once the engine round-trip has serialized the
+/// merged metadata to qmd and re-read it (`EngineExecutionStage`; a
+/// `Path` value loses its kind there). Flattening those inlines back to
+/// text is lossy: `_extensions/acme/demo/_colors.scss` parses as
+/// emphasis and comes back as `extensions/acme/demo/colors.scss` (GH
+/// #1152). So a markdown value is read from the text its span covers,
+/// decoded as a YAML scalar (quotes, escapes). The flattened inlines are
+/// the fallback only when the span is not one range in a file whose
+/// content `source_context` holds.
+pub fn config_value_text(
+    value: &ConfigValue,
+    source_context: Option<&SourceContext>,
+) -> Option<String> {
+    if let ConfigValueKind::PandocInlines(_) = &value.value
+        && let Some(text) = source_context.and_then(|sc| scalar_source_text(&value.source_info, sc))
+    {
+        return Some(text);
+    }
+    value.as_plain_text()
+}
+
+/// The YAML string scalar `source` covers, decoded.
+fn scalar_source_text(source: &SourceInfo, sc: &SourceContext) -> Option<String> {
+    let (file_id, start, end) = source.resolve_byte_range()?;
+    let content = sc.get_file(FileId(file_id))?.content.as_deref()?;
+    let raw = content.get(start..end)?;
+    match yaml_rust2::YamlLoader::load_from_str(raw).ok()?.as_slice() {
+        [yaml_rust2::Yaml::String(s)] => Some(s.clone()),
+        _ => None,
+    }
+}
+
+/// `value` with every markdown-parsed string in it replaced by a plain
+/// string scalar spelled as [`config_value_text`] reads it, for
+/// consumers outside this module that extract strings themselves
+/// (`quarto_sass::ThemeConfig::from_config_value`). Spans are kept.
+pub fn literal_config_strings(
+    value: &ConfigValue,
+    source_context: Option<&SourceContext>,
+) -> ConfigValue {
+    let mut out = value.clone();
+    literalize(&mut out, source_context);
+    out
+}
+
+fn literalize(value: &mut ConfigValue, source_context: Option<&SourceContext>) {
+    match &mut value.value {
+        ConfigValueKind::PandocInlines(_) => {
+            if let Some(text) = config_value_text(value, source_context) {
+                value.value = ConfigValueKind::scalar(yaml_rust2::Yaml::String(text));
+            }
+        }
+        ConfigValueKind::Array(items) => {
+            for item in items {
+                literalize(item, source_context);
+            }
+        }
+        ConfigValueKind::Map(entries) => {
+            for entry in entries {
+                literalize(&mut entry.value, source_context);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Resolve a path string together with the `SourceInfo` of the value it
@@ -307,7 +387,7 @@ pub fn resolve_config_file_with(
     ctx: &PathCtx<'_>,
     is_file: impl Fn(&Path) -> bool,
 ) -> Option<FileCandidate> {
-    let config_path = ConfigPath::from_value(value)?;
+    let config_path = ConfigPath::from_value_in(value, ctx.source_context)?;
     config_path.resolve_file_with(ctx, is_file)
 }
 
@@ -1051,6 +1131,90 @@ mod tests {
         assert_eq!(
             ConfigPath::from_value(&ConfigValue::new_map(vec![], SourceInfo::for_test())),
             None
+        );
+    }
+
+    /// GH #1152: front matter as the engine round-trip re-reads it. The
+    /// metadata comes back as markdown, so a path with two underscores
+    /// parses as emphasis and its inlines no longer spell the path.
+    fn reparsed_front_matter(yaml: &str) -> (SourceContext, ConfigValue) {
+        let input = format!("---\n{yaml}\n---\n\nBody.\n");
+        let mut sink = Vec::new();
+        let (pandoc, _, _) = pampa::readers::qmd::read(
+            input.as_bytes(),
+            false,
+            "/project/page.qmd",
+            &mut sink,
+            true,
+            None,
+        )
+        .expect("front matter parses");
+        let mut sc = SourceContext::new();
+        sc.add_file("/project/page.qmd".into(), Some(input));
+        (sc, pandoc.meta)
+    }
+
+    #[test]
+    fn markdown_strings_are_read_from_their_source_text() {
+        let (sc, meta) = reparsed_front_matter(
+            "theme: [_extensions/acme/demo/_colors.scss, \"a_b_.scss\", 'c_d_''.scss', main.scss]",
+        );
+        let items = meta.get("theme").and_then(|v| v.as_array()).expect("array");
+        assert!(matches!(items[0].value, ConfigValueKind::PandocInlines(_)));
+        // The inlines alone lose the emphasis delimiters.
+        assert_eq!(
+            items[0].as_plain_text().as_deref(),
+            Some("extensions/acme/demo/colors.scss")
+        );
+        let texts: Vec<_> = items
+            .iter()
+            .map(|v| config_value_text(v, Some(&sc)).expect("string"))
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "_extensions/acme/demo/_colors.scss",
+                "a_b_.scss",
+                "c_d_'.scss",
+                "main.scss"
+            ]
+        );
+        // Without a source context the inlines are all there is.
+        assert_eq!(
+            config_value_text(&items[0], None).as_deref(),
+            Some("extensions/acme/demo/colors.scss")
+        );
+    }
+
+    #[test]
+    fn markdown_path_values_resolve_by_their_source_text() {
+        let (sc, meta) = reparsed_front_matter("template: _partials/_page.html");
+        let d = dirs("/project", "/project");
+        let c = PathCtx {
+            source_context: Some(&sc),
+            project_dir: &d.project,
+            document_dir: &d.document,
+        };
+        let value = meta.get("template").expect("template");
+        assert_eq!(
+            resolve_config_path(value, &c),
+            Some(ResolvedConfigPath::File(p("/project/_partials/_page.html")))
+        );
+        let found = resolve_config_file_with(value, &c, |_| true).expect("candidate");
+        assert_eq!(found.path, p("/project/_partials/_page.html"));
+    }
+
+    #[test]
+    fn literal_config_strings_rewrites_markdown_leaves_only() {
+        let (sc, meta) =
+            reparsed_front_matter("theme:\n  light: [cosmo, _x/_y.scss]\n  dark: _a/_b.scss");
+        let literal = literal_config_strings(meta.get("theme").unwrap(), Some(&sc));
+        let light = literal.get("light").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(light[0].as_str(), Some("cosmo"));
+        assert_eq!(light[1].as_str(), Some("_x/_y.scss"));
+        assert_eq!(
+            literal.get("dark").and_then(|v| v.as_str()),
+            Some("_a/_b.scss")
         );
     }
 

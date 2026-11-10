@@ -962,25 +962,15 @@ pub(crate) fn merge_markdown_into_ast(
     // growing `ast_context.filenames`, so in a project render the
     // two counts diverge and the derived id lands on `_quarto.yml`'s
     // dense slot (bd-itj2mjkr).
-    let new_slot = if let Some(intermediate_file) = executed_ast_context
+    //
+    // The slot keeps the markdown itself, not just its line index: the
+    // re-parsed metadata's strings are markdown inlines, and a consumer
+    // that needs one as written (a path with two underscores parses as
+    // emphasis) reads it back from this text
+    // (`config_paths::config_value_text`, GH #1152).
+    let new_slot = merged_context
         .source_context
-        .get_file(quarto_source_map::FileId(0))
-        .cloned()
-    {
-        if let Some(info) = intermediate_file.file_info {
-            merged_context
-                .source_context
-                .add_file_with_info(intermediate_name.clone(), info)
-        } else {
-            merged_context
-                .source_context
-                .add_file(intermediate_name.clone(), None)
-        }
-    } else {
-        merged_context
-            .source_context
-            .add_file(intermediate_name.clone(), None)
-    };
+        .add_file(intermediate_name.clone(), Some(markdown.to_string()));
     merged_context.filenames.push(intermediate_name);
     // Carry the executed parse's example-list counter forward; the
     // last engine's value wins so downstream numbering is coherent.
@@ -2105,6 +2095,78 @@ mod tests {
         assert_eq!(
             kept_file.path, "/project/test.qmd",
             "kept original block must still attribute to the document"
+        );
+    }
+
+    // GH #1152: the engine round-trip re-reads the merged metadata as
+    // markdown, so a path with two underscores comes back as emphasis.
+    // The intermediate's slot keeps its text, so the value can still be
+    // read as written.
+    #[tokio::test]
+    async fn reparsed_metadata_strings_read_back_as_written() {
+        use crate::engine::{EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine};
+        use std::sync::Arc;
+
+        struct EchoEngine;
+        impl ExecutionEngine for EchoEngine {
+            fn name(&self) -> &str {
+                "stub"
+            }
+            fn execute(
+                &self,
+                input: &str,
+                _ctx: &ExecutionContext,
+            ) -> std::result::Result<ExecuteResult, crate::engine::ExecutionError> {
+                Ok(ExecuteResult::new(input.to_string()))
+            }
+            fn claims_language(
+                &self,
+                language: &str,
+                _first_class: Option<&str>,
+            ) -> crate::engine::LanguageClaim {
+                if language == "stub" {
+                    crate::engine::LanguageClaim::Primary(1)
+                } else {
+                    crate::engine::LanguageClaim::None
+                }
+            }
+            fn is_available(&self) -> bool {
+                true
+            }
+        }
+
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(EchoEngine));
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+
+        let content = b"---\ntitle: Test\nengine: stub\n---\n\n```{stub}\nx\n```\n";
+        let mut doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        // What an extension's rebased `theme:` entry looks like by now.
+        doc_ast.ast.meta.insert_path(
+            &["theme"],
+            quarto_pandoc_types::ConfigValue::new_path(
+                "_extensions/acme/demo/_colors.scss".to_string(),
+                quarto_source_map::SourceInfo::for_test(),
+            ),
+        );
+
+        let output = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .unwrap();
+        let result = output.into_document_ast().expect("Should be DocumentAst");
+        let theme = result.ast.meta.get("theme").expect("theme survives");
+        assert_eq!(
+            theme.as_plain_text().as_deref(),
+            Some("extensions/acme/demo/colors.scss"),
+            "precondition: the round-trip re-reads the path as markdown"
+        );
+        assert_eq!(
+            crate::config_paths::config_value_text(theme, Some(&result.ast_context.source_context))
+                .as_deref(),
+            Some("_extensions/acme/demo/_colors.scss")
         );
     }
 

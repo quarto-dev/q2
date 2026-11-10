@@ -702,7 +702,14 @@ impl PipelineStage for CompileThemeCssStage {
         // resolution failures without a config path), we fall back
         // to the legacy stage-error path so the message still lands
         // even without a span.
-        let mut theme_config = match ThemeConfig::from_config_value(&doc.ast.meta) {
+        //
+        // `theme:` entries are read as written, not from their markdown
+        // inlines: after an engine round-trip an extension's
+        // `_extensions/…/_colors.scss` parses as emphasis (GH #1152).
+        // The AST context is the one that holds the engine
+        // intermediates those spans point into.
+        let theme_meta = literal_theme_meta(&doc.ast.meta, &doc.ast_context.source_context);
+        let mut theme_config = match ThemeConfig::from_config_value(&theme_meta) {
             Ok(c) => c,
             Err(e) => {
                 let pe = crate::theme_diagnostic::sass_error_to_parse_error(
@@ -942,6 +949,21 @@ impl PipelineStage for CompileThemeCssStage {
 
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// `meta` with its `theme:` subtree's strings made literal
+/// ([`crate::config_paths::literal_config_strings`]), for
+/// `ThemeConfig::from_config_value`, which extracts theme names and
+/// paths by flattening markdown inlines (GH #1152).
+fn literal_theme_meta(
+    meta: &ConfigValue,
+    source_context: &quarto_source_map::SourceContext,
+) -> ConfigValue {
+    let mut meta = meta.clone();
+    if let Some(theme) = meta.get_mut("theme") {
+        *theme = crate::config_paths::literal_config_strings(theme, Some(source_context));
+    }
+    meta
 }
 
 /// Produce the compiled CSS for ONE variant (the top-level light
