@@ -58,6 +58,17 @@ comm capture.
 4. **The Julia engine declares it**, as a second change to Gordon\'s fork (`gordonwoodhull/quarto-julia-engine`, branch
    `q2/node-port`), made in the subtree as ordinary commits the way OPR-3 did. No host-side table of engine names.
 5. **A warning for what cannot work**: a widget-view output when no widget state exists (always, today).
+6. **Native Jupyter does not set the label in this plan (Gordon, 2026-11-10, after the plan review).** Native Jupyter
+   never derived page dependencies, so setting it would be new behavior (CDN requirejs, a global jQuery and the
+   `define('jquery')` shim on every page with a `text/html` output), not a restore. Native Jupyter and the ipynb replay
+   path get the widget warning only, and OPR-7d carries that as a known, documented difference from the plain route.
+   Julia is the only engine that sets the label.
+7. **Derived text is derived at present time on every route, never stored, and deduplicated across engines (Gordon,
+   2026-11-10).** The scan and the hoisted-library skip run inside the per-cell presenter (`present_cell_step`), so the
+   render route (`present_document`) and the splice route (`present_units`: preview, hub, supplied records,
+   `q2 convert`) get identical results. Derived includes must not reach `entry.includes`: `fold_side_data`
+   (`stage/stages/engine_execution.rs`) copies `result.includes` into the entry, so the plan clears or bypasses it
+   (see "Where the scan runs"). When several engine records contribute, an identical block is emitted once.
 
 ## Forward compatibility with the widget epic (what this plan fixes and what it leaves open)
 
@@ -68,10 +79,12 @@ comm capture.
 - The channel is `includes` on the result (the epic\'s option A text: derive dependency text in core and carry it as
   `includes`). WGT-2\'s layer 2 prefers the structured `html_dependencies` channel and a presenter result that carries a
   dependency list; this plan does not build that, and a later plan can move the output without changing the label.
-- Derived text is recomputed at present time and never stored in the record (the epic\'s decision). Only the label is
-  stored.
-- Not decided here: the name of the label beyond the working name below, the merge rule when several engines contribute,
-  the AMD-only-when-needed rule, and the per-output form.
+- Derived text is recomputed at present time and never stored in the record (the epic\'s decision; decision 7 above says
+  how this plan keeps it true). Only the label is stored.
+- The label is a selector for a core-side strategy (entry and cells in; includes and a body filter out). Core may later
+  detect a strategy from the cells instead, so treat the label as a hint, not as the only way in.
+- Not decided here: the name of the label beyond the working name below, the AMD-only-when-needed rule, and the
+  per-output form. (The merge rule for identical blocks is decided: decision 7.)
 
 **Explicitly not in this plan:** ipywidgets state (comm capture is WGT-3), a loader that is "only when needed", a
 per-output manifest, the knitr adapter, marimo, and any change to `@quarto/api` or `@quarto/types`.
@@ -90,33 +103,65 @@ engine, `TsRecordInfo` and the record.
 - Record: an optional field on `EngineEntry` (`record/types.rs`), filled through `EngineEntryInput`
   (`record/builder.rs`), `skip_serializing_if` when `None`, outside `HashDefinition`. Check whether the record format
   version needs a bump or a note (the execution-records epic\'s decision 5 and RIU stamping); say what you found.
-- Native Jupyter sets it in code where its `EngineEntry` is built (`engine/jupyter/text_execute.rs`, which calls
-  `present_document`; the other callers are `engine/ts_record.rs`, `engine/replay.rs` and `engine/ipynb_replay.rs`, per
-  WGT-2, to be re-checked by symbol).
-- knitr and marimo set nothing.
+- Native Jupyter, knitr and marimo set nothing (decision 6).
 
-**The strategy `jupyter-outputs`,** one shared function that every caller of `present_document` reaches (not only
-`present_from_record`), run once per engine record whose entry carries the label. It is a port of `widgets.ts`:
+**Where the scan runs (read in the plan review; re-check by symbol).** `present_document` takes `&cells` and an engines
+slice; `text_execute.rs` and `ipynb_replay.rs` pass `&[]`, so no entry is at hand there, and the splice calls
+`present_units` directly, never `present_document` (`stage/stages/record_splice.rs`). So:
+
+- The per-cell step (`present_cell_step`, which takes `engine: Option<&EngineEntry>` and serves both presenter loops)
+  reads the label and skips hoisted-library outputs before it renders a cell's outputs (filter the output list; do not
+  skip mid-loop). An engine with no label never skips.
+- The includes text is computed where the label is visible: per engine record, from the record\'s cells and the
+  format, and delivered through a field on the presenter result that each caller folds. Render
+  (`present_from_record`) pushes it onto `ExecuteResult.includes.header_includes` (push, never assign: the engine may
+  have set some). The splice route folds it into `meta.rendered.includes` the way `fold_includes` does for stored
+  entries.
+- Derived text never reaches `entry.includes`: `fold_side_data` copies `result.includes` into the entry, so the
+  derived text must be kept out of that copy (for example by delivering it on a separate field that the stage drains
+  into `ctx.includes` after `fold_side_data`). A test renders, then replays, and expects one requirejs block.
+- Replay (`engine/replay.rs`) keeps the stored result\'s includes; it must not add the derived text a second time.
+- Across engine records the same block is emitted once (exact-string dedupe of the requirejs, jQuery and shim block and
+  of each hoisted library text); the stage extends `ctx.includes` with no dedupe today.
+
+**The strategy `jupyter-outputs`,** a core function taking the label, the record\'s cells and the format, run once per
+engine record whose entry carries the label. It is a port of `widgets.ts`:
 
 1. Whole-record scan, as Quarto 1: any `application/javascript` or `text/html` output sets the JavaScript-widgets flag;
    any `application/vnd.jupyter.widget-view+json` sets the Jupyter-widgets flag; hidden outputs still count (the epic\'s
    decision: visibility matches Quarto 1 for Jupyter and Julia).
 2. Hoisted libraries: an output whose `text/html` is a widget include (`isWidgetIncludeHtml`, today
    `isPlotlyLibrary`) goes into the head, and the presenter does **not** emit it in the body. Quarto 1 removes it from
-   the cell in place; the recorded route renders from the unmodified record, so the presenter skips it.
-3. The includes text: requirejs 2.3.6, jQuery 3.5.1, the `define('jquery')` shim, and the html-manager and state
-   fragments when the Jupyter-widgets flag is set. Port the literal text and the ordering from
-   `widgetDependencyIncludes` (`widgets.ts`); do not paraphrase it. Put the result on `ExecuteResult.includes`.
-4. Only for HTML-compatible formats and not ipynb output (Quarto 1: `toHtml && !toIpynb`). Take the rule from the
-   format the way the plain route does, and test revealjs and a non-HTML format.
-5. The widget state (`nb.metadata.widgets`) is read if present, as Quarto 1 does, so a record that already carries it
-   (an imported or future one) works; nothing here writes it.
+   the cell in place; the recorded route renders from the unmodified record, so the presenter skips it. Port these
+   details of `htmlLibrariesText` and the strip, each as its own oracle fixture: the common-leading-whitespace removal
+   (`line.replace(" ".repeat(n), "")` removes the first match anywhere in the line, and whitespace-only lines are
+   blanked; lines split on `/\r\n?|\n/`); dedupe of identical library texts; stripping only on `display_data` and
+   `execute_result`; `text/html` as a string or an array joined with `""`; and that the scan sets the
+   JavaScript-widgets flag **before** the strip, so a Plotly library output also turns on requirejs and jQuery. The
+   `isPlotlyLibrary` regexes port to the Rust `regex` crate; JS `.` excludes `\r`, ` ` and ` ` while Rust `.`
+   excludes only `\n`, so check `hasModuleScript` for that.
+3. The includes text: requirejs 2.3.6, jQuery 3.5.1, the `define('jquery')` shim, then the libraries, then the
+   html-manager fragment when the Jupyter-widgets flag is set. Port the literal text and the ordering from
+   `widgetDependencyIncludes` (`widgets.ts`); do not paraphrase it. The head is one string, `head.join("\n") + "\n"`
+   (`widgetTempFile`). The html-manager script keeps Quarto 1\'s unpinned `@*` (pinning is the widget epic\'s).
+4. Only for HTML-compatible formats and not ipynb output (Quarto 1: `toHtml && !toIpynb`, where the Julia engine
+   computes `toHtml` as `quarto.format.isHtmlCompatible(format)`; Q1\'s definition is `isHtmlOutput`, or markdown with
+   `prefer-html`, or ipynb; `external-sources/quarto-cli/src/config/format.ts`). `InlineTarget::from_format` cannot see
+   `prefer-html`: either port that case, or record in the notes that a `prefer-html` markdown document differs. Test
+   revealjs, a non-HTML format and ipynb output.
+5. **No widget state.** Records carry no notebook `metadata.widgets`, so nothing here reads or writes widget state, and
+   the state-script and `</script>` escape variant of `widgetDependencyIncludes` are **not ported** (they belong to
+   WGT-3 with comm capture). The Jupyter-widgets flag still selects the html-manager fragment, as Quarto 1 does.
 
 **The warning.** An output with a `widget-view+json` MIME entry in a record whose scan found no widget state: one
 diagnostic per cell, naming it, saying the page will show the widget\'s text representation. Add the `Q-*` code to
 `quarto-error-catalog/error_catalog.json`, its `docs/errors/<subsystem>/<code>.qmd` page and its `docs/_quarto.yml`
-sidebar entry in the same commit (the lint rules `error-docs-page-missing` and `error-docs-sidebar-unlisted`). Draft of
-the message:
+sidebar entry in the same commit (the lint rules `error-docs-page-missing` and `error-docs-sidebar-unlisted`). Pick the
+next free number in the subsystem section the other presenter or engine warnings use; do not leave `Q-?-?`. The warning
+is a presenter note, and notes are stored in `entry.warnings` and re-raised by `fold_warnings`; check how existing notes
+avoid firing twice on a replayed record, and test that a replayed record shows this one once. Native Jupyter and the
+ipynb replay path also get this warning (decision 6), so the warning is **independent of the label**: it runs in the
+per-cell step on any record. Draft of the message:
 
 ```text
 Warning [Q-?-?]: This cell shows an interactive widget (ipywidgets) that q2 can't render yet
@@ -134,6 +179,9 @@ not a subtree merge, and **no push**.
 
 - `src/record-wire.ts`: `RecordInfo` gains the optional field; `buildRecordResult` sets `"jupyter-outputs"` whenever it
   builds a `recordInfo` (the label describes the data, not who presents it, so it is not tied to `presentedBy`).
+  Consequence to test: when the engine presents itself, `toMarkdown` already put its includes in the entry, and the
+  label is set too; core derives only for a record it presents, and never adds derived text to a record whose engine
+  presented (the entry then already holds the engine\'s includes). State this rule in code and test it.
 - `tests/unit/record-wire.test.ts` first: the label is present in a record info and absent when core sent no units.
 - Then `npm run typecheck`, `npm test` and `npm run build` in the subtree; commit the rebuilt bundle
   `_extensions/julia-engine/julia-engine.js` (the fork\'s CI verifies it matches the source).
@@ -151,23 +199,32 @@ not a subtree merge, and **no push**.
       `isPlotlyLibrary`, the includes text), `to-markdown.ts` (`isHtml`, the pre-walk), the Julia engine\'s
       `coreWillPresent` branch, `present_from_record`, the callers of `present_document`, `ExecuteResult.includes`
       (its type, and how the plain route\'s includes reach the head), `EngineEntry`, `EngineEntryInput` and
-      `TsRecordInfo`. Write down in the notes: the includes shape (text or file paths), where each caller gets the
-      engine entry, and whether knitr\'s path ever reaches `present_document`. If includes set on the result do **not**
-      reach the head on the recorded route, say so and size the extra plumbing before writing code; if it makes this
-      more than a small plan, stop and tell Gordon (the protocol\'s "When you cannot finish").
+      `TsRecordInfo`, and `present_units` with `present_cell_step` and `record_splice.rs`. Confirm the plan review\'s
+      findings by symbol and write them in the notes: the includes shape (text, `PandocIncludes`), that the splice calls
+      `present_units` and not `present_document`, that `text_execute.rs` and `ipynb_replay.rs` pass no entry, that
+      `fold_side_data` stores `result.includes`, and that the stage extends `ctx.includes` without dedupe. If any
+      finding is wrong or the "Where the scan runs" design cannot work, say so and size the extra plumbing before
+      writing code; if it makes this more than a small plan, stop and tell Gordon (the protocol\'s "When you cannot
+      finish").
 - [ ] **Oracle fixture.** Run the TypeScript `widgetDependencies` and `widgetDependencyIncludes` over a small set of
       notebooks (no HTML output; a `text/html` data-URI image like Plots; a hand-written `text/html`; a
-      `widget-view+json` with and without state; a Plotly library output) and store each input notebook and the
-      includes text it produced as test fixtures. The Rust port must reproduce them exactly.
+      `widget-view+json` with no state; a Plotly library output; the whitespace-strip, duplicate-library and
+      array-valued `text/html` cases from step 2) and store each input notebook and the includes text it produced as
+      committed test fixtures (generate once with Node; the Rust tests read the committed files, so CI needs no Node).
+      The Rust port must reproduce them exactly.
 - [ ] **Rust unit tests first**: the scan flags and the hoist for each fixture; the includes text equals the oracle;
       the label absent gives nothing; a knitr record gives nothing; a non-HTML format and ipynb output give nothing;
       hidden outputs still count; a hoisted-library output is not in the presented body; the warning fires for a
-      widget-view without state and not for plain `text/html`.
+      widget-view without state and not for plain `text/html`; **the same results through `present_units` (the splice
+      route) as through `present_document`**; two label-bearing records give one requirejs block; render then replay
+      gives one requirejs block and one warning; a record whose engine presented itself gets no derived text added; the
+      derived text is absent from `entry.includes` after a live run.
 - [ ] **Label tests first**: `TsRecordInfo` round-trips `dependencyData` and an old engine\'s info still parses;
       `EngineEntry` round-trips it, omits it when `None`, and it does not change the document hash or the hash
       definition.
 - [ ] **Julia engine tests first** in the subtree (see above), then implement the engine change, typecheck, test, build.
-- [ ] Implement the label (wire, entry, native Jupyter), then the strategy, the presenter skip and the warning.
+- [ ] Implement the label (wire and entry only; native Jupyter does not set it), then the strategy, the presenter skip
+      (in `present_cell_step`) and the warning, following "Where the scan runs".
 - [ ] **Parity.** Re-run the parity harness for the Julia documents, narrowed with `OPR_PARITY_ONLY` (the 7c report has
       the command): the script lines of `julia/records-plot` must now match, and `plot-website` and `positron-cache`
       must not regress (7h fixed their image size). Do **not** add or change an allowlist entry; report the counts
@@ -199,7 +256,10 @@ not a subtree merge, and **no push**.
 - A hoisted library output is in the head and not in the body.
 - An engine with no label (knitr, marimo, an older Julia engine) is unchanged.
 - The Julia engine declares the label; its unit tests and the rebuilt bundle are committed in the subtree, unpushed.
-- A widget-view output without state produces the warning.
+- A widget-view output without state produces the warning, once, including on replay and for native Jupyter.
+- The splice route (preview, hub) shows the same requirejs lines and the same body as render for a labeled record.
+- Derived text is not stored in the record, and a render followed by a replay gives one copy of each block.
+- Native Jupyter output is unchanged except for the warning, and the notes say OPR-7d inherits that difference.
 - `julia/records-plot` has no script-line difference left, and no allowlist entry was added.
 - The notes say what was read, what was run, what was not (browser, PlotlyJS, Windows), and which names Gordon may
   want to change before the wire ships.
