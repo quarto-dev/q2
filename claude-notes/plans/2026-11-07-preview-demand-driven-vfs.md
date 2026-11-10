@@ -1,8 +1,8 @@
 ---
-title: 'Preview demand-driven VFS: exposure policy, manifest, pull route, render worker'
+title: 'Preview demand-driven VFS: exposure policy, miss route, render worker'
 date: 2026-11-07
-description: 'Epic implementing the preview VFS contract: one exposure policy, a names manifest, on-demand content pulls from a render worker over sync XHR, watcher enrolment of new files, and removal of the single-file closure extractors.'
-status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07
+description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, and removal of the single-file closure extractors.'
+status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10
 ---
 
 ## Overview
@@ -10,17 +10,23 @@ status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed
 Implements [`../designs/preview-vfs-contract.md`](../designs/preview-vfs-contract.md).
 Evidence and costings: [`../research/2026-11-07-preview-vfs-options.md`](../research/2026-11-07-preview-vfs-options.md).
 
-The end state: the preview server pushes the *names* of every admitted file
-and the contents of sources; everything else is fetched by the render the
-first time it is read, from a Web Worker, with a synchronous XHR against a
-policy-gated route; pulled files are promoted into Automerge and watched;
-new files on disk are enrolled by the watcher. The single-file dependency
-extractors go away.
+The end state: the render runs in a Web Worker; whenever the VFS cannot
+answer a read, an existence check or a directory listing, the worker asks
+the preview server over a synchronous XHR, the server applies one exposure
+policy and answers from disk, pulled files are promoted into Automerge, and
+the server watches what it has served. Nothing is pushed that a render did
+not ask for. The single-file dependency extractors go away.
 
 Each phase is a separate worktree and PR off `main` (or off the previous
 phase's branch when it depends on it). Tests come first in every phase.
 Phases 0 and 1 are pure Rust; Phase 2 is the worker and the miss path;
-Phase 3 removes the extractors; Phase 4 moves hub-client; Phase 5 is docs.
+Phase 3 measures and removes the extractors; Phase 4 moves hub-client;
+Phase 5 is docs.
+
+Measure before optimising. The loopback cost of a round trip is 0.3 ms and
+a remote link costs its RTT per sequential trip (contract D2). Any batching
+or prefetch is added only when the Phase 2 and 3 measurements, local and
+with injected latency, show a cold render needs it.
 
 Out of scope here: the `preview-scss-theme` branch itself. Its project-mode
 change (sync `.css`/`.scss` found by the walk) ships on its own after its
@@ -48,7 +54,8 @@ Tests first (`crates/quarto-hub/src/exposure.rs` unit tests):
   at any depth is refused; the project's `output-dir` is refused.
 - [ ] Extension allow-list per class, including `.sass`; `.env` and unknown
   extensions refused.
-- [ ] Size cap refuses with a typed reason, not a panic.
+- [ ] Size cap refuses with a typed reason, not a panic; the cap is the
+  per-file limit in `resources/pandoc-wasm.json`.
 - [ ] Discovery produces the same `ProjectFiles` as before for the existing
   fixtures (regression over `discovery.rs` tests), minus the generated-dir
   differences above.
@@ -67,46 +74,54 @@ Implementation:
 - [ ] `cargo clippy -p quarto-hub -p quarto-preview --all-targets -- -D warnings`
   on the host and with `--target x86_64-pc-windows-msvc`.
 
-## Phase 1: manifest, pull route, promotion, enrolment
+## Phase 1: miss route, promotion, demand-driven watch
 
 Server side only. Contract D2, D7, D8.
 
 Tests first:
 
 - [ ] `crates/quarto-preview/tests/integration/`: `GET /api/preview/file?path=`
-  returns bytes for an admitted path, 404 for a name not in the manifest,
-  403 with a reason for a refused path (traversal, symlink escape, hidden,
-  generated, extension, size), and never follows a path outside the root
-  (the route test reuses the Phase 0 fixtures).
-- [ ] After a successful pull the path is in the Automerge index and a disk
-  edit to it is synced (promotion plus watch).
-- [ ] A file created on disk after boot that the policy admits appears in
-  the index and the manifest without restart, in project mode and in
-  single-file mode.
-- [ ] Single-file mode: the manifest lists admitted names from the deck
-  directory subtree and nothing from outside it; no contents are synced for
-  names that have not been pulled.
-- [ ] The manifest is delivered to the browser and updated on enrolment
-  (shape test against the sync client).
+  returns bytes for an admitted path, 404 for an absent one, 403 with a
+  reason for a refused path (traversal, symlink escape, hidden, generated,
+  extension, size), and never follows a path outside the root (the route
+  test reuses the Phase 0 fixtures).
+- [ ] `GET /api/preview/stat?path=` answers exists/is-file/is-dir for
+  admitted paths and 403 for refused ones; a refused path is
+  indistinguishable from an absent one to the caller only in that both
+  are "no" (the 403 reason is for diagnostics).
+- [ ] `GET /api/preview/list?path=` returns only names the policy admits;
+  a listing of a refused or absent directory is 403 or 404, never partial.
+- [ ] After a successful file pull the path is in the Automerge index and a
+  disk edit to it is synced (promotion plus watch).
+- [ ] After a stat or list answer for a directory, a file created in it that
+  the policy admits appears in the index and bumps the VFS generation;
+  a file created in a directory nothing asked about does not.
+- [ ] Project mode: a file created after boot that the policy admits appears
+  in the index without restart (the existing gap).
+- [ ] Single-file mode: nothing outside the deck and its declared config is
+  synced, listed or watched until a route asks for it.
 
 Implementation:
 
-- [ ] Manifest: names only, derived from the walk under the policy; pushed
-  through the existing sync channel (a small document or a field on the
-  index; decide for the smallest schema change, and note that
-  `vfs_generation` must bump on manifest changes so project caches
-  invalidate).
 - [ ] `HubContext::import_path(rel)`: one iteration of
   `reconcile_files_with_index` factored out, idempotent, records a
   checkpoint under the `sync_state` mutex.
-- [ ] Route `GET /api/preview/file` in `extend_with_preview`, calling the
-  policy then `import_path`, returning the bytes.
-- [ ] Watcher: create events go through the policy and `import_path`;
-  single-file mode watches the deck directory with the policy as the filter
-  (the frozen allow-list in `FileWatcher::new` is removed).
-- [ ] `--join` guests: confirm the route tunnels like other `/api/*`
-  routes (it should; add a tunnel test if the existing ones do not cover a
-  new route).
+- [ ] Routes `file`, `stat`, `list` under `/api/preview/` in
+  `extend_with_preview`, each calling the policy first; `file` then calls
+  `import_path` and returns the bytes.
+- [ ] Watch set: a directory the server has answered for is added to the
+  watcher; create events in watched directories go through the policy and
+  `import_path`; the frozen allow-list in `FileWatcher::new` is removed.
+  Project mode keeps its tree watch and gains enrolment.
+- [ ] Generation counter: bumps on enrolment and removal so the browser's
+  negative cache clears (it already bumps for project caches; confirm the
+  single-file path shares it).
+- [ ] Quarto 1 check: when a quarto-cli checkout is available, compare its
+  preview watch rules (input plus the render's reported resource files) and
+  note any case ours misses here.
+- [ ] `--join` guests: confirm the routes tunnel like other `/api/*`
+  routes (they should; add a tunnel test if the existing ones do not cover
+  a new route).
 
 ## Phase 2: render worker and the miss path (preview SPA)
 
@@ -120,10 +135,11 @@ Tests first:
   in-process engine.
 - [ ] Worker RPC unit test: request/response ids, error propagation, the
   init message carrying the ephemeral-storage and perf flags.
-- [ ] Rust: `WasmRuntime` miss hook unit test with a stub shim: a miss
-  inside the manifest calls the shim once, inserts, and a second read does
-  not call it; a name outside the manifest never calls it; the lock is not
-  held across the call (test with a re-entrant stub).
+- [ ] Rust: `WasmRuntime` miss hook unit test with a stub shim: a read miss
+  calls the shim once, inserts, and a second read does not call it; a
+  negative exists answer is cached and not re-asked until the generation
+  changes; the lock is not held across the call (test with a re-entrant
+  stub).
 - [ ] Playwright, single-file deck: `theme: styles/deck.scss` importing
   `partials/_vars.scss` (a subdirectory) renders with the variable applied;
   adding a new `@import` to `_vars.scss` that pulls in a file created
@@ -132,6 +148,11 @@ Tests first:
   citations on first render.
 - [ ] Playwright: `renderPageForPreview` is queued (two rapid edits produce
   one final render with the latest content; no torn render).
+- [ ] Playwright, latency: the same deck behind a delay proxy at 0, 20, 50
+  and 100 ms (the proxy used for the 2026-11-10 measurement is a 20-line
+  Node script; check it in under the e2e helpers). Record cold-render wall
+  time and the `perf.vfs-pull` counts per arm and status. These numbers,
+  not a guess, decide whether any batching is built.
 
 Implementation:
 
@@ -151,15 +172,18 @@ Implementation:
 - [ ] Bridge: `rasterize.js` proxied to the main thread through
   `setRasterizer`; `userGrammar/Highlight.ts` `typeof window` fix; perf
   wiring.
-- [ ] `WasmRuntime` miss hook: sync extern `vfs_miss(path) ->
-  Option<Uint8Array>` with `catch`, eligible-prefix check (not
-  `/__quarto_resources__`, not `/.quarto/`), manifest check, negative cache
-  keyed by manifest version; the read guard is dropped before the call and
-  the write lock taken after.
+- [ ] `WasmRuntime` miss hook: sync externs for the three arms
+  (`vfs_miss_read(path) -> Option<Uint8Array>`, `vfs_miss_stat(path)`,
+  `vfs_miss_list(path)`) with `catch`, an eligible-prefix check (not
+  `/__quarto_resources__`, not `/.quarto/`, not `/tmp/`), a negative cache
+  keyed by the VFS generation; the read guard is dropped before the call
+  and the write lock taken after.
 - [ ] JS shim: synchronous `XMLHttpRequest` with `responseType =
-  'arraybuffer'` to `/api/preview/file`; null on 404 or 403.
-- [ ] dart-sass importer stays sync; `vfsIsFile` answers from the manifest
-  so probes never reach the network.
+  'arraybuffer'` to the three routes; null on 404 or 403; a
+  `perf.vfs-pull` gauge counting calls per arm and status, dumped with the
+  other perf counters.
+- [ ] dart-sass importer stays sync; `vfsIsFile` goes through the exists arm
+  with the same negative cache, so a probe is asked once per generation.
 - [ ] `renderPageForPreview` goes through `enqueueRender`.
 - [ ] Vite: worker format decision (`format: 'es'` versus the global IIFE
   plus `inlineDynamicImports`); the embed build's exactly-one hashed `.wasm`
@@ -167,23 +191,32 @@ Implementation:
   build-q2-preview-spa` and `cargo build --bin q2` verified end to end.
 - [ ] End-to-end check recorded here: the exact `q2 preview` invocation, the
   observed re-theme, and a note that the output was inspected.
+- [ ] Decision recorded here from the latency run: no batching, or which
+  prefetch (directory names on a probe, stylesheet closure on a pull) and
+  why, with the before/after counts.
 
-## Phase 3: remove the single-file extractors
+## Phase 3: measure, then remove the single-file extractors
 
 Contract D5. Depends on Phases 1 and 2.
 
-- [ ] Measure first: with the extractors on and off, count pulls per cold
-  render and wall time on a deck with nested includes, images and a themed
-  partial tree (`QUARTO_PERF_STATS=1`; gauge name `perf.vfs-pull`). Record
-  the numbers here.
+- [ ] Measure first: with the extractors on and off, on loopback and behind
+  the delay proxy at 50 ms, count pulls per cold render and wall time on a
+  deck with nested includes, images and a themed partial tree
+  (`perf.vfs-pull`). Record the numbers here.
 - [ ] Remove the image walk, the `resources:` expansion, the
   `render-components:` block and the theme block from
   `resolve_single_file_deps`; keep the include closure only if the
   measurement says the first-render cost is user-visible, and say so here.
 - [ ] `SingleFileDeps`, `single_file_text_deps` and `single_file_assets`
   removed from `HubConfig` if nothing feeds them.
-- [ ] The bd-tnm3k tests that pin "no siblings synced" become "no sibling
-  *contents* synced until pulled; sibling *names* present in the manifest".
+- [ ] The bd-tnm3k tests that pin "no siblings synced" stay as they are and
+  gain "until a render reads them".
+- [ ] Project mode, same question: measure a project render with the walk's
+  eager contents for non-source classes (images, stylesheets, data) turned
+  off, so they arrive by pull. If the cold render is not user-visibly
+  slower, file the simplification as a follow-up; the walk then provides
+  only sources and config and the two modes converge. Record the numbers
+  here either way.
 
 ## Phase 4: hub-client on the worker
 
@@ -203,8 +236,8 @@ Contract D10. Depends on Phase 2.
 ## Phase 5: docs and notes
 
 - [ ] `docs/guides/projects/preview.qmd`: what single-file preview exposes
-  (names of the deck directory, contents on demand), and the share banner
-  wording if it changes.
+  (only what a render reads or lists, bounded by the deck directory), and
+  the share banner wording if it changes.
 - [ ] `claude-notes/designs/pandoc-wasm-architecture.md`: main-thread
   placement is no longer an accepted decision; point at the contract.
 - [ ] `claude-notes/plans/2026-10-24-hub-client-main-thread-render-path.md`
@@ -214,25 +247,28 @@ Contract D10. Depends on Phase 2.
 
 ## Details
 
-### Why names eager and contents lazy
+### Measured round-trip cost
 
-`dir_list` has 13 call sites and the project discovery walk runs on every
-project render; dart-sass probes about 14 candidate paths per import. None
-of those can go to the network. A manifest answers all of them locally and
-leaves only content reads to the pull. See the research note.
+From the 2026-11-10 run (tables in the research note): 0.3 ms per
+synchronous XHR from a worker on loopback, independent of payload up to
+100 KB; behind a delay proxy the cost is the configured RTT plus about
+4 ms. A thousand round trips cost 0.3 s locally and 100 s at 100 ms RTT.
+The mechanism is therefore built plain, and the remote case is handled by
+measuring the sequential chain length of real decks before deciding on
+prefetch.
 
 ### Why the policy comes first
 
-Everything else (walk, manifest, pull, watcher, `--share`) is only as safe
-as the predicate they share. Phase 0 is small and lands alone so that the
-`preview-scss-theme` branch can adopt the provenance rule immediately.
+Everything else (walk, the three route arms, watcher, `--share`) is only as
+safe as the predicate they share. Phase 0 is small and lands alone so that
+the `preview-scss-theme` branch can adopt the provenance rule immediately.
 
 ### Lock discipline in the miss hook
 
 `std::sync::RwLock` on wasm32 without atomics aborts on contention rather
 than waiting. The hook reads under the lock, drops the guard, calls the
 shim, then takes the write lock to insert. The negative cache is a
-`RefCell<HashSet>` outside the VFS lock.
+`RefCell<HashMap>` outside the VFS lock, keyed by generation.
 
 ### Worker bundle shape
 

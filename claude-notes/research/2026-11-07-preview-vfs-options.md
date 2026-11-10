@@ -135,10 +135,13 @@ Worker; on a miss, Rust calls a sync JS import that does a synchronous
   the main thread. Vite's global worker config would inline the lazy sass
   import into the worker bundle. The embed build's "exactly one hashed wasm"
   rule needs re-verifying.
-- `dir_list` must stay complete (`project/discovery.rs` walks the tree on
-  every project render; 13 call sites), and Sass probes about 14 candidate
-  paths per import. So names are pushed eagerly as a manifest and only
-  contents are pulled.
+- `dir_list` has 13 call sites and Sass probes about 14 candidate paths
+  per import. The first draft concluded from this that names had to be
+  pushed eagerly as a manifest. Superseded 2026-11-10: the listing callers
+  that can reach disk in a single-file render are globs, `_extensions/`
+  discovery and a Lua filter's directory, all directories the author named,
+  and the measured cost of a round trip (below) makes per-probe fetches
+  free locally. Listings and probes are route arms, not a manifest.
 - A render in the worker is atomic with respect to VFS writes: sync XHR never
   yields, and Automerge updates are messages processed between renders.
 
@@ -183,16 +186,18 @@ policy, manifest, promotion into Automerge) is the same as the worker's.
 
 Treat a single file as a project rooted at its directory. Covered above:
 O(bytes) with no cap, every sibling (PDFs, videos) into Automerge and to every
-guest. Rejected as the eager form; the manifest-plus-pull design gives the
-same reach with names only.
+guest. Rejected; the pull design reaches the same files without reading,
+listing or naming anything a render did not ask for.
 
 ## Facts that decided it
 
 - The invariant the user chose: the browser renders, including Sass, as the
   hub does; the server presents disk as a VFS. That removed C.
-- Seeds that only prefetch contents are an optimisation; seeds that provide
-  names (`dir_list`, existence probes) are a correctness need. Hence
-  "names eager, contents lazy".
+- Seeds of any kind are an optimisation once every question the render asks
+  (read, exists, list) goes through the miss path. The first draft treated
+  names as a correctness need and pushed a manifest; the measurements below
+  (2026-11-10) showed the round trips it saved cost nothing locally, and
+  the manifest walked and exposed the whole deck directory. Dropped.
 - Share guests already get the whole index and code execution; the join
   string is the capability and the banner says "VIEW the project"
   (`crates/quarto-preview/src/share.rs`, `format_share_banner`). The server
@@ -203,3 +208,67 @@ same reach with names only.
   `../plans/2026-10-24-hub-client-main-thread-render-path.md` audit wanted
   and left as a Phase 7 design decision. This note and the design doc are
   that decision.
+
+## Measured: what a round trip costs (2026-11-10)
+
+The open questions left after the design were all about round trips:
+whether probes could go to the network, how to cache negatives, whether to
+batch. Those are questions for numbers, not reasoning, so we measured the
+exact mechanism the design proposes.
+
+Method. A fixture with a 1 KB `.scss`, a 100 KB and a 1 MB binary, served
+by `q2 preview --static --no-browser --no-watch` from a *debug* build of
+`q2` (so the server side is slower than a user would see). Headless
+Chromium through the repo's Playwright. A dedicated worker created from a
+blob URL issues synchronous `XMLHttpRequest`s with `responseType =
+'arraybuffer'`; every URL carries a cache-busting query so no response is
+served from the HTTP cache. Timings are per call inside the worker. For the
+remote case a 20-line Node proxy sits in front of the server and holds each
+request for a fixed delay before forwarding over a keep-alive connection.
+
+Loopback, no proxy:
+
+| Case | Calls | p50 | p95 | Total |
+|---|---|---|---|---|
+| 1 KB file, 200 | 1000 | 0.3 ms | 0.4 ms | 294 ms |
+| Missing file, 404 | 1000 | 0.3 ms | 0.4 ms | 271 ms |
+| 100 KB file | 200 | 0.3 ms | 0.5 ms | 71 ms |
+| 1 MB file | 20 | 0.8 ms | 1.0 ms | 16 ms |
+| Main thread to worker `postMessage` round trip | 1000 | 0.01 ms | 0.1 ms | |
+| Main thread `fetch`, awaited serially, 1 KB | 1000 | 0.3 ms | 0.4 ms | |
+
+Through the delay proxy (the 0 ms row shows the proxy's own overhead):
+
+| Simulated RTT | 1 KB (200) p50 | 404 p50 | 100 KB p50 |
+|---|---|---|---|
+| 0 ms | 1.8 ms | 1.8 ms | 2.2 ms |
+| 20 ms | 23.7 ms | 23.5 ms | 23.8 ms |
+| 50 ms | 54.2 ms | 54.1 ms | 54.3 ms |
+| 100 ms | 104.5 ms | 104.3 ms | 104.7 ms |
+
+What it says:
+
+- Locally a round trip costs 0.3 ms whatever the outcome and whatever the
+  size up to 100 KB. A cold render that made a thousand of them would spend
+  0.3 s. The eager manifest, the per-directory batching and the
+  negative-cache granularity questions were all solving a cost that does
+  not exist on loopback.
+- Remotely the cost is the RTT, nothing else: payload size and hit/miss do
+  not register. So the only number that matters for Workbench, containers,
+  port-forwards and `--share` guests is the length of the *sequential*
+  chain a cold render walks (each import is discovered only after its
+  parent arrives). With dart-sass probing about 14 names per import, a
+  per-probe fetch at 50 ms would cost about 0.7 s per import on a cold
+  render and again after each invalidation. That is why negatives are cached
+  per generation in the design, and why any batching is decided from the
+  chain length measured on real decks behind this proxy (plan, Phase 2 and
+  3), not now.
+- Moving Sass compilation to the server would collapse only the stylesheet
+  chain to one trip. Images, bibliographies, includes and filters would pay
+  the same sequential cost, so remoteness does not reopen option C. If the
+  remote cold render needs help, it is a prefetch (a wider answer to a pull)
+  under the prediction rule in contract D2.
+
+Scripts used: a Playwright driver and the delay proxy, both under 60 lines,
+kept in the session scratchpad; the plan asks for the proxy to be checked
+in with the Phase 2 latency test.
