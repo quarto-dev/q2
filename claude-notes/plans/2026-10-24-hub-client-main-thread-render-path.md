@@ -1135,6 +1135,14 @@ Not an implementation phase: produce a design note weighing the move of
 `wasm-quarto-hub-client` (pipeline + VFS) into a dedicated worker, which
 would take the whole render pipeline off the main thread.
 
+Note (2026-11-10): the q2 preview SPA has made this move, for its own
+reason (a VFS miss must block, see
+`claude-notes/designs/preview-vfs-contract.md` D3). It left a facade
+hub-client can adopt with no miss handler (`installEngineBackend`,
+`ts-packages/preview-runtime/src/worker/`), and parity numbers in
+`claude-notes/plans/2026-11-07-preview-demand-driven-vfs.md` (Phase 2a).
+The decision for hub-client is still owed here (contract D10).
+
 - [ ] Design note in `claude-notes/designs/`: sync client pushes file
   changes into the worker VFS; render requests/responses as RPC;
   constraints enumerated (the SASS bridge calls JS synchronously from

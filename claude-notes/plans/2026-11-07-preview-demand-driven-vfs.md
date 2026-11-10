@@ -2,7 +2,7 @@
 title: 'Preview demand-driven VFS: exposure policy, miss route, render worker'
 date: 2026-11-07
 description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, a render-reported read set, and removal of the dependency predictors.'
-status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0 to 3 implemented
+status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0 to 3 and 5 implemented
 ---
 
 ## Overview
@@ -669,17 +669,17 @@ lost:
 
 ## Phase 5: docs and notes
 
-- [ ] `docs/guides/projects/preview.qmd`: what single-file preview exposes
+- [x] `docs/guides/projects/preview.qmd`: what single-file preview exposes
   (only what a render reads or lists, bounded by the deck directory), the
   request gate if it is visible to users (a token in the URL, or the proxy
   escape), and the share banner wording if it changes.
-- [ ] `claude-notes/designs/pandoc-wasm-architecture.md`: main-thread
+- [x] `claude-notes/designs/pandoc-wasm-architecture.md`: main-thread
   placement is no longer an accepted decision for the preview SPA; point
   at the contract.
-- [ ] `claude-notes/plans/2026-10-24-hub-client-main-thread-render-path.md`
+- [x] `claude-notes/plans/2026-10-24-hub-client-main-thread-render-path.md`
   Phase 7: note that the preview SPA has moved and the facade exists, and
   that the hub-client decision is still owed there (contract D10).
-- [ ] `AGENTS.md` architecture notes: a short "Preview VFS" entry pointing
+- [x] `AGENTS.md` architecture notes: a short "Preview VFS" entry pointing
   at the contract, beside the path-resolution entry.
 
 ## Details

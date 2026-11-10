@@ -26,6 +26,21 @@ second without rebuilding the page, so JavaScript state is preserved
 across edits. See the `--help` text for the flags that control the
 port, the browser, and live sharing.
 
+### A document outside a project
+
+Previewing a document that is not in a project reads files from the
+document's folder only as the render needs them: an included file, an
+image, a theme and the partials it imports, a bibliography. Nothing else
+in the folder is read or listed until a render asks for it, so previewing
+a file in your Downloads folder does not read the rest of Downloads. A
+file you create later where the render looked for one (a partial that
+was missing, for example) shows up without restarting the preview.
+
+The preview never serves hidden files, files outside the folder
+(including through symbolic links), folders a render produced (such as
+`<name>_files/` beside `<name>.qmd`), or files of unknown types. The same
+rules apply to a project.
+
 ### Typst documents
 
 A page whose format is `typst` or `pdf` shows its PDF in the preview, in
@@ -144,6 +159,8 @@ renders, downloads and imports: those requests use the host's `pandoc`
 and `typst` and read the host's project, and an import uploads the file
 to the host (up to 25 MB), where it is converted by a sandboxed `pandoc`.
 Treat the join string like a password, as the `--share` help says.
+Guests can read the files the preview serves, as described in
+[A document outside a project](#a-document-outside-a-project).
 
 ## Static preview
 
@@ -247,5 +264,12 @@ JupyterHub (`/user/<name>/proxy/<port>/`) and code-server
 every request relative to its own URL, so the requests stay under the
 prefix. Open the preview with the trailing slash (`/proxy/4321/`, not
 `/proxy/4321`).
+
+The preview answers only requests addressed to `localhost`, an IP
+address, or the `--host` name, so that another web page cannot reach it
+by pointing its own domain name at your machine. A proxy that forwards
+its own host name gets "This preview server does not answer for host";
+add that name to the `QUARTO_PREVIEW_ALLOWED_HOSTS` environment variable
+(comma-separated) before starting the preview. `*` turns the check off.
 
 The editor UI (`--ui editor`) does not support a path prefix yet.
