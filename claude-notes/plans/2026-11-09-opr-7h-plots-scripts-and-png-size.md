@@ -71,7 +71,7 @@ and no size. Nobody found where plain gets 140 by 90.
 - [x] **For a case that is harmless,** add an allowlist entry in the OPR-7c style (a rule in the harness `RULES`, a
       harness test written with it, `status = "proposed"`, a reason that cites your evidence). Do not sign it:
       signing is Gordon\'s.
-- [ ] Re-run the Julia part of the gate and the knitr corpus gate; put the counts in the notes. The target is that
+- [ ] (only a narrowed re-run was done; the 7g final gate report has the full counts, and the Plots-script difference A is still unallowlisted) Re-run the Julia part of the gate and the knitr corpus gate; put the counts in the notes. The target is that
       neither difference is left unallowlisted and unexplained.
 - [x] **End to end through the binary** for each fix: render the document on the plain route and on the recorded route
       (the OPR-7a scratch switch `OPR7A_FORCE`, re-added uncommitted as its notes describe, or the harness) and read

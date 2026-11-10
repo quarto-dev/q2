@@ -212,7 +212,7 @@ level-3 item that the normalizer or a payload check cannot remove is a "does not
       chunk differs by knitr\'s own indent asymmetry, `block.R` `return('')` against the final indent line, and is not a
       failure); (e) `include` toggled between miss and hit gives absent-and-quiet, not a hidden cell with wrong markdown.
       Say what the stored string looks like (`cache$output(hash)` on the cache entry).
-- [ ] **S2, level 1 (feeds Phase E only).** The `cache$output` wrapper for `mode = 'list'`: the hit\'s record equals the
+- [ ] (skipped: level 1 stays as OPR-7b has it; see Notes) **S2, level 1 (feeds Phase E only).** The `cache$output` wrapper for `mode = 'list'`: the hit\'s record equals the
       miss\'s, including `eval=c(1,2)` and `tidy=TRUE`, whose `code` the wrapper cannot see unmasked (review). Confirm by
       `grep` over the versions you test that the two call sites are the only ones and that `mode = 'list'` distinguishes
       them. On 1.44 the list also passes through `fix_evaluate` after the wrapper (`block.R`, review): run it there.
@@ -221,13 +221,13 @@ level-3 item that the normalizer or a payload check cannot remove is a "does not
       Prediction (decision 2): a paragraph above still hits; a chunk above or a reorder changes the id and misses. Record
       what happens; a hit that returns a payload whose id differs from the unit is a failure. (A hit always carries the id
       in the key, so the payload id equals the unit\'s by construction; there is nothing to match.)
-- [ ] **S5, the awkward chunks at level 3.** Each gives a record equal to the miss\'s, or degrades to absent-and-quiet;
+- [x] (ran in the follow-up; now tests, see Notes) **S5, the awkward chunks at level 3.** Each gives a record equal to the miss\'s, or degrades to absent-and-quiet;
       wrong output is a failure. Cases: an htmlwidget chunk (check `includes` and dependencies, not only the markdown;
       knitr restores `knit_meta` itself on a hit), a `results='asis'` chunk, `include=FALSE` (expected: recorded on a miss,
       absent on a hit), a chunk with `child=` (knitr returns before the cache check; expect no change), `dependson` and
       `autodep`, `cache.lazy`, `cache.rebuild`, a chunk in a blockquote, in a list item and in a callout, and `<doc>_files`
       deleted with the cache kept.
-- [ ] **S6, versions.** S1 and S5 on knitr 1.44 (the minimum), 1.50 and the newest you can install (KNR-1\'s matrix; see
+- [x] (ran: knitr 1.44, 1.50, 1.52; one unrelated 1.52 failure, see Notes) **S6, versions.** S1 and S5 on knitr 1.44 (the minimum), 1.50 and the newest you can install (KNR-1\'s matrix; see
       its S1 section and `KNR_R_LIBS` for how the corpus pins a library). Look specifically for: the `cache$output` call
       sites and their signature, `block_cache`, the `cache_purge` file set (matters for the sidecar), `.deps` in the key,
       and a level-3 entry written by 1.44 and read by 1.50. An unrecognized shape must degrade to today\'s
@@ -237,7 +237,7 @@ level-3 item that the normalizer or a payload check cannot remove is a "does not
       idempotent (keeps the pristine original) and gated on `quarto_capture$active`.
 - [x] **S8, keys.** Confirm (ran) that a plain run and a record run produce different level-3 hashes for the same chunk
       (the id is the only difference), so they never share an entry. That settles the "no salt" default.
-- [ ] **S9, size.** The payload per chunk for the corpus (median, largest), with and without the markdown stored twice,
+- [x] (ran; no cap enforced, reported as a finding, see Notes) **S9, size.** The payload per chunk for the corpus (median, largest), with and without the markdown stored twice,
       and for a widget chunk specifically (its html lands in the cache entry). Figures are paths, not bytes. State a cap
       above which the chunk degrades to absent-and-quiet.
 - [x] **S10, the sidecar.** Prototype Mechanism B (S1 (a) to (d) and S5\'s `<doc>_files` and `dependson` cases) and apply
@@ -253,7 +253,7 @@ Write each test, run it, see it fail for the stated reason, then implement. Test
 - [x] `a_cache_hit_records_nothing_for_a_cached_chunk_at_any_level` pins the old rule for all levels. **Split it:** the
       level-3 case now expects the chunk recorded on a hit (it fails first for that reason); the level-1 and level-2 cases
       keep the old assertion until Phase E changes level 1. Say how and why in the commit message.
-- [ ] A level-3 hit, capture on: the record, the `chunks` entry and the skeleton marker exist, with the live run\'s nonce;
+- [x] (tests `a_level_3_cache_hit_in_a_blockquote_and_a_list_item_is_recorded`, `a_level_3_hit_puts_this_runs_nonce_in_the_skeleton_marker`) A level-3 hit, capture on: the record, the `chunks` entry and the skeleton marker exist, with the live run\'s nonce;
       the payload comment is gone from the markdown. Repeat inside a blockquote and a list item.
 - [x] A level-3 hit, capture **off**, ids in the document text: markdown equal to an uncached render; no `q2-cache`
       comment anywhere.
@@ -268,7 +268,7 @@ Write each test, run it, see it fail for the stated reason, then implement. Test
 - [x] A legacy level-3 entry (written with capture off, hit in a capture run): the chunk is absent from the record and
       from the expected count, quiet, as in 7b (`a_cache_written_without_capture_is_replayed_by_a_recorded_run` stays
       green; note it builds both runs with ids in the text, which a real plain run does not).
-- [ ] A payload with a wrong version, a wrong format, mismatched begin and end ids, or truncated or corrupt base64
+- [x] (sidecar form: `a_sidecar_that_fails_a_check_degrades_the_chunk_to_absent`) A payload with a wrong version, a wrong format, mismatched begin and end ids, or truncated or corrupt base64
       degrades the chunk to absent-and-quiet, never to an error (run it red first against a stub that reads the payload
       without checking).
 - [x] Replay: `a_replayed_record_with_a_cached_chunk_equals_the_live_run` still holds, and now the replayed cached chunk
@@ -295,7 +295,7 @@ Write each test, run it, see it fail for the stated reason, then implement. Test
 - [x] Re-run the parity gate on the cached documents (the harness from OPR-0b; OPR-7c found `knitr/cache-mixed`
       identical, so any new difference is this plan\'s); the command is under this list. Classify each difference as knitr
       epic decision 26 does. A new difference is a blocker for Gordon unless it is a plain bug in this plan\'s code.
-- [ ] **End to end** (`target/debug/q2 render doc.qmd`), each run twice (miss, then hit), reading the outputs and logs:
+- [ ] (mostly ran, see Notes; a PDF-after-html run was not run, `pdf` is unsupported there, typst was used) **End to end** (`target/debug/q2 render doc.qmd`), each run twice (miss, then hit), reading the outputs and logs:
       the 0c mixed document plain and with `execute: {record: true}`; a document with an htmlwidget chunk at level 3; a
       `record: true` run followed by a plain run of the same format (expect a miss both ways, because the plain run has no
       ids; record that); and a PDF render after an html render of the same document (a different cache directory, so a
@@ -303,7 +303,7 @@ Write each test, run it, see it fail for the stated reason, then implement. Test
       is identical between runs, that no `q2-cache` comment reaches any output, the skeleton text in the stored trace, or
       any cell of the record file (`.quarto/execution-records/doc.ipynb`; `grep q2-cache` it), and that no `Record Dropped`
       appears.
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
+- [ ] (clippy clean, lint clean; nextest had one unrelated failure; Windows cross-clippy cannot build on macOS; see Notes) Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
       Windows cross-clippy (it failed to build on a macOS host in OPR-7b and 7c; say so if it does again); `cargo xtask
       lint`; `target/debug/q2 render --strict` on this plan and the spike note. `npm run build:wasm` only if a file under
       `presenter/`, `record/` or `engine/{replay,ipynb_replay,skeleton}.rs` changed.
@@ -320,13 +320,13 @@ OPR_PARITY_REPORT=1 OPR_PARITY_ONLY=cache cargo nextest run -p quarto-core \
 Run only if Phases A to D are done with no open problem **and** S2 passed on 1.44 and 1.50. If not, skip the phase and
 say so in the notes; do not leave it half built.
 
-- [ ] Tests first: a level-1 hit records the chunk (the level-1 case of the split test above changes; the level-2 case
+- [ ] (Phase E, skipped with level 1) Tests first: a level-1 hit records the chunk (the level-1 case of the split test above changes; the level-2 case
       keeps its old assertion), including `eval=c(1,2)` and `tidy=TRUE`.
-- [ ] `capture.R`: the `cache$output` wrapper for `mode = 'list'`, installed in `capture_install`, idempotent, gated on
+- [ ] (Phase E, skipped with level 1) `capture.R`: the `cache$output` wrapper for `mode = 'list'`, installed in `capture_install`, idempotent, gated on
       `quarto_capture$active`, feeding `quarto_capture$slot` as `capture_evaluate_hook` does. It must rebuild `code` the
       way a miss passed it to `evaluate()` (after `tidy` and numeric `eval` masking) or degrade the chunk to absent. Level
       2 chunks are not touched: they keep OPR-7b\'s behavior.
-- [ ] A level-1 fixture in the parity corpus, and the parity gate and end-to-end checks of Phase D repeated for it.
+- [ ] (Phase E, skipped with level 1) A level-1 fixture in the parity corpus, and the parity gate and end-to-end checks of Phase D repeated for it.
 
 ## Exit criteria
 
