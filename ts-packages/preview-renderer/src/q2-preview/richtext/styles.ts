@@ -99,7 +99,8 @@ const CSS = `
 /* SVG glyphs (comment, link, editorial marks, paragraph crumb) — currentColor. */
 .q2-rt-tb-btn:has(> .q2-rt-tb-icon) { display: inline-flex; align-items: center; justify-content: center; }
 .q2-rt-tb-icon { display: block; width: 1.25em; height: 1.25em; }
-.q2-rt-tb-icon.q2-rt-tb-icon-wide { width: 2.5em; }
+/* Markdown mark: 2:1 aspect (viewBox 16×8). */
+.q2-rt-tb-icon.q2-rt-tb-icon-wide { width: 2em; height: 1em; }
 .q2-rt-tb-sep { width: 1px; align-self: stretch; margin: 2px 2px; background: var(--q2-edit-toolbar-separator, rgba(0, 0, 0, 0.12)); }
 .q2-rt-link-editor { display: flex; align-items: center; gap: 2px; }
 /* Transient refusal notice next to the comment button. */
