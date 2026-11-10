@@ -16,7 +16,9 @@ execute <- function(
   params,
   resourceDir,
   handledLanguages,
-  markdown
+  markdown,
+  capture = FALSE,
+  nonce = NULL
 ) {
   # calculate knit_root_dir (before we setwd below)
   knit_root_dir <- if (!is.null(cwd)) {
@@ -115,6 +117,16 @@ execute <- function(
 
   # fixup options for cache
   knitr <- knitr_options_with_cache(input, format, knitr)
+
+  # KNR-1: record evaluate() pieces per chunk when the engine call asks for it
+  if (isTRUE(capture)) {
+    source(file.path(resourceDir, "rmd", "capture.R"), local = TRUE)
+    knitr <- capture_install(knitr, nonce)
+    # KNR-6: brace spans return the same kind of marker the chunk hook does (hooks.R)
+    quarto_span_records$nonce <- nonce
+    # KNR-4: an inline span's knit_asis or image value travels as a piece too (hooks.R)
+    quarto_span_records$piece_fn <- capture_piece
+  }
 
   # Apply patches to current R environments (like modifying function in packages' namespace)
   apply_responsive_patch(format)
@@ -261,7 +273,7 @@ execute <- function(
   unlink(output_file)
 
   # results
-  list(
+  result <- list(
     engine = "knitr",
     markdown = paste(markdown, collapse = "\n"),
     supporting = I(supporting),
@@ -273,6 +285,12 @@ execute <- function(
     chunks = I(unname(quarto_chunk_records$records)),
     spans = I(unname(quarto_span_records$records))
   )
+  if (isTRUE(capture)) {
+    result$pieces <- I(unname(quarto_capture$records))
+    result$knownOptions <- I(quarto_capture$known_options)
+    result$cacheDisabled <- I(unique(quarto_capture$cache_labels))
+  }
+  result
 }
 
 pandoc_options <- function(format) {

@@ -21,10 +21,12 @@
  * - Both run at load and on throttled `scroll` (5 ms) and `resize`
  *   (10 ms) events.
  *
+ * - Clicking a TOC link adds `reveal-anchorjs-link` to the heading whose
+ *   `data-anchor-id` matches the link's fragment, until the pointer
+ *   leaves it, so the heading's AnchorJS link shows (bd-d5gss9pz).
+ *
  * Deliberate deviations from Q1 (each because q2 lacks the consumer;
  * revisit when porting the corresponding feature):
- * - no anchor reveal on link click (`reveal-anchorjs-link`): q2 has no
- *   anchor-sections, so there is no `[data-anchor-id]` to reveal;
  * - no TOC overlap rollup (`manageSidebarVisiblity`) and no reader mode
  *   (`quartoToggleReader`): separate features, not ported yet.
  *
@@ -110,6 +112,30 @@
     } else {
       return window.document.querySelector(decodeURI(`${target}`));
     }
+  };
+
+  // The heading whose `data-anchor-id` is the link's fragment, or null.
+  // Q1 compared the raw (percent-encoded) fragment; decoding it lets
+  // non-ASCII ids match too. Attribute lookup rather than a selector
+  // built from the id, so no escaping is needed.
+  const anchoredHeadingFor = (link) => {
+    const href = link.getAttribute("href") || "";
+    const hash = href.indexOf("#");
+    if (hash === -1) {
+      return null;
+    }
+    let anchor = href.slice(hash + 1);
+    try {
+      anchor = decodeURIComponent(anchor);
+    } catch (_e) {
+      // malformed escape: compare the raw fragment, as Q1 did
+    }
+    for (const el of window.document.querySelectorAll("[data-anchor-id]")) {
+      if (el.getAttribute("data-anchor-id") === anchor) {
+        return el;
+      }
+    }
+    return null;
   };
 
   // The nearest scrollable ancestor of `el`, or null for the window.
@@ -255,6 +281,24 @@
       walk(tocEl, 0);
     };
 
+    // Clicking a TOC link reveals the target heading's AnchorJS link until
+    // the pointer leaves the heading (Q1 quarto.js:120-140). The heading
+    // carries its section's id as `data-anchor-id` (AnchorSectionsTransform,
+    // bd-d5gss9pz); it is looked up per click because the preview
+    // re-renders the body.
+    const onLinkClick = (event) => {
+      const heading = anchoredHeadingFor(event.currentTarget);
+      if (heading) {
+        heading.classList.add("reveal-anchorjs-link");
+        const handleMouseout = () => {
+          heading.classList.remove("reveal-anchorjs-link");
+          heading.removeEventListener("mouseout", handleMouseout);
+        };
+        heading.addEventListener("mouseout", handleMouseout);
+      }
+    };
+    tocLinks.forEach((link) => link.addEventListener("click", onLinkClick));
+
     update();
     const onScroll = throttle(update, 5);
     const onResize = throttle(update, 10);
@@ -264,6 +308,9 @@
     window.addEventListener("resize", onResize);
 
     return () => {
+      tocLinks.forEach((link) =>
+        link.removeEventListener("click", onLinkClick),
+      );
       window.document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };

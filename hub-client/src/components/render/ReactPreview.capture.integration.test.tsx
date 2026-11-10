@@ -1,29 +1,17 @@
 /**
- * Capture-consumption test for `ReactPreview` (bd-sfet3264, Phase 1D).
- *
- * hub-client must consume a recorded engine capture for the active document:
- * when the `captures` sidecar (threaded down from App.tsx) has an entry for
- * the active file, ReactPreview fetches that capture binary doc's bytes via
- * `getBinaryDocById` and threads them into the q2-preview render call
- * (`renderPageInProjectWithAttribution`, 4th arg) so the recorded engine
- * output is spliced into the AST.
- *
- * This test pins the wiring at the hub-client boundary (props → fetch →
- * render-call argument). The actual splicing is covered by the WASM-level
- * test `captureSplice.wasm.test.ts`.
+ * Engine-capture consumption and untransformed-AST capture gating for ReactPreview.
  *
  * @vitest-environment jsdom
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import React from 'react';
 
-// Distinct capture bytes the getBinaryDocById mock will return, so we can
-// assert the EXACT bytes reach the render call (not just "something truthy").
 const CAPTURE_BYTES = new Uint8Array([1, 2, 3, 4, 5]);
+const AST = '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[]}';
 
-const { renderPageInProjectWithAttribution, getBinaryDocById } = vi.hoisted(() => ({
+const { renderPageInProjectWithAttribution, getBinaryDocById, regenerateNestedBuffers } = vi.hoisted(() => ({
   renderPageInProjectWithAttribution: vi.fn(async () => ({
     success: true,
     ast_json: '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[]}',
@@ -36,6 +24,7 @@ const { renderPageInProjectWithAttribution, getBinaryDocById } = vi.hoisted(() =
     content: new Uint8Array([1, 2, 3, 4, 5]),
     mimeType: 'application/x-engine-capture+gzip',
   })),
+  regenerateNestedBuffers: vi.fn(() => ({})),
 }));
 
 vi.mock('@quarto/preview-runtime', () => ({
@@ -48,15 +37,20 @@ vi.mock('@quarto/preview-runtime', () => ({
   applyNodeEdit: vi.fn(),
   parseQmdContentSync: vi.fn(() => ({ success: true, ast: '{}' })),
   getAuthorId: () => 'author-1',
-  regenerateNestedBuffers: vi.fn(() => ({})),
+  regenerateNestedBuffers,
   pipelineKindForFormat: (f: string) => (f === 'q2-preview' ? 'preview' : undefined),
 }));
 
 vi.mock('../../hooks/useAttribution', () => ({
   useAttribution: () => ({ payload: null, generating: false }),
 }));
+
+const prefs: Record<string, unknown> = {
+  previewEditing: false,
+  unlockNestingCursor: false,
+};
 vi.mock('../../hooks/usePreference', () => ({
-  usePreference: () => [false, vi.fn()],
+  usePreference: (key: string) => [prefs[key] ?? false, vi.fn()],
 }));
 vi.mock('./ReactRenderer', () => ({
   default: () => <div data-testid="react-renderer" />,
@@ -65,7 +59,10 @@ vi.mock('./ReactRenderer', () => ({
 import ReactPreview from './ReactPreview';
 import type { CaptureRef } from '@quarto/preview-runtime';
 
-function baseProps(captures?: Record<string, CaptureRef>) {
+function baseProps(
+  captures?: Record<string, CaptureRef>,
+  commentsMode?: 'show' | 'expand' | 'hide',
+) {
   return {
     content: '---\nformat: q2-preview\nengine: knitr\n---\n\n```{r}\n1 + 1\n```\n',
     currentFile: { path: 'doc.qmd', name: 'doc.qmd' } as any,
@@ -82,6 +79,7 @@ function baseProps(captures?: Record<string, CaptureRef>) {
     format: 'q2-preview',
     attributionOn: false,
     captures,
+    commentsMode,
   };
 }
 
@@ -89,6 +87,9 @@ describe('ReactPreview capture consumption (bd-sfet3264, Phase 1D)', () => {
   beforeEach(() => {
     renderPageInProjectWithAttribution.mockClear();
     getBinaryDocById.mockClear();
+    regenerateNestedBuffers.mockClear();
+    prefs.previewEditing = false;
+    prefs.unlockNestingCursor = false;
   });
 
   it('fetches the active doc capture and threads its bytes into the render call', async () => {
@@ -98,10 +99,7 @@ describe('ReactPreview capture consumption (bd-sfet3264, Phase 1D)', () => {
 
     render(<ReactPreview {...baseProps(captures)} />);
 
-    // The capture binary doc for the active file must be fetched by id.
     await waitFor(() => expect(getBinaryDocById).toHaveBeenCalledWith('cap-1'));
-
-    // The fetched bytes must reach the render call as the 4th argument.
     await waitFor(() => {
       const calls = renderPageInProjectWithAttribution.mock.calls;
       const withCapture = calls.find((c) => c[3] !== undefined);
@@ -114,7 +112,6 @@ describe('ReactPreview capture consumption (bd-sfet3264, Phase 1D)', () => {
     render(<ReactPreview {...baseProps(undefined)} />);
 
     await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalled());
-    // No capture sidecar ⇒ no fetch, and every render call's 4th arg is undefined.
     expect(getBinaryDocById).not.toHaveBeenCalled();
     for (const call of renderPageInProjectWithAttribution.mock.calls) {
       expect(call[3]).toBeUndefined();
@@ -122,15 +119,83 @@ describe('ReactPreview capture consumption (bd-sfet3264, Phase 1D)', () => {
   });
 
   it('requests the q2 preview default-format substitution (5th arg true) — bd-kltzdhle', async () => {
-    // hub-client routes `html` documents to ReactPreview as `q2-preview`;
-    // the WASM re-detects the format from the file, so every preview
-    // pipeline render must ask for `prefer_preview_format`, or a plain
-    // document would come back as `html` instead of `ast_json`.
     render(<ReactPreview {...baseProps(undefined)} />);
 
     await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalled());
     for (const call of renderPageInProjectWithAttribution.mock.calls) {
       expect(call[4]).toBe(true);
     }
+  });
+});
+
+describe('ReactPreview untransformed-AST capture gating (Phase 3B1)', () => {
+  beforeEach(() => {
+    renderPageInProjectWithAttribution.mockClear();
+    getBinaryDocById.mockClear();
+    regenerateNestedBuffers.mockClear();
+    prefs.previewEditing = false;
+    prefs.unlockNestingCursor = false;
+  });
+
+  it.each([
+    { name: 'editing arms capture even with comments hidden', editing: true, commentsMode: 'hide' as const, capture: true },
+    { name: 'show comments arms capture in read mode', editing: false, commentsMode: 'show' as const, capture: true },
+    { name: 'expand comments arms capture in read mode', editing: false, commentsMode: 'expand' as const, capture: true },
+    { name: 'default show comments arms capture in read mode', editing: false, commentsMode: undefined, capture: true },
+    { name: 'read mode with hidden comments leaves capture off', editing: false, commentsMode: 'hide' as const, capture: false },
+  ])('$name', async ({ editing, commentsMode, capture }) => {
+    prefs.previewEditing = editing;
+    render(<ReactPreview {...baseProps(undefined, commentsMode)} />);
+
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalled());
+    for (const call of renderPageInProjectWithAttribution.mock.calls) {
+      expect(call[5]).toEqual({ captureUntransformedAst: capture });
+    }
+  });
+
+  it('entering editing causes exactly one armed render through the existing effect', async () => {
+    const props = baseProps(undefined, 'hide');
+    const view = render(<ReactPreview {...props} />);
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1));
+    renderPageInProjectWithAttribution.mockClear();
+
+    prefs.previewEditing = true;
+    await act(async () => view.rerender(<ReactPreview {...props} />));
+
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1));
+    await act(async () => Promise.resolve());
+    expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1);
+    expect(renderPageInProjectWithAttribution.mock.calls[0][5]).toEqual({ captureUntransformedAst: true });
+  });
+
+  it('showing hidden comments causes exactly one armed render through the existing effect', async () => {
+    const props = baseProps(undefined, 'hide');
+    const view = render(<ReactPreview {...props} />);
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1));
+    renderPageInProjectWithAttribution.mockClear();
+
+    await act(async () => view.rerender(<ReactPreview {...props} commentsMode="show" />));
+
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1));
+    await act(async () => Promise.resolve());
+    expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1);
+    expect(renderPageInProjectWithAttribution.mock.calls[0][5]).toEqual({ captureUntransformedAst: true });
+  });
+
+  it('regenerates nested buffers only after editing turns on, even with unchanged AST strings', async () => {
+    prefs.unlockNestingCursor = true;
+    const props = baseProps(undefined, 'show');
+    const view = render(<ReactPreview {...props} />);
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalled());
+    await act(async () => Promise.resolve());
+
+    // Visible comments arm capture in read mode, but must not arm editing work.
+    expect(regenerateNestedBuffers).not.toHaveBeenCalled();
+
+    prefs.previewEditing = true;
+    await act(async () => view.rerender(<ReactPreview {...props} />));
+
+    await waitFor(() => expect(regenerateNestedBuffers).toHaveBeenCalledTimes(1));
+    expect(regenerateNestedBuffers).toHaveBeenCalledWith(props.content, AST);
   });
 });

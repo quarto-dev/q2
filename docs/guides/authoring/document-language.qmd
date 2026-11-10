@@ -55,6 +55,12 @@ Regional variants fall back to their base language: with `lang: pt-BR`, Quarto f
 
 `lang` can be set at the project level (in `_quarto.yml`) or per document; document settings win.
 
+### Citations and Bibliographies
+
+`lang` also selects the [CSL](https://citationstyles.org) locale for citations and the bibliography: month names, terms like "and" or "edited by", and quotation marks. With `lang: nl`, a date renders as "12 juli" rather than "July 12". Titles are title-cased only for English documents, unless a reference sets its own `language`.
+
+`lang` takes precedence over a CSL style's `default-locale`; that locale applies only when `lang` is unset. A bare language tag uses its primary region (`pt` is `pt-PT`, `en` is `en-US`). A language with no CSL locale falls back to `en-US`.
+
 ## Alternate Language
 
 If you aren't happy with the generated text for a given part of a document, you can provide alternate values via the `language` key (at a project or document level). For example, to override the labels used within title blocks:

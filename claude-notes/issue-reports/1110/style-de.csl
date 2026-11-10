@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" default-locale="de-DE">
+  <info><title>t</title><id>t</id><updated>2020-01-01T00:00:00+00:00</updated></info>
+  <citation><layout><text variable="title"/><text term="and" prefix=" "/><date variable="issued" form="text" prefix=" "/></layout></citation>
+  <bibliography><layout><text variable="title"/><text term="and" prefix=" "/><date variable="issued" form="text" prefix=" "/></layout></bibliography>
+</style>

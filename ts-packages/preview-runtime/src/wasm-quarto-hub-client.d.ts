@@ -46,12 +46,16 @@ declare module 'wasm-quarto-hub-client' {
     path: string,
     user_grammars?: JsUserGrammars,
   ): Promise<string>;
+  /** Per-render baseline capture. Omitted means capture-on for raw-WASM compatibility. */
+  export interface RenderPageInProjectOptions {
+    captureUntransformedAst?: boolean;
+  }
   /**
-   * `options` is the live viewer's `{ to?, metadata? }`: `to` is the requested
+   * `options` adds the live viewer's `{ to?, metadata? }`: `to` is the requested
    * format (`q2 preview --to`; wins over the document's and the project's) and
    * `metadata` the render's runtime metadata layer (`-M`, a JSON object).
    */
-  export interface RenderPageForPreviewOptions {
+  export interface RenderPageForPreviewOptions extends RenderPageInProjectOptions {
     to?: string;
     metadata?: Record<string, unknown>;
   }

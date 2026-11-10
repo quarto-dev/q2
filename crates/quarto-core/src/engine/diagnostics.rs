@@ -24,7 +24,13 @@ use std::path::Path;
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 
+use quarto_source_map::SourceInfo;
+
 use super::ExecutionError;
+use super::context::ExecutionContext;
+use super::units::{InlineUnit, Unit};
+use crate::presenter::cell::describe_location;
+use crate::presenter::document::PresentNote;
 
 /// Where users report engine-integration bugs.
 const ISSUES_URL: &str = "https://github.com/quarto-dev/q2/issues";
@@ -186,6 +192,61 @@ pub fn no_runnable_kernel_diagnostic(
         .build()
 }
 
+/// `Q-18-12`: knitr\'s cache is off for the run that records the document. One per document,
+/// naming the chunks that asked for it. Informational: the output is the same, only slower.
+pub fn knitr_cache_disabled_diagnostic(labels: &[String]) -> DiagnosticMessage {
+    let list = labels
+        .iter()
+        .map(|l| format!("`{l}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    DiagnosticMessageBuilder::info("knitr Cache Is Off While Recording")
+        .with_code("Q-18-12")
+        .problem(format!(
+            "these chunks asked for knitr\'s cache, and it was turned off for them: {list}."
+        ))
+        .add_detail(
+            "Recording a chunk\'s output needs the chunk to run, and a cache hit skips the run, \
+             so the chunks run every time this document is executed.",
+        )
+        .build()
+}
+
+/// `Q-18-13`: the document replaced a knitr hook, so that chunk and every later one keep
+/// knitr\'s finished markdown. One per document, naming the hook and the first chunk.
+pub fn knitr_hook_override_diagnostic(hook: &str, label: &str) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::info("knitr Hook Replaced By The Document")
+        .with_code("Q-18-13")
+        .problem(format!(
+            "the chunk `{label}` replaced knitr\'s `{hook}` hook (`knitr::knit_hooks$set`)."
+        ))
+        .add_detail(
+            "Quarto cannot reproduce what a replaced hook does from the recorded pieces, so \
+             this chunk and every chunk after it keep knitr\'s finished markdown.",
+        )
+        .build()
+}
+
+/// `Q-18-14`: chunks with `child=` keep knitr\'s finished markdown. One per document, naming
+/// the chunks.
+pub fn knitr_child_diagnostic(labels: &[String]) -> DiagnosticMessage {
+    let list = labels
+        .iter()
+        .map(|l| format!("`{l}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    DiagnosticMessageBuilder::info("knitr Child Document Kept As knitr Wrote It")
+        .with_code("Q-18-14")
+        .problem(format!(
+            "these chunks include a child document with `child=`: {list}."
+        ))
+        .add_detail(
+            "The child document is run by knitr and its finished markdown is kept as one block, \
+             so its chunks are not presented from recorded pieces.",
+        )
+        .build()
+}
+
 /// A fence language that Quarto 2 invented and is removing. Not coded: it
 /// goes away with the alias table after one release.
 pub fn deprecated_alias_diagnostic(alias: &str, canonical: &str) -> DiagnosticMessage {
@@ -306,6 +367,96 @@ pub fn inline_span_diagnostic(
         }
     };
     builder.build()
+}
+
+/// The code for an image output the presenter could not use.
+pub const IMAGE_UNUSABLE_CODE: &str = "Q-18-11";
+
+/// `Q-18-11`: a cell's image output (`mime`) could not be written, so the figure is
+/// missing from the page. The render continues, so this is a warning; `--strict`
+/// promotes it. `location` is `file:line:column` of the cell when it resolves.
+pub fn image_unusable_diagnostic(
+    mime: &str,
+    reason: &str,
+    location: Option<&str>,
+) -> DiagnosticMessage {
+    let at = location.map(|l| format!(" at {l}")).unwrap_or_default();
+    DiagnosticMessageBuilder::warning("Image Output Could Not Be Used")
+        .with_code(IMAGE_UNUSABLE_CODE)
+        .problem(format!(
+            "the `{mime}` output of the code cell{at} could not be used: {reason}"
+        ))
+        .add_detail(
+            "The figure is missing from the page; the output shows the text \
+             representation the kernel sent, or a placeholder when it sent none.",
+        )
+        .add_hint(format!(
+            "Re-run the render; if it recurs, the kernel may be sending a malformed image. \
+             Report it at {ISSUES_URL} with the kernel's name. Use `--strict` to make this \
+             stop the render."
+        ))
+        .build()
+}
+
+/// The diagnostic for a span problem, located at the span's expression.
+pub(crate) fn span_diagnostic(
+    problem: &InlineSpanProblem,
+    span: &InlineUnit,
+    ctx: &ExecutionContext,
+) -> quarto_error_reporting::DiagnosticMessage {
+    let expr_source = SourceInfo::substring(
+        ctx.source_info.clone(),
+        span.code_start,
+        span.code_start + span.code.len(),
+    );
+    let location = describe_location(&expr_source, 0, ctx);
+    inline_span_diagnostic(problem, &span.lang, &span.code, location.as_deref())
+}
+
+/// A presenter note as the engine's warning: a span whose value has no usable text
+/// stays in the document (`Q-18-10`, as before the flip).
+pub(crate) fn note_diagnostic(
+    note: &PresentNote,
+    units: &[Unit],
+    ctx: &ExecutionContext,
+) -> quarto_error_reporting::DiagnosticMessage {
+    match note {
+        PresentNote::InlineNoUsableValue { unit } => match units.get(*unit) {
+            Some(Unit::Inline(span)) => {
+                span_diagnostic(&InlineSpanProblem::NoUsableResult, span, ctx)
+            }
+            _ => inline_span_diagnostic(&InlineSpanProblem::NoUsableResult, "?", "?", None),
+        },
+        PresentNote::ImageUnusable { unit, mime, reason } => {
+            let location = match units.get(*unit) {
+                Some(Unit::Cell(block)) => describe_location(
+                    &SourceInfo::substring(
+                        ctx.source_info.clone(),
+                        block.code_start,
+                        block.code_start + block.code.len(),
+                    ),
+                    0,
+                    ctx,
+                ),
+                _ => None,
+            };
+            image_unusable_diagnostic(mime, reason, location.as_deref())
+        }
+        // Jupyter records hold no fallback units; the note exists for the knitr and marimo
+        // adapters, which report it themselves.
+        PresentNote::MarkdownFormatMismatch { stored, wanted, .. } => {
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                "Stored Markdown For Another Format",
+            )
+            .problem(format!(
+                "a stored markdown unit was produced for {} but the document renders to `{wanted}`.",
+                stored
+                    .as_deref()
+                    .map_or("no recorded format".to_string(), |s| format!("`{s}`"))
+            ))
+            .build()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -507,5 +658,20 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains(" at "), "{text}");
+    }
+
+    #[test]
+    fn image_unusable_is_a_coded_warning_that_names_the_cell_and_the_reason() {
+        let d = image_unusable_diagnostic(
+            "image/png",
+            "the payload is not valid base64",
+            Some("a.qmd:7:1"),
+        );
+        assert_eq!(d.code.as_deref(), Some("Q-18-11"));
+        assert_eq!(d.kind, DiagnosticKind::Warning);
+        let text = d.to_text(None);
+        assert!(text.contains("a.qmd:7:1"), "{text}");
+        assert!(text.contains("image/png"), "{text}");
+        assert!(text.contains("not valid base64"), "{text}");
     }
 }

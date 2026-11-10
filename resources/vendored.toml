@@ -589,6 +589,19 @@ last_reviewed = "2026-11-05"
 notes = "Byte-identical to Quarto 1's copy (bd-5kf2dnw4). Hover heading links; consumes the `.anchored` class."
 
 [[asset]]
+id = "glightbox"
+title = "GLightbox"
+paths = ["resources/js/glightbox"]
+policy = "track"
+version = "3.1.0"
+version_sources = [{ kind = "file-contains", file = "resources/js/glightbox/glightbox.min.js" }]
+upstream = { kind = "npm", package = "glightbox" }
+procedure = "resources/js/README.md"
+license = "MIT"
+last_reviewed = "2026-11-06"
+notes = "Byte-identical to Quarto 1's copy (bd-kcpkgftw). Lightbox images; Quarto's colour overrides (Q1 lightbox.css) live in resources/scss/bootstrap/_bootstrap-rules.scss, not here."
+
+[[asset]]
 id = "react"
 title = "React / ReactDOM ES modules for quarto.component"
 paths = ["resources/js/react"]
@@ -789,16 +802,16 @@ title = "pandoc.wasm for the hub-client (fetched, manifest only)"
 paths = ["resources/pandoc-wasm.json"]
 policy = "track"
 group = "pandoc"
-version = "3.12.1"
+version = "3.13"
 version_sources = [
-  { kind = "file-regex", file = "resources/pandoc-wasm.json", regex = 'pandoc-([0-9.]+)\.wasm\.zip' },
+  { kind = "file-regex", file = "resources/pandoc-wasm.json", regex = '"version": "([^"]+)"' },
   { kind = "file-regex", file = "crates/quarto-core/src/pandoc_filters/mod.rs", regex = 'PANDOC_PIN: &str = "([^"]+)"' },
 ]
 upstream = { kind = "git", repo = "https://github.com/jgm/pandoc", track = "tags" }
 guards = ["quarto-core pandoc_wasm_constants", "xtask lint::pandoc_pin"]
 procedure = "dev-docs/pandoc-wasm-bump.md"
 license = "GPL-2.0"
-last_reviewed = "2026-10-21"
+last_reviewed = "2026-11-09"
 notes = '''
 Pandoc releases publish the wasm zip as a release asset. A bump moves the
 pandoc pin everywhere the pandoc-pin lint checks (CI, dev-setup, README) and
@@ -889,15 +902,15 @@ title = "Default CSL style (Pandoc's data/default.csl, chicago-author-date)"
 paths = ["crates/pampa/resources/csl"]
 policy = "track"
 group = "pandoc"
-version = "3.12.1"
+version = "3.13"
 version_sources = [{ kind = "file-contains", file = "crates/pampa/resources/csl/README.md" }]
 upstream = { kind = "git", repo = "https://github.com/jgm/pandoc", track = "tags", paths = ["data/default.csl"] }
 guards = ["quarto-citeproc tests", "pampa citeproc tests"]
 procedure = "crates/pampa/resources/csl/README.md"
 license = "CC-BY-SA-3.0"
-last_reviewed = "2026-10-21"
+last_reviewed = "2026-11-09"
 notes = '''
-Byte-identical to Pandoc's data/default.csl (3.11 through 3.12.1; recorded at 3.12.1, the pinned pandoc), so its
+Byte-identical to Pandoc's data/default.csl (3.11 through 3.13; recorded at 3.13, the pinned pandoc), so its
 upstream is Pandoc, NOT citation-style-language/styles: the styles repo's
 chicago-author-date.csl is an older revision (<updated> 2025-02-09 vs
 Pandoc's 2025-08-07) and differs substantially. The 2026-10-21 survey filed

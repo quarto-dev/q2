@@ -19,7 +19,7 @@ reader turns into a <code>Table</code>, <code>DefinitionList</code> or <code>Fig
 the same when an lmd cell builds the shape from nodes, writes it inside
 a fragment, or reads it back from JSON.</p>
 <section id="literal-list-table-control" class="section level2">
-<h2 class="anchored">1. Literal list-table (control)</h2>
+<h2 class="anchored" data-anchor-id="literal-list-table-control">1. Literal list-table (control)</h2>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -40,7 +40,7 @@ a fragment, or reads it back from JSON.</p>
 </table>
 </section>
 <section id="list-table-div-built-from-ast-nodes-in-a-cell" class="section level2">
-<h2 class="anchored">2. list-table div built from AST nodes in a cell</h2>
+<h2 class="anchored" data-anchor-id="list-table-div-built-from-ast-nodes-in-a-cell">2. list-table div built from AST nodes in a cell</h2>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -61,7 +61,7 @@ a fragment, or reads it back from JSON.</p>
 </table>
 </section>
 <section id="literal-definition-list-control" class="section level2">
-<h2 class="anchored">3. Literal definition-list (control)</h2>
+<h2 class="anchored" data-anchor-id="literal-definition-list-control">3. Literal definition-list (control)</h2>
 <dl>
 <dt>Term</dt>
 <dd>
@@ -70,7 +70,7 @@ A definition.
 </dl>
 </section>
 <section id="definition-list-div-built-from-ast-nodes-in-a-cell" class="section level2">
-<h2 class="anchored">4. definition-list div built from AST nodes in a cell</h2>
+<h2 class="anchored" data-anchor-id="definition-list-div-built-from-ast-nodes-in-a-cell">4. definition-list div built from AST nodes in a cell</h2>
 <dl>
 <dt>Term</dt>
 <dd>
@@ -79,7 +79,7 @@ A definition.
 </dl>
 </section>
 <section id="list-table-inside-a-fragment" class="section level2">
-<h2 class="anchored">5. list-table inside a fragment</h2>
+<h2 class="anchored" data-anchor-id="list-table-inside-a-fragment">5. list-table inside a fragment</h2>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -100,7 +100,7 @@ A definition.
 </table>
 </section>
 <section id="pipe-table-inside-a-fragment" class="section level2">
-<h2 class="anchored">6. Pipe table inside a fragment</h2>
+<h2 class="anchored" data-anchor-id="pipe-table-inside-a-fragment">6. Pipe table inside a fragment</h2>
 <table class="caption-top table">
 <colgroup>
 <col />
@@ -125,7 +125,7 @@ A definition.
 </table>
 </section>
 <section id="definition-list-inside-a-fragment" class="section level2">
-<h2 class="anchored">7. definition-list inside a fragment</h2>
+<h2 class="anchored" data-anchor-id="definition-list-inside-a-fragment">7. definition-list inside a fragment</h2>
 <dl>
 <dt>Term</dt>
 <dd>
@@ -134,7 +134,7 @@ A definition.
 </dl>
 </section>
 <section id="single-image-paragraph-built-from-nodes" class="section level2">
-<h2 class="anchored">8. Single-image paragraph built from nodes</h2>
+<h2 class="anchored" data-anchor-id="single-image-paragraph-built-from-nodes">8. Single-image paragraph built from nodes</h2>
 <div id="fig-pixel" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig">
 <div aria-describedby="fig-pixel-caption">
@@ -147,13 +147,13 @@ Figure 1: A pixel
 </div>
 </section>
 <section id="invalid-list-table-built-from-nodes-no-rows-list" class="section level2">
-<h2 class="anchored">9. Invalid list-table built from nodes (no rows list)</h2>
+<h2 class="anchored" data-anchor-id="invalid-list-table-built-from-nodes-no-rows-list">9. Invalid list-table built from nodes (no rows list)</h2>
 <div class="list-table">
 <p>not a list</p>
 </div>
 </section>
 <section id="pandoc.read-of-list-table-markdown" class="section level2">
-<h2 class="anchored">10. pandoc.read of list-table markdown</h2>
+<h2 class="anchored" data-anchor-id="pandoc.read-of-list-table-markdown">10. pandoc.read of list-table markdown</h2>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -174,7 +174,7 @@ Figure 1: A pixel
 </table>
 </section>
 <section id="pandoc.read-of-json-holding-a-list-table-div" class="section level2">
-<h2 class="anchored">11. pandoc.read of JSON holding a list-table div</h2>
+<h2 class="anchored" data-anchor-id="pandoc.read-of-json-holding-a-list-table-div">11. pandoc.read of JSON holding a list-table div</h2>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -195,11 +195,11 @@ Figure 1: A pixel
 </table>
 </section>
 <section id="inline-cell-whose-footnote-holds-a-list-table-div" class="section level2">
-<h2 class="anchored">12. Inline cell whose footnote holds a list-table div</h2>
+<h2 class="anchored" data-anchor-id="inline-cell-whose-footnote-holds-a-list-table-div">12. Inline cell whose footnote holds a list-table div</h2>
 <p>A note<span id="fnref1"><sup><a href="#fn1" class="footnote-ref" role="doc-noteref">1</a></sup></span> here.</p>
 </section>
 <section id="block-cell-nested-in-a-fragment" class="section level2">
-<h2 class="anchored">13. Block cell nested in a fragment</h2>
+<h2 class="anchored" data-anchor-id="block-cell-nested-in-a-fragment">13. Block cell nested in a fragment</h2>
 <p>Before the nested cell.</p>
 <table class="caption-top table">
 <thead>
@@ -215,7 +215,7 @@ Figure 1: A pixel
 </section>
 <div id="quarto-appendix" class="default">
 <section id="footnotes" class="footnotes section" role="doc-endnotes">
-<h2 class="anchored quarto-appendix-heading">Footnotes</h2>
+<h2 class="anchored quarto-appendix-heading" data-anchor-id="footnotes">Footnotes</h2>
 <ol type="1">
 <li><div id="fn1">
 <table class="caption-top table">

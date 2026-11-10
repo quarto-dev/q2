@@ -1196,7 +1196,10 @@ export default function PreviewApp() {
           state.activeFile!,
           undefined,
           captureGzJson,
-          wasmRenderOptions(state.renderFlags),
+          {
+            ...wasmRenderOptions(state.renderFlags),
+            captureUntransformedAst: state.allowEdit,
+          },
         );
         if (cancelled) return;
         // Phase D.3 (bd-kw93.9) + bd-0mji: a test-only render
@@ -1313,7 +1316,7 @@ export default function PreviewApp() {
     return () => {
       cancelled = true;
     };
-  }, [state.activeFile, state.contentTick, state.captures, pageKind, state.renderFlags]);
+  }, [state.activeFile, state.contentTick, state.captures, pageKind, state.renderFlags, state.allowEdit]);
 
   // Entering a PDF page drops the HTML page's render state, so that going back to HTML shows the
   // boot spinner until a fresh render rather than the previous page's stale AST.
@@ -1354,17 +1357,18 @@ export default function PreviewApp() {
 
   // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
   // (the exported pure helper) so the gating logic has a single testable
-  // source of truth. Returns EMPTY_NESTED_BUFFERS when nestingCursor is off
-  // or either render input is missing, keeping the iframe dep stable.
+  // source of truth. Returns EMPTY_NESTED_BUFFERS in read-only mode, when
+  // nestingCursor is off, or when either render input is missing, keeping the
+  // iframe dep stable.
   const nestedEditBuffers = useMemo(
     () =>
       computeNestedEditBuffers(
-        state.nestingCursor,
+        state.allowEdit && state.nestingCursor,
         state.renderedContent,
         state.untransformedAstJson,
         regenerateNestedBuffers,
       ),
-    [state.nestingCursor, state.renderedContent, state.untransformedAstJson],
+    [state.allowEdit, state.nestingCursor, state.renderedContent, state.untransformedAstJson],
   );
 
   // ── Render ────────────────────────────────────────────────────────────

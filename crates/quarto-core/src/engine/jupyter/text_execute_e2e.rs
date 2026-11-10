@@ -70,6 +70,8 @@ fn present_from(record: &Record, text: &str, dir: &std::path::Path) -> String {
         &units,
         None,
         InlineTarget::from_format("html"),
+        "html",
+        None,
         &mut fig,
     )
     .expect("presents")
@@ -124,6 +126,69 @@ fn e2e_record_files_are_deterministic() {
         write_record(&first).unwrap(),
         write_record(&second).unwrap()
     );
+}
+
+// ── figures ──────────────────────────────────────────────────────────────
+
+/// A 1x1 PNG, base64 without the trailing `=` padding, as Ark emits plots.
+const UNPADDED_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg";
+
+/// A kernel whose figure arrives as unpadded base64 still yields a figure file and an
+/// `<img>` reference (bd-yt2o2ovt: on Ark every plot was silently dropped before).
+#[test]
+fn e2e_unpadded_base64_figure_is_written_and_referenced() {
+    let text = "```{python}\nplot\n```\n";
+    let script = Script::from([(
+        cell("plot"),
+        vec![FakeOutput::Display(
+            serde_json::json!({ "image/png": UNPADDED_PNG, "text/plain": "<Figure>" }),
+        )],
+    )]);
+    let (keep, ctx) = staged(text, &script);
+    let result = execute_qmd(text, &ctx).expect("execution succeeds");
+
+    let rel = "doc_files/figure-html/cell-1-output-1.png";
+    assert!(result.markdown.contains(rel), "{}", result.markdown);
+    let file = ctx.source_path.parent().unwrap().join(rel);
+    assert!(file.is_file(), "figure file missing: {}", file.display());
+    assert_eq!(&std::fs::read(&file).unwrap()[..4], b"\x89PNG");
+    drop(keep);
+}
+
+/// An image the kernel sent that is not base64 is not written, and the render warns
+/// `Q-18-11` at the cell instead of only logging. The placeholder is escaped so it is
+/// literal text, not a span.
+#[test]
+fn e2e_unusable_image_warns_q_18_11_at_the_cell() {
+    let text = "Intro.\n\n```{python}\nplot\n```\n";
+    let script = Script::from([(
+        cell("plot"),
+        vec![FakeOutput::Display(
+            serde_json::json!({ "image/png": "!!!not base64!!!" }),
+        )],
+    )]);
+    let (keep, ctx) = staged(text, &script);
+    let result = execute_qmd(text, &ctx).expect("execution succeeds");
+
+    let warnings: Vec<_> = result
+        .warnings
+        .iter()
+        .filter(|w| w.code.as_deref() == Some("Q-18-11"))
+        .collect();
+    assert_eq!(warnings.len(), 1, "{:?}", result.warnings);
+    let shown = warnings[0].to_text(None);
+    assert!(shown.contains("doc.qmd:4"), "no cell location: {shown}");
+    assert!(
+        shown.contains("image/png") && shown.contains("base64"),
+        "{shown}"
+    );
+    assert!(
+        result.markdown.contains("\\[Image output\\]"),
+        "{}",
+        result.markdown
+    );
+    assert!(result.supporting_files.is_empty());
+    drop(keep);
 }
 
 // ── IEE policy beyond the unit tests ────────────────────────────────────

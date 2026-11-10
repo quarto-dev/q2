@@ -1,6 +1,6 @@
 ---
 title: "Unclosed Editorial Comment"
-description: "An editorial-comment span opens with `[!!` but no closing `]` appears before the end of the block."
+description: "An editorial-comment span opens with `[>>` but no closing `]` appears before the end of the block."
 code: Q-2-21
 subsystem: markdown
 status: stub
@@ -11,32 +11,32 @@ categories:
 
 # `Q-2-21` — Unclosed Editorial Comment
 
-> An editorial-comment span opens with `[!!` but no closing `]`
+> An editorial-comment span opens with `[>>` but no closing `]`
 > appears before the end of the block.
 
 ## What this means
 
-The editorial-comment form `[!!a remark]` attaches a non-output
-side note to text. This error fires when the opener `[!!` has no
+The editorial-comment form `[>>a remark]` attaches a non-output
+side note to text. This error fires when the opener `[>>` has no
 matching close.
 
 ## Why this happens
 
-A deleted closing bracket, or a literal `[!!` taken as an
+A deleted closing bracket, or a literal `[>>` taken as an
 editorial opener.
 
 ## How to fix
 
-Add the closing `]`, or escape the opening bracket: `\[!!text]`.
+Add the closing `]`, or escape the opening bracket: `\[>>text]`.
 
 ## Example
 
 ```markdown
-[!!
+[>>
 ```
 
 ## Related
 
 - [`Q-2-19`](Q-2-19.qmd) — unclosed editorial insert (`[++`).
 - [`Q-2-20`](Q-2-20.qmd) — unclosed editorial delete (`[--`).
-- [`Q-2-22`](Q-2-22.qmd) — unclosed editorial highlight (`[>>`).
+- [`Q-2-22`](Q-2-22.qmd) — unclosed editorial highlight (`[!!`).

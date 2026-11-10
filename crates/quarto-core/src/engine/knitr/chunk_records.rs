@@ -27,6 +27,7 @@ use crate::record::{
     BuildError, EngineEntryInput, HashDefinition, QUARTO_MARKDOWN_MIME, RecordBuilder, UnitResult,
 };
 
+use super::adapter::{Captured, build_structured};
 use super::span_records::span_output;
 use super::types::{KnitrChunkRecord, KnitrSpanRecord};
 
@@ -72,14 +73,29 @@ pub(super) fn insert_unit_ids(text: &str, ctx: &ExecutionContext) -> (String, Ve
             continue;
         };
         let syntax = crate::cell_options::comment_syntax_for(&cell.lang);
+        // knitr reads option lines under one comment prefix and stops at the first line that uses
+        // another. It accepts `#|` in any chunk, so an author's `#|` lines in a `{sql}` chunk
+        // (whose scanner prefix is `--`) must not be split from the options by a `--|` line.
+        let first_line = text[cell.start + opener_len + 1..]
+            .lines()
+            .next()
+            .unwrap_or("")
+            .strip_prefix(cell.container_prefix.as_str())
+            .unwrap_or("")
+            .trim_start_matches(' ');
+        let (prefix, suffix) = if first_line.starts_with("#|") {
+            ("#", None)
+        } else {
+            (syntax.prefix, syntax.suffix)
+        };
         // A quoted scalar keeps an id that looks like a number or a keyword a string.
         let line = format!(
             "{}{}{}| {UNIT_ID_OPTION}: {}{}\n",
             cell.container_prefix,
             " ".repeat(cell.indent),
-            syntax.prefix,
+            prefix,
             Value::String(id.to_string()),
-            syntax.suffix.unwrap_or(""),
+            suffix.unwrap_or(""),
         );
         edits.push((cell.start + opener_len + 1, line));
         ids.push(id.to_string());
@@ -95,7 +111,7 @@ pub(super) fn insert_unit_ids(text: &str, ctx: &ExecutionContext) -> (String, Ve
 /// The record's one output for a chunk: its finished markdown as `display_data`, tagged
 /// with the output format it was rendered for. The options digest and the files the
 /// chunk wrote travel in the output's metadata; neither is matched on.
-fn chunk_output(chunk: &KnitrChunkRecord, format: &str) -> Value {
+pub(super) fn chunk_output(chunk: &KnitrChunkRecord, format: &str) -> Value {
     let mut metadata = json!({
         "quarto_format": format,
         "quarto_options_digest": chunk.options_digest,
@@ -111,7 +127,7 @@ fn chunk_output(chunk: &KnitrChunkRecord, format: &str) -> Value {
 }
 
 /// Check that `found` is `expected`, id for id and in order, naming the first difference.
-fn align(expected: &[String], found: &[&str]) -> Result<(), EngineRecordProblem> {
+pub(super) fn align(expected: &[String], found: &[&str]) -> Result<(), EngineRecordProblem> {
     if expected.len() != found.len() {
         return Err(EngineRecordProblem::CountMismatch {
             expected: expected.len(),
@@ -189,7 +205,7 @@ fn build(
         builder.push(
             index,
             UnitResult {
-                outputs: vec![span_output(span, &ctx.format)],
+                outputs: vec![span_output(span, &ctx.format, &|_| None)],
                 ..Default::default()
             },
         )?;
@@ -212,18 +228,22 @@ pub(super) fn attach_records(
     expected: &[String],
     chunks: &[KnitrChunkRecord],
     spans: &Spans<'_>,
+    captured: Option<&Captured<'_>>,
     result: &mut ExecuteResult,
 ) {
     if !ctx.want_record || ctx.units.is_empty() {
         return;
     }
     let found: Vec<&str> = chunks.iter().map(|c| c.id.as_str()).collect();
+    // A captured run (KNR-3) builds structured units from the pieces; otherwise every chunk is
+    // EXR-11\'s one rendered-markdown unit.
     let outcome = align(expected, &found)
         .and_then(|()| spans.align())
-        .and_then(|()| {
-            build(ctx, def, chunks, spans.found).map_err(|e| EngineRecordProblem::Build {
+        .and_then(|()| match captured {
+            Some(captured) => build_structured(ctx, def, expected, captured, chunks, spans.found),
+            None => build(ctx, def, chunks, spans.found).map_err(|e| EngineRecordProblem::Build {
                 detail: e.to_string(),
-            })
+            }),
         });
     match outcome {
         Ok(record) => result.record = Some(record),
@@ -293,7 +313,7 @@ y = 2
             found: &[],
             location: &|_| String::new(),
         };
-        attach_records(ctx, def, expected, chunks, &spans, result);
+        attach_records(ctx, def, expected, chunks, &spans, None, result);
     }
 
     fn chunk(id: &str, markdown: &str) -> KnitrChunkRecord {
@@ -317,6 +337,36 @@ y = 2
         )
         .with_want_record(true);
         assert_eq!(insert_unit_ids(DOC, &bare), (DOC.to_string(), vec![]));
+    }
+
+    /// knitr reads a chunk's option lines under one comment prefix and stops at the first line
+    /// that uses another. A `{sql}` chunk whose author wrote `#|` lines (knitr accepts them, though
+    /// Quarto's scanner reads `--|`) must therefore get its id line in the author's prefix, or the
+    /// author's options fall out of the block and `connection` never reaches the engine.
+    #[test]
+    fn the_id_line_uses_the_prefix_of_the_authors_option_lines() {
+        let doc = "```{sql}\n#| connection: con\nSELECT 1\n```\n\n\
+                   ```{sql}\n--| connection: con\nSELECT 2\n```\n\n\
+                   ```{sql}\nSELECT 3\n```\n";
+        let c = ctx(doc, &["sql"], true);
+        let (text, ids) = insert_unit_ids(doc, &c);
+        assert_eq!(ids.len(), 3, "{text}");
+        let line = |i: usize, prefix: &str| format!("{prefix}| quarto-unit-id: \"{}\"\n", ids[i]);
+        assert!(
+            text.contains(&format!("```{{sql}}\n{}#| connection: con\n", line(0, "#"))),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "```{{sql}}\n{}--| connection: con\n",
+                line(1, "--")
+            )),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("```{{sql}}\n{}SELECT 3\n", line(2, "--"))),
+            "{text}"
+        );
     }
 
     #[test]
@@ -526,6 +576,7 @@ y = 2
         KnitrSpanRecord {
             id: id.to_string(),
             markdown: markdown.to_string(),
+            piece: None,
         }
     }
 
@@ -554,6 +605,7 @@ y = 2
                 found: &found,
                 location: &|_| String::new(),
             },
+            None,
             &mut result,
         );
         assert!(result.warnings.is_empty(), "{:?}", result.warnings);
@@ -586,6 +638,7 @@ y = 2
                     "doc.qmd:7".to_string()
                 },
             },
+            None,
             &mut result,
         );
         assert!(result.record.is_none(), "no record for the document");
@@ -620,6 +673,7 @@ y = 2
                     found: &found,
                     location: &|_| "loc".to_string(),
                 },
+                None,
                 &mut result,
             );
             assert!(result.record.is_none());

@@ -234,6 +234,8 @@ quarto-output-extract = { path = "../quarto-output-extract" }
 # diagnostic points, not just which code it carries (bd-9yh3pzfu).
 quarto-config = { workspace = true, features = ["span-assert"] }
 tempfile = "3"
+# KNR-1: the knitr corpus manifest (tests/fixtures/knitr-corpus/manifest.toml).
+toml.workspace = true
 proptest = "1.10"
 # R1: validate the PandocRequest golden against its published JSON Schema.
 jsonschema = { version = "0.55", default-features = false }

@@ -4,13 +4,17 @@
 //! highlights and comments into q2 editorial marks (I3, I4); the export transform
 //! (`crate::transforms::editorial_marks_ooxml`) turns them back (I23). The class names, the
 //! mark kinds, the I4 commented-range shape and its builder live here, so the two directions
-//! cannot drift apart.
+//! cannot drift apart. The Typst export (`crate::transforms::editorial_marks_typst`, GH #1102)
+//! shares the mark kinds and the attribution stamping.
 
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::inline::{Code, Inline, Inlines, LineBreak, RawInline, Span};
 use quarto_source_map::{By, SourceInfo};
+
+use crate::attribution::AttributionData;
+use crate::transforms::query_attribution;
 
 /// pandoc's docx reader spans (`--track-changes=all`), which are also the classes its docx
 /// writer turns into native OOXML.
@@ -82,6 +86,49 @@ pub fn new_span(
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// Attribution stamping (ported from the extension's stamp-attribution.lua)
+// ---------------------------------------------------------------------------
+
+/// `time` as `YYYY-MM-DDTHH:MM:SSZ`. Providers differ in the unit (git blame gives seconds);
+/// anything above 1e11 would be past the year 5000 as seconds, so it is milliseconds.
+fn iso_utc(time: i64) -> Option<String> {
+    let secs = if time > 100_000_000_000 {
+        time / 1000
+    } else {
+        time
+    };
+    let at = time::OffsetDateTime::from_unix_timestamp(secs).ok()?;
+    at.format(&time::format_description::well_known::Rfc3339)
+        .ok()
+}
+
+/// Copy the blamed author and time onto a mark's attributes (`author`, `date`), where the
+/// source didn't set them. No data, or no hit: the attributes are left alone. Shared by the
+/// OOXML and Typst exports.
+pub(crate) fn stamp_attribution(
+    data: Option<&AttributionData>,
+    attrs: &mut LinkedHashMap<String, String>,
+    source_info: &SourceInfo,
+) {
+    let Some(data) = data else {
+        return;
+    };
+    let Some(record) = query_attribution(source_info, &data.runs, data.file_id) else {
+        return;
+    };
+    if !attrs.contains_key("author")
+        && let Some(identity) = data.identities.get(&record.actor)
+    {
+        attrs.insert("author".to_string(), identity.display_name.clone());
+    }
+    if !attrs.contains_key("date")
+        && let Some(date) = iso_utc(record.time)
+    {
+        attrs.insert("date".to_string(), date);
+    }
 }
 
 // ---------------------------------------------------------------------------

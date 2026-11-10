@@ -87,6 +87,7 @@ function mount(commentTexts: string[], mode: PreviewContextValue['commentsMode']
     const ctx: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         commentsMode: mode,
+        sourceIndex: new Map(),
         resolveSource,
         commitSubtreeEdit,
     };

@@ -1,0 +1,51 @@
+---
+title: "Image Output Could Not Be Used"
+description: "A code cell's image output was malformed or could not be written, so the figure is missing from the page."
+code: Q-18-11
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-11` — Image Output Could Not Be Used
+
+> A code cell's image output was malformed or could not be written, so the
+> figure is missing from the page.
+
+## What this means
+
+When a Jupyter kernel returns a plot (a PNG, JPEG, or SVG image), Quarto
+saves it as a file next to your document, in a `<document>_files/` folder,
+and links it into the page.
+
+This warning means that for one cell Quarto could not do that. Either the
+image data the kernel sent could not be decoded (it was not valid base64),
+or the file could not be written (for example, a file already exists where
+the `<document>_files/` folder has to go, or the folder is read-only). The
+message names the cell's position in your file, the image type, and the
+reason.
+
+The render continues. The page shows the text representation the kernel
+sent with the image, such as `<Figure size 640x480>`. When the kernel sent
+none, the page shows the placeholder \[Image output\].
+
+## How to fix
+
+If the reason is a write failure, fix the folder named in the message and
+render again.
+
+If the image data was malformed, the kernel is sending something Quarto
+cannot read. Re-run the render to rule out a one-off failure. If it recurs,
+report it with the kernel's name and version.
+
+Use `--strict` to make this warning stop the render:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-18-10`](Q-18-10.qmd) — an inline expression could not be evaluated.

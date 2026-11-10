@@ -87,12 +87,12 @@ use crate::transforms::{
     CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
     CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
     CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform, DraftAlertTransform,
-    EditorialMarksOoxmlTransform, EquationLabelTransform, ExampleEmbedRenderTransform,
-    ExampleEmbedTransform, FloatRefTargetSugarTransform, FooterGenerateTransform,
-    FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform, LinkExternalTransform,
-    LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
-    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
+    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
+    LinkExternalTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
+    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
     ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
@@ -1368,6 +1368,8 @@ fn stage_context_from_render_context(
     // `UserFiltersStage::pre()`, never mutated by stages), so it is
     // bridged one-way and not restored.
     stage_ctx.defer_citeproc = ctx.defer_citeproc;
+    // Input-only like `defer_citeproc`: bridged one-way, never restored.
+    stage_ctx.suppress_trace_output = ctx.suppress_trace_output;
     // book-projects P4: the per-chapter seed is likewise input-only for
     // the crossref transforms — bridged one-way, never restored.
     stage_ctx.chapter_seed = ctx.chapter_seed;
@@ -2072,13 +2074,42 @@ pub async fn render_qmd_to_preview_ast(
     engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     captures: CapturePayload,
 ) -> Result<PreviewAstOutput> {
+    render_qmd_to_preview_ast_with_capture(
+        content,
+        source_name,
+        ctx,
+        runtime,
+        engine_registry,
+        captures,
+        true,
+    )
+    .await
+}
+
+/// Capture-aware implementation of [`render_qmd_to_preview_ast`].
+///
+/// Project pass 2 discards the untransformed AST, so it disables the capture;
+/// response-producing callers retain the public capture-on wrapper above.
+pub async fn render_qmd_to_preview_ast_with_capture(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    captures: CapturePayload,
+    capture_untransformed_ast: bool,
+) -> Result<PreviewAstOutput> {
     // Capture the untransformed AST before any pipeline stage runs.
     // This is the baseline `incremental_write` reconciles against (plan:
     // 2026-06-04-target-incremental-writes.md, Phase 1).  We parse the
     // content a second time rather than intercepting the pipeline's own
     // parse so that the returned JSON is wholly self-contained (its own
     // source-info pool) and independent of the main pipeline's run.
-    let untransformed_ast_json = capture_untransformed_ast_json(content, source_name);
+    let untransformed_ast_json = if capture_untransformed_ast {
+        capture_untransformed_ast_json(content, source_name)
+    } else {
+        None
+    };
 
     // Thread the optional engine registry override onto `RenderContext` so
     // `run_pipeline` can apply it to `StageContext` after populating the
@@ -2718,6 +2749,14 @@ pub fn build_transform_pipeline(
     // the `quarto-float` wrapper Div; `table-bootstrap-class` (below)
     // normalizes the forwarded copies.
     pipeline.push(Box::new(TableFloatClassForwardTransform::new()));
+    // bd-kcpkgftw: wrap lightbox images in `<a class="lightbox">` and ship
+    // GLightbox (Q1 `lightbox`). Right *before* `crossref-render`, so a
+    // float is still a `FloatRefTarget` with its caption and number at
+    // hand for the slide title — the same shape the q2-preview pipeline
+    // (which never runs `crossref-render`) sees. The crossref renderer
+    // looks through `Link[Image]` for the figure's image. HTML render +
+    // preview; only the render ships the runtime.
+    pipeline.push(Box::new(crate::transforms::LightboxTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     // Example-embed render (bd-t3cert81). Runs right after
     // `CrossrefRenderTransform` so the per-`demo` `order` the index assigned
@@ -2758,6 +2797,12 @@ pub fn build_transform_pipeline(
     // profile; bucket B3, registered for every profile and excluded for none. After every
     // content transform that survives the Pandoc cut, so the whole tree it sees is final.
     pipeline.push(Box::new(EditorialMarksOoxmlTransform::new()));
+    // Editorial marks to Typst (GH #1102): rewrites the same marks into calls to the
+    // `quarto-insert`/`quarto-delete`/`quarto-highlight`/`quarto-edit-comment` functions
+    // the Typst template defines (`definitions.typ`), so the PDF shows them as annotations
+    // instead of body text. Self-gated on the typst identifier; bucket B3 for the same
+    // reasons as its OOXML sibling.
+    pipeline.push(Box::new(EditorialMarksTypstTransform::new()));
     // bd-react-components-a8flgldm: bind `components:` declarations to
     // their Divs/Spans (`data-quarto-component`), copy the modules under
     // `site_libs/quarto-components/`, register the vendored React ESM +
@@ -3029,6 +3074,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "table-bootstrap-class",
     "components-resolve",
     "anchor-sections",
+    "lightbox",
     // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
     // analog.
     "title-block",
@@ -3233,6 +3279,10 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // I23). Gates itself on the docx/pptx identifiers, so it is inert elsewhere; it
     // crosses the cut because pandoc's docx writer needs the rewritten classes.
     ("editorial-marks-ooxml", Bucket::B3),
+    // Editorial marks to calls of the Typst template's annotation functions (GH #1102).
+    // Gates itself on the typst identifier; crosses the cut because pandoc's typst writer
+    // must see the raw Typst calls.
+    ("editorial-marks-typst", Bucket::B3),
     ("resource-collector", Bucket::B3),
     // Captures the markdown companion for llms.txt. A service, not
     // presentation of the current format; self-gates on `llms_view_active`
@@ -3297,6 +3347,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Heading/figure/table hover anchors: `anchored` class + AnchorJS
     // (bd-5kf2dnw4). HTML-only presentation.
     ("anchor-sections", Bucket::B4),
+    // Wraps lightbox images in `<a class="lightbox">` and ships GLightbox
+    // (bd-kcpkgftw). HTML-only presentation; Pandoc formats exclude it.
+    ("lightbox", Bucket::B4),
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact —
     // an HTML-only presentation decision (sibling of `responsive-image`,
     // which it runs immediately before). No Pandoc-writer analog exists yet.
@@ -5086,6 +5139,35 @@ mod tests {
             t_para.source_info(),
             "unchanged paragraph must have byte-identical source_info in both ASTs"
         );
+    }
+
+    #[test]
+    fn render_qmd_to_preview_ast_capture_gate_preserves_transformed_ast() {
+        let content = b"---\nformat: q2-preview\n---\n\nHello world.\n";
+        let project = make_test_project();
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let render = |capture_untransformed_ast| {
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            pollster::block_on(render_qmd_to_preview_ast_with_capture(
+                content,
+                "/project/test.qmd",
+                &mut ctx,
+                make_test_runtime(),
+                None,
+                CapturePayload::Empty,
+                capture_untransformed_ast,
+            ))
+            .expect("q2-preview render")
+        };
+
+        let capture_on = render(true);
+        let capture_off = render(false);
+
+        assert!(capture_on.untransformed_ast_json.is_some());
+        assert!(capture_off.untransformed_ast_json.is_none());
+        assert_eq!(capture_off.ast_json, capture_on.ast_json);
     }
 
     /// Plan 2B: with `FootnotesTransform` no longer in the
@@ -6885,11 +6967,13 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "crossref-render",
                 "example-embed-render",
                 "mermaid-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "components-resolve",
                 "anchor-sections",
                 "resource-collector",
@@ -6985,12 +7069,14 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "crossref-render",
                 "example-embed-render",
                 "reveal-auto-stretch",
                 "mermaid-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "components-resolve",
                 "anchor-sections",
                 "resource-collector",
@@ -7139,6 +7225,7 @@ mod tests {
                 "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "resource-collector",
                 "llms-capture",
             ]
@@ -7364,9 +7451,11 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "example-embed-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "anchor-sections",
                 "resource-collector",
                 "table-bootstrap-class",

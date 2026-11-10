@@ -70,6 +70,7 @@ pub mod preview_record;
 mod registry;
 mod replay;
 pub mod resolution;
+pub mod skeleton;
 mod traits;
 pub mod ts_protocol;
 pub mod units;
@@ -100,6 +101,23 @@ pub mod jupyter;
 // rscript_spawn_count()` from outside the `engine` module tree.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod knitr;
+
+// KNR-1's S2 mapper and wire types, reachable from `tests/integration/` and
+// KNR-3 without widening the rest of `knitr`.
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::pieces_map::{
+    expression_starts, knitr_visibility, output_kinds, pieces_to_cell, pieces_to_cell_anchored,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::types::{KnitrCapturedChunk, KnitrPiece};
+// The R call seam for the KNR-1 corpus harness (`tests/integration/knitr_corpus_*`):
+// it drives `execute` with capture on and off, which the public `KnitrEngine` never
+// does. Gordon chose this over an in-crate harness (2026-11-01).
+#[cfg(not(target_arch = "wasm32"))]
+pub use knitr::{
+    CallROptions, KNITR_RESOURCES, KnitrExecuteParams, KnitrExecuteResult, KnitrFormatConfig,
+    call_r,
+};
 
 /// Static file claims every built-in engine declares (Plan 7b Phase 5),
 /// without constructing any engine or probing the environment (unlike
@@ -150,6 +168,22 @@ pub enum LanguageClaim {
     None,
 }
 
+/// What knitr claims, as a pure function so a replay of a knitr trace claims the same languages.
+///
+/// It lives here, not in the native-only `knitr` module, because [`replay::ReplayEngine`] calls
+/// it and the replay path builds for `wasm32` (hub guests replay knitr records without R).
+pub(crate) fn knitr_claims(language: &str) -> LanguageClaim {
+    match language {
+        "r" => LanguageClaim::Primary(1),
+        // The Interop set is knitr's `knit_engines` in-session capability
+        // (reticulate/eng_sql/shell), ceded to a dedicated engine when one is
+        // present. Pinned, not guessed: Q1 ships verified knitr support for
+        // each of these (knitr-fixup.lua for sql, reticulate for python, etc.).
+        "python" | "sql" | "bash" | "sh" => LanguageClaim::Interop(0),
+        _ => LanguageClaim::None,
+    }
+}
+
 /// Languages that Quarto handles downstream via cell handlers (ojs, mermaid, dot).
 ///
 /// Engines must **leave these blocks unchanged** in their output — they are
@@ -167,7 +201,7 @@ pub const HANDLED_LANGUAGES: &[&str] = &["ojs", "mermaid", "dot"];
 pub const DEFAULT_EXECUTE_TIMEOUT: Duration = Duration::from_secs(300);
 
 // Re-export public types
-pub use context::{CellOption, CellOptionsMap, ExecuteResult, ExecutionContext};
+pub use context::{CellOption, CellOptionsMap, ExecuteResult, ExecutionContext, Skeleton};
 pub use detection::{
     DetectedEngine, EngineSequence, detect_engine, detect_engine_sequence, detect_engines,
 };

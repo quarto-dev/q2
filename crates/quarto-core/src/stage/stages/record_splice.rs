@@ -31,15 +31,17 @@ use serde_json::Value;
 
 use crate::cell_options::partition_cell_options;
 use crate::engine::units::Unit;
-use crate::presenter::cell::render_cell;
+use crate::presenter::cell::render_cell_with;
 use crate::presenter::expansion::{render_expanded_unit, split_expansions};
 use crate::presenter::figures::{FigureSink, RuntimeFigureSink};
 use crate::presenter::inline::{InlineTarget, render_inline};
+use crate::presenter::knitr_inputs::{knitr_header_options, original_chunk, present_knitr_cell};
+use crate::presenter::options::CellOptions;
 use crate::presenter::output::{CellOutput, CellResult};
 use crate::presenter::visibility::{CellVisibility, resolve_cell_options};
 use crate::record::{
-    EngineEntry, Record, UnitKey, UnitKind, UnitLocation, UnitStaleness, match_units, replacement,
-    stored_markdown,
+    EngineEntry, Record, UnitKey, UnitKind, UnitLocation, UnitStaleness, lost_header_keys,
+    match_units, replacement, stored_markdown,
 };
 use crate::stage::data::DocumentAst;
 use crate::stage::stages::engine_execution::{
@@ -144,12 +146,13 @@ fn splice_units(
                         Unit::Cell(c) => c.attr_tail.as_str(),
                         Unit::Inline(_) => "",
                     };
-                    UnitKey::from_author_text(
+                    UnitKey::from_author_text_with_profiles(
                         &e.hash_definition,
                         kind,
                         unit.lang(),
                         &text.text,
                         tail,
+                        &format,
                     )
                     .ok()
                 })
@@ -159,10 +162,16 @@ fn splice_units(
                     kind,
                     exec_hash: String::new(),
                     content_hash: text.content_hash.clone(),
+                    alt_exec_hashes: Vec::new(),
+                    header_keys: None,
                 })
         })
         .collect();
-    let matching = match_units(&keys, &record.cells);
+    let mut matching = match_units(&keys, &record.cells);
+    // A unit that lost a header key its cell recorded is stale (KNR-3 slice 8).
+    for unit_index in lost_header_keys(&matching, &keys, &record.cells) {
+        matching.demote(unit_index);
+    }
     let report = SpliceReport {
         units: units
             .iter()
@@ -208,6 +217,7 @@ fn splice_units(
                     doc_scope.as_ref(),
                     fig.as_mut(),
                     &format,
+                    engine_entry_for(record, cell),
                 )
             }
             Unit::Inline(_) => present_span(cell, target),
@@ -277,7 +287,7 @@ fn splice_units(
     (doc, report)
 }
 
-/// A record cell's stored nbformat outputs as the kernel result shape [`render_cell`] consumes.
+/// A record cell's stored nbformat outputs as the kernel result shape [`render_cell_with`] consumes.
 fn stored_result_for_cell(cell: &Value) -> CellResult {
     let outputs = cell
         .get("outputs")
@@ -298,6 +308,7 @@ fn present_cell(
     doc_scope: Option<&quarto_pandoc_types::ConfigValue>,
     fig: &mut dyn FigureSink,
     format: &str,
+    engine: Option<&crate::record::EngineEntry>,
 ) -> Option<String> {
     if let Some((markdown, stored_format)) = stored_markdown(cell) {
         return (stored_format.as_deref() == Some(format)).then_some(markdown);
@@ -305,14 +316,17 @@ fn present_cell(
     let lang = unit.lang();
     let body_source = SourceInfo::original(FileId(0), 0, author_text.len());
     let partitioned = partition_cell_options(lang, author_text, body_source).ok()?;
+    let partitioned_options = partitioned.options.clone();
     let resolved = resolve_cell_options(doc_scope, partitioned.options);
     let visibility = CellVisibility::resolve(resolved.as_ref());
+    let options = CellOptions::from_config(resolved.as_ref());
     if let Some(expansions) = split_expansions(&cell.outputs) {
         // An expanded cell: the author's cell, then one cell per expansion, each with its
         // own options.
         return render_expanded_unit(
             lang,
             &partitioned.code,
+            &options,
             visibility,
             &expansions,
             doc_scope,
@@ -320,14 +334,44 @@ fn present_cell(
         )
         .ok();
     }
+    // A structured knitr cell is read by the shared reader; any other cell presents as it
+    // always did.
+    if let Unit::Cell(u) = unit {
+        let header = knitr_header_options(partitioned_options);
+        let (info, lines) = original_chunk(&u.lang, &u.attr_tail, author_text);
+        if let Some(markdown) = present_knitr_cell(
+            lang,
+            &partitioned.code,
+            cell,
+            engine,
+            header.as_ref(),
+            (&info, &lines),
+            fig,
+        ) {
+            return Some(markdown);
+        }
+    }
     let result = stored_result_for_cell(&serde_json::to_value(cell).ok()?);
-    Some(render_cell(
+    Some(render_cell_with(
         lang,
         &partitioned.code,
         &result,
+        &options,
         fig,
         visibility,
     ))
+}
+
+/// The engine entry that ran `cell`: the one its `quarto_engine` names, else the only one.
+fn engine_entry_for<'a>(
+    record: &'a crate::record::Record,
+    cell: &crate::record::RecordCell,
+) -> Option<&'a crate::record::EngineEntry> {
+    let engines = &record.metadata.quarto_engines;
+    match cell.metadata.quarto_engine.as_deref() {
+        Some(name) => engines.iter().find(|e| e.name == name),
+        None => (engines.len() == 1).then(|| &engines[0]),
+    }
 }
 
 /// A span: its first output that carries data, as an inline value. `None` keeps the source.
@@ -600,6 +644,50 @@ mod tests {
         assert!(without.contains("shown"), "{without}");
         assert!(!without.contains("cell-code"), "{without}");
         assert_eq!(report.units[0].1, UnitStaleness::Fresh);
+    }
+
+    /// KNR-3 slice 8: a unit that lost a header key the record's cell carried is stale, stays
+    /// source, and does not disturb its fresh neighbors.
+    #[test]
+    fn a_header_deleted_unit_is_stale_and_its_neighbors_still_splice() {
+        let with = "```{python}\na = 1\n```\n\n```{python}\n#| echo: true\nb = 2\n```\n\n```{python}\nc = 3\n```\n";
+        let hash_def = {
+            let mut d = HashDefinition::conservative("jupyter");
+            d.presentation_cell_options = vec!["echo".into()];
+            d
+        };
+        let doc = parse(with);
+        let (qmd, _) = serialize_ast_to_qmd(&doc.ast).unwrap();
+        let (units, texts) = scan_and_fill_ids(&qmd, &[]);
+        let mut b = RecordBuilder::new("jupyter", &hash_def, &units, &texts).unwrap();
+        for i in 0..3 {
+            b.push(i, stdout(&format!("out{i}\n"))).unwrap();
+        }
+        let mut entry = b
+            .finish(EngineEntryInput {
+                owned_languages: vec!["python".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        entry.cells[1]
+            .metadata
+            .extra
+            .insert("quarto_header_keys".into(), json!(["echo"]));
+        let record = coalesce(&[entry], &units).unwrap();
+
+        // Unchanged: all three splice.
+        let (text, report) = splice(with, &record);
+        assert!(text.contains("out1"), "{text}");
+        assert!(report.units.iter().all(|(_, s)| *s == UnitStaleness::Fresh));
+
+        // Header deleted: the unit stays source and reports Stale; the others splice.
+        let (text, report) = splice(&with.replace("#| echo: true\n", ""), &record);
+        assert!(text.contains("out0") && text.contains("out2"), "{text}");
+        assert!(!text.contains("out1"), "{text}");
+        assert!(text.contains("b = 2"), "{text}");
+        assert_eq!(report.units[1].1, UnitStaleness::Stale);
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh);
+        assert_eq!(report.orphaned.len(), 1);
     }
 
     #[test]
@@ -922,6 +1010,258 @@ mod tests {
             assert_eq!(report.units.len(), 1, "{source}");
             assert!(text.contains(expected), "{source} => {text}");
         }
+    }
+
+    // ---- KNR-3 decision 8 (as corrected by interlude I3): structured knitr records through the
+    // splice. A structured cell names the `structured` hash profile and carries the output format
+    // as a flat option, so a format change or an execution-relevant edit goes stale and a
+    // presentation-only edit stays fresh.
+
+    use crate::engine::knitr::hash_rule::knitr_hash_definition;
+    use crate::engine::knitr::structured::{mark_structured, rehash_document};
+    use crate::record::QUARTO_MARKDOWN_MIME;
+
+    enum Built {
+        Structured(UnitResult),
+        Fallback(String),
+    }
+
+    fn r_stdout(text: &str) -> Built {
+        Built::Structured(stdout(text))
+    }
+
+    /// A knitr record the way the KNR-3 adapter writes it: `push`, then the structured profile,
+    /// hash, flat keys and the format option on structured cells, and the document hash.
+    fn knitr_record(
+        source: &str,
+        format: &str,
+        built_for: impl Fn(usize) -> Option<Built>,
+    ) -> Record {
+        let doc = parse(source);
+        let (qmd, _) = serialize_ast_to_qmd(&doc.ast).unwrap();
+        let (units, texts): (_, AuthorTexts) = scan_and_fill_ids(&qmd, &[]);
+        let def = knitr_hash_definition();
+        let mut builder = RecordBuilder::new("knitr", &def, &units, &texts).unwrap();
+        let mut structured_ids = std::collections::BTreeSet::new();
+        for i in 0..units.len() {
+            match built_for(i) {
+                Some(Built::Structured(result)) => {
+                    builder.push(i, result).unwrap();
+                    structured_ids.insert(unit_id(&units[i]));
+                }
+                Some(Built::Fallback(markdown)) => builder
+                    .push(
+                        i,
+                        UnitResult {
+                            outputs: vec![json!({
+                                "output_type": "display_data",
+                                "data": {QUARTO_MARKDOWN_MIME: markdown},
+                                "metadata": {"quarto_format": format}
+                            })],
+                            execution_count: None,
+                            kernel: None,
+                        },
+                    )
+                    .unwrap(),
+                None => {}
+            }
+        }
+        let mut entry = builder
+            .finish(EngineEntryInput {
+                owned_languages: vec!["r".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        for cell in &mut entry.cells {
+            if structured_ids.contains(&cell.metadata.quarto_cell_id) {
+                mark_structured(&def, cell, "", format).unwrap();
+            }
+        }
+        rehash_document(&mut entry, &Default::default()).unwrap();
+        coalesce(&[entry], &units).unwrap()
+    }
+
+    fn splice_in(format: Format, source: &str, record: &Record) -> (String, SpliceReport) {
+        let mut c = ctx();
+        c.format = format;
+        let (doc, report) = splice_record(parse(source), record, &mut c, Path::new("/project"));
+        (text_of(&doc), report)
+    }
+
+    const R_ECHO: &str = "```{r}\n#| echo: true\nx <- 1\nx\n```\n";
+
+    #[test]
+    fn a_structured_record_for_another_format_is_stale() {
+        let record = knitr_record(R_ECHO, "docx", |_| Some(r_stdout("[1] 1\n")));
+        let (text, report) = splice_in(Format::html(), R_ECHO, &record);
+        assert_eq!(report.units[0].1, UnitStaleness::Stale, "{text}");
+        assert!(!text.contains("[1] 1"), "{text}");
+    }
+
+    #[test]
+    fn a_structured_record_for_this_format_is_fresh() {
+        let record = knitr_record(R_ECHO, "html", |_| Some(r_stdout("[1] 1\n")));
+        let (text, report) = splice_in(Format::html(), R_ECHO, &record);
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
+        assert!(text.contains("[1] 1"), "{text}");
+    }
+
+    #[test]
+    fn a_presentation_edit_is_fresh_and_uses_the_current_echo() {
+        let record = knitr_record(R_ECHO, "html", |_| Some(r_stdout("[1] 1\n")));
+        let edited = R_ECHO.replace("echo: true", "echo: false");
+        let (text, report) = splice_in(Format::html(), &edited, &record);
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
+        assert!(
+            text.contains("[1] 1") && !text.contains("cell-code"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_execution_relevant_edit_is_stale() {
+        let record = knitr_record(R_ECHO, "html", |_| Some(r_stdout("[1] 1\n")));
+        let edited = R_ECHO.replace("echo: true", "echo: true\n#| warning: false");
+        let (_, report) = splice_in(Format::html(), &edited, &record);
+        assert_eq!(report.units[0].1, UnitStaleness::Stale);
+    }
+
+    /// What EXR-11 wrote: the all-options declaration at version 1, no `structured` profile, no
+    /// `quarto_hash_rule` or format option on the cell, and the output as pass-through markdown.
+    fn exr11_record(source: &str, markdown: &str) -> Record {
+        let doc = parse(source);
+        let (qmd, _) = serialize_ast_to_qmd(&doc.ast).unwrap();
+        let (units, texts): (_, AuthorTexts) = scan_and_fill_ids(&qmd, &[]);
+        let mut def = crate::record::HashDefinition::conservative("knitr");
+        def.version = 1;
+        def.document_keys = vec!["knitr".to_string()];
+        let mut builder = RecordBuilder::new("knitr", &def, &units, &texts).unwrap();
+        for i in 0..units.len() {
+            builder
+                .push(
+                    i,
+                    UnitResult {
+                        outputs: vec![json!({
+                            "output_type": "display_data",
+                            "data": {QUARTO_MARKDOWN_MIME: markdown},
+                            "metadata": {"quarto_format": "html"}
+                        })],
+                        execution_count: None,
+                        kernel: None,
+                    },
+                )
+                .unwrap();
+        }
+        let mut entry = builder
+            .finish(EngineEntryInput {
+                owned_languages: vec!["r".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        rehash_document(&mut entry, &Default::default()).unwrap();
+        coalesce(&[entry], &units).unwrap()
+    }
+
+    #[test]
+    fn an_exr11_era_record_still_presents_through_the_pass_through_presenter() {
+        let record = exr11_record(R_ECHO, "```r\nx <- 1\nx\n```\n\n```\n[1] 1\n```\n");
+        assert_eq!(record.metadata.quarto_engines[0].hash_definition.version, 1);
+        let (text, report) = splice_in(Format::html(), R_ECHO, &record);
+        // The record is judged by the declaration it stores (version 1), so it is fresh and its
+        // pass-through markdown is placed.
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
+        assert!(text.contains("[1] 1"), "{text}");
+        // The version bump restarts every hash: the current declaration never reproduces an
+        // EXR-11 hash, so a new run's record shares no unit hash with the old one.
+        let (units, texts): (_, AuthorTexts) = scan_and_fill_ids(R_ECHO, &[]);
+        let Unit::Cell(cell) = &units[0] else {
+            panic!("expected a cell")
+        };
+        let current = UnitKey::from_author_text(
+            &knitr_hash_definition(),
+            UnitKind::Cell,
+            "r",
+            &texts.0[0].text,
+            &cell.attr_tail,
+        )
+        .unwrap();
+        assert_ne!(
+            current.exec_hash, record.cells[0].metadata.quarto_exec_hash,
+            "version 2 must not reproduce a version 1 hash"
+        );
+    }
+
+    #[test]
+    fn a_cell_naming_no_profile_matches_as_before() {
+        // A Jupyter-shaped record (no profile, no format option) is not affected.
+        let record = record_of(THREE, |i| Some(stdout(&format!("out{i}\n"))));
+        let (text, report) = splice_in(Format::html(), THREE, &record);
+        assert!(report.units.iter().all(|(_, s)| *s == UnitStaleness::Fresh));
+        assert!(text.contains("out1"), "{text}");
+    }
+
+    #[test]
+    fn a_structured_knitr_cell_reaches_the_shared_reader() {
+        use crate::presenter::knitr_inputs::fixture;
+        let mut record = knitr_record(fixture::SOURCE, "html", |_| {
+            Some(Built::Structured(UnitResult {
+                outputs: fixture::outputs(),
+                execution_count: None,
+                kernel: None,
+            }))
+        });
+        fixture::apply(&mut record.cells[0]);
+        record.metadata.quarto_engines[0].known_options =
+            Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect());
+        let (text, report) = splice_in(Format::html(), fixture::SOURCE, &record);
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
+        fixture::assert_rich(&text);
+    }
+
+    mod layering;
+    mod option_sweep;
+
+    const MIXED: &str =
+        "```{r}\n#| echo: true\nx <- 1\nx\n```\n\n```{r}\n#| echo: true\ny <- 2\ny\n```\n";
+
+    #[test]
+    fn a_mixed_record_splices_both_and_a_fallback_presentation_edit_is_stale() {
+        let fallback = "::: {.cell}\n\nFALLBACK-MARKDOWN\n\n:::\n";
+        let record = knitr_record(MIXED, "html", |i| {
+            Some(if i == 0 {
+                r_stdout("[1] 1\n")
+            } else {
+                Built::Fallback(fallback.to_string())
+            })
+        });
+        let (text, report) = splice_in(Format::html(), MIXED, &record);
+        assert!(
+            report.units.iter().all(|(_, s)| *s == UnitStaleness::Fresh),
+            "{text}"
+        );
+        assert!(
+            text.contains("[1] 1") && text.contains("FALLBACK-MARKDOWN"),
+            "{text}"
+        );
+        // The structured unit ignores a presentation edit; the fallback unit counts every option.
+        let edited = MIXED.replacen("echo: true", "echo: false", 2);
+        let edited = edited.replacen("echo: false", "echo: true", 1);
+        let (text, report) = splice_in(Format::html(), &edited, &record);
+        assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
+        assert_eq!(report.units[1].1, UnitStaleness::Stale, "{text}");
+    }
+
+    #[test]
+    fn a_presentation_edit_survives_a_cell_inserted_above() {
+        // The id carries the document-wide index, which shifts when a cell is added, so the
+        // match cannot go through the id.
+        let record = knitr_record(R_ECHO, "html", |_| Some(r_stdout("[1] 1\n")));
+        let edited = format!(
+            "```{{r}}\nz <- 0\n```\n\n{}",
+            R_ECHO.replace("echo: true", "echo: false")
+        );
+        let (text, report) = splice_in(Format::html(), &edited, &record);
+        assert_eq!(report.units[1].1, UnitStaleness::Fresh, "{text}");
     }
 
     /// Design decision 7: the record path never depends on the legacy splice, so EXR-17 can

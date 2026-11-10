@@ -573,6 +573,80 @@ $sidebar-section-bottom-margin: 0.2em !default;
   width: 100%;
 }
 
+.sidebar-item-toggle:hover {
+  cursor: pointer;
+}
+
+// Section disclosure controls are <button> elements so that they are
+// reachable by keyboard and expose the button role (bd-3bg8h1rx; Q1
+// `quarto-nav.scss:374-410`, quarto-cli #14826). Strip the browser's
+// default button styling so they still look like the sidebar links
+// beside them.
+.sidebar-item .sidebar-item-toggle,
+.sidebar-item button.sidebar-item-text {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+
+// In a section without its own page, the label and the chevron are one
+// control, so that button lays out its own children instead of relying
+// on the flex container. `margin-left: auto` keeps the chevron hard
+// right whether or not the item also has a navicon.
+//
+// `align-items: baseline` is deliberate, not a typo for `center`: Q1
+// chose it to reproduce the line box of the inline `<a>` the button
+// replaced, so row heights and the chevron position are unchanged.
+// `center` renders 1-2px shorter per section.
+.sidebar-item button.sidebar-item-text {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+}
+
+.sidebar-item button.sidebar-item-text > .bi-chevron-right {
+  margin-left: auto;
+  padding-left: 0.5rem;
+}
+
+// Section disclosure chevron (`button.sidebar-item-toggle > i.bi-chevron-right`).
+// Ported from Q1 `quarto-nav.scss:412-432` and `756-762` (bd-rl7r38pw).
+// Bootstrap's collapse plugin keeps `aria-expanded` on the toggle in sync
+// with the section, so the chevron points down while the section is open.
+// `test_sidebar_toggle_chevron_rotates_when_expanded` (quarto-sass) checks
+// the compiled CSS.
+.sidebar-item .sidebar-item-toggle .bi {
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.sidebar-item .sidebar-item-toggle .bi-chevron-right::before {
+  transition: transform 200ms ease;
+}
+
+.sidebar-item
+  .sidebar-item-toggle[aria-expanded="false"]
+  .bi-chevron-right::before {
+  transform: none;
+}
+
+.sidebar-item
+  .sidebar-item-toggle[aria-expanded="true"]
+  .bi-chevron-right::before {
+  transform: rotate(90deg);
+}
+
+.sidebar-section .bi-chevron-right {
+  vertical-align: middle;
+}
+
+.sidebar-section .bi-chevron-right::before {
+  font-size: 0.9em;
+}
+
 // Sidebar text colors. The link itself inherits `color` from the
 // surrounding `div.sidebar-item-container`; the active/hover/disabled
 // states are scoped to that container too. The four `$sidebar-*-color`
@@ -1314,10 +1388,21 @@ caption {
 // Misc element parity. ported from _quarto-rules.scss (bd-28iqotrt), each
 // verified against live Q2 DOM via `q2 render`. `.visually-hidden` (L13-24) is
 // NOT ported — bootstrap core already supplies it (+ `.visually-hidden-
-// focusable`). `.zindex-bottom`/`.top-right` (row 1b) stay BLOCKED (client-JS
-// features). Row 29 (light/dark-content) was split to its own strand.
+// focusable`). `.zindex-bottom` (row 1b) stays BLOCKED (client-JS feature).
+// Row 29 (light/dark-content) was split to its own strand.
 .hidden {
   display: none !important;
+}
+
+// Floating utility (`_quarto-rules.scss:3-7`, row 1b), unblocked by its
+// emitter: the color-mode runtime's fallback toggle carries `.top-right`
+// (bd-kwgtllvn). Without it the toggle fell to the end of the document.
+// It is positioned against the page, which is why the runtime makes its
+// landmark container a fresh direct child of `<body>`.
+.top-right {
+  position: absolute;
+  top: 1em;
+  right: 1em;
 }
 
 // Raw-HTML <iframe> passthrough. from _quarto-rules.scss:262-264.
@@ -1869,6 +1954,38 @@ h5:hover > .anchorjs-link,
 h6:hover > .anchorjs-link,
 .reveal-anchorjs-link > .anchorjs-link {
   opacity: 1;
+}
+
+// GLightbox theme overrides (bd-kcpkgftw). Ported from Q1's
+// `formats/html/glightbox/lightbox.css`, with Q1's `--quarto-body-bg` /
+// `--quarto-body-color` (not defined in Q2) replaced by Bootstrap's own
+// `--bs-body-bg` / `--bs-body-color`, which also follow dark mode. The
+// overlay is a scrim, so its alpha is intentional.
+body:not(.glightbox-mobile) div.gslide div.gslide-description,
+body:not(.glightbox-mobile) div.gslide-description .gslide-title,
+body:not(.glightbox-mobile) div.gslide-description .gslide-desc {
+  color: var(--bs-body-color);
+  background-color: var(--bs-body-bg);
+}
+
+body:not(.glightbox-mobile) div.gslide-media {
+  background-color: var(--bs-body-bg);
+}
+
+.goverlay {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+div.gslide-description .gslide-title {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+div.gslide-description .gslide-desc {
+  padding-bottom: 0.5em;
+  font-family: inherit;
 }
 
 // Diagram alignment (bd-2pmjmjmj). mermaid.js swaps a `pre.mermaid`'s
@@ -2483,9 +2600,10 @@ div.callout.callout-style-default > .callout-header {
 }
 
 // dark mode
-// Q1 `_bootstrap-rules.scss`: the toggle as a `<button>` (the dashboard
-// navbar's, Q1 `processPages`) drops the browser's button chrome; site
-// navbars use an `<a>`.
+// Q1 `_bootstrap-rules.scss`: every color-scheme toggle is a
+// `<button role="switch">` (website navbar, the runtime's floating
+// fallback, and the dashboard navbar; quarto-cli #14739, bd-kwgtllvn),
+// so drop the browser's button chrome.
 button.quarto-color-scheme-toggle {
   background: transparent;
   border: none;

@@ -371,6 +371,10 @@ pub struct StageContext {
     /// `meta["filters"]`).
     pub defer_citeproc: bool,
 
+    /// Bridged one-way from [`crate::render::RenderContext::suppress_trace_output`]:
+    /// `trace: true` installs no JSON trace writer. `false` by default.
+    pub suppress_trace_output: bool,
+
     /// Input-only host options for [`crate::stage::stages::PandocPrepareStage`],
     /// bridged one way from [`crate::render::RenderContext::prepare_options`].
     /// When set, `run_pipeline` also pre-seeds this context's temp dir with
@@ -521,6 +525,7 @@ impl StageContext {
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
             defer_citeproc: false,
+            suppress_trace_output: false,
             prepare_options: None,
             pandoc_request: None,
             unexecuted_cells: 0,

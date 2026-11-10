@@ -7,8 +7,8 @@ asks for citations without naming a `csl:`. Registered as
 
 ## Source
 
-Byte-identical to **Pandoc's `data/default.csl`** at pandoc `3.12.1` (and
-unchanged since `3.11`, verified 2026-10-21) — so q2 and Pandoc format
+Byte-identical to **Pandoc's `data/default.csl`** at pandoc `3.13` (and
+unchanged since `3.11`, verified 2026-11-09) — so q2 and Pandoc format
 citations with the same default style. It is *not* a copy of the CSL styles
 repository's current `chicago-author-date.csl`: Pandoc ships its own revision
 (its `<updated>` stamp, 2025-08-07, is newer than the styles repo's master,

@@ -241,11 +241,19 @@ fn replay_stored_outputs(
         &units,
         ctx.execute_scope.as_ref(),
         InlineTarget::from_format(&ctx.format),
+        &ctx.format,
+        None,
         fig.as_mut(),
     )
     .map_err(|e| ExecutionError::execution_failed(IPYNB, e.to_string()))?;
 
     let mut result = ExecuteResult::new(presented.markdown);
+    result.warnings.extend(
+        presented
+            .notes
+            .iter()
+            .map(|note| crate::engine::diagnostics::note_diagnostic(note, &units, ctx)),
+    );
     if !presented.files_written.is_empty() {
         result = result.with_supporting_files(presented.files_written);
     }
@@ -324,6 +332,29 @@ mod tests {
         let ctx = ExecutionContext::new(dir.to_path_buf(), dir.to_path_buf(), nb_path, "html")
             .with_source_info(converted.source_info, Arc::new(sc));
         (ctx, converted.markdown)
+    }
+
+    const BAD_PNG_NB: &str = r##"{"cells":[{"cell_type":"code","execution_count":5,"metadata":{},"outputs":[{"output_type":"display_data","data":{"image/png":"!!!not base64!!!"},"metadata":{}}],"source":["plot()\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"##;
+
+    /// The presenter's image-failure note reaches this consumer as a `Q-18-11` warning
+    /// (the sink's failure channel is not dropped here), and the placeholder is literal.
+    #[test]
+    fn an_unusable_stored_image_warns_q_18_11() {
+        let dir = tempfile::tempdir().unwrap();
+        let (ctx, markdown) = ctx_for(BAD_PNG_NB, dir.path());
+        let out = replay_stored_outputs(&markdown, &ctx, None).unwrap();
+        let codes: Vec<_> = out
+            .warnings
+            .iter()
+            .filter_map(|w| w.code.as_deref())
+            .collect();
+        assert_eq!(codes, ["Q-18-11"], "{:?}", out.warnings);
+        assert!(
+            out.markdown.contains("\\[Image output\\]"),
+            "{}",
+            out.markdown
+        );
+        assert!(out.supporting_files.is_empty());
     }
 
     #[test]

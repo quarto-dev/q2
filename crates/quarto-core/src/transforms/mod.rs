@@ -14,6 +14,7 @@
 //! - [`CalloutResolveTransform`] - Resolves Callout CustomNodes to standard Div structure
 //! - [`ComponentsResolveTransform`] - Binds `components:` declarations to elements and ships the client runtime
 //! - [`EditorialMarksOoxmlTransform`] - Renders editorial marks to Word and PowerPoint (docx, pptx)
+//! - [`EditorialMarksTypstTransform`] - Renders editorial marks as calls to Typst template functions
 //! - [`FooterGenerateTransform`] - Resolves `page-footer:` YAML into `navigation.footer`
 //! - [`FooterRenderTransform`] - Renders `navigation.footer` to HTML
 //! - [`AnnouncementGenerateTransform`] - Resolves `website.announcement` into `navigation.announcement`
@@ -80,6 +81,7 @@ mod crossref_resolve;
 pub(crate) mod date_normalize;
 mod draft_alert;
 mod editorial_marks_ooxml;
+mod editorial_marks_typst;
 mod equation_label;
 mod example_embed;
 mod float_ref_target;
@@ -89,6 +91,7 @@ mod footnotes;
 mod footnotes_resolve;
 mod format_css;
 mod heading_id;
+mod lightbox;
 mod link_external;
 mod link_resource_discovery;
 mod link_rewrite;
@@ -156,6 +159,7 @@ pub use announcement_render::AnnouncementRenderTransform;
 pub use appendix::AppendixStructureTransform;
 pub use attribution_generate::AttributionGenerateTransform;
 pub use attribution_render::AttributionRenderTransform;
+pub(crate) use attribution_render::query_attribution;
 pub use attribution_viewer::AttributionViewerTransform;
 pub use authors_normalize::{AuthorsNormalizeTransform, normalize_authors_meta};
 pub use book_cover_image::BookCoverImageTransform;
@@ -182,6 +186,7 @@ pub use crossref_resolve::CrossrefResolveTransform;
 pub use date_normalize::normalize_dates;
 pub use draft_alert::DraftAlertTransform;
 pub use editorial_marks_ooxml::EditorialMarksOoxmlTransform;
+pub use editorial_marks_typst::EditorialMarksTypstTransform;
 pub use equation_label::EquationLabelTransform;
 pub use example_embed::{ExampleEmbedRenderTransform, ExampleEmbedTransform};
 pub use float_ref_target::FloatRefTargetSugarTransform;
@@ -195,6 +200,10 @@ pub use heading_id::{HeadingIdTransform, rederive_stale_heading_ids};
 #[cfg(not(target_arch = "wasm32"))]
 pub use hephaestus::HephaestusRenderTransform;
 pub use image_alt_normalize::ImageAltNormalizeTransform;
+pub use lightbox::LightboxTransform;
+// Only `hephaestus-render` (native-only, see above) calls it.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use lightbox::sync_lightbox_hrefs;
 pub use link_external::LinkExternalTransform;
 pub use link_resource_discovery::{LinkResourceDiscoveryTransform, RESOURCE_DISCOVERY_KEY};
 pub use link_rewrite::LinkRewriteTransform;

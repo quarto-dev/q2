@@ -3229,6 +3229,9 @@ async fn pass1_profile_single_file_live(
     let source_name = doc_info.input.to_string_lossy().to_string();
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, doc_info, format, &binaries);
+    // This pass runs before the real render, which writes the trace. Its own trace would
+    // replace the recording a replay is reading (KNR-6).
+    ctx.suppress_trace_output = true;
 
     // Exactly the full pipeline's head, so the Pass-1 profile equals
     // the one the full render computes (see `build_head_stages`).

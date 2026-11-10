@@ -209,6 +209,31 @@ impl Default for EngineExecutionStage {
     }
 }
 
+/// KNR-6: a replay capture whose engine never executed means the replay ignored its recording
+/// (for example a `{r}` chunk nothing claimed rendered as unexecuted code with exit 0).
+fn fail_on_unused_replay(
+    stage: &str,
+    registry: &crate::engine::EngineRegistry,
+) -> Result<(), PipelineError> {
+    let unused = registry.unused_replay_engines();
+    if unused.is_empty() {
+        return Ok(());
+    }
+    Err(PipelineError::stage_error(
+        stage,
+        format!(
+            "replay: the trace holds a capture for {} that never ran, so the document was \
+             rendered without it. Check that the trace was recorded from this document and that \
+             its cells are claimed by that engine.",
+            unused
+                .iter()
+                .map(|n| format!("`{n}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    ))
+}
+
 /// `Q-2-40`: a `.md` document asked for an engine it will never get.
 fn md_engine_ignored_diagnostic(
     ignored: &[&str],
@@ -478,6 +503,7 @@ impl PipelineStage for EngineExecutionStage {
                 EventLevel::Debug,
                 "no executable engines — passing through unchanged"
             );
+            fail_on_unused_replay(self.name(), &ctx.registry)?;
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
@@ -867,6 +893,7 @@ impl PipelineStage for EngineExecutionStage {
             }
         }
 
+        fail_on_unused_replay(self.name(), &ctx.registry)?;
         Ok(PipelineData::DocumentAst(DocumentAst {
             path,
             ast,
@@ -3936,6 +3963,46 @@ mod tests {
         assert!(
             msg.contains("replay miss"),
             "expected 'replay miss' diagnostic in stage error, got: {msg}"
+        );
+    }
+
+    /// KNR-6: a replay capture whose engine never runs is an error, not a silent no-op. A
+    /// `{r}` chunk nothing claims once rendered as unexecuted code with exit 0 (interlude I2).
+    #[tokio::test]
+    async fn test_replay_capture_that_never_runs_fails_the_stage() {
+        use crate::engine::{EngineRegistry, ReplayEngine};
+        use quarto_trace::EngineCapture;
+
+        // The document has no cell for the recorded engine, so it is never in the sequence.
+        let content = b"---\ntitle: T\n---\n\nJust prose.\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+        let capture = EngineCapture {
+            engine_name: "mock-replay-engine".into(),
+            input_qmd: String::from_utf8_lossy(content).into_owned(),
+            result: serde_json::json!({
+                "markdown": "x\n",
+                "supporting_files": [],
+                "filters": [],
+                "includes": {"header_includes": [], "include_before": [], "include_after": []},
+                "needs_postprocess": false,
+            }),
+            record: None,
+            files: Vec::new(),
+        };
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(ReplayEngine::new(capture)));
+
+        let stage = EngineExecutionStage::new();
+        let mut ctx = make_test_context();
+        ctx.registry = Arc::new(registry);
+        let err = stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect_err("an unused replay capture must fail the render");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("mock-replay-engine") && msg.contains("never ran"),
+            "the error names the engine and says it never ran: {msg}"
         );
     }
 

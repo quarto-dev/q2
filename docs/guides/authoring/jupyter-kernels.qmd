@@ -99,6 +99,67 @@ not make a page without cells start the engine. See
 [Inline expressions](computations.qmd#inline-expressions) for where spans are
 and are not evaluated.
 
+## Running R cells on Ark {#r-on-jupyter}
+
+By default `{r}` cells run in knitr. To run them on a Jupyter R kernel
+instead, such as [Ark](https://github.com/posit-dev/ark) or IRkernel, make
+two choices: which kernel, and that Jupyter is the engine that gets `r`.
+One block does both:
+
+```{.yaml filename="document.qmd"}
+jupyter:
+  kernel: ark              # a name from `jupyter kernelspec list`
+  claims:
+    r: 1                   # Jupyter takes r cells, not knitr
+```
+
+The same block works in `_quarto.yml` to switch a whole project. The
+document needs no `engine:` key. Plots come back as figures, like the
+figures of a Python cell.
+
+A few things to know:
+
+- **`claims` is what moves `{r}` cells to Jupyter.** `jupyter: ark` on its
+  own picks the kernel, but knitr still runs the cells, because knitr is the
+  default owner of `r`. A later release may make the `claims` line
+  unnecessary when you name a kernel.
+- **Leave `engine: jupyter` out.** With `engine: jupyter` written as a
+  plain name, a top-level `jupyter:` block, `claims` included, is not read,
+  and knitr runs your `{r}` cells without a warning. Use the block above
+  by itself, or put the settings inside the `engine:` entry:
+
+  ```{.yaml filename="document.qmd"}
+  engine:
+    jupyter:
+      kernel: ark
+      claims:
+        r: 1
+  ```
+
+- **If `engine:` also lists knitr, write `r: 2`.** At `r: 1` knitr and
+  Jupyter tie, and the order of the list decides. `r: 2` wins in either
+  order:
+
+  ```{.yaml filename="document.qmd"}
+  engine:
+    - knitr
+    - jupyter:
+        kernel: ark
+        claims:
+          r: 2
+  ```
+
+- **Write `claims` as a number.** Other spellings of the same entry, such
+  as `r: {kind: primary}`, are not honored here yet.
+- **One kernel runs the whole document.** A `claims` table replaces
+  Jupyter's usual one, so this block gives Jupyter only `r`. Keep the
+  document to `{r}` cells, or Jupyter's other languages will not be run
+  by it.
+
+If a plot cannot be saved, for example because the kernel sent a malformed
+image, Quarto warns ([`Q-18-11`](../../errors/engine/Q-18-11.qmd)) and
+shows the output's text instead.
+
 ## Which cells run
 
 Jupyter runs the cells in the languages it owns. When no engine claims a

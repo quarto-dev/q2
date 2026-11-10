@@ -95,6 +95,7 @@ fn expand_entries(
                 id,
                 contents,
                 expanded,
+                active,
             } => {
                 // Recurse into nested sections so `auto:` nested under a
                 // hand-written section also expands.
@@ -106,6 +107,7 @@ fn expand_entries(
                     id,
                     contents: new_contents,
                     expanded,
+                    active,
                 });
             }
             other => out.push(other),
@@ -131,6 +133,7 @@ fn strip_entries(
                 id,
                 contents,
                 expanded,
+                active,
             } => {
                 let new_contents = strip_entries(contents, diagnostics);
                 out.push(SidebarEntry::Section {
@@ -140,6 +143,7 @@ fn strip_entries(
                     id,
                     contents: new_contents,
                     expanded,
+                    active,
                 });
             }
             other => out.push(other),
@@ -420,6 +424,7 @@ fn section_for_dir(dir: &str, members: &[&DocumentProfile]) -> SidebarEntry {
         id: None,
         contents,
         expanded: false,
+        active: false,
     }
 }
 
@@ -1212,6 +1217,7 @@ mod tests {
                 id: None,
                 contents: vec![inner_auto],
                 expanded: false,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };

@@ -17,8 +17,8 @@
  *
  * **Disabled path:** when `enabled` is false (Attribution toggle off),
  * the hook short-circuits and returns `null`. Callers then route through
- * `parseQmdToAst(content)` (or `parseQmdToAstWithAttribution(content, null)`),
- * which is byte-identical to today's q2-debug output (Phase 0 test #10).
+ * `parseQmdToAstWithAttribution(content, null)`, which is byte-identical
+ * to today's q2-debug output (Phase 0 test #10).
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';

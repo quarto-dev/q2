@@ -19,6 +19,7 @@ import type {
   PandocRequestFile,
   PrepareImportResponse,
   RenderPageForPreviewOptions,
+  RenderPageInProjectOptions,
   RenderPandocRequestOptions,
   RenderPandocRequestResponse,
   ResolvePandocFormatsResponse,
@@ -109,6 +110,7 @@ interface WasmModuleExtended {
     // the hub-client `RenderHost`. Omitted / `false` is byte-identical to
     // the pre-knob behaviour.
     prefer_preview_format?: boolean,
+    options?: RenderPageInProjectOptions,
   ) => Promise<string>;
   // pandoc-wasm epic (R2): build the request pandoc.wasm runs. See
   // wasm-quarto-hub-client.d.ts for the shapes. `render_pandoc_request`
@@ -800,6 +802,7 @@ export async function renderPageInProjectWithAttribution(
   // `undefined`) to render code cells as source.
   captureGzJson?: Uint8Array,
   preferPreviewFormat?: boolean,
+  options?: RenderPageInProjectOptions,
 ): Promise<RenderResponse> {
   // Serialised and latest-wins coalesced against other page renders
   // (bd-r8iqmg2f): a render a newer request supersedes while still
@@ -814,6 +817,7 @@ export async function renderPageInProjectWithAttribution(
         attributionJson,
         captureGzJson,
         preferPreviewFormat,
+        options,
       ),
     RENDER_PAGE_RENDER_KEY,
   );
@@ -830,6 +834,7 @@ async function renderPageInProjectWithAttributionRaw(
   attributionJson: string | null,
   captureGzJson?: Uint8Array,
   preferPreviewFormat?: boolean,
+  options?: RenderPageInProjectOptions,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   if (!perfEnabled()) {
@@ -840,6 +845,7 @@ async function renderPageInProjectWithAttributionRaw(
         attributionJson ?? undefined,
         captureGzJson,
         preferPreviewFormat,
+        options,
       ),
     );
   }
@@ -853,6 +859,7 @@ async function renderPageInProjectWithAttributionRaw(
         attributionJson ?? undefined,
         captureGzJson,
         preferPreviewFormat,
+        options,
       ),
     );
   } finally {
@@ -911,6 +918,7 @@ export async function renderPageForPreview(
 
 export type {
   RenderPageForPreviewOptions,
+  RenderPageInProjectOptions,
   PandocFormatClass,
   PandocFormatInfo,
   PandocRequestFile,
@@ -1162,7 +1170,7 @@ export interface ConvertResult {
 }
 
 /**
- * Parse QMD content to Pandoc AST JSON, handling errors gracefully.
+ * Parse QMD content to Pandoc AST JSON, optionally with attribution.
  *
  * This function parses QMD markdown into a Pandoc AST representation,
  * which can be used for programmatic manipulation, analysis, or rendering
@@ -1189,31 +1197,21 @@ export interface ConvertResult {
  * }
  * ```
  *
- * @param qmdContent - QMD source text to parse
- * @returns Parse result with AST JSON string or error information
- */
-export async function parseQmdToAst(
-  qmdContent: string
-): Promise<ParseResult> {
-  return parseQmdToAstWithAttribution(qmdContent, null);
-}
-
-/**
- * Parse QMD content to Pandoc AST JSON, optionally with attribution.
- *
  * When `attributionJson` is non-null, the JSON string is shipped to the
  * Rust `PreBuiltAttributionProvider`, which decodes runs + identities
  * and drives `AttributionGenerateTransform` + `AttributionRenderTransform`.
  * The resulting AST carries `astContext.attribution` (sparse `{s, actor,
  * time}` records) and `astContext.attributionActors` (actor →
- * `{name, color}` table). When `null`, the call is byte-identical to
- * `parseQmdToAst(content)` — same code path, no provider installed,
- * no transforms fire (Phase 0 test #10 contract).
+ * `{name, color}` table). When `null`, no provider is installed and no
+ * attribution transforms fire (the Phase 0 test #10 contract).
  *
  * The producer of `attributionJson` is responsible for satisfying the
  * Phase 6 invariant: every actor referenced in `runs` must have an
  * entry in `identities`. See `useAttribution` for the hub-client
  * producer that builds this payload from Automerge history.
+ *
+ * @param qmdContent - QMD source text to parse
+ * @returns Parse result with AST JSON string or error information
  */
 export async function parseQmdToAstWithAttribution(
   qmdContent: string,
@@ -1222,8 +1220,6 @@ export async function parseQmdToAstWithAttribution(
   try {
     await initWasm();
     const wasm = getWasm();
-    // Finding 1: PreviewRouter calls this per keystroke only to read
-    // `success`; the AST is serialized, shipped, parsed and discarded.
     const pT0 = perfNow();
     const responseJson = await wasm.parse_qmd_to_ast_with_attribution(
       qmdContent,

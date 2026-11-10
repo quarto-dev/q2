@@ -781,6 +781,123 @@ mod tests {
         );
     }
 
+    /// bd-rl7r38pw: an expanded sidebar section must show a rotated
+    /// (down-pointing) chevron, a collapsed one a right-pointing one.
+    /// Bootstrap's collapse plugin keeps `aria-expanded` on the
+    /// `.sidebar-item-toggle` button in sync; the theme has to key the
+    /// rotation off it (Q1 `quarto-nav.scss:418-432`). The markup is
+    /// correct either way, so only the compiled CSS can show the bug.
+    #[test]
+    fn test_sidebar_toggle_chevron_rotates_when_expanded() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+
+        // Find the declarations of the rule targeting the chevron of a
+        // toggle in the given `aria-expanded` state. Quotes around the
+        // attribute value are optional in CSS; normalize them away.
+        let decls_for = |state: &str| -> Option<String> {
+            let want = format!("[aria-expanded={state}]");
+            rules(&css).into_iter().find_map(|(selector, decls)| {
+                let sel = selector.replace('"', "");
+                (sel.contains(".sidebar-item-toggle")
+                    && sel.contains(&want)
+                    && sel.contains(".bi-chevron-right::before"))
+                .then(|| decls.replace(' ', ""))
+            })
+        };
+
+        let expanded = decls_for("true").expect(
+            "no rule for `.sidebar-item-toggle[aria-expanded=true] .bi-chevron-right::before` \
+             — expanded sidebar sections show a collapsed chevron. \
+             Port Q1 quarto-nav.scss:418-432.",
+        );
+        assert!(
+            expanded.contains("transform:rotate(90deg)"),
+            "expanded chevron rule does not rotate 90deg: {expanded}"
+        );
+
+        let collapsed = decls_for("false")
+            .expect("no rule for `.sidebar-item-toggle[aria-expanded=false]` chevron");
+        assert!(
+            collapsed.contains("transform:none"),
+            "collapsed chevron rule should reset transform: {collapsed}"
+        );
+    }
+
+    /// bd-kwgtllvn: the color-mode runtime's floating fallback toggle
+    /// carries `.top-right` (Q1 `_quarto-rules.scss:3-7`). Without the
+    /// utility the toggle renders at the end of the document instead
+    /// of the page's top-right corner; markup tests can't see that.
+    #[test]
+    fn test_top_right_utility_positions_against_page() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+        let decls = rules(&css)
+            .into_iter()
+            .find(|(sel, _)| sel.trim() == ".top-right")
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no `.top-right` rule. Port Q1 _quarto-rules.scss:3-7.");
+        for decl in ["position:absolute", "top:1em", "right:1em"] {
+            assert!(decls.contains(decl), "`.top-right` lacks `{decl}`: {decls}");
+        }
+    }
+
+    /// bd-3bg8h1rx: sidebar section toggles are `<button>`s (Q1 #14826).
+    /// Without the reset they render with the browser's native button
+    /// chrome; without the flex layout an unlinked section's single
+    /// label+chevron button loses the chevron's right alignment.
+    #[test]
+    fn test_sidebar_toggle_buttons_are_reset_and_laid_out() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, false).unwrap();
+        let all = rules(&css);
+
+        let reset = all
+            .iter()
+            .find(|(sel, _)| {
+                sel.contains(".sidebar-item .sidebar-item-toggle")
+                    && sel.contains(".sidebar-item button.sidebar-item-text")
+            })
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no button-reset rule for sidebar toggles. Port Q1 quarto-nav.scss:378-393.");
+        for decl in [
+            "background:none",
+            "border:none",
+            "padding:0",
+            "font:inherit",
+            "color:inherit",
+            "text-align:inherit",
+        ] {
+            assert!(reset.contains(decl), "reset rule lacks `{decl}`: {reset}");
+        }
+
+        let layout = all
+            .iter()
+            .find(|(sel, _)| sel.trim() == ".sidebar-item button.sidebar-item-text")
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no layout rule for `.sidebar-item button.sidebar-item-text`");
+        for decl in ["display:flex", "align-items:baseline", "width:100%"] {
+            assert!(
+                layout.contains(decl),
+                "layout rule lacks `{decl}`: {layout}"
+            );
+        }
+
+        let chevron = all
+            .iter()
+            .find(|(sel, _)| {
+                sel.contains("button.sidebar-item-text")
+                    && sel.contains(".bi-chevron-right")
+                    && !sel.contains("::before")
+            })
+            .map(|(_, decls)| decls.replace(' ', ""))
+            .expect("no rule pushing the in-button chevron right");
+        assert!(
+            chevron.contains("margin-left:auto"),
+            "in-button chevron must sit hard right: {chevron}"
+        );
+    }
+
     /// bd-26bf3j1y: `role="doc-toc"` is NOT a safe hook for hiding
     /// things. q2 puts it on two different elements — the real TOC
     /// (`nav#TOC`) and, as a divergence from Q1 tracked in

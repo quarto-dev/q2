@@ -239,6 +239,7 @@ async function doRender(
     // pipeline splices the recorded engine output into the AST. `undefined`
     // renders code cells as source.
     captureGzJson?: Uint8Array;
+    captureUntransformedAst: boolean;
   }
 ): Promise<RenderResult> {
   if (!isWasmReady()) {
@@ -282,6 +283,7 @@ async function doRender(
       options.attributionJson,
       options.captureGzJson,
       true,
+      { captureUntransformedAst: options.captureUntransformedAst },
     );
     const allDiagnostics: Diagnostic[] = [
       ...(result.diagnostics ?? []),
@@ -497,10 +499,10 @@ export default function ReactPreview({
   // overlay itself is package-internal in @quarto/preview-renderer and
   // takes the value via props (controlled component).
   const [errorOverlayCollapsed, setErrorOverlayCollapsed] = usePreference('errorOverlayCollapsed');
-  // P3.2: nesting-cursor mode preference (default-ON). When true, the
-  // nestedEditBuffers memo below calls regenerateNestedBuffers to produce
-  // a per-siKey clean QMD buffer table; when off, that WASM pass is
-  // completely unreachable.
+  // P3.2: nesting-cursor mode preference (default-ON). With editing enabled,
+  // the nestedEditBuffers memo below calls regenerateNestedBuffers to produce
+  // a per-siKey clean QMD buffer table; read mode or nesting-off skips that
+  // WASM pass completely.
   const [unlockNestingCursor] = usePreference('unlockNestingCursor');
   // bd-j1nto6eq: rich-text editor preference (default-ON), forwarded to the
   // q2-preview iframe so editable paragraphs/headings open the tiptap editor
@@ -531,17 +533,17 @@ export default function ReactPreview({
   // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
   // (the exported pure helper) so the gating logic has a single testable
   // source of truth. Returns EMPTY_NESTED_BUFFERS (a module-level constant)
-  // when unlockNestingCursor is off or either render input is missing, keeping
-  // the iframe effect dep referentially stable across renders.
+  // in read mode, when unlockNestingCursor is off, or when either render input
+  // is missing, keeping the iframe effect dep referentially stable across renders.
   const nestedEditBuffers = useMemo(
     () =>
       computeNestedEditBuffers(
-        unlockNestingCursor ?? true,
+        previewEditing && (unlockNestingCursor ?? true),
         rendered.renderedContent,
         rendered.untransformedAstJson,
         regenerateNestedBuffers,
       ),
-    [unlockNestingCursor, rendered.renderedContent, rendered.untransformedAstJson],
+    [previewEditing, unlockNestingCursor, rendered.renderedContent, rendered.untransformedAstJson],
   );
 
   // Scroll sync (editor ↔ preview). Mirrors `Preview.tsx`: the q2-preview
@@ -717,6 +719,7 @@ export default function ReactPreview({
         format,
         attributionJson: attributionPayload,
         captureGzJson: captureBytes,
+        captureUntransformedAst: previewEditing || (commentsMode ?? 'show') !== 'hide',
       });
     } catch (err) {
       // bd-r8iqmg2f: a render a newer edit superseded while it was still
@@ -788,7 +791,7 @@ export default function ReactPreview({
         setPreviewState('ERROR_FROM_GOOD');
       }
     }
-  }, [scrollSyncEnabled, onDiagnosticsChange, onCommentsChange, onAstChange, format, attributionPayload, captureBytes]);
+  }, [scrollSyncEnabled, onDiagnosticsChange, onCommentsChange, onAstChange, format, attributionPayload, captureBytes, previewEditing, commentsMode]);
 
   // Immediate render update (no debounce)
   const updatePreview = useCallback((newContent: string, documentPath?: string) => {

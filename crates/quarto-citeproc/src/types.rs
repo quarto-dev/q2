@@ -1,7 +1,7 @@
 //! Core types for citation processing.
 
 use crate::Result;
-use crate::locale::LocaleManager;
+use crate::locale::{LocaleManager, normalize_lang};
 use crate::output::QuoteConfig;
 use crate::reference::Reference;
 use hashlink::LinkedHashMap;
@@ -253,6 +253,12 @@ pub struct Processor {
     /// Locale manager for term lookup.
     pub locales: LocaleManager,
 
+    /// The effective locale (e.g. "nl-NL"): the document language if one
+    /// was given, else the style's `default-locale`, else "en-US". Style
+    /// `<locale xml:lang>` blocks are matched against it even when no
+    /// bundled locale file exists for it (`locales` then holds en-US).
+    lang: String,
+
     /// References by ID (preserves insertion order).
     references: LinkedHashMap<String, Reference>,
 
@@ -290,12 +296,27 @@ struct CitationHistory {
 }
 
 impl Processor {
-    /// Create a new processor with a CSL style.
+    /// Create a new processor with a CSL style, using the style's
+    /// `default-locale` (or en-US).
     pub fn new(style: Style) -> Self {
-        let default_locale = style.default_locale.clone();
+        Self::with_lang(style, None)
+    }
+
+    /// Create a new processor with a CSL style and a document language.
+    ///
+    /// The locale is chosen as Pandoc's citeproc (and so Quarto 1) does:
+    /// the document `lang` overrides the style's `default-locale`, which
+    /// overrides en-US. A bare language (`nl`) resolves to its primary
+    /// dialect (`nl-NL`).
+    pub fn with_lang(style: Style, lang: Option<&str>) -> Self {
+        let lang = lang
+            .and_then(normalize_lang)
+            .or_else(|| style.default_locale.as_deref().and_then(normalize_lang))
+            .unwrap_or_else(|| "en-US".to_string());
         Self {
             style,
-            locales: LocaleManager::new(default_locale),
+            locales: LocaleManager::new(Some(lang.clone())),
+            lang,
             references: LinkedHashMap::new(),
             initial_citation_numbers: LinkedHashMap::new(),
             final_citation_numbers: None,
@@ -550,62 +571,16 @@ impl Processor {
         crate::eval::evaluate_bibliography_entry_to_output(self, &reference).map(Some)
     }
 
-    /// Generate the full bibliography.
+    /// Generate the full bibliography, each entry rendered to a string.
+    ///
+    /// The rendered form of [`Self::generate_bibliography_to_outputs`]: same
+    /// entries, same order, same `subsequent-author-substitute` handling.
     pub fn generate_bibliography(&mut self) -> Result<Vec<(String, String)>> {
-        let bib = match &self.style.bibliography {
-            Some(b) => b,
-            None => return Ok(Vec::new()),
-        };
-
-        // LinkedHashMap preserves insertion order
-        let ids: Vec<String> = self.references.keys().cloned().collect();
-
-        // Get sort keys from bibliography
-        let sort_keys: &[_] = bib.sort.as_ref().map_or(&[], |s| &s.keys);
-
-        // Check if any sort key uses citation-number
-        let uses_citation_number = sort_keys.iter().any(
-            |k| matches!(&k.key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number"),
-        );
-
-        // If there are sort keys, sort the IDs; otherwise preserve insertion order
-        let final_ids = if sort_keys.is_empty() {
-            ids
-        } else {
-            // Compute sort key values for each reference
-            let mut sorted_ids: Vec<(String, Vec<SortKeyValue>)> = ids
-                .into_iter()
-                .map(|id| {
-                    let keys = self.compute_sort_keys(&id, sort_keys);
-                    (id, keys)
-                })
-                .collect();
-
-            // Sort by the computed keys
-            sorted_ids.sort_by(|a, b| compare_sort_keys(&a.1, &b.1));
-
-            sorted_ids.into_iter().map(|(id, _)| id).collect()
-        };
-
-        // Determine whether to reassign citation numbers:
-        // - If citation-number is the ONLY sort key, don't reassign (keep original numbers)
-        // - If there are multiple sort keys or citation-number is secondary, reassign
-        let is_citation_number_only = sort_keys.len() == 1
-            && matches!(&sort_keys[0].key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number");
-
-        if uses_citation_number && !sort_keys.is_empty() && !is_citation_number_only {
-            self.reassign_citation_numbers(&final_ids);
-        }
-
-        // Format entries in order
-        let mut entries = Vec::new();
-        for id in &final_ids {
-            if let Some(formatted) = self.format_bibliography_entry(id)? {
-                entries.push((id.clone(), formatted));
-            }
-        }
-
-        Ok(entries)
+        Ok(self
+            .generate_bibliography_to_outputs()?
+            .into_iter()
+            .map(|(id, output)| (id, output.render()))
+            .collect())
     }
 
     /// Generate the full bibliography, returning Output AST for each entry.
@@ -637,8 +612,16 @@ impl Processor {
             |k| matches!(&k.key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number"),
         );
 
-        // If there are sort keys, sort the IDs; otherwise preserve insertion order
+        // With sort keys, sort by them. Without, list entries by citation
+        // number (first-cited order), as Pandoc's citeproc does; references
+        // that never got a number follow in insertion order (bd-mumobar8).
         let final_ids = if sort_keys.is_empty() {
+            let mut ids = ids;
+            // A stable sort keeps unnumbered ids in insertion order.
+            ids.sort_by_key(|id| match self.initial_citation_numbers.get(id) {
+                Some(&n) => (false, n),
+                None => (true, 0),
+            });
             ids
         } else {
             // Compute sort key values for each reference
@@ -794,10 +777,40 @@ impl Processor {
         }
     }
 
+    /// The effective locale code (e.g. "nl-NL").
+    pub fn lang(&self) -> &str {
+        &self.lang
+    }
+
+    /// The style's `<locale>` elements that apply to the effective locale,
+    /// in CSL priority order:
+    /// 1. exact language match (`xml:lang="de-AT"` for de-AT);
+    /// 2. base language match (`xml:lang="de"` for de-AT);
+    /// 3. no `xml:lang` (applies to every locale).
+    ///
+    /// A `<locale xml:lang="en">` block in a style therefore does not
+    /// apply to a Dutch document.
+    fn applicable_style_locales(&self) -> impl Iterator<Item = &quarto_csl::Locale> {
+        let lang = self.lang.as_str();
+        let base = lang.split('-').next().unwrap_or(lang);
+        let exact = self
+            .style
+            .locales
+            .iter()
+            .filter(move |l| l.lang.as_deref() == Some(lang));
+        let base_match = self
+            .style
+            .locales
+            .iter()
+            .filter(move |l| base != lang && l.lang.as_deref() == Some(base));
+        let unscoped = self.style.locales.iter().filter(|l| l.lang.is_none());
+        exact.chain(base_match).chain(unscoped)
+    }
+
     /// Get a term from the locale.
     pub fn get_term(&self, name: &str, form: quarto_csl::TermForm, plural: bool) -> Option<String> {
         // First check style-level locale overrides
-        for locale in &self.style.locales {
+        for locale in self.applicable_style_locales() {
             for term in &locale.terms {
                 if term.name == name && term.form == form {
                     if plural {
@@ -820,54 +833,13 @@ impl Processor {
 
     /// Get a date format from the locale.
     ///
-    /// This follows the CSL spec locale priority order:
-    /// 1. Style locale with exact language match (e.g., xml:lang="en-US" for en-US)
-    /// 2. Style locale with base language match (e.g., xml:lang="en" for en-US)
-    /// 3. Style locale with no language (fallback locale)
-    /// 4. External locale files from the locale manager
+    /// Style `<locale>` date formats that apply to the effective locale
+    /// (see [`Self::applicable_style_locales`]) win over the locale files.
     pub fn get_date_format(&self, form: quarto_csl::DateForm) -> Option<&quarto_csl::DateFormat> {
-        // Get the effective language for locale lookup
-        let effective_lang = self.style.default_locale.as_deref().unwrap_or("en-US");
-
-        // Extract base language (e.g., "en" from "en-US")
-        let base_lang = effective_lang.split('-').next().unwrap_or(effective_lang);
-
-        // Priority 1: Exact language match (e.g., xml:lang="en-US" for en-US)
-        for locale in &self.style.locales {
-            if let Some(ref lang) = locale.lang
-                && lang == effective_lang
-            {
-                for df in &locale.date_formats {
-                    if df.form == form {
-                        return Some(df);
-                    }
-                }
-            }
-        }
-
-        // Priority 2: Base language match (e.g., xml:lang="en" for en-US)
-        // Only if it differs from the exact match
-        if base_lang != effective_lang {
-            for locale in &self.style.locales {
-                if let Some(ref lang) = locale.lang
-                    && lang == base_lang
-                {
-                    for df in &locale.date_formats {
-                        if df.form == form {
-                            return Some(df);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Priority 3: Style locale with no xml:lang (fallback locale)
-        for locale in &self.style.locales {
-            if locale.lang.is_none() {
-                for df in &locale.date_formats {
-                    if df.form == form {
-                        return Some(df);
-                    }
+        for locale in self.applicable_style_locales() {
+            for df in &locale.date_formats {
+                if df.form == form {
+                    return Some(df);
                 }
             }
         }
@@ -880,7 +852,7 @@ impl Processor {
     /// This checks locale overrides first, then falls back to style options.
     pub fn limit_day_ordinals_to_day_1(&self) -> bool {
         // First check style-level locale overrides
-        for locale in &self.style.locales {
+        for locale in self.applicable_style_locales() {
             if let Some(ref opts) = locale.options {
                 return opts.limit_day_ordinals_to_day_1;
             }
@@ -896,7 +868,7 @@ impl Processor {
     /// When true, periods and commas following a closing quote are moved inside.
     pub fn punctuation_in_quote(&self) -> bool {
         // First check style-level locale overrides
-        for locale in &self.style.locales {
+        for locale in self.applicable_style_locales() {
             if let Some(ref opts) = locale.options {
                 return opts.punctuation_in_quote;
             }
@@ -915,8 +887,21 @@ impl Processor {
     ///
     /// This returns the appropriate quote characters for the current locale,
     /// allowing proper rendering of quotation marks (e.g., English "..." vs French « ... »).
+    ///
+    /// Quote terms the style's applicable `<locale>` elements define win
+    /// over the locale file's, as for every other term.
     pub fn get_quote_config(&self) -> QuoteConfig {
-        self.locales.get_quote_config()
+        let base = self.locales.get_quote_config();
+        let term = |name: &str, fallback: String| {
+            self.get_term(name, quarto_csl::TermForm::Long, false)
+                .unwrap_or(fallback)
+        };
+        QuoteConfig {
+            outer_open: term("open-quote", base.outer_open),
+            outer_close: term("close-quote", base.outer_close),
+            inner_open: term("open-inner-quote", base.inner_open),
+            inner_close: term("close-inner-quote", base.inner_close),
+        }
     }
 
     /// Get the bibliography sort key for a reference.
@@ -1247,5 +1232,114 @@ mod tests {
         assert_eq!(citation.items.len(), 2);
         assert_eq!(citation.note_number, Some(1));
         assert_eq!(citation.items[1].prefix, Some("see also".to_string()));
+    }
+
+    // ---- Document language selects the locale (issue #1110) -------------
+    //
+    // Expected strings come from Pandoc 3.12.1 (= Quarto 1) on the same
+    // inputs; see claude-notes/issue-reports/1110/pandoc-probe.txt.
+
+    /// A style that renders a title (title-cased), a term, and a text date.
+    fn lang_test_style(default_locale: Option<&str>, extra: &str) -> Style {
+        let default_locale =
+            default_locale.map_or_else(String::new, |l| format!(r#" default-locale="{l}""#));
+        let csl = format!(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0"{default_locale}>
+  {extra}
+  <citation>
+    <layout delimiter="; ">
+      <group delimiter=" ">
+        <text variable="title" text-case="title"/>
+        <text term="and"/>
+        <date variable="issued" form="text"/>
+      </group>
+    </layout>
+  </citation>
+</style>"#
+        );
+        quarto_csl::parse_csl(&csl).unwrap()
+    }
+
+    fn render_with(style: Style, lang: Option<&str>, reference_language: Option<&str>) -> String {
+        let mut processor = Processor::with_lang(style, lang);
+        let language = reference_language
+            .map(|l| format!(r#", "language": "{l}""#))
+            .unwrap_or_default();
+        let reference: Reference = serde_json::from_str(&format!(
+            r#"{{"id": "item", "type": "webpage", "title": "a page",
+                "issued": {{"date-parts": [[2020, 7, 12]]}}{language}}}"#
+        ))
+        .unwrap();
+        processor.add_reference(reference);
+        let citation: Citation =
+            serde_json::from_str(r#"{"citationItems": [{"id": "item"}]}"#).unwrap();
+        processor.process_citation(&citation).unwrap()
+    }
+
+    #[test]
+    fn document_lang_overrides_style_default_locale() {
+        let out = render_with(lang_test_style(Some("de-DE"), ""), Some("nl"), None);
+        assert_eq!(out, "a page en 12 juli 2020");
+    }
+
+    #[test]
+    fn style_default_locale_applies_without_document_lang() {
+        let out = render_with(lang_test_style(Some("de-DE"), ""), None, None);
+        assert!(out.contains(" und ") && out.contains("Juli 2020"), "{out}");
+    }
+
+    #[test]
+    fn en_us_applies_without_lang_or_default_locale() {
+        let out = render_with(lang_test_style(None, ""), None, None);
+        assert_eq!(out, "A Page and July 12, 2020");
+    }
+
+    #[test]
+    fn document_lang_en_overrides_non_english_style() {
+        let out = render_with(lang_test_style(Some("de-DE"), ""), Some("en"), None);
+        assert_eq!(out, "A Page and July 12, 2020");
+    }
+
+    #[test]
+    fn region_and_case_spellings_of_lang_are_accepted() {
+        for lang in ["nl-NL", "nl_NL", "NL", "nl-nl"] {
+            let out = render_with(lang_test_style(None, ""), Some(lang), None);
+            assert_eq!(out, "a page en 12 juli 2020", "lang: {lang}");
+        }
+    }
+
+    #[test]
+    fn unknown_lang_falls_back_to_en_us() {
+        let out = render_with(lang_test_style(None, ""), Some("xx"), None);
+        assert_eq!(out, "A Page and July 12, 2020");
+    }
+
+    #[test]
+    fn reference_language_still_controls_title_case() {
+        // An English reference in a Dutch document is still title-cased.
+        let out = render_with(lang_test_style(None, ""), Some("nl"), Some("en"));
+        assert!(out.starts_with("A Page "), "{out}");
+    }
+
+    #[test]
+    fn bare_language_uses_its_primary_dialect() {
+        let pt = Processor::with_lang(lang_test_style(None, ""), Some("pt"));
+        assert_eq!(pt.lang(), "pt-PT");
+        let en = Processor::with_lang(lang_test_style(None, ""), Some("en"));
+        assert_eq!(en.lang(), "en-US");
+    }
+
+    #[test]
+    fn style_locale_overrides_apply_only_to_their_language() {
+        let extra = r#"<locale xml:lang="en"><terms><term name="and">plus</term></terms></locale>"#;
+        let english = render_with(lang_test_style(None, extra), Some("en-GB"), None);
+        assert!(english.contains(" plus "), "{english}");
+        let dutch = render_with(lang_test_style(None, extra), Some("nl"), None);
+        assert!(dutch.contains(" en "), "{dutch}");
+
+        let unscoped = r#"<locale><terms><term name="and">plus</term></terms></locale>"#;
+        let dutch = render_with(lang_test_style(None, unscoped), Some("nl"), None);
+        assert!(dutch.contains(" plus "), "{dutch}");
     }
 }
