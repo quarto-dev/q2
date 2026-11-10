@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { outOfRunWorkspaceDeps, publishManifest, sortByDependencies, PUBLISH_REPOSITORY } from './manifest.mjs';
+import { outOfRunWorkspaceDeps, publishManifest, sortByDependencies, workspaceDepsToBuild, PUBLISH_REPOSITORY } from './manifest.mjs';
 
 const workspacePkg = {
   name: '@quarto/annotated-qmd',
@@ -162,4 +162,30 @@ test('outOfRunWorkspaceDeps is empty when every workspace dep is in the run', ()
   ]);
   const run = new Set(['@quarto/annotated-qmd', '@quarto/pandoc-types']);
   assert.deepEqual(outOfRunWorkspaceDeps(pkgs, run, workspaceVersions), []);
+});
+
+test('workspaceDepsToBuild returns the transitive out-of-run workspace deps, dependencies first', () => {
+  const ws = new Map([
+    ['@quarto/annotated-qmd', { name: '@quarto/annotated-qmd', dependencies: { '@quarto/pandoc-types': '*' } }],
+    ['@quarto/pandoc-types', { name: '@quarto/pandoc-types', dependencies: { '@quarto/leaf': '*' } }],
+    ['@quarto/leaf', { name: '@quarto/leaf' }],
+    ['@quarto/unrelated', { name: '@quarto/unrelated' }],
+  ]);
+  const run = [ws.get('@quarto/annotated-qmd')];
+  assert.deepEqual(
+    workspaceDepsToBuild(run, new Set(['@quarto/annotated-qmd']), ws).map((p) => p.name),
+    ['@quarto/leaf', '@quarto/pandoc-types'],
+  );
+});
+
+test('workspaceDepsToBuild skips packages that are in the run and registry-only deps', () => {
+  const ws = new Map([
+    ['@quarto/annotated-qmd', { name: '@quarto/annotated-qmd', dependencies: { '@quarto/pandoc-types': '*', '@quarto/mapped-string': '^0.1.8' } }],
+    ['@quarto/pandoc-types', { name: '@quarto/pandoc-types' }],
+  ]);
+  const run = [ws.get('@quarto/annotated-qmd'), ws.get('@quarto/pandoc-types')];
+  assert.deepEqual(
+    workspaceDepsToBuild(run, new Set(['@quarto/annotated-qmd', '@quarto/pandoc-types']), ws),
+    [],
+  );
 });

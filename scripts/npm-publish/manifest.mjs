@@ -153,3 +153,31 @@ export function outOfRunWorkspaceDeps(pkgs, publishSet, workspaceVersions) {
   }
   return [...found].map(([name, version]) => ({ name, version }));
 }
+
+/**
+ * Workspace packages that must be built before the run's packages can be
+ * built and tested: every workspace package reachable through `dependencies`
+ * from `pkgs` that is not itself in the run, in dependency order.
+ *
+ * Workspace siblings resolve through their `"import": "./dist/..."` export
+ * condition at test time, so on a clean checkout their `dist/` must exist
+ * even when they are not being published (a sibling already on the registry
+ * is still consumed from the workspace in-repo).
+ *
+ * @param {object[]} pkgs  package.json objects in the run
+ * @param {Set<string>} publishSet  names in the run
+ * @param {Map<string, object>} workspacePkgs  name -> package.json of every workspace package
+ */
+export function workspaceDepsToBuild(pkgs, publishSet, workspacePkgs) {
+  const needed = new Map();
+  const visit = (p) => {
+    for (const dep of Object.keys(p.dependencies ?? {})) {
+      const sibling = workspacePkgs.get(dep);
+      if (!sibling || publishSet.has(dep) || needed.has(dep)) continue;
+      needed.set(dep, sibling);
+      visit(sibling);
+    }
+  };
+  for (const p of pkgs) visit(p);
+  return sortByDependencies([...needed.values()]);
+}
