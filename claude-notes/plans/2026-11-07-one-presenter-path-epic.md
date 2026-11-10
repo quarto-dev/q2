@@ -32,7 +32,7 @@ need, and degrade cleanly, one input at a time, for one that does not. The scope
    option is removed and `-M` is the command-line way (decision R5, 2026-11-09).
 
 Jupyter output stays byte-identical unless a cell sets a new option (knitr epic decision 12), except for the two
-documented preview and hub fixes in OPR-1a and OPR-1b. **Marimo is a documented exception**: it uses the legacy
+documented preview and hub fixes in OPR-1a and OPR-1b and the one group fix in OPR-7j (D14). **Marimo is a documented exception**: it uses the legacy
 capture splice and is not part of this epic.
 
 ## Decisions (Gordon, 2026-11-08; not to be reopened by a plan)
@@ -81,6 +81,13 @@ capture splice and is not part of this epic.
 - **D12. Marimo is a documented exception.**
 - **D13. Strands.** `bd-nn2fou8h` (execute-visibility options) is referenced by OPR-1a and OPR-2; `bd-gbaykhth` (Jupyter
   has no subfloat synthesis) and `bd-au5gts6e` (knitr sub-figure numbering) are out of scope.
+- **D14. A third Jupyter exception: figure groups (Gordon, 2026-11-10).** The OPR-7d review found that the flip would
+  make Julia `fig-subcap` groups worse (the group caption and the panel ids are lost), and that native Jupyter already
+  has the same two gaps. [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) applies knitr\'s group rules to every
+  engine, so a Jupyter `fig-subcap` cell now renders its group caption and resolves its panel references. Gordon accepted
+  that this changes Jupyter output and overrides the byte-identical rule for this one case; every other Jupyter output
+  stays byte-identical, and 7j tests that. Real subfloats and tables (`tbl-subcap`, which no engine handles and the flip
+  does not worsen) stay out of scope (D13).
 
 ## What the spikes and reviews found (evidence)
 
@@ -217,7 +224,7 @@ for work only Gordon can do.
 
 ## Constraints that hold across the plans
 
-- Jupyter output is byte-identical except for the two documented preview and hub fixes (D9); the goldens never exercised a
+- Jupyter output is byte-identical except for the two documented preview and hub fixes (D9) and the figure-group fix (D14); the goldens never exercised a
   document `execute:` scope, so OPR-0a\'s fixtures are the guard.
 - The `.cell` wrapper contract holds: one `Div.cell` per executed cell, the empty string when echo and every output
   are suppressed, exactly one wrapper per cell for the preview splice.

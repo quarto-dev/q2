@@ -12,8 +12,8 @@ lane: D
 **Blocks:** [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) (it lists `opr-7j` in its `depends-on`).
 **Evidence:** [OPR-7d plan review](../research/2026-11-10-opr-7d-plan-review.md), items 15 and 16 (superseded by this plan).
 **Related, not replaced:** [subfloat parity draft](2026-11-09-subfloat-parity-draft.md) (`bd-plcqhfcn`, `bd-gbaykhth`, `bd-au5gts6e`).
-**Status:** an outline written during the 7d review. It becomes `ready` when Gordon flips it. Gordon must also answer
-the Jupyter question below.
+**Status:** an outline written during the 7d review. It becomes `ready` when Gordon flips it. The Jupyter question is
+decided (below).
 
 ## Why this plan exists
 
@@ -92,24 +92,38 @@ are untested.
    A single-figure labeled cell must not get a doubled id.
 3. **Count from the outputs, not from the subcaps.** The prototype numbers panels by position. Hooks.R numbers by the
    plot count. Compute the figure count generically (from the cell\'s plot outputs) so the knitr rule applies as written.
-4. **Tables.** Julia and Jupyter `tbl-cap` with `tbl-subcap` lose the parent caption on both routes already (the draft\'s
-   probe), so the flip does not make tables worse and this plan may leave them. Decide in the plan whether the same gate
-   covers `tbl-`, or file it with the subfloat work (not a strand from here).
+4. **Tables:** decided above (left alone; not a regression, not fixed by the prototype). Add one test that the table
+   group page is unchanged by this plan.
 5. **Preview and splice.** The splice route (`present_units`) and the render route share the cell step; add one splice
    test so preview and render produce the same bytes.
 
-## Decision for Gordon
+## Decision (Gordon, 2026-11-10): apply to every engine, Jupyter included
 
-**Jupyter output changes.** The epic says Jupyter output stays byte-identical unless a cell sets a new option. A
-`fig-subcap` cell today loses its caption and references silently, and this plan fixes that, so it is a behavior change
-for Jupyter. Options: (a) apply it to every engine, as this outline does (recommended, since it is the same gate), or
-(b) gate it to the Julia path only and leave Jupyter, which keeps Jupyter byte-identical but leaves a known bug.
+The epic said Jupyter output stays byte-identical unless a cell sets a new option. A Jupyter `fig-subcap` cell today
+silently loses its group caption and its panel references, and this plan fixes that. Gordon accepted the change and
+overrode the byte-identical rule for this one case; it is recorded as D14 in the epic. The rest of Jupyter output must
+stay byte-identical, and a checklist box tests that.
+
+## Tables (tested 2026-11-10; out of scope here, nothing for the flip to fix)
+
+A `tbl-cap` plus `tbl-subcap` group (two markdown tables in one labeled cell) was rendered on Julia, knitr and Jupyter,
+plain and recorded, with and without the prototype (ran). Every one of the twelve pages is the same: `tbl-two` exists and
+`@tbl-two` resolves ("Table 2"), but the group caption text is lost (class `quarto-uncaptioned`), `@tbl-two-1` and
+`@tbl-two-2` are `?tbl-two-N?` with two warnings, and the panels have no ids. The pre-epic plain render (commit
+`7016d595a`) of Julia and knitr gives the same page, so the flip and the epics change nothing for tables on those two
+engines. (The pre-epic Jupyter plain page had no `tbl-two` id at all and three warnings; today it matches the others. I did not
+find which change fixed that.) Because the gate here is figure-only (`label_on_cell` reads `figure_label`), the prototype changes none
+of the table pages. So tables are a gap that exists on every engine and route, not a regression, and fixing it needs its
+own work under the subfloat draft (knitr writes no table panel ids either in these renders; I did not read `hooks.R` for why). 7j leaves tables alone.
 
 ## Checklist (tests first; every box is `[unattended]`)
 
 - [ ] **Tests first.** Unit tests in `presenter/options.rs` and `presenter/cell.rs` for a labeled cell with `fig-cap`
       and `fig-subcap` and no figure count: the cell div carries the label, the closing caption is the `fig-cap`, panel N
       has the id `label-N`. Watch them fail on today\'s code, for that reason.
+- [ ] **Jupyter byte-identity guard (D14).** Every existing Jupyter golden and parity fixture except a `fig-subcap`
+      group renders byte-identically before and after; list the fixtures compared. The Jupyter `fig-subcap` fixture is
+      the one expected change, with the group caption and panel ids as in the prototype table.
 - [ ] A test per open question 2 case, including the single-figure cell with no doubled id and the knitr output
       unchanged (an existing knitr group test pins it).
 - [ ] A test through the binary (model `crates/quarto/tests/integration/no_execute_cli.rs`): a Jupyter notebook

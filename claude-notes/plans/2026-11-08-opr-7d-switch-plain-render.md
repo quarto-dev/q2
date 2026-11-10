@@ -51,7 +51,8 @@ with two new warnings. Gordon\'s rule is that the epics must not make behavior w
 for figures. [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) applies knitr\'s group rules (caption, label on the
 cell, `label-N` panel ids) to every engine; after it the Julia group renders as it does today, with today\'s (wrong)
 panel numbers, and nothing about figures changes on the flip. Tables are unchanged (a 2026-11-09 probe: both routes
-leave the panel references unresolved and drop the parent caption); 7j decides whether its gate covers `tbl-` too. Real
+leave the panel references unresolved and drop the parent caption; the 7j session re-tested Julia, knitr and Jupyter on both
+routes and the pre-epic commit, and all give the same page, so there is nothing for the flip to worsen and 7j leaves tables alone). Real
 subfloats (numbering such as "Figure 2 (a)") stay out of scope: `bd-plcqhfcn` (the umbrella), `bd-gbaykhth` (the
 Jupyter family) and `bd-au5gts6e` (knitr numbering), with the
 [subfloat draft](2026-11-09-subfloat-parity-draft.md). Nothing in this plan fixes them.
@@ -159,7 +160,7 @@ presenter, as a recorded render does. Concretely:
   pdf, pptx, docx and epub, while the gate compares only html, gfm, revealjs and typst. Decide: gate Julia to the engine
   route for those targets as knitr is, or accept presenter output with one binary test per class (see the checklist).
 - **Native Jupyter takes no flag.** `text_execute.rs` gates only on `ctx.want_record` and already presents through
-  `present_document` on every render, so the flip changes nothing for it; the only difference from the plain route
+  `present_document` on every render, so the flip changes nothing for it (a Jupyter `fig-subcap` group does change, but through 7j, which lands first: epic D14); the only difference from the plain route
   that [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) leaves (decision 6) is that native Jupyter and the ipynb
   replay path get the widget warning but not the page-dependency scan. 7d carries that as a known, documented
   difference, and OPR-8\'s notes say so.
