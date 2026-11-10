@@ -1262,20 +1262,124 @@ Phase 3C's separately deferred transport decision.
   failures remain open rather than being patched or hidden here.
 - No snapshot files changed.
 
-## Phase 6 — Attribution off the main thread (finding 7)
+## Phase 6 — Attribution production main-thread cost (finding 7)
 
-Behind a toggle and debounced, so lowest urgency; still O(document
-history) when on.
+The preview overlay is session-only and defaults off; its incremental updates
+are debounced, but cold builds start immediately. DOCX/PPTX downloads also
+build attribution on demand, independently of the toggle. Cold replay is
+history-dependent; incremental updates currently traverse full history again
+for bookkeeping, run updates may shift or splice the run array, and payload
+construction is O(source length + runs).
 
-- [ ] Baseline: cold-build and incremental-update ms at history scales
-  (the 2026-04-23 attribution profiling session is the template;
-  `requestIdleCallback` override mandatory).
-- [ ] If numbers warrant: move run-list replay and char-to-byte mapping
-  into a worker (Automerge handles are transferable to a worker context
-  via doc export/import; design the wire shape first), keeping the
-  hook's payload contract unchanged.
-- [ ] Regression: attribution overlay output identical on fixtures with
-  mixed author/actor history; toggle on/off flicker-free.
+### Phase 6a — Cold-build edit race (correctness)
+
+A correctness bug, independent of the performance gate; it gets its own
+strand and lands before the 6b baseline so the baseline measures correct
+behavior.
+
+`buildRunListAttribution` snapshots history and the document when it starts.
+An edit that arrives during the build is not replayed, and both callers then
+pair the stale runs with newer text: the hook schedules no incremental update
+while `stateRef.current` is null and finalises through the latest
+`sourceTextRef.current`; the download reads `handle.doc().text` after the
+await (`downloadAttribution.ts`). `runsCharToByteOffsets` hides out-of-range
+offsets behind its `??` fallback.
+
+- [x] Failing regression tests first, one per caller: an edit during a cold
+  build yields a payload whose runs match the final text. Cover multiple
+  edits, disable or file-switch during the build, and late completion.
+- [x] Fix in the producer, not the hook lifecycle: before
+  `buildRunListAttribution` returns, replay `getChanges(workDoc, handle.doc())`
+  until it is empty, so the returned state is at the handle's current heads.
+  One change covers both callers. If the hook's `sourceText` lags the handle,
+  the existing debounced effect corrects it, because `stateRef` is then set.
+- [x] Verify in a real browser: type during a cold build on a long-history
+  document with attribution enabled, and inspect the overlay.
+
+**Status: implementation and browser verification complete on 2026-11-10
+under bd-oul15aql.** The producer now replays the live delta without another
+yield and returns `getHeads(workDoc)`. The hook and download callers are
+unchanged.
+
+### Phase 6a verification
+
+- Before the fix, the hook, file-switch, and download regressions all failed
+  with only the initial 501-character run; the edits at times 2 and 3 were
+  missing. The disable/late-completion guard already passed. After the fix,
+  all 29 focused attribution tests passed.
+- `npm run build:all -w hub-client` passed, including release WASM, the
+  sandbox bundle, production TypeScript/Vite build, and precache check.
+- `npm run test:ci -w hub-client` passed: 1,755 unit, 240 integration, and
+  478 WASM tests; preview/render DOM parity passed 109/109 opted-in fixtures.
+- Scoped ESLint, `npm run typecheck -w hub-client`, `cargo fmt --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings`, and
+  `cargo xtask lint` passed. The strict `claude-notes` render passed all 1,702
+  files. No snapshot files changed.
+- The full Rust workspace run used an official scratch pandoc 3.13 because
+  the system binary is 3.12.1. It completed all 19,203 tests: 19,201 passed,
+  201 skipped, and the same two unrelated local knitr failures recorded for
+  Phase 5: `capture_classifies_pieces` (bd-54odm3rz, bd-qwscag8b) and
+  `knitr_replay_equals_live::a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live`
+  (bd-b95dt1ia). No Rust source changed in this phase.
+- Real Chromium verification used a throwaway Playwright spec and config in
+  the scratch directory (not committed). The spec generated 501 real edits,
+  gated the cold build at its first idle callback, typed into Monaco, proved
+  the sentinel was in Automerge before releasing the callback, and inspected
+  the resulting attribution wrapper and hover badge. Invocation:
+
+  ```bash
+  npm exec -w hub-client -- playwright test \
+    --config=/tmp/pa-502/928e87e0-3b75-4558-9782-1fe213fb5f2b/playwright.attribution.config.ts \
+    --project=chromium --workers=1 --retries=0
+  ```
+
+  Observed output:
+
+  ```text
+  COLD_BUILD_HISTORY 502
+  COLD_BUILD_EDIT_CONFIRMED_BEFORE_RELEASE
+  COLD_BUILD_OVERLAY {"typedText":"COLD_BUILD_SENTINEL","typedActor":"e2e7e1f02a30000000000000000007e1","badge":"Gentle Koala just now"}
+  1 passed
+  ```
+
+  The screenshot was inspected: `COLD_BUILD_SENTINEL` has the author color,
+  and its visible hover badge reads "Gentle Koala just now".
+
+### Phase 6b — Main-thread cost
+
+Measure before choosing between a cheaper algorithmic fix and a worker.
+
+- [ ] Baseline the real producer using the 2026-04-23 attribution profiling
+  session as the template; the `requestIdleCallback` override is mandatory.
+  Use geometric history, source-length, and run-count scales. Cover cold
+  builds, debounced incremental updates, and DOCX/PPTX download attribution.
+  Record main-thread CPU, longest synchronous slice, and elapsed time;
+  distinguish CPU from idle scheduling. Measure the unchunked cold-build
+  prefix separately: `history()`, `getAllChanges`, and a `decodeChange` of
+  every change for the hash index all run before the first yield.
+- [ ] Remove dead bookkeeping: `updateRunListAttribution` calls
+  `handle.history()` (a full `topoHistoryTraversal`) after every nonempty
+  delta solely to set `processedHistoryIndex`. Neither that field nor
+  `processedHeads` has a consumer; delete both.
+- [ ] Try unifying the cold build with the incremental path: replay
+  `getAllChanges(doc)` in order from `init()`, chunked, instead of walking
+  `history()`. This drops the traversal, the hash index, the second
+  `decodeChange` per change, and `decodeHeads`, and leaves one replay loop
+  (which also subsumes the 6a catch-up). It depends on `getAllChanges`
+  returning a causally valid order; confirm that first, then require the
+  existing `attribution-runs.test.ts` invariant suite to pass unchanged.
+- [ ] Regression: payload identical before and after on fixtures with
+  concurrent mixed author/actor histories, Unicode offsets, and incremental
+  updates; toggle on/off flicker-free.
+- [ ] Re-measure. Only if the numbers still warrant a worker, write a design
+  section before any implementation (wire shape, ongoing change feed,
+  staleness and cancellation, failure fallback, download path), keeping the
+  `{ runs, identities }` payload contract unchanged. Note that `DocHandle`
+  objects do not transfer via export/import: `Repo.export()` serializes the
+  full document on the calling thread, and `Repo.import()` sets up no sync.
+- [ ] Verify end-to-end in a real browser with attribution enabled, including
+  an edit burst and toggle cycle. Record the invocation, inspected overlay
+  output, and before/after main-thread measurements.
 
 ## Phase 7 — Render-worker architecture evaluation (design only)
 

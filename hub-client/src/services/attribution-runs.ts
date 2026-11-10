@@ -341,8 +341,8 @@ export async function buildRunListAttribution(
   const runs: AttributionRun[] = [];
   const authorByActor = new Map<string, string>();
   let prevHeads: string[] | null = null;
-  let lastHeads: unknown[] = [];
   let workDoc: Doc<unknown> = init();
+  let processedHistoryIndex = history.length;
 
   for (let chunkStart = 0; chunkStart < history.length; chunkStart += CHUNK_SIZE) {
     if (signal?.aborted) return null;
@@ -357,16 +357,29 @@ export async function buildRunListAttribution(
         workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
       }
       prevHeads = decodedCurr;
-      lastHeads = Array.isArray(currHeads) ? currHeads : [currHeads];
     }
 
     if (chunkEnd < history.length) await waitForIdle();
   }
 
+  // The history and change index were snapshot before the first yield. Catch
+  // up to edits that arrived during the chunked replay, then confirm the delta
+  // is empty without yielding again, so callers never pair stale runs with
+  // newer text. New changes are not in `changeByHash`; replay them directly.
+  while (true) {
+    if (signal?.aborted) return null;
+    const newChanges = getChanges(workDoc, viewable.doc() as Doc<unknown>);
+    if (newChanges.length === 0) break;
+    for (const change of newChanges) {
+      workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
+      processedHistoryIndex++;
+    }
+  }
+
   return {
     runs,
-    processedHeads: lastHeads as unknown[],
-    processedHistoryIndex: history.length,
+    processedHeads: getHeads(workDoc),
+    processedHistoryIndex,
     _workDoc: workDoc,
     _authorByActor: authorByActor,
   };
