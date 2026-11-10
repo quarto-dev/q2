@@ -10,10 +10,9 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { next as A } from '@automerge/automerge';
 import type { Doc } from '@automerge/automerge';
-import { encodeHeads } from '@automerge/automerge-repo';
 import type { DocHandle } from '@automerge/automerge-repo';
 
 import {
@@ -22,7 +21,6 @@ import {
   runsCharToByteOffsets,
   updateRunListAttribution,
   type AttributionRun,
-  type ViewableHandle,
 } from './attribution-runs';
 import { buildAttributionPayload } from '../hooks/useAttribution';
 
@@ -98,12 +96,7 @@ describe('runsCharToByteOffsets', () => {
 interface TDoc { text: string }
 
 function fakeHandle(doc: Doc<TDoc>): DocHandle<unknown> {
-  const view: ViewableHandle = {
-    history: () => A.topoHistoryTraversal(doc).map(h => encodeHeads([h])),
-    metadata: () => undefined,
-    doc: () => doc,
-  };
-  return view as unknown as DocHandle<unknown>;
+  return { doc: () => doc } as unknown as DocHandle<unknown>;
 }
 
 describe('updateRunListAttribution invariant', () => {
@@ -169,6 +162,22 @@ describe('updateRunListAttribution invariant', () => {
     // short-circuit and return the same runs.
     const incremental = updateRunListAttribution(stateBefore!, fakeHandle(alice), 'text');
     expect(incremental.runs).toEqual(stateBefore!.runs);
+  });
+
+  it('does not traverse document history for an incremental update', async () => {
+    const actor = 'f'.repeat(32);
+    let doc = A.from<TDoc>({ text: '' }, { actor });
+    doc = A.change(doc, d => A.splice(d, ['text'], 0, 0, 'before'));
+    const stateBefore = await buildRunListAttribution(fakeHandle(doc), 'text');
+    expect(stateBefore).toBeTruthy();
+
+    doc = A.change(doc, d => A.splice(d, ['text'], 6, 0, ' after'));
+    const handle = fakeHandle(doc);
+    const history = vi.fn();
+    Object.assign(handle, { history });
+    updateRunListAttribution(stateBefore!, handle, 'text');
+
+    expect(history).not.toHaveBeenCalled();
   });
 });
 
@@ -267,5 +276,72 @@ describe('author-first attribution', () => {
     // Without author-first resolution these would be two runs (STABLE vs
     // the random actor); with it, maybeMergeAt coalesces them into one.
     expect(state!.runs).toEqual([{ start: 0, end: 4, actor: STABLE, time: T }]);
+  });
+
+  it('preserves the exact payload for concurrent mixed-author Unicode history', async () => {
+    const BOB = 'b'.repeat(32);
+    const ALICE_SESSION = 'c'.repeat(32);
+    const ALICE_AUTHOR = 'd'.repeat(32);
+
+    let legacy = A.from<TDoc>({ text: '' }, { actor: STABLE });
+    legacy = A.change(legacy, { time: 100 }, d => A.splice(d, ['text'], 0, 0, 'A中'));
+    let alice = A.clone(legacy, { actor: ALICE_SESSION, author: ALICE_AUTHOR });
+    alice = A.change(alice, { time: 300 }, d => A.splice(d, ['text'], 2, 0, '𝕏'));
+    let bob = A.load(A.save(legacy), { actor: BOB });
+    bob = A.change(bob, { time: 200 }, d => A.splice(d, ['text'], 0, 0, 'B'));
+
+    const stateBefore = await buildRunListAttribution(fakeHandle(alice), 'text');
+    expect(stateBefore).toBeTruthy();
+
+    let merged = A.merge(alice, bob);
+    merged = A.change(merged, { time: 400 }, d => A.splice(d, ['text'], 5, 0, '!'));
+    expect(merged.text).toBe('BA中𝕏!');
+
+    // The unified cold path depends on every getAllChanges entry being
+    // immediately applicable in the returned order, not merely on Automerge
+    // buffering out-of-order changes until the final document converges.
+    let causalReplay = A.init<TDoc>();
+    for (const change of A.getAllChanges(merged)) {
+      const [next] = A.applyChanges(causalReplay, [change]);
+      expect(A.getHeads(next)).toContain(A.decodeChange(change).hash);
+      causalReplay = next;
+    }
+    expect(A.getHeads(causalReplay)).toEqual(A.getHeads(merged));
+    expect(causalReplay.text).toBe(merged.text);
+
+    const expectedRuns = [
+      { start: 0, end: 1, actor: BOB, time: 200 },
+      { start: 1, end: 3, actor: STABLE, time: 100 },
+      { start: 3, end: 5, actor: ALICE_AUTHOR, time: 300 },
+      { start: 5, end: 6, actor: ALICE_AUTHOR, time: 400 },
+    ];
+    const identities = {
+      [STABLE]: { name: 'Legacy', color: '#010203' },
+      [BOB]: { name: 'Bob', color: '#040506' },
+      [ALICE_AUTHOR]: { name: 'Alice', color: '#070809' },
+    };
+
+    const cold = await buildRunListAttribution(fakeHandle(merged), 'text');
+    expect(cold).toBeTruthy();
+    const incremental = updateRunListAttribution(stateBefore!, fakeHandle(merged), 'text');
+    expect(cold!.runs).toEqual(expectedRuns);
+    expect(incremental.runs).toEqual(expectedRuns);
+
+    const coldPayload = buildAttributionPayload(cold!, merged.text, identities);
+    const incrementalPayload = buildAttributionPayload(incremental, merged.text, identities);
+    expect(incrementalPayload).toBe(coldPayload);
+    expect(JSON.parse(coldPayload)).toEqual({
+      runs: [
+        { start: 0, end: 1, actor: BOB, time: 200 },
+        { start: 1, end: 5, actor: STABLE, time: 100 },
+        { start: 5, end: 9, actor: ALICE_AUTHOR, time: 300 },
+        { start: 9, end: 10, actor: ALICE_AUTHOR, time: 400 },
+      ],
+      identities: {
+        [BOB]: identities[BOB],
+        [STABLE]: identities[STABLE],
+        [ALICE_AUTHOR]: identities[ALICE_AUTHOR],
+      },
+    });
   });
 });

@@ -26,11 +26,9 @@ import {
   decodeChange,
   getAllChanges,
   getChanges,
-  getHeads,
   init,
 } from '@automerge/automerge';
 import type { Change, Doc, Patch } from '@automerge/automerge';
-import { decodeHeads } from '@automerge/automerge-repo';
 import type { DocHandle } from '@automerge/automerge-repo';
 
 // ---------------------------------------------------------------------------
@@ -60,10 +58,8 @@ export interface AttributionRun {
 
 export interface RunListAttribution {
   runs: AttributionRun[];
-  processedHeads: unknown[];
-  processedHistoryIndex: number;
   /**
-   * Internal: forward-replay doc held at `processedHeads`, fed to
+   * Internal: forward-replay doc held at the last replayed heads, fed to
    * `A.applyChanges` so each incremental update only pays for new
    * changes (not a full doc-state load per step like `A.diff` did).
    * Absent when state is hand-constructed (tests), in which case
@@ -103,9 +99,7 @@ interface PutPatch {
 
 export type TextPatch = SplicePatch | DelPatch | PutPatch;
 
-export interface ViewableHandle {
-  history(): unknown[] | undefined;
-  metadata(change?: string): { time?: number; actor?: string; author?: string | null } | undefined;
+interface ViewableHandle {
   doc(): unknown;
 }
 
@@ -120,11 +114,6 @@ export function isTextPatch(patch: unknown, textFieldName: string): patch is Tex
   const p = patch as { action?: string; path?: unknown[] };
   if (!p || !Array.isArray(p.path) || p.path[0] !== textFieldName) return false;
   return p.action === 'splice' || p.action === 'del' || p.action === 'put';
-}
-
-export function extractChangeHash(heads: unknown): string | null {
-  const h = Array.isArray(heads) ? heads[0] : heads;
-  return typeof h === 'string' ? h : null;
 }
 
 /**
@@ -267,18 +256,6 @@ function applyPatchToRuns(
 // ---------------------------------------------------------------------------
 
 /**
- * The new change introduced at this history step is whichever hash is in
- * `currHeads` but not in `prevHeads`. For the first step, take the first
- * head. Returns null if no new change can be identified (defensive).
- */
-function newChangeHashAt(prevHeads: string[] | null, currHeads: string[]): string | null {
-  if (currHeads.length === 0) return null;
-  if (prevHeads === null) return currHeads[0];
-  const prevSet = new Set(prevHeads);
-  return currHeads.find(h => !prevSet.has(h)) ?? null;
-}
-
-/**
  * Apply one change to `workDoc`, collect any patches via patchCallback,
  * and fold them into the running runs list using the change's attribution
  * key/time. Returns the advanced workDoc.
@@ -323,63 +300,46 @@ export async function buildRunListAttribution(
   signal?: AbortSignal,
 ): Promise<RunListAttribution | null> {
   const viewable = handle as unknown as ViewableHandle;
-  const history = viewable.history();
-  if (!history) return null;
+  const doc = viewable.doc() as Doc<unknown> | undefined;
+  if (!doc) return null;
 
-  if (history.length === 0) {
-    return { runs: [], processedHeads: [], processedHistoryIndex: 0, _workDoc: init(), _authorByActor: new Map() };
-  }
-
-  // Pre-index every change in the doc by hash so each history step can
-  // look up its corresponding change in O(1).
-  const doc = viewable.doc() as Doc<unknown>;
-  const changeByHash = new Map<string, Change>();
-  for (const c of getAllChanges(doc)) {
-    changeByHash.set(decodeChange(c).hash, c);
+  // getAllChanges returns a causally applicable order, so cold replay can use
+  // exactly the same forward path as incremental updates without a topology
+  // traversal, hash index, or per-step head decoding.
+  const changes = getAllChanges(doc);
+  if (changes.length === 0) {
+    return { runs: [], _workDoc: init(), _authorByActor: new Map() };
   }
 
   const runs: AttributionRun[] = [];
   const authorByActor = new Map<string, string>();
-  let prevHeads: string[] | null = null;
   let workDoc: Doc<unknown> = init();
-  let processedHistoryIndex = history.length;
 
-  for (let chunkStart = 0; chunkStart < history.length; chunkStart += CHUNK_SIZE) {
+  for (let chunkStart = 0; chunkStart < changes.length; chunkStart += CHUNK_SIZE) {
     if (signal?.aborted) return null;
 
-    const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, history.length);
+    const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, changes.length);
     for (let i = chunkStart; i < chunkEnd; i++) {
-      const currHeads = history[i];
-      const decodedCurr = decodeHeads(currHeads as Parameters<typeof decodeHeads>[0]);
-      const newHash = newChangeHashAt(prevHeads, decodedCurr);
-      const change = newHash ? changeByHash.get(newHash) : undefined;
-      if (change) {
-        workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
-      }
-      prevHeads = decodedCurr;
+      workDoc = replayChange(workDoc, changes[i], textFieldName, runs, authorByActor);
     }
 
-    if (chunkEnd < history.length) await waitForIdle();
+    if (chunkEnd < changes.length) await waitForIdle();
   }
 
-  // The history and change index were snapshot before the first yield. Catch
-  // up to edits that arrived during the chunked replay, then confirm the delta
-  // is empty without yielding again, so callers never pair stale runs with
-  // newer text. New changes are not in `changeByHash`; replay them directly.
+  // The change list was snapshot before the first yield. Catch up to edits
+  // that arrived during chunked replay, then confirm the delta is empty
+  // without yielding again, so callers never pair stale runs with newer text.
   while (true) {
     if (signal?.aborted) return null;
     const newChanges = getChanges(workDoc, viewable.doc() as Doc<unknown>);
     if (newChanges.length === 0) break;
     for (const change of newChanges) {
       workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
-      processedHistoryIndex++;
     }
   }
 
   return {
     runs,
-    processedHeads: getHeads(workDoc),
-    processedHistoryIndex,
     _workDoc: workDoc,
     _authorByActor: authorByActor,
   };
@@ -417,14 +377,8 @@ export function updateRunListAttribution(
     workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
   }
 
-  // `processedHeads` / `processedHistoryIndex` are bookkeeping in the
-  // incremental path — neither is read here. Updating them keeps the state
-  // truthful for the cold-start path and for any future consumer.
-  const history = viewable.history();
   return {
     runs,
-    processedHeads: getHeads(workDoc),
-    processedHistoryIndex: history?.length ?? state.processedHistoryIndex,
     _workDoc: workDoc,
     _authorByActor: authorByActor,
   };

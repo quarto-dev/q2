@@ -1,10 +1,8 @@
 import { next as A } from '@automerge/automerge';
-import { encodeHeads } from '@automerge/automerge-repo';
 import type { DocHandle } from '@automerge/automerge-repo';
 import { vi } from 'vitest';
 
 import { CHUNK_SIZE } from '../services/attribution-runs';
-import type { ViewableHandle } from '../services/attribution-runs';
 
 interface TDoc {
   text: string;
@@ -26,9 +24,7 @@ export function createColdBuildAttributionFixture(): ColdBuildAttributionFixture
     doc = A.change(doc, { time: 1 }, d => A.splice(d, ['text'], i, 0, 'a'));
   }
 
-  const view: ViewableHandle = {
-    history: () => A.topoHistoryTraversal(doc).map(h => encodeHeads([h])),
-    metadata: () => undefined,
+  const view = {
     doc: () => doc,
   };
 
