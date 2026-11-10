@@ -5,7 +5,7 @@ description: 'Draft plan, not an approved one and not necessarily correct. Subfl
 status: draft
 ---
 
-**Status: DRAFT (Claude, 2026-11-09, after the OPR-7a session).** Written from what that session turned up, not from a
+**Status: DRAFT (Claude, 2026-11-09, after the OPR-7a session; updated 2026-11-10 after the OPR-7d review, see [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md)).** Written from what that session turned up, not from a
 full read of Quarto 1. Anything marked (guess) or (relied) needs checking before it is believed. Gordon has not
 approved it; it can be rewritten freely. It lives outside the one-presenter epic and its `depends-on` DAG; it was
 committed on the epic\'s integration branch only so it is not lost.
@@ -42,7 +42,9 @@ with the parity measured against Quarto 1 itself and not argued.
 | knitr | `hooks.R` labels each panel image from `fig.subcap` and the label, so panels get ids; the presenter\'s knitr option path handles `fig.subcap` per figure (unit tests). Numbering then comes out as separate figures. | read (code and tests); the numbering is relied on `bd-au5gts6e`, measured there on 2026-11-08 |
 | In-process Jupyter engine | No per-panel id or caption synthesis; pre-engine desugaring deliberately leaves the cell unwrapped so the engine can synthesize (`codeblock_shorthand.rs`). | relied on `bd-gbaykhth` (Python, typst) |
 | Julia, tables | Probe (one cell, `tbl-cap` and `tbl-subcap`, two markdown displays): both the plain and the recorded route resolve `@tbl-x` and leave `@tbl-x-1` and `@tbl-x-2` unresolved; the parent caption is lost (`quarto-uncaptioned`); the options come out as `data-tbl-cap` and `data-tbl-subcap` attributes. | ran, 2026-11-09, release `q2`, HTML read |
-| Julia, figures | The OPR-7c parity report says plain builds the group and numbers it wrongly and recorded leaves the references unresolved. | relied (7c report; `Plots` is not installed here) |
+| Julia, figures | Rendered 2026-11-10 (ran, release-branch `q2`, HTML read; the pre-epic commit `7016d595a` gives the same page as today\'s plain route). **Plain:** the TS conversion (`to-markdown.ts`) writes each panel output as `fig-x-N` (the output label is `label + "-" + suffix`), so crossref sees three figures: panels "Figure 2: First." and "Figure 3: Second." and the group "Figure 4: A group."; `@fig-x`, `@fig-x-1`, `@fig-x-2` all resolve, with those wrong numbers, and there are no warnings. **Recorded route:** the presenter writes no panel ids and no group caption for a non-knitr cell (the gate is `figure_count`, set only by knitr), so the caption text is lost, the panels are unnumbered and `@fig-x-1`, `@fig-x-2` are `?fig-x-N?` with two warnings. | ran |
+| Julia and knitr, same markup | knitr\'s `hooks.R` labels each panel the same way (`label-N`) and its page matches plain Julia\'s (Figure 2, 3, 4). Both are wrong for the same visible reason: panel ids without a `parent` link, so each panel counts as its own figure. This is evidence that `bd-au5gts6e` is downstream of the missing `parent`, not an independent bug. It is not a finding until Phase 2 measures it. | ran (pages); the causal claim is a guess |
+| Native Jupyter | `fig-subcap` group: no `fig-x` id, no group caption, three unresolved references and three warnings, on both routes (rendered 2026-11-10). Not a regression of any epic; the same gate as the Julia recorded route. | ran |
 | Lightbox | Subfigure galleries wait on this feature. | `bd-lnb5x22l` |
 
 **Not known (the draft depends on finding out):** what Quarto 1 renders for each of these cases; whether `bd-au5gts6e` is
@@ -132,15 +134,28 @@ how, do not assume).
 
 ## Interaction with the one-presenter epic
 
-- That epic keeps this out of scope (OPR-7d decision 3 and the 7c report cite the strands). Its flip changes Julia
-  sub-figure references from wrong numbers to unresolved; tables are unchanged (the probe above). Nothing here blocks it.
-- If option B is chosen, the work lands on `presenter/cell.rs` and `engine/ts_record.rs`, which OPR-7f changes. Start
-  Phase 4 only after OPR-7f and OPR-7d have landed. Phases 0 to 2 do not touch them.
+- **OPR-7j (2026-11-10) comes first and is a small step on this plan\'s road.** The 7d review found that the flip makes
+  Julia figure groups worse than the 2026-11-09 text here and in 7d decision 3 assumed (the group caption text and the
+  panel ids are lost, not just the numbers). [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) removes that
+  regression by applying knitr\'s `hooks.R` group rules (the label on the cell, the `fig-cap` as the group caption,
+  `label-N` panel ids) to every engine in the presenter. It leaves the numbers exactly as they are today for knitr and
+  plain Julia and does not build subfloats. It **does not decide the central design question** below: it creates panel
+  ids in the presenter (the direction of option B) for the current Quarto 1 behavior only, the knitr path stays option A,
+  and Phase 3 may move or replace it. The markup it writes (`fig-x-1`, `fig-x-2`, the group caption) is the same markup
+  the model in Phase 4 needs, so the later work reads it, adds the `parent` link and the "(a)" numbering, and removes
+  7j\'s ids only if the chosen option creates them elsewhere.
+- That epic keeps real subfloats out of scope (OPR-7d decision 3, replaced on 2026-11-10 by 7j, and the 7c report cite
+  the strands). After 7j the flip changes nothing about figure groups; tables are unchanged by the flip (the probe
+  above). Nothing here blocks the epic any more than it already is by 7j, which is a prerequisite of 7d.
+- If option B is chosen, the work lands on `presenter/cell.rs`, `presenter/options.rs` and `engine/ts_record.rs`, which
+  OPR-7f changed and 7j changes. Start Phase 4 only after OPR-7f, 7j and 7d have landed. Phases 0 to 2 do not touch them.
 - OPR-7f, Part C, stops `metadata.quarto` from being forwarded as `data-quarto`. It does **not** stop `tbl-cap` and
   `fig-subcap` from being forwarded as `data-*` attributes; that belongs to this plan\'s synthesis work.
 
 ## Risks and things this draft may have wrong
 
+- After 7j the Julia and Jupyter figure paths share the presenter\'s knitr-derived group rules. The corpus may show that
+  Quarto 1 does something different for Jupyter (where it wins over `hooks.R`); parity then needs a stated choice per case.
 - It assumes the right unit of work is "subfloats" as one feature. The corpus may show that tables, figures and
   `layout-*` options each need separate handling.
 - Option B is a lean, not a finding. It needs a look at how much of the Jupyter-dialect `subcap` handling the presenter

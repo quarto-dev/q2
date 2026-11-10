@@ -9,7 +9,7 @@ lane: D
 
 **Epic:** [one presenter path](2026-11-07-one-presenter-path-epic.md) ·
 **Protocol:** [agent protocol](2026-11-08-opr-agent-protocol.md) (read it first).
-**Blocks:** [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) (to be added to its `depends-on`).
+**Blocks:** [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) (it lists `opr-7j` in its `depends-on`).
 **Evidence:** [OPR-7d plan review](../research/2026-11-10-opr-7d-plan-review.md), items 15 and 16 (superseded by this plan).
 **Related, not replaced:** [subfloat parity draft](2026-11-09-subfloat-parity-draft.md) (`bd-plcqhfcn`, `bd-gbaykhth`, `bd-au5gts6e`).
 **Status:** an outline written during the 7d review. It becomes `ready` when Gordon flips it. Gordon must also answer
@@ -123,10 +123,13 @@ for Jupyter. Options: (a) apply it to every engine, as this outline does (recomm
 - [ ] Snapshots: count and list any changed `.snap` or golden files, per the protocol.
 - [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the
       Windows cross-clippy; `cargo xtask lint`; `cd hub-client && npm run build:wasm` (the presenter compiles for wasm32).
-- [ ] Update OPR-7d: add `opr-7j` to `depends-on` and the start condition; reword decision 3 (it accepted wrong becoming
-      unresolved; after 7j the panel references still resolve with today\'s numbers, so nothing about figures worsens);
-      drop the `julia-subfigure-group` normalizer and keep only the interleaving one; update the allowlist header sentence
-      that calls group references "not an allowlist candidate".
+- [x] OPR-7d and the subfloat draft are updated to fit this plan (done in the 7d review session, 2026-11-10): 7d
+      depends on `opr-7j`, its decision 3 is replaced, the `julia-subfigure-group` normalizer is dropped from its
+      design, and the draft\'s "Interaction" paragraph and known-facts table say what 7j does. At landing, re-read both
+      and correct anything this plan\'s implementation changed (for example if tables end up in scope).
+- [ ] Remove the allowlist header sentence that calls group references "not an allowlist candidate" (the header is in
+      `opr-parity-allowlist.toml`; 7d\'s checklist updates it for the interleaving entries, so whichever plan lands
+      second makes the final edit).
 
 ## Exit criteria
 
