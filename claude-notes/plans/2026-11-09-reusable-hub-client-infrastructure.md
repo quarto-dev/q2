@@ -2,7 +2,7 @@
 title: 'Reusable hub-client and q2-preview infrastructure: npm packages and an override API (bd-kf7za8ey)'
 date: 2026-11-09
 description: 'Assessment of how Posit Connect (quartohub satellite) and Posit Assistant (Canvas) consume q2 today, and a layered proposal (groundwork, published packages, a documented component and chrome override API, an embedding protocol) for making that consumption direct.'
-status: in-progress  # direction decided 2026-11-09; N1 (npm automation) done, first package @quarto/pandoc-types 0.1.0 published
+status: in-progress  # direction decided 2026-11-09; N1 done; published @quarto/pandoc-types 0.1.0 and @quarto/annotated-qmd 0.2.0
 braid:
   strand: bd-kf7za8ey
   priority: P2
@@ -736,11 +736,36 @@ The procedure for every later package is in the header of
 4. approve the environment gate;
 5. `npm stage approve`.
 
+Second package, completed 2026-11-10 (bd-htza1cii):
+
+- [x] Fixed `annotated-qmd` in PR #1139. It now handles SourceInfo kinds
+  3 and 4, treats "no source location" as a non-error, and survives the
+  `a`-less shortcode Span. Its suite went from 78/161 to 174/174 and is now
+  gated in `ts-test-suite.yml`. Discovered and filed bd-1f3cfv2k: pampa
+  gives shortcode argument Spans a fabricated file-0 `[0, 0]` location.
+- [x] The first real run (42823245049) failed in `pack`: a clean checkout
+  had no `dist/` for the workspace `pandoc-types`, and nothing was staged.
+  Fixed in PR #1148, where `pack.mjs` builds out-of-run workspace
+  dependencies first. The fix was verified with a dry-run of the PR branch
+  on GitHub before merging; the pack job uses no environment, so it can be
+  dispatched from any branch.
+- [x] Run 42836916126 staged `@quarto/annotated-qmd@0.2.0` (35 files,
+  provenance), which was then approved; token publishing is disallowed.
+  The trust config needed no bootstrap, since the name already existed.
+- [x] Verified from the registry: `latest` is `0.2.0`. A clean install
+  pulls `@quarto/pandoc-types@0.1.0` and `@quarto/mapped-string@0.1.8`.
+  `npm audit signatures` reports 11 verified signatures and 2 verified
+  attestations. Fresh `pampa -t json` output of a shortcode document
+  converts with the metadata at `[4, 16]` and the shortcode Span at
+  `[35, 53]`.
+
+Lesson for later packages: dry-run the exact package set on GitHub
+(`gh workflow run publish-npm.yml --ref <branch> -f packages=... -f
+dry-run=true`) before merging. Local runs can reuse a stale `dist/`.
+bd-5f98vdw2 would make that automatic on PRs.
+
 Follow-ups, filed under bd-kf7za8ey:
 
-- bd-htza1cii: fix `annotated-qmd` (SourceInfo kinds 3 and 4), then
-  publish `@quarto/annotated-qmd` 0.2.0. Its name already exists, so it
-  needs only `npm trust`.
 - bd-brotphji: move the npm half of `publish-hub-mcp.yml` onto
   `publish-npm.yml` and drop `NPM_TOKEN`.
 - bd-5f98vdw2: run the tooling tests and a pack dry-run on PRs, with the
