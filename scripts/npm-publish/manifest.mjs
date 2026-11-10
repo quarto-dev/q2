@@ -136,3 +136,20 @@ export function sortByDependencies(pkgs) {
   for (const p of pkgs) visit(p);
   return order;
 }
+
+/**
+ * Workspace packages that `pkgs` depend on but that are not part of this
+ * run, with their workspace versions. The caller must confirm each one is
+ * already on the registry before publishing anything that depends on it.
+ */
+export function outOfRunWorkspaceDeps(pkgs, publishSet, workspaceVersions) {
+  const found = new Map();
+  for (const p of pkgs) {
+    for (const dep of Object.keys(p.dependencies ?? {})) {
+      if (publishSet.has(dep) || found.has(dep)) continue;
+      const version = workspaceVersions.get(dep);
+      if (version !== undefined) found.set(dep, version);
+    }
+  }
+  return [...found].map(([name, version]) => ({ name, version }));
+}
