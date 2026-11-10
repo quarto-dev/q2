@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-11-10
 
+- [`11af5236b`](https://github.com/quarto-dev/q2/commits/11af5236b): Semantic syntax highlighting now waits for a 300 ms pause while typing and reuses identical results, reducing measured tokenization work during edit bursts by 47–65% without delaying immediate base highlighting.
 - [`c7bc73610`](https://github.com/quarto-dev/q2/commits/c7bc73610): Previews with editing off and comments hidden now skip an unused source-AST parse and serialization, cutting render time and response size by about half in the measurement fixture; enabling editing or showing comments still captures the baseline needed for edits, and comments are read-only until that baseline arrives.
 
 ### 2026-11-09
