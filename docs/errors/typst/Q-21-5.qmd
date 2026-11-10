@@ -1,0 +1,70 @@
+---
+title: "Inline Reference Not Available To Typst"
+description: "A citation refers to an entry defined only in front-matter references:, which Typst's own bibliography does not read."
+code: Q-21-5
+subsystem: typst
+status: stub
+since: "99.9.9"
+categories:
+  - typst
+---
+
+# `Q-21-5` — Inline Reference Not Available To Typst
+
+> A citation refers to an entry defined only in the front-matter
+> `references:` list, which Typst's own bibliography does not read.
+
+## What this means
+
+By default, Typst output formats citations with Typst's own
+bibliography, not with citeproc. Each citation reaches Typst as
+`@key`, and Typst looks the key up in the files listed in
+`bibliography:`. Entries written directly in the document's front
+matter under `references:` are not in any of those files, so Typst
+cannot find them.
+
+Without this check, `typst compile` would stop with
+`label <key> does not exist in the document`. Quarto reports the
+problem before Typst runs, and points at the citation.
+
+When the render produces Typst source instead of a PDF (an `output-ext`
+other than `pdf`), Typst does not run, so this is a warning: the source
+is still written, but compiling it will fail the same way.
+
+## Why this happens
+
+- The document lists its references in front matter instead of a
+  bibliography file:
+
+  ``` yaml
+  ---
+  format: typst
+  references:
+    - id: smith2020
+      type: webpage
+      title: A page
+  ---
+
+  See [@smith2020].
+  ```
+
+- The document has a `bibliography:` file, but the cited entry is only
+  in `references:`.
+- `citation-location: margin` is set. Margin citations also use
+  Typst's own bibliography, in documents and in books.
+
+## How to fix
+
+Either of these works:
+
+- Set `citeproc: true`. Citeproc then formats the citations and the
+  bibliography, and it reads `references:` as well as `bibliography:`.
+  The output uses a CSL style instead of a Typst bibliography style.
+- Move the entry into a bibliography file, BibLaTeX `.bib` or Hayagriva
+  `.yml`, and list that file under `bibliography:`.
+
+## Related errors
+
+- [`Q-21-6`](Q-21-6.qmd) — a `bibliography:` file and `references:`
+  both define the cited key, and Typst ignores the inline entry.
+- [`Q-21-3`](Q-21-3.qmd) — the `typst compile` step itself failed.

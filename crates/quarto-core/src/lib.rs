@@ -97,6 +97,7 @@ pub mod template;
 pub mod theme_diagnostic;
 pub mod transform;
 pub mod transforms;
+pub mod typst_citations;
 pub mod typst_google_fonts;
 
 // Re-export commonly used types

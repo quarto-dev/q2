@@ -1,0 +1,21 @@
+---
+title: "Typst: an inline-only reference with margin citations"
+format: typst
+citation-location: margin
+references:
+  - id: smith2020
+    type: webpage
+    title: A page
+_quarto:
+  tests:
+    typst:
+      shouldError: default
+      printsMessage:
+        level: ERROR
+        regex: "Q-21-5"
+---
+
+bd-yjf99rzx: margin citations also reach Typst as native citations, so the
+same inline-only key fails the same way.
+
+See [@smith2020].

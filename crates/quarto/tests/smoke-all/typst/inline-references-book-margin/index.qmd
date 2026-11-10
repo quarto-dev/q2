@@ -1,0 +1,18 @@
+---
+_quarto:
+  render-project: true
+  tests:
+    typst:
+      shouldError: default
+      printsMessage:
+        level: ERROR
+        regex: "Q-21-5"
+---
+
+# Preface {.unnumbered}
+
+bd-yjf99rzx: in `citation-location: margin` mode the book leaves citations
+for Typst's native bibliography, which never sees front-matter
+`references:`. The citation in the next chapter fails with Q-21-5 before
+Typst runs. (Without margin mode the book's own citeproc pass resolves
+inline references, so the plain case renders.)

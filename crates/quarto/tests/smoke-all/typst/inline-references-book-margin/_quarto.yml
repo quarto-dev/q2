@@ -1,0 +1,24 @@
+project:
+  type: book
+
+book:
+  title: "Inline references in a margin-citation Typst book"
+  author: "Test Author"
+  chapters:
+    - index.qmd
+    - chapter1.qmd
+
+citation-location: margin
+
+references:
+  - id: smith2020
+    type: webpage
+    title: A page
+    author:
+      - family: Smith
+        given: Jane
+    issued:
+      date-parts: [[2020, 7, 12]]
+
+format:
+  typst: default

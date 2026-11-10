@@ -2,13 +2,12 @@
 title: 'Typst: citations to inline front-matter references fail to compile (bd-yjf99rzx)'
 date: 2026-11-07
 description: 'Typst renders that cite a key defined only in front-matter `references:` fail with a raw Typst label error, as in Quarto 1; keep Quarto 1 behavior, but stop before Typst runs with a Q-21-5 error and warn (Q-21-6) about ignored inline entries, for single documents and books.'
-status: draft  # Design settled 2026-11-09; implementation waits for the user's go-ahead
+status: implemented  # 2026-11-10, branch braid/bd-yjf99rzx-typst-citations-inline-front
 braid:
   strand: bd-yjf99rzx
 ---
 
 **Worktree:** `.worktrees/bd-yjf99rzx-typst-citations-inline-front` (branch `braid/bd-yjf99rzx-typst-citations-inline-front`, based on `main` @ `d4b4bb26c`)
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -85,6 +84,13 @@ To confirm in Phase 1: the book single-file path reaches `PandocPrepareStage` wi
 ## Open questions for the user
 
 None; all settled on 2026-11-09 (see Decisions).
+
+## Implementation notes (2026-11-10)
+
+- **Where.** `crates/quarto-core/src/typst_citations.rs` holds the check. `PandocWriteStage::prepare()` calls it for Typst targets, so native renders (`PandocWriteStage`) and browser renders (`PandocPrepareStage`) share it. `prepare()` resolves `bibliography:` paths with the same `meta_path_files` it uses for the PDF request.
+- **When it applies.** A `Cite` still in the final AST is one Typst will see as `@key`; citeproc removes the ones it resolves, and book renders in default mode run citeproc on the merged book, so they are unaffected. `citeproc: true` turns the check off: with margin citations, the vendored Lua margin handler then formats the citations inside Pandoc, after `prepare()`, so the `Cite` nodes are still present but never reach Typst as `@key` (verified with a `keep-typ` render).
+- **Typst source only.** With an `output-ext` other than `pdf`, Typst never runs, so Q-21-5 is a warning there and the `.typ` is still written. Decided during implementation; flagged in the PR.
+- **Reading keys.** BibLaTeX via the `biblatex` 0.12 crate (already in the build through pampa; hayagriva itself uses `biblatex` 0.11), Hayagriva via top-level YAML mapping keys. Any other format, an unreadable file, or a parse failure gives "unknown", which suppresses Q-21-5.
 
 ## Risks / tradeoffs (draft)
 
