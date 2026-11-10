@@ -20,6 +20,7 @@ use serde_json::Value;
 
 use super::cell_step::engine_entry_for;
 use super::inline::InlineTarget;
+use super::knitr_inputs::{OUTPUT_ANCHORS_KEY, OUTPUT_KINDS_KEY};
 use crate::record::{EngineEntry, RecordCell};
 
 /// The one label value: the cell outputs are nbformat outputs.
@@ -73,6 +74,34 @@ pub fn page_dependencies(
         }
     }
     out
+}
+
+/// `cell` without the outputs at `hoisted`. The positional metadata (`quarto_output_kinds` and
+/// `quarto_output_anchors`) loses the same entries, so the presenter, which reads them by
+/// position, still lines them up with the outputs that remain.
+pub fn without_outputs(cell: &RecordCell, hoisted: &BTreeSet<usize>) -> RecordCell {
+    let mut out = cell.clone();
+    out.outputs = keep_unhoisted(&cell.outputs, hoisted);
+    for key in [OUTPUT_KINDS_KEY, OUTPUT_ANCHORS_KEY] {
+        if let Some(Value::Array(items)) = out.metadata.extra.get(key)
+            && items.len() == cell.outputs.len()
+        {
+            let kept = keep_unhoisted(items, hoisted);
+            out.metadata
+                .extra
+                .insert(key.to_string(), Value::Array(kept));
+        }
+    }
+    out
+}
+
+fn keep_unhoisted(items: &[Value], hoisted: &BTreeSet<usize>) -> Vec<Value> {
+    items
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !hoisted.contains(i))
+        .map(|(_, v)| v.clone())
+        .collect()
 }
 
 struct Scan {

@@ -719,6 +719,7 @@ pub(super) fn present_from_record(
         ExecutionError::execution_failed(engine, format!("presenting the record failed: {e}"))
     })?;
     result.markdown = presented.markdown;
+    result.derived_header_includes = presented.header_includes;
     result.supporting_files.extend(presented.files_written);
     result.warnings.extend(
         presented

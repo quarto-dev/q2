@@ -142,7 +142,7 @@ impl ReplayEngine {
         let mut fig = FsFigureSink::new(&ctx.source_path);
         // A whole-document engine (knitr) recorded a skeleton: present over it, not over the
         // input text, so the spans and chunks its own run substituted are already in place.
-        let (markdown, files_written, notes, note_units) = if let Some(skeleton) =
+        let (markdown, files_written, notes, note_units, derived_includes) = if let Some(skeleton) =
             stored.skeleton.as_ref()
         {
             // The markers are keyed by unit id, so every unit needs one (a stage that did not
@@ -180,6 +180,8 @@ impl ReplayEngine {
                 presented.files_written,
                 presented.notes,
                 presented.ranged_units,
+                // A skeleton is a whole-document engine's (knitr): it carries no label.
+                Vec::new(),
             )
         } else {
             let presented = present_document(
@@ -202,12 +204,15 @@ impl ReplayEngine {
                 presented.files_written,
                 presented.notes,
                 units.clone(),
+                // Derived again, never read from the stored result: one copy on replay.
+                presented.header_includes,
             )
         };
 
         let mut result = stored;
         result.markdown = markdown;
         result.supporting_files = files_written;
+        result.derived_header_includes = derived_includes;
         result.warnings.extend(
             notes
                 .iter()

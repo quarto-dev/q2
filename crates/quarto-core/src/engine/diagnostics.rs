@@ -457,6 +457,9 @@ pub fn inline_span_diagnostic(
 /// The code for an image output the presenter could not use.
 pub const IMAGE_UNUSABLE_CODE: &str = "Q-18-11";
 
+/// The code of the widget-view warning.
+pub const WIDGET_VIEW_UNSUPPORTED_CODE: &str = "Q-18-16";
+
 /// `Q-18-11`: a cell's image output (`mime`) could not be written, so the figure is
 /// missing from the page. The render continues, so this is a warning; `--strict`
 /// promotes it. `location` is `file:line:column` of the cell when it resolves.
@@ -480,6 +483,22 @@ pub fn image_unusable_diagnostic(
              Report it at {ISSUES_URL} with the kernel's name. Use `--strict` to make this \
              stop the render."
         ))
+        .build()
+}
+
+/// `Q-18-16`: a cell shows an ipywidgets view and no widget state is captured, so the page
+/// shows its text representation. A warning; `--strict` promotes it.
+pub fn widget_view_unsupported_diagnostic(location: Option<&str>) -> DiagnosticMessage {
+    let at = location.map(|l| format!(" at {l}")).unwrap_or_default();
+    DiagnosticMessageBuilder::warning("Interactive Widget Not Supported")
+        .with_code(WIDGET_VIEW_UNSUPPORTED_CODE)
+        .problem(format!(
+            "the code cell{at} shows an interactive widget (ipywidgets) that q2 can't render yet"
+        ))
+        .add_detail(
+            "The page shows the widget's text representation instead. The widget's state is \
+             not captured, so it can't be drawn. Other output in this document is unaffected.",
+        )
         .build()
 }
 
@@ -526,6 +545,21 @@ pub(crate) fn note_diagnostic(
                 _ => None,
             };
             image_unusable_diagnostic(mime, reason, location.as_deref())
+        }
+        PresentNote::WidgetViewUnsupported { unit } => {
+            let location = match units.get(*unit) {
+                Some(Unit::Cell(block)) => describe_location(
+                    &SourceInfo::substring(
+                        ctx.source_info.clone(),
+                        block.code_start,
+                        block.code_start + block.code.len(),
+                    ),
+                    0,
+                    ctx,
+                ),
+                _ => None,
+            };
+            widget_view_unsupported_diagnostic(location.as_deref())
         }
         PresentNote::EngineAttrsRejected { reason, .. } => {
             quarto_error_reporting::DiagnosticMessageBuilder::warning(

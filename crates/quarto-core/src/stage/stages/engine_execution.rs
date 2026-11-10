@@ -812,6 +812,13 @@ impl PipelineStage for EngineExecutionStage {
             ctx.includes
                 .header_includes
                 .extend(result.includes.header_includes);
+            // Derived page dependencies (OPR-7i), after `fold_side_data` so they never reach the
+            // stored entry, and deduplicated against what is already on the page.
+            for derived in std::mem::take(&mut result.derived_header_includes) {
+                if !ctx.includes.header_includes.contains(&derived) {
+                    ctx.includes.header_includes.push(derived);
+                }
+            }
             ctx.includes
                 .include_before
                 .extend(result.includes.include_before);
