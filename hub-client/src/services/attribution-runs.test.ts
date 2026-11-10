@@ -297,11 +297,12 @@ describe('author-first attribution', () => {
     merged = A.change(merged, { time: 400 }, d => A.splice(d, ['text'], 5, 0, '!'));
     expect(merged.text).toBe('BA中𝕏!');
 
-    // The unified cold path depends on every getAllChanges entry being
-    // immediately applicable in the returned order, not merely on Automerge
-    // buffering out-of-order changes until the final document converges.
+    // The cold path replays `getChanges` from an empty doc. It depends on
+    // every entry being immediately applicable in the returned order, not
+    // merely on Automerge buffering out-of-order changes until the final
+    // document converges.
     let causalReplay = A.init<TDoc>();
-    for (const change of A.getAllChanges(merged)) {
+    for (const change of A.getChanges(A.init<TDoc>(), merged)) {
       const [next] = A.applyChanges(causalReplay, [change]);
       expect(A.getHeads(next)).toContain(A.decodeChange(change).hash);
       causalReplay = next;

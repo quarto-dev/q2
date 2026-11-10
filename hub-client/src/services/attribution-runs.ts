@@ -24,7 +24,6 @@
 import {
   applyChanges,
   decodeChange,
-  getAllChanges,
   getChanges,
   init,
 } from '@automerge/automerge';
@@ -59,9 +58,8 @@ export interface AttributionRun {
 export interface RunListAttribution {
   runs: AttributionRun[];
   /**
-   * Internal: forward-replay doc held at the last replayed heads, fed to
-   * `A.applyChanges` so each incremental update only pays for new
-   * changes (not a full doc-state load per step like `A.diff` did).
+   * Internal: forward-replay doc held at the last replayed heads, so each
+   * incremental update replays only the changes the live doc has gained.
    * Absent when state is hand-constructed (tests), in which case
    * `updateRunListAttribution` throws `HistoryCompactedError` and
    * the caller (`useAttribution`) falls back to a full rebuild.
@@ -117,15 +115,16 @@ export function isTextPatch(patch: unknown, textFieldName: string): patch is Tex
 }
 
 /**
- * History entries processed between idle-callback yields. Larger
- * values cut yield overhead at the cost of bigger per-slice CPU.
- *
- * Per-entry CPU is ~15 µs (applyChanges forward-replay, roughly
- * constant in N), so a 500-entry slice is ≈7-8 ms — comfortably
- * under one frame (16.67 ms). Slices above ~1000 risk overrunning a
- * frame in busier browsers.
+ * How long a cold build replays before it yields to the event loop. A yield
+ * can only happen between batches, so one slow batch may overrun this.
  */
-export const CHUNK_SIZE = 500;
+export const SLICE_BUDGET_MS = 8;
+
+/**
+ * Most changes applied in one batch. Bounds a slice, and keeps an abort
+ * checkpoint, when a flood of changes shares one author and second.
+ */
+export const MAX_BATCH_SIZE = 500;
 
 export function waitForIdle(timeout = 100): Promise<void> {
   return new Promise<void>(resolve => {
@@ -255,10 +254,11 @@ function applyPatchToRuns(
 // Internal: shared replay loop
 // ---------------------------------------------------------------------------
 
+/** Replay state with every field present; the loop below mutates it. */
+type ReplayState = Required<RunListAttribution>;
+
 /**
- * Apply one change to `workDoc`, collect any patches via patchCallback,
- * and fold them into the running runs list using the change's attribution
- * key/time. Returns the advanced workDoc.
+ * The attribution key and time of one change.
  *
  * Author-first resolution (author-ID transition): the author footer rides
  * on the actor's seq-1 change only (Phase 0 finding 1), so `authorByActor`
@@ -267,27 +267,81 @@ function applyPatchToRuns(
  * actor — which by D5 equals the author's value, keeping one user's key
  * continuous across the transition boundary.
  */
-function replayChange(
-  workDoc: Doc<unknown>,
-  change: Change,
-  textFieldName: string,
-  runs: AttributionRun[],
-  authorByActor: Map<string, string>,
-): Doc<unknown> {
+function resolveAttribution(change: Change, authorByActor: Map<string, string>): CharAttribution {
   const decoded = decodeChange(change);
   if (decoded.author) authorByActor.set(decoded.actor, decoded.author);
-  const attribution: CharAttribution = {
+  return {
     actor: decoded.author ?? authorByActor.get(decoded.actor) ?? decoded.actor,
     time: decoded.time,
   };
+}
+
+/** Apply one batch to the work doc and fold its text patches into the runs. */
+function applyBatch(
+  state: ReplayState,
+  batch: Change[],
+  attribution: CharAttribution,
+  textFieldName: string,
+): void {
   let collected: Patch[] = [];
-  const [next] = applyChanges(workDoc, [change], {
+  const [next] = applyChanges(state._workDoc, batch, {
     patchCallback: (patches: Patch[]) => { collected = patches; },
   });
+  state._workDoc = next;
   for (const patch of collected) {
-    if (isTextPatch(patch, textFieldName)) applyPatchToRuns(runs, patch, attribution);
+    if (isTextPatch(patch, textFieldName)) applyPatchToRuns(state.runs, patch, attribution);
   }
-  return next;
+}
+
+/**
+ * Replay every change the live doc has that `state._workDoc` lacks, and
+ * re-check until none is left: when the generator finishes, the state is at
+ * the handle's current heads, including edits that arrived while the caller
+ * was paused. It yields between batches (never after the last), which is
+ * where the cold build may pause; the incremental update just drains it.
+ *
+ * One `applyChanges` call costs time proportional to the text length however
+ * many changes it carries. Consecutive changes with the same attribution
+ * (Automerge stamps changes in whole seconds, so a typing burst shares one)
+ * give every inserted character the same run either way, so they go in one
+ * call.
+ */
+function* replayPending(
+  state: ReplayState,
+  handle: ViewableHandle,
+  textFieldName: string,
+): Generator<void, void, void> {
+  for (;;) {
+    let pending: Change[];
+    try {
+      pending = getChanges(state._workDoc, handle.doc() as Doc<unknown>);
+    } catch {
+      // `getChanges` throws if the work doc has changes the live doc lacks.
+      // The work doc only ever advances by applying the live doc's changes,
+      // so this needs hand-constructed state; report it as a rebuild signal.
+      throw new HistoryCompactedError();
+    }
+    if (pending.length === 0) return;
+
+    let batch: Change[] = [];
+    let batchAttribution: CharAttribution | null = null;
+    for (const change of pending) {
+      const attribution = resolveAttribution(change, state._authorByActor);
+      if (
+        batchAttribution !== null &&
+        (batch.length >= MAX_BATCH_SIZE ||
+          attribution.actor !== batchAttribution.actor ||
+          attribution.time !== batchAttribution.time)
+      ) {
+        applyBatch(state, batch, batchAttribution, textFieldName);
+        batch = [];
+        yield;
+      }
+      batch.push(change);
+      batchAttribution = attribution;
+    }
+    if (batchAttribution !== null) applyBatch(state, batch, batchAttribution, textFieldName);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -300,49 +354,19 @@ export async function buildRunListAttribution(
   signal?: AbortSignal,
 ): Promise<RunListAttribution | null> {
   const viewable = handle as unknown as ViewableHandle;
-  const doc = viewable.doc() as Doc<unknown> | undefined;
-  if (!doc) return null;
+  if (!viewable.doc() || signal?.aborted) return null;
 
-  // getAllChanges returns a causally applicable order, so cold replay can use
-  // exactly the same forward path as incremental updates without a topology
-  // traversal, hash index, or per-step head decoding.
-  const changes = getAllChanges(doc);
-  if (changes.length === 0) {
-    return { runs: [], _workDoc: init(), _authorByActor: new Map() };
-  }
-
-  const runs: AttributionRun[] = [];
-  const authorByActor = new Map<string, string>();
-  let workDoc: Doc<unknown> = init();
-
-  for (let chunkStart = 0; chunkStart < changes.length; chunkStart += CHUNK_SIZE) {
+  // A cold build is the incremental replay started from an empty doc.
+  const state: ReplayState = { runs: [], _workDoc: init(), _authorByActor: new Map() };
+  const replay = replayPending(state, viewable, textFieldName);
+  let sliceStart = performance.now();
+  while (!replay.next().done) {
+    if (performance.now() - sliceStart < SLICE_BUDGET_MS) continue;
+    await waitForIdle();
     if (signal?.aborted) return null;
-
-    const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, changes.length);
-    for (let i = chunkStart; i < chunkEnd; i++) {
-      workDoc = replayChange(workDoc, changes[i], textFieldName, runs, authorByActor);
-    }
-
-    if (chunkEnd < changes.length) await waitForIdle();
+    sliceStart = performance.now();
   }
-
-  // The change list was snapshot before the first yield. Catch up to edits
-  // that arrived during chunked replay, then confirm the delta is empty
-  // without yielding again, so callers never pair stale runs with newer text.
-  while (true) {
-    if (signal?.aborted) return null;
-    const newChanges = getChanges(workDoc, viewable.doc() as Doc<unknown>);
-    if (newChanges.length === 0) break;
-    for (const change of newChanges) {
-      workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
-    }
-  }
-
-  return {
-    runs,
-    _workDoc: workDoc,
-    _authorByActor: authorByActor,
-  };
+  return state;
 }
 
 // ---------------------------------------------------------------------------
@@ -354,34 +378,17 @@ export function updateRunListAttribution(
   handle: DocHandle<unknown>,
   textFieldName: string,
 ): RunListAttribution {
-  const viewable = handle as unknown as ViewableHandle;
   if (!state._workDoc) throw new HistoryCompactedError();
 
-  const doc = viewable.doc() as Doc<unknown>;
-  let newChanges: Change[];
-  try {
-    newChanges = getChanges(state._workDoc, doc);
-  } catch {
-    // `getChanges` throws if `oldState` has changes not in `newState`.
-    // Production state machine never hits that — `_workDoc` only ever
-    // advances by applying changes from `doc` — but guard against
-    // hand-constructed state in tests and surface as a cold-rebuild signal.
-    throw new HistoryCompactedError();
-  }
-  if (newChanges.length === 0) return state;
-
-  const runs = state.runs.map(r => ({ ...r }));
-  const authorByActor = state._authorByActor ?? new Map<string, string>();
-  let workDoc: Doc<unknown> = state._workDoc;
-  for (const change of newChanges) {
-    workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
-  }
-
-  return {
-    runs,
-    _workDoc: workDoc,
-    _authorByActor: authorByActor,
+  const next: ReplayState = {
+    runs: state.runs.map(r => ({ ...r })),
+    _workDoc: state._workDoc,
+    _authorByActor: state._authorByActor ?? new Map<string, string>(),
   };
+  const replay = replayPending(next, handle as unknown as ViewableHandle, textFieldName);
+  while (!replay.next().done);
+  // Nothing was applied: keep the caller's state object.
+  return next._workDoc === state._workDoc ? state : next;
 }
 
 // ---------------------------------------------------------------------------

@@ -1380,6 +1380,12 @@ Measure before choosing between a cheaper algorithmic fix and a worker.
 - [x] Verify end-to-end in a real browser with attribution enabled, including
   an edit burst and toggle cycle. Record the invocation, inspected overlay
   output, and before/after main-thread measurements.
+- [x] Follow-up review (see "Phase 6b follow-up" below): batch consecutive
+  changes that share an attribution key and time into one `applyChanges` call.
+- [x] Follow-up: yield the cold build on a time budget instead of a fixed
+  change count.
+- [x] Follow-up: collapse the cold loop, the 6a catch-up loop, and the
+  incremental update into one replay loop.
 
 ### Phase 6b baseline
 
@@ -1526,6 +1532,11 @@ complexity or the user-blocking result. The 400k fixture still has a 9.26-second
 synchronous slice and a 663 ms eight-edit incremental update. Further
 main-thread micro-tuning is therefore rejected and the worker design below is
 required before any worker implementation.
+
+**Superseded in part by the follow-up below.** The 9.26-second slice was an
+artifact of count-based chunking, not of the initial 400k change, and replay
+cost depends on the number of `applyChanges` calls rather than the number of
+changes. Re-measure with a typing-shaped fixture before starting the worker.
 
 ### Phase 6b attribution-worker design
 
@@ -1713,6 +1724,125 @@ The before/after main-thread measurements are recorded in the tables above.
   failures and no Rust source changed. Commit awaits user approval because the
   full workspace run is not green.
 - No snapshot files changed.
+
+### Phase 6b follow-up — batched replay and time-budgeted yields
+
+Review of the 6b producer on 2026-11-10 (still bd-kckdpt8j) found where the
+replay time goes, which changes two conclusions above.
+
+**One `applyChanges` call costs time proportional to the text length, however
+many changes it carries.** Measured against Automerge 3.5 with throwaway
+probes:
+
+| Text size | One text-edit change per call | 100 changes in one call |
+|---:|---:|---:|
+| 20k chars | about 4 ms each | not measured |
+| 100k chars | about 21 ms each | not measured |
+| 400k chars | about 82 ms each | 90 ms total |
+
+The cost is the same without `patchCallback`, through `loadIncremental`, on a
+`load(save())` copy, and through the low-level handle with `diffIncremental`.
+Changes that do not touch the text cost about 0.1 ms. So the only lever on
+replay CPU is fewer calls.
+
+Two earlier statements are therefore wrong:
+
+- The baseline says replay around the 400k initial text dominates the
+  9.90-second slice. The initial change costs about 0.8 seconds (264 ms to
+  apply, 560 ms in `decodeChange`). The other 8.2 seconds is the fixture\'s 100
+  text edits at 82 ms each, which all fall in the first 500-change chunk.
+- The `CHUNK_SIZE` comment assumed about 15 µs per entry and a 7–8 ms slice.
+  500 text edits on a 20k document take about 2 seconds.
+
+**Changes made:**
+
+1. **Batching.** Automerge stamps a change with whole seconds by default, and
+   the sync client\'s `handle.change` calls pass no time. A typing burst
+   therefore produces consecutive changes with the same attribution key and
+   time. Every character such changes insert gets the same run whether they
+   are applied one at a time or together, so the producer applies them in one
+   call. A batch is capped at `MAX_BATCH_SIZE` (500) changes.
+2. **Time-budgeted yields.** The cold build yields between batches once
+   `SLICE_BUDGET_MS` (8 ms) has passed, instead of every 500 changes. One
+   batch is the smallest unit, so a slice can overrun by one `applyChanges`
+   call.
+3. **One replay loop.** `getChanges(init(), doc)` returns the same list as
+   `getAllChanges(doc)` at the same cost (100.8 ms for both at 400k). A
+   generator, `replayPending`, replays `getChanges(workDoc, handle.doc())`
+   until it is empty. The cold build drives it with yields; the incremental
+   update drains it synchronously. It never yields after the last batch of a
+   round and re-checks after every pause, so the 6a guarantee holds: the
+   returned state is at the handle\'s current heads.
+
+Not done: replacing `decodeChange` with `getChangesMetaSince`. It would save
+the 560 ms decode of a 400k paste (34 ms at 20k), and its order matched
+`getChanges` hash-for-hash over 2,018 changes of concurrent history, but that
+order is undocumented.
+
+**Tests** (`attribution-runs.batching.test.ts`, all six failed before the
+change): one call per author-and-second burst for cold and incremental
+replay; the batch cap; runs equal to a change-by-change reference replay over
+60 random three-peer histories with inserts, deletes, replacements, whole-text
+puts and merges (the test also requires that at least a quarter of the calls
+were batched away); yields at every batch boundary when the budget is spent;
+no yields within budget for 600 changes. The cold-build fixture now pauses on
+a stubbed clock instead of the change count.
+
+**Measurements** (before → after; throwaway driver, real producer, immediate
+idle callbacks, single run, both versions in one process). The typing fixture
+is 2,000 single-character changes at six per second.
+
+| Fixture | Cold main ms | Longest slice ms | Yields | Runs identical |
+|---|---:|---:|---:|---|
+| Typing, 20k chars | 9370 → 1641 | 2415 → 52 | 4 → 167 | yes |
+| Typing, 100k chars | 44945 → 7633 | 11257 → 241 | 4 → 335 | yes |
+| Distinct times, 20k, 1000 changes | 620 → 626 | 510 → 49 | 2 → 66 | yes |
+| Distinct times, 400k, 1000 changes | 9835 → 9848 | 9764 → 950 | 1 → 113 | yes |
+
+| Eight-edit incremental update | Before ms | After ms |
+|---|---:|---:|
+| Typing fixture, 20k, burst within one second | 39 | 5 |
+| 400k, burst within one second | 706 | 90 |
+| 400k, burst over eight seconds | 707 | 697 |
+
+The remaining longest slice is the initial change: one call and one decode
+(950 ms at 400k). The plan\'s original driver gives every change its own
+millisecond-scale time, so it cannot batch; its totals are unchanged and only
+its longest slice improves. Total CPU still scales with batches times text
+length, so the worker (bd-arh0obkp) remains the fix for very large documents;
+decide on it from a typing-shaped fixture.
+
+**Browser verification.** The 6b throwaway Playwright spec was copied to the
+session scratch directory and rerun against a fresh e2e build. Its 501 seeded
+edits and its typed marker both fall in same-second bursts, so it exercises
+batching. Invocation:
+
+```bash
+VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws \
+  VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html \
+  npm run build -w hub-client
+npm exec -w hub-client -- playwright test \
+  --config="$SCRATCH/e2e/playwright.config.ts" \
+  --project=chromium --workers=1 --retries=0
+```
+
+Observed output (the long `restoredText` value is abridged):
+
+```text
+ATTRIBUTION_HISTORY 502
+ATTRIBUTION_EDIT {"marker":"BURSTMARK!","actor":"e2e7e1f02a30000000000000000007e1","color":"#607D8B","badge":"Clever Penguin just now"}
+ATTRIBUTION_TOGGLE {"offWrappers":0,"restoredActor":"e2e7e1f02a30000000000000000007e1","restoredText":"Start…BURSTMARK!"}
+1 passed (8.2s)
+```
+
+`attribution-edit.png` was inspected: the marker is in Monaco, the preview
+paragraph has the attribution outline, and the badge reads
+`Clever Penguin just now`.
+
+**Verification.** `npm run test:ci -w hub-client` passed: 1,763 unit, 240
+integration, and 478 WASM tests. `npm run build:all -w hub-client` passed,
+including the precache check. `npm run typecheck -w hub-client` and scoped
+ESLint passed. No Rust source and no snapshot files changed.
 
 ## Phase 7 — Render-worker architecture evaluation (design only)
 
