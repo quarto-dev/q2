@@ -155,10 +155,21 @@ presenter, as a recorded render does. Concretely:
   the output format is `pdf`. / LaTeX targets keep knitr\'s finished markdown for every chunk."; for other uncovered
   targets: "knitr output for this target is not presented from the execution record / ... Targets outside HTML,
   revealjs, epub, Typst, docx and gfm keep knitr\'s finished markdown for every chunk." No code change.
-- **Julia on non-HTML targets (open, Gordon).** Julia has no target gate: `offers_presentation` (`ts_record.rs`)
-  checks only that a record is built and units exist, so after the flip core presents a Julia render to latex, beamer,
-  pdf, pptx, docx and epub, while the gate compares only html, gfm, revealjs and typst. Decide: gate Julia to the engine
-  route for those targets as knitr is, or accept presenter output with one binary test per class (see the checklist).
+- **Julia on non-HTML targets: decided (Gordon, 2026-11-10): present by evidence, gate the rest.** Julia has no target
+  gate today: `offers_presentation` (`ts_record.rs`) checks only that a record is built and units exist, so after the
+  flip core would present a Julia render to every target, while the gate compares only html, gfm, revealjs and typst
+  (`COMPARABLE`, `opr_parity_runner.rs`; it skips zip formats, and every Julia manifest entry is `html`). One hand run of
+  a Julia document (a `println`, a labeled figure, a labeled table, a bare expression; plain against recorded, 7d review
+  session, ran) found: `docx` and `epub` differ only in where the `println` output sits relative to the figure (4d
+  interleaving); `pptx` slide text is identical; `gfm` differs in a way the interleaving does not explain (the recorded
+  route writes figures to `doc_files/figure-html/` where plain writes `figure-gfm/`; I did not check whether that is
+  Julia-specific or presenter-wide); `typst` rendered on both routes and was not diffed; `latex` and `beamer` give
+  "Unknown format" in this tree (LaTeX lives on `explore/pandoc-hybrid-latex`) and there is no TeX, so they are not
+  measurable. The rule: a target class goes through the presenter for Julia only when a parity case for it differs from
+  the plain route by the accepted interleaving alone. A class with no case, or a failing case, stays on the engine route
+  for Julia, quietly, through a one-line target list in `offers_presentation` (the knitr gate\'s counterpart; do not
+  reuse knitr\'s own list, which excludes pptx). `pdf`, `latex` and `beamer` stay gated until the LaTeX work exists. A
+  class graduates by adding its case and removing it from the list.
 - **Native Jupyter takes no flag.** `text_execute.rs` gates only on `ctx.want_record` and already presents through
   `present_document` on every render, so the flip changes nothing for it (a Jupyter `fig-subcap` group does change, but through 7j, which lands first: epic D14); the only difference from the plain route
   that [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) leaves (decision 6) is that native Jupyter and the ipynb
@@ -201,8 +212,15 @@ recorded route with itself and proves nothing.
       is identical before and after; there is no opt-out to test (decision 2). The Julia and knitr binary tests skip
       cleanly when the engine is absent and **are local evidence only**: CI installs a Jupyter venv but neither R nor
       Julia (a grep of `.github/workflows` finds none), so say that, and name the unit tests CI does run.
-- [ ] **Julia on non-HTML targets:** the decision above, and one binary test per class (latex-family, pptx, docx, epub)
-      if it stays on the presenter.
+- [ ] **Julia on non-HTML targets (decided above).** Tests first: (1) add one Julia parity case per class to
+      `manifest.toml` (gfm, typst, docx, pptx, epub; the document of the review\'s hand run is a good seed) and teach the
+      harness to compare zip formats by member (extract `word/document.xml`, the pptx slide XML, the epub xhtml; strip
+      relationship ids; the review did this by hand); (2) a unit test that Julia\'s `offers_presentation` returns false for
+      a gated target and true for the graduated ones, with the list as data; (3) the gfm figure directory: find out
+      whether `figure-html` for gfm is a presenter-wide naming bug (check knitr and Jupyter) or Julia-specific, and fix it
+      in the presenter or gate gfm; (4) run the cases, graduate each class whose difference is the interleaving alone, and
+      leave the others in the list with a line in the notes saying why. Include the gate report\'s per-class table. A
+      knitr target keeps its own list (decision D5). Add a binary test per graduated class that skips when Julia is absent.
 - [ ] **Flip the default (no opt-out, decision 2) in `EngineExecutionStage::new()`.** `new()` is called at
       `pipeline.rs` in three places (the shared head, `insert_capture_splice_stage_in`, which rebuilds the stage with
       `new()` and would lose a builder-set flag, and `parse_qmd_to_ast`), so flipping its initial value reaches all three;
