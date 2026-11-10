@@ -50,6 +50,43 @@ gate\'s case `julia/capture-facts` is that behavior change, not a regression. Re
 allowlist as an accepted whole-document difference (the harness has no whole-document form today: add the smallest one,
 or normalize the interleaving, and say which), and mention it in the migration notes written by OPR-8.
 
+**5. The whole-document allowlist form moves here, with `julia/fig-subcap` as its second user (Gordon, 2026-11-10).**
+Gordon chose to design one mechanism in this plan rather than sign a one-off rule for `julia/fig-subcap` in 7g. The
+allowlist file\'s header calls the group references "not an allowlist candidate"; that sentence is updated when the entry
+lands. The six unallowlisted cases at the end of 7g are: the three 4d interleaving cases (`julia/capture-facts`,
+`julia/presentation-attrs`, `julia/records-plot`), `julia/fig-subcap` (this plan), and the Plots script elements in
+`julia/docs-index-chunk`, `julia/positron-cache` and `julia/records-plot` (moved to a separate plan, 7i, which this
+plan\'s start condition still waits on). `julia/records-plot` appears in both groups.
+
+## Design sketch: the whole-document form (a sketch for 7d to settle, not a decision)
+
+**Problem.** `RULES` in `tests/integration/opr_parity_harness.rs` are regex substitutions applied to both sides, so a
+rule hides a line-level difference. Two accepted differences are structural: the 4d interleaving is the same content
+arranged differently, and `fig-subcap` is a missing feature (no panel synthesis, `bd-gbaykhth`). A regex wide enough
+to cover either would also hide real bugs in the same document.
+
+**Shape.** Add a second kind of rule, a *document normalizer*: a function from the rendered HTML of one side to a
+canonical form, with the same contract as today\'s rules (applied to BOTH sides, scoped by document-name prefix, named in
+`RULES`, hides exactly what it names). The comparison then still runs on everything the normalizer leaves alone.
+
+| Normalizer | Canonicalizes | Leaves visible |
+|---|---|---|
+| `julia-interleaved-cell` (4d) | Merge the output of a recorded cell\'s per-expression units into the plain route\'s single block: join adjacent `.cell-output` blocks inside one `.cell`, and drop the repeated code-block boundaries the split adds. | Every output\'s content and order, each code line, the cell count, and anything outside `.cell`. |
+| `julia-subfigure-group` (`bd-gbaykhth`) | Strip float wrappers and numbering from a `fig-subcap` group on the plain side (`quarto-float*`, `Figure N:` captions, resolved reference text), and the matching unresolved-reference markup on the recorded side. | Each panel image, its caption text without the number, and every element outside the group. |
+
+**Questions for 7d to settle before writing code** (not answered here):
+
+1. Where the pattern lives: Rust over the HTML string, as today, or an HTML-aware pass. The 4d merge needs balanced
+   `div` handling, which a regex does not give; prefer a small parser over a clever pattern. Say which, and why.
+2. How a case proves the normalizer is narrow. Each normalizer needs a test with a negative control: a second difference
+   in the same document (a changed output line, a dropped image) that must still be reported.
+3. Reporting. `Entry` carries no per-case count today for a document rule. The report should list which documents each
+   normalizer touched, so an entry that stops firing is visible.
+4. Lifetime. The interleaving entry is permanent (the behavior is the intended one). The `fig-subcap` entry is not:
+   its `reason` names `bd-gbaykhth` and says to remove it when panel synthesis lands, and the removal is a test (the
+   case must become `identical` or the entry is reported as stale).
+5. Signing. Each entry stays `proposed` until Gordon signs it; the agent writes the rule and reason, not the signature.
+
 ## Branch and land (explicit)
 
 ```bash
@@ -87,6 +124,9 @@ presenter, as a recorded render does. Concretely:
       document\'s HTML is identical to before (it has no presenter route; `marimo_engine_e2e::` still passes); nothing new under
       `.quarto`; a knitr document to `pdf` or `latex` takes the engine route and prints nothing about it; a cached
       chunk falls back; `execute: record: true` still writes the file; there is no opt-out to test (decision 2).
+- [ ] **Whole-document allowlist form** (decisions 4 and 5, design sketch above): tests first, including a negative
+      control per normalizer; entries `proposed` for `julia/capture-facts`, `julia/presentation-attrs`,
+      `julia/records-plot` (interleaving) and `julia/fig-subcap`; Gordon signs; update the allowlist header.
 - [ ] Flip the default (no opt-out, decision 2); change the fallback diagnostic\'s condition so it does
       not fire for a plain render.
 - [ ] Re-run the OPR-0b/7c gate harness and attach the final report (zero unallowlisted differences).
