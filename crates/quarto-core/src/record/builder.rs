@@ -217,6 +217,7 @@ impl<'a> RecordBuilder<'a> {
                 resource_files: input.resource_files,
                 warnings: input.warnings,
                 known_options: input.known_options,
+                dependency_data: None,
                 extra: BTreeMap::new(),
             },
             cells,
