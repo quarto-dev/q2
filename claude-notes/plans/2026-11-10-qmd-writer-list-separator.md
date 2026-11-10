@@ -214,6 +214,10 @@ being revisited. Option (a) is a list-item exception to it.
 
 ### Verification record
 
+- PR #1151 passed all 12 CI checks on the first run (both test-suite
+  platforms, WASM, hub-client E2E on chromium and firefox, and Clippy
+  for Windows).
+
 - Investigation probe after the fix:
   `qmd-writer-ordered-list-separator-investigation/roundtrip-output-after-fix.txt`.
   All eight cases round-trip unchanged. The strand's case now writes
