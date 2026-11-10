@@ -40,12 +40,11 @@ interface ParsedPayload {
 }
 
 /** Convenience constructor for `RunListAttribution` — only `runs` is
- *  read by the function under test; the other fields are bookkeeping
- *  used by the live update path. */
+ *  read by the function under test. */
 function state(
   runs: Array<{ start: number; end: number; actor: string; time: number }>,
 ): RunListAttribution {
-  return { runs, processedHeads: [], processedHistoryIndex: 0 };
+  return { runs };
 }
 
 function parse(json: string): ParsedPayload {

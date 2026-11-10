@@ -75,7 +75,7 @@ fn recordings_name_no_machine_paths() {
     }
 }
 
-/// The pinned pandoc, from `resources/pandoc-wasm.json`'s asset name.
+/// The pinned pandoc, from `resources/pandoc-wasm.json`'s `version`.
 #[cfg(unix)]
 fn require_pinned_pandoc() {
     let text = std::fs::read_to_string(
@@ -83,12 +83,7 @@ fn require_pinned_pandoc() {
     )
     .unwrap();
     let json: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let asset = json["asset_name"].as_str().unwrap();
-    let pin = asset
-        .strip_prefix("pandoc-")
-        .unwrap()
-        .strip_suffix(".wasm.zip")
-        .unwrap();
+    let pin = json["version"].as_str().unwrap();
     let out = std::process::Command::new("pandoc")
         .arg("--version")
         .output()

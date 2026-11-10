@@ -1,0 +1,9 @@
+---
+title: Shortcodes
+---
+
+The title is {{< meta title >}}.
+
+{{< pagebreak >}}
+
+A [span]{.note} after.

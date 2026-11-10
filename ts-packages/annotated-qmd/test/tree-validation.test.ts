@@ -439,6 +439,9 @@ describe('Tree Validation', () => {
         'blog-post', 'academic-paper', 'tutorial',
         'empty-content', 'minimal-doc', 'boundary-values',
         'missing-fields', 'zero-width'
+        // 'shortcode' is left out until bd-1f3cfv2k: pampa writes shortcode
+        // argument Spans with a fabricated file-0 [0, 0] location, which
+        // fails the nesting checks. test/shortcode-span.test.ts covers it.
       ];
 
       for (const docName of documents) {

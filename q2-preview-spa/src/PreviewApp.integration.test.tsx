@@ -1702,32 +1702,36 @@ describe('PreviewApp: the session’s --to / -M (F8)', () => {
     window.history.replaceState(null, '', '/');
   });
 
-  it('sends the render block on every wasm render call and to the format resolver', async () => {
+  it('sends the render block and read-only capture gate to wasm, and only the render block to the resolver', async () => {
     stubConfig(() => ok({ allowEdit: false, render: FLAGS }));
     const runtime = await import('@quarto/preview-runtime');
     render(<PreviewApp />);
     await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
     const renderMock = runtime.renderPageForPreview as ReturnType<typeof vi.fn>;
-    expect(renderMock.mock.calls.at(-1)?.[3]).toEqual(FLAGS);
+    expect(renderMock.mock.calls.at(-1)?.[3]).toEqual({ ...FLAGS, captureUntransformedAst: false });
     const resolveMock = runtime.resolvePandocFormats as ReturnType<typeof vi.fn>;
     expect(resolveMock.mock.calls.at(-1)?.[1]).toEqual(FLAGS);
   });
 
-  it('with no flags nothing changes: no options reach the wasm calls', async () => {
+  it('with no render flags only the read-only capture gate reaches wasm', async () => {
     stubConfig(() => ok({ allowEdit: false }));
     const runtime = await import('@quarto/preview-runtime');
     render(<PreviewApp />);
     await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
-    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[3]).toBeUndefined();
+    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[3]).toEqual({
+      captureUntransformedAst: false,
+    });
     expect((runtime.resolvePandocFormats as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[1]).toBeUndefined();
   });
 
-  it('an older server (config 404) changes nothing either', async () => {
+  it('an older server (config 404) is also read-only and capture-off', async () => {
     stubConfig(() => new Response('nope', { status: 404 }));
     const runtime = await import('@quarto/preview-runtime');
     render(<PreviewApp />);
     await waitFor(() => expect(screen.queryByTestId('q2-preview-iframe-mock')).not.toBeNull());
-    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[3]).toBeUndefined();
+    expect((runtime.renderPageForPreview as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[3]).toEqual({
+      captureUntransformedAst: false,
+    });
   });
 
   it('hands the render block to the PDF pane', async () => {

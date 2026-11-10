@@ -143,7 +143,7 @@ beforeEach(() => {
       }
       if (url.includes('/api/preview/config')) {
         return new Response(
-          JSON.stringify({ allow_edit: false }),
+          JSON.stringify({ allowEdit: true }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }

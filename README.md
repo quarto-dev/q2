@@ -4,7 +4,7 @@
 
 > **Experimental** - This project is under active development. It's not yet ready for production use.
 
-This repository is a Rust implementation of the next version of [Quarto](https://quarto.org). The goal is to replace parts of the TypeScript/Deno runtime with a unified Rust implementation.
+This repository is Quarto 2, the next version of [Quarto](https://quarto.org): a full rewrite of the Quarto CLI in Rust. See [What's next: Quarto 2](https://opensource.posit.co/blog/2026-04-06_whats-next-quarto-2/) for why.
 
 ## Installing
 

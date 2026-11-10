@@ -1114,6 +1114,52 @@ fn enumerate_docs() -> Vec<Doc> {
         }
     }
 
+    // Adjacent sublists in one item (bd-2bcre8cr). A delimiter or bullet
+    // change starts a new list, so the item holds two sibling lists, which
+    // the qmd writer must keep apart without merging them and without a
+    // separator the reader absorbs. Before this sweep only the proptest
+    // sampler produced the shape, so its failures surfaced as flakes.
+    let sub_markers = [
+        Marker::Dot(1),
+        Marker::Paren(1),
+        Marker::Minus,
+        Marker::Star,
+    ];
+    let sub_items = [
+        item(ItemStart::Inline, vec![]),
+        item(ItemStart::Inline, vec![(Sep::None, BlockKind::Para(1))]),
+    ];
+    let sublist = |marker: Marker, only: &Item| {
+        BlockKind::Sublist(Box::new(list(marker, 1, vec![(Sep::None, only.clone())])))
+    };
+    for lead_para in [false, true] {
+        for first_marker in sub_markers {
+            for second_marker in sub_markers {
+                for first_item in &sub_items {
+                    for second_item in &sub_items {
+                        for sep in [Sep::None, Sep::Blank] {
+                            let mut blocks = Vec::new();
+                            if lead_para {
+                                blocks.push((Sep::None, BlockKind::Para(1)));
+                            }
+                            blocks.push((Sep::None, sublist(first_marker, first_item)));
+                            blocks.push((sep, sublist(second_marker, second_item)));
+                            docs.push(doc(
+                                Container::None,
+                                list(
+                                    Marker::Minus,
+                                    1,
+                                    vec![(Sep::None, item(ItemStart::Inline, blocks))],
+                                ),
+                                Tail::Eof,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Normalize, drop thematic-break artifacts, dedupe by rendered text.
     let mut seen = BTreeSet::new();
     docs.into_iter()
@@ -1164,14 +1210,15 @@ fn enumerated_list_documents_match_oracle() {
 // Round trip through the qmd writer
 // ---------------------------------------------------------------------------
 
-/// Write pampa's AST for `text` back to qmd and return the written text with
-/// the shape it reads back as. The writer spells a list tight or loose from
-/// the Plain/Para shape (`crates/pampa/src/writers/qmd.rs`), so the shape
-/// must survive `read(write(read(text)))`.
-fn roundtrip_shape(text: &str) -> Result<(String, Result<Vec<Shape>, String>), String> {
-    let pandoc = pampa_pandoc(text)?;
+/// Write `pandoc` back to qmd and return the written text with the AST it
+/// reads back as. The writer spells a list tight or loose from the
+/// Plain/Para shape (`crates/pampa/src/writers/qmd.rs`), so the shape must
+/// survive `read(write(read(text)))`.
+fn roundtrip_pandoc(
+    pandoc: &pampa::pandoc::Pandoc,
+) -> Result<(String, Result<pampa::pandoc::Pandoc, String>), String> {
     let mut buf = Vec::new();
-    pampa::writers::qmd::write(&pandoc, &mut buf).map_err(|diagnostics| {
+    pampa::writers::qmd::write(pandoc, &mut buf).map_err(|diagnostics| {
         diagnostics
             .iter()
             .map(|d| d.title.clone())
@@ -1179,8 +1226,20 @@ fn roundtrip_shape(text: &str) -> Result<(String, Result<Vec<Shape>, String>), S
             .join("; ")
     })?;
     let written = String::from_utf8(buf).map_err(|e| e.to_string())?;
-    let reread = pampa_shape(&written).map_err(|e| format!("re-read: {e}; written {written:?}"));
+    let reread = pampa_pandoc(&written).map_err(|e| format!("re-read: {e}; written {written:?}"));
     Ok((written, reread))
+}
+
+/// The number of raw nodes (`RawBlock` and `RawInline`) in `pandoc`.
+///
+/// The shape alone can't see a raw block the reader absorbed into the
+/// preceding paragraph as a `RawInline`: the paragraph keeps its shape. So
+/// the round trip also requires that no raw node appears that the first read
+/// didn't have (bd-2bcre8cr). Counted through `Debug`, where each variant is
+/// spelled `RawBlock(RawBlock { .. })` / `RawInline(RawInline { .. })`.
+fn raw_node_count(pandoc: &pampa::pandoc::Pandoc) -> usize {
+    let debug = format!("{:?}", pandoc.blocks);
+    debug.matches("RawBlock(").count() + debug.matches("RawInline(").count()
 }
 
 /// Known divergences for the round trip: the oracle families, plus every
@@ -1206,21 +1265,33 @@ fn known_roundtrip(doc: &Doc) -> Option<&'static str> {
     })
 }
 
-/// Documents pampa parses must keep their list shape through the writer.
-/// Documents pampa cannot parse are the other tests' business, and so is a
-/// written text that contains a thematic-break line (three nested empty
-/// items come out as `* * *`, bd-6522kqyw).
+/// Documents pampa parses must keep their list shape through the writer,
+/// without gaining raw nodes. Documents pampa cannot parse are the other
+/// tests' business, and so is a written text that contains a thematic-break
+/// line (three nested empty items come out as `* * *`, bd-6522kqyw).
 fn check_roundtrip(text: &str) -> Option<Verdict> {
-    let before = pampa_shape(text).ok()?;
-    Some(match roundtrip_shape(text) {
+    let before = pampa_pandoc(text).ok()?;
+    let before_shape = shape_of(&before.blocks);
+    let before_raw = raw_node_count(&before);
+    Some(match roundtrip_pandoc(&before) {
         Err(err) => Verdict::ParseError(err),
         Ok((written, _)) if has_thematic_break_line(&written) => return None,
         Ok((_, Err(err))) => Verdict::ParseError(err),
-        Ok((_, Ok(after))) if after == before => Verdict::Agree,
-        Ok((written, Ok(after))) => Verdict::Mismatch {
-            expected: shapes_to_string(&before),
-            actual: format!("{} (written {written:?})", shapes_to_string(&after)),
-        },
+        Ok((written, Ok(after))) => {
+            let after_shape = shape_of(&after.blocks);
+            let after_raw = raw_node_count(&after);
+            if after_shape == before_shape && after_raw <= before_raw {
+                Verdict::Agree
+            } else {
+                Verdict::Mismatch {
+                    expected: format!("{} [{before_raw} raw]", shapes_to_string(&before_shape)),
+                    actual: format!(
+                        "{} [{after_raw} raw] (written {written:?})",
+                        shapes_to_string(&after_shape)
+                    ),
+                }
+            }
+        }
     })
 }
 
@@ -1238,6 +1309,136 @@ fn enumerated_list_documents_round_trip_through_the_qmd_writer() {
         "enumerated corpus round trip ({} documents)",
         docs.len()
     ));
+}
+
+/// Round trips around adjacent lists (bd-2bcre8cr), one case per failure
+/// class in `claude-notes/plans/qmd-writer-ordered-list-separator-investigation/findings.md`.
+/// The writer used to put a bare `<!-- -->` between every two adjacent
+/// ordered lists, tight inside list items, where the reader's
+/// paragraph-extent HTML model absorbs it.
+const ADJACENT_LIST_CASES: &[(&str, &str)] = &[
+    (
+        "- 1.\n  1)\n",
+        "an empty item right after the separator (the proptest seed)",
+    ),
+    (
+        "- 1. a\n  1) b\n",
+        "a tight separator after item text is absorbed as a RawInline",
+    ),
+    (
+        "- x\n  1. a\n  1)\n",
+        "blank lines around the separator make a tight item loose",
+    ),
+    (
+        "1.\n1)\n",
+        "top level: no separator between lists the reader splits anyway",
+    ),
+    ("1. a\n1) b\n", "top level, with item content"),
+    (
+        "- 1. a\n\n  <!-- -->\n\n  1.\n",
+        "an authored separator inside an item must not merge the two lists",
+    ),
+    (
+        "- 1. a\n\n  <!-- -->\n\n  1. b\n",
+        "an authored separator inside an item, with item content",
+    ),
+    (
+        "- x\n  1. a\n\n  <!-- -->\n\n  1. b\n",
+        "an authored separator after a paragraph lead",
+    ),
+];
+
+#[test]
+fn adjacent_lists_round_trip_through_the_qmd_writer() {
+    let mut failures = Vec::new();
+    for (text, what) in ADJACENT_LIST_CASES {
+        match check_roundtrip(text) {
+            Some(Verdict::Agree) => {}
+            Some(other) => failures.push(format!(
+                "{what}\n   text: {text:?}\n   {}",
+                other.group_key()
+            )),
+            None => failures.push(format!(
+                "{what}\n   text: {text:?}\n   not checked (unparsed, or a thematic break was written)"
+            )),
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} adjacent-list cases fail the round trip:\n{}",
+        failures.len(),
+        ADJACENT_LIST_CASES.len(),
+        failures.join("\n")
+    );
+}
+
+/// An imported (pandoc-shaped) AST can hold two adjacent ordered lists with
+/// the *same* delimiter, a shape qmd text can't express: the reader would
+/// merge them. The writer must keep them apart with a separator that the
+/// reader keeps as a block, so the round trip gives `[OL, RawBlock, OL]`,
+/// inside a list item as well as at top level (bd-2bcre8cr).
+#[test]
+fn imported_same_delimiter_lists_stay_apart() {
+    use pampa::pandoc::block::RawBlock;
+    use pampa::pandoc::list::ListNumberDelim;
+
+    /// The blocks holding the two lists: the first item of a leading
+    /// bullet list, or the document itself.
+    fn container(pandoc: &mut pampa::pandoc::Pandoc) -> &mut Vec<Block> {
+        if matches!(pandoc.blocks.first(), Some(Block::BulletList(_))) {
+            let Some(Block::BulletList(bullets)) = pandoc.blocks.first_mut() else {
+                unreachable!()
+            };
+            &mut bullets.content[0]
+        } else {
+            &mut pandoc.blocks
+        }
+    }
+
+    for text in [
+        "- 1.\n  1)\n",
+        "- 1. a\n  1) b\n",
+        "- x\n  1. a\n  1) b\n",
+        "1. a\n1) b\n",
+    ] {
+        // Read the differing-delimiter document, then give the second
+        // list the first one's delimiter, as an import would.
+        let mut imported = pampa_pandoc(text).expect("fixture parses");
+        let blocks = container(&mut imported);
+        let second = blocks
+            .iter()
+            .rposition(|b| matches!(b, Block::OrderedList(_)))
+            .expect("two ordered lists");
+        let Block::OrderedList(list) = &mut blocks[second] else {
+            unreachable!()
+        };
+        list.attr.2 = ListNumberDelim::Period;
+        let source_info = list.source_info.clone();
+
+        let mut expected = imported.clone();
+        container(&mut expected).insert(
+            second,
+            Block::RawBlock(RawBlock {
+                format: "html".to_string(),
+                text: "<!-- -->".to_string(),
+                source_info,
+            }),
+        );
+
+        let (written, reread) = roundtrip_pandoc(&imported).expect("writes");
+        let reread = reread.unwrap_or_else(|e| panic!("{text:?}: {e}"));
+        assert_eq!(
+            shapes_to_string(&shape_of(&reread.blocks)),
+            shapes_to_string(&shape_of(&expected.blocks)),
+            "{text:?}: the two lists must come back apart, separated by one raw block; \
+             written {written:?}"
+        );
+        assert_eq!(
+            raw_node_count(&reread),
+            1,
+            "{text:?}: exactly the separator, nothing absorbed; written {written:?}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
