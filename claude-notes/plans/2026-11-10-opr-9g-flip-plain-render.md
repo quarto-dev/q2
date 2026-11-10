@@ -56,7 +56,7 @@ presenter, as a recorded render does. Concretely:
 - **Julia on non-HTML targets:** decided in OPR-9e (present by evidence, gate the rest, through a target allowlist in
   `offers_presentation`); the flip inherits whatever 9e graduated.
 - **Native Jupyter takes no flag.** `text_execute.rs` gates only on `ctx.want_record` and already presents through
-  `present_document` on every render, so the flip changes nothing for it (a Jupyter `fig-subcap` group does change, and so does every later figure number in that document, but through 7j, which lands first: epic D14 and 7j\'s "Decided: later-figure numbering"); the only difference from the plain route
+  `present_document` on every render, so the flip changes nothing for it (a Jupyter `fig-subcap` group does change, and so does every later figure number in that document, but through 7j, which lands first: epic D14 and 7j\'s decision D14, "Later-figure numbering"); the only difference from the plain route
   that [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) leaves (decision 6) is that native Jupyter and the ipynb
   replay path get the widget warning but not the page-dependency scan. 7d carries that as a known, documented
   difference, and OPR-8\'s notes say so.
@@ -86,8 +86,14 @@ presenter, as a recorded render does. Concretely:
   listing test can compare empty with empty: add a positive assertion (the render manifest exists in a project render) or test on a project.
 - **Marimo (read, relied).** Marimo is offered `presentedBy: "core"` and declines by not acknowledging; it also builds a record, so its HTML stays
   identical but stderr may gain `engine_record_diagnostic` lines. The byte-identity test covers HTML and says so.
-- **WASM (read, relied).** The stage is not `cfg`-gated, so after the flip it runs in the browser; `ReplayEngine` returns a record and the stage
-  runs `coalesce` (previously only when `want_record`). 9a\'s S6 says whether that is a new path; if it is, add the test it names.
+- **WASM (read; 9a\'s S6).** The stage is not `cfg`-gated, so after the flip it runs in the browser. Only `ReplayEngine` runs there (the
+  other engines are `cfg(not(wasm32))`); it returns the capture\'s record, and the stage pushes any `result.record` into the coalesce
+  whatever the flag says, so after the flip the browser **coalesces a replayed record where before it did not** (the browser observer
+  wants no record). `coalesce` fails with `UnknownCell` or `DuplicateCell` when a record\'s cell id is not in the unit list, so a capture
+  recorded under an older id derivation could now fail to render. Add the test S6 names: replay a Jupyter capture recorded before the
+  flip through `render_page_for_preview` (the WASM build and the two vitest files `recordPayload.wasm.test.ts` and
+  `captureSpliceHtml.wasm.test.ts`) and assert it renders. The native flip run covered every `ReplayEngine` test in `quarto-core` (9096
+  tests, no replay failure), so the open risk is the stored-capture case alone.
 - **Stale comments after the flip:** `engine/context.rs` (the `record` field doc says it is built only when `want_record`) and
   `engine_execution.rs` (near the `present_from_record` field).
 - **The four gate-time entries (proposed, for Gordon to confirm; recommendation from the review).** After the flip both sides of the harness
@@ -132,8 +138,8 @@ presenter, as a recorded render does. Concretely:
       the check is that it is.)
 - [ ] **Preview chain** (AGENTS.md, "Verifying Rust changes in `q2 preview`"): `cd hub-client && npm run build:wasm`,
       `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`; confirm `q2 preview` of the same documents still
-      renders. This is a compile and smoke check, not a behavior check: the preview recorder already wants a record, so
-      the flip is a no-op there, and `ts_engine`, `knitr` and `jupyter` are `cfg(not(wasm32))`. Say what was and was not
+      renders. This is a compile and smoke check for the native preview (the preview recorder already wants a record, so the
+      flip is a no-op there); the browser is not a no-op (see the WASM box above), so run the old-capture replay test there too. Say what was and was not
       seen by a person.
 - [ ] Gates: `cargo clippy -p quarto -p quarto-core --all-targets -- -D warnings`; `cargo nextest run` for the same
       crates; the Windows cross-clippy; `cargo xtask lint`.

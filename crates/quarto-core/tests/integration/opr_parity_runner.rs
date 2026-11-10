@@ -12,8 +12,10 @@
 //! Narrowing: `OPR_PARITY_ONLY=<substring>` keeps documents whose name contains it;
 //! `OPR_PARITY_KNITR=0` leaves out the existing knitr corpus (the plan's own corpus still runs).
 //!
-//! The runner measures. It does not assert on blockers: the gate rule (zero unallowlisted
-//! differences) is applied in OPR-7c.
+//! With `OPR_PARITY_REPORT` set the run also ASSERTS (OPR-9d): it fails when any case is an
+//! unallowlisted difference (or the routes disagree on success), and when an allowlist entry that
+//! covers compared cases is needed by none of them (a stale entry). Without the variable the test
+//! does nothing.
 
 #![cfg(not(target_arch = "wasm32"))]
 
@@ -26,7 +28,7 @@ use super::julia_engine_e2e::julia_available;
 use super::knitr_corpus_run::{materialize, parallel, r_available};
 use super::knitr_corpus_support::{CorpusManifest, corpus_dir};
 use super::opr_parity_harness::{
-    Allowlist, Side, Verdict, compare, normalize_text, prepare_dir, render_prepared,
+    Allowlist, Applied, Side, Verdict, compare, normalize_text, prepare_dir, render_prepared,
 };
 
 fn corpus_root() -> PathBuf {
@@ -78,6 +80,11 @@ struct Job {
 /// `typst` is compared through the `.typ` the harness asks `keep-typ` for.
 const COMPARABLE: &[&str] = &["html", "gfm", "revealjs", "typst"];
 
+/// The formats the plan's own manifest may list: the text formats above plus the zip formats the
+/// harness opens (`opr_parity_zip`). A format outside this list is reported as not compared, never
+/// rendered and then misreported as "both routes failed".
+const EXTRACTABLE: &[&str] = &["html", "gfm", "revealjs", "typst", "docx", "pptx", "epub"];
+
 fn plan_jobs() -> (Vec<Job>, Vec<String>) {
     let only = std::env::var("OPR_PARITY_ONLY").ok();
     let wanted = |name: &str| only.as_ref().is_none_or(|o| name.contains(o.as_str()));
@@ -92,6 +99,10 @@ fn plan_jobs() -> (Vec<Job>, Vec<String>) {
         }
         let _ = &d.note;
         for format in &d.formats {
+            if !EXTRACTABLE.contains(&format.as_str()) {
+                not_compared.push(format!("{} [{format}] (no extractor)", d.name));
+                continue;
+            }
             jobs.push(Job {
                 name: d.name.clone(),
                 src: corpus_root().join(&d.dir),
@@ -380,7 +391,7 @@ fn is_rejection(message: &str) -> bool {
 
 fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist) -> String {
     let mut identical = Vec::new();
-    let mut allowlisted: Vec<(&Case, &Vec<String>)> = Vec::new();
+    let mut allowlisted: Vec<(&Case, &Vec<Applied>)> = Vec::new();
     let mut blockers: Vec<(&Case, &String, &Option<String>)> = Vec::new();
     let mut failed_same = Vec::new();
     let mut one_failed = Vec::new();
@@ -392,7 +403,7 @@ fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist)
                 ..
             } => identical.push(c),
             Outcome::Compared {
-                verdict: Verdict::Allowlisted { rules },
+                verdict: Verdict::Allowlisted { applied: rules },
                 ..
             } => allowlisted.push((c, rules)),
             Outcome::Compared {
@@ -470,20 +481,41 @@ fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist)
 
     out.push_str("## Allowlisted (proposed or signed entries)\n\n");
     for entry in &allowlist.entries {
-        let n = allowlisted
+        let touched: Vec<(&Case, &Applied)> = allowlisted
             .iter()
-            .filter(|(_, r)| r.contains(&entry.rule))
-            .count();
+            .flat_map(|(c, applied)| {
+                applied
+                    .iter()
+                    .filter(|a| a.entry == entry.name)
+                    .map(move |a| (*c, a))
+            })
+            .collect();
+        let (pf, rf) = touched.iter().fold((0, 0), |(p, r), (_, a)| {
+            (p + a.plain_fires, r + a.recorded_fires)
+        });
         out.push_str(&format!(
-            "- `{}` ({}, scope `{}`, {}): explains {n} cases\n",
-            entry.rule, entry.name, entry.scope, entry.status
+            "- `{}` ({}, {}, {}): explains {} cases (fires: plain {pf}, recorded {rf})\n",
+            entry.rule,
+            entry.name,
+            entry.coverage(),
+            entry.status,
+            touched.len()
         ));
+        for (c, a) in &touched {
+            out.push_str(&format!(
+                "  - {}: plain {}, recorded {}{}\n",
+                tag(c),
+                a.plain_fires,
+                a.recorded_fires,
+                if a.needed { "" } else { " (NOT needed)" }
+            ));
+        }
     }
     out.push('\n');
-    for (c, rules) in &allowlisted {
-        out.push_str(&format!("- {}: {}\n", tag(c), rules.join(", ")));
+    for (c, applied) in &allowlisted {
+        let names: Vec<&str> = applied.iter().map(|a| a.rule.as_str()).collect();
+        out.push_str(&format!("- {}: {}\n", tag(c), names.join(", ")));
     }
-
     out.push_str("\n## Identical\n\n");
     for c in &identical {
         out.push_str(&format!("- {}\n", tag(c)));
@@ -532,6 +564,51 @@ fn render_report(cases: &[Case], not_compared: &[String], allowlist: &Allowlist)
     out
 }
 
+/// What makes the gate fail: an unallowlisted difference, routes that disagree on success, and a
+/// stale entry (one that covers at least one compared case and is needed by none). An entry with
+/// no compared case in scope (skipped tools, a narrowed run) proves nothing, so it is not stale.
+/// `pending` cases are not exempt: the tag only labels them in the report.
+fn gate_failures(cases: &[Case], allowlist: &Allowlist) -> Vec<String> {
+    let mut failures = Vec::new();
+    for c in cases {
+        let label = format!("{} [{}]", c.name, c.format);
+        match &c.outcome {
+            Outcome::Compared {
+                verdict: Verdict::Blocker { diff },
+                ..
+            } => {
+                let first = diff.lines().next().unwrap_or("");
+                failures.push(format!("unallowlisted difference: {label}: {first}"));
+            }
+            Outcome::OneFailed { .. } | Outcome::BothFailed { same: false, .. } => {
+                failures.push(format!("routes disagree on success: {label}"));
+            }
+            _ => {}
+        }
+    }
+    for entry in &allowlist.entries {
+        let mut compared_in_scope = 0;
+        let mut needed = false;
+        for c in cases.iter().filter(|c| entry.covers(&c.name)) {
+            let Outcome::Compared { verdict, .. } = &c.outcome else {
+                continue;
+            };
+            compared_in_scope += 1;
+            if let Verdict::Allowlisted { applied } = verdict {
+                needed |= applied.iter().any(|a| a.entry == entry.name && a.needed);
+            }
+        }
+        if compared_in_scope > 0 && !needed {
+            failures.push(format!(
+                "stale entry `{}` ({}): none of {compared_in_scope} compared cases needs it",
+                entry.name,
+                entry.coverage()
+            ));
+        }
+    }
+    failures
+}
+
 #[test]
 fn opr_parity_report() {
     let Ok(target) = std::env::var("OPR_PARITY_REPORT") else {
@@ -564,6 +641,12 @@ fn opr_parity_report() {
         std::fs::write(&target, &report).unwrap();
         eprintln!("wrote {target}");
     }
+    let failures = gate_failures(&cases, &allowlist);
+    assert!(
+        failures.is_empty(),
+        "the parity gate failed:\n{}",
+        failures.join("\n")
+    );
 }
 
 #[cfg(test)]
@@ -689,5 +772,126 @@ mod tests {
         );
         assert!(report.contains("c [html]: no R"), "{report}");
         let _: Option<&Side> = None;
+    }
+
+    fn compared(name: &str, verdict: Verdict) -> Case {
+        Case {
+            name: name.into(),
+            format: "html".into(),
+            pending: String::new(),
+            expect_failure: false,
+            outcome: Outcome::Compared {
+                verdict,
+                unstable: None,
+            },
+        }
+    }
+
+    fn applied(entry: &str, needed: bool) -> Applied {
+        Applied {
+            entry: entry.into(),
+            rule: "julia-code-leading-newline".into(),
+            plain_fires: 1,
+            recorded_fires: 1,
+            needed,
+        }
+    }
+
+    fn entry_list() -> Allowlist {
+        Allowlist::parse(
+            "[[entry]]\nname='nl'\nrule='julia-code-leading-newline'\nscope='julia/'\nstatus='proposed'\nreason='r'\n",
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn the_gate_passes_when_every_case_is_identical_or_allowlisted_and_needed() {
+        let cases = vec![
+            compared("md/a", Verdict::Identical),
+            compared(
+                "julia/b",
+                Verdict::Allowlisted {
+                    applied: vec![applied("nl", true)],
+                },
+            ),
+        ];
+        assert_eq!(gate_failures(&cases, &entry_list()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_gate_fails_on_an_unallowlisted_blocker_and_names_it() {
+        let cases = vec![compared(
+            "julia/b",
+            Verdict::Blocker {
+                diff: "- x\n".into(),
+            },
+        )];
+        let failures = gate_failures(&cases, &Allowlist::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].contains("julia/b"), "{failures:?}");
+    }
+
+    #[test]
+    fn the_gate_fails_when_the_routes_disagree_on_success() {
+        let mut case = compared("julia/c", Verdict::Identical);
+        case.outcome = Outcome::OneFailed {
+            plain: String::new(),
+            recorded: "boom".into(),
+        };
+        assert_eq!(gate_failures(&[case], &Allowlist::default()).len(), 1);
+    }
+
+    #[test]
+    fn the_gate_fails_on_a_stale_entry_and_not_on_a_needed_one() {
+        let ids = vec![
+            compared("julia/a", Verdict::Identical),
+            compared(
+                "julia/b",
+                Verdict::Allowlisted {
+                    applied: vec![applied("nl", false)],
+                },
+            ),
+        ];
+        let failures = gate_failures(&ids, &entry_list());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(
+            failures[0].contains("stale") && failures[0].contains("nl"),
+            "{failures:?}"
+        );
+        // One document that needs it is enough.
+        let mut cases = ids;
+        cases.push(compared(
+            "julia/c",
+            Verdict::Allowlisted {
+                applied: vec![applied("nl", true)],
+            },
+        ));
+        assert!(gate_failures(&cases, &entry_list()).is_empty());
+    }
+
+    #[test]
+    fn an_entry_with_no_compared_case_in_scope_is_not_called_stale() {
+        // Skipped (no Julia) or out-of-scope cases prove nothing about the entry.
+        let mut skipped = compared("julia/a", Verdict::Identical);
+        skipped.outcome = Outcome::Skipped("no julia".into());
+        let other = compared("md/x", Verdict::Identical);
+        assert!(gate_failures(&[skipped, other], &entry_list()).is_empty());
+    }
+
+    #[test]
+    fn the_plans_manifest_lists_only_formats_the_harness_can_read() {
+        let text = std::fs::read_to_string(corpus_root().join("manifest.toml")).unwrap();
+        let manifest: Manifest = toml::from_str(&text).unwrap();
+        for d in &manifest.document {
+            for f in &d.formats {
+                assert!(EXTRACTABLE.contains(&f.as_str()), "{} lists `{f}`", d.name);
+            }
+        }
+        // And each extractable format maps to an output extension the harness reads.
+        use crate::opr_parity_harness::has_extractor;
+        for ext in ["html", "md", "typ", "docx", "pptx", "epub"] {
+            assert!(has_extractor(ext), "{ext}");
+        }
+        assert!(!has_extractor("pdf") && !has_extractor("odt"));
     }
 }

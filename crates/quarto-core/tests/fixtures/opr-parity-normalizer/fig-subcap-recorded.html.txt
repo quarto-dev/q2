@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A subfigure group from Julia</title>
+<link rel="stylesheet" href="doc_files/quarto/quarto-theme-d9a3a2debf57bcb1.css">
+<script src="doc_files/anchor/anchor.min.js"></script>
+<script src="doc_files/quarto/bootstrap.bundle.min.js"></script>
+<script src="doc_files/quarto/clipboard.min.js"></script>
+<script src="doc_files/quarto/code-copy-init.js"></script>
+<script src="doc_files/quarto/tabsets.js"></script>
+</head>
+<body class="fullcontent quarto-light">
+<a id="quarto-skip-link" class="visually-hidden-focusable" href="#quarto-document-content">Skip to main content</a>
+
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content" tabindex="-1">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">A subfigure group from Julia</h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+
+</header>
+
+
+<div id="fig-one" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig">
+<div aria-describedby="fig-one-caption">
+<div id="cell-1" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-keyword-import">using</span> <span class="hl-variable">Plots</span>
+<span class="hl-function-call">display</span><span class="hl-punctuation-bracket">(</span><span class="hl-function-call">MIME</span><span class="hl-punctuation-bracket">(</span><span class="hl-string">&quot;image/png&quot;</span><span class="hl-punctuation-bracket">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function-call">plot</span><span class="hl-punctuation-bracket">(</span><span class="hl-number">1</span><span class="hl-operator">:</span><span class="hl-number">3</span><span class="hl-punctuation-bracket">)</span><span class="hl-punctuation-bracket">)</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-display">
+<p><img src="doc_files/figure-html/cell-2-output-1.png" alt="" width="600" height="400" /></p>
+</div>
+</div>
+</div>
+<figcaption id="fig-one-caption" class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig">
+Figure 1: One figure.
+</figcaption>
+</figure>
+</div>
+<div id="fig-two" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-layout-ncol="2" data-execution_count="1">
+<figure class="quarto-float quarto-float-fig">
+<div aria-describedby="fig-two-caption">
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-function-call">display</span><span class="hl-punctuation-bracket">(</span><span class="hl-function-call">MIME</span><span class="hl-punctuation-bracket">(</span><span class="hl-string">&quot;image/png&quot;</span><span class="hl-punctuation-bracket">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function-call">plot</span><span class="hl-punctuation-bracket">(</span><span class="hl-number">1</span><span class="hl-operator">:</span><span class="hl-number">4</span><span class="hl-punctuation-bracket">)</span><span class="hl-punctuation-bracket">)</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-two-1" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig">
+<div aria-describedby="fig-two-1-caption">
+<img src="doc_files/figure-html/fig-two-output-1.png" alt="First." width="600" height="400" />
+</div>
+<figcaption id="fig-two-1-caption" class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig">
+Figure 2: First.
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-function-call">display</span><span class="hl-punctuation-bracket">(</span><span class="hl-function-call">MIME</span><span class="hl-punctuation-bracket">(</span><span class="hl-string">&quot;image/png&quot;</span><span class="hl-punctuation-bracket">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function-call">plot</span><span class="hl-punctuation-bracket">(</span><span class="hl-punctuation-bracket">(</span><span class="hl-number">1</span><span class="hl-operator">:</span><span class="hl-number">4</span><span class="hl-punctuation-bracket">)</span> <span class="hl-operator">.^</span> <span class="hl-number">2</span><span class="hl-punctuation-bracket">)</span><span class="hl-punctuation-bracket">)</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-display">
+<div id="fig-two-2" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig">
+<div aria-describedby="fig-two-2-caption">
+<img src="doc_files/figure-html/fig-two-output-2.png" alt="Second." width="600" height="400" />
+</div>
+<figcaption id="fig-two-2-caption" class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig">
+Figure 3: Second.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<figcaption id="fig-two-caption" class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig">
+Figure 4: A group.
+</figcaption>
+</figure>
+</div>
+<div id="tbl-one" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl">
+<figcaption id="tbl-one-caption" class="quarto-float-caption-top quarto-float-caption quarto-float-tbl">
+Table 1: A table.
+</figcaption>
+<div aria-describedby="tbl-one-caption">
+<div id="cell-5" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-keyword-import">using</span> <span class="hl-variable">Markdown</span>
+<span class="hl-function-call">display</span><span class="hl-punctuation-bracket">(</span><span class="hl-function-call">MIME</span><span class="hl-punctuation-bracket">(</span><span class="hl-string">&quot;text/markdown&quot;</span><span class="hl-punctuation-bracket">)</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-function-macro">md</span><span class="hl-string">&quot;| a | b |\n|---|---|\n| 1 | 2 |&quot;</span><span class="hl-punctuation-bracket">)</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-display cell-output-markdown">
+<p>| a | b |\n|–-|–-|\n| 1 | 2 |</p>
+</div>
+</div>
+</div>
+</figure>
+</div>
+<p>References: <a href="#fig-one" class="quarto-xref">Figure 1</a>, <a href="#fig-two" class="quarto-xref">Figure 4</a>, <a href="#fig-two-1" class="quarto-xref">Figure 2</a>, <a href="#fig-two-2" class="quarto-xref">Figure 3</a>, <a href="#tbl-one" class="quarto-xref">Table 1</a>.</p>
+
+</main>
+</div>
+<!-- quarto-anchor-sections -->
+<script>
+window.document.addEventListener("DOMContentLoaded", function (event) {
+const anchorJS = new window.AnchorJS();
+anchorJS.options = {
+placement: 'right',
+icon: ''
+};
+anchorJS.add('.anchored');
+});
+</script>
+</body>
+</html>

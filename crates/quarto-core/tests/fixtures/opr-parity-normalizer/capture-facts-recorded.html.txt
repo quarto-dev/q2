@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Julia capture facts</title>
+<link rel="stylesheet" href="doc_files/quarto/quarto-theme-d9a3a2debf57bcb1.css">
+<script src="doc_files/anchor/anchor.min.js"></script>
+<script src="doc_files/quarto/bootstrap.bundle.min.js"></script>
+<script src="doc_files/quarto/clipboard.min.js"></script>
+<script src="doc_files/quarto/code-copy-init.js"></script>
+<script src="doc_files/quarto/tabsets.js"></script>
+</head>
+<body class="fullcontent quarto-light">
+<a id="quarto-skip-link" class="visually-hidden-focusable" href="#quarto-document-content">Skip to main content</a>
+
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content" tabindex="-1">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Julia capture facts</h1>
+</div>
+<div class="quarto-title-meta">
+</div>
+
+</header>
+
+
+<p>A cell with several expressions, <code>prompt</code>, and a numeric <code>echo</code>.</p>
+<div id="cell-1" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia">&gt; <span class="hl-variable">x</span> <span class="hl-operator">=</span> <span class="hl-number">1</span>
+&gt; <span class="hl-function-call">println</span><span class="hl-punctuation-bracket">(</span><span class="hl-string">&quot;first&quot;</span><span class="hl-punctuation-bracket">)</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-stdout">
+<div class="code-copy-outer-scaffold">
+<pre class="code-with-copy"><code>first</code></pre>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+</div>
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia">&gt; <span class="hl-variable">y</span> <span class="hl-operator">=</span> <span class="hl-variable">x</span> <span class="hl-operator">+</span> <span class="hl-number">1</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<pre class="code-with-copy"><code>2</code></pre>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+</div>
+</div>
+<div id="cell-3" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-variable">b</span> <span class="hl-operator">=</span> <span class="hl-number">2</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<pre class="code-with-copy"><code>2</code></pre>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+</div>
+</div>
+<p><code>warning: false</code> keeps the message and the raw stderr write and drops the warning.</p>
+<div id="cell-5" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-function-macro">@</span><span class="hl-function-macro">info</span> <span class="hl-string">&quot;keepme&quot;</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-stderr">
+<div class="code-copy-outer-scaffold">
+<pre class="code-with-copy"><code>[ Info: keepme</code></pre>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+</div>
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-function-macro">@</span><span class="hl-function-macro">warn</span> <span class="hl-string">&quot;dropme&quot;</span>
+<span class="hl-function-call">println</span><span class="hl-punctuation-bracket">(</span><span class="hl-variable">stderr</span><span class="hl-punctuation-delimiter">,</span> <span class="hl-string">&quot;rawstderr&quot;</span><span class="hl-punctuation-bracket">)</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-stderr">
+<div class="code-copy-outer-scaffold">
+<pre class="code-with-copy"><code>rawstderr</code></pre>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+</div>
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-number">1</span></code></pre></div>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+<div class="cell-output cell-output-display" data-execution_count="1">
+<div class="code-copy-outer-scaffold">
+<pre class="code-with-copy"><code>1</code></pre>
+<button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
+</div>
+</div>
+</div>
+
+</main>
+</div>
+<!-- quarto-anchor-sections -->
+<script>
+window.document.addEventListener("DOMContentLoaded", function (event) {
+const anchorJS = new window.AnchorJS();
+anchorJS.options = {
+placement: 'right',
+icon: ''
+};
+anchorJS.add('.anchored');
+});
+</script>
+</body>
+</html>

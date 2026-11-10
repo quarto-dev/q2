@@ -2,7 +2,7 @@
 title: 'OPR-9e: Julia on non-HTML targets (fixture, parity classes, target allowlist)'
 date: 2026-11-10
 description: 'Measures Julia plain against recorded on gfm, typst, docx, pptx and epub, adds the three fig-subcap formats, and graduates each target class whose only difference is the accepted interleaving, through a target allowlist in offers_presentation. A class that fails stays on the engine route, quietly.'
-status: conditional
+status: ready
 depends-on: [opr-9a, opr-9b, opr-9d]
 lane: D
 ---
@@ -19,8 +19,7 @@ lane: D
 
 ## Start condition
 
-`status: conditional`: Gordon reads the 9a note and answers its decisions (gfm graduates or is gated; whether the Julia target gate
-applies under `want_record`) and sets this plan `ready`. Then start when 9a, 9b and 9d are `complete`. Check that `workspace-6` is
+Gordon read the [9a note](../research/2026-11-10-opr-9a-spike-results.md) and confirmed its two settled decisions for this plan (which formats graduate; the gate applies under `want_record`) on 2026-11-10, so the status is `ready`. Then start when 9a, 9b and 9d are `complete` (9d runs first in this same lane; 9b runs in lane B). Check that `workspace-6` is
 clean and on no other branch (it was on `knr/knitr-pieces-hook-memo` with a dirty tree on 2026-11-10); if not, stop and report.
 
 ## The rule (Gordon, 2026-11-10)
@@ -28,18 +27,15 @@ clean and on no other branch (it was on `knr/knitr-pieces-hook-memo` with a dirt
 - **Julia on non-HTML targets: decided (Gordon, 2026-11-10): present by evidence, gate the rest.** Julia has no target
   gate today: `offers_presentation` (`ts_record.rs`) checks only that a record is built and units exist, so after the
   flip core would present a Julia render to every target, while the gate compares only html, gfm, revealjs and typst
-  (`COMPARABLE`, `opr_parity_runner.rs`; it skips zip formats, and every Julia manifest entry is `html`). One hand run of
-  a Julia document (a `println`, a labeled figure, a labeled table, a bare expression; plain against recorded, 7d review
-  session, ran) found: `docx` and `epub` differ only in where the `println` output sits relative to the figure (4d
-  interleaving); `pptx` slide text is identical; `gfm` differs in a way the interleaving does not explain (the recorded
-  route writes figures to `doc_files/figure-html/` where plain writes `figure-gfm/`; the 7j review found it is
-  presenter-wide: `FsFigureSink` hardcodes `figure-html`, and native Jupyter does it today); `typst` rendered on both routes and was not diffed; `latex` and `beamer` give
-  "Unknown format" in this tree (LaTeX lives on `explore/pandoc-hybrid-latex`) and there is no TeX, so they are not
-  measurable. The rule: a target class goes through the presenter for Julia only when a parity case for it differs from
-  the plain route by the accepted interleaving alone. A class with no case, or a failing case, stays on the engine route
-  for Julia, quietly, through a one-line target list in `offers_presentation` (the knitr gate\'s counterpart; do not
-  reuse knitr\'s own list, which excludes pptx). `pdf`, `latex` and `beamer` stay gated until the LaTeX work exists. A
-  class graduates by adding its case and removing it from the list.
+  (`COMPARABLE`, `opr_parity_runner.rs`; it skips zip formats, and every Julia manifest entry is `html`). 9a\'s S1 measured 22 formats
+  on the unfixed presenter ([note](../research/2026-11-10-opr-9a-spike-results.md)): html, revealjs, dashboard and epub match (html by
+  interleaving alone); docx and typst match except the figure directory name (9b fixes it); gfm, commonmark, markdown, djot, rst, org,
+  native, textile and mediawiki inline a base64 image, and pptx, odt, rtf, icml, fb2, docbook and plain lose the figure (9b fixes
+  both). `pdf` is "not yet supported" and `latex` and `beamer` give "Unknown format" in this tree (LaTeX lives on
+  `explore/pandoc-hybrid-latex`), so none of the three is measurable. The rule: a target class goes through the presenter for Julia only
+  when a parity case for it differs from the plain route by the accepted interleaving alone. A class with no case, or a failing case,
+  stays on the engine route for Julia, quietly, through the allowlist below (the knitr gate\'s counterpart; do not reuse knitr\'s own
+  list, which excludes pptx). **Settled by 9a\'s S2 (ran):** with 9b\'s fix, recorded matches plain on figures and directory for all 22 formats measured. Graduation follows the harness: **html, revealjs, dashboard, gfm and typst** have harness evidence (interleaving only; the three `fig-subcap` and `records-plot` cases); **epub, docx and pptx** join with 9d\'s zip extractor (the hand matrix already matches); the other text formats (commonmark, markdown, djot, rst, org, native, textile, mediawiki, plain, icml, fb2, docbook, rtf) have hand-matrix evidence only, so add them to the harness\'s comparable list and graduate each that shows interleaving alone; odt after the extractor handles it. Html, revealjs and dashboard must be on the list or they would stop presenting from the record. Everything else, and `pdf`, stays gated.
 
 ## What the review added
 
@@ -49,11 +45,13 @@ clean and on no other branch (it was on `knr/knitr-pieces-hook-memo` with a dirt
   `JULIA_PRESENTED_TARGETS` (a data list in `engine/ts_record.rs`, read by `offers_presentation(ctx)` through `ctx.format`), and graduate a
   class by adding its identifier with its parity case. `latex` and `beamer` never reach the engine ("Unknown format", `format.rs`). `pdf`
   stays out until the LaTeX work exists. Do not reuse knitr\'s `route_for_target` list (it excludes pptx).
-- **The gate also changes `want_record` runs.** `offers_presentation` is called with `want_record` true for `--trace`, `record: true`,
-  preview and hub, so a gated Julia target stops presenting there too (the record is still built, then discarded). Apply Gordon\'s
-  answer from 9a: either state that this is intended (knitr behaves so today) or gate only when `!want_record`.
-- **The hand-run document is not in the tree (read).** It lived in an earlier session\'s scratch. 9a\'s S4 note holds a draft; commit the
-  final as `crates/quarto-core/tests/fixtures/opr-parity/julia/targets/doc.qmd` (a `println`, a labeled figure from a hardcoded PNG, a
+- **The gate and `want_record`.** `offers_presentation` is `builds_record() && !units.is_empty()` and `builds_record()` is
+  `want_record || present_from_record`, so `record: true`, `--trace`, preview and hub make a Julia engine present from the record on a
+  target the gate excludes: S1\'s "recorded" renders are exactly that. Gordon agreed (2026-11-10) to settle the rule after S2; S2 shows the recorded route is correct on every measured target, so the gate now protects only the unmeasured tail of formats and any target without a parity case. **Decided (9a note, 2026-11-10): the gate applies under `want_record` too**, so asking
+  for a record never changes the output route (the record is still built and written); that means `offers_presentation` must test the
+  allowlist, not only `builds_record()`. Tests: `record: true`, `--trace` and a plain render of a gated target give the same page.
+- **The hand-run document is not in the tree (read).** It lived in an earlier session\'s scratch. 9a\'s S4 (done) put a corrected draft in the
+  [results note](../research/2026-11-10-opr-9a-spike-results.md) (it needs only Julia\'s standard library, no Plots); commit it as `crates/quarto-core/tests/fixtures/opr-parity/julia/targets/doc.qmd` (a `println`, a labeled figure from a hardcoded PNG, a
   labeled table, a bare expression, and a `fig-subcap` group cell). The existing `julia/fig-subcap` table renders as literal pipe text on
   both routes, so it does not exercise a table.
 - **gfm and pptx (ran):** the presenter bug behind them is fixed by 9b, so run them after 9b. docx and typst already match apart from the

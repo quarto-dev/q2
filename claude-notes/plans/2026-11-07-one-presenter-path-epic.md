@@ -164,10 +164,10 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) | OPR | Group caption and per-panel `label-N` ids for `fig-subcap` cells on every engine (knitr\'s hooks.R rules in the presenter), so the flip does not lose the Julia group caption or its panel references; real subfloats stay out of scope | 7f | C | ready |
 | [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | **Superseded 2026-11-10 (Gordon): a tombstone; split into 9a to 9g below** | nothing | none | cancelled |
 | [OPR-9a](2026-11-10-opr-9a-non-html-spikes.md) | OPR | Spikes (a note) before the plain-render pieces: Julia format matrix, presenter-fix prototype, normalizer prototype, zip extraction, reserved keys, browser replay | nothing | B | ready |
-| [OPR-9b](2026-11-10-opr-9b-presenter-follows-target.md) | OPR | The presenter picks rich outputs and names figure directories by target, for every engine (Jupyter changes on non-HTML targets, a separate bugfix) | 7j, 9a | C | ready |
-| [OPR-9c](2026-11-10-opr-9c-reserved-unit-id-key.md) | OPR | A diagnostic for the reserved knitr option `quarto-unit-id` (the flip would expose the crash to every knitr render) | 9a | B | ready |
-| [OPR-9d](2026-11-10-opr-9d-parity-harness-machinery.md) | OPR | Parity harness: document normalizer, pinned entry, zip comparison, a real gate assertion | 9a | B | ready |
-| [OPR-9e](2026-11-10-opr-9e-julia-non-html-targets.md) | OPR | Julia on non-HTML targets: fixture, five parity classes, a target allowlist in `offers_presentation` | 9a, 9b, 9d | D | conditional |
+| [OPR-9b](2026-11-10-opr-9b-presenter-follows-target.md) | OPR | The presenter picks rich outputs and names figure directories by target, for every engine (Jupyter changes on non-HTML targets, a separate bugfix) | 7j, 9a | B | ready |
+| [OPR-9c](2026-11-10-opr-9c-reserved-unit-id-key.md) | OPR | A diagnostic for the reserved knitr option `quarto-unit-id` (the flip would expose the crash to every knitr render) | 9a | C | ready |
+| [OPR-9d](2026-11-10-opr-9d-parity-harness-machinery.md) | OPR | Parity harness: document normalizer, pinned entry, zip comparison, a real gate assertion | 9a | D | ready |
+| [OPR-9e](2026-11-10-opr-9e-julia-non-html-targets.md) | OPR | Julia on non-HTML targets: fixture, five parity classes, a target allowlist in `offers_presentation` | 9a, 9b, 9d | D | ready |
 | [OPR-9f](2026-11-10-opr-9f-run-the-gate.md) | OPR | Run the gate before the flip: four interleaving entries proposed, report attached, Gordon signs | 7a, 7b, 7c, 7f, 7g, 7h, 7i, 7j, 9b, 9c, 9d, 9e | D | ready |
 | [OPR-9g](2026-11-10-opr-9g-flip-plain-render.md) | OPR | Switch plain render of Julia and knitr to the recorded route (the old 7d goal) | 9f, Gordon\'s signature | D | blocked-on-gordon |
 | [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 9g, 4d resolved, RFU-8 | D | ready |
@@ -185,11 +185,13 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | Lane | Workspace | Plans, in order |
 |---|---|---|
 | A, the presenter chain | `workspace-3` | OPR-0a, 1a, 1b, 2, 4d, RFU-3, **RFU-7** (moved from C), **OPR-7g** (moved from C, 2026-11-09) |
-| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, **OPR-7e**, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C), **OPR-9a, 9c, 9d** (2026-11-10, split from 7d) |
-| C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a, **OPR-7f**, **OPR-7j** (moved from D, 2026-11-10), **OPR-9b** (2026-11-10, split from 7d) |
-| D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, **OPR-7h**, **OPR-7i**, **OPR-9e, 9f, 9g** (replace 7d, 2026-11-10), OPR-8 |
+| B, Julia and knitr capture | `workspace-4` | OPR-3, 4a, 7b, RFU-5, RFU-2, **OPR-7e**, OPR-4b, 4c, **RFU-8** (moved from D), **RFU-4** (moved from C), **OPR-9a** (2026-11-10, split from 7d), **OPR-9b** (moved from C, 2026-11-10) |
+| C, the flag and the fork | `workspace-5` | OPR-0d, RFU-1, OPR-5, OPR-6, OPR-7a, **OPR-7f**, **OPR-7j** (moved from D, 2026-11-10), **OPR-9c** (moved from B, 2026-11-10) |
+| D, measurement, gate, docs | `workspace-6` | OPR-0c, 0b, OPR-7c, **OPR-7h**, **OPR-7i**, **OPR-9d** (moved from B, 2026-11-10), **OPR-9e, 9f, 9g** (replace 7d, 2026-11-10), OPR-8 |
 
 > **Split, 2026-11-10.** OPR-7d was split by Gordon into OPR-9a to 9g (see its tombstone); the epic prose below that says OPR-7d means **9g**, the flip.
+
+> **Lane change, 2026-11-10 (Gordon).** So that the three startable pieces run at once, OPR-9b moved from lane C to **lane B** (`workspace-4`), OPR-9c from lane B to **lane C** (`workspace-5`), and OPR-9d from lane B to **lane D** (`workspace-6`). OPR-9e, 9f and 9g stay in lane D, so lane D runs 9d, then 9e (which also waits on 9b, from lane B), then 9f and 9g. Dependencies are unchanged. `workspace-6` must be clean and on no other branch before 9d starts (on 2026-11-10 it held an untracked note on `knr/knitr-pieces-hook-memo`).
 
 > **Lane change, 2026-11-09.** Lanes A and B went idle (all their plans complete) while C and D still held startable plans, so three plans were **reassigned**: RFU-7 from lane C to **lane A** (`workspace-3`), RFU-4 from lane C to **lane B** (`workspace-4`), and RFU-8 from lane D to **lane B** (`workspace-4`). Dependencies are unchanged. The Lane column and lane lists below show the new lanes; the plan files and the lanes diagram carry the same change.
 

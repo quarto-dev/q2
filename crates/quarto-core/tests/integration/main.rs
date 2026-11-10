@@ -162,6 +162,7 @@ pub mod navigation_merge;
 pub mod nested_cell_mask_render;
 pub mod opr_parity_harness;
 pub mod opr_parity_runner;
+pub mod opr_parity_zip;
 pub mod orange_book_lua;
 pub mod output_outside_source_images;
 pub mod own_file_provenance;

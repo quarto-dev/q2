@@ -9,7 +9,7 @@ lane: C
 
 **Epic:** [one presenter path](2026-11-07-one-presenter-path-epic.md) ·
 **Protocol:** [agent protocol](2026-11-08-opr-agent-protocol.md) (read it first).
-**Blocks:** [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md), which lists `opr-7j` in its `depends-on`.
+**Blocks:** [OPR-9b](2026-11-10-opr-9b-presenter-follows-target.md) and [OPR-9f](2026-11-10-opr-9f-run-the-gate.md), which list `opr-7j` in their `depends-on`. OPR-7d, which this plan was written for, is now a cancelled tombstone split into OPR-9a to 9g.
 **Reviews, both folded in below:** [first-round plan review](../research/2026-11-10-opr-7j-plan-review.md) (design, edge cases,
 Quarto 1 evidence) and [implementability review](../research/2026-11-10-opr-7j-implementability-review.md) (could an agent
 run the plan cold). The second complements the first and disagrees with it in three places, noted where they matter.
@@ -366,3 +366,8 @@ the three `fig-subcap` manifest entries to html). Subfloat draft: its Interactio
 figures ... two too high"; it now says n + 1 figures and n too high, from the rendered rows. The first-round review was read
 against the plan again (findings 1 to 17): all are folded in; finding 6's two unrendered cases (plot plus graphic, plot plus
 widget) are now tests.
+
+**After the second rebase.** OPR-7d was cancelled and split into OPR-9a to 9g while this run was landing. The only conflict was
+my one-line fix in the 7d file, dropped in favor of the tombstone; the same stale pointer in
+[OPR-9g](2026-11-10-opr-9g-flip-plain-render.md) is fixed there. The code and gates are unchanged by that rebase
+(the integration branch added plan files only after the gate run at `d446c7bb6`).
