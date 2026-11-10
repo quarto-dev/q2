@@ -2,7 +2,7 @@
 title: 'OPR-7g: ANSI escapes are removed at presentation, from one function, across engines'
 date: 2026-11-09
 description: 'Closes the parity gate difference where the recorded route writes raw ANSI escape bytes into HTML (a plain Julia or Jupyter render strips them, as Quarto 1 does). Adds one presenter function through which every stream, text/plain and error output passes, strips there for cells that carry no resolved knitr options, leaves the record raw, and shares one stripping definition and one test table with the TS route. Tested on knitr, Julia, Jupyter, an imported Positron record and marimo. No color yet: the function is where it will land.'
-status: ready
+status: in-progress
 depends-on: [opr-7f, opr-7h]
 lane: A
 ---
