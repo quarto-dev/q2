@@ -17,7 +17,7 @@ use quarto_citeproc::output::{Output, QuoteConfig, Tag};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::StyleClass;
 use quarto_csl::parse_csl;
-use quarto_error_reporting::DiagnosticMessage;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_system_runtime::SystemRuntime;
 use serde::{Deserialize, Serialize};
 
@@ -183,6 +183,21 @@ pub fn apply_citeproc_filter(
         })
     };
 
+    // A cited key no reference defines renders as `**key?**` (see
+    // `quarto_citeproc`'s `unknown_item_output`) and warns once, at its
+    // first citation, as in Pandoc (issue #1111).
+    let unknown: HashSet<String> = citations
+        .iter()
+        .flat_map(|c| c.items.iter())
+        .filter(|item| processor.get_reference(&item.id).is_none())
+        .map(|item| item.id.clone())
+        .collect();
+    let diagnostics = if unknown.is_empty() {
+        vec![]
+    } else {
+        unknown_key_warnings(&pandoc.blocks, &unknown)
+    };
+
     // Process citations with disambiguation, keeping the Output AST so
     // the rendered text keeps its formatting and its per-item structure.
     let outputs = processor
@@ -222,7 +237,159 @@ pub fn apply_citeproc_filter(
         }
     }
 
-    Ok((pandoc, context, vec![], citation_manifest))
+    Ok((pandoc, context, diagnostics, citation_manifest))
+}
+
+/// The warning for a citation key no reference defines (`Q-23-2`, issue
+/// #1111), at the key's span in the source when there is one.
+///
+/// Pandoc's citeproc warns (`citation X not found`) rather than failing
+/// the render, and so does Q2. The citation renders as `**X?**`.
+pub fn unknown_citation_key_warning(
+    id: &str,
+    location: Option<&quarto_source_map::SourceInfo>,
+) -> DiagnosticMessage {
+    let mut builder = DiagnosticMessageBuilder::warning("Citation Key Not Found")
+        .with_code("Q-23-2")
+        .problem(format!(
+            "No reference has the citation key `{id}`, so the citation renders as `{id}?`."
+        ))
+        .add_hint(
+            "Check the key for a typo, or add the reference to a file listed in \
+             `bibliography` (or to `references`).",
+        );
+    if let Some(location) = location {
+        builder = builder.with_location(location.clone());
+    }
+    builder.build()
+}
+
+/// The span to report a citation item at: the key itself, else the whole
+/// citation (a `Cite` a filter built may have no key span).
+fn citation_key_location<'a>(
+    citation: &'a crate::pandoc::Citation,
+    cite: &'a crate::pandoc::Cite,
+) -> &'a quarto_source_map::SourceInfo {
+    citation.id_source.as_ref().unwrap_or(&cite.source_info)
+}
+
+/// One [`unknown_citation_key_warning`] per id in `unknown`, at its first
+/// citation in `blocks`, in document order.
+///
+/// Walks a copy of `blocks`, so callers only reach for it once they know
+/// some key is unknown; a document whose keys all resolve pays nothing.
+fn unknown_key_warnings(blocks: &[Block], unknown: &HashSet<String>) -> Vec<DiagnosticMessage> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut warnings = Vec::new();
+    let mut filter = crate::filters::Filter::new().with_cite(|cite, _ctx| {
+        for citation in &cite.citations {
+            if unknown.contains(&citation.id) && seen.insert(citation.id.clone()) {
+                warnings.push(unknown_citation_key_warning(
+                    &citation.id,
+                    Some(citation_key_location(citation, &cite)),
+                ));
+            }
+        }
+        crate::filters::FilterReturn::Unchanged(cite)
+    });
+    let mut ctx = crate::filter_context::FilterContext::new();
+    crate::filters::topdown_traverse_blocks(blocks.to_vec(), &mut filter, &mut ctx);
+    drop(filter);
+    warnings
+}
+
+/// Check every citation key against the document's references when Q2's
+/// citeproc does not run because the output format resolves citations
+/// itself (Typst's `#bibliography`, the default for `typst`).
+///
+/// Typst fails the whole compile on an unknown key and points at the
+/// generated `.typ` (issue #1111). Here each unknown key instead gets a
+/// [`unknown_citation_key_warning`] at its source span and is replaced by
+/// `**key?**`, as Q2's own citeproc renders it; the known items of the
+/// same citation stay a `Cite` for Typst to resolve.
+///
+/// The check only acts when it can read every bibliography: Typst reads
+/// formats Q2 does not (Hayagriva YAML) and reports its own read errors,
+/// so an unreadable file leaves the document untouched.
+pub fn check_citation_keys(
+    pandoc: Pandoc,
+    base_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> (Pandoc, Vec<DiagnosticMessage>) {
+    let config = extract_config(&pandoc);
+    if config.bibliography.is_empty() && config.references.is_empty() {
+        return (pandoc, vec![]);
+    }
+    let mut known: HashSet<String> = config.references.iter().map(|r| r.id.clone()).collect();
+    for bib_path in &config.bibliography {
+        match load_bibliography(bib_path, base_dir, runtime) {
+            Ok(references) => known.extend(references.into_iter().map(|r| r.id)),
+            Err(_) => return (pandoc, vec![]),
+        }
+    }
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut warnings = Vec::new();
+    let mut filter = crate::filters::Filter::new().with_cite(|cite, _ctx| {
+        if cite.citations.iter().all(|c| known.contains(&c.id)) {
+            return crate::filters::FilterReturn::Unchanged(cite);
+        }
+        let mut markers: Vec<Inline> = Vec::new();
+        for citation in cite.citations.iter().filter(|c| !known.contains(&c.id)) {
+            if seen.insert(citation.id.clone()) {
+                warnings.push(unknown_citation_key_warning(
+                    &citation.id,
+                    Some(citation_key_location(citation, &cite)),
+                ));
+            }
+            markers.push(unknown_key_marker(&citation.id));
+        }
+        // The known items stay one `Cite`, followed by the markers:
+        // `@a **b?**; **c?**`.
+        let source_info = cite.source_info.clone();
+        let mut cite = cite;
+        cite.citations.retain(|c| known.contains(&c.id));
+        let mut out: Inlines = Vec::new();
+        if !cite.citations.is_empty() {
+            out.push(Inline::Cite(cite));
+        }
+        for marker in markers {
+            match out.last() {
+                None => {}
+                Some(Inline::Cite(_)) => {}
+                Some(_) => out.push(Inline::Str(crate::pandoc::Str {
+                    text: ";".to_string(),
+                    source_info: source_info.clone(),
+                })),
+            }
+            if !out.is_empty() {
+                out.push(Inline::Space(crate::pandoc::Space {
+                    source_info: source_info.clone(),
+                }));
+            }
+            out.push(marker);
+        }
+        crate::filters::FilterReturn::FilterResult(out, false)
+    });
+    let mut ctx = crate::filter_context::FilterContext::new();
+    let pandoc = Pandoc {
+        meta: pandoc.meta,
+        blocks: crate::filters::topdown_traverse_blocks(pandoc.blocks, &mut filter, &mut ctx),
+    };
+    drop(filter);
+    (pandoc, warnings)
+}
+
+/// `**key?**`, the inline an unknown citation key renders as.
+fn unknown_key_marker(id: &str) -> Inline {
+    let source_info = quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc());
+    Inline::Strong(crate::pandoc::Strong {
+        content: vec![Inline::Str(crate::pandoc::Str {
+            text: format!("{id}?"),
+            source_info: source_info.clone(),
+        })],
+        source_info,
+    })
 }
 
 /// Resolve a declared `bibliography`/`csl` path against `base_dir`
@@ -4791,5 +4958,256 @@ mod tests {
                 ("extra".to_string(), "[3] Nocite work".to_string()),
             ]
         );
+    }
+
+    // ---- Unknown citation keys (issue #1111, bd-s1kn2w1r) ----
+    //
+    // Pandoc's citeproc warns `citation X not found` and renders the item
+    // as bold `X?`, keeping the citation's own affixes and delimiters,
+    // the item's prefix, and dropping its suffix. The item gets no
+    // citation number. Q2 matches that, and the warning carries code
+    // Q-23-2 and the key's span in the source.
+
+    /// A span in a made-up source file, distinct from `si()`, so a test
+    /// can tell the key's location apart from every other node's.
+    fn key_span(start: usize) -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(quarto_source_map::FileId(7), start, start + 12)
+    }
+
+    /// One `Cite` holding `items` (id, prefix, suffix, id_source).
+    fn cite_items(items: &[(&str, &str, &str, Option<quarto_source_map::SourceInfo>)]) -> Inline {
+        let words = |text: &str| -> Vec<Inline> {
+            if text.is_empty() {
+                vec![]
+            } else {
+                vec![str_inline(text)]
+            }
+        };
+        Inline::Cite(crate::pandoc::Cite {
+            citations: items
+                .iter()
+                .map(|(id, prefix, suffix, id_source)| crate::pandoc::Citation {
+                    id: id.to_string(),
+                    prefix: words(prefix),
+                    suffix: words(suffix),
+                    mode: crate::pandoc::CitationMode::NormalCitation,
+                    note_num: 0,
+                    hash: 0,
+                    id_source: id_source.clone(),
+                })
+                .collect(),
+            content: vec![],
+            source_info: si(),
+        })
+    }
+
+    /// Run the filter on one paragraph of `content` against `SCOPE_BIB`.
+    fn render_paragraph(
+        content: Vec<Inline>,
+        extra_meta: Vec<(&str, ConfigValue)>,
+        files: &[(&str, &str)],
+    ) -> (Pandoc, Vec<DiagnosticMessage>) {
+        let mut all_files = vec![("/mem/refs.bib", SCOPE_BIB)];
+        all_files.extend_from_slice(files);
+        let rt = MemRuntime::new(&all_files);
+        let mut meta = vec![("bibliography", meta_string("refs.bib"))];
+        meta.extend(extra_meta);
+        let pandoc = Pandoc {
+            meta: meta_map(meta),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content,
+                source_info: si(),
+            })],
+        };
+        let (out, _, diagnostics, _) =
+            apply_citeproc_filter(pandoc, ASTContext::new(), "typst", Path::new("/mem"), &rt)
+                .expect("an unknown citation key must not fail the render");
+        (out, diagnostics)
+    }
+
+    fn first_paragraph(pandoc: &Pandoc) -> &[Inline] {
+        match &pandoc.blocks[0] {
+            Block::Paragraph(p) => &p.content,
+            other => panic!("expected a paragraph first, got {other:?}"),
+        }
+    }
+
+    fn has_strong(inlines: &[Inline], text: &str) -> bool {
+        inlines.iter().any(|i| match i {
+            Inline::Strong(s) => inlines_to_text(&s.content) == text,
+            Inline::Cite(c) => has_strong(&c.content, text),
+            Inline::Span(s) => has_strong(&s.content, text),
+            _ => false,
+        })
+    }
+
+    fn assert_missing_key_warning(
+        d: &DiagnosticMessage,
+        key: &str,
+        location: &quarto_source_map::SourceInfo,
+    ) {
+        assert_eq!(d.code.as_deref(), Some("Q-23-2"), "{d:?}");
+        assert_eq!(
+            d.kind,
+            quarto_error_reporting::DiagnosticKind::Warning,
+            "{d:?}"
+        );
+        assert_eq!(d.location.as_ref(), Some(location), "{d:?}");
+        let text = d.to_text(None);
+        assert!(text.contains(key), "the message must name the key: {text}");
+    }
+
+    #[test]
+    fn unknown_key_renders_as_bold_marker_and_warns_at_its_source() {
+        let (out, diagnostics) = render_paragraph(
+            vec![cite_items(&[
+                ("cited", "", "", None),
+                ("missing2020", "", "", Some(key_span(40))),
+            ])],
+            vec![],
+            &[],
+        );
+        let para = first_paragraph(&out);
+        assert_eq!(inlines_to_text(para), "(Smith 2020; missing2020?)");
+        assert!(has_strong(para, "missing2020?"), "{para:?}");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert_missing_key_warning(&diagnostics[0], "missing2020", &key_span(40));
+    }
+
+    #[test]
+    fn unknown_key_keeps_its_prefix_and_drops_its_suffix() {
+        let (out, _) = render_paragraph(
+            vec![cite_items(&[("missing2020", "see", ", p. 3", None)])],
+            vec![],
+            &[],
+        );
+        assert_eq!(inlines_to_text(first_paragraph(&out)), "(see missing2020?)");
+    }
+
+    #[test]
+    fn each_unknown_key_warns_once_at_its_first_citation() {
+        let (_, diagnostics) = render_paragraph(
+            vec![
+                cite_items(&[("missing2020", "", "", Some(key_span(10)))]),
+                cite_items(&[("alsomissing", "", "", Some(key_span(30)))]),
+                cite_items(&[("missing2020", "", "", Some(key_span(50)))]),
+            ],
+            vec![],
+            &[],
+        );
+        assert_eq!(diagnostics.len(), 2, "{diagnostics:?}");
+        assert_missing_key_warning(&diagnostics[0], "missing2020", &key_span(10));
+        assert_missing_key_warning(&diagnostics[1], "alsomissing", &key_span(30));
+    }
+
+    #[test]
+    fn unknown_key_takes_no_citation_number() {
+        let (out, _) = render_paragraph(
+            vec![
+                cite_items(&[("missing2020", "", "", None)]),
+                Inline::Space(Space { source_info: si() }),
+                cite_items(&[("cited", "", "", None)]),
+            ],
+            vec![("csl", meta_string("numeric.csl"))],
+            &[("/mem/numeric.csl", NUMERIC_CSL)],
+        );
+        assert_eq!(inlines_to_text(first_paragraph(&out)), "missing2020? [1]");
+        assert_eq!(
+            bibliography_entries(&out),
+            vec![("cited".to_string(), "[1] Cited work".to_string())]
+        );
+    }
+
+    // ---- The same check where Typst resolves citations itself ----
+    //
+    // With `citeproc: false` (Typst's default) the `Cite` nodes reach
+    // Typst, which fails the whole compile on an unknown key and points
+    // at the generated `.typ`. `check_citation_keys` runs the same lookup
+    // first: it warns at the key's source and replaces just that item
+    // with the bold marker, leaving known items as `Cite`s for Typst.
+
+    fn check_paragraph(
+        content: Vec<Inline>,
+        files: &[(&str, &str)],
+    ) -> (Pandoc, Vec<DiagnosticMessage>) {
+        let rt = MemRuntime::new(files);
+        let pandoc = Pandoc {
+            meta: meta_map(vec![("bibliography", meta_string("refs.bib"))]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content,
+                source_info: si(),
+            })],
+        };
+        check_citation_keys(pandoc, Path::new("/mem"), &rt)
+    }
+
+    fn cite_ids(inlines: &[Inline]) -> Vec<Vec<String>> {
+        inlines
+            .iter()
+            .filter_map(|i| match i {
+                Inline::Cite(c) => Some(c.citations.iter().map(|c| c.id.clone()).collect()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn key_check_replaces_only_unknown_items_and_warns() {
+        let (out, diagnostics) = check_paragraph(
+            vec![cite_items(&[
+                ("cited", "", "", None),
+                ("missing2020", "", "", Some(key_span(20))),
+            ])],
+            &[("/mem/refs.bib", SCOPE_BIB)],
+        );
+        let para = first_paragraph(&out);
+        assert_eq!(cite_ids(para), vec![vec!["cited".to_string()]], "{para:?}");
+        assert!(has_strong(para, "missing2020?"), "{para:?}");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert_missing_key_warning(&diagnostics[0], "missing2020", &key_span(20));
+    }
+
+    #[test]
+    fn key_check_replaces_a_wholly_unknown_cite() {
+        let (out, diagnostics) = check_paragraph(
+            vec![cite_items(&[("missing2020", "", "", Some(key_span(5)))])],
+            &[("/mem/refs.bib", SCOPE_BIB)],
+        );
+        let para = first_paragraph(&out);
+        assert!(cite_ids(para).is_empty(), "{para:?}");
+        assert!(has_strong(para, "missing2020?"), "{para:?}");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    }
+
+    #[test]
+    fn key_check_separates_markers_like_citation_items() {
+        let (out, diagnostics) = check_paragraph(
+            vec![cite_items(&[
+                ("cited", "", "", None),
+                ("missing2020", "", "", None),
+                ("alsomissing", "", "", None),
+            ])],
+            &[("/mem/refs.bib", SCOPE_BIB)],
+        );
+        let para = first_paragraph(&out);
+        assert_eq!(cite_ids(para), vec![vec!["cited".to_string()]], "{para:?}");
+        // The `Cite` keeps no text of its own; Typst renders it.
+        assert_eq!(inlines_to_text(para), " missing2020?; alsomissing?");
+        assert_eq!(diagnostics.len(), 2, "{diagnostics:?}");
+    }
+
+    #[test]
+    fn key_check_leaves_the_document_alone_when_a_bibliography_cannot_be_read() {
+        // Typst reads formats Q2 doesn't (Hayagriva YAML), and reports its
+        // own read errors; the check must not guess.
+        let (out, diagnostics) = check_paragraph(
+            vec![cite_items(&[("missing2020", "", "", Some(key_span(5)))])],
+            &[],
+        );
+        assert_eq!(
+            cite_ids(first_paragraph(&out)),
+            vec![vec!["missing2020".to_string()]]
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
     }
 }

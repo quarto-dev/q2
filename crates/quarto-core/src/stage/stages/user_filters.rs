@@ -299,6 +299,30 @@ impl PipelineStage for UserFiltersStage {
             }
             FilterPosition::Post => resolved.post.clone(),
         };
+
+        // Typst resolves citations itself unless Q2's citeproc runs, and
+        // fails the whole compile on an unknown key, pointing at the
+        // generated `.typ`. Check the keys here instead, at their source
+        // (issue #1111). Margin-citation mode is left alone: its Lua
+        // handler runs citeproc on the `Cite` nodes itself.
+        if hybrid_post
+            && ctx.format.identifier == crate::format::FormatIdentifier::Typst
+            && !crate::filter_resolve::margin_citations(&doc.ast.meta)
+            && !resolved
+                .pre
+                .iter()
+                .chain(resolved.post.iter())
+                .any(|f| *f == pampa::unified_filter::FilterSpec::Citeproc)
+        {
+            let (ast, warnings) = pampa::citeproc_filter::check_citation_keys(
+                doc.ast,
+                &ctx.project.dir,
+                ctx.runtime.as_ref(),
+            );
+            doc.ast = ast;
+            ctx.diagnostics.extend(warnings);
+        }
+
         if filters.is_empty() {
             return Ok(PipelineData::DocumentAst(doc));
         }
