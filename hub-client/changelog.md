@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-10
+
+- [`c7bc73610`](https://github.com/quarto-dev/q2/commits/c7bc73610): Previews with editing off and comments hidden now skip an unused source-AST parse and serialization, cutting render time and response size by about half in the measurement fixture; enabling editing or showing comments still captures the baseline needed for edits, and comments are read-only until that baseline arrives.
+
 ### 2026-11-09
 
 - [`3010beb04`](https://github.com/quarto-dev/q2/commits/3010beb04): Multi-file project previews are about 20% faster in the measurement fixture because rendering no longer parses and serializes a source AST that it immediately discarded; preview output and editing/comment data are unchanged.

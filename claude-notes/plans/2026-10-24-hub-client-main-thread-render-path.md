@@ -796,7 +796,7 @@ current implementation scope.
 
 ### Phase 3B1 — Gate capture without changing visible-comment behavior
 
-**Status: complete 2026-11-10 (bd-wpmqf039).** This checkpoint completes the
+**Status: complete 2026-11-10 (bd-wpmqf039, implementation `c7bc73610`).** This checkpoint completes the
 shared strand. An unarmed single-document render drops from two QMD parses to one. An
 unarmed project render drops from two to one relative to Phase 3A (from
 the original three to one overall); an armed project render remains at
@@ -927,7 +927,7 @@ editing-enabled renders remain armed in every variant.
   (`previewEditing=false, commentsMode=show`) **162.329 / 1294.363 ms**.
   Both have exactly the flag-on envelope bytes above; neither is presented as
   an unarmed win.
-- [ ] End-to-end smoke both hosts. In hub, verify content editing after
+- [x] End-to-end smoke both hosts. In hub, verify content editing after
   entering edit mode, comment add/resolve with editing off and comments
   visible, and comments hidden/visible transitions, including the
   baseline-less interval before the armed render completes. In the SPA,
