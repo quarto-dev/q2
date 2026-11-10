@@ -3,7 +3,7 @@ title: 'OPR-7d: switch plain render of Julia and knitr to the recorded route'
 date: 2026-11-08
 description: 'Turns the internal present_from_record control on by default, so a plain q2 render of a Julia or knitr document is presented by the Rust presenter from an in-memory record, writing nothing to .quarto. Keeps the LaTeX family and uncovered targets on the engine route, quietly. Applies Gordon''s decisions on the retained knitr fallback and on an opt-out control.'
 status: blocked-on-gordon
-depends-on: [opr-7a, opr-7b, opr-7c, opr-7f, opr-7g, opr-7h]
+depends-on: [opr-7a, opr-7b, opr-7c, opr-7f, opr-7g, opr-7h, opr-7i]
 lane: D
 ---
 
@@ -21,7 +21,9 @@ decisions below are recorded (2026-11-09). If the allowlist is unsigned or the s
 `crates/quarto-core/tests/fixtures/opr-parity/opr-parity-allowlist.toml` (`knitr-empty-cell-wrapper`,
 `knitr-adjacent-blockquotes`, `julia-code-leading-newline`; each reason ends "Signed: Gordon, 2026-11-09"). The five
 Julia markup entries are not signed: [OPR-7f](2026-11-09-opr-7f-presentation-attrs-and-julia-names.md) removes them.
-Anything OPR-7h proposes is `proposed` until Gordon signs it. The flip to `ready` still waits on 7f, 7g and 7h.
+Anything OPR-7h proposes is `proposed` until Gordon signs it. The flip to `ready` still waits on 7f, 7g and 7h, and on [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) (added
+2026-11-10): the recorded route writes no requirejs or jQuery for a Julia or Jupyter page that needs them, which the
+plain route does, so switching first would break those pages.
 
 ## Decisions by Gordon (2026-11-09)
 
