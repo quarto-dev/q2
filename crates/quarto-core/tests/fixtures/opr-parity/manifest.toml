@@ -135,6 +135,22 @@ formats = ["html"]
 note = "engine test doc with a _metadata.yml"
 
 [[document]]
+name = "julia/ansi-output"
+dir = "julia/ansi-output"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["html"]
+note = "OPR-7g: printstyled to stdout and stderr, then a value; plain and recorded must both carry no ESC byte"
+
+[[document]]
+name = "jupyter/ansi-output"
+dir = "jupyter/ansi-output"
+file = "doc.ipynb"
+requires = []
+formats = ["html"]
+note = "OPR-7g: a stored notebook with colored stdout, stderr, text/plain and a colored traceback"
+
+[[document]]
 name = "julia/engine-sleep"
 dir = "julia/engine-sleep"
 file = "sleep.qmd"

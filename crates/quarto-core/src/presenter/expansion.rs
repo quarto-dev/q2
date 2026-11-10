@@ -163,6 +163,16 @@ mod tests {
     }
 
     #[test]
+    fn an_expanded_unit_is_presented_without_escapes() {
+        // Each expansion builds its own options from config, never from knitr's resolved
+        // options, so `ansi::output_text` strips (OPR-7g).
+        let split =
+            split_expansions(&[marker(1, "a()"), stdout(1, "\u{1b}[31mred\u{1b}[0m\n")]).unwrap();
+        let md = render("julia", &split, None);
+        assert!(md.contains("red") && !md.contains('\u{1b}'), "{md:?}");
+    }
+
+    #[test]
     fn untagged_outputs_are_not_an_expansion() {
         let plain = json!({"output_type": "stream", "name": "stdout", "text": ["x"]});
         assert_eq!(split_expansions(&[plain]), None);
