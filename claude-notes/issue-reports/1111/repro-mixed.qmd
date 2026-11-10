@@ -1,0 +1,5 @@
+---
+bibliography: refs.bib
+---
+
+First [@knuth1984], then [@missing2020] and [@alsomissing].

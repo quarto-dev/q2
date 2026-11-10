@@ -1,0 +1,50 @@
+=== q2 render repro.qmd --to html
+Rendering single file: repro.qmd
+error: while rendering repro.qmd
+Error: Citation processing error: Reference 'missing2020' not found
+
+1 error
+exit=1
+=== q2 render repro.qmd --to typst
+Rendering single file: repro.qmd
+Discovering imports in repro.typ...
+error: while rendering repro.qmd
+Error [Q-21-3]: typst compile exited with exit status: 1:
+error: label `<missing2020>` does not exist in the document
+    ┌─ repro.typ:438:4
+    │
+438 │ See @missing2020.
+    │     ^^^^^^^^^^^^
+
+
+
+1 error
+exit=1
+=== q2 render repro-mixed.qmd --to html
+Rendering single file: repro-mixed.qmd
+error: while rendering repro-mixed.qmd
+Error: Citation processing error: Reference 'missing2020' not found
+
+1 error
+exit=1
+=== q2 render repro-mixed.qmd --to typst
+Rendering single file: repro-mixed.qmd
+Discovering imports in repro-mixed.typ...
+error: while rendering repro-mixed.qmd
+Error [Q-21-3]: typst compile exited with exit status: 1:
+error: label `<missing2020>` does not exist in the document
+    ┌─ repro-mixed.typ:436:23
+    │
+436 │ First @knuth1984, then @missing2020 and @alsomissing.
+    │                        ^^^^^^^^^^^^
+
+error: label `<alsomissing>` does not exist in the document
+    ┌─ repro-mixed.typ:436:40
+    │
+436 │ First @knuth1984, then @missing2020 and @alsomissing.
+    │                                         ^^^^^^^^^^^^
+
+
+
+1 error
+exit=1

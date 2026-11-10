@@ -2197,6 +2197,13 @@
     "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-1",
     "since_version": "99.9.9"
   },
+  "Q-23-2": {
+    "subsystem": "citeproc",
+    "title": "Citation Key Not Found",
+    "message_template": "No reference has this citation key, so the citation renders as the key followed by `?`, in bold.",
+    "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-2",
+    "since_version": "99.9.9"
+  },
   "Q-24-1": {
     "subsystem": "import",
     "title": "Unsupported Import File Type",
