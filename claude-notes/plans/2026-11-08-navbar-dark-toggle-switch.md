@@ -167,6 +167,18 @@ which is a workable harness.
 
 ### Verification record
 
+- PR #1137 is green on all 15 checks. Two fixes were needed along the
+  way:
+  - The new smoke fixture also runs in the hub-client preview
+    (`hub-client/e2e/smoke-all.spec.ts`), which does not inject the
+    inline color-mode script. Its `script#quarto-color-mode` selector
+    was dropped from the fixture; the native pipeline test still covers
+    `data-toggle-label`.
+  - One macOS run failed in the randomized test
+    `pampa::list_looseness::sampled_list_documents_round_trip_through_the_qmd_writer`.
+    That is a pre-existing `pampa` reader bug, unrelated to this
+    change, filed as bd-2bcre8cr. The failed job passed on rerun.
+
 - Rust, with `--no-fail-fast`:
   - The only code-independent failure is
     `knitr::capture_classifies_pieces` (local R install).
