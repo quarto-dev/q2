@@ -2,7 +2,7 @@
 title: 'qmd writer: ordered-list separator doesn''t survive re-reading inside list items (bd-2bcre8cr)'
 date: 2026-11-10
 description: 'The qmd writer places a bare `<!-- -->` tight against lists inside list items, where the reader absorbs it or drops a list; scope a writer-side fix and close the test gap that hid it.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: active
 braid:
   strand: bd-2bcre8cr
 ---
@@ -163,35 +163,69 @@ being revisited. Option (a) is a list-item exception to it.
 
 ### Phase 0: tests first (must fail on HEAD)
 
-- [ ] Deterministic regression table for classes 1–5 (the cases in
+- [x] Deterministic regression table for classes 1–5 (the cases in
   `findings.md`), run through the qmd writer round trip.
-- [ ] The proptest `cc` line in
+- [x] The proptest `cc` line in
   `crates/pampa/tests/proptest-regressions/list_looseness.txt`.
-- [ ] `check_roundtrip`: fail on any `RawInline` or `RawBlock` count
+- [x] `check_roundtrip`: fail on any `RawInline` or `RawBlock` count
   that grows from the first read to the re-read (decision 5).
-- [ ] Enumerated corpus: adjacent sublists with same and differing
+- [x] Enumerated corpus: adjacent sublists with same and differing
   delimiters, with and without an authored separator (decision 6).
 
 ### Phase 1: skip unnecessary separators
 
-- [ ] `separate_ordered_lists` only separates same-delimiter
-  neighbours. Fix the trigger scan and the header comment in
-  `qmd_prepass.rs`.
+- [x] `separate_ordered_lists` only separates neighbours with the
+  same *written* marker (`needs_list_separator`): `Default` and
+  `Period` both write `1.`, `OneParen` and `TwoParens` both write `1)`,
+  and Example (`(@)`) lists are always separated, because of
+  bd-bumesax9, a reader parse error on consecutive `(@)` items found
+  here. The trigger scan uses the same predicate, so qmd-read
+  documents take the borrowed fast path again. The header comment is
+  fixed.
 
 ### Phase 2: robust separator inside items
 
-- [ ] Inside a list item, a bare html `RawBlock` that directly follows a
+- [x] Inside a list item, a bare html `RawBlock` that directly follows a
   list (inserted or authored) is written as a fenced ```` ```{=html} ````
   block, tight. Top level is unchanged.
-- [ ] Re-check the 2026-09-04 writer adjacency rules (`RawBlock` tight
-  against `Plain`) for interactions.
+- [x] Re-check the 2026-09-04 writer adjacency rules (`RawBlock` tight
+  against `Plain`) for interactions. A comment directly after item
+  *text* is outside this rule, and benign: written tight, the reader
+  already absorbs it into the text on the first read, so no `RawBlock`
+  exists; with blank lines the item is loose and the bare form is safe.
+- [x] Remove the prepass's `loosen_items_with_separators`. It was an
+  earlier workaround for the same defect: it turned an item's leading
+  `Plain` into a `Para` (case 3), and it missed items that start with
+  a list (cases 1 and 2). Fencing makes it unnecessary.
+  `qmd_writer_pandoc_shapes::adjacent_ordered_lists_in_a_tight_item_are_not_swallowed`
+  now checks for an exact round trip and the fence, instead of
+  erasing the Plain/Para difference.
 
 ### Phase 3: verification
 
-- [ ] `list_looseness` with turned-up `PROPTEST_CASES`, the qmd writer
-  snapshot tests, and the import round-trip tests (`pandoc_request_*`,
-  docx import).
-- [ ] `cargo xtask verify --skip-hub-build`.
+- [x] `list_looseness` with turned-up `PROPTEST_CASES` (200,000 cases
+  each for the oracle and round-trip samplers, about 10 s, all pass),
+  the qmd writer tests, and the import round-trip tests.
+- [x] `cargo xtask verify --skip-hub-build`. Every non-Rust step passes,
+  including the hub-client WASM suite on a rebuilt bundle. The Rust
+  suite runs 19,209 tests; the only failure is
+  `knitr::capture_classifies_pieces`, which depends on the local R
+  install.
+
+### Verification record
+
+- Investigation probe after the fix:
+  `qmd-writer-ordered-list-separator-investigation/roundtrip-output-after-fix.txt`.
+  All eight cases round-trip unchanged. The strand's case now writes
+  `* 1.\n  1)` with no comment, and an author-written separator inside
+  an item is written as a fence.
+- Before the fix, the new tests failed for the predicted reasons. In
+  `adjacent_lists_round_trip_through_the_qmd_writer`, 7 of 8 cases
+  failed (the passing one is a loose item).
+  `imported_same_delimiter_lists_stay_apart` failed with
+  `[OL, RawBlock, Plain]`. The enumerated round trip failed on the new
+  adjacent-sublist sweep, and the oracle tests kept passing with that
+  sweep, so the readers already agree on these shapes.
 
 ## Risks / tradeoffs (draft)
 

@@ -575,26 +575,13 @@ fn adjacent_ordered_lists_in_nested_containers() {
     assert_roundtrip_with(doc(vec![ordered_list(1, vec![item])]), with_list_separators);
 }
 
-/// Every `Plain` as a `Para`, for comparisons that don't care which one a
-/// list item's first block is.
-fn plains_as_paras(value: &mut Value) {
-    match value {
-        Value::Array(items) => items.iter_mut().for_each(plains_as_paras),
-        Value::Object(map) => {
-            if map.get("t") == Some(&json!("Plain")) {
-                map.insert("t".to_string(), json!("Para"));
-            }
-            map.values_mut().for_each(plains_as_paras);
-        }
-        _ => {}
-    }
-}
-
 #[test]
 fn adjacent_ordered_lists_in_a_tight_item_are_not_swallowed() {
-    // A tight item has no blank line between its blocks, so the separator would
-    // read back as text on the preceding list line. The writer loosens the item
-    // instead (its first `Plain` becomes a `Para`), so only Plain/Para may differ.
+    // A tight item has no blank line between its blocks, so a bare separator
+    // would read back as text on the preceding list line, and a blank line
+    // around it would make the item loose. The writer fences the separator
+    // instead (bd-2bcre8cr), so the item stays tight: the round trip is exact
+    // up to the separator itself.
     let mut item = vec![plain(inl("item"))];
     item.extend([numbered(1, &["x"]), numbered(1, &["y"])]);
     for outer in [
@@ -603,11 +590,14 @@ fn adjacent_ordered_lists_in_a_tight_item_are_not_swallowed() {
     ] {
         let mut t = trip(&doc(vec![outer]));
         with_list_separators(&mut t.before);
-        plains_as_paras(&mut t.before);
-        plains_as_paras(&mut t.after);
         assert_eq!(
             t.before["blocks"], t.after["blocks"],
             "--- qmd ---\n{}",
+            t.qmd
+        );
+        assert!(
+            t.qmd.contains("```{=html}"),
+            "the separator inside the item is fenced: {:?}",
             t.qmd
         );
     }
