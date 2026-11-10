@@ -49,14 +49,21 @@ function astJson(commentInlines: unknown[]): string {
 }
 
 function mountWithComment(commentInlines: unknown[]) {
+    const ctx: PreviewContextValue = {
+        currentFilePath: '/project/test.qmd',
+        commentsMode: 'show',
+        sourceIndex: new Map(),
+    };
     return render(
-        <Ast
-            astJson={astJson(commentInlines)}
-            currentFilePath="/project/test.qmd"
-            onNavigateToDocument={() => {}}
-            setAst={() => {}}
-            registry={previewRegistry}
-        />,
+        <PreviewContext.Provider value={ctx}>
+            <Ast
+                astJson={astJson(commentInlines)}
+                currentFilePath="/project/test.qmd"
+                onNavigateToDocument={() => {}}
+                setAst={() => {}}
+                registry={previewRegistry}
+            />
+        </PreviewContext.Provider>,
     );
 }
 
@@ -113,6 +120,7 @@ function mountExpandedWithComment(commentInlines: unknown[]) {
     const ctx: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         commentsMode: 'expand',
+        sourceIndex: new Map(),
     };
     return render(
         <PreviewContext.Provider value={ctx}>

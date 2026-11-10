@@ -57,6 +57,7 @@ function mount(identity: { name: string; color: string } | null) {
     const preview: PreviewContextValue = {
         currentFilePath: '/project/test.qmd',
         commentsMode: 'expand',
+        sourceIndex: new Map(),
     };
     return render(
         <PreviewContext.Provider value={preview}>

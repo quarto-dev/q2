@@ -26,13 +26,12 @@ The sandboxed preview is genuinely cross-origin at
 3-4. TS-side performance instrumentation lives in
 `hub-client/src/utils/perfCounters.ts`.
 
-Phases 0-2 and 3A are complete. **Phase 3B1 is the current implementation
-checkpoint and completes bd-wpmqf039. Phases 3B2 and 3C remain deferred.**
-Phase 3B1 preserves eager capture whenever comments are visible or editing is
-enabled; it does not redesign comment interactions. This keeps the capture
-optimization independent of ongoing comment work. The comment-intent UX in
-Phase 3B2 and the transport changes in Phase 3C require fresh measurements
-before activation.
+Phases 0-2, 3A, and 3B1 are complete. **Phase 3B1 completed on 2026-11-10
+under bd-wpmqf039. Phases 3B2 and 3C remain deferred.** Phase 3B1 preserves
+eager capture whenever comments are visible or editing is enabled; it does not
+redesign comment interactions. This keeps the capture optimization independent
+of ongoing comment work. The comment-intent UX in Phase 3B2 and the transport
+changes in Phase 3C require fresh measurements before activation.
 
 ## Findings from the original audit
 
@@ -797,8 +796,8 @@ current implementation scope.
 
 ### Phase 3B1 — Gate capture without changing visible-comment behavior
 
-This is the current implementation checkpoint and completes the shared strand.
-An unarmed single-document render drops from two QMD parses to one. An
+**Status: complete 2026-11-10 (bd-wpmqf039).** This checkpoint completes the
+shared strand. An unarmed single-document render drops from two QMD parses to one. An
 unarmed project render drops from two to one relative to Phase 3A (from
 the original three to one overall); an armed project render remains at
 two. The flag-off response omits `untransformed_ast_json`; `ast_json`
@@ -806,7 +805,7 @@ remains byte-identical. Default comments-visible hub renders remain armed
 unless the deferred Phase 3B2 is later activated, and fresh-default
 editing-enabled renders remain armed in every variant.
 
-- [ ] Continue the Phase 3A/3B1 strand and write the Rust and raw-WASM
+- [x] Continue the Phase 3A/3B1 strand and write the Rust and raw-WASM
   tests first. Cover both single-document and multi-file project paths:
   flag off omits `untransformed_ast_json`; flag on returns bytes identical
   to Phase 3A; transformed `ast_json` is identical in both modes. Also pin
@@ -814,7 +813,13 @@ editing-enabled renders remain armed in every variant.
   explicit flag-on call. Confirm the new flag-off assertions fail on the
   unmodified build. Leave existing raw-WASM callers that consume the
   baseline, including `applyNodeEdit.wasm.test.ts`, unchanged.
-- [ ] Write the TypeScript behavior tests before implementation:
+  → Native gate characterization passed. On the unmodified WASM, both new
+  flag-off cases failed because the baseline was still present; all three
+  default-on/byte-characterization controls passed. `applyNodeEdit` is unchanged.
+  An isolated Phase 3A build additionally pinned single-document transformed
+  `8599765d7edeaabd48916d0c4629010262189443614f440d867e8798f6e0314c`,
+  the same untransformed hash as the project path, and source `index.qmd`.
+- [x] Write the TypeScript behavior tests before implementation:
   - hub `previewEditing=true` arms capture;
   - hub editing off with `commentsMode='show'` or `'expand'` also arms it,
     and real `PreviewRoot` read-mode comment add/resolve still works;
@@ -829,7 +834,10 @@ editing-enabled renders remain armed in every variant.
     because a read-mode render was armed for visible comments, and an
     editing toggle invalidates a previously computed table even when the
     AST strings are unchanged.
-- [ ] Extend the real `CommentBlock.readMode.integration.test.tsx` tests
+  → Before implementation, the eight hub arming/rerender/nesting cases and
+  five SPA option/read-only cases failed as intended; 67 SPA controls passed.
+  The three real `PreviewRoot` read-mode add/resolve controls also passed.
+- [x] Extend the real `CommentBlock.readMode.integration.test.tsx` tests
   before the UI implementation. With no baseline there is no new-node `+`,
   and existing comments have no input or resolve buttons. Cover both an
   initial baseline-less mount and an armed-to-unarmed rerender with an
@@ -838,7 +846,10 @@ editing-enabled renders remain armed in every variant.
   supplies the baseline, normal block and span add/resolve UI appears
   unchanged. Existing unsupported-node and read-only-host cases remain
   unchanged.
-- [ ] Thread `capture_untransformed_ast` through both hot WASM render
+  → The existing-comment initial-mount and armed-to-unarmed cases failed on
+  the unsuppressed input before implementation. The new-node and all six
+  existing read-mode/host controls passed.
+- [x] Thread `capture_untransformed_ast` through both hot WASM render
   paths. Single-document rendering passes it to the internal core
   implementation from Phase 3A. Project pass 2 remains capture-off; the
   project response keeps or skips its existing original-`active_path`
@@ -847,18 +858,28 @@ editing-enabled renders remain armed in every variant.
   wrapper and both public WASM entries as capture-on when their options or
   flag are omitted, so unrelated native and raw-WASM tests need no
   mechanical edits.
-- [ ] Add `captureUntransformedAst` to the two public wrapper option shapes.
+  → Release WASM rebuilt successfully. The five capture characterization /
+  gating tests and all 26 unchanged `applyNodeEdit` round trips passed 31/31.
+- [x] Add `captureUntransformedAst` to the two public wrapper option shapes.
   Use `previewEditing || (commentsMode ?? 'show') !== 'hide'` for hub and
   `allowEdit` for the SPA. Add those arming inputs to the existing render
   callback dependencies so the current effect performs the rerender. Do
   not add pending edits, lazy retries, or a separate entering-editing
   effect.
-- [ ] Make baseline-less comments read-only in `CommentWrapper` by deriving
+  → Both perf branches of the runtime-forwarding test pass 2/2 (8/8 file
+  total). All hub arming and one-render transition cases pass; all SPA capture
+  and option-compatibility cases pass. Only the separate nested-gate items
+  remain red at this checkpoint.
+- [x] Make baseline-less comments read-only in `CommentWrapper` by deriving
   readiness from `PreviewContext.sourceIndex`. Include a missing source
   index in the existing read-only gate and suppress the inline input even
   when it was already open. Add no readiness prop, iframe message, or
   comment-edit queue.
-- [ ] Make the nested-buffer conditions and memo dependencies explicit in
+  → All eight focused comment files pass 57/57, including real `PreviewRoot`
+  block/span add/resolve, baseline loss/restoration, unsupported nodes, and
+  read-only hosts. Writable direct-context fixtures now declare readiness
+  explicitly with a non-null source index.
+- [x] Make the nested-buffer conditions and memo dependencies explicit in
   `computeNestedEditBuffers` call sites: hub uses
   `previewEditing && (unlockNestingCursor ?? true)` with `previewEditing`
   in the dependency list; the SPA uses `allowEdit && nestingCursor` with
@@ -867,17 +888,45 @@ editing-enabled renders remain armed in every variant.
   regeneration to use `allow_edit: true`, and add a read-only
   no-regeneration case. Keep comment-only armed renders from paying the
   `regenerate_nested_buffers` call.
-- [ ] Run focused Rust, preview-runtime, preview-renderer, hub-client, and
+  → Hub 17/17 and SPA 72/72 focused integration tests pass. The positive SPA
+  fixtures use the production `allowEdit: true` key (the former snake-case key
+  was ignored); the read-only case verifies no regeneration. The hub editing
+  toggle recomputes with unchanged AST strings; comment-only read mode does not.
+- [x] Run focused Rust, preview-runtime, preview-renderer, hub-client, and
   SPA tests, then the full verification chain in Conventions. Audit
   `.snap` files and report counts and surprises if any change; no snapshot
   churn is assumed from the optional response field.
-- [ ] Measure same-build flag-on/flag-off runs at 1x/8x for both
+  → Focused core 8/8 and native clippy passed; raw-WASM 31/31; preview-runtime
+  92/92; preview-renderer 643 unit + 723 integration; SPA 95 unit + 97
+  integration plus production build. `cargo xtask verify --skip-rust-tests`
+  passed all 14 legs, including hub-client 1746 unit + 240 integration + 478
+  WASM tests. The selected workspace run passed **19,193/19,193**, excluding
+  the three Phase 3A environment cases and newly filed bd-wwmnuqxr. Standalone
+  WASM clippy reaches pre-existing lints tracked as bd-wn2pd12d. No `.snap`
+  files changed.
+- [x] Measure same-build flag-on/flag-off runs at 1x/8x for both
   single-document and project paths. Record `render.wasm-call`,
   `wasm-envelope.parse` bytes, and the arming mode used. Flag-on is the
   Phase 3A comparison point; flag-off isolates the gating win. The hub
   unarmed measurement must explicitly use `previewEditing=false` and
   `commentsMode='hide'`. Include editing-on and comments-visible armed
   controls; do not present either as an unarmed win.
+  → Same release WASM `bf2bc87eb6fa`, production wrapper/init path, warm SASS
+  cache, 10 renders/scale. Ran `QUARTO_PERF_STATS=1 ENTRY=<single|project>
+  CAPTURE=<on|off> SCALES=1,8 RENDERS=10 node --import tsx/esm --import
+  <scratch>/phase3b1-perf/register.mjs <scratch>/phase3b1-perf/driver.mjs`.
+  Single (`allowEdit=true → false`): 1x **164.935 → 86.728 ms** (−47.4%);
+  8x **1305.639 → 712.920 ms** (−45.4%). Envelope bytes: 1x 89,356,660 →
+  45,229,180; 8x 737,121,840 → 372,181,160.
+  Project (`previewEditing=true, commentsMode=show` →
+  `previewEditing=false, commentsMode=hide`): 1x **170.617 → 90.004 ms**
+  (−47.2%); 8x **1345.331 → 712.938 ms** (−47.0%). Envelope bytes: 1x
+  89,366,940 → 45,252,910; 8x 737,319,610 → 372,392,800.
+  Armed project controls at 1x/8x: editing-on (`previewEditing=true,
+  commentsMode=hide`) **165.160 / 1299.047 ms**; comments-visible
+  (`previewEditing=false, commentsMode=show`) **162.329 / 1294.363 ms**.
+  Both have exactly the flag-on envelope bytes above; neither is presented as
+  an unarmed win.
 - [ ] End-to-end smoke both hosts. In hub, verify content editing after
   entering edit mode, comment add/resolve with editing off and comments
   visible, and comments hidden/visible transitions, including the
@@ -885,6 +934,22 @@ editing-enabled renders remain armed in every variant.
   verify a read-only session and an `--allow-edit` session. Record
   invocations and observed behavior, then finish the hub-client changelog
   two-commit workflow and close the strand with the measurements.
+  → Hub built with `VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
+  VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html npm
+  --workspace hub-client run build`; `npm --workspace hub-client exec --
+  playwright test e2e/phase3b1-smoke.spec.ts --project=chromium --workers=1
+  --retries=0` passed **2/2**. Observed `Edited after the armed render.` in
+  Automerge after entering editing from the unarmed state; comment add/resolve
+  changed the QMD; a gated `show` + null-baseline update kept existing comments
+  readable with no input, resolve, or new-comment `+`, and the released armed
+  update restored controls. SPA refreshed with `cargo xtask
+  build-q2-preview-spa && cargo build --bin q2`; `npm --workspace q2-preview-spa
+  exec -- playwright test e2e/phase3b1-smoke.spec.ts --project=chromium
+  --workers=1 --retries=0` passed **2/2**. The default session rendered
+  read-only with no edit/comment mutation controls; the `--allow-edit` session
+  wrote `Edited through the allowEdit session.` to `index.qmd` on disk. Outputs
+  were inspected through Automerge/disk and browser locators, not inferred from
+  render success. Throwaway specs are preserved in scratch, not committed.
 
 ### Phase 3B2 — Deferred: one armed render on comment intent
 

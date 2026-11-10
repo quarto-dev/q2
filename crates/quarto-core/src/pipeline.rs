@@ -5141,6 +5141,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn render_qmd_to_preview_ast_capture_gate_preserves_transformed_ast() {
+        let content = b"---\nformat: q2-preview\n---\n\nHello world.\n";
+        let project = make_test_project();
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let render = |capture_untransformed_ast| {
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            pollster::block_on(render_qmd_to_preview_ast_with_capture(
+                content,
+                "/project/test.qmd",
+                &mut ctx,
+                make_test_runtime(),
+                None,
+                CapturePayload::Empty,
+                capture_untransformed_ast,
+            ))
+            .expect("q2-preview render")
+        };
+
+        let capture_on = render(true);
+        let capture_off = render(false);
+
+        assert!(capture_on.untransformed_ast_json.is_some());
+        assert!(capture_off.untransformed_ast_json.is_none());
+        assert_eq!(capture_off.ast_json, capture_on.ast_json);
+    }
+
     /// Plan 2B: with `FootnotesTransform` no longer in the
     /// q2-preview deny-list, inline-footnote rendering (`^[body]`
     /// syntax — produces `Inline::Note` directly) must emit the
