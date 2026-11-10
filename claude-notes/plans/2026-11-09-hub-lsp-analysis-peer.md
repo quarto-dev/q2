@@ -119,6 +119,9 @@ hub-lsp exited with 0
   Today the identifier is dropped: only key-value attributes survive, so a client cannot use it as a stable comment key.
 - [ ] Project-aware analysis, so comments in included files count toward the including document.
 - [ ] Attribute each comment to the author of its span, using Automerge history.
+- [ ] Answer for only the documents that changed: a per-document comments request, or a cache of each document's comments keyed by its Automerge heads, so a settle parses the files named by `quarto/documentsChanged` rather than the whole project.
+  Measured cost of whole-project queries: one round over 24 MB of qmd text took 9 seconds and raised resident memory by about 115 MB (Connect's plan, "Memory of `q2 hub-lsp`").
+- [ ] Measure how much memory `HubWorkspace::unfollow` returns: it drops the project's handles, but whether samod releases the documents is untested.
 - [ ] Standard LSP requests (`textDocument/documentSymbol`, diagnostics) on hub documents.
 
 ## Design notes
