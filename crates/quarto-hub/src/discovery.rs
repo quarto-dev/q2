@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 use walkdir::WalkDir;
 
-use crate::exposure::{Class, ExposurePolicy};
+use crate::exposure::{Admitted, Class, ExposurePolicy};
 use crate::resource::is_binary_extension;
 
 /// Discovered files in a Quarto project.
@@ -111,65 +111,32 @@ impl ProjectFiles {
                 continue;
             };
             let relative = admitted.rel.as_path();
-
-            // Files inside _extensions/ are included wholesale (Lua filters,
-            // JSON manifests, YAML metadata, etc. are all needed at render time).
-            // Binary files within _extensions/ go into binary_files; everything
-            // else is treated as text and goes into extension_files.
-            if admitted.class == Class::Extension {
-                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                if is_binary_extension(ext) {
+            match walk_category(&admitted) {
+                Some(Category::ExtensionBinary) => {
                     debug!(?relative, "Discovered extension binary file");
                     files.binary_files.push(relative.to_path_buf());
-                } else {
+                }
+                Some(Category::ExtensionText) => {
                     debug!(?relative, "Discovered extension text file");
                     files.extension_files.push(relative.to_path_buf());
                 }
-                continue;
-            }
-
-            // Check for config files first (by name).
-            // `_brand.yml`/`_brand.yaml` are project-level config like
-            // `_quarto.yml` (they feed theme/brand resolution); syncing them
-            // into the preview VFS lets `q2 preview` read a deck's brand
-            // (bd-y259zb57) instead of failing with "Path not found:
-            // /project/_brand.yml".
-            if let Some(file_name) = path.file_name()
-                && (file_name == "_quarto.yml"
-                    || file_name == "_quarto.yaml"
-                    || file_name == "_metadata.yml"
-                    || file_name == "_metadata.yaml"
-                    || file_name == "_brand.yml"
-                    || file_name == "_brand.yaml")
-            {
-                debug!(?relative, "Discovered config file");
-                files.config_files.push(relative.to_path_buf());
-                continue;
-            }
-
-            // Get file extension for further checks
-            let ext = path.extension().and_then(|e| e.to_str());
-
-            // Check for source files (.qmd, .md — see module docs re D10)
-            if ext == Some("qmd") || ext == Some("md") {
-                debug!(?relative, "Discovered source file");
-                files.qmd_files.push(relative.to_path_buf());
-                continue;
-            }
-
-            // Check for .tsx source files
-            if ext == Some("tsx") {
-                debug!(?relative, "Discovered .tsx source file");
-                files.source_files.push(relative.to_path_buf());
-                continue;
-            }
-
-            // Check for binary resource files (images, PDFs, etc.)
-            if let Some(ext_str) = ext
-                && is_binary_extension(ext_str)
-            {
-                debug!(?relative, "Discovered binary file");
-                files.binary_files.push(relative.to_path_buf());
+                Some(Category::Config) => {
+                    debug!(?relative, "Discovered config file");
+                    files.config_files.push(relative.to_path_buf());
+                }
+                Some(Category::Source) => {
+                    debug!(?relative, "Discovered source file");
+                    files.qmd_files.push(relative.to_path_buf());
+                }
+                Some(Category::Component) => {
+                    debug!(?relative, "Discovered .tsx source file");
+                    files.source_files.push(relative.to_path_buf());
+                }
+                Some(Category::Binary) => {
+                    debug!(?relative, "Discovered binary file");
+                    files.binary_files.push(relative.to_path_buf());
+                }
+                None => {}
             }
         }
 
@@ -181,6 +148,14 @@ impl ProjectFiles {
         files.source_files.sort();
 
         files
+    }
+
+    /// Whether the project-mode walk would sync an admitted file. The
+    /// watcher enrols a file created after boot by the same rule, so a new
+    /// file reaches the index as if the preview had been restarted
+    /// (preview VFS contract D8).
+    pub fn walk_syncs(admitted: &Admitted) -> bool {
+        walk_category(admitted).is_some()
     }
 
     /// Build a `ProjectFiles` whose only entry is the supplied
@@ -309,6 +284,66 @@ impl ProjectFiles {
             .chain(self.resource_files.iter())
             .chain(self.text_dep_files.iter())
     }
+}
+
+/// Which [`ProjectFiles`] list the walk puts an admitted file in.
+enum Category {
+    ExtensionText,
+    ExtensionBinary,
+    Config,
+    Source,
+    Component,
+    Binary,
+}
+
+/// The walk's categorization of an admitted file, or `None` for a type the
+/// walk leaves to the miss routes (stylesheets, bibliographies, data, ...).
+fn walk_category(admitted: &Admitted) -> Option<Category> {
+    let rel = admitted.rel.as_path();
+    let ext = rel.extension().and_then(|e| e.to_str());
+
+    // Files inside _extensions/ are included wholesale (Lua filters,
+    // JSON manifests, YAML metadata, etc. are all needed at render time).
+    // Binary files within _extensions/ go into binary_files; everything
+    // else is treated as text and goes into extension_files.
+    if admitted.class == Class::Extension {
+        return Some(if ext.is_some_and(is_binary_extension) {
+            Category::ExtensionBinary
+        } else {
+            Category::ExtensionText
+        });
+    }
+
+    // Check for config files first (by name).
+    // `_brand.yml`/`_brand.yaml` are project-level config like
+    // `_quarto.yml` (they feed theme/brand resolution); syncing them
+    // into the preview VFS lets `q2 preview` read a deck's brand
+    // (bd-y259zb57) instead of failing with "Path not found:
+    // /project/_brand.yml".
+    if let Some(file_name) = rel.file_name()
+        && (file_name == "_quarto.yml"
+            || file_name == "_quarto.yaml"
+            || file_name == "_metadata.yml"
+            || file_name == "_metadata.yaml"
+            || file_name == "_brand.yml"
+            || file_name == "_brand.yaml")
+    {
+        return Some(Category::Config);
+    }
+
+    // Check for source files (.qmd, .md — see module docs re D10)
+    if ext == Some("qmd") || ext == Some("md") {
+        return Some(Category::Source);
+    }
+
+    // Check for .tsx source files
+    if ext == Some("tsx") {
+        return Some(Category::Component);
+    }
+
+    // Check for binary resource files (images, PDFs, etc.)
+    ext.filter(|e| is_binary_extension(e))
+        .map(|_| Category::Binary)
 }
 
 #[cfg(test)]

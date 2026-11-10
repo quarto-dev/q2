@@ -351,13 +351,27 @@ impl ExposurePolicy {
     /// root or the canonical root) sits inside a generated directory. A path
     /// outside the root is not this policy's to judge and returns `false`.
     pub fn event_in_generated_dir(&self, abs: &Path) -> bool {
-        let Ok(rel) = abs
-            .strip_prefix(&self.canonical_root)
-            .or_else(|_| abs.strip_prefix(&self.root))
-        else {
+        let Some(rel) = self.relative(abs) else {
             return false;
         };
         rel.parent().is_some_and(|dir| self.dir_is_generated(dir))
+    }
+
+    /// Whether an absolute event path passes the checks that need no
+    /// canonicalization ([`admit_lexically`](Self::admit_lexically)). A
+    /// path outside the root does not.
+    pub fn admits_event(&self, abs: &Path) -> bool {
+        self.relative(abs)
+            .is_some_and(|rel| self.admit_lexically(rel).is_ok())
+    }
+
+    /// `abs` relative to the root, accepting either the root's own
+    /// spelling or its canonical one (watchers report canonical paths;
+    /// macOS spells temp directories both ways).
+    pub fn relative<'a>(&self, abs: &'a Path) -> Option<&'a Path> {
+        abs.strip_prefix(&self.canonical_root)
+            .or_else(|_| abs.strip_prefix(&self.root))
+            .ok()
     }
 
     /// Canonical containment (check 2): the canonical form of `rel` must
@@ -708,6 +722,21 @@ mod tests {
             assert!(!p.event_in_generated_dir(&base.join("index.qmd")));
         }
         assert!(!p.event_in_generated_dir(Path::new("/elsewhere/site_libs/a.css")));
+    }
+
+    #[test]
+    fn admits_event_applies_the_lexical_checks() {
+        let temp = project();
+        let root = temp.path();
+        fs::create_dir_all(root.join("index_files")).unwrap();
+        let p = policy(&temp);
+        assert!(p.admits_event(&root.join("refs.bib")));
+        assert!(p.admits_event(&root.join("new/never-existed.scss")));
+        assert!(!p.admits_event(&root.join(".quarto/preview-out/x.png")));
+        assert!(!p.admits_event(&root.join("index_files/a.png")));
+        assert!(!p.admits_event(&root.join("a.exe")));
+        assert!(!p.admits_event(root));
+        assert!(!p.admits_event(Path::new("/elsewhere/a.qmd")));
     }
 
     // ── 5. Extension allow-list ─────────────────────────────────────

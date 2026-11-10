@@ -15,6 +15,7 @@ pub mod embed_downloads;
 pub mod import_route;
 pub mod join_frontend;
 pub mod join_tunnel;
+pub mod miss_routes;
 pub mod pdfjs_serving;
 pub mod record_payload;
 pub mod render_flags;

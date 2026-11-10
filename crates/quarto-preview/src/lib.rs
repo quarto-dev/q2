@@ -30,6 +30,7 @@ pub mod capture_driver;
 pub mod config;
 pub mod deps;
 pub mod diagnostics;
+pub mod host_gate;
 pub mod import_route;
 pub mod join_frontend;
 pub mod pdf_preview;
@@ -39,6 +40,7 @@ pub mod render_flags;
 pub mod render_helper;
 pub mod share;
 pub mod static_mode;
+pub mod vfs_routes;
 
 pub use render_flags::RenderFlags;
 
@@ -376,6 +378,11 @@ where
     // bd-ov4gqk3m: stash the edit-permission bit for the
     // `/api/preview/config` handler before the server starts serving.
     let _ = ALLOW_EDIT.set(config.allow_edit);
+
+    // Preview VFS contract D6: the router-wide `Host` gate answers for the
+    // `--host` value plus loopback names, IP literals and
+    // `QUARTO_PREVIEW_ALLOWED_HOSTS`.
+    host_gate::init(&config.host);
 
     // Phase 4 (bd-jt1etjbn): stash the UI choice for the SPA fallback
     // handler before the server starts serving.
@@ -833,7 +840,17 @@ pub fn extend_with_preview(
         // once at boot — currently just `allowEdit`, which gates the
         // inline block-editing surface.
         .route("/api/preview/config", get(preview_config_handler))
+        // Preview VFS contract D2: the miss routes the browser render asks
+        // when its VFS cannot answer a read, an existence check or a
+        // listing. Each applies the exposure policy first.
+        .route("/api/preview/file", get(vfs_routes::file_handler))
+        .route("/api/preview/stat", get(vfs_routes::stat_handler))
+        .route("/api/preview/list", get(vfs_routes::list_handler))
         .fallback(spa_handler)
+        // Preview VFS contract D6: refuse DNS-rebinding requests. Added
+        // last so it wraps every route, the hub's included, and the
+        // fallback.
+        .layer(axum::middleware::from_fn(host_gate::require_allowed_host))
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────

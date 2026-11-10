@@ -2182,6 +2182,9 @@ where
         match FileWatcher::new(&project_root, watch_config) {
             Ok(watcher) => {
                 info!("Starting filesystem watcher");
+                // Preview VFS contract D8: the miss routes widen the
+                // watch to what they serve through this handle.
+                ctx_for_watch.set_watch_handle(watcher.handle());
                 let on_change = on_file_changed.clone();
                 Some(tokio::spawn(async move {
                     run_file_watcher(ctx_for_watch, watcher, shutdown_rx, on_change).await;
@@ -2334,7 +2337,26 @@ async fn run_file_watcher(
                                 }
                             }
                             Ok(None) => {
-                                debug!(path = %path.display(), "File not in index, skipping");
+                                // Preview VFS contract D8: a file the index
+                                // does not hold may be new; enrol it if the
+                                // policy and the watch scope allow.
+                                match ctx.enrol(&path).await {
+                                    Ok(true) => {
+                                        if let Some(callback) = on_file_changed.as_ref() {
+                                            callback(ctx.clone(), path.clone());
+                                        }
+                                    }
+                                    Ok(false) => {
+                                        debug!(path = %path.display(), "File not in index, skipping");
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            path = %path.display(),
+                                            error = %e,
+                                            "Failed to enrol new file"
+                                        );
+                                    }
+                                }
                             }
                             Err(e) => {
                                 tracing::warn!(

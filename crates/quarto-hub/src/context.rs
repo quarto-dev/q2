@@ -19,6 +19,7 @@ use crate::error::Result;
 use crate::exposure::ExposurePolicy;
 use crate::index::{IndexDocument, load_or_create_index};
 use crate::peer::spawn_peer_connection;
+use crate::resource::is_binary_extension;
 use crate::resource::{create_binary_document, detect_mime_type};
 use crate::revocation::{RevocationLedger, RevocationStatus};
 use crate::session::{SessionKeys, SessionLifetimes, VerifiedSession};
@@ -28,6 +29,7 @@ use crate::sync::{
 };
 use crate::sync_state::SyncState;
 use crate::watch::WatchFilter;
+use crate::watch::WatchHandle;
 
 /// Configuration for the hub.
 #[derive(Debug)]
@@ -278,6 +280,17 @@ pub struct HubContext {
     /// See [`HubConfig::disk_write_policy`]. Applied to every filesystem
     /// sync this context performs (initial, periodic, watcher-triggered).
     disk_write_policy: DiskWritePolicy,
+
+    /// The exposure policy for the project root (preview VFS contract D4).
+    /// `None` in standalone mode.
+    exposure: Option<ExposurePolicy>,
+
+    /// Whether this is a single-file preview ([`HubConfig::single_file`]).
+    single_file_mode: bool,
+
+    /// The running watcher's handle, set once the watcher starts, so the
+    /// miss routes can widen the watch to what they serve (contract D8).
+    watch_handle: OnceLock<WatchHandle>,
 }
 
 impl HubContext {
@@ -301,14 +314,18 @@ impl HubContext {
         // single-file mode skips the WalkDir entirely — the relative
         // path is already known, and walking the parent directory
         // would index sibling files the user didn't ask for.
-        let project_files = if let Some(ref project_root) = project_root {
-            // Preview VFS contract D4: the walk asks the exposure policy,
-            // which also refuses the configured output directory.
-            let policy = ExposurePolicy::new(project_root);
-            let policy = match config.output_dir.as_deref() {
+        // Preview VFS contract D4: the walk, the miss routes and enrolment
+        // all ask the one exposure policy, which also refuses the
+        // configured output directory.
+        let exposure = project_root.as_deref().map(|root| {
+            let policy = ExposurePolicy::new(root);
+            match config.output_dir.as_deref() {
                 Some(out) => policy.with_output_dir(out),
                 None => policy,
-            };
+            }
+        });
+        let single_file_mode = config.single_file.is_some();
+        let project_files = if let (Some(project_root), Some(policy)) = (&project_root, &exposure) {
             let files = match config.single_file.as_ref() {
                 // bd-ggvq1j68: single-file mode skips the WalkDir, but a deck
                 // that references `brand: _brand.yml` needs that sibling in the
@@ -328,7 +345,7 @@ impl HubContext {
                 // `.html` (it falls through every category), so the
                 // caller-resolved set is injected here to ride the text
                 // sync path into the VFS.
-                None => ProjectFiles::discover_with(&policy)
+                None => ProjectFiles::discover_with(policy)
                     .with_resource_files(config.resource_files.clone()),
             };
             info!(
@@ -461,6 +478,9 @@ impl HubContext {
             revocations,
             register_root_ws,
             disk_write_policy,
+            exposure,
+            single_file_mode,
+            watch_handle: OnceLock::new(),
         })
     }
 
@@ -550,6 +570,118 @@ impl HubContext {
             self.disk_write_policy,
         )
         .await
+    }
+
+    /// The project's exposure policy (preview VFS contract D4). `None` in
+    /// standalone mode.
+    pub fn exposure(&self) -> Option<&ExposurePolicy> {
+        self.exposure.as_ref()
+    }
+
+    /// Whether this hub serves a single-file preview.
+    pub fn is_single_file(&self) -> bool {
+        self.single_file_mode
+    }
+
+    /// Install the running watcher's handle. Called once by the server
+    /// when the watcher starts; later calls are ignored.
+    pub fn set_watch_handle(&self, handle: WatchHandle) {
+        let _ = self.watch_handle.set(handle);
+    }
+
+    /// Watch a directory the server has answered for (contract D8): a file
+    /// created in it later is enrolled. A no-op in project mode, or when no
+    /// watcher runs. Failures are logged; the answer already went out.
+    pub fn watch_dir(&self, abs_dir: &Path) {
+        if let Some(handle) = self.watch_handle.get()
+            && let Err(e) = handle.watch_dir(abs_dir)
+        {
+            warn!(dir = %abs_dir.display(), error = %e, "Failed to watch directory on demand");
+        }
+    }
+
+    /// Watch a file the server has served (contract D8). A no-op in project
+    /// mode, or when no watcher runs.
+    pub fn watch_file(&self, abs_file: &Path) {
+        if let Some(handle) = self.watch_handle.get()
+            && let Err(e) = handle.watch_file(abs_file)
+        {
+            warn!(file = %abs_file.display(), error = %e, "Failed to watch file on demand");
+        }
+    }
+
+    /// Promote a project-relative file into the index (preview VFS
+    /// contract D7): create its Automerge document, add it to the index,
+    /// and record a sync checkpoint, so it is synced, watched and shared
+    /// from then on. Idempotent: a path already in the index is left alone
+    /// and `Ok(false)` is returned. The caller has already asked the
+    /// exposure policy.
+    ///
+    /// Binary extensions become binary documents; everything else is
+    /// text, and a file that is not UTF-8 is skipped (`Ok(false)`).
+    pub async fn import_path(&self, rel: &Path) -> Result<bool> {
+        let Some(project_root) = self.storage.project_root().map(Path::to_path_buf) else {
+            return Ok(false);
+        };
+        let Some(ref sync_state_mutex) = self.sync_state else {
+            return Ok(false);
+        };
+        let mut sync_state = sync_state_mutex.lock().await;
+        let kind = if rel
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(is_binary_extension)
+        {
+            DocKind::Binary
+        } else {
+            DocKind::Text
+        };
+        if !import_file(&self.repo, &self.index, &project_root, rel, kind).await? {
+            return Ok(false);
+        }
+        sync_file_by_path(
+            &self.repo,
+            &self.index,
+            &project_root.join(rel),
+            &project_root,
+            &mut sync_state,
+            self.disk_write_policy,
+        )
+        .await?;
+        info!(path = %rel.display(), "Promoted file into the project index");
+        Ok(true)
+    }
+
+    /// Enrol a file the watcher reported that is not in the index
+    /// (preview VFS contract D8). Project mode enrols what the boot walk
+    /// would have synced; single-file mode enrols any file the policy
+    /// admits that was created in a directory a miss route answered for.
+    /// Returns whether the file was added.
+    pub async fn enrol(&self, abs: &Path) -> Result<bool> {
+        let Some(policy) = &self.exposure else {
+            return Ok(false);
+        };
+        let Some(rel) = policy.relative(abs) else {
+            return Ok(false);
+        };
+        let admitted = if self.single_file_mode {
+            let Some(handle) = self.watch_handle.get() else {
+                return Ok(false);
+            };
+            if !handle.is_new_in_watched_dir(abs) {
+                return Ok(false);
+            }
+            match policy.admit_pull(rel) {
+                Ok(admitted) => admitted,
+                Err(_) => return Ok(false),
+            }
+        } else {
+            match policy.admit(rel) {
+                Ok(admitted) if ProjectFiles::walk_syncs(&admitted) => admitted,
+                _ => return Ok(false),
+            }
+        };
+        self.import_path(&admitted.rel).await
     }
 
     /// Get the auth configuration, if auth is enabled.
@@ -997,104 +1129,122 @@ async fn reconcile_files_with_index(
 
     // Reconcile text files (config + qmd)
     for file_path in project_files.text_files() {
-        let path_str = file_path.to_string_lossy();
-
-        // Skip if already in index
-        if index.has_file(&path_str) {
-            debug!(path = %path_str, "File already in index");
-            continue;
+        if import_file(repo, index, project_root, file_path, DocKind::Text).await? {
+            added += 1;
         }
-
-        // Read file content from disk
-        let full_path = project_root.join(file_path);
-        let file_content = match std::fs::read_to_string(&full_path) {
-            Ok(content) => content,
-            Err(e) => {
-                warn!(path = %path_str, error = %e, "Failed to read text file, skipping");
-                continue;
-            }
-        };
-
-        // Create a new automerge document with Text object initialized from file content
-        let mut doc = Automerge::new();
-        if let Err(e) = doc.transact::<_, _, automerge::AutomergeError>(|tx| {
-            // Create a Text object at ROOT.text
-            let text_obj = tx.put_object(ROOT, "text", ObjType::Text)?;
-            // Initialize with file content using update_text (which handles diffing internally)
-            tx.update_text(&text_obj, &file_content)?;
-            Ok(())
-        }) {
-            warn!(path = %path_str, error = ?e, "Failed to initialize text document, skipping");
-            continue;
-        }
-
-        let doc_handle = repo
-            .create(doc)
-            .await
-            .map_err(|_| crate::error::Error::IndexDocument("repo is stopped".to_string()))?;
-
-        let doc_id = doc_handle.document_id().to_string();
-
-        // Add to index
-        index.add_file(&path_str, &doc_id)?;
-
-        debug!(path = %path_str, doc_id = %doc_id, content_len = file_content.len(), "Added new text file to index");
-        added += 1;
     }
 
     // Reconcile binary files
     for file_path in &project_files.binary_files {
-        let path_str = file_path.to_string_lossy();
-
-        // Skip if already in index
-        if index.has_file(&path_str) {
-            debug!(path = %path_str, "Binary file already in index");
-            continue;
+        if import_file(repo, index, project_root, file_path, DocKind::Binary).await? {
+            added += 1;
         }
-
-        // Read file content from disk as bytes
-        let full_path = project_root.join(file_path);
-        let file_content = match std::fs::read(&full_path) {
-            Ok(content) => content,
-            Err(e) => {
-                warn!(path = %path_str, error = %e, "Failed to read binary file, skipping");
-                continue;
-            }
-        };
-
-        // Detect MIME type from content and filename
-        let mime_type = detect_mime_type(&file_content, full_path.to_str());
-
-        // Create binary document
-        let doc = match create_binary_document(&file_content, &mime_type) {
-            Ok(doc) => doc,
-            Err(e) => {
-                warn!(path = %path_str, error = ?e, "Failed to create binary document, skipping");
-                continue;
-            }
-        };
-
-        let doc_handle = repo
-            .create(doc)
-            .await
-            .map_err(|_| crate::error::Error::IndexDocument("repo is stopped".to_string()))?;
-
-        let doc_id = doc_handle.document_id().to_string();
-
-        // Add to index
-        index.add_file(&path_str, &doc_id)?;
-
-        debug!(
-            path = %path_str,
-            doc_id = %doc_id,
-            content_len = file_content.len(),
-            mime_type = %mime_type,
-            "Added new binary file to index"
-        );
-        added += 1;
     }
 
     Ok(added)
+}
+
+/// How a file is stored in Automerge.
+#[derive(Debug, Clone, Copy)]
+enum DocKind {
+    /// A Text object at `ROOT.text`.
+    Text,
+    /// A binary document (see [`create_binary_document`]).
+    Binary,
+}
+
+/// One iteration of the reconcile loop: create the Automerge document for
+/// `file_path` (relative to `project_root`) and add it to the index.
+///
+/// Returns `Ok(false)` when the path is already indexed or cannot be read
+/// or converted (logged and skipped), `Ok(true)` when it was added, and an
+/// error only when the repo or the index fails.
+async fn import_file(
+    repo: &Repo,
+    index: &IndexDocument,
+    project_root: &Path,
+    file_path: &Path,
+    kind: DocKind,
+) -> Result<bool> {
+    let path_str = file_path.to_string_lossy();
+
+    // Skip if already in index
+    if index.has_file(&path_str) {
+        debug!(path = %path_str, "File already in index");
+        return Ok(false);
+    }
+
+    let full_path = project_root.join(file_path);
+    let doc = match kind {
+        DocKind::Text => {
+            // Read file content from disk
+            let file_content = match std::fs::read_to_string(&full_path) {
+                Ok(content) => content,
+                Err(e) => {
+                    warn!(path = %path_str, error = %e, "Failed to read text file, skipping");
+                    return Ok(false);
+                }
+            };
+
+            // Create a new automerge document with Text object initialized from file content
+            let mut doc = Automerge::new();
+            if let Err(e) = doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                // Create a Text object at ROOT.text
+                let text_obj = tx.put_object(ROOT, "text", ObjType::Text)?;
+                // Initialize with file content using update_text (which handles diffing internally)
+                tx.update_text(&text_obj, &file_content)?;
+                Ok(())
+            }) {
+                warn!(path = %path_str, error = ?e, "Failed to initialize text document, skipping");
+                return Ok(false);
+            }
+            debug!(path = %path_str, content_len = file_content.len(), "Adding text file to index");
+            doc
+        }
+        DocKind::Binary => {
+            // Read file content from disk as bytes
+            let file_content = match std::fs::read(&full_path) {
+                Ok(content) => content,
+                Err(e) => {
+                    warn!(path = %path_str, error = %e, "Failed to read binary file, skipping");
+                    return Ok(false);
+                }
+            };
+
+            // Detect MIME type from content and filename
+            let mime_type = detect_mime_type(&file_content, full_path.to_str());
+
+            // Create binary document
+            match create_binary_document(&file_content, &mime_type) {
+                Ok(doc) => {
+                    debug!(
+                        path = %path_str,
+                        content_len = file_content.len(),
+                        mime_type = %mime_type,
+                        "Adding binary file to index"
+                    );
+                    doc
+                }
+                Err(e) => {
+                    warn!(path = %path_str, error = ?e, "Failed to create binary document, skipping");
+                    return Ok(false);
+                }
+            }
+        }
+    };
+
+    let doc_handle = repo
+        .create(doc)
+        .await
+        .map_err(|_| crate::error::Error::IndexDocument("repo is stopped".to_string()))?;
+
+    let doc_id = doc_handle.document_id().to_string();
+
+    // Add to index
+    index.add_file(&path_str, &doc_id)?;
+
+    debug!(path = %path_str, doc_id = %doc_id, "Added new file to index");
+    Ok(true)
 }
 
 #[cfg(test)]

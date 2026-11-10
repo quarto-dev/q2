@@ -4,7 +4,10 @@
 //! files (`.qmd`, `.md`) are modified on disk, enabling real-time
 //! synchronization between the filesystem and automerge documents.
 
+use std::collections::{HashMap, HashSet};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 use notify::RecursiveMode;
@@ -42,14 +45,13 @@ pub enum WatchFilter {
     /// time, not here.)
     #[default]
     SourcesOnly,
-    /// Broadened filter for `q2 preview`. Accepts, in addition to
-    /// source files:
-    ///   - `_quarto.yml` / `_quarto.yaml` (project config)
-    ///   - `_metadata.yml` / `_metadata.yaml` (section config)
-    ///   - `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp` (media)
-    ///   - `.tsx` (custom React components)
-    /// `_extensions/**` is intentionally *not* expanded yet — see
-    /// `claude-notes/plans/2026-05-13-q2-preview-phase-b.md` Q-B1.
+    /// Filter for `q2 preview`: every file the exposure policy classifies
+    /// (preview VFS contract D4): sources, config, stylesheets,
+    /// components, bibliographies, data, templates, binaries and
+    /// `_extensions/` contents. The watcher additionally drops hidden and
+    /// generated paths by asking the policy itself (see
+    /// [`FileWatcher::new`]). One list, so a file a render pulled is also
+    /// a file whose edits surface.
     PreviewBroad,
     /// Every path surfaces. For consumers that classify changes
     /// themselves against state the watcher cannot see — `q2 preview
@@ -65,7 +67,9 @@ impl WatchFilter {
     pub fn accepts(self, path: &Path) -> bool {
         match self {
             Self::SourcesOnly => is_source_file(path) && !in_preview_out(path),
-            Self::PreviewBroad => is_preview_relevant(path) && !in_preview_out(path),
+            Self::PreviewBroad => {
+                crate::exposure::classify(path).is_some() && !in_preview_out(path)
+            }
             Self::All => true,
         }
     }
@@ -152,13 +156,122 @@ impl WatchConfig {
     }
 }
 
-/// Filesystem watcher for .qmd files.
+/// The single-file watch scope (bd-tnm3k, preview VFS contract D8): the
+/// files and directories a single-file preview has been asked about. An
+/// event surfaces only if its path is one of the files, or sits directly in
+/// one of the directories.
+#[derive(Debug, Default)]
+struct WatchScope {
+    files: HashSet<PathBuf>,
+    /// Each watched directory with the names it held when it was first
+    /// watched, so a file *created* later can be told apart from a sibling
+    /// nothing asked for.
+    dirs: HashMap<PathBuf, HashSet<OsString>>,
+}
+
+impl WatchScope {
+    fn admits(&self, path: &Path) -> bool {
+        self.files.contains(path) || path.parent().is_some_and(|dir| self.dirs.contains_key(dir))
+    }
+}
+
+/// A cloneable handle that widens a running watcher (preview VFS contract
+/// D8): the server watches what it has served. In project mode the tree is
+/// already watched and every call is a no-op.
+#[derive(Clone)]
+pub struct WatchHandle {
+    debouncer: Arc<Mutex<Debouncer<notify::RecommendedWatcher>>>,
+    /// `None` in project mode.
+    scope: Option<Arc<RwLock<WatchScope>>>,
+}
+
+impl WatchHandle {
+    /// Watch `dir`'s direct children (absolute, canonical). Records the
+    /// names `dir` holds now; see [`is_new_in_watched_dir`](Self::is_new_in_watched_dir).
+    pub fn watch_dir(&self, dir: &Path) -> Result<()> {
+        let Some(scope) = &self.scope else {
+            return Ok(());
+        };
+        if scope
+            .read()
+            .expect("watch scope lock")
+            .dirs
+            .contains_key(dir)
+        {
+            return Ok(());
+        }
+        let names = std::fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.file_name())
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.debouncer
+            .lock()
+            .expect("watcher lock")
+            .watcher()
+            .watch(dir, RecursiveMode::NonRecursive)
+            .map_err(|e| Error::Sync(format!("failed to watch {}: {e}", dir.display())))?;
+        scope
+            .write()
+            .expect("watch scope lock")
+            .dirs
+            .insert(dir.to_path_buf(), names);
+        debug!(dir = %dir.display(), "Watching directory on demand");
+        Ok(())
+    }
+
+    /// Watch one file (absolute, canonical).
+    pub fn watch_file(&self, file: &Path) -> Result<()> {
+        let Some(scope) = &self.scope else {
+            return Ok(());
+        };
+        if scope.read().expect("watch scope lock").files.contains(file) {
+            return Ok(());
+        }
+        self.debouncer
+            .lock()
+            .expect("watcher lock")
+            .watcher()
+            .watch(file, RecursiveMode::NonRecursive)
+            .map_err(|e| Error::Sync(format!("failed to watch {}: {e}", file.display())))?;
+        scope
+            .write()
+            .expect("watch scope lock")
+            .files
+            .insert(file.to_path_buf());
+        Ok(())
+    }
+
+    /// Whether `path` may be enrolled as a new file. Project mode: always
+    /// (the tree is watched; the caller applies the walk's rules).
+    /// Single-file mode: only a file that sits directly in a watched
+    /// directory and was not there when the directory was first watched.
+    pub fn is_new_in_watched_dir(&self, path: &Path) -> bool {
+        let Some(scope) = &self.scope else {
+            return true;
+        };
+        let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+            return false;
+        };
+        scope
+            .read()
+            .expect("watch scope lock")
+            .dirs
+            .get(dir)
+            .is_some_and(|before| !before.contains(name))
+    }
+}
+
+/// Filesystem watcher for project files.
 ///
 /// Uses notify-debouncer-mini to watch for filesystem changes with debouncing
 /// to batch rapid changes (e.g., multiple saves in quick succession).
 pub struct FileWatcher {
-    /// The debouncer wrapping the underlying watcher
-    _debouncer: Debouncer<notify::RecommendedWatcher>,
+    /// Shared with [`WatchHandle`]s, which widen the watch at runtime.
+    handle: WatchHandle,
 
     /// Receiver for watch events
     event_rx: mpsc::UnboundedReceiver<WatchEvent>,
@@ -167,7 +280,8 @@ pub struct FileWatcher {
 impl FileWatcher {
     /// Create a new filesystem watcher for the given project root.
     ///
-    /// The watcher will recursively watch for changes to .qmd files.
+    /// Project mode watches the tree recursively; single-file mode watches
+    /// the deck and its dependencies, and grows through [`WatchHandle`].
     pub fn new(project_root: &Path, config: WatchConfig) -> Result<Self> {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let project_root = project_root.to_path_buf();
@@ -175,25 +289,29 @@ impl FileWatcher {
         let single_file = config.single_file.clone();
         let single_file_deps = config.single_file_deps.clone();
 
-        // In single-file mode, the watcher's allow-list is the deck plus its
-        // resolved dependency closure (bd-tnm3k + bd-9cyza5vy). An event
-        // surfaces only if its path is in this set, so `notify` directory-level
-        // events and unrelated siblings are both dropped. `None` ⇒ project mode
-        // (recursive walk, no allow-list).
-        let allowed: Option<std::collections::HashSet<PathBuf>> =
-            single_file.as_ref().map(|deck| {
-                let mut set = std::collections::HashSet::with_capacity(1 + single_file_deps.len());
-                set.insert(deck.clone());
-                set.extend(single_file_deps.iter().cloned());
-                set
-            });
-        let event_allowed = allowed.clone();
+        // In single-file mode, the watcher's allow-list starts as the deck
+        // plus its resolved dependency closure (bd-tnm3k + bd-9cyza5vy) and
+        // grows with what the miss routes serve (contract D8). An event
+        // surfaces only if its path is in scope, so `notify` directory-level
+        // events and unrelated siblings are both dropped. `None` ⇒ project
+        // mode (recursive walk, no allow-list).
+        let scope: Option<Arc<RwLock<WatchScope>>> = single_file.as_ref().map(|deck| {
+            let mut files = HashSet::with_capacity(1 + single_file_deps.len());
+            files.insert(deck.clone());
+            files.extend(single_file_deps.iter().cloned());
+            Arc::new(RwLock::new(WatchScope {
+                files,
+                dirs: HashMap::new(),
+            }))
+        });
+        let event_scope = scope.clone();
 
-        // Preview VFS contract D4: the preview watcher drops events inside
-        // generated directories (a sidecar beside its source, `site_libs`,
-        // the output directory, ...) by asking the exposure policy, so a
-        // render's own output never looks like an author's edit.
-        let generated_policy = (filter == WatchFilter::PreviewBroad).then(|| {
+        // Preview VFS contract D4: the preview watcher drops events the
+        // exposure policy refuses on the path alone: hidden, inside a
+        // generated directory (a sidecar beside its source, `site_libs`, the
+        // output directory, ...), or an unknown type. A render's own output
+        // never looks like an author's edit.
+        let policy = (filter == WatchFilter::PreviewBroad).then(|| {
             let policy = ExposurePolicy::new(&project_root);
             match config.output_dir.as_deref() {
                 Some(out) => policy.with_output_dir(out),
@@ -209,17 +327,16 @@ impl FileWatcher {
                     Ok(events) => {
                         for event in events {
                             // bd-tnm3k / bd-9cyza5vy: in single-file mode, drop
-                            // any event whose path isn't in the deck's closure
-                            // allow-list. `notify` may report directory-level
-                            // events on some platforms even when only specific
-                            // files are watched.
-                            if let Some(ref allow) = event_allowed
-                                && !allow.contains(&event.path)
+                            // any event whose path isn't in scope. `notify` may
+                            // report directory-level events on some platforms
+                            // even when only specific files are watched.
+                            if let Some(ref scope) = event_scope
+                                && !scope.read().expect("watch scope lock").admits(&event.path)
                             {
                                 continue;
                             }
-                            if let Some(policy) = &generated_policy
-                                && policy.event_in_generated_dir(&event.path)
+                            if let Some(policy) = &policy
+                                && !policy.admits_event(&event.path)
                             {
                                 continue;
                             }
@@ -282,9 +399,17 @@ impl FileWatcher {
         );
 
         Ok(Self {
-            _debouncer: debouncer,
+            handle: WatchHandle {
+                debouncer: Arc::new(Mutex::new(debouncer)),
+                scope,
+            },
             event_rx,
         })
+    }
+
+    /// A handle that widens this watcher at runtime.
+    pub fn handle(&self) -> WatchHandle {
+        self.handle.clone()
     }
 
     /// Receive the next watch event.
@@ -299,46 +424,6 @@ impl FileWatcher {
 fn is_source_file(path: &Path) -> bool {
     path.extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("qmd") || ext.eq_ignore_ascii_case("md"))
-}
-
-/// Check if a path matches the [`WatchFilter::PreviewBroad`] allow-list.
-///
-/// Acceptance is decided by the file's basename / extension only — the
-/// containing directory is irrelevant. That keeps the predicate cheap
-/// and makes it tolerant of nested project layouts (e.g. a sub-section
-/// `posts/_metadata.yml`).
-fn is_preview_relevant(path: &Path) -> bool {
-    if is_source_file(path) {
-        return true;
-    }
-
-    // Exact-basename match for Quarto config files. We match both
-    // `.yml` and `.yaml` since `.yml` is the canonical Quarto spelling
-    // but nothing prevents `.yaml`; missing the alt spelling silently
-    // would be a surprising failure mode.
-    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-        let lower = name.to_ascii_lowercase();
-        if matches!(
-            lower.as_str(),
-            "_quarto.yml" | "_quarto.yaml" | "_metadata.yml" | "_metadata.yaml"
-        ) {
-            return true;
-        }
-    }
-
-    // Extension-based match for media, custom React components, and
-    // project-level CSS. SCSS / SASS / LESS are deliberately omitted —
-    // preview-pipeline support for editing them is unverified; track
-    // as a follow-up if user demand surfaces. (Phase D.3, bd-kw93.9.)
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        let lower = ext.to_ascii_lowercase();
-        return matches!(
-            lower.as_str(),
-            "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "tsx" | "css"
-        );
-    }
-
-    false
 }
 
 #[cfg(test)]
@@ -429,31 +514,36 @@ mod tests {
         assert!(f.accepts(Path::new("THEME.CSS")));
     }
 
+    /// Preview VFS contract D4: `PreviewBroad` is the exposure policy's
+    /// class list, so every type a render can pull (stylesheets,
+    /// bibliographies, data) also surfaces its edits; unknown types do not.
     #[test]
-    fn test_watch_filter_preview_broad_rejects() {
+    fn test_watch_filter_preview_broad_follows_the_policy_classes() {
         let f = WatchFilter::PreviewBroad;
-
-        // Random non-matching files. (README.md moved to the accepts
-        // side with bd-6d2wj4zp D10 — .md is a source file now.)
-        assert!(!f.accepts(Path::new("notes.txt")));
-        assert!(!f.accepts(Path::new("data.csv")));
-
-        // Other YAML files: only the two canonical Quarto names match.
-        assert!(!f.accepts(Path::new("config.yml")));
-        assert!(!f.accepts(Path::new("settings.yaml")));
-
-        // Backup files where the trailing extension wins. `.tsx.bak` ends
-        // in `.bak`, not `.tsx`, so it must be rejected.
-        assert!(!f.accepts(Path::new("Component.tsx.bak")));
-        assert!(!f.accepts(Path::new("_quarto.yml.bak")));
-
-        // Image formats we explicitly don't watch yet.
-        assert!(!f.accepts(Path::new("scan.bmp")));
-        assert!(!f.accepts(Path::new("art.tiff")));
-
-        // Extensionless / dotfile.
-        assert!(!f.accepts(Path::new(".gitignore")));
-        assert!(!f.accepts(Path::new("Makefile")));
+        for p in [
+            "notes.txt",
+            "data.csv",
+            "config.yml",
+            "refs.bib",
+            "apa.csl",
+            "theme.scss",
+            "_partial.sass",
+            "scan.bmp",
+            "_brand.yml",
+            "_extensions/acme/filter.lua",
+        ] {
+            assert!(f.accepts(Path::new(p)), "{p}");
+        }
+        for p in [
+            // The trailing extension wins: a backup is not its original.
+            "Component.tsx.bak",
+            "_quarto.yml.bak",
+            "a.exe",
+            ".gitignore",
+            "Makefile",
+        ] {
+            assert!(!f.accepts(Path::new(p)), "{p}");
+        }
     }
 
     #[tokio::test]
@@ -787,6 +877,6 @@ mod all_filter_tests {
     #[test]
     fn narrower_filters_still_reject_what_all_accepts() {
         assert!(!WatchFilter::SourcesOnly.accepts(Path::new("data.csv")));
-        assert!(!WatchFilter::PreviewBroad.accepts(Path::new("data.csv")));
+        assert!(!WatchFilter::PreviewBroad.accepts(Path::new("no-extension")));
     }
 }

@@ -185,7 +185,9 @@ async fn raw_http(
     extra: &[(&str, &str)],
 ) -> RawResponse {
     let mut stream = TcpStream::connect(addr).await.expect("connect");
-    let mut request = format!("{method} {path} HTTP/1.1\r\nHost: join-frontend-test\r\n");
+    // A browser on the guest sends its own loopback name; the host's
+    // `Host` gate (preview VFS contract D6) refuses anything else.
+    let mut request = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\n");
     for (name, value) in extra {
         request.push_str(&format!("{name}: {value}\r\n"));
     }
@@ -556,9 +558,7 @@ async fn tunneled_head_carries_connection_close() {
     // A browser-style keep-alive request for a dynamic path.
     let mut stream = TcpStream::connect(rig.guest).await.expect("connect");
     stream
-        .write_all(
-            b"GET /health HTTP/1.1\r\nHost: join-frontend-test\r\nConnection: keep-alive\r\n\r\n",
-        )
+        .write_all(b"GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n")
         .await
         .expect("write request");
 
@@ -827,7 +827,7 @@ async fn head_peek_timeout_closes() {
     // seeing a request.
     let mut stream = TcpStream::connect(guest).await.expect("connect guest");
     stream
-        .write_all(b"GET / HTTP/1.1\r\nHost: join-frontend-test\r\n")
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n")
         .await
         .expect("write partial head");
     let started = Instant::now();
@@ -975,4 +975,31 @@ async fn guest_config_carries_the_hosts_render_block() {
         body["render"],
         serde_json::json!({ "to": "typst", "metadata": { "toc": true } })
     );
+}
+
+/// Preview VFS contract D2/D6: the miss routes tunnel like every other
+/// `/api/*` route, and the host's `Host` gate still applies to what
+/// arrives through the tunnel.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn miss_routes_tunnel_and_the_host_gate_holds() {
+    let rig = boot_rig(PreviewUi::Viewer, LocalServing::Tunnel).await;
+    for path in [
+        "/api/preview/stat?path=index.qmd",
+        "/api/preview/list?path=",
+        "/api/preview/file?path=about.qmd",
+    ] {
+        let guest = raw_http(rig.guest, "GET", path, &[]).await;
+        let host = raw_http(rig.hub, "GET", path, &[]).await;
+        assert_eq!(guest.status, 200, "{path}");
+        assert_eq!(guest.body, host.body, "{path}: the host's answer");
+    }
+
+    let mut stream = TcpStream::connect(rig.guest).await.expect("connect");
+    stream
+        .write_all(b"GET /health HTTP/1.1\r\nHost: evil.example\r\nConnection: close\r\n\r\n")
+        .await
+        .expect("write request");
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).await.expect("read response");
+    assert_eq!(parse_response(&raw).status, 403);
 }
