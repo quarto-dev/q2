@@ -15,7 +15,7 @@ Rendering to these formats requires a `pandoc` binary. Quarto does not
 bundle one — install it from
 [pandoc.org](https://pandoc.org/installing.html) and make sure it's on
 your `PATH`, or point the `QUARTO_PANDOC` environment variable at
-wherever it lives. Quarto requires `pandoc` 3.11 or newer.
+wherever it lives. Quarto requires `pandoc` 3.13 or newer.
 
 A few Pandoc writers are deliberately not exposed: the bibliography
 exporters (`bibtex`, `biblatex`, `csljson`) and `opml` discard the
