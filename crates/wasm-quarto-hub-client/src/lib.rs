@@ -20,12 +20,12 @@ use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
 use quarto_core::overlay_runtime::RenderOverlay;
+use quarto_core::pipeline::render_qmd_to_preview_ast_with_capture;
 use quarto_core::project::drafts::RenderAudience;
 use quarto_core::project::render_scripts::RenderHost;
 use quarto_core::{
-    render_qmd_to_html, render_qmd_to_preview_ast, BinaryDependencies, DocumentInfo, Format,
-    HtmlRenderConfig, ProjectConfig, ProjectContext, QuartoError, RenderContext, RenderOptions,
-    ResourceResolverContext,
+    render_qmd_to_html, BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig,
+    ProjectContext, QuartoError, RenderContext, RenderOptions, ResourceResolverContext,
 };
 use quarto_error_reporting::{
     diagnostic_to_json, with_source_file, DiagnosticMessage, JsonDiagnostic, JsonPass1Failure,
@@ -672,8 +672,8 @@ struct RenderResponse {
     is_slides: bool,
     /// Untransformed Pandoc AST JSON — the `qmd_to_pandoc` output
     /// captured immediately after `ParseDocumentStage`, before any
-    /// `AstTransformsStage`.  Populated alongside `ast_json` for
-    /// q2-preview renders; `None` for HTML / error responses.
+    /// `AstTransformsStage`. Populated alongside `ast_json` for capture-armed
+    /// q2-preview renders; `None` for capture-off, HTML, and error responses.
     /// Round-tripped to the frontend as the baseline for
     /// `apply_node_edit` (target-incremental-writes Phase 1).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1132,6 +1132,7 @@ async fn render_qmd_with_overlay(
         None,
         None,
         None,
+        true,
         runtime_arc.clone(),
     )
     .await
@@ -1202,6 +1203,7 @@ async fn render_printable_with_overlay(
         None,
         Some(&printable_format),
         None,
+        true,
         runtime_arc.clone(),
     )
     .await
@@ -1237,6 +1239,7 @@ pub async fn render_qmd_content(
         None,
         None,
         None,
+        true,
         // No overlay on the path-less render: it has no project to resolve.
         render_runtime(None),
     )
@@ -1247,12 +1250,12 @@ pub async fn render_qmd_content(
 ///
 /// Phase 9 entry point used by the hub-client live preview.
 /// Equivalent to
-/// [`render_page_in_project_with_attribution(path, user_grammars, None, None, None)`](render_page_in_project_with_attribution).
+/// [`render_page_in_project_with_attribution(path, user_grammars, None, None, None, None)`](render_page_in_project_with_attribution).
 /// Kept as a separate entry point for callers that have no
 /// attribution payload or capture to ship and want the simpler signature.
 #[wasm_bindgen]
 pub async fn render_page_in_project(path: &str, user_grammars: Option<JsUserGrammars>) -> String {
-    render_page_in_project_with_attribution(path, user_grammars, None, None, None).await
+    render_page_in_project_with_attribution(path, user_grammars, None, None, None, None).await
 }
 
 /// Render a single page **in the context of its surrounding project**,
@@ -1339,13 +1342,21 @@ pub async fn render_page_in_project_with_attribution(
     // omits the argument (`undefined`) is explicitly `None` → `false`,
     // instead of relying on the ToInt32 coercion of `undefined`.
     prefer_preview_format: Option<bool>,
+    // Phase 3B1: `{ captureUntransformedAst?: boolean }`. Omitted options or
+    // flag preserve the capture-on raw-WASM contract.
+    options: Option<JsValue>,
 ) -> String {
+    let capture_untransformed_ast = match parse_capture_untransformed_ast(options) {
+        Ok(capture) => capture,
+        Err(e) => return error_response(e),
+    };
     render_page_in_project_with_overlay(
         path,
         user_grammars,
         attribution_json,
         capture_gz_json,
         prefer_preview_format,
+        capture_untransformed_ast,
         None,
     )
     .await
@@ -1359,6 +1370,7 @@ async fn render_page_in_project_with_overlay(
     attribution_json: Option<String>,
     capture_gz_json: Option<Vec<u8>>,
     prefer_preview_format: Option<bool>,
+    capture_untransformed_ast: bool,
     overlay: Option<Arc<RenderOverlay>>,
 ) -> String {
     let prefer_preview_format = prefer_preview_format.unwrap_or(false);
@@ -1410,6 +1422,7 @@ async fn render_page_in_project_with_overlay(
             attribution_json,
             None,
             None,
+            capture_untransformed_ast,
             runtime_arc.clone(),
         )
         .await;
@@ -1437,6 +1450,7 @@ async fn render_page_in_project_with_overlay(
         captures,
         attribution_json,
         None,
+        capture_untransformed_ast,
         runtime_arc.clone(),
     )
     .await
@@ -1465,9 +1479,10 @@ async fn render_page_in_project_with_overlay(
 /// and threads it through this argument.
 ///
 /// `options` (optional, trailing) is `{ to?: string, metadata?: Record<string,
-/// unknown> }`: the live viewer's `--to` (the requested format, which wins over
-/// the document's and the project's) and `-M` (the render's runtime metadata
-/// layer). Absent, the render is what it always was.
+/// unknown>, captureUntransformedAst?: boolean }`: the live viewer's `--to`
+/// (the requested format, which wins over the document's and the project's),
+/// `-M` (the render's runtime metadata layer), and the per-render baseline
+/// capture gate. Absent options or capture flag preserve capture-on behavior.
 #[wasm_bindgen]
 pub async fn render_page_for_preview(
     path: &str,
@@ -1482,6 +1497,7 @@ pub async fn render_page_for_preview(
         Ok(o) => o,
         Err(e) => return error_response(e),
     };
+    let capture_untransformed_ast = options.capture_untransformed_ast.unwrap_or(true);
     let overlay = overlay_with_metadata(None, options.metadata);
     render_page_for_preview_with_overlay(
         path,
@@ -1489,6 +1505,7 @@ pub async fn render_page_for_preview(
         capture_gz_json,
         overlay,
         options.to.as_deref(),
+        capture_untransformed_ast,
     )
     .await
 }
@@ -1501,6 +1518,7 @@ async fn render_page_for_preview_with_overlay(
     capture_gz_json: Option<Vec<u8>>,
     overlay: Option<Arc<RenderOverlay>>,
     requested_format: Option<&str>,
+    capture_untransformed_ast: bool,
 ) -> String {
     let runtime_arc = render_runtime(overlay.as_ref());
     let runtime = runtime_arc.as_ref();
@@ -1545,6 +1563,7 @@ async fn render_page_for_preview_with_overlay(
             None,
             None,
             requested_format,
+            capture_untransformed_ast,
             runtime_arc.clone(),
         )
         .await;
@@ -1566,6 +1585,7 @@ async fn render_page_for_preview_with_overlay(
         captures,
         None,
         requested_format,
+        capture_untransformed_ast,
         runtime_arc.clone(),
     )
     .await
@@ -1963,12 +1983,36 @@ fn get_to(options: &JsValue) -> Result<Option<String>, String> {
     }
 }
 
-/// The `{ to?, metadata? }` options of [`render_page_for_preview`] and the
-/// metadata and format of [`resolve_pandoc_formats`].
+fn get_capture_untransformed_ast(options: &JsValue) -> Result<Option<bool>, String> {
+    let capture = js_sys::Reflect::get(options, &"captureUntransformedAst".into())
+        .unwrap_or(JsValue::UNDEFINED);
+    if capture.is_undefined() || capture.is_null() {
+        return Ok(None);
+    }
+    capture
+        .as_bool()
+        .map(Some)
+        .ok_or_else(|| "options.captureUntransformedAst must be a boolean".to_string())
+}
+
+fn parse_capture_untransformed_ast(options: Option<JsValue>) -> Result<bool, String> {
+    let Some(options) = options.filter(|o| !o.is_undefined() && !o.is_null()) else {
+        return Ok(true);
+    };
+    if !options.is_object() {
+        return Err("options must be an object".to_string());
+    }
+    Ok(get_capture_untransformed_ast(&options)?.unwrap_or(true))
+}
+
+/// The `{ to?, metadata?, captureUntransformedAst? }` options of
+/// [`render_page_for_preview`] and the metadata and format of
+/// [`resolve_pandoc_formats`].
 #[derive(Default)]
 struct PreviewOptions {
     to: Option<String>,
     metadata: Option<serde_json::Value>,
+    capture_untransformed_ast: Option<bool>,
 }
 
 fn parse_preview_options(options: Option<JsValue>) -> Result<PreviewOptions, String> {
@@ -1984,6 +2028,7 @@ fn parse_preview_options(options: Option<JsValue>) -> Result<PreviewOptions, Str
     if !metadata.is_undefined() && !metadata.is_null() {
         out.metadata = Some(metadata_object(&metadata)?);
     }
+    out.capture_untransformed_ast = get_capture_untransformed_ast(&options)?;
     Ok(out)
 }
 
@@ -2426,7 +2471,7 @@ fn parse_resolve_formats_options(
                 .ok_or_else(|| "options.contentOverride must be a string".to_string())?,
         );
     }
-    let PreviewOptions { to, metadata } = parse_preview_options(Some(options))?;
+    let PreviewOptions { to, metadata, .. } = parse_preview_options(Some(options))?;
     out.to = to;
     out.metadata = metadata;
     Ok(out)
@@ -2528,6 +2573,8 @@ async fn render_single_doc_to_response(
     // The requested format (`to`; the live viewer's `--to`), which wins over
     // the document's and the project's (FR2). `None` for every other entry.
     requested_format: Option<&str>,
+    // Whether to run the separate parent-less parse and return its JSON.
+    capture_untransformed_ast: bool,
     // The render's runtime, already wrapped in the request's overlay by the
     // entry that created it (FR12); this function never wraps.
     runtime_arc: Arc<dyn SystemRuntime>,
@@ -2591,13 +2638,14 @@ async fn render_single_doc_to_response(
         .pipeline_kind
     {
         Some("preview") => {
-            match render_qmd_to_preview_ast(
+            match render_qmd_to_preview_ast_with_capture(
                 content,
                 &source_name,
                 &mut ctx,
                 runtime_arc,
                 None,
                 captures,
+                capture_untransformed_ast,
             )
             .await
             {
@@ -2721,6 +2769,9 @@ async fn render_project_active_page_to_response(
     attribution_json: Option<String>,
     // The requested format (`to`), as for `render_single_doc_to_response`.
     requested_format: Option<&str>,
+    // Whether this response owns an untransformed-AST capture. Project pass 2
+    // remains capture-off regardless of this response-level flag.
+    capture_untransformed_ast: bool,
     // The render's runtime, already wrapped in the request's overlay by the
     // entry that created it (FR12); this function never wraps.
     runtime_arc: Arc<dyn SystemRuntime>,
@@ -2940,29 +2991,33 @@ async fn render_project_active_page_to_response(
         Pass2Payload::AstJson(s) => (None, Some(s)),
     };
 
-    // Capture the untransformed AST for the active page when this is a
-    // q2-preview render (ast_json is populated). Same logic as
+    // Capture the untransformed AST for the active page when this is an armed
+    // q2-preview render (ast_json is populated). The filter keeps the false
+    // path from parsing or serializing at all. Same capture logic as
     // quarto_core::pipeline::capture_untransformed_ast_json.
     let source_name = active_path.to_string_lossy();
-    let untransformed_ast_json = ast_json.as_ref().and_then(|_| {
-        use pampa::wasm_entry_points::qmd_to_pandoc;
-        use pampa::writers::json::{write_with_config, JsonConfig};
-        let (ast, context) = qmd_to_pandoc(content).ok()?;
-        let ast_ctx = pampa::pandoc::ASTContext {
-            filenames: vec![source_name.to_string()],
-            example_list_counter: std::cell::Cell::new(1),
-            source_context: context.source_context.clone(),
-            parent_source_info: None,
-            file_id: quarto_source_map::FileId(0),
-        };
-        let json_config = JsonConfig {
-            include_inline_locations: true,
-            ..Default::default()
-        };
-        let mut buf = Vec::new();
-        write_with_config(&ast, &ast_ctx, &mut buf, &json_config).ok()?;
-        String::from_utf8(buf).ok()
-    });
+    let untransformed_ast_json = ast_json
+        .as_ref()
+        .filter(|_| capture_untransformed_ast)
+        .and_then(|_| {
+            use pampa::wasm_entry_points::qmd_to_pandoc;
+            use pampa::writers::json::{write_with_config, JsonConfig};
+            let (ast, context) = qmd_to_pandoc(content).ok()?;
+            let ast_ctx = pampa::pandoc::ASTContext {
+                filenames: vec![source_name.to_string()],
+                example_list_counter: std::cell::Cell::new(1),
+                source_context: context.source_context.clone(),
+                parent_source_info: None,
+                file_id: quarto_source_map::FileId(0),
+            };
+            let json_config = JsonConfig {
+                include_inline_locations: true,
+                ..Default::default()
+            };
+            let mut buf = Vec::new();
+            write_with_config(&ast, &ast_ctx, &mut buf, &json_config).ok()?;
+            String::from_utf8(buf).ok()
+        });
 
     serde_json::to_string(&RenderResponse {
         success: true,

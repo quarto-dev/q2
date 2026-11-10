@@ -2074,13 +2074,42 @@ pub async fn render_qmd_to_preview_ast(
     engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
     captures: CapturePayload,
 ) -> Result<PreviewAstOutput> {
+    render_qmd_to_preview_ast_with_capture(
+        content,
+        source_name,
+        ctx,
+        runtime,
+        engine_registry,
+        captures,
+        true,
+    )
+    .await
+}
+
+/// Capture-aware implementation of [`render_qmd_to_preview_ast`].
+///
+/// Project pass 2 discards the untransformed AST, so it disables the capture;
+/// response-producing callers retain the public capture-on wrapper above.
+pub async fn render_qmd_to_preview_ast_with_capture(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    captures: CapturePayload,
+    capture_untransformed_ast: bool,
+) -> Result<PreviewAstOutput> {
     // Capture the untransformed AST before any pipeline stage runs.
     // This is the baseline `incremental_write` reconciles against (plan:
     // 2026-06-04-target-incremental-writes.md, Phase 1).  We parse the
     // content a second time rather than intercepting the pipeline's own
     // parse so that the returned JSON is wholly self-contained (its own
     // source-info pool) and independent of the main pipeline's run.
-    let untransformed_ast_json = capture_untransformed_ast_json(content, source_name);
+    let untransformed_ast_json = if capture_untransformed_ast {
+        capture_untransformed_ast_json(content, source_name)
+    } else {
+        None
+    };
 
     // Thread the optional engine registry override onto `RenderContext` so
     // `run_pipeline` can apply it to `StageContext` after populating the
@@ -5110,6 +5139,35 @@ mod tests {
             t_para.source_info(),
             "unchanged paragraph must have byte-identical source_info in both ASTs"
         );
+    }
+
+    #[test]
+    fn render_qmd_to_preview_ast_capture_gate_preserves_transformed_ast() {
+        let content = b"---\nformat: q2-preview\n---\n\nHello world.\n";
+        let project = make_test_project();
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let render = |capture_untransformed_ast| {
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            pollster::block_on(render_qmd_to_preview_ast_with_capture(
+                content,
+                "/project/test.qmd",
+                &mut ctx,
+                make_test_runtime(),
+                None,
+                CapturePayload::Empty,
+                capture_untransformed_ast,
+            ))
+            .expect("q2-preview render")
+        };
+
+        let capture_on = render(true);
+        let capture_off = render(false);
+
+        assert!(capture_on.untransformed_ast_json.is_some());
+        assert!(capture_off.untransformed_ast_json.is_none());
+        assert_eq!(capture_off.ast_json, capture_on.ast_json);
     }
 
     /// Plan 2B: with `FootnotesTransform` no longer in the

@@ -1,58 +1,45 @@
 ---
 title: 'hub-client main-thread render path: audit fixes'
 date: 2026-10-24
-description: 'Phased fixes from the 2026-10-24 main-thread render-path audit: render coalescing, resolver-only format classification, single-parse AST transport, binary asset transfer, then measurement-gated worker work.'
-status: draft
+description: 'Phased fixes from the main-thread render-path audit: render coalescing, resolver-only format classification, untransformed-AST capture elimination and gating, binary asset transfer, then measurement-gated worker work.'
+status: in-progress
 ---
 
 ## Overview
 
-An audit on 2026-10-24 examined what heavy, general-purpose work runs on
-the browser main thread on the hub-client render path, and what can be
-removed, coalesced, or moved off it. Context: the entire Rust WASM render
-pipeline (`wasm-quarto-hub-client`: VFS, qmd parse, transform pipeline, AST
-production, theme CSS compile, LSP intelligence) runs on the main thread;
-the only workers are pandoc.wasm, typst, and Monaco language workers
-(architecture map: `claude-notes/designs/pandoc-wasm-architecture.md`,
-which documents main-thread placement as an accepted decision). Every bit
-of general work sharing that thread shows up as typing latency and preview
-lag.
+The hub-client render path runs the entire Rust WASM pipeline on the browser
+main thread: VFS access, qmd parsing, transforms, AST production, theme CSS
+compilation, and LSP intelligence. Only pandoc.wasm, typst, and Monaco
+language workers run off that thread (architecture map:
+`claude-notes/designs/pandoc-wasm-architecture.md`). General work on the main
+thread therefore appears as typing latency and preview lag.
 
-Eight findings, ranked by expected impact, are below. This plan sequences
-the fixes cheapest-first, with measurement gating the larger ones per
-`claude-notes/instructions/performance-profiling.md`.
+This plan addresses eight findings in cheapest-first order, with measurements
+gating the larger changes per
+`claude-notes/instructions/performance-profiling.md`. The original findings
+came from static analysis and code-path reading; the completed phases below
+record which costs the measurements confirmed. File:line references locate
+the audit sites, but should be re-located before editing.
 
-Caveat: findings are from static analysis plus code-path reading. The cost
-claims are hypotheses until Phase 0 instruments them. File:line references
-were as of the audit; re-locate before editing.
+The sandboxed preview is genuinely cross-origin at
+`quarto-dev.github.io/q2-sandbox`, which affects findings 3 and 6 and Phases
+3-4. TS-side performance instrumentation lives in
+`hub-client/src/utils/perfCounters.ts`.
 
-Revised 2026-10-27: file:line references re-verified against main; updated
-for bd-73lilznv (2026-10-26: the sandboxed preview's default origin moved
-to `quarto-dev.github.io/q2-sandbox`, so the preview iframe is now
-genuinely cross-origin — this affects findings 3 and 6 and Phases 3-4) and
-for the TS-side perf instrumentation that has landed since the audit
-(`hub-client/src/utils/perfCounters.ts`). Phase 3's per-consumer scoping is
-now decided (manifest moves iframe-side; the other consumers stay, with
-reasons recorded inline).
+Phases 0-2, 3A, and 3B1 are complete. **Phase 3B1 completed on 2026-11-10
+under bd-wpmqf039. Phases 3B2 and 3C remain deferred.** Phase 3B1 preserves
+eager capture whenever comments are visible or editing is enabled; it does not
+redesign comment interactions. This keeps the capture optimization independent
+of ongoing comment work. The comment-intent UX in Phase 3B2 and the transport
+changes in Phase 3C require fresh measurements before activation.
 
-Revised 2026-11-06: first Phase 2 review folded in (new export plus a
-two-signal skip).
-
-Revised 2026-11-09: Phase 2 rewritten for implementation after a second
-probe against the real WASM corrected the first review — `success` is
-*not* front-matter-determined (inline parse errors fail it), the
-router's guard is live only for unknown `q2-*` keys and causes a bug
-under a runtime `format`, and the new-export design is replaced by a
-one-line resolver fix plus deletions. The skip is dropped: the call it
-would save costs well under a millisecond.
-
-## Findings
+## Findings from the original audit
 
 | # | Finding | Primary site | Cost class |
 |---|---------|--------------|------------|
 | 1 | Per-keystroke full parse whose AST is discarded (format classification) | `hub-client/src/components/render/PreviewRouter.tsx:134` | wasted work per keystroke |
 | 2 | Renders are debounce-free; stale queued renders still execute | `hub-client/src/components/render/ReactPreview.tsx:768`, `ts-packages/preview-runtime/src/wasmRenderer.ts:494` | N full pipelines per N-keystroke burst |
-| 3 | AST serialized twice, parsed twice per render; untransformed AST always shipped | `ts-packages/preview-runtime/src/wasmRenderer.ts:611`, `hub-client/quarto-hub-sandboxed-preview/src/entry.tsx:330` | multi-MB JSON parse on main thread, discarded |
+| 3 | Untransformed AST captured on every preview render and captured twice on the project path; transformed AST nested as a JSON string in the response envelope | `crates/quarto-core/src/pipeline.rs:2083`, `crates/wasm-quarto-hub-client/src/lib.rs:2947`, `ts-packages/preview-runtime/src/wasmRenderer.ts:835` | redundant QMD parse + serialization; multi-MB JSON scanning |
 | 4 | Systemic JSON-string envelopes on every WASM call; binaries are base64-in-JSON | `ts-packages/preview-runtime/src/wasmRenderer.ts:331` and ~30 sites | boundary tax on every call |
 | 5 | Whole-document semantic tokenization synchronous on main thread | `hub-client/src/services/intelligenceService.ts:263` | editor-blocking tree-sitter per token request |
 | 6 | Asset proxy: base64 + JSON + string postMessage per asset | `hub-client/src/components/render/q2-sandboxed-preview/Q2SandboxedPreviewIframe.tsx:183` | ~33% bloat + copies per asset |
@@ -64,9 +51,9 @@ crosses the JS-to-WASM boundary at least three times (sync callback
 `ts-packages/preview-runtime/src/automergeSync.ts:108`, semantic-tokens
 write `intelligenceService.ts:275`,
 `resolvePandocFormats` contentOverride `PreviewRouter.tsx:147`) before the
-render itself reads it. Measured in Phase 0 (sub-millisecond each; the
-Phase 2 decisions record why the third crossing is not worth removing)
-and folded into Phase 5 rather than tracked separately.
+render itself reads it. Phase 0 measured each crossing as sub-millisecond;
+Phase 2's final design explains why the third crossing is not worth removing.
+The amplifier is folded into Phase 5 rather than tracked separately.
 
 Existing related strands: the closed bd-k9tfhsst covered SW asset-proxy
 namespace plumbing, not the base64 wire format (finding 6 is new work).
@@ -98,9 +85,10 @@ re-flush, template recompiles) — orthogonal to this plan.
 - End-to-end verification per AGENTS.md: each phase gets a manual smoke
   in the dev server (or states explicitly that browser verification was
   not done). Record the invocation and observed output.
-- File a braid strand per phase when work begins; reference this plan.
-  Snapshot-file changes (Phase 3 likely) get the AGENTS.md snapshot
-  treatment: counts, summary, surprises called out.
+- File a braid strand per independently implemented phase or subphase when
+  work begins; reference this plan.
+  Any snapshot-file changes get the AGENTS.md snapshot treatment: counts,
+  summary, and surprises called out.
 
 ## Phase 0 — Measurement harness and baselines
 
@@ -219,16 +207,14 @@ wall. End-to-end A/B (same driver, pre-Phase-0 worktree vs instrumented
 checkout, profiling off, interleaved runs): old walls 5580.8–5675.5 ms,
 new 5575.8–5605.2 ms — identical within run-to-run spread.
 
-Follow-up (same day, PR review): the wrappers were restructured to an
-early-return fast path — disabled code is one `perfEnabled()` property
-read, then the exact pre-instrumentation shape (no `try/finally`, no
-gauge calls); the sink object is cached at module scope so
-`perfEnabled()` itself is a single property read. Re-measured: +0.005 µs
-on 21-B, +0.3 µs on 130-KB, and 16-MB/100-KB deltas lost in noise
-(wrapped measures *faster* than bare) — payload-scaled overhead
-eliminated, residual ≈ 5 ns per instrumented call. Both paths are pinned
-by `perfGauges.test.ts` (enabled records, disabled is identical-result
-and records nothing).
+The final wrappers use an early-return fast path: disabled code performs one
+`perfEnabled()` property read, then follows the exact pre-instrumentation
+shape with no `try/finally` or gauge calls. The sink object is cached at
+module scope, so `perfEnabled()` itself is a single property read.
+Re-measurement found +0.005 µs on 21-B and +0.3 µs on 130-KB envelopes, with
+16-MB/100-KB deltas lost in noise. Payload-scaled overhead is eliminated,
+leaving approximately 5 ns per instrumented call. `perfGauges.test.ts` pins
+both enabled recording and disabled identical-result behavior.
 
 ## Phase 1 — Latest-wins render coalescing (finding 2)
 
@@ -292,13 +278,10 @@ cost ~0.4 s" at 1x) matches the measured 554 ms on this fixture.
 
 Verification: preview-runtime unit 86/86, hub-client `test:ci`
 437 passed / 28 skipped, `npm run build:all` green, no snapshot changes.
-End-to-end: measured through the real WASM and production
-preview-runtime sources under the Node driver (the Phase 0 proxy);
-live-browser verification was initially owed and landed 2026-10-30 —
-see "Live-browser smoke" under the review follow-ups below.
+End-to-end verification used the real WASM and production preview-runtime
+sources under the Node driver, followed by the browser smoke below.
 
-Review follow-ups (2026-10-30, PR review of bd-r8iqmg2f; three commits
-on the same branch):
+Additional queue invariants:
 
 - The dead `isRenderSupersededError` export was removed — the
   components deliberately inline the name check so partial
@@ -318,8 +301,7 @@ on the same branch):
   Re-verification: preview-runtime 88/88, hub-client `test:ci`
   437 passed / 28 skipped.
 
-Live-browser smoke (2026-10-30; closes the verification debt recorded
-above). A throwaway Playwright spec (deleted after the run, same
+**Browser smoke:** A throwaway Playwright spec (deleted after the run, same
 precedent as the Phase 0 driver) drove the **dev server** end-to-end:
 vite dev with `VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
 VITE_HUB_SERVER=http://localhost:3031
@@ -346,33 +328,26 @@ pace makes overlap deterministic.
 
 ## Phase 2 — Resolver-only format classification (finding 1)
 
-The router pays a full parse per keystroke and reads only `success`
-(`PreviewRouter.tsx:147`). That parse is `parse_qmd_to_ast`: the whole
-tree-sitter body parse, the engine pass-through, `MetadataMergeStage`
-and the AST writer — the discard is larger than "parse + serialize"
-says. Nothing merged since the audit touches this path.
+Before this phase, the router paid a full parse per keystroke and read only
+`success` (`PreviewRouter.tsx:147`). That parse was `parse_qmd_to_ast`: the
+whole tree-sitter body parse, the engine pass-through, `MetadataMergeStage`,
+and the AST writer — a larger discard than "parse + serialize" suggests.
 
-**Status: done 2026-11-09 (bd-luoo7qgu).** The first
-review (2026-11-06) designed a new export, `check_document_for_preview`,
-returning parseability plus the classification in one envelope, with a
-two-signal skip in front of it. A second probe against the real WASM
-(below) shows none of that is needed: the router can drop the parse
-*and* its guard outright once a one-line inconsistency in the Rust
-resolver is fixed. The design is now one Rust line, deletions in the
-router, and no skip. Results below; the per-keystroke baseline's other
-components (render, tokens, VFS) are unchanged — the phase removes the
-discarded parse and its envelope, nothing else.
+**Status: done 2026-11-09 (bd-luoo7qgu).** The router uses the resolver
+directly, without parsing the document or retaining the old parse guard. A
+one-line consistency fix in the Rust resolver makes unknown `q2-*` keys
+classify as `neither`, which allows both deletions. The other per-keystroke
+components (render, tokens, VFS) are unchanged; this phase removes only the
+discarded parse and its envelope.
 
-### What the probe showed (2026-11-09, local WASM artifact of 2026-11-03)
+### Classification evidence
 
-`parse_qmd_to_ast` + `resolve_pandoc_formats` on each input, then
-`classifyPreviewMode` as the router runs it. The artifact predates the
-dashboard commit (c5a29dcd0), so `format: dashboard` is omitted; nothing
-else relevant to this phase changed between the artifact and `main`
-(the only other touch, a0080ff54, is the single-file `_metadata.yml`
-walk).
+A probe ran `parse_qmd_to_ast` and `resolve_pandoc_formats` on each input,
+then applied `classifyPreviewMode` as the router did. It omitted
+`format: dashboard`, which did not affect the classification constraints
+below.
 
-| Input | parse `success` | resolver `class` / `pseudoFormat` | router mode today |
+| Input | parse `success` | resolver `class` / `pseudoFormat` | former router mode |
 |---|---|---|---|
 | no front matter; `format: html`, `revealjs`, `q2-slides` | true | preview / set | react |
 | `format: q2-html-render` | true | preview / null | dom |
@@ -390,12 +365,11 @@ Timing, 75 KB document, warm, min of 5: `parse_qmd_to_ast` 67.1 ms,
 `resolve_pandoc_formats` 0.26 ms. The Phase 0 baseline agrees: 79 ms vs
 0.48 ms at 1x, 708 ms vs 1.5 ms at 8x.
 
-Three corrections to the 2026-11-06 premise follow from the table:
+The table establishes three design constraints:
 
 1. **`success` is not front-matter-determined.** Unbalanced inline
    spans and malformed links hard-fail the parse (pampa raises a parse
-   error / Q-2-31). A parse-free export cannot reproduce `success`, and
-   the `success`-parity probes the first review specified would fail.
+   error / Q-2-31). A parse-free export cannot reproduce `success`.
    This does not matter for classification: the mode is a function of
    the front matter and the project only, so "hold the previous mode on
    a body error" and "reclassify from the unchanged front matter" are
@@ -420,37 +394,29 @@ Three corrections to the 2026-11-06 premise follow from the table:
    layer only, while the resolver — and the real render, via
    `resolve_entry_format` — are project-aware and honor the runtime
    scalar `format` (`q2 preview --to`). With a requested format, a
-   document whose own key is unknown never reclassifies today (last
-   row). Deleting the guard fixes it; the resolver is the one that is
+   document whose own key was unknown could never reclassify (last row).
+   Deleting the guard fixes it; the resolver is the one that is
    right.
 
-### Decisions
+### Final design
 
 - **No new export.** `resolve_pandoc_formats` already returns everything
   the router needs, synchronously, in a small envelope.
-- **No skip logic.** The two-signal skip of the first review
-  (YAML-region compare + VFS-write counter, per-path keying) would save
-  the resolver call: 0.26 ms here, 0.48 / 1.5 ms at 1x / 8x in the
-  baseline. The "third full-text crossing" of the amplifier is one
-  buffer copy into WASM memory, sub-millisecond at 8x. Against that, a
+- **No skip logic.** Skipping the resolver would save only 0.26 ms in the
+  probe and 0.48 / 1.5 ms at 1x / 8x in the baseline. The "third full-text
+  crossing" is one buffer copy into WASM memory, sub-millisecond at 8x. A
   TS front-matter extractor would have to match the Rust YAML-block
-  boundary exactly (the unterminated case shows how subtle that is), and
-  the counter touches three VFS wrappers. Not worth the code or the
-  invalidation risk; the amplifier stays with Phase 5.
-- **Accepted behavior change.** While a `q2-*` format name is being
-  typed, the pane shows the `neither` view ("nothing can show `q2-s`")
-  for the partial key instead of holding the previous preview, then
-  mounts the deck when the key completes. That is exactly what typing
-  `revealjs` or `docx` does letter by letter today, and the preview
-  already shows a render error for the partial key (the render resolves
-  the format itself). Rejected alternative, for the record: a
-  `formatKnown` boolean on the resolver response computed from the same
-  gate, with the guard kept — same cost, but it keeps a special case for
-  one key family.
-- **Out of scope, pre-existing**: `format: q2-foo-html` parses as
-  extension `q2-foo` of `html`, gets a `pseudoFormat`, and mounts the
-  React preview on a non-preview pipeline. Unchanged by this phase; file
-  a strand if it ever bites.
+  boundary exactly, and a VFS-write counter would touch three wrappers.
+  Neither justifies the invalidation risk; the amplifier stays with Phase 5.
+- **Accepted behavior change.** While a `q2-*` format name is being typed,
+  the pane shows the `neither` view for the partial key instead of holding
+  the previous preview, then mounts the deck when the key completes. This
+  matches typing `revealjs` or `docx` letter by letter. The preview already
+  shows a render error for the partial key because rendering resolves the
+  format itself.
+- **Out of scope, pre-existing**: `format: q2-foo-html` parses as extension
+  `q2-foo` of `html`, gets a `pseudoFormat`, and mounts the React preview on
+  a non-preview pipeline. This phase leaves that behavior unchanged.
 
 ### Checklist
 
@@ -462,8 +428,8 @@ Three corrections to the 2026-11-06 premise follow from the table:
   `previewModeClassification.wasm.test.ts`, under the editor-edge
   `describe`, add two pins that must **fail** on the current artifact:
   `format: q2-s` and `format: q2-bogus` → `{ mode: 'neither', formatKey:
-  'q2-s' }` / `'q2-bogus'` (today: `react` with the partial key). Add one
-  regression pin that passes already and documents correction 3:
+  'q2-s' }` / `'q2-bogus'` (pre-fix: `react` with the partial key). Add one
+  regression pin that passes already and documents runtime-format behavior:
   `wasm.vfs_set_runtime_metadata('format: revealjs')` then a buffer with
   `format: bogus` → `{ mode: 'react', format: 'revealjs' }` (the
   `beforeEach` already resets the runtime metadata). Fix the stale
@@ -639,65 +605,465 @@ parse takes the 1x wall from 431 ms to ~350 ms and the 8x wall from
   → 641acc274 + changelog efcad13be; bd-luoo7qgu closed with the
   measurement.
 
-## Phase 3 — Single-parse AST transport (finding 3)
+## Phase 3 — Skip and gate the untransformed AST capture (finding 3)
 
-Today the AST is a JSON string inside the JSON response envelope: the
-main thread parses the whole envelope to extract a string it reposts to
-the iframe, which parses it again. Since bd-73lilznv (2026-10-26) the
-sandbox iframe is cross-origin by default, so the iframe-side re-parse
-runs in a separate process under site isolation; the main-thread costs
-that remain are the envelope parse itself and the parent-side AST
-consumers enumerated below.
+Phases 3A and 3B1 are two implementation checkpoints under one strand.
+Phase 3A removes the duplicate project-side capture without changing
+behavior or the public WASM API. Phase 3B1 makes capture optional with a
+conservative eager-comment policy and preserves capture-on defaults for
+existing callers.
 
-- [ ] Test first: characterization test that the exact `astJson` string
-  posted to the iframe is byte-identical before/after (golden fixtures
-  in `goldenParity.wasm.test.ts` style), and that
-  `untransformed_ast_json` is absent from the envelope unless requested.
-- [ ] Rust side: change the render response so `ast_json` (and
-  `untransformed_ast_json` when requested) travel as separate string
-  out-params or a wasm-bindgen multi-return, not nested inside the
-  parsed envelope. Gate `untransformed_ast_json` behind a flag the TS
-  side sets only during rich-text editing sessions.
-- [ ] TS side: `renderPageInProjectWithAttribution` and siblings stop
-  parsing the AST; `ReactPreview` threads the opaque string through.
-  Parent-side consumers that parse the AST as an object today (found
-  2026-10-27; grep `.ast_json` / `astJson` / `JSON.parse(astJson)`
-  outside iframe plumbing to catch any new ones), with scoping verdicts:
-  - `buildProxyAssetManifest` (`proxyAssetManifest.ts:29`, run by
-    `Q2SandboxedPreviewIframe` on every render) — **move iframe-side**
-    (decided 2026-10-27; sub-items below).
-  - `ReactRenderer.tsx:230` (`extractRenderComponentPaths`) — **stays**.
-    Mounted by `ReactPreview.tsx:896`, the direct (non-sandboxed) React
-    preview, which renders on the main thread by design; the opaque
-    string applies to the sandboxed path only.
-  - `useCursorToSlide.ts:29`, `useSlideThumbnails.tsx:94` — **stay**.
-    Parent-side slide UI (Editor.tsx, OutlinePanel.tsx), independent of
-    preview path. Optional follow-up, out of Phase 3 scope: have these
-    share one parsed object instead of each re-parsing.
-- [ ] Move `proxyAssetManifest.ts` (+ its test) into
-  `hub-client/quarto-hub-sandboxed-preview/src/` and build the manifest
-  in `updateAst`, dropping `assetManifest` from the UPDATE_AST payload
-  and the parent `useMemo`. Rationale: the function is pure in
-  `(astJson, currentFilePath)` — both already cross in UPDATE_AST — does
-  no VFS reads, and its output is consumed only iframe-side via
-  `AssetManifestContext` (`PreviewRoot.tsx:1603`). The move also fixes a
-  reverse-import smell (parent code currently reaches into the iframe
-  package for `pageRelativeUrlForVfsPath` via `../../../../`). The
-  "Image never renders before its manifest entry" guarantee is
-  preserved: the manifest is derived from the same UPDATE_AST string,
-  synchronously before `root.render`. Do NOT unify with q2-preview's
-  `buildAssetManifest` (`Q2PreviewIframe.tsx:314`): that one reads VFS
-  bytes and mints origin-scoped blob URLs, so it must stay parent-side —
-  cross-comment both files.
-- [ ] Optional, only if iframe-side profiling cares: derive the manifest
-  from the iframe's already-parsed AST instead of a second
-  `JSON.parse(astJson)` in `updateAst`. Phase 3's target is the hub main
-  thread; a same-string parse in the iframe process is off that thread
-  and acceptable.
-- [ ] Snapshot audit: this touches render-response shape — expect
-  `.snap` updates; report counts and surprises per AGENTS.md.
-- [ ] Measure: envelope `JSON.parse` bytes and AST parse count per
-  render before/after, recorded in the plan.
+**Complete Phase 3B1 now, then close bd-wpmqf039 after verification and
+measurement. Keep Phases 3B2 and 3C deferred.** Phase 3B1 does not optimize
+or redesign comment interactions, so it does not depend on comments becoming
+a stable design. Its only comment-UI change is the baseline-less read-only
+guard below. The host-side **Enable comments** action and request correlation
+in Phase 3B2 remain measurement-gated product work; Phase 3C's transport
+changes wait for evidence that envelope parsing still justifies their
+protocol complexity.
+
+The original capture inventory established these constraints:
+
+- `render_qmd_to_preview_ast` captures the untransformed AST with a fresh,
+  parent-less `qmd_to_pandoc` parse and an
+  `include_inline_locations: true` JSON write before running the main
+  pipeline (`crates/quarto-core/src/pipeline.rs:2077`). Single-document
+  preview renders therefore parse the QMD twice: once for this capture and
+  once for the transformed preview AST.
+- Before Phase 3A, the multi-file project renderer called the same function
+  but dropped `preview_output.untransformed_ast_json` when it constructed
+  `WasmPassTwoOutput` (`crates/quarto-core/src/project/pass2_renderer.rs:1251`,
+  `:1341`). The project response builder then reparsed the active document
+  to recreate the same payload (`crates/wasm-quarto-hub-client/src/lib.rs:2943`).
+  Armed project renders therefore parsed the QMD three times; after Phase 3A
+  they parse twice.
+- The two project captures are not interchangeable. Pass 2 names the source
+  with canonical `doc_info.input`; the response names it with the original
+  `active_path`. Hub calls can use relative paths such as `index.qmd`, while
+  the canonical path is `/project/index.qmd`. The name is serialized into
+  the AST context, so moving the pass-2 capture into the response would not
+  preserve bytes for those calls.
+- The untransformed AST is not only an `applyNodeEdit` input. The iframe
+  parses it to build `sourceIndex` (`PreviewRoot.tsx:1507`), which both
+  content editing and comment add/resolve use to find their source nodes.
+  An unarmed render therefore cannot support comment edits: the comment
+  affordance and handlers need `sourceIndex` before they create a payload.
+
+Phase 2 measured a comparable parse and serialization at about 19 % of
+per-keystroke wall on its fixture. This makes gating worth measuring, not a
+guaranteed win on every path. The unarmed cases are a hub preview with
+editing off and comments hidden, and the default read-only q2-preview SPA
+with `allowEdit=false`. Fresh-default hub sessions remain armed. Use the
+same-driver before/after and same-build flag-on/flag-off measurements below
+as the evidence.
+
+### Design constraints
+
+- **Keep the separate parent-less parse.** It protects the source-pool and
+  provenance contract used by incremental writes (`pipeline.rs:5262`). Do
+  not derive a baseline from the transformed pipeline AST.
+- **The project response keeps ownership of its capture.** Phase 3A skips
+  the discarded pass-2 capture; it does not carry that capture into
+  `WasmPassTwoOutput`. The response continues to capture with the original
+  `active_path`, preserving both bytes and source-name provenance.
+- **The capture flag is per render and defaults to on.** Use the internal
+  capture-aware core implementation from Phase 3A and retain
+  `render_qmd_to_preview_ast` as a capture-on wrapper for native callers.
+  Add `captureUntransformedAst` to the existing
+  `render_page_for_preview` options object and a trailing options object to
+  `render_page_in_project_with_attribution`. At both WASM boundaries, an
+  omitted options object or flag means capture-on, preserving the existing
+  raw-WASM contract. Only the hub and SPA hot callers need to pass the flag
+  explicitly; unrelated raw-WASM callers and tests need no mechanical
+  edits. Do not add module-global WASM state, which would race with the
+  Phase 1 queue.
+- **Phases 3A and 3B1 share one strand.** Land them as two green,
+  independently revertable implementation checkpoints: first the
+  behavior-preserving project-capture deletion, then per-render gating.
+  Hub-client changelog entries still use their required separate hash
+  commits.
+- **Phase 3B1 keeps capture eager for active comment and edit surfaces.**
+  In hub-client, arm capture for
+  `previewEditing || (commentsMode ?? 'show') !== 'hide'`. In
+  the q2-preview SPA, arm it for `allowEdit`, which governs both content
+  editing and commenting. The unarmed hub case is therefore editing off
+  plus comments hidden. Fresh hub defaults have `previewEditing=true`, so
+  they remain armed in every Phase 3 variant.
+- **Baseline-less comments are read-only in Phase 3B1.** Hidden-to-visible
+  and editing-transition renders temporarily have no new baseline, so this
+  gate cannot wait for Phase 3B2. Derive readiness from
+  `PreviewContext.sourceIndex`; do not add a readiness prop or iframe
+  protocol. `CommentWrapper` must include a missing source index in its
+  read-only gate, suppress resolve controls and new-comment inputs, and
+  hide an input that is already open when the baseline disappears. Existing
+  comments remain readable and no comment text or edit is queued.
+- **Nesting buffers have a separate editing gate and memo dependency.** Hub
+  computes them only for `previewEditing && (unlockNestingCursor ?? true)`
+  and includes `previewEditing` in the memo dependencies. The SPA uses
+  `allowEdit && nestingCursor` and includes `allowEdit`. A comment-armed
+  read-mode render must skip `regenerate_nested_buffers`, and an editing
+  toggle must invalidate any previously computed table even when the AST
+  strings are unchanged.
+- **Phase 3B1 adds no capture-only side channel.** Do not add a dedicated
+  WASM export, `REQUEST_COMMENT_CAPTURE` message, generation transport,
+  baseline patching, in-flight top-up, or comment-edit queue.
+
+### Phase 3A — Skip the discarded project capture
+
+No response-shape, TypeScript-call-site, or comment/editing behavior
+change. An armed project render drops from three QMD parses to two;
+single-document rendering remains at two until Phase 3B1. This is the
+first implementation checkpoint in the shared Phase 3A/3B1 strand.
+
+**Status: complete 2026-11-09 (bd-wpmqf039, implementation `3010beb04`).**
+Phase 3B1 continues under the same strand; Phases 3B2 and 3C are outside the
+current implementation scope.
+
+- [x] File one Phase 3A/3B1 strand, mark it `in_progress`, and record the
+  current project-path `render.wasm-call` baseline at 1x/8x with the Node
+  driver. Do not block this checkpoint on a new Rust timer: the cited
+  `std::env::var_os("QUARTO_PERF_STATS")` pattern is not available as a
+  browser-WASM profiling mechanism. The same-driver before/after wall-time
+  comparison below measures the deleted capture directly enough.
+  → bd-wpmqf039. Unmodified release WASM, 10 warm-cache project renders per
+  scale (`QUARTO_PERF_STATS=1 ENTRY=project CAPTURE=default SCALES=1,8
+  RENDERS=10 node --import tsx/esm driver.mjs`): **356.940 ms/render at 1x**
+  (99 KB; envelope parse 107,168,994 bytes) and **2811.396 ms/render at 8x**
+  (792 KB; 882,771,214 bytes).
+- [x] Test first, as behavior-preserving characterization: add a focused
+  `hub-client/src/services/previewCapture.wasm.test.ts` test through the
+  raw WASM project entry. Record the current SHA-256 hashes of `ast_json`
+  and `untransformed_ast_json` for a fixed multi-file project so the test
+  pins their exact bytes before the refactor and must remain green after
+  it. Use a relative active path and assert that the original source name,
+  not canonical `/project/...`, remains in the serialized AST context.
+  Keep the existing `applyNodeEdit.wasm.test.ts` round trips unchanged as
+  the proof that the response baseline still matches the retained
+  `renderedContent` bytes.
+  → Green on the unmodified build: transformed
+  `c98fd4c8a875b4f8a8cb5e910153b0ba8b3e6cb1502c0d8bbbe15cd3021afeab`,
+  untransformed
+  `9b22dd9a3495eba60a3ae6b3efecbfbd254e0761125a73ba8587eaa8a2003733`;
+  source name `index.qmd`.
+- [x] Add an internal capture-aware implementation of
+  `render_qmd_to_preview_ast`, retaining the existing public function as a
+  capture-on wrapper. Project pass 2 calls the internal implementation
+  with capture off so its discarded parse and serialization never happen.
+  Leave `render_project_active_page_to_response` and
+  `render_single_doc_to_response` unchanged in this checkpoint. Do not add
+  `untransformed_ast_json` to `WasmPassTwoOutput`.
+- [x] Run focused Rust and raw-WASM regression tests, then the full
+  verification chain in Conventions. No `.snap` changes are expected from
+  this internal plumbing; audit and report any that occur rather than
+  assuming a snapshot round.
+  → Seven focused core tests and strict clippy passed; the rebuilt raw-WASM
+  characterization plus unchanged `applyNodeEdit` round trips passed 27/27.
+  `cargo xtask verify --skip-rust-tests` passed every leg. The final selected
+  workspace run passed **19,193/19,193** tests, excluding the two known
+  R-package-version cases in bd-qwscag8b (`capture_classifies_pieces` and
+  `a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live`) and the
+  load-sensitive `socket_group_relaxes_permissions`. The latter passed in
+  isolation. `head_peek_timeout_closes` also failed once by 136 microseconds
+  under load, then passed in isolation and in the following full run. The
+  unfiltered `cargo xtask verify` is therefore not green on this machine:
+  its first Rust leg stops at the documented `rlang_error`/`simpleError`
+  skew; CI's pinned R environment remains the backstop. No `.snap` files
+  changed.
+- [x] Measure the same project fixture at 1x/8x and record
+  `render.wasm-call` before/after. `wasm-envelope.parse` bytes should be
+  unchanged because the response still carries the same capture; the win
+  is the removed parse and serialization inside the WASM call.
+  → Same driver, release WASM, 10 renders/scale: 1x **356.940 → 284.122 ms**
+  (−72.818 ms, **−20.4%**); 8x **2811.396 → 2211.554 ms** (−599.842 ms,
+  **−21.3%**). Envelope bytes are exactly unchanged at both scales
+  (107,168,994 and 882,771,214).
+- [x] Browser-smoke a multi-file hub project: a rich-text content edit and
+  a comment add/resolve with editing off both land in the QMD. Record the
+  invocation and observed result, or explicitly record the browser debt.
+  Commit this green checkpoint, following the hub-client changelog
+  two-commit workflow when the commits touch `hub-client/`; keep the
+  strand open for Phase 3B1.
+  → Built with `cd hub-client && VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
+  npm run build`, then drove headless Chromium with the project factory's
+  hub on port 3031. A throwaway multi-file spec plus the existing inline-edit
+  control passed 2/2: a paragraph edit reached Automerge, and a comment added
+  and resolved with editing off appeared in and disappeared from `main.qmd`.
+  The throwaway spec was deleted after the run. The existing real-ProseMirror
+  control (`q2-preview-richtext-bold-content-loss.spec.ts`, "bolding a
+  paragraph preserves its content") also passed 1/1 and produced
+  `**Hello world paragraph.**` in Automerge. The output was inspected through
+  the test hooks, not inferred from successful renders alone.
+
+### Phase 3B1 — Gate capture without changing visible-comment behavior
+
+**Status: complete 2026-11-10 (bd-wpmqf039, implementation `c7bc73610`).** This checkpoint completes the
+shared strand. An unarmed single-document render drops from two QMD parses to one. An
+unarmed project render drops from two to one relative to Phase 3A (from
+the original three to one overall); an armed project render remains at
+two. The flag-off response omits `untransformed_ast_json`; `ast_json`
+remains byte-identical. Default comments-visible hub renders remain armed
+unless the deferred Phase 3B2 is later activated, and fresh-default
+editing-enabled renders remain armed in every variant.
+
+- [x] Continue the Phase 3A/3B1 strand and write the Rust and raw-WASM
+  tests first. Cover both single-document and multi-file project paths:
+  flag off omits `untransformed_ast_json`; flag on returns bytes identical
+  to Phase 3A; transformed `ast_json` is identical in both modes. Also pin
+  omitted options and an omitted flag to the same capture-on bytes as an
+  explicit flag-on call. Confirm the new flag-off assertions fail on the
+  unmodified build. Leave existing raw-WASM callers that consume the
+  baseline, including `applyNodeEdit.wasm.test.ts`, unchanged.
+  → Native gate characterization passed. On the unmodified WASM, both new
+  flag-off cases failed because the baseline was still present; all three
+  default-on/byte-characterization controls passed. `applyNodeEdit` is unchanged.
+  An isolated Phase 3A build additionally pinned single-document transformed
+  `8599765d7edeaabd48916d0c4629010262189443614f440d867e8798f6e0314c`,
+  the same untransformed hash as the project path, and source `index.qmd`.
+- [x] Write the TypeScript behavior tests before implementation:
+  - hub `previewEditing=true` arms capture;
+  - hub editing off with `commentsMode='show'` or `'expand'` also arms it,
+    and real `PreviewRoot` read-mode comment add/resolve still works;
+  - hub editing off with `commentsMode='hide'` leaves it unarmed;
+  - entering editing and changing comments from hidden to visible each
+    cause exactly one armed render through the existing effect, with no
+    additional retry render;
+  - SPA `allowEdit=true` arms the first render, while `allowEdit=false`
+    leaves capture, content editing, commenting, and nested regeneration
+    off;
+  - nested buffers are regenerated only in editing mode, never merely
+    because a read-mode render was armed for visible comments, and an
+    editing toggle invalidates a previously computed table even when the
+    AST strings are unchanged.
+  → Before implementation, the eight hub arming/rerender/nesting cases and
+  five SPA option/read-only cases failed as intended; 67 SPA controls passed.
+  The three real `PreviewRoot` read-mode add/resolve controls also passed.
+- [x] Extend the real `CommentBlock.readMode.integration.test.tsx` tests
+  before the UI implementation. With no baseline there is no new-node `+`,
+  and existing comments have no input or resolve buttons. Cover both an
+  initial baseline-less mount and an armed-to-unarmed rerender with an
+  existing-comment input already open; the input must be suppressed rather
+  than remaining available for a null-source no-op. Once an armed render
+  supplies the baseline, normal block and span add/resolve UI appears
+  unchanged. Existing unsupported-node and read-only-host cases remain
+  unchanged.
+  → The existing-comment initial-mount and armed-to-unarmed cases failed on
+  the unsuppressed input before implementation. The new-node and all six
+  existing read-mode/host controls passed.
+- [x] Thread `capture_untransformed_ast` through both hot WASM render
+  paths. Single-document rendering passes it to the internal core
+  implementation from Phase 3A. Project pass 2 remains capture-off; the
+  project response keeps or skips its existing original-`active_path`
+  capture according to the flag. When false, skip the capture entirely —
+  no parse, serialization, or envelope field. Preserve the public core
+  wrapper and both public WASM entries as capture-on when their options or
+  flag are omitted, so unrelated native and raw-WASM tests need no
+  mechanical edits.
+  → Release WASM rebuilt successfully. The five capture characterization /
+  gating tests and all 26 unchanged `applyNodeEdit` round trips passed 31/31.
+- [x] Add `captureUntransformedAst` to the two public wrapper option shapes.
+  Use `previewEditing || (commentsMode ?? 'show') !== 'hide'` for hub and
+  `allowEdit` for the SPA. Add those arming inputs to the existing render
+  callback dependencies so the current effect performs the rerender. Do
+  not add pending edits, lazy retries, or a separate entering-editing
+  effect.
+  → Both perf branches of the runtime-forwarding test pass 2/2 (8/8 file
+  total). All hub arming and one-render transition cases pass; all SPA capture
+  and option-compatibility cases pass. Only the separate nested-gate items
+  remain red at this checkpoint.
+- [x] Make baseline-less comments read-only in `CommentWrapper` by deriving
+  readiness from `PreviewContext.sourceIndex`. Include a missing source
+  index in the existing read-only gate and suppress the inline input even
+  when it was already open. Add no readiness prop, iframe message, or
+  comment-edit queue.
+  → All eight focused comment files pass 57/57, including real `PreviewRoot`
+  block/span add/resolve, baseline loss/restoration, unsupported nodes, and
+  read-only hosts. Writable direct-context fixtures now declare readiness
+  explicitly with a non-null source index.
+- [x] Make the nested-buffer conditions and memo dependencies explicit in
+  `computeNestedEditBuffers` call sites: hub uses
+  `previewEditing && (unlockNestingCursor ?? true)` with `previewEditing`
+  in the dependency list; the SPA uses `allowEdit && nestingCursor` with
+  `allowEdit` in its dependency list. Update the existing SPA nesting
+  fixtures that currently set `allow_edit: false` while expecting
+  regeneration to use `allow_edit: true`, and add a read-only
+  no-regeneration case. Keep comment-only armed renders from paying the
+  `regenerate_nested_buffers` call.
+  → Hub 17/17 and SPA 72/72 focused integration tests pass. The positive SPA
+  fixtures use the production `allowEdit: true` key (the former snake-case key
+  was ignored); the read-only case verifies no regeneration. The hub editing
+  toggle recomputes with unchanged AST strings; comment-only read mode does not.
+- [x] Run focused Rust, preview-runtime, preview-renderer, hub-client, and
+  SPA tests, then the full verification chain in Conventions. Audit
+  `.snap` files and report counts and surprises if any change; no snapshot
+  churn is assumed from the optional response field.
+  → Focused core 8/8 and native clippy passed; raw-WASM 31/31; preview-runtime
+  92/92; preview-renderer 643 unit + 723 integration; SPA 95 unit + 97
+  integration plus production build. `cargo xtask verify --skip-rust-tests`
+  passed all 14 legs, including hub-client 1746 unit + 240 integration + 478
+  WASM tests. The selected workspace run passed **19,193/19,193**, excluding
+  the three Phase 3A environment cases and newly filed bd-wwmnuqxr. Standalone
+  WASM clippy reaches pre-existing lints tracked as bd-wn2pd12d. No `.snap`
+  files changed.
+- [x] Measure same-build flag-on/flag-off runs at 1x/8x for both
+  single-document and project paths. Record `render.wasm-call`,
+  `wasm-envelope.parse` bytes, and the arming mode used. Flag-on is the
+  Phase 3A comparison point; flag-off isolates the gating win. The hub
+  unarmed measurement must explicitly use `previewEditing=false` and
+  `commentsMode='hide'`. Include editing-on and comments-visible armed
+  controls; do not present either as an unarmed win.
+  → Same release WASM `bf2bc87eb6fa`, production wrapper/init path, warm SASS
+  cache, 10 renders/scale. Ran `QUARTO_PERF_STATS=1 ENTRY=<single|project>
+  CAPTURE=<on|off> SCALES=1,8 RENDERS=10 node --import tsx/esm --import
+  <scratch>/phase3b1-perf/register.mjs <scratch>/phase3b1-perf/driver.mjs`.
+  Single (`allowEdit=true → false`): 1x **164.935 → 86.728 ms** (−47.4%);
+  8x **1305.639 → 712.920 ms** (−45.4%). Envelope bytes: 1x 89,356,660 →
+  45,229,180; 8x 737,121,840 → 372,181,160.
+  Project (`previewEditing=true, commentsMode=show` →
+  `previewEditing=false, commentsMode=hide`): 1x **170.617 → 90.004 ms**
+  (−47.2%); 8x **1345.331 → 712.938 ms** (−47.0%). Envelope bytes: 1x
+  89,366,940 → 45,252,910; 8x 737,319,610 → 372,392,800.
+  Armed project controls at 1x/8x: editing-on (`previewEditing=true,
+  commentsMode=hide`) **165.160 / 1299.047 ms**; comments-visible
+  (`previewEditing=false, commentsMode=show`) **162.329 / 1294.363 ms**.
+  Both have exactly the flag-on envelope bytes above; neither is presented as
+  an unarmed win.
+- [x] End-to-end smoke both hosts. In hub, verify content editing after
+  entering edit mode, comment add/resolve with editing off and comments
+  visible, and comments hidden/visible transitions, including the
+  baseline-less interval before the armed render completes. In the SPA,
+  verify a read-only session and an `--allow-edit` session. Record
+  invocations and observed behavior, then finish the hub-client changelog
+  two-commit workflow and close the strand with the measurements.
+  → Hub built with `VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws
+  VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html npm
+  --workspace hub-client run build`; `npm --workspace hub-client exec --
+  playwright test e2e/phase3b1-smoke.spec.ts --project=chromium --workers=1
+  --retries=0` passed **2/2**. Observed `Edited after the armed render.` in
+  Automerge after entering editing from the unarmed state; comment add/resolve
+  changed the QMD; a gated `show` + null-baseline update kept existing comments
+  readable with no input, resolve, or new-comment `+`, and the released armed
+  update restored controls. SPA refreshed with `cargo xtask
+  build-q2-preview-spa && cargo build --bin q2`; `npm --workspace q2-preview-spa
+  exec -- playwright test e2e/phase3b1-smoke.spec.ts --project=chromium
+  --workers=1 --retries=0` passed **2/2**. The default session rendered
+  read-only with no edit/comment mutation controls; the `--allow-edit` session
+  wrote `Edited through the allowEdit session.` to `index.qmd` on disk. Outputs
+  were inspected through Automerge/disk and browser locators, not inferred from
+  render success. Throwaway specs are preserved in scratch, not committed.
+
+### Phase 3B2 — Deferred: one armed render on comment intent
+
+Do not file an implementation strand with Phases 3A/3B1. Phase 3B1 leaves
+read-mode, comments-visible renders armed; this deferred phase targets
+only that non-default configuration. Fresh-default hub sessions have
+`previewEditing=true` and remain armed. Reconsider activation only when
+the Phase 3B1 measurements show that the ordinary-render saving justifies
+a new host action and its race handling.
+
+- [ ] Measurement gate only: after Phase 3B1, measure its target
+  configuration at 1x/8x with `previewEditing=false` and
+  `commentsMode='show'`. Record the potential ordinary-render saving and
+  an editing-enabled armed control. Decide explicitly whether to activate
+  this phase; otherwise leave it deferred.
+
+If a later review activates the phase, use these design constraints rather
+than treating them as current implementation work:
+
+- **Direct iframe only.** A host-side **Enable comments** action sets a
+  path-keyed `commentCaptureArmedForPath` React state value. Arm hub
+  capture with
+  `previewEditing || format === 'q2-sandboxed-preview' || commentCaptureArmedForPath === currentFile?.path`.
+  Thus the direct iframe can opt in on comment intent while sandbox
+  capture stays eager. The SPA condition remains `allowEdit`.
+- **Sandbox work is separate.** Do not deploy baseline-less sandbox
+  renders in this phase. A future sandbox strand must handle old or cached
+  iframe deployment and the existing `editingDisabled` transport gap
+  before changing its eager-capture policy. No compatibility handshake is
+  needed for the direct-only activation.
+- **Reuse the full-render path.** The first state change deliberately uses
+  the existing render effect and serial/latest-wins queue, increasing
+  `render.started` exactly once. Repeated activation deduplicates;
+  subsequent natural renders for that path stay armed. Retry invokes the
+  same armed render. Do not use a ref latch, a separate entering-editing
+  effect, or an effect-order-dependent file reset.
+- **Correlate armed and unarmed requests.** Extend the compound `rendered`
+  state with `sourcePath`, use it for the matching `ReactRenderer` props,
+  and key accepted-render staleness by path + content + capture-armed
+  state. Path + content prevents a same-content file switch from accepting
+  the old path's result; the armed bit prevents an identical-content
+  unarmed render already in flight from owning comment-intent pending,
+  failure, Retry, or readiness. The queued armed render publishes the
+  final comment-ready state without a top-up. Add race tests for both
+  cases; no numeric generation protocol is needed.
+- **Reuse the Phase 3B1 read-only gate.** Existing comments remain
+  readable without a baseline, while add/resolve controls and inputs stay
+  suppressed. The Enable comments action belongs to `ReactPreview`, not
+  `PreviewRoot`. Keep it pending until the matching armed baseline is
+  published. No comment text or edit is queued.
+- **Keep editing work separate.** None of these paths enables nested
+  regeneration in read mode; the Phase 3B1 editing guards and memo
+  dependencies remain unchanged.
+- **Add no capture-only side channel.** Reuse the Phase 3B1 flag and
+  existing queue. No dedicated capture export, `REQUEST_COMMENT_CAPTURE`
+  message, iframe pending/error transport, baseline patching, or in-flight
+  top-up is part of this design.
+- **Verify only if activated.** Write the `ReactPreview` behavior and race
+  tests first, run the full verification chain, and browser-smoke the
+  direct iframe: no capture before intent, one armed render on activation,
+  block and span add/resolve, subsequent armed natural renders,
+  failure/Retry, and same-content path and armed-state races. Measure
+  ordinary no-intent cost, first-intent full-render latency, and exactly
+  one `render.started` increase against Phase 3B1. Keep sandbox regression
+  coverage on its eager path.
+
+If the measured first-intent full-render latency is unacceptable, stop and
+write a separate capture-only design justified by those numbers. That
+design must cover original-source-name byte parity, request/generation
+correlation, stale top-up revalidation and failure, direct and sandbox
+`event.source` checks, a real paint-yielding mechanism, and old or cached
+iframe deployment. Do not implement that side channel as part of this
+phase.
+
+### Phase 3C — Deferred: AST transport and proxy-manifest relocation
+
+Do not implement this with Phases 3A/3B. Reconsider it only if post-3B
+profiles still show significant main-thread envelope parsing or
+parent-side AST work; it may then fit better with Phase 5's scoped
+envelope work. It is independent of Phase 4: binary asset transfer changes
+the VFS read and service-worker response paths, not the AST response shape.
+
+The activation design must account for the full current consumer and
+deployment inventory:
+
+- `ReactRenderer.tsx:231` parses `astJson` for custom-component paths for
+  `q2-sandboxed-preview` as well as the direct iframe formats. Moving only
+  the proxy manifest therefore does not eliminate parent AST parsing on
+  the sandboxed path.
+- `ReactAstSlideRenderer.tsx:77`, `useCursorToSlide.ts:29`, and
+  `useSlideThumbnails.tsx:94` also parse on the parent side. The SPA has
+  sibling parses for custom components and the document title. Any claim
+  of "single-parse AST transport" must say exactly which parses it removes.
+- A wasm-bindgen out-param or multi-return changes success/error
+  representation, generated and hand-written declarations, wrappers, and
+  direct raw-WASM callers. Design that contract separately rather than
+  treating it as a small addition to the capture-option change.
+- Moving `buildProxyAssetManifest` into `updateAst` remains a plausible
+  follow-up because it is pure in `(astJson, currentFilePath)` and needs no
+  VFS reads. Preserve the current ordering guarantee by deriving the
+  manifest synchronously before `root.render`. The VFS-reading,
+  origin-scoped blob manifest in `Q2PreviewIframe.tsx` stays parent-side.
+- The sandbox iframe is deployed separately. Roll out a dual-mode iframe
+  that derives a manifest when absent and honors a supplied manifest first;
+  remove the parent field only after that deployment. Add real iframe-side
+  tests and a test runner for `quarto-hub-sandboxed-preview` rather than
+  moving the existing test outside hub-client discovery.
+- Sharing the already-parsed AST from `PreviewRoot` is not a free optional
+  cleanup: that parsed object currently lives inside `PreviewRoot`, while
+  `updateAst` runs before `root.render`. Profile before restructuring it.
+- Cross-origin iframes do not guarantee a separate OS process under every
+  browser and local deployment. Measure the actual production-like
+  topology rather than assuming every iframe parse is off the parent event
+  loop.
 
 ## Phase 4 — Binary asset transfer without base64 (finding 6)
 

@@ -19,6 +19,7 @@ import type {
   PandocRequestFile,
   PrepareImportResponse,
   RenderPageForPreviewOptions,
+  RenderPageInProjectOptions,
   RenderPandocRequestOptions,
   RenderPandocRequestResponse,
   ResolvePandocFormatsResponse,
@@ -109,6 +110,7 @@ interface WasmModuleExtended {
     // the hub-client `RenderHost`. Omitted / `false` is byte-identical to
     // the pre-knob behaviour.
     prefer_preview_format?: boolean,
+    options?: RenderPageInProjectOptions,
   ) => Promise<string>;
   // pandoc-wasm epic (R2): build the request pandoc.wasm runs. See
   // wasm-quarto-hub-client.d.ts for the shapes. `render_pandoc_request`
@@ -800,6 +802,7 @@ export async function renderPageInProjectWithAttribution(
   // `undefined`) to render code cells as source.
   captureGzJson?: Uint8Array,
   preferPreviewFormat?: boolean,
+  options?: RenderPageInProjectOptions,
 ): Promise<RenderResponse> {
   // Serialised and latest-wins coalesced against other page renders
   // (bd-r8iqmg2f): a render a newer request supersedes while still
@@ -814,6 +817,7 @@ export async function renderPageInProjectWithAttribution(
         attributionJson,
         captureGzJson,
         preferPreviewFormat,
+        options,
       ),
     RENDER_PAGE_RENDER_KEY,
   );
@@ -830,6 +834,7 @@ async function renderPageInProjectWithAttributionRaw(
   attributionJson: string | null,
   captureGzJson?: Uint8Array,
   preferPreviewFormat?: boolean,
+  options?: RenderPageInProjectOptions,
 ): Promise<RenderResponse> {
   const wasm = getWasm();
   if (!perfEnabled()) {
@@ -840,6 +845,7 @@ async function renderPageInProjectWithAttributionRaw(
         attributionJson ?? undefined,
         captureGzJson,
         preferPreviewFormat,
+        options,
       ),
     );
   }
@@ -853,6 +859,7 @@ async function renderPageInProjectWithAttributionRaw(
         attributionJson ?? undefined,
         captureGzJson,
         preferPreviewFormat,
+        options,
       ),
     );
   } finally {
@@ -911,6 +918,7 @@ export async function renderPageForPreview(
 
 export type {
   RenderPageForPreviewOptions,
+  RenderPageInProjectOptions,
   PandocFormatClass,
   PandocFormatInfo,
   PandocRequestFile,
