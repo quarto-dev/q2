@@ -10,8 +10,7 @@ braid:
 **Checkout:** main checkout, branch
 `braid/bd-2bcre8cr-qmd-reader-empty-ordered` (made with `switch-task` off
 `main` @ `665f9b588`; the slug predates the retitle). The design was
-aligned with the user on 2026-11-10 (see Decisions). One question,
-provenance tagging, is still open.
+aligned with the user on 2026-11-10 (see Decisions).
 
 ## Triage verdict
 
@@ -117,7 +116,7 @@ Details, the probe script, and its output are in
    enumerated corpus.
 7. **Branch:** made with `switch-task` (above).
 
-### Open: provenance tagging for writer-inserted separators
+### Deferred: provenance tagging for writer-inserted separators
 
 The user suggested recording the separator's provenance, for example
 through a deliberate choice of `quarto-source-map` feature or a new
@@ -152,8 +151,13 @@ from checking `quarto-source-map` 0.3.1 and pampa's writers:
   preceding list) or special handling in `incremental.rs`.
 
 Decisions 1–6 don't depend on this. Fencing inside items and dropping
-the unnecessary separators fix the reported failures either way. The
-question is whether tagging belongs in this strand or a follow-up.
+the unnecessary separators fix the reported failures either way.
+**Decided 2026-11-10:** the costs outweigh the benefits for this
+failure, so tagging is filed as a follow-up, **bd-bq4mjc6b** (P4).
+
+The user also confirmed the 2026-09-04 bare-HTML rule in its narrow
+scope (block-level HTML from naked-HTML input, plus comments). It is not
+being revisited. Option (a) is a list-item exception to it.
 
 ## Checklist
 
