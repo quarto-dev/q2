@@ -10,8 +10,13 @@ _quarto:
         # color-mode runtime keeps `aria-checked` in sync; its behavior
         # is covered by the JSDOM tests in
         # ts-packages/preview-renderer/src/q2-preview/quarto-color-mode.integration.test.ts.
+        #
+        # Only the navbar markup is asserted here: this fixture also runs
+        # in the hub-client preview (hub-client/e2e/smoke-all.spec.ts),
+        # which does not inject the inline color-mode script, so its
+        # `data-toggle-label` is checked by the native pipeline test
+        # theme_light_dark::color_scheme_toggle_label_is_localized instead.
         - - '.quarto-navbar-tools > button.quarto-color-scheme-toggle[type="button"][role="switch"][aria-checked="false"][aria-label="Dunkelmodus umschalten"][title="Dunkelmodus umschalten"]'
-          - 'script#quarto-color-mode[data-toggle-label="Dunkelmodus umschalten"]'
         - - 'a.quarto-color-scheme-toggle'
 ---
 
