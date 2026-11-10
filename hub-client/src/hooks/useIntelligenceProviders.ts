@@ -12,10 +12,10 @@ import {
  *
  * Registration is idempotent; disposal is unmount-only — coupling it to
  * `currentFile` once left a file switch with no provider until a page reload.
- * `refreshSemanticTokens()` forces an immediate re-tokenise (Monaco wires a
- * provider's `onDidChange` to `schedule(0)`, skipping its ~300ms debounce); we
- * fire it on every mount (the editor remounts per file) and once on WASM
- * `loading → ready` (the mount refresh can precede a cold-start highlighter).
+ * `refreshSemanticTokens()` bypasses Monaco's adaptive scheduler delay (the
+ * provider's own quiet window still applies); we fire it on every mount (the
+ * editor remounts per file) and once on WASM `loading → ready` (the mount
+ * refresh can precede a cold-start highlighter).
  */
 export function useIntelligenceProviders(
   getCurrentFilePath: () => string | null,

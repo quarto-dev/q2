@@ -4,7 +4,7 @@
  * real WASM (the intelligence service is mocked).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type * as Monaco from 'monaco-editor';
 
 // Mock the intelligence service so the provider's WASM call is controllable.
@@ -114,7 +114,51 @@ function stubModel(versionIds: number[], value = 'model text'): Monaco.editor.IT
   return {
     getVersionId: () => versionIds[Math.min(i++, versionIds.length - 1)],
     getValue: () => value,
+    onDidChangeContent: () => ({ dispose: () => {} }),
   } as unknown as Monaco.editor.ITextModel;
+}
+
+function stubQuietModel(initialValue = 'initial') {
+  let value = initialValue;
+  let version = 1;
+  const listeners = new Set<() => void>();
+  const model = {
+    getVersionId: () => version,
+    getValue: () => value,
+    onDidChangeContent: (listener: () => void) => {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
+  } as unknown as Monaco.editor.ITextModel;
+  return {
+    model,
+    change(nextValue: string) {
+      value = nextValue;
+      version += 1;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
+function stubCancellableToken() {
+  const listeners = new Set<() => void>();
+  let cancelled = false;
+  const token = {
+    get isCancellationRequested() {
+      return cancelled;
+    },
+    onCancellationRequested: (listener: () => void) => {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    },
+  } as Monaco.CancellationToken;
+  return {
+    token,
+    cancel() {
+      cancelled = true;
+      for (const listener of listeners) listener();
+    },
+  };
 }
 
 describe('provideDocumentSemanticTokens return shape', () => {
@@ -201,6 +245,143 @@ describe('provideDocumentSemanticTokens return shape', () => {
       stubToken(false),
     );
     expect(result).toBeNull();
+    expect(getSemanticTokensForContentMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Identical-request coalescing
+// ---------------------------------------------------------------------------
+
+describe('semantic-tokens identical-request coalescing', () => {
+  beforeEach(() => {
+    getSemanticTokensForContentMock.mockReset();
+    disposeIntelligenceProviders();
+  });
+
+  it('shares concurrent and completed requests for the same path and content', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveTokens!: (tokens: SemanticToken[]) => void;
+      getSemanticTokensForContentMock.mockImplementation(
+        () => new Promise<SemanticToken[]>((resolve) => {
+          resolveTokens = resolve;
+        }),
+      );
+      const provider = captureProvider('/project/a.qmd');
+      const model = stubModel([1], '[label](url)');
+
+      const first = provider.provideDocumentSemanticTokens(model, null, stubToken(false));
+      const second = provider.provideDocumentSemanticTokens(model, null, stubToken(false));
+      await vi.advanceTimersByTimeAsync(300);
+      expect(getSemanticTokensForContentMock).toHaveBeenCalledTimes(1);
+
+      resolveTokens([{ line: 0, character: 1, length: 5, tokenType: 1, modifiers: 0 }]);
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+      expect(Array.from((firstResult as Monaco.languages.SemanticTokens).data)).toEqual([
+        0, 1, 5, 1, 0,
+      ]);
+      expect(Array.from((secondResult as Monaco.languages.SemanticTokens).data)).toEqual([
+        0, 1, 5, 1, 0,
+      ]);
+
+      const third = provider.provideDocumentSemanticTokens(model, null, stubToken(false));
+      await vi.advanceTimersByTimeAsync(300);
+      await third;
+      expect(getSemanticTokensForContentMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries an empty result instead of caching a possible transient failure', async () => {
+    getSemanticTokensForContentMock.mockResolvedValue([]);
+    const provider = captureProvider('/project/a.qmd');
+    const model = stubModel([1], 'plain text');
+
+    await provider.provideDocumentSemanticTokens(model, null, stubToken(false));
+    await provider.provideDocumentSemanticTokens(model, null, stubToken(false));
+
+    expect(getSemanticTokensForContentMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops the shared request when providers are disposed', async () => {
+    getSemanticTokensForContentMock.mockResolvedValue([
+      { line: 0, character: 0, length: 1, tokenType: 0, modifiers: 0 },
+    ]);
+    const model = stubModel([1], '[label](url)');
+    await captureProvider('/project/a.qmd').provideDocumentSemanticTokens(
+      model,
+      null,
+      stubToken(false),
+    );
+
+    disposeIntelligenceProviders();
+    await captureProvider('/project/a.qmd').provideDocumentSemanticTokens(
+      model,
+      null,
+      stubToken(false),
+    );
+
+    expect(getSemanticTokensForContentMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Quiet-window scheduling
+// ---------------------------------------------------------------------------
+
+describe('semantic-tokens quiet-window scheduling', () => {
+  beforeEach(() => {
+    getSemanticTokensForContentMock.mockReset();
+    disposeIntelligenceProviders();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('tokenises once with the latest content after the model becomes quiet', async () => {
+    getSemanticTokensForContentMock.mockResolvedValue([
+      { line: 0, character: 0, length: 4, tokenType: 1, modifiers: 0 },
+    ]);
+    const provider = captureProvider('/project/a.qmd');
+    const { model, change } = stubQuietModel();
+
+    const pending = provider.provideDocumentSemanticTokens(model, null, stubToken(false));
+    expect(getSemanticTokensForContentMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(150);
+    change('first edit');
+    await vi.advanceTimersByTimeAsync(150);
+    change('final content');
+    await vi.advanceTimersByTimeAsync(299);
+    expect(getSemanticTokensForContentMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getSemanticTokensForContentMock).toHaveBeenCalledTimes(1);
+    expect(getSemanticTokensForContentMock).toHaveBeenCalledWith(
+      '/project/a.qmd',
+      'final content',
+    );
+    const result = await pending;
+    expect(Array.from((result as Monaco.languages.SemanticTokens).data)).toEqual([
+      0, 0, 4, 1, 0,
+    ]);
+  });
+
+  it('cancels before tokenization when the quiet-window request is cancelled', async () => {
+    getSemanticTokensForContentMock.mockResolvedValue([]);
+    const provider = captureProvider('/project/a.qmd');
+    const { model } = stubQuietModel();
+    const cancellation = stubCancellableToken();
+
+    const pending = provider.provideDocumentSemanticTokens(model, null, cancellation.token);
+    cancellation.cancel();
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(await pending).toBeNull();
     expect(getSemanticTokensForContentMock).not.toHaveBeenCalled();
   });
 });

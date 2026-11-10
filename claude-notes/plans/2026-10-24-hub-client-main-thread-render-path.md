@@ -33,6 +33,12 @@ redesign comment interactions. This keeps the capture optimization independent
 of ongoing comment work. The comment-intent UX in Phase 3B2 and the transport
 changes in Phase 3C require fresh measurements before activation.
 
+Phase 5 implementation and measurement are complete under bd-lxq4oac3:
+identical-request sharing plus a model-quiet window reduced each measured
+Monaco burst to one tokenization. Its commit awaits approval because the full
+workspace run has two unrelated local knitr failures; all other verification
+legs pass. See the Phase 5 evidence below.
+
 ## Findings from the original audit
 
 | # | Finding | Primary site | Cost class |
@@ -1093,26 +1099,168 @@ envelope, main-thread parse, string postMessage, SW base64 decode.
 ## Phase 5 — Semantic tokens and the envelope tax (findings 4, 5)
 
 Measurement-gated: start only with Phase 0 numbers showing these matter
-relative to Phases 1-3.
+relative to Phases 1-3. **Implementation and verification complete under
+bd-lxq4oac3 except for two unrelated local knitr failures; commit awaits
+user approval per the dirty-phase review policy.**
 
-- [ ] Baseline first: token-request frequency from Monaco during a
+- [x] Baseline first: token-request frequency from Monaco during a
   keystroke burst, and synchronous tokenize ms per request at fixture
   scales. Check how Monaco's built-in ~300 ms semantic-tokens debounce
   interacts — and note that `refreshSemanticTokens()`
   (`useIntelligenceProviders.ts`, `services/monacoProviders.ts`)
   deliberately bypasses it via `schedule(0)` on mount and on WASM
   ready, so forced refreshes pay the synchronous cost immediately.
-- [ ] Candidate fixes, cheapest first: (a) coalesce/debounce token
+  → Fresh Node and real-Chromium baselines below.
+- [x] Candidate fixes, cheapest first: (a) coalesce/debounce token
   requests in `monacoProviders` so a burst costs one synchronous run;
   (b) avoid the extra `vfsAddFile` full-text write when the VFS image is
   already current (dirty-check against the last write); (c) scoped
   serde-wasm-bindgen or typed returns for the three hottest envelopes
   (vfs write, semantic tokens, render response) instead of a blanket
   JSON.parse migration.
-- [ ] Only if (a)-(c) are insufficient: evaluate moving LSP
+  → Took (a). The measured sub-1% token-path headroom does not justify (b)
+  or semantic-token typed returns; render transport stays scoped to
+  deferred Phase 3C.
+- [x] Only if (a)-(c) are insufficient: evaluate moving LSP
   intelligence into a dedicated worker fed by the same sync callbacks
   (design note first; overlaps Phase 7).
-- [ ] Record what was measured, which option was taken, and why.
+  → Not activated: option (a) reduced each measured burst to one run.
+- [x] Record what was measured, which option was taken, and why.
+  → Baseline, rejected alternatives, TDD evidence, and final browser
+  measurements below.
+
+### Phase 5 baseline (2026-11-10, release WASM, production modules)
+
+The throwaway harness uses the real `wasmRenderer` and
+`intelligenceService`, with only Node module-resolution shims. The fixture
+is `docs/guides/authoring/computations.qmd` without its front matter,
+repeated to about 100 KB at 1x and scaled geometrically. Each token scale
+ran one warm-up and ten content-changing requests. Invocation:
+
+```sh
+QUARTO_PERF_STATS=1 node --cpu-prof --cpu-prof-interval=200 \
+  --import tsx/esm --import <scratch>/phase5-perf/register.mjs \
+  <scratch>/phase5-perf/driver.mjs
+```
+
+| Scale | Source, UTF-16 units | Tokens | Tokenize avg | Semantic JSON parse, isolated avg | VFS write avg | Semantic envelope |
+|---|---:|---:|---:|---:|---:|---:|
+| 1x | 102,325 | 4,361 | 55.350 ms | 0.558 ms | 0.181 ms | 296,835 units |
+| 2x | 204,589 | 8,713 | 108.951 ms | 1.056 ms | 0.249 ms | 594,539 units |
+| 4x | 409,117 | 17,417 | 216.662 ms | 2.066 ms | 0.436 ms | 1,193,695 units |
+| 8x | 818,173 | 34,825 | 434.742 ms | 4.103 ms | 0.809 ms | 2,401,919 units |
+
+Tokenization scales linearly (7.9x from 1x to 8x). The isolated semantic
+JSON parse is 1.0% of tokenization at 1x and 0.9% at 8x; the VFS write is
+0.3% and 0.2%. The CPU profile agrees: `parseSemanticTokensResponse` is
+0.8% of total self-time, while WASM frames dominate. A semantic-token
+typed return or a duplicate-write check therefore cannot materially reduce
+the synchronous token cost on its own.
+
+The render comparison used the same fixture, an unarmed
+`captureUntransformedAst: false` project render, warm SASS cache, one
+warm-up, and five measured renders per scale:
+
+| Scale | Render avg | Outer-envelope parse avg | Envelope units/render | Parse share |
+|---|---:|---:|---:|---:|
+| 1x | 137.972 ms | 6.107 ms | 5,497,091 | 4.4% |
+| 8x | 1749.030 ms | 46.906 ms | 45,388,428 | 2.7% |
+
+This keeps the render-envelope question relevant to Phase 3C, but the
+cheapest first experiment is token-request elimination rather than a broad
+transport change.
+
+Real Monaco was measured in the production hub bundle through a throwaway
+Playwright config and spec. The bundle was built with `VITE_E2E=1`,
+`VITE_DEFAULT_SYNC_SERVER=/ws`, and the local sandbox URL. The driver ran
+`npx playwright test --config=<scratch>/phase5-perf/playwright.config.ts
+--project=chromium --workers=1 --retries=0`; both scenarios passed in
+36.9s, and the final `BURSTMARK!` text was inspected in Monaco. Gauges were
+snapshotted after mount/WASM-ready tokenization settled and again after a
+10-character, 100-ms-paced burst plus trailing requests:
+
+| Scale | Mount token runs | Mount token total | Burst token runs | Burst token total | Burst renders |
+|---|---:|---:|---:|---:|---:|
+| 1x | 2 | 135.5 ms | 2 | 84.7 ms | 2 |
+| 8x | 2 | 771.2 ms | 3 | 1054.0 ms | 2 |
+
+Monaco's adaptive debounce already collapses many edit requests, but does
+not make this burst one synchronous run; the mount/WASM-ready path also
+runs twice. Render coalescing remains intact at two renders per burst.
+These measurements activate option (a) as the first implementation
+experiment. Options (b) and the semantic-token half of (c) have sub-1%
+headroom; the render half of (c) stays coupled to Phase 3C's transport
+constraints rather than becoming a blanket JSON migration.
+
+### Phase 5 implementation and result (2026-11-10)
+
+`monacoProviders.ts` now uses two bounded mechanisms:
+
+- A single latest `(path, content)` request shares concurrent and completed
+  nonempty token results. This removes duplicate mount/WASM-ready work and
+  lets Monaco's trailing request reuse the result from an earlier pending
+  provider call. Empty results are not retained because the service also
+  uses them for transient failures; disposal clears the entry.
+- A 300 ms model-quiet window resets directly from Monaco content-change
+  events. Content and version are snapshotted only after that window, and
+  cancellation before the snapshot prevents VFS/WASM work. Monarch base
+  highlighting remains immediate; semantic enrichment is the layer that
+  waits for the quiet window.
+
+TDD preceded both changes. The identical-request test failed with two
+service calls instead of one. The quiet-window tests failed because the
+provider tokenized `initial` immediately and cancellation did not prevent
+that call. A 50 ms implementation passed the unit tests but produced mixed
+Chromium results (2 then 3 runs at 1x, versus 2 at baseline), so it was
+rejected rather than tuned blindly. Updating the test to require a 300 ms
+quiet window failed at 50 ms, then passed at 300 ms. The final focused
+suite has 17 passing tests, including latest-content, cancellation,
+nonempty-cache, empty-retry, and disposal cases.
+
+The same production-browser scenario used for the baseline was rerun with
+render-readiness included in both snapshots. Two scenarios passed in 44.7s;
+the final `BURSTMARK!` text was inspected in Monaco and all started renders
+completed. The structural run-count changes are the primary result;
+millisecond totals are same-scenario observations, not a general latency
+budget.
+
+| Scale | Mount runs, before → after | Burst runs, before → after | Burst token total, before → after | Change |
+|---|---:|---:|---:|---:|
+| 1x | 2 → 1 | 2 → 1 | 84.7 → 45.0 ms | −46.9% |
+| 8x | 2 → 1 | 3 → 1 | 1054.0 → 367.9 ms | −65.1% |
+
+Option (a) is therefore sufficient for this phase. No VFS dirty-check,
+serde-wasm-bindgen dependency, typed render response, or intelligence
+worker was added. The render envelope measurements remain available for
+Phase 3C's separately deferred transport decision.
+
+### Phase 5 verification
+
+- `npm run build:all -w hub-client` passed, including release WASM, the
+  sandbox bundle, production TypeScript/Vite build, and service-worker
+  precache check.
+- `npm run test:ci -w hub-client` passed: 1,751 unit, 240 integration, and
+  478 WASM tests; preview/render DOM parity passed 109/109 opted-in
+  fixtures. The focused provider suite passed 17/17 and the intelligence
+  lifecycle integration suite passed 6/6.
+- `cargo xtask verify --skip-rust-tests --skip-hub-build` passed every
+  enabled leg, including custom lints, clippy, formatting, strict
+  `claude-notes` render, ts-packages, hub-client tests, and preview SPA.
+  Scoped ESLint passed for all three changed TypeScript files. Full
+  hub-client ESLint reports 190 errors in unrelated files and none in this
+  change set.
+- The real-browser end-to-end invocation and output inspection are recorded
+  above: two scenarios passed in 44.7s, the final edited text was visible,
+  and each measured burst produced one actual tokenization.
+- The full Rust workspace run used an official scratch pandoc 3.13 because
+  the system binary is 3.12.1. It completed all 19,203 tests: 19,201 passed,
+  201 skipped, and two failed. `capture_classifies_pieces` is the known
+  `rlang_error`/`simpleError` environment issue (bd-54odm3rz,
+  bd-qwscag8b). `knitr_replay_equals_live::a_sql_chunk_with_hash_pipe_options_records_as_it_runs_live`
+  rejects `#|` in the live engine and reproduces in isolation; it is filed
+  as bd-b95dt1ia. No Rust source changed in this phase, so these unrelated
+  failures remain open rather than being patched or hidden here.
+- No snapshot files changed.
 
 ## Phase 6 — Attribution off the main thread (finding 7)
 
