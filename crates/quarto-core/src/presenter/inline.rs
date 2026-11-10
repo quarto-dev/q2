@@ -179,6 +179,10 @@ fn escape_quoted(s: &str) -> String {
 /// latex become raw inline spans, markdown is inserted as is, and plain text goes
 /// through the quote-aware escape. The result may be the empty string (a quoted
 /// `''`); the caller treats it like Q1: leave the span source in place.
+//
+// OPR-7g: inline spans are deliberately not routed through `ansi::output_text`. The value is a
+// `text/plain` execute_result, not a stream, and the plain TS route does not strip it either,
+// so there is no parity difference to close. If the ANSI policy changes, decide it there.
 pub fn render_inline(bundle: &MimeBundle, target: InlineTarget) -> Option<String> {
     let text_only: MimeBundle = bundle
         .iter()

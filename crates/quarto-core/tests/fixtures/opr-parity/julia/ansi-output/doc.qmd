@@ -1,0 +1,20 @@
+---
+title: ANSI output
+engine: julia
+---
+
+One expression per cell, so the only plain-versus-recorded difference left is ANSI
+(a several-expression cell is interleaved on the recorded route, a separate accepted change).
+
+```{julia}
+printstyled("colored stdout\n"; color = :red)
+```
+
+```{julia}
+printstyled(stderr, "colored stderr\n"; color = :blue, bold = true)
+```
+
+```{julia}
+using Test
+@test 1 + 1 == 2
+```

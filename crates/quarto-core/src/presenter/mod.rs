@@ -13,6 +13,7 @@
 //! live Jupyter path, the stored-notebook replay and (later) record presentation can
 //! all call the same functions on every target.
 
+pub mod ansi;
 pub mod cell;
 pub mod cell_step;
 pub mod document;

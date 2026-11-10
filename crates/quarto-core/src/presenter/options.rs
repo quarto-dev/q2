@@ -214,6 +214,11 @@ pub struct CellOptions {
     /// Parallel to the cell\'s outputs: which of them is a message or a warning. Empty when
     /// unknown (a Jupyter cell).
     output_kinds: Vec<Option<OutputKind>>,
+    /// OPR-7g: the text of this cell\'s outputs is the engine\'s own (knitr wrote it from
+    /// resolved options), so the presenter leaves its ANSI escapes as written. Set only by
+    /// `present_with_inputs` for a cell that carries `quarto_resolved_options`; every other
+    /// cell, and every expansion, is stripped. See `ansi::output_text`.
+    keeps_engine_text: bool,
     /// OPR-7f: what the engine said about the `.cell` wrapper (`quarto_attrs` on the record
     /// cell). Display-only; dropped when the wrapper is not written.
     engine_attrs: Option<EngineAttrs>,
@@ -439,6 +444,7 @@ impl CellOptions {
             class_warning: words("class.warning"),
             attr_warning: get("attr.warning"),
             output_kinds: Vec::new(),
+            keeps_engine_text: false,
             engine_attrs: None,
             classes: get("classes"),
             fig_column: string("fig-column"),
@@ -802,6 +808,17 @@ impl CellOptions {
     pub fn with_output_kinds(mut self, kinds: Vec<Option<OutputKind>>) -> Self {
         self.output_kinds = kinds;
         self
+    }
+
+    /// Mark this cell\'s output text as the engine\'s own (see the field).
+    pub fn with_engine_text(mut self, keeps: bool) -> Self {
+        self.keeps_engine_text = keeps;
+        self
+    }
+
+    /// Whether `ansi::output_text` leaves this cell\'s text as written.
+    pub fn keeps_engine_text(&self) -> bool {
+        self.keeps_engine_text
     }
 
     /// The numeric `warning` selection, when set.

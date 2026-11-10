@@ -12,6 +12,7 @@
 
 use quarto_source_map::SourceInfo;
 
+use super::ansi::output_text;
 use super::engine_attrs::{ClassPlacement, EngineAttrs, build_head};
 use super::figures::FigureSink;
 use super::options::{CellOptions, FenceKind, OutputKind};
@@ -893,6 +894,7 @@ fn format_outputs_with(
                         .unwrap_or_default(),
                     CellOutput::Error { .. } => String::new(),
                 };
+                let text = output_text(&text, options.keeps_engine_text());
                 output.push_str(&format!("\n{}\n", text.trim_end()));
                 continue;
             }
@@ -901,7 +903,9 @@ fn format_outputs_with(
             CellOutput::Stream { name, text } => {
                 output.push_str(&fenced_output_div(
                     &format!(".cell-output .cell-output-{}", name),
-                    &options.comment_out(options.trim_output(text)),
+                    &options.comment_out(
+                        options.trim_output(&output_text(text, options.keeps_engine_text())),
+                    ),
                     options.fence_attrs(if name != "stderr" {
                         FenceKind::Output
                     } else {
@@ -1013,6 +1017,7 @@ fn format_outputs_with(
                     *figures += 1;
                 } else if let Some(text) = data.get("text/plain") {
                     let s = extract_text_content(text);
+                    let s = output_text(&s, options.keeps_engine_text());
                     output.push_str(&fenced_output_div(
                         ".cell-output .cell-output-display",
                         &options.comment_out(options.trim_output(&s)),
@@ -1073,49 +1078,25 @@ fn format_outputs_with(
     output
 }
 
-/// `"<ename>: <evalue>"` plus the ANSI-stripped traceback lines.
+/// `"<ename>: <evalue>"` plus the traceback lines, every part through `output_text`.
+///
+/// Errors are always stripped (`keeps_engine_text` is false): kernel tracebacks arrive
+/// colorized, and this path never kept escapes, knitr cells included.
 fn format_error_text(ename: &str, evalue: &str, traceback: &[String]) -> String {
     // An empty `ename` (Ark, knitr) has no `name:` header; the message stands alone, and an
     // empty message leaves the traceback.
-    let evalue = strip_ansi_codes(evalue);
+    let ename = output_text(ename, false);
+    let evalue = output_text(evalue, false);
     let mut error_text = match (ename.is_empty(), evalue.is_empty()) {
         (true, true) => String::new(),
         (true, false) => format!("{evalue}\n"),
         (false, _) => format!("{ename}: {evalue}\n"),
     };
     for line in traceback {
-        error_text.push_str(&strip_ansi_codes(line));
+        error_text.push_str(&output_text(line, false));
         error_text.push('\n');
     }
     error_text
-}
-
-/// Strip ANSI escape codes from a string (kernel tracebacks arrive
-/// colorized).
-fn strip_ansi_codes(s: &str) -> String {
-    // Simple pattern to remove ANSI escape sequences
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // Start of escape sequence
-            if chars.peek() == Some(&'[') {
-                chars.next(); // consume '['
-                // Skip until we hit a letter (end of sequence)
-                while let Some(&next) = chars.peek() {
-                    chars.next();
-                    if next.is_ascii_alphabetic() {
-                        break;
-                    }
-                }
-            }
-        } else {
-            result.push(c);
-        }
-    }
-
-    result
 }
 
 #[cfg(test)]
@@ -1722,15 +1703,6 @@ mod tests {
             format_outputs(&result, &mut test_fig(), true),
             "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n"
         );
-    }
-
-    #[test]
-    fn test_strip_ansi_codes() {
-        let input = "\x1b[31mRed\x1b[0m Normal";
-        assert_eq!(strip_ansi_codes(input), "Red Normal");
-
-        let input = "No escape codes";
-        assert_eq!(strip_ansi_codes(input), "No escape codes");
     }
 
     #[test]
@@ -3736,5 +3708,142 @@ mod jupyter_asis_tests {
         assert!(resolve(None).output_asis());
         assert!(resolve(Some("echo: false\n")).output_asis());
         assert!(!resolve(Some("output: true\n")).output_asis());
+    }
+}
+
+/// OPR-7g: printed text goes through `ansi::output_text`; the record stays raw.
+#[cfg(test)]
+mod ansi_tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use crate::presenter::figures::FsFigureSink;
+
+    const RED: &str = "\x1b[31mred\x1b[0m";
+
+    fn markdown(outputs: Vec<CellOutput>, options: &CellOptions) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        let result = CellResult {
+            status: ExecuteStatus::Ok,
+            outputs,
+            execution_count: Some(1),
+        };
+        format_outputs_with(&result, &mut fig, true, options, &mut 0, 0)
+    }
+
+    fn text_output(variant_display: bool) -> CellOutput {
+        let mut data = HashMap::new();
+        data.insert("text/plain".to_string(), serde_json::json!(RED));
+        let metadata = serde_json::json!({});
+        if variant_display {
+            CellOutput::DisplayData { data, metadata }
+        } else {
+            CellOutput::ExecuteResult {
+                data,
+                metadata,
+                execution_count: 1,
+            }
+        }
+    }
+
+    fn every_text_site() -> Vec<CellOutput> {
+        vec![
+            CellOutput::Stream {
+                name: "stdout".into(),
+                text: RED.into(),
+            },
+            CellOutput::Stream {
+                name: "stderr".into(),
+                text: RED.into(),
+            },
+            text_output(true),
+            text_output(false),
+            CellOutput::Error {
+                ename: "\x1b[1mE\x1b[0m".into(),
+                evalue: RED.into(),
+                traceback: vec![RED.into()],
+            },
+        ]
+    }
+
+    #[test]
+    fn a_cell_with_no_resolved_options_is_presented_without_escapes() {
+        let md = markdown(every_text_site(), &CellOptions::default());
+        assert!(!md.contains('\x1b'), "{md:?}");
+        assert_eq!(md.matches("red").count(), 6, "{md}");
+    }
+
+    #[test]
+    fn a_cell_with_resolved_options_keeps_the_text_it_was_given() {
+        let options = CellOptions::default().with_engine_text(true);
+        let md = markdown(every_text_site()[..4].to_vec(), &options);
+        assert_eq!(md.matches(RED).count(), 4, "{md:?}");
+    }
+
+    #[test]
+    fn results_asis_goes_through_the_same_function() {
+        let asis = CellOptions::from_knitr(&serde_json::json!({"results": "asis"}));
+        let raw = markdown(
+            every_text_site()[..1].to_vec(),
+            &asis.clone().with_engine_text(true),
+        );
+        assert!(raw.contains('\x1b'), "{raw:?}");
+        let stripped = markdown(every_text_site()[..1].to_vec(), &asis);
+        assert!(
+            !stripped.contains('\x1b') && stripped.contains("red"),
+            "{stripped:?}"
+        );
+    }
+
+    #[test]
+    fn an_error_status_with_no_outputs_is_stripped() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        let result = CellResult {
+            status: ExecuteStatus::Error {
+                ename: "E".into(),
+                evalue: RED.into(),
+                traceback: vec![RED.into()],
+            },
+            outputs: vec![],
+            execution_count: None,
+        };
+        let md = format_outputs_with(&result, &mut fig, true, &CellOptions::default(), &mut 0, 0);
+        assert!(!md.contains('\x1b') && md.contains("red"), "{md:?}");
+    }
+
+    #[test]
+    fn presenting_does_not_touch_the_record_text() {
+        let outputs = every_text_site();
+        let _ = markdown(outputs.clone(), &CellOptions::default());
+        match &outputs[0] {
+            CellOutput::Stream { text, .. } => assert_eq!(text, RED),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn the_stored_record_stays_raw_through_presentation_write_and_read() {
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/records/basic.json")).unwrap();
+        value["cells"][0]["outputs"] = serde_json::json!([
+            {"output_type": "stream", "name": "stdout", "text": [RED]},
+            {"output_type": "error", "ename": "E", "evalue": RED, "traceback": [RED]}
+        ]);
+        let record = crate::record::read_record_value(value).unwrap();
+        let before = crate::record::write_record(&record).unwrap();
+
+        let result = CellResult::from_nbformat(&record.cells[0].outputs, Some(1));
+        let md = markdown(result.outputs, &CellOptions::default());
+        assert!(!md.contains('\x1b') && md.contains("red"), "{md:?}");
+
+        let written = crate::record::write_record(&record).unwrap();
+        assert_eq!(written, before);
+        assert!(written.contains("\\u001b[31mred"), "{written}");
+        let reread = crate::record::read_record(&written).unwrap();
+        assert_eq!(reread.cells[0].outputs, record.cells[0].outputs);
     }
 }

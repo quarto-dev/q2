@@ -243,11 +243,16 @@ function isWarningOutput(output: JupyterOutput): boolean {
  * error path). Do NOT add a test asserting color/styling is absent; that
  * would freeze the "no colorization" gap as permanent rather than recording
  * it as a known v1 limitation. */
+// The pattern is shared with the Rust presenter (`presenter/ansi.rs`); both read the table
+// `crates/quarto-core/tests/fixtures/ansi/strip-cases.json`. CSI (`ESC [` or 8-bit CSI, parameter
+// bytes, intermediate bytes, one final byte), OSC (`ESC ]` up to BEL or `ESC \`, so OSC 8
+// hyperlinks go whole) and the two-byte charset selectors. A lone ESC, or an escape cut by a
+// line break, is not a complete escape and stays.
 // eslint-disable-next-line no-control-regex
 const ANSI_PATTERN =
   // eslint-disable-next-line no-control-regex
-  /[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[a-zA-Z\d]*)*)?\u0007)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-ntqry=><~]))/g;
-function stripAnsiCode(text: string): string {
+  /(?:[\u001B\u009B]\[[0-?]*[ -/]*[@-~])|(?:\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\))|(?:\u001B[()][0-9A-Za-z])/g;
+export function stripAnsiCode(text: string): string {
   return text.replace(ANSI_PATTERN, "");
 }
 

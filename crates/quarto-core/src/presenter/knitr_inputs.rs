@@ -155,7 +155,7 @@ pub fn present_with_inputs(
                 result.outputs.iter().filter(|o| is_plot_output(o)).count(),
             );
             let pair = (
-                CellOptions::from_knitr_known(&m, known),
+                CellOptions::from_knitr_known(&m, known).with_engine_text(true),
                 CellVisibility::from_flags(
                     |k| m.get(k).and_then(Value::as_bool),
                     !inputs.capture_enforced_warning,
