@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-11-10
 
+- [`178c2feb5`](https://github.com/quarto-dev/q2/commits/178c2feb5): Collaborator display names now accept full Connect first/last-name combinations (up to 513 Unicode code points) and remain readable in presence, version history, tooltips, and attribution on narrow screens.
 - [`525fbe559`](https://github.com/quarto-dev/q2/commits/525fbe559): The Authors overlay and Word/PowerPoint downloads now load authorship for a typed document history several times faster (about 9.4 s to 1.6 s for 2,000 keystrokes in a 20,000-character document) and no longer freeze the editor while doing so, without changing attribution output.
 - [`6386eb73a`](https://github.com/quarto-dev/q2/commits/6386eb73a): The Authors overlay and Word/PowerPoint downloads now avoid redundant document-history traversal and decoding, reducing measured attribution work by 3–10% for cold builds and 14–45% for incremental updates without changing attribution output.
 - [`abdedc336`](https://github.com/quarto-dev/q2/commits/abdedc336): The Authors overlay and Word/PowerPoint downloads now retain the correct authorship when you type while a long document history is still loading, instead of pairing the new text with stale attribution.
