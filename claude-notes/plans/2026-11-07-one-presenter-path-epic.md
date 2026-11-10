@@ -88,6 +88,10 @@ capture splice and is not part of this epic.
   that this changes Jupyter output and overrides the byte-identical rule for this one case; every other Jupyter output
   stays byte-identical, and 7j tests that. Real subfloats and tables (`tbl-subcap`, which no engine handles and the flip
   does not worsen) stay out of scope (D13).
+  **Later-figure numbering (Gordon, 2026-11-10):** a group is counted as one figure per panel plus the group, so figures
+  after a Jupyter group are numbered too high against Quarto 1 (today they are one too low); Gordon accepted this as no
+  worse than before, and the real fix is the subfloat plan. A user-written panel id that clashes with `label-N` stays
+  author error (no worse than Quarto 1).
 
 ## What the spikes and reviews found (evidence)
 
@@ -157,7 +161,7 @@ and fast-forwarded back. A plan depends **only on complete (or cancelled) plans*
 | [OPR-7g](2026-11-09-opr-7g-ansi-at-presentation.md) | OPR | ANSI escapes removed at presentation from one function, across engines; record stays raw; closes the 7c ANSI difference | 7f, 7h | A | ready |
 | [OPR-7h](2026-11-09-opr-7h-plots-scripts-and-png-size.md) | OPR | Investigate the two remaining Julia parity differences (Plots script elements, bare-PNG size): find the cause, then fix, allowlist or propose | 7c | D | ready |
 | [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md) | OPR | Page dependencies for Jupyter-style outputs on the recorded route: the engine declares the data kind (Julia fork change), core runs the Quarto 1 scan and writes requirejs and jQuery includes, warns for widget views; restores the plain route\'s behavior so OPR-7d does not regress widget pages | 7h | D | ready |
-| [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) | OPR | Group caption and per-panel `label-N` ids for `fig-subcap` cells on every engine (knitr\'s hooks.R rules in the presenter), so the flip does not lose the Julia group caption or its panel references; real subfloats stay out of scope | 7f | D | blocked-on-gordon (outline) |
+| [OPR-7j](2026-11-10-opr-7j-group-caption-and-panel-ids.md) | OPR | Group caption and per-panel `label-N` ids for `fig-subcap` cells on every engine (knitr\'s hooks.R rules in the presenter), so the flip does not lose the Julia group caption or its panel references; real subfloats stay out of scope | 7f | D | ready |
 | [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) | OPR | Switch plain render to the recorded route | 7a, 7b, 7c, 7f, 7g, 7h, 7i, 7j, Gordon\'s decisions | D | blocked-on-gordon |
 | [OPR-8](2026-11-08-opr-8-docs-and-end-to-end.md) | OPR | Docs, embedded-docs refresh, end-to-end | 1b, 2, 5, 6, 7d, 4d resolved, RFU-8 | D | ready |
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | RFU | `q2 convert` replaces `q2 record export-positron` | nothing | C | ready |

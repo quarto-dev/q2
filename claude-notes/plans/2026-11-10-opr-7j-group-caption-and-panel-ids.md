@@ -2,7 +2,7 @@
 title: 'OPR-7j: group caption and panel ids for fig-subcap cells, for every engine (OUTLINE)'
 date: 2026-11-10
 description: 'Outline, not yet reviewed by Gordon. Makes the presenter apply knitr''s hooks.R group rules to every engine: a cell with a figure label, fig-cap and fig-subcap keeps its group caption and gives each panel its own label-N id. This removes the Julia regression OPR-7d would otherwise ship (lost group caption, unresolved panel references) and fixes the same two gaps for native Jupyter, without building real subfloats.'
-status: blocked-on-gordon
+status: ready
 depends-on: [opr-7f]
 lane: D
 ---
@@ -12,8 +12,7 @@ lane: D
 **Blocks:** [OPR-7d](2026-11-08-opr-7d-switch-plain-render.md) (it lists `opr-7j` in its `depends-on`).
 **Evidence:** [OPR-7d plan review](../research/2026-11-10-opr-7d-plan-review.md), items 15 and 16 (superseded by this plan).
 **Related, not replaced:** [subfloat parity draft](2026-11-09-subfloat-parity-draft.md) (`bd-plcqhfcn`, `bd-gbaykhth`, `bd-au5gts6e`).
-**Status:** an outline written during the 7d review. It becomes `ready` when Gordon flips it. The Jupyter question is
-decided (below).
+**Status:** `ready` (Gordon, 2026-11-10). The Jupyter question and the two review questions are decided (below).
 
 ## Why this plan exists
 
@@ -48,7 +47,7 @@ they are today for knitr and plain Julia: each panel counts as its own figure, a
 panels (Figure 4). That wrongness predates this plan for knitr and Julia, and the subfloat plan fixes it, by making the
 Rust crossref index carry `parent`. **For Jupyter it is not predated:** today the group is not a figure at all, so every
 later figure is numbered one too low against Quarto 1; after 7j the group counts as three figures, so every later figure is
-one too high (see "Open for Gordon" below). Quarto 1 itself numbers the group "Figure 2" with panels "(a)" and "(b)", and
+one too high (see "Decided: later-figure numbering" below). Quarto 1 itself numbers the group "Figure 2" with panels "(a)" and "(b)", and
 the next figure "Figure 3" (review report, item 1). The plan also does not change tables (below), layout options, other
 formats\' differences that exist today, or `bd-au5gts6e`.
 
@@ -155,22 +154,35 @@ silently loses its group caption and its panel references, and this plan fixes t
 overrode the byte-identical rule for this one case; it is recorded as D14 in the epic. The rest of Jupyter output must
 stay byte-identical, and a checklist box tests that.
 
-**Open for Gordon (found by the 7j review; D14 does not cover it).** The decision above was made on the group caption
-and the panel references. The review also found that a Jupyter `fig-subcap` group changes the number of every **later**
-figure in the document (ran, a stored notebook with a one-figure cell, a group, then one more figure; Quarto 1 numbers the
-last figure 3, relied from the sub-agent\'s Quarto 1 run):
+**Decided: later-figure numbering (Gordon, 2026-11-10: accepted as no worse than before; recorded in D14).** The review
+found that a Jupyter `fig-subcap` group changes the number of every **later** figure in the document. Gordon accepted
+that, and asked for a more precise definition and more examples to judge the impact. Both follow.
 
-| Build | Group | Later figure |
-|---|---|---|
-| Quarto 1 | Figure 2, panels (a) and (b) | Figure 3 |
-| q2 today | no figure (caption lost) | Figure 2 (one too low) |
-| q2 with 7j | panels 2 and 3, group 4 | Figure 5 (two too high) |
+*Definition.* A group cell with `n` panels, in q2 with 7j, counts as `n + 1` figures: each panel is its own figure (it
+carries the id `label-N`), and the group, which carries the cell label, is numbered after its panels. Quarto 1 counts the
+group as one figure with `n` sub-panels `(a)`, `(b)`, and so on. So after a group, every later figure is `n` too high
+against Quarto 1 (the numbers of the panels and the group differ as well). Today, q2 Jupyter counts the group as zero
+figures (no id, no caption), so later figures are one too low. The offset accumulates across groups. The rule is the
+same on Jupyter, knitr and plain Julia once 7j lands; knitr and plain Julia already behave this way today.
 
-knitr and plain Julia already number this way (each panel its own figure, the group after them), so after 7j all three
-engines agree with each other and disagree with Quarto 1; today Jupyter was wrong the other way. Recommendation: **accept**
-it. The references now resolve, three engines agree, and the real fix (a `parent` link so panels are "Figure 2 (a)") is the
-subfloat plan\'s, `bd-plcqhfcn`. The alternative, making the Jupyter group count as one figure in 7j, needs the same
-`parent` link and is not small. If Gordon does not accept it, 7j must wait for the subfloat work. Say which in D14.
+*Examples* (derived from the definition and the one stored-notebook run in the review; **not rendered case by case**: the
+implementer renders each row on Jupyter with the changed binary and the Quarto 1 column from the sub-agent\'s method, and
+corrects this table where a row is wrong; rows 1 to 3 have a figure before the group and one after):
+
+| Document (Jupyter) | Quarto 1: group / later figure | q2 today | q2 with 7j: group / later figure |
+|---|---|---|---|
+| one figure, one group of 2 panels, one figure | Figure 2 / Figure 3 | no group figure / Figure 2 | Figure 4 / Figure 5 |
+| same, group of 3 panels | Figure 2 / Figure 3 | no group figure / Figure 2 | Figure 5 / Figure 6 |
+| one figure, two groups of 2 panels, one figure | Figures 2 and 3 / Figure 4 | no group figures / Figure 2 | Figures 4 and 7 / Figure 8 |
+| a group of 2 panels alone (no figure before or after) | Figure 1 | no figure | Figure 3 |
+
+(The first row is the case the review ran; the others follow from the definition.) What a reader sees: references to later
+figures resolve and read two or more too high, instead of one too low. References to the group (`@fig-l`) and to its
+panels (`@fig-l-1`) resolve, which they did not before. The real fix, a `parent` link so panels are "Figure 2 (a)", is
+the subfloat plan\'s (`bd-plcqhfcn`); 7j neither depends on it nor blocks it.
+
+**Decided: a user-written panel id (Gordon, 2026-11-10).** Stays "author error" with a pinning test, as in the numbered
+list above (item 4). Gordon: no worse than before, and no worse than Quarto 1. No plan for skipping clashing ids.
 
 ## Tables (tested 2026-11-10; out of scope here, nothing for the flip to fix)
 
@@ -249,7 +261,7 @@ own work under the subfloat draft (knitr writes no table panel ids either in the
 - No new warnings; knitr output unchanged; the splice route matches the render route; every Jupyter output other than a
   `fig-subcap` group is byte-identical (the guard above).
 - Panel numbering is not changed for knitr and Julia (Figure 2, 3, 4 as today); Jupyter\'s later-figure numbers change as
-  in "Open for Gordon", with Gordon\'s answer recorded in D14; the notes say real subfloats remain `bd-plcqhfcn`.
+  in "Decided: later-figure numbering" (recorded in D14); the notes say real subfloats remain `bd-plcqhfcn`.
 
 ## Review findings
 
