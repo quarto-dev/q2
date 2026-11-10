@@ -172,14 +172,17 @@ The policy, in order:
    a hidden directory).
 4. Not a generated directory. Generated means *provenance*, not a name
    suffix: `node_modules`, `__pycache__`, `_freeze`, `site_libs` at any
-   depth, the project's `output-dir`, and `<stem>_files/` or
+   depth (and `_site`, `_book`, `renv`, `venv`, `target`, which the walk
+   always skipped), the project's `output-dir`, and `<stem>_files/` or
    `<stem>_cache/` only when a sibling `<stem>.qmd`, `.ipynb`, `.Rmd` or
    `.md` exists. (The suffix-only rule on `preview-scss-theme` skipped a
    theme at `static_files/brand.scss`.)
 5. An extension allow-list per class: sources, config, stylesheets
    (`.css`, `.scss`, `.sass`), components, bibliographies and styles, data,
-   and the binary list in `quarto_hub::resource`. Never `.env`, keys, or
-   unknown types.
+   templates and filters (`.html`, `.tex`, `.typ`, `.lua`, `.js`), and the
+   binary list in `quarto_hub::resource`. Everything under `_extensions/`
+   except key material. Never `.env`, keys, or unknown types. The lists
+   live in `crates/quarto-hub/src/exposure.rs`.
 6. A size cap for pulled contents; large binaries are refused with a
    diagnostic rather than streamed. Start at the per-file limits in
    `resources/pandoc-wasm.json`, which the request builder already enforces,
