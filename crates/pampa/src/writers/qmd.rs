@@ -812,6 +812,29 @@ fn tight_blocks_need_separator(prev: &Block, next: &Block) -> bool {
     (prev_can_continue && next_is_text) || both_quotes
 }
 
+/// In a tight item, the raw HTML block written directly after a list, if it
+/// must be fenced rather than written bare.
+///
+/// The reader's HTML-block extent is the paragraph, so a bare `<!-- -->`
+/// line written tight after a list is read back as a lazy continuation of
+/// the list's last line (a `RawInline`), and an empty item after it can't
+/// interrupt it. Two lists separated that way merge on the next read. A
+/// blank line around the bare block would avoid this, but it makes the item
+/// loose. A fence closes explicitly and stays tight. This is the list
+/// separator the pre-pass inserts between same-delimiter ordered lists, or
+/// one the author wrote (bd-2bcre8cr). At top level and in loose items the
+/// block is still written bare, between blank lines, as pandoc does.
+fn fenced_after_list_in_tight_item<'a>(prev: &Block, block: &'a Block) -> Option<&'a RawBlock> {
+    match (prev, block) {
+        (Block::BulletList(_) | Block::OrderedList(_), Block::RawBlock(raw))
+            if raw.format == "html" && html_writes_bare(&raw.text) =>
+        {
+            Some(raw)
+        }
+        _ => None,
+    }
+}
+
 fn write_bulletlist(
     bulletlist: &BulletList,
     buf: &mut dyn std::io::Write,
@@ -860,7 +883,13 @@ fn write_bulletlist(
                     // loose lists, and where the pair would otherwise merge.
                     writeln!(&mut item_writer)?;
                 }
-                write_block(block, &mut item_writer, ctx)?;
+                match (j > 0 && is_tight)
+                    .then(|| fenced_after_list_in_tight_item(&item[j - 1], block))
+                    .flatten()
+                {
+                    Some(raw) => write_rawblock_fenced(raw, &mut item_writer)?,
+                    None => write_block(block, &mut item_writer, ctx)?,
+                }
             }
         }
     }
@@ -911,7 +940,13 @@ fn write_orderedlist(
                 // See write_bulletlist.
                 writeln!(&mut item_writer)?;
             }
-            write_block(block, &mut item_writer, ctx)?;
+            match (j > 0 && is_tight)
+                .then(|| fenced_after_list_in_tight_item(&item[j - 1], block))
+                .flatten()
+            {
+                Some(raw) => write_rawblock_fenced(raw, &mut item_writer)?,
+                None => write_block(block, &mut item_writer, ctx)?,
+            }
         }
     }
     Ok(())
@@ -1076,14 +1111,19 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
         writeln!(buf, "{}", rawblock.text.trim_end())?;
     } else {
         // For other formats, use fenced raw block notation with `=` prefix
-        writeln!(buf, "```{{={}}}", rawblock.format)?;
-        write!(buf, "{}", rawblock.text)?;
-        if !rawblock.text.ends_with('\n') {
-            writeln!(buf)?;
-        }
-        writeln!(buf, "```")?;
+        write_rawblock_fenced(rawblock, buf)?;
     }
     Ok(())
+}
+
+/// Write `rawblock` as a ```` ```{=format} ```` fence.
+fn write_rawblock_fenced(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    writeln!(buf, "```{{={}}}", rawblock.format)?;
+    write!(buf, "{}", rawblock.text)?;
+    if !rawblock.text.ends_with('\n') {
+        writeln!(buf)?;
+    }
+    writeln!(buf, "```")
 }
 
 /// Write a definition list as the `.definition-list` div the qmd reader
