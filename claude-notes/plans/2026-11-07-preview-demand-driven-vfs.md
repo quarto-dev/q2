@@ -2,7 +2,7 @@
 title: 'Preview demand-driven VFS: exposure policy, miss route, render worker'
 date: 2026-11-07
 description: 'Epic implementing the preview VFS contract: one exposure policy, a three-arm miss route (read, exists, list) answered from a render worker over sync XHR, a demand-driven watch set, a render-reported read set, and removal of the dependency predictors.'
-status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0, 1 and 2a implemented
+status: approved  # design in designs/preview-vfs-contract.md; sequencing agreed 2026-11-07; manifest dropped 2026-11-10; revised after review 2026-11-10 (Phase 2 split, read set, hub-client deferred); request gate decided 2026-11-10 (Host allow-list); Phases 0, 1, 2a and 2b implemented
 ---
 
 ## Overview
@@ -394,38 +394,38 @@ Contract D2, D7, D11. Depends on Phases 1 and 2a.
 
 Tests first:
 
-- [ ] Rust: `WasmRuntime` miss hook unit test with a stub shim: a read miss
+- [x] Rust: `WasmRuntime` miss hook unit test with a stub shim: a read miss
   calls the shim once, inserts, and a second read does not call it; a
   negative exists answer is cached and not re-asked until the generation
   changes; the lock is not held across the call (test with a re-entrant
   stub).
-- [ ] Rust, `vfs.rs`: a pull insert of a new path does not move the
+- [x] Rust, `vfs.rs`: a pull insert of a new path does not move the
   generation; a sync write of identical bytes to an existing path does not
   move it, for text and for binary; a sync write of different bytes, a
   create and a remove still do.
-- [ ] Rust: a directory that holds some files but has not been listed
+- [x] Rust: a directory that holds some files but has not been listed
   answers `dir_list` through the list arm, once; after that the listing is
   local until the generation changes.
-- [ ] Rust: the read set of a render holds the paths read, the paths
+- [x] Rust: the read set of a render holds the paths read, the paths
   probed (hits and misses) and the directories listed, scoped to that
   render; a render answered from the project cache still reports the
   project config among its reads.
-- [ ] TS: the echo of a promoted file (the same bytes arriving through
+- [x] TS: the echo of a promoted file (the same bytes arriving through
   `onFileAdded` or `onBinaryChanged`) does not bump `contentTick`.
-- [ ] Playwright, single-file deck: `theme: styles/deck.scss` importing
+- [x] Playwright, single-file deck: `theme: styles/deck.scss` importing
   `partials/_vars.scss` (a subdirectory) renders with the variable applied;
   adding a new `@import` to `_vars.scss` that pulls in a file created
   mid-session re-themes the page without restart.
-- [ ] Playwright, both modes: a `.bib` beside the document resolves
+- [x] Playwright, both modes: a `.bib` beside the document resolves
   citations on first render with no `resources:` entry.
-- [ ] Playwright, one cold render: the render count is one. The pulls of
+- [x] Playwright, one cold render: the render count is one. The pulls of
   that render and their echoes do not start a second render, and a forced
   second render makes no request to the miss routes (`perf.vfs-pull`
   stays flat).
-- [ ] Playwright, read-set filter: editing a file in the read set
+- [x] Playwright, read-set filter: editing a file in the read set
   re-renders; editing an unrelated sibling does not; creating a file at a
   path the render probed and missed does.
-- [ ] Playwright, latency: the same deck behind a delay proxy at 0, 20, 50
+- [x] Playwright, latency: the same deck behind a delay proxy at 0, 20, 50
   and 100 ms (the proxy used for the 2026-11-10 measurement is a 20-line
   Node script; check it in under the e2e helpers). Record cold-render wall
   time and the `perf.vfs-pull` counts per arm and status. These numbers,
@@ -433,39 +433,123 @@ Tests first:
 
 Implementation:
 
-- [ ] `WasmRuntime` miss hook: sync externs for the three arms
+- [x] `WasmRuntime` miss hook: sync externs for the three arms
   (`vfs_miss_read(path) -> Option<Uint8Array>`, `vfs_miss_stat(path)`,
   `vfs_miss_list(path)`) with `catch`, an eligible-prefix check (not
   `/__quarto_resources__`, not `/.quarto/`, not `/tmp/`), a negative cache
   keyed by the VFS generation; the read guard is dropped before the call
   and the write lock taken after.
-- [ ] Generation rules (contract D2): the hook inserts through a
+- [x] Generation rules (contract D2): the hook inserts through a
   generation-neutral path; `vfs_add_file` and `vfs_add_binary_file` go
   through `add_file_if_changed` (it exists; only `file_write` and the
   artifact flush use it today) and report whether anything changed, and
   `automergeSync.ts` skips `onFileContent` / `onBinaryContent` when
   nothing did.
-- [ ] A per-directory "listed completely" bit in the VFS, set by the list
+- [x] A per-directory "listed completely" bit in the VFS, set by the list
   arm, cleared with the generation.
-- [ ] JS shim: synchronous `XMLHttpRequest` with `responseType =
+- [x] JS shim: synchronous `XMLHttpRequest` with `responseType =
   'arraybuffer'` to the three routes; null on 404 or 403; a
   `perf.vfs-pull` gauge counting calls per arm and status, dumped with the
   other perf counters.
-- [ ] `vfsIsFile` goes through the exists arm with the same negative cache,
+- [x] `vfsIsFile` goes through the exists arm with the same negative cache,
   so a Sass probe is asked once per generation.
-- [ ] Read set (contract D11): `WasmRuntime` records reads, probes and
+- [x] Read set (contract D11): `WasmRuntime` records reads, probes and
   listings in a per-render scope; the project cache stores the reads made
   while an entry was built and a cache hit adds them; the render response
   carries the set.
-- [ ] `PreviewApp.tsx`: `shouldRerenderForTextChange` and the binary
+- [x] `PreviewApp.tsx`: `shouldRerenderForTextChange` and the binary
   handler filter on the read set (previous set kept after a failed render;
   no set yet means pass everything). The `/api/preview/deps` fetch stays
   until Phase 3 removes the endpoint.
-- [ ] End-to-end check recorded here: the exact `q2 preview` invocation, the
+- [x] End-to-end check recorded here: the exact `q2 preview` invocation, the
   observed re-theme, and a note that the output was inspected.
-- [ ] Decision recorded here from the latency run: no batching, or which
+- [x] Decision recorded here from the latency run: no batching, or which
   prefetch (directory names on a probe, stylesheet closure on a pull) and
   why, with the before/after counts.
+
+### Phase 2b record (2026-11-10)
+
+Shape:
+
+- The miss logic is target-independent, in
+  `crates/quarto-system-runtime/src/demand.rs` (`Demand`), unit-tested
+  natively with a stub handler; `WasmRuntime` delegates `file_read`,
+  `path_exists`, `path_metadata` and `dir_list` to it. The JS side is not
+  a `raw_module` extern but a handler object the worker installs with
+  `vfs_set_miss_handler` (`read`, `stat`, `list`, each a synchronous XHR;
+  `ts-packages/preview-runtime/src/worker/missShim.ts`). A throw answers
+  "absent". hub-client installs none.
+- Generation rules: `VirtualFileSystem::insert_pulled` never moves the
+  generation; `vfs_add_file` / `vfs_add_binary_file` go through
+  `add_file_if_changed` and answer `{ success, changed }`; the page's
+  mirror answers the same; `automergeSync.ts` skips `onFileContent` /
+  `onBinaryContent` when nothing changed. `/tmp` (render scratch) joined
+  the generation-free prefixes, so a render's temp directories no longer
+  flush the caches mid-render.
+- Pulled files ride back in the render answer into the page's mirror, so
+  the asset manifest sees them and their sync echo is an identical write.
+- The read set is recorded from the start of `render_page_for_preview`
+  and taken with `vfs_take_read_set`; `renderPageForPreview` returns it
+  as `readSet`. The project cache rule (a cache hit reports the reads
+  recorded when its entry was built) has no case today: render discovers
+  its project directly; only format resolution uses `cached_project`.
+  `Demand::record` is there for it.
+- Re-render filter (`shouldRerenderForTextChange`): with the active
+  page's read set, a text change re-renders when the path was read or
+  probed, or when the file is *new* in a directory the render listed.
+  Edits of existing files in a listed directory do not count: a listing
+  depends only on names, and project discovery lists every directory, so
+  counting them made the filter pass everything in project mode. `.tsx`
+  always passes (the main thread compiles it). Binary edits still always
+  re-render: in the preview AST, images are loaded on the main thread by
+  the asset walker, not read by the render, so they never enter the read
+  set. The `/api/preview/deps` filter remains the fallback until a set
+  exists; Phase 3 removes it.
+
+Measured, and the decision it made: a cold single-file render of a deck
+with a custom theme made 766 `stat` round trips. dart-sass tries about
+fourteen candidate names per `@import`, and Bootstrap's own imports are
+tried against the theme's directory first. That is 0.2 s on loopback and
+tens of seconds at 50 ms RTT. So the prediction rule is built: a probe
+miss asks for its parent directory's listing once per generation, the
+other candidates there are answered locally, and an absent directory
+answers everything beneath it. The same render now makes 5 round trips
+(3 listings, 2 reads). No other batching.
+
+Latency (`e2e/demand-vfs-latency.spec.ts`, run with
+`Q2_LATENCY_MEASURE=1`; `e2e/helpers/delayProxy.ts` delays each TCP chunk
+by half the RTT each way). Single-file deck with a custom theme, two
+partials and a bibliography; time from navigation to the themed render;
+two runs, within 50 ms of each other:
+
+| RTT | Cold render | Miss-route calls |
+|---|---|---|
+| 0 ms | 1200 ms | 3 list, 4 read |
+| 20 ms | 1690 ms | 3 list, 4 read |
+| 50 ms | 2080 to 2130 ms | 3 list, 4 read |
+| 100 ms | 3390 ms | 3 list, 4 read |
+
+The seven sequential pulls account for at most 0.7 s at 100 ms; the rest
+is the SPA's own assets and sync crossing the same link.
+
+E2E (`e2e/demand-vfs.spec.ts`, Chromium): a theme's partial tree is
+pulled and a partial created mid-session re-themes; a `.bib` resolves
+citations on the first render in both modes with one render; a cold
+render costs one render and a forced re-render makes no miss-route call;
+the read set re-renders for a read file and a file created where the
+render probed, not for an unrelated directory. Output inspected through
+the computed iframe background and the rendered citation text.
+
+Changed expectation: `static-resources.spec.ts` pinned "any `.css` edit
+under `_extensions/` re-renders". Its stylesheet belongs to no extension
+the document uses, so under D11 its edit no longer re-renders; the spec
+now pins that. The full Chromium project otherwise matches Phase 2a (the
+seven `typst-pdf-preview` failures are the local pandoc version).
+
+Observed while writing the specs, not changed here: a custom theme under
+`format: html: theme:` takes effect in the preview (which maps `html` to
+its own format), but under `format: q2-preview: theme:` the render never
+reads the file. Worth a look separately.
 
 ## Phase 3: measure, then remove the predictors
 
