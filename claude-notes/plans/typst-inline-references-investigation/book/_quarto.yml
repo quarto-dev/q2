@@ -1,0 +1,19 @@
+project:
+  type: book
+book:
+  title: "B"
+  author: "A. Author"
+  chapters:
+    - index.qmd
+    - ch1.qmd
+format: typst
+references:
+  - id: item
+    type: webpage
+    title: A page
+    author:
+      - family: Smith
+        given: Jane
+    issued:
+      date-parts: [[2020, 7, 12]]
+

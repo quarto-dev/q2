@@ -2099,6 +2099,20 @@
     "docs_url": "https://quarto.org/docs/errors/typst/Q-21-4",
     "since_version": "99.9.9"
   },
+  "Q-21-5": {
+    "subsystem": "typst",
+    "title": "Inline Reference Not Available To Typst",
+    "message_template": "A citation refers to an entry defined only in the front-matter `references:` list. Typst formats citations with its own bibliography by default, and that bibliography reads only the files listed in `bibliography:`, so Typst cannot resolve the citation. Set `citeproc: true` to format citations with citeproc instead, or move the entry into a `bibliography:` file (BibLaTeX `.bib` or Hayagriva `.yml`).",
+    "docs_url": "https://quarto.org/docs/errors/typst/Q-21-5",
+    "since_version": "99.9.9"
+  },
+  "Q-21-6": {
+    "subsystem": "typst",
+    "title": "Inline Reference Ignored By Typst",
+    "message_template": "A citation's key is defined both in the front-matter `references:` list and in a `bibliography:` file. Typst's own bibliography reads only the `bibliography:` files, so it uses that file's entry and ignores the inline one. Remove one of the two entries, or set `citeproc: true` to format citations with citeproc.",
+    "docs_url": "https://quarto.org/docs/errors/typst/Q-21-6",
+    "since_version": "99.9.9"
+  },
   "Q-22-1": {
     "subsystem": "math",
     "title": "Unknown Math Command",

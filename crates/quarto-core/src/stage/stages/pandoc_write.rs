@@ -497,6 +497,39 @@ fn meta_path_files(
         .collect()
 }
 
+/// The document's `bibliography:` files with the entry keys Typst will
+/// find in them (bd-yjf99rzx). Paths resolve as for the PDF request's
+/// copies of these files; a file that cannot be read or parsed gets no
+/// keys, which keeps [`crate::typst_citations::check`] from reporting
+/// keys it might define.
+fn typst_bibliography_files(
+    meta: &quarto_pandoc_types::ConfigValue,
+    path_ctx: &crate::config_paths::PathCtx<'_>,
+    project_dir: &Path,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+) -> Vec<crate::typst_citations::BibliographyFile> {
+    meta_path_files(meta, "bibliography", path_ctx)
+        .into_iter()
+        .map(|path| {
+            let absolute = if path.has_root() || path.is_absolute() {
+                path.clone()
+            } else {
+                project_dir.join(&path)
+            };
+            let keys = runtime
+                .file_read_string(&absolute)
+                .ok()
+                .and_then(|content| crate::typst_citations::bibliography_keys(&absolute, &content));
+            let display = absolute
+                .strip_prefix(project_dir)
+                .unwrap_or(&absolute)
+                .display()
+                .to_string();
+            crate::typst_citations::BibliographyFile { display, keys }
+        })
+        .collect()
+}
+
 /// A request path: UTF-8, absolute (relative paths resolve against the
 /// project directory), `/`-normalized.
 fn request_path(stage: &str, project_dir: &Path, path: &Path) -> Result<String, PipelineError> {
@@ -1140,6 +1173,40 @@ impl PandocWriteStage {
             document_dir: &doc_dir_abs,
         };
 
+        // bd-yjf99rzx: a citation that reaches Typst as `@key` with a key
+        // defined only in front-matter `references:` fails `typst compile`
+        // with a bare label error. Stop here with Q-21-5 instead, and warn
+        // (Q-21-6) about inline entries a `bibliography:` file shadows.
+        let citation_warnings = if is_typst {
+            let files = typst_bibliography_files(
+                &doc.ast.meta,
+                &path_ctx,
+                &project_dir,
+                ctx.runtime.as_ref(),
+            );
+            // With a non-`pdf` `output-ext` the `.typ` is the output and Typst
+            // never runs, so Q-21-5 is a warning there.
+            let typst_compiles =
+                crate::output_ext::is_typst_compile_ext(Some(&ctx.format.output_extension));
+            let check = crate::typst_citations::check(
+                &mut doc.ast.blocks,
+                &doc.ast.meta,
+                &files,
+                typst_compiles,
+            );
+            if !check.errors.is_empty() {
+                let mut diagnostics = check.errors;
+                diagnostics.extend(check.warnings);
+                return Err(PipelineError::stage_error_with_diagnostics(
+                    name,
+                    diagnostics,
+                ));
+            }
+            check.warnings
+        } else {
+            Vec::new()
+        };
+
         let (format_extra_args, extra_files) = if ctx.format.identifier == FormatIdentifier::Epub {
             epub_extra_args(&temp_root, &path_ctx, &doc.ast.meta, |p| rp(p))?
         } else {
@@ -1417,6 +1484,8 @@ impl PandocWriteStage {
         validate_mounts(&mut request, opts.collect_resources)
             .map_err(|msg| PipelineError::stage_error(name, msg))?;
         request.job_id = request.compute_job_id();
+
+        diagnostics.extend(citation_warnings);
 
         // T9.2: no binary bytes travel through `PipelineData` — pandoc
         // writes `output_path` directly. For typst, `output_path` is the

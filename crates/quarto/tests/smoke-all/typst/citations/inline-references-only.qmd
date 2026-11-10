@@ -1,0 +1,27 @@
+---
+title: "Typst: a citation to an inline-only reference"
+format: typst
+references:
+  - id: smith2020
+    type: webpage
+    title: A page
+    author:
+      - family: Smith
+        given: Jane
+    issued:
+      date-parts: [[2020, 7, 12]]
+_quarto:
+  tests:
+    typst:
+      shouldError: default
+      printsMessage:
+        level: ERROR
+        regex: "Q-21-5"
+---
+
+bd-yjf99rzx: Typst's native bibliography reads only `bibliography:` files,
+so a key defined only in front-matter `references:` would fail `typst
+compile` with a bare label error (in Quarto 1 too). Q2 stops first with
+Q-21-5.
+
+See [@smith2020].
