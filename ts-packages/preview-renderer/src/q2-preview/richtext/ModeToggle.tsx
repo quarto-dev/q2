@@ -6,6 +6,7 @@
 
 import { useContext, type MouseEvent } from 'react';
 import { PreviewContext } from '../PreviewContext';
+import { MarkdownIcon } from './ToolbarIcons';
 
 export function ModeToggle() {
   const ctx = useContext(PreviewContext);
@@ -34,23 +35,8 @@ export function ModeToggle() {
       title={isPlain ? 'Edit as rich text' : 'Edit as plain text'}
       onMouseDown={onMouseDown}
     >
-      {/* Markdown mark (dcurtis/markdown-mark); currentColor tracks the active state. */}
-      <svg viewBox="0 0 208 128" aria-hidden="true" focusable="false">
-        <rect
-          x="5"
-          y="5"
-          width="198"
-          height="118"
-          ry="10"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="10"
-        />
-        <path
-          fill="currentColor"
-          d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39zm125 0l-30-33h20V30h20v35h20z"
-        />
-      </svg>
+      {/* Markdown icon (currentColor — same glyph color as the rest of the toolbar). */}
+      <MarkdownIcon />
     </button>
   );
 }
