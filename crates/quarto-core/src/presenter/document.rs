@@ -1304,6 +1304,29 @@ print(1)
     }
 
     #[test]
+    fn a_subcap_group_through_present_units_keeps_caption_and_panel_ids() {
+        // OPR-7j: `present_document` and the splice stage both reach the cell step through
+        // `present_units`, so this covers render and preview.
+        let text = "```{python}\n#| label: fig-two\n#| fig-cap: A group\n#| fig-subcap:\n#|   - First\n#|   - Second\nplots()\n```\n";
+        let mut outputs = image_only();
+        outputs.extend(image_only());
+        let (reports, _dir) = reports_for(text, &[(0, outputs)], "html");
+        let [cell] = reports.as_slice() else {
+            panic!("{reports:?}");
+        };
+        let UnitOutcome::Replace(cell) = &cell.outcome else {
+            panic!("{cell:?}");
+        };
+        let md = &cell.text;
+        assert!(md.contains("::: {#fig-two .cell}"), "{md}");
+        assert!(
+            md.contains("{#fig-two-1}") && md.contains("{#fig-two-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nA group\n:::"), "{md}");
+    }
+
+    #[test]
     fn a_cell_and_a_span_each_return_a_replacement() {
         let text = "Value `{python} x`.\n\n```{python}\n1\n```\n";
         let (reports, _dir) = reports_for(text, &[(0, plain("42")), (1, stdout("hi\n"))], "html");

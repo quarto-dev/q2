@@ -19,7 +19,7 @@ dir = "julia/fig-subcap"
 file = "doc.qmd"
 requires = ["julia", "plots"]
 formats = ["html"]
-note = "a fig-subcap group with layout-ncol 2 plus references to the group and each member (bd-gbaykhth: blocker, not an allowlist candidate)"
+note = "a fig-subcap group with layout-ncol 2 plus references to the group and each member (OPR-7j: the presenter writes the group caption and panel ids; only interleaving differs)"
 
 [[document]]
 name = "jupyter/fig-subcap"

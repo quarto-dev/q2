@@ -3,7 +3,7 @@ title: 'OPR-8: user docs, embedded-docs refresh and end-to-end checks'
 date: 2026-11-08
 description: 'The last plan of the one-presenter epic. Writes the user-facing changes inside the existing docs pages (no page about differences), refreshes the embedded docs once, and runs the end-to-end checks for the whole epic, which merges as a single pull request.'
 status: ready
-depends-on: [opr-1b, opr-2, opr-5, opr-6, opr-7d, opr-4d, rfu-8]
+depends-on: [opr-1b, opr-2, opr-5, opr-6, opr-9g, opr-4d, rfu-8]
 lane: D
 ---
 

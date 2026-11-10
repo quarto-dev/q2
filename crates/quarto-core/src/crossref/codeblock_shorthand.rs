@@ -165,11 +165,12 @@ fn try_desugar_code_block(
         // engine — no wrapper, and the label stays in the body.
         Some(label) => match registry.classify_cite_id(label) {
             Some(def) if parsed.has(&format!("{}-subcap", def.ref_type)) => {
-                // A multi-panel cell (R/knitr `fig-subcap` et al.): leave
-                // `label`/`<reftype>-cap` in the body untouched. The engine
-                // needs its own `label` option intact to synthesize each
-                // panel's id and per-panel caption (see knitr's
-                // `output_label_placeholder`/`figure_cap` in hooks.R); the
+                // A multi-panel cell (`fig-subcap` et al.): leave
+                // `label`/`<reftype>-cap` in the body untouched. The
+                // presenter needs the `label` option intact to synthesize each
+                // panel's id and per-panel caption, for every engine (knitr's
+                // `output_label_placeholder`/`figure_cap` in hooks.R; the
+                // generic plot-count path of OPR-7j for Julia and Jupyter); the
                 // resulting self-labelled `.cell` div — with its nested,
                 // individually labelled/captioned panel images — is the
                 // exact shape the all-Lua subfloat pipeline
@@ -1166,8 +1167,8 @@ mod tests {
     /// also carries `fig-subcap` (R/knitr's multi-panel form) must be left
     /// entirely untouched pre-engine. Wrapping it the way a single-caption
     /// cell is wrapped would strip `label`/`fig-cap` from the body before
-    /// knitr runs, so knitr's own `output_label_placeholder`/`figure_cap`
-    /// (hooks.R) could no longer synthesize per-panel ids and captions —
+    /// the engine runs, so the presenter (knitr's `output_label_placeholder`/`figure_cap`
+    /// in hooks.R, and OPR-7j's generic path for Julia and Jupyter) could no longer synthesize per-panel ids and captions —
     /// the panel images would come back unlabelled, and the all-Lua
     /// subfloat pipeline (`parsefiguredivs.lua`) would have nothing to
     /// recognize as a subfloat. Leaving the cell alone preserves the

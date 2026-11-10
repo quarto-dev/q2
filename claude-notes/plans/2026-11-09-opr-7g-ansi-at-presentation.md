@@ -145,9 +145,9 @@ change the pin only if 7g itself adds or removes an entry (it should not).
       confirms what only running can:
   - [x] Run the table rows through the **old** Rust `strip_ansi_codes` and the **old** TS pattern; confirm the OSC 8 and
         lone-ESC differences listed above and record any row that differs from the table.
-  - [ ] Confirm with one Julia record (print a `printstyled` cell, read the record JSON) that no `quarto_resolved_options`
+  - [ ] (not run; relied on reading `ts_record.rs`, see Notes) Confirm with one Julia record (print a `printstyled` cell, read the record JSON) that no `quarto_resolved_options`
         key is present and that the output text holds ESC bytes (so the rule fires and the record is raw).
-  - [ ] Confirm that a structured knitr record cell **does** carry the key (the `gating_tests.rs` `is_structured` helper
+  - [ ] (not run; relied on the knitr corpus fixture `ansi_and_unicode`, see Notes) Confirm that a structured knitr record cell **does** carry the key (the `gating_tests.rs` `is_structured` helper
         reads it) and an R `cat("\033[31mx")` cell keeps its ESC through the presenter today.
   - [x] Read the integration branch for the 7f and 7h landings: re-grep `fenced_output_div` and `format_outputs_with` call
         sites, and the allowlist entry count, before editing.
@@ -166,7 +166,7 @@ change the pin only if 7g itself adds or removes an entry (it should not).
       branch) through it, deleting the separate `strip_ansi_codes`; add the one boolean on `CellOptions`, set in
       `present_with_inputs`, copied to each expansion\'s options; a test for an expanded unit and for `results: asis`.
       Add the span comment at `render_inline`. A grep gate: `rg -n 'strip_ansi_codes' crates/quarto-core/src` prints nothing.
-- [ ] **Across engines**, one small case each (add to the OPR-0b corpus where a plain-versus-recorded comparison
+- [ ] (partly: `julia/ansi-output` and `jupyter/ansi-output` added; the Positron-record case was not built; see Notes) **Across engines**, one small case each (add to the OPR-0b corpus where a plain-versus-recorded comparison
       applies; `crates/quarto-core/tests/fixtures/opr-parity/manifest.toml`):
   - Julia: `printstyled` to stdout, a colored write to stderr, and `@test` (the existing `julia/engine-reordering`
     document): plain and recorded identical, no ESC.
@@ -179,11 +179,11 @@ change the pin only if 7g itself adds or removes an entry (it should not).
     'binary(integration) & test(marimo_engine_e2e::)'` still passes (it runs; a skip is a signal).
 - [x] **Gate:** re-run the parity harness for `julia/` (the OPR-7c report gives the command) and confirm
       `julia/engine-reordering` is identical; the knitr corpus gate must not move. Put the counts in the notes.
-- [ ] **End to end through the binary:** render a Julia and a Python document with colored output on the plain route
+- [ ] (plain route: 0 ESC bytes in both; recorded route checked by the parity harness only, see Notes) **End to end through the binary:** render a Julia and a Python document with colored output on the plain route
       and on the recorded route (the OPR-7a scratch switch `OPR7A_FORCE`, re-added uncommitted as its notes describe, or
       the harness); read both HTML files; record the invocation and that no ESC byte is present in either.
 - [x] `cd hub-client && npm run build:wasm` (the presenter is in the WASM).
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the Windows
+- [ ] (nextest 8211 of 8212, the failure unrelated; lint only the known finding; Windows cross-clippy cannot run on macOS; clippy not reported in the notes) Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`; the Windows
       cross-clippy (say if it cannot run); `cargo xtask lint`; `q2 render --strict` on this file.
 - [x] Say in the notes how this relates to `bd-18410csp` (comment on it: the seam exists, the conversion is the open
       half) and to the Positron traceback check in RIU-3.
@@ -195,7 +195,7 @@ change the pin only if 7g itself adds or removes an entry (it should not).
       report): re-run only that document narrowed and say so. Write the report in `claude-notes/research/` in the 7c
       report\'s style with the counts: identical, allowlisted, unallowlisted (**the target is zero**), rejected, skipped.
       Also run the knitr corpus gate. If anything is unallowlisted, list each with its cause and **stop at box B**.
-- [ ] **B. THE FLIP** (Gordon authorizes this one edit). Set OPR-7d\'s `status:` from `blocked-on-gordon` to `ready`
+- [ ] (not done in 7g; moved to OPR-7j on 2026-11-10, see its checklist) **B. THE FLIP** (Gordon authorizes this one edit). Set OPR-7d\'s `status:` from `blocked-on-gordon` to `ready`
       (`claude-notes/plans/2026-11-08-opr-7d-switch-plain-render.md`) **only if all hold**: 7f, 7g and 7h are `complete`;
       the final gate has zero unallowlisted differences; every allowlist entry is `signed` (none `proposed`), or you list
       the proposed ones for Gordon and do not flip; no plan note says "needs Gordon" about anything still open. Otherwise
@@ -269,6 +269,10 @@ Positron traceback check.
 verified on the integration branch). The marimo tests ran and passed.
 
 **Box B: not flipped.** The final gate has six unallowlisted differences, and the 7h notes hold an open proposal
-(Plots scripts) that needs Gordon's decision. OPR-7d stays `blocked-on-gordon`. What it waits on: a whole-document
-allowlist form for the 4d interleaving (7d decision 4 says to add one), a decision on the Plots scripts, and
-signing or fixing `fig-subcap`.
+(Plots scripts) that needs Gordon's decision. OPR-7d stays `blocked-on-gordon`.
+
+*Reconciled 2026-11-10 (the run's list of what 7d waits on, corrected).* The whole-document allowlist form for the 4d
+interleaving is **a step inside 7d** (its decision 5), not something 7d waits for. The Plots-script decision was answered
+by OPR-7i (Gordon's decisions of 2026-11-10 adopt the proposal's first option; the parity re-run in 7i's notes shows the
+script lines gone from `julia/records-plot` and `julia/positron-cache`). `julia/fig-subcap` is OPR-7j's. The flip itself
+moved to OPR-7j, the last prerequisite (its exit criteria).

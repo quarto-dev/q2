@@ -197,6 +197,32 @@ mod tests {
         present_cell_step("python", "", &author, cell, engine, scope, &mut fig).unwrap()
     }
 
+    // === OPR-7j: a group on the fallback path ===
+
+    #[test]
+    fn a_chunk_without_resolved_options_renders_the_group_on_the_generic_path() {
+        // No `quarto_resolved_options`, so no knitr `figure_count`: the cell takes the generic
+        // path (the same one Julia and Jupyter take) and the plot count makes it a group.
+        const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+        let def = knitr_like();
+        let mut c = cell(&def, None);
+        c.outputs = (0..2)
+            .map(|_| json!({"output_type": "display_data", "data": {"image/png": PNG}, "metadata": {}}))
+            .collect();
+        let md = present(
+            "#| label: fig-g\n#| fig-cap: A group\n#| fig-subcap:\n#|   - First\n#|   - Second",
+            &c,
+            Some(&entry(&def)),
+            None,
+        );
+        assert!(md.contains("#fig-g .cell"), "{md}");
+        assert!(
+            md.contains("{#fig-g-1}") && md.contains("{#fig-g-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nA group\n:::"), "{md}");
+    }
+
     // === OPR-7f: the cell\'s `quarto_attrs` reach the wrapper; refusals come back ===
 
     #[test]

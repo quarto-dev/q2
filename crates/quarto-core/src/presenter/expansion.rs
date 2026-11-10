@@ -173,6 +173,35 @@ mod tests {
     }
 
     #[test]
+    fn an_expansion_with_two_plots_renders_the_group() {
+        // The plot count is set where options meet the result, not in `CellInputs`, which an
+        // expanded unit never reads (OPR-7j).
+        let plot = |i: u64| {
+            json!({"output_type": "display_data",
+                   "data": {"image/png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="},
+                   "metadata": {}, "quarto_expansion": {"index": i}})
+        };
+        let split = split_expansions(&[
+            marker(
+                1,
+                "#| label: fig-two\n#| fig-cap: A group\n#| fig-subcap:\n#|   - First\n#|   - Second\nplots()",
+            ),
+            plot(1),
+            plot(1),
+        ])
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let md = render_expansions("julia", &split, None, &mut fig).unwrap();
+        assert!(md.contains("::: {#fig-two .cell}"), "{md}");
+        assert!(
+            md.contains("{#fig-two-1}") && md.contains("{#fig-two-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nA group\n:::"), "{md}");
+    }
+
+    #[test]
     fn untagged_outputs_are_not_an_expansion() {
         let plain = json!({"output_type": "stream", "name": "stdout", "text": ["x"]});
         assert_eq!(split_expansions(&[plain]), None);

@@ -128,6 +128,15 @@ pub fn render_cell_with(
     render_cell_whole(language, code, result, options, &[], fig, visibility)
 }
 
+/// The plots of a cell result that become figures (included graphics carry no figure id).
+fn count_plots(result: &CellResult) -> usize {
+    result
+        .outputs
+        .iter()
+        .filter(|o| is_plot_output(o) && !is_included_graphic(o))
+        .count()
+}
+
 /// [`render_cell_with`] knowing where each expression of `code` starts (`starts`: line
 /// indices, empty when unknown), which knitr's `prompt` needs.
 fn render_cell_whole(
@@ -139,6 +148,7 @@ fn render_cell_whole(
     fig: &mut dyn FigureSink,
     visibility: CellVisibility,
 ) -> String {
+    let options = &options.clone().with_plot_count(count_plots(result));
     let source = if visibility.echo && !code.trim().is_empty() {
         echoed_source_fence_with(language, code, options, starts)
     } else {
@@ -198,6 +208,8 @@ pub fn render_cell_interleaved(
         }
         None => (result, anchors, options),
     };
+    let counted = options.clone().with_plot_count(count_plots(result));
+    let options = &counted;
     let total = code.lines().count();
     let usable = anchors.filter(|a| {
         a.len() == result.outputs.len()
@@ -2498,6 +2510,253 @@ mod option_tests {
     fn fig_cap_is_the_image_alt_text() {
         let o = opts(serde_json::json!({"fig.cap": "A *marked up* caption"}));
         assert_eq!(images(&o, vec![plot()]), ["![A *marked up* caption](P)"]);
+    }
+
+    // === OPR-7j: group caption and panel ids without a knitr figure count ===
+
+    #[test]
+    fn a_labeled_subcap_group_without_a_figure_count_keeps_caption_and_panel_ids() {
+        // Julia/Jupyter shape: label, fig-cap, fig-subcap and two plots, no `figure_count`.
+        let o = opts(
+            serde_json::json!({"label": "fig-two", "fig.cap": "A group", "fig.subcap": ["First", "Second"]}),
+        );
+        let md = render_figs(&o, vec![plot(), plot()]);
+        assert!(md.contains("::: {#fig-two .cell}"), "{md}");
+        assert!(
+            md.contains("![First](") && md.contains("){#fig-two-1}"),
+            "{md}"
+        );
+        assert!(
+            md.contains("![Second](") && md.contains("){#fig-two-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nA group\n:::"), "{md}");
+    }
+
+    #[test]
+    fn a_one_plot_subcap_group_is_not_a_group() {
+        // Negative control: one plot, one subcap. knitr and plain Julia render one figure.
+        let o = opts(
+            serde_json::json!({"label": "fig-two", "fig.cap": "A group", "fig.subcap": ["Only"]}),
+        );
+        let md = render_figs(&o, vec![plot()]);
+        assert!(!md.contains("{#fig-two-1}"), "{md}");
+        assert!(!md.contains("::: {#fig-two .cell}"), "{md}");
+    }
+
+    #[test]
+    fn a_labeled_figure_without_subcap_is_unchanged() {
+        // Negative control: no `fig-subcap`, so no group even with two plots.
+        let o = opts(serde_json::json!({"label": "fig-two", "fig.cap": "Cap"}));
+        let md = render_figs(&o, vec![plot(), plot()]);
+        assert!(!md.contains("{#fig-two-1}"), "{md}");
+        assert!(!md.contains("::: {#fig-two .cell}"), "{md}");
+    }
+
+    #[test]
+    fn a_labeled_single_figure_without_a_figure_count_is_unchanged() {
+        // The case a generic figure count would have broken (D14): one labeled plot.
+        let o = opts(serde_json::json!({"label": "fig-one", "fig.cap": "One"}));
+        let md = render_figs(&o, vec![plot()]);
+        assert!(!md.contains("#fig-one"), "{md}");
+        assert!(!md.contains("::: {#fig-one"), "{md}");
+    }
+
+    #[test]
+    fn subcaptions_recycle_over_more_plots_and_keep_panel_ids() {
+        let o =
+            opts(serde_json::json!({"label": "fig-g", "fig.cap": "G", "fig.subcap": ["C1", "C2"]}));
+        let md = render_figs(&o, vec![plot(), plot(), plot()]);
+        for n in 1..=3 {
+            assert!(md.contains(&format!("{{#fig-g-{n}}}")), "{md}");
+        }
+        assert!(md.contains("![C1](") && md.contains("![C2]("), "{md}");
+    }
+
+    #[test]
+    fn a_plot_and_an_included_graphic_is_not_a_group() {
+        // Included graphics carry no figure id and do not count toward the two plots a group
+        // needs.
+        let graphic = {
+            let mut data = std::collections::HashMap::new();
+            data.insert("image/png".to_string(), serde_json::json!(PNG));
+            CellOutput::DisplayData {
+                data,
+                metadata: serde_json::json!({
+                    "quarto_knitr": {"include_graphics": true},
+                    "quarto_file_path": "x.png"
+                }),
+            }
+        };
+        let o =
+            opts(serde_json::json!({"label": "fig-g", "fig.cap": "G", "fig.subcap": ["A", "B"]}));
+        let md = render_figs(&o, vec![plot(), graphic]);
+        assert!(!md.contains("::: {#fig-g .cell}"), "{md}");
+        assert!(!md.contains("{#fig-g-1}"), "{md}");
+    }
+
+    #[test]
+    fn an_engine_written_panel_id_loses_to_the_generated_one() {
+        // OPR-7j, item 4: the presenter cannot see an id the engine put in an output's own
+        // markdown (a hand-written `{#fig-l-1}` duplicates the generated id; author error,
+        // not reproducible at this level because the cell step does not render that mime).
+        // What it can see is an engine `quarto_attrs` id on a plot: the presenter's id wins
+        // (`build_head`), so the id appears once. Pinned so a change is a visible decision.
+        let mut data = std::collections::HashMap::new();
+        data.insert("image/png".to_string(), serde_json::json!(PNG));
+        let user = CellOutput::DisplayData {
+            data,
+            metadata: serde_json::json!({"quarto_attrs": {"id": "fig-l-1"}}),
+        };
+        let o =
+            opts(serde_json::json!({"label": "fig-l", "fig.cap": "L", "fig.subcap": ["A", "B"]}));
+        let md = render_figs(&o, vec![user, plot()]);
+        assert_eq!(md.matches("fig-l-1}").count(), 1, "{md}");
+    }
+
+    fn group_opts(extra: serde_json::Value) -> CellOptions {
+        let mut j = serde_json::json!({"label": "fig-g", "fig.cap": "G", "fig.subcap": ["A", "B"]});
+        for (k, v) in extra.as_object().unwrap() {
+            j[k] = v.clone();
+        }
+        opts(j)
+    }
+
+    fn render_group_vis(o: &CellOptions, vis: CellVisibility) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        fig.begin_cell();
+        render_cell_with("r", "x\n", &result(vec![plot(), plot()]), o, &mut fig, vis)
+    }
+
+    fn assert_group(md: &str) {
+        assert!(md.contains("::: {#fig-g .cell"), "{md}");
+        assert!(
+            md.contains("{#fig-g-1}") && md.contains("{#fig-g-2}"),
+            "{md}"
+        );
+        assert!(md.trim_end().ends_with("\nG\n:::"), "{md}");
+    }
+
+    #[test]
+    fn layout_options_keep_the_group_and_panel_ids() {
+        // Design rule 7: the panel references resolve under `layout-ncol` and `layout-nrow`.
+        for (k, v) in [("layout-ncol", 2), ("layout-nrow", 2)] {
+            let md = render_figs(
+                &group_opts(serde_json::json!({ k: v })),
+                vec![plot(), plot()],
+            );
+            assert_group(&md);
+            assert!(md.contains(&format!("{k}=\"2\"")), "{md}");
+        }
+    }
+
+    #[test]
+    fn fig_subcap_without_a_label_has_no_group_and_no_ids() {
+        let o = opts(serde_json::json!({"fig.cap": "G", "fig.subcap": ["A", "B"]}));
+        let md = render_figs(&o, vec![plot(), plot()]);
+        assert!(!md.contains("{#"), "{md}");
+        assert!(md.contains("![A](") && md.contains("![B]("), "{md}");
+        assert!(!md.contains("\nG\n"), "{md}");
+    }
+
+    #[test]
+    fn echo_false_still_renders_the_group() {
+        // The plots are output; hiding the source changes nothing about the group.
+        let vis = CellVisibility {
+            echo: false,
+            ..CellVisibility::VISIBLE
+        };
+        let md = render_group_vis(&group_opts(serde_json::json!({})), vis);
+        assert_group(&md);
+        assert!(!md.contains("cell-code"), "{md}");
+    }
+
+    #[test]
+    fn results_asis_does_not_change_a_plot_group() {
+        let md = render_figs(
+            &group_opts(serde_json::json!({"results": "asis"})),
+            vec![plot(), plot()],
+        );
+        assert_group(&md);
+    }
+
+    #[test]
+    fn a_hidden_group_emits_nothing_and_no_stray_caption() {
+        // `include: false`: nothing renders, so the references stay unresolved as before.
+        let md = render_group_vis(&group_opts(serde_json::json!({})), CellVisibility::HIDDEN);
+        assert!(!md.contains("fig-g"), "{md}");
+        assert!(!md.contains("\nG\n"), "{md}");
+    }
+
+    #[test]
+    fn output_false_gives_no_panels() {
+        // `output: false` with the source shown: the panels are gone; pin whether a caption
+        // is left behind.
+        let vis = CellVisibility {
+            output: false,
+            ..CellVisibility::VISIBLE
+        };
+        let md = render_group_vis(&group_opts(serde_json::json!({})), vis);
+        assert!(!md.contains("{#fig-g-1}"), "{md}");
+        assert!(!md.contains("![A]("), "{md}");
+        // The group caption stays with the cell, with no panels (as plain Julia does).
+        assert!(
+            md.contains("::: {#fig-g .cell}") && md.contains("\nG\n:::"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn fig_subcap_true_keeps_ids_with_empty_subcaptions() {
+        let md = render_figs(
+            &group_opts(serde_json::json!({"fig.subcap": true})),
+            vec![plot(), plot()],
+        );
+        assert_group(&md);
+        assert!(md.contains("![](") && !md.contains("![A]("), "{md}");
+    }
+
+    #[test]
+    fn a_non_fig_label_keeps_the_recorded_routes_behavior() {
+        // Known difference from plain Julia (`foo-1`, `foo-2`); the flip changes it, not 7j.
+        let md = render_figs(
+            &group_opts(serde_json::json!({"label": "foo"})),
+            vec![plot(), plot()],
+        );
+        assert!(!md.contains("{#foo"), "{md}");
+        assert!(!md.contains("\nG\n"), "{md}");
+    }
+
+    #[test]
+    fn a_list_fig_cap_uses_its_first_entry_as_the_group_caption() {
+        let md = render_figs(
+            &group_opts(serde_json::json!({"fig.cap": ["L1", "L2"]})),
+            vec![plot(), plot()],
+        );
+        assert!(md.contains("::: {#fig-g .cell"), "{md}");
+        assert!(md.trim_end().ends_with("\nL1\n:::"), "{md}");
+    }
+
+    #[test]
+    fn a_plot_and_a_widget_is_one_plot_so_not_a_group() {
+        // The widget is not a plot (`is_plot_output`), so the count is 1: no group.
+        let mut data = std::collections::HashMap::new();
+        data.insert(
+            "application/vnd.jupyter.widget-view+json".to_string(),
+            serde_json::json!({"model_id": "abc"}),
+        );
+        data.insert("text/plain".to_string(), serde_json::json!("Widget"));
+        let widget = CellOutput::DisplayData {
+            data,
+            metadata: Default::default(),
+        };
+        let md = render_figs(&group_opts(serde_json::json!({})), vec![plot(), widget]);
+        assert!(!md.contains("{#fig-g-1}"), "{md}");
+        assert!(!md.contains("::: {#fig-g .cell"), "{md}");
+        // What renders instead: the one plot, then the widget's text fallback.
+        assert!(md.contains("![A]("), "{md}");
+        assert!(md.contains("Widget"), "{md}");
     }
 
     #[test]

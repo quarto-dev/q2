@@ -325,7 +325,7 @@ If you stop early, the handoff says the subtree commits are local and must stay 
 - [x] Reconcile this checklist, fill in "Notes from the run", set `status: complete`, rebase, re-run the gates, fast-forward
       from workspace-1 (protocol, "Landing a plan"). Report snapshot or golden changes by count and file (expected:
       `ts_wire_parity.json`, the new oracle fixtures, and the parity goldens only; list them).
-- [ ] **\[Gordon\]** Push the subtree commits to the fork and refresh the subtree (above). Not an agent step.
+- [x] **\[Gordon\]** Push the subtree commits to the fork and refresh the subtree (above). Done 2026-11-10 (Gordon's go-ahead): the four mixed commits that touch the subtree (OPR-3, OPR-5, OPR-4c, RFU-2) were first split with `git history split` so every subtree commit is subtree-only, then `git subtree push` fast-forwarded `q2/node-port` from `ea4dceef` to `493762536` (five commits, this plan's last). **Not done:** the `cargo xtask pull-extension-subtree julia-engine` refresh, which records the fork's tip as the import point (`resources/vendored.toml` still names the old split).
 
 ## Exit criteria
 

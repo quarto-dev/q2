@@ -197,7 +197,9 @@ how, do not assume).
   ids in the presenter (the direction of option B) for the current Quarto 1 behavior only, the knitr path stays option A,
   and Phase 3 may move or replace it. The markup it writes (`fig-x-1`, `fig-x-2`, the group caption) is the same markup
   the model in Phase 4 needs, so the later work reads it, adds the `parent` link and the "(a)" numbering, and removes
-  7j\'s ids only if the chosen option creates them elsewhere.
+  7j\'s ids only if the chosen option creates them elsewhere. One consequence for the Phase 2 baseline: after 7j a Jupyter group
+counts as n + 1 figures for n panels (rendered 2026-11-10: a group of 2 shifts later figures by 2, of 3 by 3), so every later figure in a Jupyter document is numbered n too high against Quarto 1 (today one
+too low; knitr and Julia already number this way). Include a later-figure case per engine in the corpus.
 - That epic keeps real subfloats out of scope (OPR-7d decision 3, replaced on 2026-11-10 by 7j, and the 7c report cite
   the strands). After 7j the flip changes nothing about figure groups; tables are unchanged by the flip (see "Subtables are in scope"
   above, which is where they get fixed). Nothing here blocks the epic any more than it already is by 7j, which is a prerequisite of 7d.

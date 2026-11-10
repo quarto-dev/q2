@@ -283,6 +283,10 @@ pub struct CellOptions {
     /// (a figure label becomes `label` or `label-<i>` on the image, hooks.R). `None` for engines
     /// whose label is the crossref layer\'s.
     figure_count: Option<usize>,
+    /// How many plots (not included graphics) the cell holds, set by the cell renderer for every
+    /// engine. Consulted only when `figure_count` is `None`: a group (label, `fig-cap`,
+    /// `fig-subcap`) needs two or more plots (OPR-7j).
+    plot_count: Option<usize>,
     /// A `tbl-` label: the cell\'s id (hooks.R lets only table labels through).
     table_label: Option<String>,
     /// A knitr cell: printed text keeps its trailing spaces (only the final newlines go).
@@ -514,6 +518,7 @@ impl CellOptions {
             keep_trailing_space: false,
             unknown: Vec::new(),
             figure_count: None,
+            plot_count: None,
             figure_label: first("label")
                 .filter(|l| l.trim_start_matches('#').starts_with("fig-"))
                 .map(|l| l.trim_start_matches('#').to_string()),
@@ -621,10 +626,18 @@ impl CellOptions {
         self
     }
 
+    /// Say how many plots the cell holds, for engines with no knitr figure count (Julia,
+    /// Jupyter): a labeled `fig-cap` plus `fig-subcap` cell with two or more is a group.
+    pub fn with_plot_count(mut self, count: usize) -> Self {
+        self.plot_count = Some(count);
+        self
+    }
+
     /// Whether the label moves to the cell div: hooks.R keeps a cell label only when both
-    /// `fig.cap` and `fig.subcap` are set (the figures then carry `label-<i>`).
+    /// `fig.cap` and `fig.subcap` are set (the figures then carry `label-<i>`). Without a knitr
+    /// figure count the cell needs two or more plots to be a group (OPR-7j).
     fn label_on_cell(&self) -> bool {
-        self.figure_count.is_some()
+        (self.figure_count.is_some() || self.plot_count.is_some_and(|n| n >= 2))
             && self.figure_label.is_some()
             && !self.fig_cap.is_empty()
             && !self.fig_subcap.is_empty()
@@ -652,10 +665,15 @@ impl CellOptions {
     }
 
     /// `#label` for the `index`th plot\'s image (from 0): the label itself for one plot,
-    /// `label-<i>` for several (hooks.R). Only when the figure count is known.
+    /// `label-<i>` for several (hooks.R). With no knitr figure count, only the group case
+    /// (see [`Self::label_on_cell`]) gets an id, `label-<i>`.
     fn plot_image_id(&self, index: usize) -> Option<String> {
-        let n = self.figure_count?;
         let label = self.figure_label.as_ref()?;
+        let Some(n) = self.figure_count else {
+            return self
+                .label_on_cell()
+                .then(|| format!("#{label}-{}", index + 1));
+        };
         Some(if n > 1 {
             format!("#{label}-{}", index + 1)
         } else {

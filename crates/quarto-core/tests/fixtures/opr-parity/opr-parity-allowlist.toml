@@ -11,9 +11,8 @@
 #   status  `proposed` or `signed`
 #   reason  why the divergence is intended, with the evidence
 #
-# Not an entry, on purpose: the references to a `fig-subcap` group. The recorded Julia route leaves
-# them unresolved where the plain route resolves them (wrongly). That is a blocker for Gordon
-# (bd-gbaykhth, bd-au5gts6e; OPR-7d decision 3), not an allowlist candidate.
+# Not an entry: the group caption, the panel ids and the references to a `fig-subcap` group. The
+# presenter now writes them for every engine (OPR-7j), so the recorded and plain Julia routes agree.
 
 [[entry]]
 name = "knitr empty cell wrapper"

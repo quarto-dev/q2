@@ -71,7 +71,7 @@ and no size. Nobody found where plain gets 140 by 90.
 - [x] **For a case that is harmless,** add an allowlist entry in the OPR-7c style (a rule in the harness `RULES`, a
       harness test written with it, `status = "proposed"`, a reason that cites your evidence). Do not sign it:
       signing is Gordon\'s.
-- [ ] Re-run the Julia part of the gate and the knitr corpus gate; put the counts in the notes. The target is that
+- [ ] (only a narrowed re-run was done; the 7g final gate report has the full counts, and the Plots-script difference A is still unallowlisted) Re-run the Julia part of the gate and the knitr corpus gate; put the counts in the notes. The target is that
       neither difference is left unallowlisted and unexplained.
 - [x] **End to end through the binary** for each fix: render the document on the plain route and on the recorded route
       (the OPR-7a scratch switch `OPR7A_FORCE`, re-added uncommitted as its notes describe, or the harness) and read
@@ -93,6 +93,7 @@ and no size. Nobody found where plain gets 140 by 90.
 
 - **B (fixed, landed):** cause and fix in [the research note](../research/2026-11-09-opr-7h-plots-differences.md).
   Changed: `format_outputs` in `presenter/cell.rs` (one match arm) and one new test beside the existing metadata-size test.
+- **A (answered 2026-11-10 by [OPR-7i](2026-11-10-opr-7i-jupyter-page-dependencies.md); the first note below is the run's own, kept for the record):** Gordon chose the proposal's option 1 (the engine declares a label, core runs the Quarto 1 widget-dependency scan on every route); 7i landed it, and its parity re-run shows no script line left on `julia/records-plot` or `julia/positron-cache`. No allowlist entry for the script lines, as the proposal advised.
 - **A (not fixed, proposal):** the scripts come from a notebook-wide `text/html` scan in the plain route; the recorded
   route has no equivalent, which is a real gap for widget pages. Not small (record or cross-stage change), so no fix and no
   allowlist entry (a rule would hide the broken case). Proposal in the note. The box "for a case that is harmless" is ticked
