@@ -113,7 +113,8 @@
       "out-extra",
       "classes",
       "fig-column",
-      "tbl-column"
+      "tbl-column",
+      "record-sources"
      ],
      "version": 1
     },
