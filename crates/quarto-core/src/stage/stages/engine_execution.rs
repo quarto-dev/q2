@@ -112,7 +112,10 @@ pub struct EngineExecutionStage {
 
     /// OPR-7a: build the engines' record in memory so core can present from it, without
     /// serializing it, emitting it to the observer or writing a file unless something asks
-    /// for that. Internal control, off by default; OPR-7d sets it for plain render.
+    /// for that. Internal control, on by default since OPR-9g (a plain render of a Julia or
+    /// knitr document is presented from the record); there is no user-facing opt-out.
+    /// [`with_present_from_record`](Self::with_present_from_record)`(false)` exists for tests
+    /// that need the pre-record route.
     present_from_record: bool,
 }
 
@@ -126,7 +129,7 @@ impl EngineExecutionStage {
     pub fn new() -> Self {
         Self {
             spliced_engines: HashSet::new(),
-            present_from_record: false,
+            present_from_record: true,
         }
     }
 

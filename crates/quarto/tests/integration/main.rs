@@ -40,6 +40,7 @@ pub mod no_execute_cli;
 pub mod output_dir_images_e2e;
 pub mod pandoc_read_locations_e2e;
 pub mod pandoc_read_stderr_e2e;
+pub mod plain_render_recorded_route_cli;
 pub mod preview_cli;
 pub mod preview_static_e2e;
 pub mod project_pandoc_gate_e2e;

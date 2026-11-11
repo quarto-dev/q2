@@ -189,6 +189,22 @@ describe('engine-record payloads (EXR-13, EXR-14)', () => {
     ).toBeGreaterThan(ast.lastIndexOf('print(1)'));
   });
 
+  // OPR-9g: `format: html` runs the engine stage, which now coalesces a replayed record in the
+  // browser. A record recorded before the flip must still render there.
+  it('a record recorded before the flip still renders through the html branch', async () => {
+    wasm.vfs_add_file('/project/doc.qmd', DOC.replace('format: q2-preview', 'format: html'));
+    const result = JSON.parse(
+      await wasm.render_page_in_project_with_attribution(
+        '/project/doc.qmd',
+        undefined,
+        undefined,
+        recordBytes,
+      ),
+    ) as RenderResponse & { html?: string };
+    expect(result.success, `Render failed: ${result.error}`).toBe(true);
+    expect(result.html!.includes(MARKER), 'the recorded output is presented').toBe(true);
+  });
+
   it('an unrecognized payload still fails with an error naming both shapes', async () => {
     wasm.vfs_add_file('/project/doc.qmd', DOC);
     const junk = new Uint8Array(gzipSync(Buffer.from('{"hello":1}')));

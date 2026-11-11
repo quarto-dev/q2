@@ -1,7 +1,9 @@
 //! OPR-0b: the parity harness for the plain-render switch.
 //!
 //! A document is rendered twice through the real render path (`render_document_to_file`): once
-//! plain, once with `execute: {record: true}` (the recorded route, which the presenter owns).
+//! plain, once with `execute: {record: true}`. Before OPR-9g these were two routes (the engine's
+//! markdown versus the presenter); since the flip both are the recorded route, and the harness
+//! is its regression test (identity, empty allowlist).
 //! Each side is reduced to its output text plus the SET OF FIGURE FILE NAMES it wrote (Julia
 //! Plots figures are inline base64, so the HTML alone hides a file-name change), normalized,
 //! and compared. A difference is either explained by a named rule of the allowlist

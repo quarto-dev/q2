@@ -243,15 +243,17 @@ pub struct ExecutionContext {
     /// Whether the engine should build an execution record as a side product
     /// of this run (EXR-5). Set by `EngineExecutionStage` from
     /// `PipelineObserver::wants_execution_record` or from
-    /// `execute: {record: true}` in the merged metadata; a plain render leaves
-    /// it `false` and the engine allocates nothing for the record.
+    /// `execute: {record: true}` in the merged metadata. A plain render leaves it `false`, but
+    /// since OPR-9g the engine still builds the record in memory (see
+    /// [`present_from_record`](Self::present_from_record)); it just serializes and writes nothing.
     pub want_record: bool,
 
     /// Whether core will present this document from the engine's record (OPR-7a). Unlike
     /// [`want_record`](Self::want_record) it asks for nothing to be serialized, emitted or
     /// written: engines build the record in memory (see [`builds_record`](Self::builds_record))
     /// and core presents from it when the engine acknowledges the offer. Internal control,
-    /// `false` unless the pipeline sets it.
+    /// `true` in the render pipelines since OPR-9g (the stage default); `false` in a bare
+    /// `ExecutionContext`.
     pub present_from_record: bool,
 }
 

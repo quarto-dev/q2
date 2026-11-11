@@ -145,12 +145,11 @@ fn run_stage_inner(
     let mut stages = build_html_pipeline_stages_with_options(None);
     if let Some(idx) = stages.iter().position(|s| s.name() == "engine-execution") {
         stages.truncate(idx + 1);
-        if present_from_record {
-            stages[idx] = Box::new(
-                quarto_core::stage::stages::EngineExecutionStage::new()
-                    .with_present_from_record(true),
-            );
-        }
+        // `new()` presents from the record since OPR-9g, so the flag is always set explicitly.
+        stages[idx] = Box::new(
+            quarto_core::stage::stages::EngineExecutionStage::new()
+                .with_present_from_record(present_from_record),
+        );
     }
     let pipeline = Pipeline::new(stages).expect("pipeline stages are compatible");
     let data = PipelineData::LoadedSource(LoadedSource::new(input.to_path_buf(), content));

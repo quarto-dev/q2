@@ -1,5 +1,10 @@
 //! OPR-0b: the gated runner for the parity harness (`opr_parity_harness`).
 //!
+//! Since OPR-9g this is a regression test of the recorded route. A plain render of a Julia or
+//! knitr document is presented from an in-memory record, the same route `execute: {record: true}`
+//! takes, so the two sides must be identical and the allowlist is empty. The pre-flip run (where
+//! the routes differed and nine entries explained it) is the OPR-9f gate report.
+//!
 //! `opr_parity_report` does nothing unless `OPR_PARITY_REPORT` is set: a path to write the
 //! markdown report to, or `1` to print it to stderr. A full run renders every document twice and
 //! takes many minutes, and R and Julia are absent from CI, so it is not part of any default run.
@@ -677,57 +682,16 @@ mod tests {
     }
 
     #[test]
-    fn the_seeded_allowlist_parses_and_each_entry_is_proposed_or_signed() {
+    fn the_seeded_allowlist_is_empty_because_both_sides_present_from_the_record() {
+        // OPR-9g: the flip made the plain route the recorded route, so the nine pre-flip entries
+        // (three plain-versus-presenter rules and six Julia interleaving entries) fired 0 times
+        // and were removed. A new entry needs a new, signed reason; this test is the place that
+        // notices one appearing.
         let list = Allowlist::load(&corpus_root().join("opr-parity-allowlist.toml")).unwrap();
-        // OPR-7f removed the five proposed Julia entries (wrapper id, data-quarto, output
-        // execution count, figure output class, figure file names): the engine route and the
-        // presenter now agree on them, so only the three signed entries were left. OPR-9e adds one
-        // proposed entry: the pinned epub interleaving. OPR-9f adds five more: the interleaving
-        // normalizer for presentation-attrs, records-plot, fig-subcap and capture-facts, and
-        // capture-facts' pinned difference. Gordon signed all six on 2026-11-11.
-        assert_eq!(list.entries.len(), 9);
         assert!(
-            list.entries
-                .iter()
-                .all(|e| e.status == "proposed" || e.status == "signed")
-        );
-        // A signed entry says who signed it and when, in its reason: the first three on 2026-11-09
-        // (OPR-7d start condition), the six interleaving entries on 2026-11-11 (OPR-9f).
-        let mut signed: Vec<&str> = list
-            .entries
-            .iter()
-            .filter(|e| e.status == "signed")
-            .map(|e| e.rule.as_str())
-            .collect();
-        signed.sort_unstable();
-        assert_eq!(
-            signed,
-            [
-                "julia-code-leading-newline",
-                "julia-interleaved-cell",
-                "julia-interleaved-cell",
-                "julia-interleaved-cell",
-                "julia-interleaved-cell",
-                "knitr-adjacent-blockquotes",
-                "knitr-empty-cell-wrapper",
-                "pinned-difference",
-                "pinned-difference"
-            ]
-        );
-        assert!(
-            list.entries
-                .iter()
-                .filter(|e| e.status == "signed")
-                .all(|e| {
-                    e.reason.contains("Signed: Gordon, 2026-11-09")
-                        || e.reason.contains("Signed: Gordon, 2026-11-11")
-                })
-        );
-        // The subfigure-group references are a blocker, not an allowlist candidate.
-        assert!(
-            list.entries
-                .iter()
-                .all(|e| !e.reason.contains("fig-subcap") || e.reason.contains("not"))
+            list.entries.is_empty(),
+            "the recorded-route regression test runs with no allowlist; entries: {:?}",
+            list.entries.iter().map(|e| &e.name).collect::<Vec<_>>()
         );
     }
 

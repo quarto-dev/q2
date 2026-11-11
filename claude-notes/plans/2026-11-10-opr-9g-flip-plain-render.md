@@ -2,7 +2,7 @@
 title: 'OPR-9g: flip plain render of Julia and knitr to the recorded route'
 date: 2026-11-10
 description: 'Turns the internal present_from_record control on by default, so a plain q2 render of a Julia or knitr document is presented by the Rust presenter from an in-memory record, writing nothing to .quarto. Keeps the LaTeX family and uncovered targets on the engine route, quietly, and converts the parity harness into a regression test of the recorded route.'
-status: ready
+status: complete
 depends-on: [opr-9f]
 lane: D
 ---
@@ -107,7 +107,7 @@ presenter, as a recorded render does. Concretely:
 
 ## Checklist (tests first; every box is `[unattended]` except the preview step)
 
-- [ ] **Tests first, through the binary** (model `crates/quarto/tests/integration/no_execute_cli.rs`, which has
+- [x] **Tests first, through the binary** (model `crates/quarto/tests/integration/no_execute_cli.rs`, which has
       `q2_render` and `Q2_BIN` but no Julia or knitr helper; `r_available()` and `julia_available()` live in
       `quarto-core` tests, so the `quarto` crate needs its own copy or a shared one): a plain render of a Julia and a
       knitr document is presented from a record (the output carries the recorded-route markup, for example the `.cell`
@@ -120,7 +120,7 @@ presenter, as a recorded render does. Concretely:
       is identical before and after; there is no opt-out to test (decision 2). The Julia and knitr binary tests skip
       cleanly when the engine is absent and **are local evidence only**: CI installs a Jupyter venv but neither R nor
       Julia (a grep of `.github/workflows` finds none), so say that, and name the unit tests CI does run.
-- [ ] **Flip the default (no opt-out, decision 2) in `EngineExecutionStage::new()`.** `new()` is called at
+- [x] **Flip the default (no opt-out, decision 2) in `EngineExecutionStage::new()`.** `new()` is called at
       `pipeline.rs` in three places (the shared head, `insert_capture_splice_stage_in`, which rebuilds the stage with
       `new()` and would lose a builder-set flag, and `parse_qmd_to_ast`), so flipping its initial value reaches all three;
       list the tests that used `new()` as "plain" and say what each now means (the 2026-11-10 implementability review ran this flip
@@ -129,19 +129,19 @@ presenter, as a recorded render does. Concretely:
       `engine_record_stage::legacy_capture_payload_is_byte_identical_with_and_without_record` (their driver keeps the
       `new()` stage when its flag is false), and `knitr_chunk_records::knitr_chunk_id_is_not_emitted_as_an_attribute`). Nothing in production calls
       `with_present_from_record` today.
-- [ ] **Keep the harness as a regression test of the recorded route (Gordon, 2026-11-10).** After the flip it compares
+- [x] **Keep the harness as a regression test of the recorded route (Gordon, 2026-11-10).** After the flip it compares
       the recorded route with itself plus the file it writes; apply the rule in "What the review added" (remove the four entries, keep the
       code and tests, assert identity), say so in the allowlist header and the runner doc, and keep the pre-flip report as the gate\'s evidence. A test-only seam on the pipeline builder that re-enables the old
       route is not an opt-out, but it is a new surface; add one only if Gordon asks.
-- [ ] **End-to-end through the real binary,** plain `q2 render` on a Jupyter, a Julia and a knitr document and one
+- [x] **End-to-end through the real binary,** plain `q2 render` on a Jupyter, a Julia and a knitr document and one
       LaTeX-target knitr document; read the HTML; record the invocations and what you saw. (Native Jupyter is unchanged;
       the check is that it is.)
-- [ ] **Preview chain** (AGENTS.md, "Verifying Rust changes in `q2 preview`"): `cd hub-client && npm run build:wasm`,
+- [x] **Preview chain** (AGENTS.md, "Verifying Rust changes in `q2 preview`"): `cd hub-client && npm run build:wasm`,
       `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`; confirm `q2 preview` of the same documents still
       renders. This is a compile and smoke check for the native preview (the preview recorder already wants a record, so the
       flip is a no-op there); the browser is not a no-op (see the WASM box above), so run the old-capture replay test there too. Say what was and was not
       seen by a person.
-- [ ] Gates: `cargo clippy -p quarto -p quarto-core --all-targets -- -D warnings`; `cargo nextest run` for the same
+- [x] Gates: `cargo clippy -p quarto -p quarto-core --all-targets -- -D warnings`; `cargo nextest run` for the same
       crates; the Windows cross-clippy; `cargo xtask lint`.
 
 ## Stop conditions
@@ -172,4 +172,55 @@ End the session with the protocol's handoff ("Ending your session"). If this pla
 
 ## Notes from the run
 
-(Fill in at landing.)
+Session 2026-11-11, lane D. Commits: `3bdb23e41` (flip, tests, allowlist), `ab643e591` (WASM replay tests).
+
+**What I ran (ran) and what I only read.**
+
+- Tests first: `crates/quarto/tests/integration/plain_render_recorded_route_cli.rs` (six tests). Before the flip the two route tests
+  (`julia_plain_render_is_presented_from_a_record`, `knitr_plain_render_is_presented_from_a_record`) failed for the stated reason (plain was
+  not on the recorded route); the other four passed before and after, so they are regression guards. Route markers: a multi-expression Julia
+  cell is one code block on the engine route and one per expression on the recorded route; a knitr chunk inside a blockquote gives two
+  `<blockquote>` on the engine route and one on the recorded route. A plain knitr `include: false` chunk shows no empty `.cell` wrapper on
+  either route in my probe, so I did not use it as a marker. These are local evidence only (CI has neither R nor Julia); what CI runs is the
+  `engine_execution.rs` and `engine_record_stage` unit tests, and `target_route.rs::a_fallback_caused_only_by_present_from_record_is_quiet`.
+- The flip: `EngineExecutionStage::new()` sets `present_from_record: true`. `cargo nextest run -p quarto-core -p quarto`: 9183 run, 9182
+  passed, 1 failed (`revealjs::assemble::tests::vendored_reveal_assets_match_npm_package`, node_modules drift, not mine). The three failures the
+  review predicted did not all appear: I fixed the `engine_stage_driver` driver (always sets the flag explicitly), after which both
+  `engine_record_stage` tests passed, and `knitr_chunk_records::knitr_chunk_id_is_not_emitted_as_an_attribute` passed unchanged. None of the
+  47 `engine_execution.rs` tests failed, and none read as relying on plain.
+- Stale comments fixed: `engine/context.rs` (two field docs) and `engine_execution.rs` (the field doc).
+- **Allowlist.** After the flip the gate (`OPR_PARITY_REPORT`) failed with nine stale entries and a report of 93 identical, 0 differences. The plan
+  names "four" entries; there were nine, because 9f signed six interleaving entries and the three older plain-versus-presenter entries (knitr
+  empty cell wrapper, knitr split blockquote, Julia leading newline) are stale for the same reason. I removed all nine, rewrote the header,
+  and replaced `the_seeded_allowlist_parses_...` with a test that the allowlist is empty. Gordon signed these entries; he should see this
+  list. Kept: the normalizer code, the pin mechanism and their unit tests (they use their own fixture), and `pins/` as pre-flip evidence.
+  Gate after the change: 93 identical, 0 unallowlisted, 0 disagreements, 253 rejected before any engine ran (same on both routes), 2 both
+  failed at execution with the same message, 8 zip formats not compared (the accepted knitr docx and epub gap). 42 harness and runner tests
+  pass.
+- End to end, `target/debug/q2 render doc.qmd` in the scratchpad (`.../scratchpad/e2e`), output read: Julia (`1 + 1`, `println`, `2 + 2` in
+  one cell) wrote four code blocks and `jul-out`, `.quarto` held only `render-manifest.json`; knitr (a chunk in a blockquote, plus an
+  `include: false` chunk) wrote one `<blockquote>`, `knit-out`, `.quarto` only `render-manifest.json`; knitr `--to pptx` rendered with no
+  fallback line. **Jupyter: not verified through the binary**: this machine has no `ipykernel`, so a Jupyter render fails with "runtime is
+  not available". The gate lists `jupyter/*` cases as identical, but I did not confirm they ran a kernel. Native Jupyter takes no flag, by
+  construction. **LaTeX targets: not driven**: `pdf` is "not yet supported" and `latex`, `beamer` and `context` are unknown formats in the
+  binary, so `pptx` stands in; the LaTeX family rests on the `target_route.rs` unit test. **Marimo**: not run here; `marimo_engine_e2e::` ran
+  in the workspace test pass (it skips cleanly when marimo is absent).
+- Diagnostics I saw while rendering the corpus: only the knitr `processing file` / `output file` lines (knitr's own, both routes) and the
+  documents rejected before any engine ran (253, the same on both routes, mostly `Engine 'jupyter' is registered but its runtime is not
+  available` for shell chunks). I saw no `present_from_record` error, `coalesce` error, unit-count warning or child-document line.
+- WASM: `cd hub-client && npm run build:wasm` succeeded on the flipped tree. `captureSpliceHtml.wasm.test.ts` (a Jupyter-named stored capture
+  through `format: html`) and `recordPayload.wasm.test.ts` (a record through `format: html`) both pass: 10 tests with the two I added. These
+  two guard a risk the flip could have introduced and did not, so they were not red first. They do not cover a record whose cell id
+  came from an older derivation; none is stored in the repo, so that case (S6's remaining open risk) is untested.
+- Preview chain: `cargo xtask build-q2-preview-spa` (up to date) and `cargo build --bin q2` succeeded. `q2 preview --static` on the knitr
+  document served `/doc.html` with one blockquote and the chunk output. **Not seen by a person**: the live browser preview was not opened;
+  that step is Gordon's.
+- Gates: `cargo clippy -p quarto -p quarto-core --all-targets -- -D warnings` clean. The Windows cross-clippy fails in third-party build
+  scripts (`ring`, `wasmtime`, `aws-lc-sys`), as the stop conditions allow; a Windows user must run the native check. `cargo xtask lint` reports one
+  violation I did not cause: `crates/quarto-core/src/positron_cache.rs:360` `metadata-as-str` (RIU-3a; `meta` looks like a serde JSON value, so
+  probably a false positive). Not touched.
+- `hub-client/changelog.md`: not updated. The changelog is for user-facing changes and the hub-client commit only adds tests.
+- Production recorders (`preview_record.rs`, hub) already want a record, so the flip should change nothing there; I read this and ran the preview
+  smoke above, but did not trace each recorder path for `want_record`.
+- Not checked by any review, and I did not check: freeze, listings, search and the profile checkpoint as readers of engine output.
+- Snapshots: none added, changed or removed. One golden/fixture file changed (`opr-parity-allowlist.toml`).
