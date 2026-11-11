@@ -25,6 +25,12 @@ describe('attributionStyles', () => {
         expect(attributionStyles).toBe(viewerCss);
     });
 
+    it('bounds the badge and wraps long author names without hiding text', () => {
+        expect(attributionStyles).toMatch(
+            /\.q2-attr-badge\s*\{[^}]*box-sizing:\s*border-box;[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/s,
+        );
+    });
+
     it('contains the badge class names the framework renders against', () => {
         for (const cls of ['q2-attr-badge', 'q2-attr-badge-dot', 'q2-attr-badge-time']) {
             expect(attributionStyles).toContain(cls);
