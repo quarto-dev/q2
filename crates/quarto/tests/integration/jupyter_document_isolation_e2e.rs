@@ -105,6 +105,36 @@ fn parallel_documents_do_not_interleave_on_a_kernel() {
     }
 }
 
+/// A document's kernel is shut down gracefully when the document finishes
+/// (`shutdown_request`, not a kill), so the kernel's exit handlers run: here
+/// an `atexit` handler that writes a marker next to the document. Killing
+/// the kernel loses whatever user code does at exit.
+#[test]
+fn a_finished_documents_kernel_exits_gracefully() {
+    if !python3_ready() {
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let body = "```{python}\nimport atexit, os\n\
+                marker = os.path.join(os.environ[\"QUARTO_DOCUMENT_PATH\"], \"exited.txt\")\n\
+                atexit.register(lambda: open(marker, \"w\").write(\"graceful\"))\n```\n";
+    let project = project(tmp.path(), &[("a", body.to_string())]);
+
+    render(&project, "1");
+
+    let marker = project.join("exited.txt");
+    let ok = (0..50).any(|_| {
+        marker.is_file() || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            false
+        }
+    });
+    assert!(
+        ok && std::fs::read_to_string(&marker).unwrap() == "graceful",
+        "the kernel's atexit handler did not run: it was killed, not shut down"
+    );
+}
+
 /// A serial render: each document reports whether the other document's global
 /// is visible, then defines its own. Whichever runs second would see the
 /// first one's global on a shared kernel.

@@ -340,7 +340,7 @@ impl JupyterDaemon {
         // 5. Spawn kernel process
         let mut spec = kernel.spec.clone();
         expand_resource_dir(&mut spec);
-        let process = spec
+        let mut process = spec
             .command(&connection_file, None, None)
             .map_err(|e| JupyterError::ProcessSpawnError {
                 kernel: key.kernel_name.clone(),
@@ -367,16 +367,24 @@ impl JupyterDaemon {
                 message: e.to_string(),
             }
         })?;
-        let shell_socket = runtimelib::create_client_shell_connection_with_identity(
-            &connection_info,
-            &session_id,
-            peer_identity,
-        )
-        .await
-        .map_err(|e| JupyterError::SocketError {
-            socket_type: "shell".to_string(),
-            message: e.to_string(),
-        })?;
+        // The connect retries until the kernel binds its shell port, for up
+        // to 30s. A kernel that dies first (a port taken, a failed import)
+        // would only surface as that timeout, so race the connect against
+        // the process exiting and report what the kernel said.
+        let shell_socket = tokio::select! {
+            connected = runtimelib::create_client_shell_connection_with_identity(
+                &connection_info,
+                &session_id,
+                peer_identity,
+            ) => connected.map_err(|e| JupyterError::SocketError {
+                socket_type: "shell".to_string(),
+                message: e.to_string(),
+            })?,
+            status = process.wait() => {
+                let _ = std::fs::remove_file(&connection_file);
+                return Err(exited_during_startup(&key.kernel_name, status, &mut process).await);
+            }
+        };
 
         let iopub_socket =
             runtimelib::create_client_iopub_connection(&connection_info, "", &session_id)
@@ -596,6 +604,33 @@ impl Drop for KernelScope {
         {
             daemon.shutdown_all_blocking();
         }
+    }
+}
+
+/// The error for a kernel process that exited before its shell channel came
+/// up, with what it wrote to stderr (bounded, so a kernel that left a
+/// grandchild holding the pipe cannot stall the error).
+async fn exited_during_startup(
+    kernel: &str,
+    status: std::io::Result<std::process::ExitStatus>,
+    process: &mut tokio::process::Child,
+) -> JupyterError {
+    use tokio::io::AsyncReadExt;
+    let mut stderr = String::new();
+    if let Some(mut pipe) = process.stderr.take() {
+        let mut bytes = Vec::new();
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            pipe.read_to_end(&mut bytes),
+        )
+        .await;
+        stderr = String::from_utf8_lossy(&bytes).into_owned();
+    }
+    tracing::error!(kernel, ?status, %stderr, "kernel exited while starting");
+    JupyterError::ExitedDuringStartup {
+        kernel: kernel.to_string(),
+        code: status.ok().and_then(|s| s.code()),
+        stderr,
     }
 }
 

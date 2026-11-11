@@ -207,11 +207,36 @@ impl KernelSession {
         Ok(())
     }
 
-    /// Shutdown the kernel: graceful `shutdown_request` first (when
-    /// possible), SIGKILL backstop, then connection-file cleanup.
+    /// Shutdown the kernel: graceful `shutdown_request` first, SIGKILL
+    /// backstop, then connection-file cleanup.
+    ///
+    /// The async counterpart of [`Self::shutdown_blocking`], for callers
+    /// already on a tokio runtime (a document finishing its lease,
+    /// bd-i7yz08uh). The blocking form has to skip the graceful request on
+    /// a runtime thread; this one sends it on the current runtime, so the
+    /// kernel exits on its own and runs its exit handlers (a user's
+    /// `atexit`), instead of always being killed.
     pub async fn shutdown(&mut self) -> Result<()> {
-        self.shutdown_blocking();
+        if !self.has_exited() {
+            let sent = timeout(SHUTDOWN_REQUEST_TIMEOUT, self.send_shutdown_request()).await;
+            if matches!(sent, Ok(Ok(()))) {
+                let start = Instant::now();
+                while !self.has_exited() && start.elapsed() <= GRACEFUL_EXIT_TIMEOUT {
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            }
+        }
+        self.kill_and_clean_up();
         Ok(())
+    }
+
+    /// Send `shutdown_request` on a fresh control connection.
+    async fn send_shutdown_request(&self) -> std::result::Result<(), runtimelib::RuntimeError> {
+        let mut control =
+            runtimelib::create_client_control_connection(&self.connection_info, &self.session_id)
+                .await?;
+        let message: JupyterMessage = ShutdownRequest { restart: false }.into();
+        control.send(message).await
     }
 
     /// Runtime-independent shutdown (bd-hxhnnlzs). Deliberately sync so
@@ -240,16 +265,7 @@ impl KernelSession {
                     // `block_on`: it arms its timer eagerly and
                     // panics without a current runtime.
                     let sent = rt.block_on(async {
-                        timeout(SHUTDOWN_REQUEST_TIMEOUT, async {
-                            let mut control = runtimelib::create_client_control_connection(
-                                &self.connection_info,
-                                &self.session_id,
-                            )
-                            .await?;
-                            let message: JupyterMessage = ShutdownRequest { restart: false }.into();
-                            control.send(message).await
-                        })
-                        .await
+                        timeout(SHUTDOWN_REQUEST_TIMEOUT, self.send_shutdown_request()).await
                     });
                     if matches!(sent, Ok(Ok(()))) {
                         self.wait_for_exit(GRACEFUL_EXIT_TIMEOUT);
@@ -261,6 +277,12 @@ impl KernelSession {
             }
         }
 
+        self.kill_and_clean_up();
+    }
+
+    /// The shutdown backstop: kill the process if it is still running, reap
+    /// it (bounded), and remove the connection file.
+    fn kill_and_clean_up(&mut self) {
         if !self.has_exited() {
             if let Err(e) = self.process.start_kill() {
                 tracing::warn!("Failed to kill kernel process: {}", e);

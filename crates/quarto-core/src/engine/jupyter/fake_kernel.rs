@@ -62,6 +62,10 @@ pub(crate) const SCRIPT_ENV: &str = "QUARTO_FAKE_KERNEL_SCRIPT";
 /// kernelspecs that answer the same code differently (JOL-5).
 pub(crate) const SCRIPTS_ENV: &str = "QUARTO_FAKE_KERNEL_SCRIPTS";
 
+/// When set, the kernel process writes the variable's value to stderr and exits
+/// with code 3 instead of serving, like a kernel that cannot bind its ports.
+pub(crate) const EXIT_ENV: &str = "QUARTO_FAKE_KERNEL_EXIT";
+
 /// The libtest name of the entry test the kernelspec argv runs.
 const ENTRY_TEST: &str = "engine::jupyter::fake_kernel::tests::fake_kernel_process_entry";
 
@@ -250,6 +254,10 @@ mod tests {
     /// returns (the kernel runs until killed); otherwise it passes immediately.
     #[test]
     fn fake_kernel_process_entry() {
+        if let Ok(message) = std::env::var(EXIT_ENV) {
+            eprintln!("{message}");
+            std::process::exit(3);
+        }
         run_kernel_process(
             std::env::var(SCRIPT_ENV).ok(),
             std::env::var(SCRIPTS_ENV).ok(),
@@ -484,6 +492,47 @@ mod tests {
         assert_ne!(pid_of(&mut second).await, first_pid);
         assert!(daemon.has_session(second.key()));
         daemon.shutdown_lease(second).await.unwrap();
+        assert_eq!(daemon.session_count(), 0);
+    }
+
+    /// A kernel that exits while starting fails the start at once with its
+    /// exit code and stderr, not after the shell connect's 30s timeout.
+    #[tokio::test]
+    async fn test_kernel_exiting_at_startup_reports_its_stderr() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let mut env = kernel.env.clone();
+        env.push((
+            EXIT_ENV.to_string(),
+            "zmq.error.ZMQError: Address already in use".to_string(),
+        ));
+        let cwd = std::env::current_dir().unwrap();
+        let daemon = JupyterDaemon::new();
+
+        let started = std::time::Instant::now();
+        let err = match daemon
+            .acquire(&kernel.name, &cwd, &cwd.join("a.qmd"), &env)
+            .await
+        {
+            Ok(_) => panic!("a kernel that exits cannot be leased"),
+            Err(e) => e,
+        };
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "took {:?}",
+            started.elapsed()
+        );
+        match &err {
+            crate::engine::jupyter::error::JupyterError::ExitedDuringStartup {
+                code,
+                stderr,
+                ..
+            } => {
+                assert_eq!(*code, Some(3));
+                assert!(stderr.contains("Address already in use"), "{stderr}");
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
         assert_eq!(daemon.session_count(), 0);
     }
 }
