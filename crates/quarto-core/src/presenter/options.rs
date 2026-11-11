@@ -260,6 +260,10 @@ pub struct CellOptions {
     /// knitr `results`: `hide` drops printed text, `asis` writes it bare (`hold` is applied
     /// by [`crate::presenter::cell::apply_holds`]).
     results: Option<String>,
+    /// Jupyter `output: asis` (Quarto 1 `jupyter.ts`): no output gets a `.cell-output` div,
+    /// stdout is written as is, and the `.cell` div goes unless something needs it. Set only
+    /// from a Jupyter cell's resolved options; knitr reaches its own asis through `results`.
+    output_asis: bool,
     /// Options Quarto forwards to the cell div as `key='value'` (knitr: outside `known_options`).
     unknown: Vec<(String, String)>,
     /// A `fig-` label: the id of a figure\'s output div.
@@ -289,7 +293,7 @@ pub struct CellOptions {
 impl CellOptions {
     /// Build from a Jupyter cell's resolved options (`None`: nothing was set).
     pub fn from_config(resolved: Option<&ConfigValue>) -> Self {
-        Self::from_lookup(
+        let mut me = Self::from_lookup(
             &|key| {
                 resolved
                     .and_then(|c| c.get(key))
@@ -308,7 +312,13 @@ impl CellOptions {
                         _ => None,
                     })
             },
-        )
+        );
+        // The cell's `output` wins over the document's `execute.output` (resolution merged
+        // them), so `output: true` on a cell turns a document-level asis off.
+        me.output_asis = resolved
+            .and_then(|c| c.get("output"))
+            .is_some_and(|v| config_to_json(v) == Value::String("asis".to_string()));
+        me
     }
 
     /// Forward the cell options nothing handles as cell attributes (Phase 7g): Quarto 1\'s
@@ -487,6 +497,7 @@ impl CellOptions {
             },
             collapse,
             results: first("results"),
+            output_asis: false,
             keep_trailing_space: false,
             unknown: Vec::new(),
             figure_count: None,
@@ -808,9 +819,22 @@ impl CellOptions {
         self.results.as_deref() == Some("asis")
     }
 
-    /// Whether the `.cell` wrapper is written: not for `results = "asis"` unless the cell
-    /// has attributes or a caption that need it (hooks.R `needCell`).
+    /// Jupyter `output: asis`: every output is written without its output div, and printed
+    /// stdout as is (Quarto 1 `jupyter.ts`, `asis`).
+    pub fn output_asis(&self) -> bool {
+        self.output_asis
+    }
+
+    /// Whether the `.cell` wrapper is written: not under asis (knitr `results = "asis"`,
+    /// Jupyter `output: asis`) unless the cell has attributes or a caption that need it
+    /// (hooks.R and `jupyter.ts` `needCell`). Under Jupyter asis a cell id (a `tbl-` label)
+    /// needs it too: `jupyter.ts` keeps the div for a label it puts on the cell.
     pub fn needs_cell_div(&self) -> bool {
+        if self.output_asis {
+            return !self.cell_div_id().is_empty()
+                || !self.cell_div_attrs().is_empty()
+                || !self.fig_cap.is_empty();
+        }
         !self.results_asis() || !self.cell_div_attrs().is_empty() || !self.fig_cap.is_empty()
     }
 

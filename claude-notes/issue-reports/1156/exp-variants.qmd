@@ -1,0 +1,50 @@
+---
+title: Asis variants
+---
+
+## A: stdout plus an execute_result
+
+```{python}
+#| echo: false
+#| output: asis
+print("Printed **markdown**.\n")
+"a trailing value"
+```
+
+## B: stderr and an IPython Markdown display
+
+```{python}
+#| echo: false
+#| output: asis
+import sys
+from IPython.display import Markdown, display
+print("to stderr", file=sys.stderr)
+display(Markdown("Displayed *markdown*."))
+```
+
+## C: echo true
+
+```{python}
+#| output: asis
+print("Echoed cell, **bold** output.")
+```
+
+## D: a class forces the cell div (needCell)
+
+```{python}
+#| echo: false
+#| output: asis
+#| classes: keepme
+print("Inside a **div**.")
+```
+
+## E: a tabset (the reporter's use case, without code fences; see bd-f63cqoke)
+
+```{python}
+#| echo: false
+#| output: asis
+print("::: {.panel-tabset}\n")
+for name in ["pip", "conda"]:
+    print(f"## {name}\n\nRun `{name} install thing`.\n")
+print(":::")
+```

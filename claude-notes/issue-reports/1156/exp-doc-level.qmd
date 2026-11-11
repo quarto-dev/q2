@@ -1,0 +1,16 @@
+---
+title: Document-level asis
+execute:
+  output: asis
+---
+
+```{python}
+#| echo: false
+print("Document-level **asis**.")
+```
+
+```{python}
+#| echo: false
+#| output: true
+print("Cell override: **not** asis.")
+```
