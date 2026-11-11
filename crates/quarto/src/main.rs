@@ -1748,7 +1748,22 @@ mod cli_parse_tests {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(err) = run() {
+        // A structured parse error reaching here prints its diagnostic
+        // decorated per the resolved stderr style (bd-be8ve52f): its
+        // `Display` is plain by design. Anything else prints exactly as
+        // returning the error from `main` would (`Error: {err:?}`).
+        let opts = commands::terminal_style::stderr_text_options();
+        match commands::terminal_style::format_error_report(&err, &opts) {
+            Some(report) => eprintln!("{report}"),
+            None => eprintln!("Error: {err:?}"),
+        }
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     // Install Quarto's `Q-*` error catalog into the catalog-agnostic
     // `quarto-error-reporting` host, so diagnostics can resolve docs URLs and
     // catalog metadata. Must run before any diagnostic is rendered; idempotent.

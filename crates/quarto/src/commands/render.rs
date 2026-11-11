@@ -806,15 +806,16 @@ pub enum RenderAbort {
 }
 
 impl RenderAbort {
-    /// What `q2 render` prints for this abort in text mode. Parse
-    /// diagnostics carry their own `Error: [Q-N-M]` header; the rest
-    /// get the `Error:` prefix `main` would have added.
-    pub fn user_message(&self) -> String {
+    /// What `q2 render` prints for this abort in text mode, decorated
+    /// per `opts` (the stderr style for a terminal, plain for the
+    /// browser). Parse diagnostics carry their own `Error: [Q-N-M]`
+    /// header; the rest get the `Error:` prefix `main` would have added.
+    pub fn user_message(&self, opts: &TextRenderOptions) -> String {
         match self {
-            RenderAbort::Dispatch(DispatchError::DiscoverParse(pe)) => pe.to_string(),
+            RenderAbort::Dispatch(DispatchError::DiscoverParse(pe)) => pe.render_with(opts),
             RenderAbort::Dispatch(e) => format!("Error: {e}"),
-            RenderAbort::Parse { error, .. } => error.to_string(),
-            RenderAbort::Scripts(pe) => pe.to_string(),
+            RenderAbort::Parse { error, .. } => error.render_with(opts),
+            RenderAbort::Scripts(pe) => pe.render_with(opts),
             RenderAbort::Other(e) => format!("Error: {e:#}"),
         }
     }
@@ -841,7 +842,7 @@ pub(crate) fn exit_with_abort(abort: RenderAbort, args: &RenderArgs) -> anyhow::
             // `Error:` prefix on top (bd-y56u1gl7). Mirrors the
             // `RenderAbort::Parse` arm below.
             if let DispatchError::DiscoverParse(pe) = &e {
-                eprintln!("{pe}");
+                eprintln!("{}", pe.render_with(&stderr_text_options()));
                 std::process::exit(1);
             }
             anyhow::anyhow!("{}", e)
@@ -850,7 +851,7 @@ pub(crate) fn exit_with_abort(abort: RenderAbort, args: &RenderArgs) -> anyhow::
             if args.json_errors {
                 emit_parse_error_json(&error, input.as_deref());
             } else {
-                eprintln!("{}", error);
+                eprintln!("{}", error.render_with(&stderr_text_options()));
             }
             std::process::exit(1);
         }
@@ -1399,7 +1400,7 @@ fn exit_with_parse_error(parse_error: quarto_core::ParseError, args: &RenderArgs
     if args.json_errors {
         emit_parse_error_json(&parse_error, None);
     } else {
-        eprintln!("{}", parse_error);
+        eprintln!("{}", parse_error.render_with(&stderr_text_options()));
     }
     std::process::exit(1);
 }

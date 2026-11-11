@@ -167,3 +167,65 @@ fn tracing_follows_color_always() {
     let e = render(CLEAN, &["-vv", "--color=always"], &[]);
     assert!(e.sgr > 0, "{e:?}");
 }
+
+// ── render aborts (structured parse errors printed by the CLI) ───────
+//
+// These paths printed `ParseError`'s `Display`, which baked in color and
+// hyperlinks regardless of the stream. Each gets a pipe test (plain) and
+// a forced-color guard, so making `Display` plain can't silently drop
+// color where the user asked for it.
+
+/// A project whose `_quarto.yml` is `config`, with one page, rendered
+/// with `args` (after `render`).
+fn render_project(config: &str, args: &[&str], env: &[(&str, &str)]) -> Escapes {
+    let dir = tempfile::TempDir::new().unwrap();
+    std::fs::write(dir.path().join("_quarto.yml"), config).unwrap();
+    std::fs::write(dir.path().join("index.qmd"), CLEAN).unwrap();
+    let mut cmd = Command::new(Q2_BIN);
+    cmd.current_dir(dir.path()).env("TERM", "xterm-256color");
+    for var in STYLE_VARS {
+        cmd.env_remove(var);
+    }
+    cmd.envs(env.iter().copied());
+    let output = cmd.arg("render").args(args).output().expect("q2 runs");
+    assert!(
+        !output.status.success(),
+        "the fixture must abort the render"
+    );
+    count(&output.stderr)
+}
+
+/// Discovery fails on a YAML syntax error: `RenderAbort::Dispatch`.
+const BROKEN_CONFIG: &str = "project:\n  type: website\n  title: [unclosed\n";
+
+/// A pre-render script that does not exist: `RenderAbort::Scripts`.
+const MISSING_PRE_RENDER: &str = "project:\n  type: website\n  pre-render: nothere.py\n";
+
+#[test]
+fn config_abort_to_a_pipe_is_plain() {
+    for args in [&[][..], &["index.qmd"][..]] {
+        let e = render_project(BROKEN_CONFIG, args, &[]);
+        assert!(e.stderr.contains("Q-1-1"), "{args:?}: {e:?}");
+        assert_eq!((e.sgr, e.osc8), (0, 0), "{args:?}: {e:?}");
+    }
+}
+
+#[test]
+fn config_abort_keeps_color_when_forced() {
+    let e = render_project(BROKEN_CONFIG, &["--color=always"], &[]);
+    assert!(e.stderr.contains("Q-1-1"), "{e:?}");
+    assert!(e.sgr > 0, "{e:?}");
+}
+
+#[test]
+fn script_abort_to_a_pipe_is_plain() {
+    let e = render_project(MISSING_PRE_RENDER, &[], &[]);
+    assert!(e.stderr.contains("nothere.py"), "{e:?}");
+    assert_eq!((e.sgr, e.osc8), (0, 0), "{e:?}");
+}
+
+#[test]
+fn script_abort_keeps_color_when_forced() {
+    let e = render_project(MISSING_PRE_RENDER, &["--color=always"], &[]);
+    assert!(e.sgr > 0, "{e:?}");
+}

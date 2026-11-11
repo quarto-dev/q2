@@ -157,31 +157,48 @@ global state. Only command entry points call `output_style::get()`.
 
 ### Phase 4: stop baking styling into strings (regression-guarded)
 
-- [ ] Audit every path where a `ParseError` / `QuartoError` `Display` (styled
-      today) reaches the terminal. Known so far:
-  - `RenderAbort::user_message` (`render.rs:809`);
-  - `exit_with_abort` → `main`\'s anyhow `Error:` print;
-  - `preview_static.rs:870` (abort `eprintln!`, then `strip_ansi_escapes`
-    for the browser);
-  - string producers that call `to_text(None)` with the default (styled)
-    options: `quarto-core/src/error.rs:35` (`ParseError`\'s `Display`),
-    `engine/ts_record.rs:527` (an engine failure message),
-    `pampa/src/utils/diagnostic_collector.rs:73`,
-    `pampa/src/wasm_entry_points/mod.rs:53,161`, and
-    `wasm-quarto-hub-client/src/lib.rs:4111,4221,4399`. The browser already
-    runs `stripAnsi` defensively (`ReactPreview.tsx:957`, the
-    preview-renderer overlays), so plain WASM strings are harmless.
+The maintainer chose the plain `Display` with rendering at the sinks
+(2026-11-11), not a `Display` that reads the global style.
 
-  Record the full list here.
-- [ ] Before any change, add a `--color=always` test per terminal path that asserts SGR > 0. A plain `Display` that loses color must fail these tests.
-- [ ] Convert each path to explicit rendering (for example `ParseError::render_with(&TextRenderOptions)`), using the stderr style.
-- [ ] Make `ParseError`\'s `Display` plain (`TextRenderOptions::plain()`).
-      Then remove the `strip_ansi_escapes` calls that become dead (preview
-      abort; the opaque-message fallback in `failure_error_text`).
-- [ ] Check that the WASM / hub-client paths that stringify `QuartoError`
-      (`wasm-quarto-hub-client/src/lib.rs`) now get plain text.
-- [ ] If any path can't be converted cleanly, **stop and ask**. Do not keep a
-      strip-after-the-fact hack.
+- [x] Audit every path where a `ParseError` / `QuartoError` `Display` (styled
+      before) reaches the terminal:
+  - `exit_with_abort`: `DiscoverParse` (`eprintln!("{pe}")`),
+    `RenderAbort::Parse`, and `exit_with_parse_error` (`Scripts`);
+  - `RenderAbort::user_message`, used by `q2 preview --static`;
+  - `quarto-preview` pre-render script failure (`eprintln!("{parse_error}")`);
+  - `main`, for any `QuartoError::Parse` / `ParseError` returned through
+    anyhow.
+
+  The string producers that called `to_text(None)` are
+  `engine/ts_record.rs`, `pampa` `DiagnosticCollector::to_text`, the `pampa`
+  WASM entry points, and `wasm-quarto-hub-client` (3 sites).
+- [x] Guard tests written first. In `terminal_output_style.rs`:
+      `config_abort_*` (Dispatch, project and single-file) and
+      `script_abort_*` (Scripts). Each has a pipe test (plain; it failed
+      before) and a `--color=always` guard (SGR > 0; it passed before and
+      still passes). There are also unit tests for
+      `format_error_report` and `ParseError::{Display, render_with}`.
+- [x] `ParseError::render_with(&TextRenderOptions)`. `render()` and `Display`
+      are now plain. Every terminal sink above renders with the stderr
+      style.
+- [x] `main` became a wrapper around `run()`. When it holds a parse error,
+      `commands::terminal_style::format_error_report` prints it, either bare
+      or with anyhow's `Caused by:` layout. Every other error prints exactly
+      as before (`Error: {err:?}`).
+- [x] The string producers now pass `TextRenderOptions::plain()` explicitly.
+- [x] `strip_ansi_escapes` is **kept** in two places: the opaque-message
+      fallback of `failure_error_text` and the preview abort message. They
+      no longer clean up our own output. They guard against external tool
+      text (pandoc, engines) that carries its own escapes.
+- [x] End to end, from a file and from a terminal simulated with `script`
+      (SGR/OSC 8 counts in the table below). A non-parse error
+      (`q2 render does-not-exist.qmd`) prints unchanged.
+
+| case | pipe (before → after) | tty (before = after) |
+|------|------|------|
+| broken `_quarto.yml` | 62/2 → 0/0 | 62/2 |
+| unknown project type | 90/2 → 0/0 | 90/2 |
+| missing pre-render script | 102/2 → 0/0 | 102/2 |
 
 ### Phase 5: docs
 

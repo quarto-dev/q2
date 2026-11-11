@@ -4108,7 +4108,12 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
                 Err(diags) => {
                     let error_msg = diags
                         .iter()
-                        .map(|d| d.to_text(None))
+                        .map(|d| {
+                            d.to_text_with_options(
+                                None,
+                                &quarto_error_reporting::TextRenderOptions::plain(),
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join("\n");
                     serde_json::to_string(&AstResponse {
@@ -4218,7 +4223,12 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
         Err(diags) => {
             let error_msg = diags
                 .iter()
-                .map(|d| d.to_text(None))
+                .map(|d| {
+                    d.to_text_with_options(
+                        None,
+                        &quarto_error_reporting::TextRenderOptions::plain(),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             serde_json::to_string(&AstResponse {
@@ -4396,7 +4406,12 @@ pub fn prepare_template(content: &str) -> String {
         Err(diags) => {
             let error_msg = diags
                 .iter()
-                .map(|d| d.to_text(None))
+                .map(|d| {
+                    d.to_text_with_options(
+                        None,
+                        &quarto_error_reporting::TextRenderOptions::plain(),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             return PrepareTemplateResponse::error(&format!(
