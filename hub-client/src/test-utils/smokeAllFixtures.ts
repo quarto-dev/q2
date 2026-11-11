@@ -64,7 +64,8 @@ export interface RunConfig {
    * Execution engines whose runtime the fixture needs (e.g. `jupyter`), a
    * string or a list, as in the Rust runner (`RunConfig::requires`), which
    * skips the fixture when that runtime is not installed. WASM has no engine
-   * runtimes, so any entry skips it here.
+   * runtimes, so any entry skips it here. Keep in step with `shouldSkip`
+   * in `e2e/helpers/smokeAllDiscovery.ts` (the Playwright runner).
    */
   requires?: string | string[];
 }
