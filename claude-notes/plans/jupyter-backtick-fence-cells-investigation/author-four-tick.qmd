@@ -1,0 +1,11 @@
+---
+title: Author-written four-backtick cell
+---
+
+````{python}
+print("MARK-FOUR")
+````
+
+```{python}
+print("MARK-CONTROL")
+```
