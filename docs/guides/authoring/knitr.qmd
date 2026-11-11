@@ -329,9 +329,9 @@ These cells keep knitr's markdown:
   `class.output`, `attr.source` and `collapse` do the same job for most uses,
   and cells that use them stay out of this list.
 - **Every cell, when the output format is one the record cannot present yet.**
-  The record presents HTML, Reveal.js, EPUB, Typst, Word (`docx`) and GitHub
-  Flavored Markdown (`gfm`). Other formats, such as PDF and PowerPoint, keep
-  knitr's markdown for every cell.
+  The record presents HTML, Reveal.js, EPUB, Typst, Word (`docx`),
+  PowerPoint (`pptx`) and GitHub Flavored Markdown (`gfm`). Other formats,
+  such as PDF, keep knitr's markdown for every cell.
 - **A cell that asks for `cache: 1` or `cache: 2`.** Its output is part of the
   page, and it is not part of the record at all. A cell that asks for
   `cache: true` is recorded.
