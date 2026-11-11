@@ -2,7 +2,7 @@
 title: 'knitr capture reports rlang_error instead of simpleError (bd-54odm3rz)'
 date: 2026-11-11
 description: 'knitr 1.51+ entraces every chunk error through rlang, so capture.R records ename rlang_error; decide which class ename should carry, fix capture.R, and stop the local verify leg from failing on it.'
-status: in-progress  # design agreed 2026-11-11; implementation on braid/bd-54odm3rz-knitr-rlang-error-ename
+status: done  # PR #1181 merged 2026-11-11 (6a0a59e0e)
 braid:
   strand: bd-54odm3rz
 ---
