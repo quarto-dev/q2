@@ -72,7 +72,7 @@ migration notes written by OPR-8.
       every difference not covered by an entry. Zero unallowlisted differences is the exit; any other result is a stop (below).
 - [x] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (the known
       `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package` failure is local `node_modules` drift, not yours).
-- [x] **[Gordon]** signs the four entries (`proposed` to `signed`, each reason ending "Signed: Gordon, 2026-11-NN") and sets OPR-9g to
+- [x] **\[Gordon\]** signs the four entries (`proposed` to `signed`, each reason ending "Signed: Gordon, 2026-11-NN") and sets OPR-9g to
       `ready`. The agent writes the rule and reason, never the signature, and does not flip a status.
 
 ## Stop conditions
