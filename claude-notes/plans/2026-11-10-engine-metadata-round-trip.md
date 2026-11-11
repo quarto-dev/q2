@@ -2,7 +2,7 @@
 title: 'Engine round-trip rewrites project metadata as document markdown (bd-8svy3p89)'
 date: 2026-11-10
 description: 'On pages that run code, the engine output''s re-parsed metadata replaces the real metadata wholesale; reconcile it three ways instead, against a parse of the exact markdown the engine received, so only changes the engine made are taken.'
-status: active  # Implemented 2026-11-11; PR open
+status: done  # Merged in PR #1180 (beb17a780), 2026-11-11
 braid:
   strand: bd-8svy3p89
 ---
@@ -180,7 +180,7 @@ Blocks keep today's two-way reconcile (decision 4).
 
 - [x] The `apply.rs` comment. (`config_paths` needed nothing: Phase 3
       restored it to its state before #1164.)
-- [x] Comment on the strand; mark this plan done when the PR merges.
+- [x] Comment on the strand; mark this plan done (PR #1180 merged 2026-11-11).
 
 ## Outcome (2026-11-11)
 
