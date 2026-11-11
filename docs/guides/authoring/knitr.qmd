@@ -1,0 +1,337 @@
+---
+title: Running R with knitr
+---
+
+## Overview
+
+Quarto uses [knitr](https://yihui.org/knitr/) to execute R code. A code block
+whose language is `r` in braces, as in ```` ```{r} ````, is an executable cell,
+and knitr owns the `r` language by default, so a document with R cells needs
+no `engine:` key. Quarto runs each cell when it renders the document and puts
+the output in the page.
+
+Here is a simple example:
+
+````{.markdown filename="airquality.qmd"}
+---
+title: ggplot2 demo
+author: Norah Jones
+date: 5/22/2021
+format:
+  html:
+    code-fold: true
+---
+
+## Air quality
+
+@fig-airquality explores the impact of temperature on ozone level.
+
+```{r}
+#| label: fig-airquality
+#| fig-cap: "Temperature and ozone level."
+#| warning: false
+
+library(ggplot2)
+
+ggplot(airquality, aes(Temp, Ozone)) +
+  geom_point() +
+  geom_smooth(method = "loess")
+```
+````
+
+The comments at the top of the cell are cell options. Here they give the
+figure a label and a caption, which makes it
+[cross-referenceable](cross-references.qmd).
+
+A cell can produce a wide variety of output, including plots, tables from
+data frames, and plain text such as the printed result of a statistical
+summary. The [execution options](#execution-options) control what appears,
+and a value can also be computed inside a sentence with an
+[inline expression](computations.qmd#inline-expressions).
+
+This page covers rendering, installation, how Quarto chooses knitr, cell
+options, caching, and the chunks whose output Quarto keeps exactly as knitr
+wrote it.
+
+### Rendering
+
+Render the document from a shell:
+
+```bash
+q2 render airquality.qmd
+q2 render airquality.qmd --to docx
+```
+
+`q2 preview airquality.qmd` renders the document and keeps the page up to date
+as you edit.
+
+## Installation
+
+To run R cells you need R and the **rmarkdown** package:
+
+```r
+install.packages("rmarkdown")
+```
+
+Installing **rmarkdown** also installs **knitr**, so it provides everything
+needed to render a document that contains R code. Quarto requires knitr 1.44
+or later.
+
+Quarto finds R by looking for `Rscript` on the system `PATH`. To use a
+different R, set the `QUARTO_R` environment variable to the directory that
+holds the `Rscript` binary, or to the binary itself.
+
+## How Quarto picks knitr
+
+Quarto gives a cell to knitr when the cell's language is `r`. Nothing else is
+needed: neither an `engine:` key nor a `knitr:` key. A document with both `{r}`
+and `{python}` cells runs the Python cells through
+[reticulate](https://rstudio.github.io/reticulate/), because knitr takes
+Python only when it is already running for the R cells.
+
+::: {.callout-note}
+## Migrating from Quarto 1
+
+Quarto 1 chose one engine for the whole document, and it chose knitr whenever
+the document had an `{r}` cell. In Quarto 2 each language goes to the engine
+that owns it, so `{r}` cells run in knitr whatever else the document contains.
+The [engines page](engines.qmd) describes how to change which engine owns a
+language, and
+[Running R cells on Ark](jupyter-kernels.qmd#r-on-jupyter) shows how to run
+`{r}` cells on a Jupyter kernel instead.
+:::
+
+## Cell options
+
+Cell options are `#|` comment lines at the top of a cell, written in YAML:
+
+````markdown
+```{r}
+#| echo: false
+#| fig-cap: "Air Quality"
+
+library(ggplot2)
+
+ggplot(airquality, aes(Temp, Ozone)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = FALSE)
+```
+````
+
+This keeps long options such as `fig-cap`, `fig-subcap` and `fig-alt`
+readable, and it lets a structured editor change an option without parsing
+the first line of the cell.
+
+::: {.callout-note}
+## Migrating from Quarto 1
+
+Quarto 1 accepted options on the first line of the cell too, as in
+```` ```{r, echo = FALSE} ````. Quarto 2 does not. A header like that is
+rejected with error [`Q-2-36`](../../errors/markdown/Q-2-36.qmd), and the fix
+is to move each option to a `#|` line.
+:::
+
+Option values use YAML syntax, not R syntax. To compute a value with R, start
+it with `!expr`:
+
+```r
+#| echo: !expr Sys.getenv("SHOW_CODE") == "yes"
+```
+
+`!expr` is a YAML tag, and it must be followed by a single YAML flow scalar:
+see the [YAML specification](https://yaml.org/spec/1.2.2/#73-flow-scalar-styles)
+for how double-quoted, single-quoted and unquoted strings work.
+
+::: {.callout-note}
+## Migrating from Quarto 1
+
+In Quarto 1, `!expr` also worked in caption options. In Quarto 2 the caption
+options `fig-cap` and `tbl-cap` do not evaluate it: a caption written
+`#| fig-cap: !expr paste("Air", "Quality")` appears as that text. To compute a
+caption, use the cross-reference div syntax with an
+[inline expression](computations.qmd#inline-expressions).
+:::
+
+### Cell labels
+
+Set a label for a cell with the `label` option:
+
+````markdown
+```{r}
+#| label: convert
+airquality$TempC <- (5 / 9) * (airquality$Temp - 32)
+```
+````
+
+Unless you want a cross-reference, avoid the reserved
+[cross-reference prefixes](cross-references.qmd) (`fig-`, `tbl-` and the
+others) for labels.
+
+### Execution options
+
+The `execute` front matter key sets a default for a whole document, and a
+`#|` line overrides it for one cell. For example, to hide the code in every
+cell and show it in one:
+
+````markdown
+---
+title: Knitr Document
+execute:
+  echo: false
+---
+
+```{r}
+#| echo: true
+summary(airquality)
+```
+````
+
+The options that decide what appears are `eval`, `echo`, `output`, `warning`,
+`error` and `include`. Set `output: asis` when R writes markdown that Quarto
+should not wrap:
+
+````markdown
+```{r}
+#| echo: false
+#| output: asis
+
+cat("# Heading 1\n")
+cat("## Heading 2\n")
+```
+````
+
+### Data frames
+
+The `df-print` option sets how data frames print. Set it in the format:
+
+```yaml
+---
+title: "Document"
+format:
+  html:
+    df-print: paged
+---
+```
+
+| Option    | Description                                                                                                                      |
+|-----------|----------------------------------------------------------------------------------------------------------------------------------|
+| `default` | Use the default S3 method for the data frame.                                                                                    |
+| `kable`   | A Markdown table, made with [`knitr::kable()`](https://bookdown.org/yihui/rmarkdown-cookbook/kable.html).                       |
+| `tibble`  | A plain text table, made with the [tibble](https://tibble.tidyverse.org/) package.                                               |
+| `paged`   | An HTML table that pages long rows and columns, made with [`rmarkdown::paged_table()`](https://pkgs.rstudio.com/rmarkdown/reference/paged_table.html). |
+
+`paged` is available in HTML formats. In any other format Quarto prints the
+data frame with `kable`.
+
+## Knitr options
+
+To set knitr's own chunk options once, for a whole document, put them under
+the `knitr` key:
+
+```yaml
+---
+title: "My Document"
+format: html
+knitr:
+  opts_chunk:
+    collapse: true
+    comment: "#>"
+    R.options:
+      digits: 3
+---
+```
+
+The `knitr` key also works in a project's `_quarto.yml`, where it sets the
+defaults for every document in the project.
+
+The `R.options` chunk option is a convenient way to set R options that apply
+only while the chunk runs. knitr sets them with
+[`options()`](https://rdrr.io/r/base/options.html) before the chunk and
+restores them afterward.
+
+## Inline expressions
+
+Knitr cells can compute a value inside a sentence, with either the brace
+spelling `` `{r} x` `` or knitr's own `` `r x` ``. The two differ in how they
+insert the value, and
+[Inline expressions](computations.qmd#inline-expressions) describes both.
+
+## Caching
+
+The knitr cache works on individual cells, not on the whole document. That is
+convenient, and it also means you manage the dependencies between cells
+yourself.
+
+Enable the cache for a document or a project with the `execute` option:
+
+```yaml
+---
+title: "My Document"
+format: html
+execute:
+  cache: true
+---
+```
+
+Or enable it for a single cell, and leave the document option unset:
+
+````markdown
+```{r}
+#| cache: true
+
+summary(cars)
+```
+````
+
+The other cell options that affect knitr's cache, such as `cache.path`,
+`dependson` and `cache.rebuild`, work as they do in knitr. Yihui Xie's article
+on [cache invalidation](https://yihui.org/en/2018/06/cache-invalidation/)
+explains how knitr decides that a cache is out of date.
+
+::: {.callout-note}
+## Migrating from Quarto 1
+
+The command line options `--cache` and `--cache-refresh` are accepted by
+`q2 render` but do not change caching in Quarto 2. To force a refresh, delete
+the cell's cache directory, or set `cache.rebuild` on the cell.
+:::
+
+If you are caching to shorten a slow render, `execute: enabled: false` skips
+execution while you work on prose, and `freeze` keeps results from documents
+you have not changed.
+
+## Chunks that keep knitr's markdown {#chunks-that-keep-knitrs-markdown}
+
+When Quarto runs a document it can keep what the code produced as an
+[execution record](execution-records.qmd), so that `q2 preview` and hub can
+present the page again without running R. For most cells the record holds the
+pieces knitr produced: the code, the printed text, the messages and the plots.
+
+Some cells give Quarto no pieces to keep. For these, Quarto keeps the
+finished markdown that knitr wrote, and the record holds that block of text
+for the cell. **The page is the same as the one knitr produces.** Nothing needs
+fixing, but a tool that reads the record sees a block of markdown where it
+would otherwise see separate outputs. Positron, for example, does not show
+these cells' output or fill them from its own cache.
+
+These cells keep knitr's markdown:
+
+- **A cell that includes another document with `child=`.** Quarto reports
+  [`Q-18-14`](../../errors/engine/Q-18-14.qmd).
+- **A cell in another language run by knitr.** This covers `bash`, `sql`,
+  Python through reticulate, and engines you define yourself.
+- **Every cell from the point where the document replaces a knitr hook.** A
+  call to `knitr::knit_hooks$set()` for `source`, `output`, `message`,
+  `warning`, `error` or `plot` changes what knitr writes for a cell, and Quarto
+  cannot know what the new hook does. The cell that replaces the hook and every
+  cell after it keep knitr's markdown, and Quarto reports
+  [`Q-18-13`](../../errors/engine/Q-18-13.qmd). Cell options such as
+  `class.output`, `attr.source` and `collapse` do the same job for most uses,
+  and cells that use them stay out of this list.
+- **Every cell, when the output format is one the record cannot present yet.**
+  The record presents HTML, Reveal.js, EPUB, Typst, Word (`docx`) and GitHub
+  Flavored Markdown (`gfm`). Other formats, such as PDF and PowerPoint, keep
+  knitr's markdown for every cell.
+- **A cell that asks for `cache: 1` or `cache: 2`.** Its output is part of the
+  page, and it is not part of the record at all. A cell that asks for
+  `cache: true` is recorded.
