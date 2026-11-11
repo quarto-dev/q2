@@ -189,7 +189,7 @@ fn pptx_side(parts: &Parts) -> Result<Side, String> {
 fn epub_side(parts: &Parts) -> Result<Side, String> {
     let uuid = regex::Regex::new(r"urn:uuid:[0-9A-Fa-f-]{36}").unwrap();
     let identifier = regex::Regex::new(r"(<dc:identifier[^>]*>)[^<]*").unwrap();
-    let date = regex::Regex::new(r"(<dc:date>)[^<]*").unwrap();
+    let date = regex::Regex::new(r"(<dc:date[^>]*>)[^<]*").unwrap();
     let modified = regex::Regex::new(r#"(<meta property="dcterms:modified">)[^<]*"#).unwrap();
     let uid = regex::Regex::new(r#"(<meta name="dtb:uid" content=")[^"]*"#).unwrap();
     let clean = |s: &str| -> String {
@@ -439,7 +439,7 @@ mod tests {
 
     fn epub(xhtml: &str, uuid: &str, date: &str) -> Vec<u8> {
         let opf = format!(
-            "<package><metadata><dc:identifier id=\"id\">urn:uuid:{uuid}</dc:identifier><dc:date>{date}</dc:date><meta property=\"dcterms:modified\">{date}</meta><dc:title>T</dc:title></metadata></package>"
+            "<package><metadata><dc:identifier id=\"id\">urn:uuid:{uuid}</dc:identifier><dc:date id=\"epub-date\">{date}</dc:date><meta property=\"dcterms:modified\">{date}</meta><dc:title>T</dc:title></metadata></package>"
         );
         let ncx =
             format!("<ncx><head><meta name=\"dtb:uid\" content=\"urn:uuid:{uuid}\"/></head></ncx>");

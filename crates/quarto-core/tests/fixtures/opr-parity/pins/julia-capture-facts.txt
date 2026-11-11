@@ -1,0 +1,25 @@
+- plain    <div id="cell-1" class="cell" data-prompt="true" data-execution_count="1">
+- plain    <div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-variable">x</span> <span class="hl-operator">=</span> <span class="hl-number">1</span>
+- plain    <span class="hl-function-call">println</span><span class="hl-punctuation-bracket">(</span><span class="hl-string">&quot;first&quot;</span><span class="hl-punctuation-bracket">)</span>
+- plain    <span class="hl-variable">y</span> <span class="hl-operator">=</span> <span class="hl-variable">x</span> <span class="hl-operator">+</span> <span class="hl-number">1</span></code></pre></div>
+- plain    <div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-variable">a</span> <span class="hl-operator">=</span> <span class="hl-number">1</span>
+- plain    <span class="hl-variable">b</span> <span class="hl-operator">=</span> <span class="hl-number">2</span>
+- plain    <span class="hl-variable">b</span></code></pre></div>
++ recorded <div id="cell-1" class="cell" data-execution_count="1">
++ recorded <div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia">&gt; <span class="hl-variable">x</span> <span class="hl-operator">=</span> <span class="hl-number">1</span>
++ recorded &gt; <span class="hl-function-call">println</span><span class="hl-punctuation-bracket">(</span><span class="hl-string">&quot;first&quot;</span><span class="hl-punctuation-bracket">)</span>
++ recorded &gt; <span class="hl-variable">y</span> <span class="hl-operator">=</span> <span class="hl-variable">x</span> <span class="hl-operator">+</span> <span class="hl-number">1</span></code></pre></div>
++ recorded <div class="sourceCode cell-code code-with-copy"><pre class="sourceCode julia"><code class="sourceCode julia"><span class="hl-variable">b</span> <span class="hl-operator">=</span> <span class="hl-number">2</span></code></pre></div>
++ recorded <div class="cell-output cell-output-stderr">
++ recorded <pre class="code-with-copy"><code>[ Info: keepme</code></pre>
++ recorded <div class="cell-output cell-output-stderr">
++ recorded <div class="code-copy-outer-scaffold">
++ recorded <pre class="code-with-copy"><code>rawstderr</code></pre>
++ recorded <button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
++ recorded <div class="code-copy-outer-scaffold">
++ recorded <button title="Copy to Clipboard" class="code-copy-button" aria-label="Copy code"><i class="bi"></i></button>
++ recorded </div>
++ recorded </div>
++ recorded </div>
++ recorded </div>
+the lines both sides share are in a different order: first at shared line 69: plain `<div class="cell-output cell-output-display" data-execution_count="1">` vs recorded `<div class="code-copy-outer-scaffold">`

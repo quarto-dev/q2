@@ -2,7 +2,7 @@
 title: 'OPR-9f: run the plain-render gate (entries proposed, report attached)'
 date: 2026-11-10
 description: 'Writes the four interleaving entries as proposed, runs the whole parity harness before the flip, and attaches the report: zero unallowlisted differences, per-entry fire counts, and the caption and reference lines of the three fig-subcap fixtures. Ends with Gordon signing the entries; no flip happens here.'
-status: ready
+status: complete
 depends-on: [opr-7a, opr-7b, opr-7c, opr-7f, opr-7g, opr-7h, opr-7i, opr-7j, opr-9b, opr-9c, opr-9d, opr-9e]
 lane: D
 ---
@@ -59,20 +59,20 @@ migration notes written by OPR-8.
 
 ## Checklist (every box is `[unattended]` except the last)
 
-- [ ] Entries `proposed` for `julia/presentation-attrs`, `julia/records-plot`, `julia/fig-subcap` (normalizer) and
+- [x] Entries `proposed` for `julia/presentation-attrs`, `julia/records-plot`, `julia/fig-subcap` (normalizer) and
       `julia/capture-facts` (pinned diff); Gordon signs; update the allowlist header sentence about group references.
-- [ ] **Gate before the flip.** Run the OPR-0b/7c harness on the commit that has the normalizer, with 7i and 7j
+- [x] **Gate before the flip.** Run the OPR-0b/7c harness on the commit that has the normalizer, with 7i and 7j
       landed and no flip (`OPR_PARITY_REPORT=<scratchpad>/report.md cargo nextest run -p quarto-core -E
       'binary(integration) & test(opr_parity_runner::opr_parity_report)' --no-capture`; it needs R, Julia and Plots; narrow
       with `OPR_PARITY_ONLY=julia/ OPR_PARITY_KNITR=0`, about 2 minutes; the test itself asserts nothing, so read the report
       counts), and attach the report: zero unallowlisted differences, the per-entry fire counts, and the
       caption and reference lines of the three `fig-subcap` fixtures before and after.
-- [ ] **Record the result** in `claude-notes/research/2026-11-NN-opr-9f-gate-report.md`: the five counts, the per-entry fire counts (plain
+- [x] **Record the result** in `claude-notes/research/2026-11-NN-opr-9f-gate-report.md`: the five counts, the per-entry fire counts (plain
       and recorded), the "not compared" list, the caption and reference lines of the three `fig-subcap` fixtures before and after, and
       every difference not covered by an entry. Zero unallowlisted differences is the exit; any other result is a stop (below).
-- [ ] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (the known
+- [x] **Gates:** `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core` (the known
       `revealjs::assemble::tests::vendored_reveal_assets_match_npm_package` failure is local `node_modules` drift, not yours).
-- [ ] **[Gordon]** signs the four entries (`proposed` to `signed`, each reason ending "Signed: Gordon, 2026-11-NN") and sets OPR-9g to
+- [x] **[Gordon]** signs the four entries (`proposed` to `signed`, each reason ending "Signed: Gordon, 2026-11-NN") and sets OPR-9g to
       `ready`. The agent writes the rule and reason, never the signature, and does not flip a status.
 
 ## Stop conditions
@@ -99,4 +99,37 @@ attached; Gordon has the entries to sign.
 
 ## Notes from the run
 
-(Fill in at landing.)
+Written 2026-11-11 on `opr/9f-run-the-gate`. I stopped once, on one stop condition (below); Gordon ruled "accept" and "sign off" the same day, and the plan landed.
+Report: [gate report](../research/2026-11-11-opr-9f-gate-report.md).
+
+**Result (ran).** Whole harness, no flip: 81 identical, 12 allowlisted, **0 unallowlisted**, 253 rejected before any engine
+(same on both routes), 2 both-failed, 0 routes disagree, 0 skipped, 8 not compared. Every interleaving entry fires on the
+recorded side only. The caption and reference lines of the `julia`, `knitr` and `jupyter` `fig-subcap` fixtures are identical
+before (plain route) and after (recorded route).
+
+**Entries written, all `proposed`:** `julia-interleaved-cell` for `julia/presentation-attrs`, `julia/records-plot`,
+`julia/fig-subcap` and `julia/capture-facts`, and a pinned difference for `julia/capture-facts`
+(`pins/julia-capture-facts.txt`). That is five rows for the plan's "four entries". Gordon signs these five and the 9e epub
+entry, six in all. The pin comes from the live run, not from the 9d unit fixture, which predates 7h and 7i; read the pin
+before signing (the report explains).
+
+**Test change (not a weakened assertion).** `opr_parity_runner::tests::the_seeded_allowlist_parses_and_each_entry_is_proposed_or_signed`
+pinned the entry count at 4; it now expects 9 entries, 6 of them `proposed`. Its tripwire on the word "fig-subcap" in a reason
+needed the `fig-subcap` entry to say plainly that group references are not part of it; it does.
+
+**Stop condition: 8 cases "not compared".** The knitr docx and epub cases of four `rich-output` documents are not compared,
+because the knitr loop of the runner still uses the text-only `COMPARABLE` list (9d kept it on purpose). An uncommitted local
+run with the extractable list measured them: 6 identical, 2 (`include_graphics`) rejected before any engine, no blocker. I
+did not commit that one-line widening; it is a decision for Gordon (accept the measurement and land, or widen the loop in 9f).
+
+**Gates (ran).** `cargo clippy -p quarto-core --all-targets -- -D warnings` clean. `cargo nextest run -p quarto-core
+--no-fail-fast`: 8310 passed, 1 failed (the known `vendored_reveal_assets_match_npm_package` drift), 36 skipped. The Windows
+cross-check could not build here (`aws-lc-sys` needs a C toolchain for the MSVC target); the change is a test count plus data
+files with no `cfg`. The allowlist wording of one reason changed after the 138 s gate run (it is not read by any rule); the
+52 `opr_parity` tests passed after it, and I did not rerun the whole gate.
+
+**Gordon's rulings (2026-11-11).** (1) The 8 not-compared knitr docx and epub cases: accepted as measured; the runner's
+knitr loop keeps its text-only list. (2) Sign off: on Gordon's instruction in the session I set the six `proposed` entries to
+`signed`, each reason ending "Signed: Gordon, 2026-11-11." (the protocol says an agent never signs; this was his explicit request), and
+the seeded-allowlist test now expects nine signed entries. (3) Gordon also asked me to set OPR-9g to `ready`; done in the landing commit.
+The whole gate was rerun after signing: same counts (81 identical, 12 allowlisted, 0 unallowlisted), exit 0.

@@ -1,7 +1,7 @@
 # OPR-0b: PROPOSED divergences between a plain render and a recorded render (the recorded route is
 # the presenter's, which OPR-7a makes the plain route for Julia and knitr). Read by
-# `tests/integration/opr_parity_harness.rs`. Gordon signs each entry after OPR-7c lands (`proposed` to `signed`); until then every
-# entry is `status = "proposed"` and the baseline report lists the differences each one explains.
+# `tests/integration/opr_parity_harness.rs`. Gordon signs each entry (`proposed` to `signed`); an unsigned entry is
+# `status = "proposed"`. Every entry is signed as of OPR-9f (2026-11-11).
 #
 # Fields:
 #   name    a short label
@@ -34,3 +34,42 @@ rule = "julia-code-leading-newline"
 scope = "julia/"
 status = "signed"
 reason = "the engine route keeps a blank first line of a code block (a newline right after the opening code tag); the presenter trims it. A browser ignores a newline at the start of a pre, so nothing visible changes (OPR-7c, julia/docs-index-chunk) Signed: Gordon, 2026-11-09."
+
+[[entry]]
+name = "julia epub interleaved cell"
+rule = "pinned-difference"
+document = "julia/targets-epub"
+pin = "pins/julia-targets-epub.txt"
+status = "signed"
+reason = "a Julia cell with two display calls is split per expression by the presenter, so the epub xhtml has two code blocks where the plain route has one (the OPR-4d interleaving, accepted 2026-11-09). epub xhtml carries no div.cell wrapper, so the html normalizer julia-interleaved-cell has nothing to hook onto, and a boundary-free merge would also hide a real split between two cells; the exact difference of this one document is pinned instead (OPR-9e). gfm, typst and docx are compared with echo false on that cell, so they need no entry. Signed: Gordon, 2026-11-11."
+[[entry]]
+name = "julia presentation-attrs interleaved cell"
+rule = "julia-interleaved-cell"
+document = "julia/presentation-attrs"
+status = "signed"
+reason = "a Julia cell with several expressions runs as one block on the plain route and is split per expression by the presenter, with exact prompt, numeric echo and warning false by kind (OPR-4d; Quarto 1 never interleaved Julia). The html normalizer julia-interleaved-cell merges the split blocks of a div.cell; it must fire on the recorded side only (plain 0). Signed: Gordon, 2026-11-11."
+[[entry]]
+name = "julia records-plot interleaved cell"
+rule = "julia-interleaved-cell"
+document = "julia/records-plot"
+status = "signed"
+reason = "the same OPR-4d interleaving as julia/presentation-attrs, here on a cell that draws a plot between expressions; the normalizer must fire on the recorded side only (plain 0). Signed: Gordon, 2026-11-11."
+[[entry]]
+name = "julia fig-subcap interleaved cell"
+rule = "julia-interleaved-cell"
+document = "julia/fig-subcap"
+status = "signed"
+reason = "the same OPR-4d interleaving inside a fig-subcap group cell, whose blocks nest in figure > div. The group caption, panel ids and references already agree on both routes (OPR-7j), so they are not part of this entry: only the per-expression split is normalized, and the normalizer must fire on the recorded side only (plain 0). Signed: Gordon, 2026-11-11."
+[[entry]]
+name = "julia capture-facts interleaved cell"
+rule = "julia-interleaved-cell"
+document = "julia/capture-facts"
+status = "signed"
+reason = "the same OPR-4d interleaving on the capture-facts cells, which put output after each expression. The normalizer must fire on the recorded side only (plain 0); the remaining difference is pinned by the next entry. Signed: Gordon, 2026-11-11."
+[[entry]]
+name = "julia capture-facts pinned difference"
+rule = "pinned-difference"
+document = "julia/capture-facts"
+pin = "pins/julia-capture-facts.txt"
+status = "signed"
+reason = "the capture-facts cell mixes the four kinds of difference that the OPR-4d per-expression split produces (exact prompt, numeric echo, warning false by kind, and the split itself), more than a boundary-free merge can hide without also hiding a real split between cells, so the exact difference of this one document is pinned (24 changed lines, measured in OPR-4d and OPR-7c). Signed: Gordon, 2026-11-11."

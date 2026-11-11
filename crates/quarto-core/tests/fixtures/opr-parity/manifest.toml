@@ -18,15 +18,23 @@ name = "julia/fig-subcap"
 dir = "julia/fig-subcap"
 file = "doc.qmd"
 requires = ["julia", "plots"]
-formats = ["html"]
+formats = ["html", "typst", "revealjs"]
 note = "a fig-subcap group with layout-ncol 2 plus references to the group and each member (OPR-7j: the presenter writes the group caption and panel ids; only interleaving differs)"
+
+[[document]]
+name = "julia/fig-subcap-gfm"
+dir = "julia/fig-subcap-gfm"
+file = "doc.qmd"
+requires = ["julia", "plots"]
+formats = ["gfm"]
+note = "OPR-9e: julia/fig-subcap with echo false on the group cell, to gfm: gfm has no cell wrapper to normalize the interleaved split against, so the group markup is compared without the echoed code (the echoed split is pinned for epub and normalized for html)"
 
 [[document]]
 name = "jupyter/fig-subcap"
 dir = "jupyter/fig-subcap"
 file = "doc.ipynb"
 requires = []
-formats = ["html"]
+formats = ["html", "gfm", "typst", "revealjs"]
 note = "the same group case from a stored notebook (bd-gbaykhth)"
 
 [[document]]
@@ -172,7 +180,7 @@ name = "knitr/fig-subcap"
 dir = "knitr/fig-subcap"
 file = "doc.qmd"
 requires = ["r"]
-formats = ["html"]
+formats = ["html", "gfm", "typst", "revealjs"]
 note = "a fig-subcap group with layout-ncol 2 and references (bd-au5gts6e; identical on both routes)"
 
 [[document]]
@@ -302,3 +310,43 @@ file = "tbl-column-margin.qmd"
 requires = ["r"]
 formats = ["html", "typst"]
 note = "from crates/quarto/tests/smoke-all/typst/margin-layout"
+
+[[document]]
+name = "julia/targets-gfm"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["gfm"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to gfm; needs no Plots (text)"
+
+[[document]]
+name = "julia/targets-typst"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["typst"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to typst; needs no Plots (text, compared through the .typ)"
+
+[[document]]
+name = "julia/targets-docx"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["docx"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to docx; needs no Plots (zip, word/document.xml)"
+
+[[document]]
+name = "julia/targets-pptx"
+dir = "julia/targets"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["pptx"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to pptx; needs no Plots (zip, slide XML)"
+
+[[document]]
+name = "julia/targets-epub"
+dir = "julia/targets-echo"
+file = "doc.qmd"
+requires = ["julia"]
+formats = ["epub"]
+note = "OPR-9e: the hand-run document (println, labeled figure, labeled table, bare expression, fig-subcap group) to epub with the group cell echoed: the interleaving case (a pinned entry, since epub has no div.cell); the other classes set echo false on that cell"

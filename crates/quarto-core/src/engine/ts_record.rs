@@ -660,8 +660,36 @@ pub(super) fn attach_record(
 /// builds a record and the document has units. No engine name is tested; an engine that
 /// ignores the offer keeps presenting for itself.
 pub(super) fn offers_presentation(ctx: &ExecutionContext) -> bool {
-    ctx.builds_record() && !ctx.units.is_empty()
+    ctx.builds_record()
+        && !ctx.units.is_empty()
+        && JULIA_PRESENTED_TARGETS.contains(&ctx.format.as_str())
 }
+
+/// The output formats core presents from the record for a TypeScript engine (OPR-9e; today
+/// that is Julia). An allowlist, not a deny list: `FormatIdentifier::as_str()` yields about
+/// sixty identifiers, and an identifier with no parity case must stay on the engine's own
+/// route. A target joins this list with a parity case in `opr-parity/manifest.toml` that
+/// differs from the plain route by the accepted interleaving alone. The gate applies under
+/// `want_record` and `present_from_record` alike, so asking for a record never changes
+/// which route writes the output. It is quiet: a gated target prints nothing.
+///
+/// Graduated by parity evidence (`opr-parity/manifest.toml`): html, revealjs, dashboard, gfm,
+/// typst, epub, docx and pptx. commonmark, markdown, djot, rst, org, native, textile, mediawiki,
+/// plain, icml, fb2, docbook, rtf and odt have hand-matrix evidence only (9a S2), so they stay
+/// gated until a parity case exists for them.
+///
+/// `pdf` stays out until the LaTeX work exists (`latex` and `beamer` never reach an engine).
+/// Knitr keeps its own list (`knitr::target_route`, which excludes pptx); do not merge them.
+pub(super) const JULIA_PRESENTED_TARGETS: &[&str] = &[
+    "html",
+    "revealjs",
+    "dashboard",
+    "gfm",
+    "typst",
+    "epub",
+    "docx",
+    "pptx",
+];
 
 /// Whether the engine acknowledged the offer on its returned record info. Core presents
 /// from the record exactly when this is true.
@@ -1886,6 +1914,69 @@ fenced = 1
         )
         .with_want_record(true);
         assert!(!offers_presentation(&no_units));
+    }
+
+    fn with_target(mut ctx: ExecutionContext, target: &str) -> ExecutionContext {
+        ctx.format = target.to_string();
+        ctx
+    }
+
+    #[test]
+    fn the_target_allowlist_admits_each_graduated_target() {
+        for target in JULIA_PRESENTED_TARGETS {
+            let ctx = with_target(ctx_for(JDOC, &["julia"], true), target);
+            assert!(offers_presentation(&ctx), "{target} is graduated");
+        }
+    }
+
+    #[test]
+    fn a_gated_or_unknown_target_is_never_offered_whatever_asks_for_a_record() {
+        for target in [
+            "pdf",
+            "odt",
+            "commonmark",
+            "rst",
+            "latex",
+            "beamer",
+            "no-such-format",
+            "",
+        ] {
+            assert!(!JULIA_PRESENTED_TARGETS.contains(&target));
+            // `want_record` (record: true, --trace, preview, hub) does not bypass the gate ...
+            let asked = with_target(ctx_for(JDOC, &["julia"], true), target);
+            assert!(!offers_presentation(&asked), "{target} with want_record");
+            // ... nor does the stage's own present-from-record flag.
+            let flagged = with_target(
+                ctx_for(JDOC, &["julia"], false).with_present_from_record(true),
+                target,
+            );
+            assert!(
+                !offers_presentation(&flagged),
+                "{target} with present_from_record"
+            );
+        }
+    }
+
+    #[test]
+    fn the_target_allowlist_holds_canonical_identifiers_and_the_html_family() {
+        for t in JULIA_PRESENTED_TARGETS {
+            assert_eq!(*t, t.to_lowercase(), "identifiers are canonical lowercase");
+            assert!(!t.contains('+'), "no +extension: {t}");
+        }
+        // These would stop presenting from the record on the flip if they were missing.
+        for t in ["html", "revealjs", "dashboard"] {
+            assert!(JULIA_PRESENTED_TARGETS.contains(&t), "{t}");
+        }
+        assert!(!JULIA_PRESENTED_TARGETS.contains(&"pdf"));
+    }
+
+    #[test]
+    fn a_gated_target_is_quiet() {
+        // The gate offers nothing and adds no diagnostic: the run is the engine's own.
+        let ctx = with_target(ctx_for(JDOC, &["julia"], true), "odt");
+        assert!(!offers_presentation(&ctx));
+        let result = run_julia(&ctx, julia_nb());
+        assert!(result.warnings.is_empty(), "{:?}", result.warnings);
     }
 
     #[test]

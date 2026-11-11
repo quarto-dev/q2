@@ -2,7 +2,7 @@
 title: 'OPR-9g: flip plain render of Julia and knitr to the recorded route'
 date: 2026-11-10
 description: 'Turns the internal present_from_record control on by default, so a plain q2 render of a Julia or knitr document is presented by the Rust presenter from an in-memory record, writing nothing to .quarto. Keeps the LaTeX family and uncovered targets on the engine route, quietly, and converts the parity harness into a regression test of the recorded route.'
-status: blocked-on-gordon
+status: ready
 depends-on: [opr-9f]
 lane: D
 ---
