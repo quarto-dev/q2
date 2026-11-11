@@ -103,6 +103,57 @@ returns false, prints `SKIP`, and the test passes in about 10 ms. Every knitr te
 that needs R is a no-op in CI; these tests run only on developer machines, so they drift
 with whatever R packages each person has installed.
 
+### Inventory: R tests that run locally but not in CI (2026-11-11)
+
+Measured, not grepped: a logging `Rscript`/`R` shim on `PATH`
+(`knitr-rlang-error-ename-investigation/rscript-logging-shim.sh`) recorded the nextest test
+name of every process that started R during `cargo nextest run --workspace --no-fail-fast`.
+Full list: `knitr-rlang-error-ename-investigation/r-tests-2026-11-11.txt`.
+
+- **137 distinct tests start R** (out of 19251). 39 are `quarto-core` unit tests (all in
+  `engine::knitr`), 93 are `quarto-core` integration tests, 4 are `quarto` integration
+  tests, 1 is in `quarto-test`. The count includes tests that only probe for R or a package
+  and then skip (for example the SQL test, which needs DBI and RSQLite).
+- They take **about 480 test-seconds** locally (wall time is lower; nextest runs them in
+  parallel). The largest: `smoke_all` 123 s (one test over the smoke-all corpus, about 25
+  documents of which use R), the two `knitr_corpus_control` tests at 70 s each,
+  `dashboard_goldens` 24 s.
+- CI: the latest green `test-suite.yml` run on `main` (43086661780) reports 19249 tests
+  passed on ubuntu and macOS, with no R setup step. All of these gates need knitr and
+  rmarkdown, which no runner image ships, so they skip there.
+
+### Exposure to future knitr changes
+
+This failure is one instance of a general coupling. Three layers:
+
+1. **Test oracles are live knitr.** About 137 tests compare Q2 against whatever knitr,
+   evaluate and rlang are installed locally. A CRAN release changes the expected output
+   with no change to Q2. Because `cargo xtask verify` runs nextest fail-fast, one such test
+   stops verify for every agent on that machine, and it looks like a branch regression.
+   That happened twice in four days here (bd-54odm3rz, bd-qwscag8b), plus a memory-note
+   workaround.
+2. **Product code uses knitr private API.** The vendored R resources call 45 distinct
+   `knitr:::` functions, mostly the `sew.*`/`wrap.*` family in `patch.R`, plus
+   `parse_block`, `parse_params`, `opts_chunk_attr`. These can change without a NEWS
+   entry. Quarto 1 shares `patch.R`/`hooks.R`, so it has the same exposure.
+3. **Structured records reconstruct knitr formatting.** `capture.R` re-derives some text
+   ("as knitr formats it before comment_out (sew.warning + msg_wrap)") and names
+   conditions. Quarto 1 only passes knitr's text through, so Q2 is more coupled than
+   Quarto 1 here. The `ename` fix in this plan removes one such coupling; the warning
+   formatting is another.
+
+What CI never running R implies: drift is caught only on developer machines, and only
+when someone upgrades packages. Possible mitigations (for discussion, not in this strand):
+
+- Default test runs use **recorded** knitr output (the execution-record / replay
+  machinery), and live-R tests become opt-in (an env var or a nextest profile), in the
+  same spirit as `cargo xtask capture-pandoc-recordings`.
+- Each recording stores the knitr/evaluate/rlang/rmarkdown versions it came from, and a
+  periodic local job (weekly, or on demand) re-runs the live tests against current CRAN and
+  reports differences as a drift report, not as a failing verify.
+- A cheap version-check test that warns when the installed packages differ from the
+  versions the recordings were made with, so a failure points at the cause.
+
 ## Proposed phases (draft)
 
 - Phase 0: Tests first. Extend `capture_classifies_pieces` (or add a sibling) with a custom
@@ -114,8 +165,8 @@ with whatever R packages each person has installed.
   (question 2).
 - Phase 2: done 2026-11-11. bd-qwscag8b closed as a duplicate; the SQL `#|` skew is
   bd-lnu81d4a.
-- Phase 3 (optional): CI. Add an R leg, or a nightly job, that installs a pinned knitr,
-  rmarkdown, jsonlite, rlang, DBI and RSQLite, so these tests run somewhere.
+- Phase 3: no R in CI (decided 2026-11-11). Whether to move live-R tests to an opt-in or
+  periodic local cadence is a separate question (see "Exposure to future knitr changes").
 - Phase 4: Retire the `project_local_knitr_rlang_error` memory note.
 
 ## Open design questions for the user
@@ -123,17 +174,12 @@ with whatever R packages each person has installed.
 1. **What should `ename` name?** Options: (a) the class the author raised, unwrapped from
    rlang's `$error` (`simpleError`, `myError`), so the name does not depend on the knitr
    version; (b) the first class as-is (`rlang_error`), relaxing the test; (c) the test
-   accepts either. Recommendation: (a), since a knitr upgrade should not change the
-   records Q2 writes.
-2. **What should `text` carry?** Keep knitr's own rendering (`as.character(p)`, now in
-   rlang's format, which is what the user sees in the knitted output), or rebuild the base
-   R form from the unwrapped condition? Recommendation: keep knitr's text, since `text` is
-   "as knitr formats it" elsewhere in capture.R, the replay tests compare against live
-   knitr output, and Quarto 1 shows exactly that text (see "What Quarto 1 does").
-3. **Do we want R in CI?** The knitr capture and replay tests currently never run in CI.
-   Should this strand add an R leg (cost: R + packages install time per run, and pinning
-   versions to keep it stable), file a separate strand for it, or leave R tests as
-   local-only?
+   accepts either. Resolved 2026-11-11: (a).
+2. **What should `text` carry?** Resolved 2026-11-11: keep knitr's own text
+   (`as.character(p)`), which matches what Quarto 1 shows.
+3. **Do we want R in CI?** Resolved 2026-11-11: no, CI never runs R. Open follow-up:
+   should live-R tests also leave the default local run (opt-in or periodic), using
+   recorded executions instead? Not part of this strand.
 4. **Duplicate handling.** Resolved 2026-11-11: yes. bd-qwscag8b closed, SQL failure
    split into bd-lnu81d4a.
 
