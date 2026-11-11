@@ -101,8 +101,9 @@ pub(crate) fn splice_record(
     doc_dir: &Path,
 ) -> (DocumentAst, SpliceReport) {
     let (mut doc, report) = splice_units(doc, record, ctx, doc_dir);
-    // After the merge: reconciling against the reparsed text takes its meta, which would drop
-    // anything folded earlier. Includes must reach the pane even when no unit splices.
+    // Includes must reach the pane even when no unit splices, so they are folded here rather
+    // than by the merge. (Before bd-8svy3p89's metadata reconcile the merge replaced the meta
+    // with the reparsed text's, which also dropped anything folded earlier.)
     fold_includes(record, &mut doc);
     fold_warnings(record, ctx);
     (doc, report)

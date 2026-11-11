@@ -969,15 +969,25 @@ pub(crate) fn merge_markdown_into_ast(
     // growing `ast_context.filenames`, so in a project render the
     // two counts diverge and the derived id lands on `_quarto.yml`'s
     // dense slot (bd-itj2mjkr).
-    //
-    // The slot keeps the markdown itself, not just its line index: the
-    // re-parsed metadata's strings are markdown inlines, and a consumer
-    // that needs one as written (a path with two underscores parses as
-    // emphasis) reads it back from this text
-    // (`config_paths::config_value_text`, GH #1152).
-    let new_slot = merged_context
+    let new_slot = if let Some(intermediate_file) = executed_ast_context
         .source_context
-        .add_file(intermediate_name.clone(), Some(markdown.to_string()));
+        .get_file(quarto_source_map::FileId(0))
+        .cloned()
+    {
+        if let Some(info) = intermediate_file.file_info {
+            merged_context
+                .source_context
+                .add_file_with_info(intermediate_name.clone(), info)
+        } else {
+            merged_context
+                .source_context
+                .add_file(intermediate_name.clone(), None)
+        }
+    } else {
+        merged_context
+            .source_context
+            .add_file(intermediate_name.clone(), None)
+    };
     merged_context.filenames.push(intermediate_name);
     // Carry the executed parse's example-list counter forward; the
     // last engine's value wins so downstream numbering is coherent.

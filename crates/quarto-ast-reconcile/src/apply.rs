@@ -29,7 +29,10 @@ pub fn apply_reconciliation(
     let result_blocks = apply_reconciliation_to_blocks(original.blocks, executed.blocks, plan);
 
     Pandoc {
-        // For v1, executed metadata wins entirely
+        // The executed metadata is taken as given. An engine round-trip
+        // does not leave metadata unchanged, so callers that have the
+        // engine's input text reconcile it first with
+        // [`crate::reconcile_meta`] (bd-8svy3p89).
         meta: executed.meta,
         blocks: result_blocks,
     }

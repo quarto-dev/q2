@@ -2,14 +2,13 @@
 title: 'Engine round-trip rewrites project metadata as document markdown (bd-8svy3p89)'
 date: 2026-11-10
 description: 'On pages that run code, the engine output''s re-parsed metadata replaces the real metadata wholesale; reconcile it three ways instead, against a parse of the exact markdown the engine received, so only changes the engine made are taken.'
-status: draft  # Design agreed 2026-11-11; all questions decided; do not implement before the go-ahead
+status: active  # Implemented 2026-11-11; PR open
 braid:
   strand: bd-8svy3p89
 ---
 
 **Branch:** `braid/bd-8svy3p89-engine-metadata-round-trip` (main checkout,
 based on `main` @ `d84b9ad12`).
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Status
 
@@ -122,48 +121,48 @@ Blocks keep today's two-way reconcile (decision 4).
 
 ### Phase 0: tests first
 
-- [ ] `quarto-ast-reconcile`: unit tests for the meta reconcile over
+- [x] `quarto-ast-reconcile`: unit tests for the meta reconcile over
       hand-built S0, S1 and S2: unchanged leaf keeps S0 (kind and
       `source_info`); changed leaf takes S2; key added; key removed; key
       missing from S1 keeps S0; nested map with one changed leaf keeps the
       siblings from S0; array of equal length with one changed item;
       array of different length takes S2.
-- [ ] `engine_execution.rs`: echo-engine test over the probe matrix
+- [x] `engine_execution.rs`: echo-engine test over the probe matrix
       (`Path`, `Glob`, `Expr`, the string cases): every value comes back
       equal to S0, kind and span included.
-- [ ] `engine_execution.rs`: an engine that rewrites one front-matter
+- [x] `engine_execution.rs`: an engine that rewrites one front-matter
       value (as span evaluation does) and leaves the rest: that value is
       the engine's, the others are S0's.
-- [ ] Pipeline-level test from the subdirectory repro (css link and
+- [x] Pipeline-level test from the subdirectory repro (css link and
       `include-in-header` on a page with a stub engine). First find a
       harness that renders a project with an injected engine registry;
       if none exists, assert on the merged metadata after the engine
       stage instead.
-- [ ] Watch each fail on HEAD for the right reason.
+- [x] Watch each fail on HEAD for the right reason.
 
 ### Phase 1: the reconcile
 
-- [ ] `quarto-ast-reconcile`: `reconcile_meta(original, baseline,
+- [x] `quarto-ast-reconcile`: `reconcile_meta(original, baseline,
       executed) -> ConfigValue` implementing the table above.
       `apply_reconciliation` keeps its blocks job; the "executed metadata
       wins" comment goes away.
-- [ ] `merge_markdown_into_ast` takes the baseline text, parses it, and
+- [x] `merge_markdown_into_ast` takes the baseline text, parses it, and
       replaces `executed.meta` with `reconcile_meta(...)` before applying.
       Parse warnings from the baseline parse are dropped (they repeat the
       executed parse's for unchanged text).
-- [ ] Engine loop: pass `unmask(qmd)` as the baseline for each engine; in
+- [x] Engine loop: pass `unmask(qmd)` as the baseline for each engine; in
       a multi-engine sequence S0 is the metadata reconciled after the
       previous engine.
 
 ### Phase 2: record splice
 
-- [ ] `record_splice.rs`: pass the unmasked serialized `qmd` (before the
+- [x] `record_splice.rs`: pass the unmasked serialized `qmd` (before the
       edits) as the baseline. Splice never edits front-matter units, so
       every value should come back as S0; add a test that says so.
 
 ### Phase 3: revert the #1152 machinery (decision 1)
 
-- [ ] Remove `config_value_text`, `literal_config_strings`,
+- [x] Remove `config_value_text`, `literal_config_strings`,
       `ConfigPath::from_value_in`, the theme-stage `literal_theme_meta`,
       and storing the intermediate's text in its source slot; keep the
       regression test for GH #1152 (an extension `theme:` with two
@@ -171,7 +170,7 @@ Blocks keep today's two-way reconcile (decision 4).
 
 ### Phase 4: real engines
 
-- [ ] Run the GH #1152 repro and `subdir-repro.sh` with jupyter and knitr.
+- [x] Run the GH #1152 repro and `subdir-repro.sh` with jupyter and knitr.
       Check that the front matter knitr emits parses to the same values as
       the front matter it received, so S1 equals S2 for untouched values.
       If knitr reformats YAML in a way that changes values, those values
@@ -179,8 +178,38 @@ Blocks keep today's two-way reconcile (decision 4).
 
 ### Phase 5: notes and docs
 
-- [ ] Update the `config_paths` module docs and the `apply.rs` comments.
-- [ ] Mark this plan done; comment on the strand.
+- [x] The `apply.rs` comment. (`config_paths` needed nothing: Phase 3
+      restored it to its state before #1164.)
+- [x] Comment on the strand; mark this plan done when the PR merges.
+
+## Outcome (2026-11-11)
+
+- **Tests.** `quarto-ast-reconcile/src/meta.rs` (11 unit tests);
+  `engine_execution.rs` `engine_round_trip_keeps_untouched_metadata` (the
+  probe matrix) and `engine_change_to_metadata_is_taken`; `record_splice.rs`
+  `splice_keeps_the_metadata_as_it_was`;
+  `tests/integration/engine_metadata_round_trip.rs`, three pages in `sub/`
+  rendered through `render_to_file` with a `FixtureEngine`: project
+  `brand:` (bd-08hfh3ut), project `include-in-header`, `css:` and a theme
+  layer (bd-bfp32yw9), and an extension theme partial (GH #1152). Each
+  fails with the reconcile disabled, for the reported reason (Q-14-6 on
+  `sub/_brand.yml`; the missing header).
+- **Real engines.** The GH #1152 repro, `subdir-repro.sh` and the
+  bd-08hfh3ut fixture all render correctly with knitr and jupyter, with
+  the #1152 machinery reverted, so the front matter knitr emits reads
+  back to the values it received. An evaluated front-matter span (a `title:`
+  holding an inline Python expression for 6 times 7) still renders as
+  `Answer 42`.
+- **Hidden double delivery.** `marimo_records::marimo_record_replays_without_engine`
+  failed: the replay carried the islands header includes twice. The test
+  set its empty registry on `ctx.engine_registry_override`, which
+  `render_qmd_to_html` overwrites from `HtmlRenderConfig::engine_registry`,
+  so the real marimo engine ran during the "replay without engine". Its
+  includes plus the record splice's folded ones made two copies; the old
+  round-trip dropped the folded copy. Fixed in the test (registry through
+  the config). The only production record splice
+  (`pass2_renderer.rs`, the hub-client HTML preview) renders with
+  `execute: false`, so no engine runs after a splice there.
 
 ## Decisions (2026-11-11)
 
