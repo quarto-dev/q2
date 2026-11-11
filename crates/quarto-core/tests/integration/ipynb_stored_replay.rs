@@ -549,3 +549,26 @@ async fn document_level_output_asis_yields_to_a_cell_override() {
         "the override cell's text stays a code block: {ast}"
     );
 }
+
+/// bd-f63cqoke: a backtick run of three or more in a code cell's source lengthens the cell's
+/// fence (the ipynb converter for a line-leading run, the qmd writer for one anywhere in a
+/// line). The replayer must still treat the cell as a code cell and present its stored output;
+/// it used to accept only three-backtick fences and left such a cell as plain source.
+#[tokio::test]
+async fn cell_whose_source_holds_a_backtick_run_replays_its_output() {
+    let notebook = r###"{"cells":[{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["MID-LINE-OUT\n"]}],"source":["print(\"a ``` b\")\n"]},{"cell_type":"code","execution_count":2,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["LINE-START-OUT\n"]}],"source":["s = '''\n","```bash\n","pip install x\n","```\n","'''\n","print(s)\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"###;
+    let out = preview_ast(notebook, ExecutionPolicy::None, None).await;
+    let ast = &out.ast_json;
+    for marker in ["MID-LINE-OUT", "LINE-START-OUT"] {
+        assert!(
+            ast.contains(marker),
+            "the stored output {marker} must be presented: {ast}"
+        );
+    }
+    assert_eq!(
+        ast.matches("cell-output-stdout").count(),
+        2,
+        "both cells present their stdout: {ast}"
+    );
+    assert!(problems(&out).is_empty(), "{:?}", problems(&out));
+}

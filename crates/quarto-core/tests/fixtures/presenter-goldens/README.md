@@ -32,3 +32,11 @@ div, and the Julia flip needs the same, so `unhandled-markdown-mime`,
 `unhandled-latex-mime` and `markdown-beats-nothing-plain-wins` were re-blessed (Gordon
 approved). `scripts/check-presenter-goldens-unchanged.sh` reports these three files as
 changed from now on; that is the intended exception.
+
+Changed on purpose (bd-f63cqoke, 2026-11-11): `four-backtick-source` pinned a bug. A code
+cell whose source has a line starting with ``` gets a four-backtick fence from the ipynb
+converter (Quarto 1's rule), and the executor's legacy rule accepted only three-backtick
+fences. The cell's stored `ok` output was dropped and only its source was shown. Quarto 1
+opens a cell on any run of three or more backticks, so the cell now presents its output and
+the golden was re-blessed. `scripts/check-presenter-goldens-unchanged.sh` reports this file as
+changed from now on; that is the intended exception.

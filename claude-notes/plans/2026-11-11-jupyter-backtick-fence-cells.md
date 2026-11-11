@@ -1,14 +1,13 @@
 ---
-title: 'Jupyter cell whose source contains ``` mid-line is silently not executed (bd-f63cqoke)'
+title: 'Jupyter cell whose source contains three backticks mid-line is silently not executed (bd-f63cqoke)'
 date: 2026-11-11
-description: 'The qmd writer lengthens a cell fence to four backticks when the cell source contains ``` anywhere, and the Jupyter executor only runs three-backtick cells, so the cell silently renders as inert code; Quarto 1 runs any fence of three or more backticks.'
-status: draft  # Design questions answered 2026-11-11; ready to implement Phase 0-1 on go-ahead
+description: 'The qmd writer lengthens a cell fence to four backticks when the cell source contains a run of three backticks anywhere, and the Jupyter executor only runs three-backtick cells, so the cell silently renders as inert code; Quarto 1 runs any fence of three or more backticks.'
+status: in-progress  # Phases 0-1 implemented on braid/bd-f63cqoke-jupyter-cell-whose-source; PR pending
 braid:
   strand: bd-f63cqoke
 ---
 
-**Branch:** `main` @ `2511c70a8` (investigation committed in place; no worktree created).
-**Do not start implementation until the user gives the go-ahead.**
+**Branch:** `braid/bd-f63cqoke-jupyter-cell-whose-source` (off `main` @ `2511c70a8`). Go-ahead given 2026-11-11.
 
 ## Triage verdict
 
@@ -21,9 +20,11 @@ tighten the writer, or both, and whether to add a warning.
 
 Filed 2026-11-11 by Carlos while fixing GH #1156 (`output: asis` under Jupyter). Type bug, P2.
 
+````python
 ```{python}
 print("a ``` b")
 ```
+````
 
 renders as an inert code block with class `{python}` and no kernel output. One or two
 backticks in the string work. Three or more anywhere in a line break it. Real-world impact:
@@ -55,7 +56,7 @@ The chain the strand describes still holds at `2511c70a8`:
 
 1. The AST is serialized back to qmd before execution. `pampa/src/writers/qmd.rs:1022-1024`
    picks the fence with `determine_backticks` (`:1830`), which counts the longest backtick run
-   **anywhere** in the text, plus one, minimum 3. `a ``` b` therefore gets a four-backtick fence.
+   **anywhere** in the text, plus one, minimum 3. A string like `a`, three backticks, `b` therefore gets a four-backtick fence.
    That is valid CommonMark, but more conservative than needed: only a line made of backticks
    (and up to 3 spaces of indent) can close a fence.
 2. `crates/quarto-core/src/engine/units.rs:240` `runs_in_legacy_executor` requires
@@ -63,32 +64,32 @@ The chain the strand describes still holds at `2511c70a8`:
    `jupyter/text_execute.rs:362` (`owned_cells`) and `ipynb_replay.rs:131,176`.
 3. The cell is dropped and nothing is reported.
 
-Quarto 1's `startCodeCellRegEx` is `^(\s*)(```+)\s*\{lang...\}` (jupyter.ts:318-321), so q1 runs
-fences of any length ≥3. knitr's chunk regex also accepts ```+.
+Quarto 1's `startCodeCellRegEx` is an opener pattern that takes a run of three or more backticks (jupyter.ts:318-321), so q1 runs
+fences of any length ≥3. knitr's chunk regex also accepts three or more.
 
 ### Reproduced (q2 0.42.0 from PATH, Jupyter venv; repros in `jupyter-backtick-fence-cells-investigation/`)
 
 | File | Result |
 |---|---|
-| `mid-line-triple.qmd` | **Bug.** The ``` cell is an inert `<pre class="{python}">`. The control cell runs. No warning. |
-| `author-four-tick.qmd` | Runs. **This corrects the strand's guess:** the writer normalizes an author-written ```` fence back to 3 ticks when the source has no backticks. |
+| `mid-line-triple.qmd` | **Bug.** The cell with three backticks in its string is an inert `<pre class="{python}">`. The control cell runs. No warning. |
+| `author-four-tick.qmd` | Runs. **This corrects the strand's guess:** the writer normalizes an author-written four-backtick fence back to 3 ticks when the source has no backticks. |
 | `asis-tabset.qmd` | Not executed (same mechanism). This is the #1156 use case. |
-| `knitr-mid-line.qmd` | Runs (`{r}` with ``` in a string). **knitr is unaffected.** |
+| `knitr-mid-line.qmd` | Runs (`{r}` with three backticks in a string). **knitr is unaffected.** |
 
 The only trigger is a backtick run of 3+ in the cell source. Where the run sits in the line does
 not matter. An author-written 4-tick fence fails only when its source also contains backticks.
 
 **Second likely trigger (unverified):** the `.ipynb` converter's `code_fence_ticks`
 (`content_processors/ipynb.rs:618`) lengthens a code cell fence when a source *line starts*
-with ```. A notebook cell like that would then be skipped by `ipynb_replay` (`:176`) and by
+with three backticks. A notebook cell like that would then be skipped by `ipynb_replay` (`:176`) and by
 execution. Phase 0 should pin this.
 
 ## Proposed phases (draft)
 
 - **Phase 0 — Failing tests.** Add a units-level test that a `fence_len == 4` bare `{python}`
   cell runs (this flips the existing `assert!(!runs_in_legacy_executor(&four[0]))` at
-  `units.rs:739`). Add a Jupyter end-to-end test for the mid-line ``` cell and the asis tabset
-  case. Add an ipynb test for a code cell with a line-leading ```.
+  `units.rs:739`). Add a Jupyter end-to-end test for the mid-line three-backtick cell and the asis tabset
+  case. Add an ipynb test for a code cell with a line starting with three backticks.
 - **Phase 1 — Executor rule.** Change `runs_in_legacy_executor` to `fence_len >= 3` (q1 parity).
   Update the EXR-2 plan (decision 12) and the epic (decision 40) to record that the
   opener-length skip is decided.
@@ -144,3 +145,23 @@ before starting Phase 1.
   replayed. That is the desired outcome, but replay tests may need new expectations.
 - The fix makes q2 run cells it previously skipped. Any document that relied on this,
   knowingly or not, will start executing code. Mention it in the changelog.
+
+## Implementation log
+
+- **Phase 0 (tests, red first).**
+  - `units.rs`: a fence of four or five backticks runs, including one whose source holds three backticks.
+  - `text_execute.rs`: `bd_f63cqoke_cell_with_a_backtick_run_survives_the_qmd_round_trip`
+    (parse → qmd writer → plan) and `bd_f63cqoke_longer_opener_runs`. The `cells_nested`
+    corpus fixture is now a named exception to the old-finder comparison.
+  - `ipynb_stored_replay.rs`: `cell_whose_source_holds_a_backtick_run_replays_its_output`
+    covers both triggers. **It confirmed the ipynb trigger:** before the fix, both cells
+    replayed as inert `{python}` blocks.
+  - smoke-all `jupyter/backtick-run-in-cell.qmd` uses a live kernel (`requires: jupyter`)
+    and covers the mid-line, `output: asis` tabset and control cells. Checked red with
+    `== 3` put back, then green.
+- **Phase 1.** `runs_in_legacy_executor` now uses `fence_len >= 3`. The EXR-2 decision 12 and
+  epic decision 40 notes record that the opener-length skip is decided.
+- **Phase 4.** No changelog: this repo only keeps `hub-client/changelog.md`, and hub-client
+  is not touched.
+- **Still to do after merge:** a follow-up comment on bd-jupyter-parse-code-blocks-regex-z1ehfla6
+  (decision 4).
