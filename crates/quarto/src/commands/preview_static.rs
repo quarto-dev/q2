@@ -826,7 +826,7 @@ fn record_failure(hub: &ReloadHub, report: &RenderReport) {
         hub.set_failure(None);
         return;
     }
-    let text = report.diagnostics_text(false);
+    let text = report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN);
     hub.set_failure(Some(if text.trim().is_empty() {
         "The render produced no output.".to_string()
     } else {
@@ -851,7 +851,7 @@ fn finish_render(
                 ok,
                 errors: counts.errors,
                 warnings: counts.warnings,
-                text: report.diagnostics_text(false),
+                text: report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN),
             });
             if ok {
                 let target = match ran {
@@ -867,14 +867,22 @@ fn finish_render(
             *last = LastRender::from_report(&report);
         }
         RenderOutcome::Abort(abort) => {
-            let message = abort.user_message();
-            eprintln!("{message}");
-            hub.set_failure(Some(strip_ansi_escapes(&message)));
+            eprintln!(
+                "{}",
+                abort.user_message(&crate::commands::terminal_style::stderr_text_options())
+            );
+            // The browser gets the plain form. Still sanitized: an
+            // `Other` abort can quote external tool output (a pandoc or
+            // engine error) that carries its own escapes.
+            let message = strip_ansi_escapes(
+                &abort.user_message(&quarto_error_reporting::TextRenderOptions::plain()),
+            );
+            hub.set_failure(Some(message.clone()));
             hub.send(ReloadEvent::RenderStop {
                 ok: false,
                 errors: 1,
                 warnings: 0,
-                text: strip_ansi_escapes(&message),
+                text: message,
             });
         }
         RenderOutcome::Panicked(message) => {

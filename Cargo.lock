@@ -6929,6 +6929,7 @@ dependencies = [
  "pampa",
  "quarto-error-reporting",
  "quarto-source-map",
+ "quarto-util",
  "regex",
  "serde",
  "serde_json",
@@ -7539,6 +7540,7 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-trace",
+ "quarto-util",
  "quarto-wasm-embed",
  "reqwest 0.12.28",
  "samod",
@@ -7744,8 +7746,10 @@ dependencies = [
 name = "quarto-util"
 version = "0.43.0"
 dependencies = [
+ "anstyle-query",
  "dirs",
  "serde",
+ "supports-hyperlinks",
  "thiserror 2.0.21",
 ]
 

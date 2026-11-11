@@ -37,8 +37,33 @@ struct Cli {
     #[arg(short = 'v', long = "verbose", global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
+    /// When to color messages and make file locations clickable.
+    /// `auto` (the default) decides from the terminal and the
+    /// `NO_COLOR` / `CLICOLOR` / `CLICOLOR_FORCE` / `FORCE_COLOR`
+    /// environment variables; this flag overrides them all.
+    #[arg(long, global = true, value_enum, default_value_t = ColorArg::Auto, value_name = "WHEN")]
+    color: ColorArg,
+
     #[command(subcommand)]
     command: Commands,
+}
+
+/// clap's view of [`quarto_util::output_style::ColorFlag`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ColorArg {
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<ColorArg> for quarto_util::output_style::ColorFlag {
+    fn from(arg: ColorArg) -> Self {
+        match arg {
+            ColorArg::Auto => Self::Auto,
+            ColorArg::Always => Self::Always,
+            ColorArg::Never => Self::Never,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -1723,7 +1748,22 @@ mod cli_parse_tests {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(err) = run() {
+        // A structured parse error reaching here prints its diagnostic
+        // decorated per the resolved stderr style (bd-be8ve52f): its
+        // `Display` is plain by design. Anything else prints exactly as
+        // returning the error from `main` would (`Error: {err:?}`).
+        let opts = commands::terminal_style::stderr_text_options();
+        match commands::terminal_style::format_error_report(&err, &opts) {
+            Some(report) => eprintln!("{report}"),
+            None => eprintln!("Error: {err:?}"),
+        }
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     // Install Quarto's `Q-*` error catalog into the catalog-agnostic
     // `quarto-error-reporting` host, so diagnostics can resolve docs URLs and
     // catalog metadata. Must run before any diagnostic is rendered; idempotent.
@@ -1737,6 +1777,12 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Decide color and hyperlinks for stdout/stderr once, here on the
+    // main thread before any runtime, thread, or output exists
+    // (bd-be8ve52f). Every sink reads it back via
+    // `quarto_util::output_style::get()`.
+    let output_style = quarto_util::output_style::init(cli.color.into());
+
     // Initialize logging. The `-v` flag chooses a default filter
     // directive (see `quarto_util::verbose_to_filter`); `RUST_LOG`,
     // when set, takes precedence and is parsed directly by
@@ -1749,7 +1795,11 @@ fn main() -> Result<()> {
         )
         // Logs go to stderr like every other q2 diagnostic — stdout
         // stays reserved for command output (`get-config` JSON, etc.).
-        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(output_style.stderr.color),
+        )
         .init();
 
     match cli.command {

@@ -599,7 +599,10 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         ))
         .chain(project.config.config_diagnostics.iter().cloned())
     {
-        eprintln!("{}", diagnostic.to_text(None));
+        eprintln!(
+            "{}",
+            diagnostic.to_text_with_options(None, &stderr_text_options())
+        );
     }
     if project.config.pre_render_scripts.is_empty() {
         return;
@@ -635,7 +638,7 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         &ctx,
         &input_files,
     ) {
-        eprintln!("{parse_error}");
+        eprintln!("{}", parse_error.render_with(&stderr_text_options()));
         eprintln!(
             "note: the preview keeps serving; fix the script and restart `q2 preview` to re-run it."
         );
@@ -1311,6 +1314,15 @@ fn content_type_for(path: &str) -> HeaderValue {
     // it exactly — `WebAssembly.compileStreaming` needs
     // `application/wasm`).
     HeaderValue::from_static(spa_manifest::content_type_for(path))
+}
+
+/// Diagnostic render options for this process's stderr, per the style
+/// resolved once at startup (`quarto_util::output_style`, bd-be8ve52f).
+fn stderr_text_options() -> quarto_error_reporting::TextRenderOptions {
+    let style = quarto_util::output_style::get().stderr;
+    quarto_error_reporting::TextRenderOptions::default()
+        .color(style.color)
+        .hyperlinks(style.hyperlinks)
 }
 
 #[cfg(test)]

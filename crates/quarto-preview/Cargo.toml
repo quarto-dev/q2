@@ -26,6 +26,7 @@ samod = { version = "0.16.0", features = ["tokio"] }
 
 quarto-core.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }
+quarto-util.workspace = true
 quarto-hub.workspace = true
 # Live-share tunnel host (`--share`, plan Phase 2). Native-only; keeps
 # all iroh usage behind quarto-p2p's API.

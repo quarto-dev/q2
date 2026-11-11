@@ -11,6 +11,24 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use quarto_hub::{StorageManager, auth, context::HubConfig, default_standalone_data_dir, server};
 
+/// clap's view of [`quarto_util::output_style::ColorFlag`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ColorArg {
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<ColorArg> for quarto_util::output_style::ColorFlag {
+    fn from(arg: ColorArg) -> Self {
+        match arg {
+            ColorArg::Auto => Self::Auto,
+            ColorArg::Always => Self::Always,
+            ColorArg::Never => Self::Never,
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "hub")]
 #[command(about = "Collaborative sync server for Quarto projects")]
@@ -27,6 +45,12 @@ struct Args {
     /// `RUST_LOG` overrides this flag entirely when set.
     #[arg(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
     verbose: u8,
+
+    /// When to color log output: `auto` (the default) decides from the
+    /// terminal and the `NO_COLOR` / `CLICOLOR` / `CLICOLOR_FORCE` /
+    /// `FORCE_COLOR` environment variables; this flag overrides them.
+    #[arg(long, value_enum, default_value_t = ColorArg::Auto, value_name = "WHEN")]
+    color: ColorArg,
 
     /// Watch a local Quarto project directory.
     /// When provided, the hub discovers and syncs files from this directory.
@@ -364,6 +388,11 @@ async fn run_admin(cmd: AdminCommand) -> anyhow::Result<()> {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
+    // Decide color once, before any task or output exists (bd-be8ve52f).
+    // `#[tokio::main]` has started the runtime, but this body still runs
+    // on the main thread and nothing has been spawned or printed yet.
+    let output_style = quarto_util::output_style::init(args.color.into());
+
     // `hub admin …`: maintainer tools, no server startup.
     if let Some(Command::Admin { cmd }) = args.command {
         tracing_subscriber::registry()
@@ -371,7 +400,7 @@ async fn main() -> anyhow::Result<()> {
                 tracing_subscriber::EnvFilter::try_from_default_env()
                     .unwrap_or_else(|_| quarto_util::verbose_to_filter(args.verbose).into()),
             )
-            .with(tracing_subscriber::fmt::layer())
+            .with(tracing_subscriber::fmt::layer().with_ansi(output_style.stderr.color))
             .init();
         return run_admin(cmd).await;
     }
@@ -386,7 +415,7 @@ async fn main() -> anyhow::Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| quarto_util::verbose_to_filter(args.verbose).into()),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_ansi(output_style.stderr.color))
         .init();
 
     // Mode roots, needed both for storage and for resolving a bare

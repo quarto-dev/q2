@@ -50,7 +50,15 @@ pub fn qmd_to_pandoc(
         }
         Err(diagnostics) => {
             // Convert diagnostics to strings for backward compatibility
-            Err(diagnostics.iter().map(|d| d.to_text(None)).collect())
+            Err(diagnostics
+                .iter()
+                .map(|d| {
+                    d.to_text_with_options(
+                        None,
+                        &quarto_error_reporting::TextRenderOptions::plain(),
+                    )
+                })
+                .collect())
         }
     }
 }
@@ -158,7 +166,7 @@ pub fn render_with_template_bundle_named(
         Ok((output, diagnostics)) => {
             let diag_json: Vec<serde_json::Value> = diagnostics
                 .iter()
-                .map(|d| serde_json::json!({"message": d.to_text(None)}))
+                .map(|d| serde_json::json!({"message": d.to_text_with_options(None, &quarto_error_reporting::TextRenderOptions::plain())}))
                 .collect();
             serde_json::json!({
                 "output": output,

@@ -146,7 +146,13 @@ fn fail(diag: &DiagnosticMessage, json: bool) -> ! {
             Err(e) => eprintln!("(internal: failed to serialize diagnostic for --json: {e})"),
         }
     } else {
-        eprintln!("{}", diag.to_text(None));
+        eprintln!(
+            "{}",
+            diag.to_text_with_options(
+                None,
+                &crate::commands::terminal_style::stderr_text_options()
+            )
+        );
     }
     std::process::exit(1);
 }

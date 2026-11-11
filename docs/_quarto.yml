@@ -122,6 +122,7 @@ website:
       title: "Tools"
       contents:
         - tools/q2-mcp.qmd
+        - tools/terminal-output.qmd
     - id: guide
       collapse-level: 1
       contents:

@@ -524,7 +524,12 @@ pub(super) fn present_from_record(
             let why = result
                 .warnings
                 .iter()
-                .map(|w| w.to_text(None))
+                .map(|w| {
+                    w.to_text_with_options(
+                        None,
+                        &quarto_error_reporting::TextRenderOptions::plain(),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             return Err(ExecutionError::execution_failed(

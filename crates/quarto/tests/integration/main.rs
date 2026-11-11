@@ -49,6 +49,7 @@ pub mod render_scripts_cli;
 pub mod revealjs_cli;
 pub mod smoke_all;
 pub mod strict_mode;
+pub mod terminal_output_style;
 pub mod theme_compile_error;
 pub mod theme_missing_file;
 pub mod toc_component_render;
