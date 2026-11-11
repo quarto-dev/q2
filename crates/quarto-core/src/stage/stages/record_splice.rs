@@ -230,6 +230,10 @@ fn splice_units(
         return (doc, report);
     }
 
+    // The text before the edits is the baseline for the metadata
+    // reconcile: splice never edits front matter, so every value should
+    // come back as it was (bd-8svy3p89).
+    let baseline = crate::engine::nested_cell_mask::unmask(&qmd);
     let mut text = qmd;
     edits.sort_by_key(|e| e.0);
     for (start, end, replaced) in edits.into_iter().rev() {
@@ -254,7 +258,7 @@ fn splice_units(
         derived_listing,
     } = doc;
     let fallback = ast.clone();
-    match merge_markdown_into_ast(ast, &mut ast_context, &text, intermediate) {
+    match merge_markdown_into_ast(ast, &mut ast_context, &baseline, &text, intermediate) {
         Ok((merged, parse_warnings, _plan)) => {
             warnings.extend(parse_warnings);
             doc = DocumentAst {
@@ -579,6 +583,25 @@ mod tests {
 
     fn three_cells() -> Record {
         record_of(THREE, |i| Some(stdout(&format!("out{i}\n"))))
+    }
+
+    /// bd-8svy3p89: splicing re-reads the document through the same
+    /// metadata round-trip as a live engine run, and never edits front
+    /// matter, so the metadata comes back exactly as it was. A marked path
+    /// with two underscores used to come back as emphasis (GH #1152).
+    #[test]
+    fn splice_keeps_the_metadata_as_it_was() {
+        let mut doc = parse(THREE);
+        let theme = quarto_pandoc_types::ConfigValue::new_path(
+            "_extensions/a/_b.scss".into(),
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(77), 3, 9),
+        );
+        doc.ast.meta.insert_path(&["theme"], theme.clone());
+        let before = doc.ast.meta.clone();
+        let (doc, _) = splice_record(doc, &three_cells(), &mut ctx(), Path::new("/project"));
+        assert!(text_of(&doc).contains("out0"), "the splice happened");
+        assert_eq!(doc.ast.meta.get("theme"), Some(&theme));
+        assert_eq!(doc.ast.meta, before);
     }
 
     #[test]
