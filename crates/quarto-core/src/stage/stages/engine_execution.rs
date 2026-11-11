@@ -861,6 +861,7 @@ impl PipelineStage for EngineExecutionStage {
             let (reconciled_ast, parse_warnings, reconciliation_plan) = merge_markdown_into_ast(
                 ast,
                 &mut merged_context,
+                &crate::engine::nested_cell_mask::unmask(&qmd),
                 &result.markdown,
                 intermediate_name,
             )?;
@@ -929,9 +930,15 @@ impl PipelineStage for EngineExecutionStage {
 /// into `ast`, so unchanged content keeps its source locations and new content points at the
 /// slot. Shared by the engine stage and the record splice (EXR-14), so a spliced record
 /// attributes diagnostics exactly as a live engine run does.
+///
+/// `baseline` is the text the engine received (unmasked). Its metadata is
+/// what the round-trip alone makes of `ast.meta`, so comparing it with the
+/// output's tells the engine's changes from the round-trip's (bd-8svy3p89,
+/// [`quarto_ast_reconcile::reconcile_meta`]).
 pub(crate) fn merge_markdown_into_ast(
-    ast: quarto_pandoc_types::pandoc::Pandoc,
+    mut ast: quarto_pandoc_types::pandoc::Pandoc,
     merged_context: &mut pampa::pandoc::ASTContext,
+    baseline: &str,
     markdown: &str,
     intermediate_name: String,
 ) -> Result<
@@ -981,15 +988,25 @@ pub(crate) fn merge_markdown_into_ast(
     // growing `ast_context.filenames`, so in a project render the
     // two counts diverge and the derived id lands on `_quarto.yml`'s
     // dense slot (bd-itj2mjkr).
-    //
-    // The slot keeps the markdown itself, not just its line index: the
-    // re-parsed metadata's strings are markdown inlines, and a consumer
-    // that needs one as written (a path with two underscores parses as
-    // emphasis) reads it back from this text
-    // (`config_paths::config_value_text`, GH #1152).
-    let new_slot = merged_context
+    let new_slot = if let Some(intermediate_file) = executed_ast_context
         .source_context
-        .add_file(intermediate_name.clone(), Some(markdown.to_string()));
+        .get_file(quarto_source_map::FileId(0))
+        .cloned()
+    {
+        if let Some(info) = intermediate_file.file_info {
+            merged_context
+                .source_context
+                .add_file_with_info(intermediate_name.clone(), info)
+        } else {
+            merged_context
+                .source_context
+                .add_file(intermediate_name.clone(), None)
+        }
+    } else {
+        merged_context
+            .source_context
+            .add_file(intermediate_name.clone(), None)
+    };
     merged_context.filenames.push(intermediate_name);
     // Carry the executed parse's example-list counter forward; the
     // last engine's value wins so downstream numbering is coherent.
@@ -1016,9 +1033,47 @@ pub(crate) fn merge_markdown_into_ast(
     // new content from the executed AST. The "original" side may
     // already carry FileIds from earlier engines; reconcile decides
     // keep/replace by content, so mixed provenance is fine.
+    //
+    // Metadata is reconciled three ways instead: the front matter does not
+    // survive the writer and reader unchanged (strings come back as
+    // markdown, marked paths lose their kind), so the output's metadata
+    // is compared with a parse of the text the engine received, and the
+    // original value is kept wherever the two agree (bd-8svy3p89).
+    executed_ast.meta = reconcile_executed_meta(
+        std::mem::take(&mut ast.meta),
+        baseline,
+        std::mem::take(&mut executed_ast.meta),
+    );
     let (reconciled_ast, reconciliation_plan) = quarto_ast_reconcile::reconcile(ast, executed_ast);
 
     Ok((reconciled_ast, parse_warnings, reconciliation_plan))
+}
+
+/// [`quarto_ast_reconcile::reconcile_meta`] with the baseline parsed from
+/// `baseline` by the same reader as the engine's output. The baseline is
+/// our own serialization, so it parses; if it ever does not, the output's
+/// metadata is taken, as before bd-8svy3p89.
+fn reconcile_executed_meta(
+    original: quarto_pandoc_types::ConfigValue,
+    baseline: &str,
+    executed: quarto_pandoc_types::ConfigValue,
+) -> quarto_pandoc_types::ConfigValue {
+    match pampa::readers::qmd::read(
+        baseline.as_bytes(),
+        false,
+        "<engine input>",
+        &mut std::io::sink(),
+        true,
+        None,
+    ) {
+        Ok((baseline_ast, _, _)) => {
+            quarto_ast_reconcile::reconcile_meta(original, &baseline_ast.meta, executed)
+        }
+        Err(_) => {
+            tracing::warn!("engine input did not re-parse; taking the engine output's metadata");
+            executed
+        }
+    }
 }
 
 /// EXR-5: the one scan, with every unit's id filled from the author text the
@@ -2233,75 +2288,131 @@ mod tests {
         );
     }
 
-    // GH #1152: the engine round-trip re-reads the merged metadata as
-    // markdown, so a path with two underscores comes back as emphasis.
-    // The intermediate's slot keeps its text, so the value can still be
-    // read as written.
-    #[tokio::test]
-    async fn reparsed_metadata_strings_read_back_as_written() {
-        use crate::engine::{EngineRegistry, ExecuteResult, ExecutionContext, ExecutionEngine};
-        use std::sync::Arc;
-
-        struct EchoEngine;
-        impl ExecutionEngine for EchoEngine {
-            fn name(&self) -> &str {
-                "stub"
-            }
-            fn execute(
-                &self,
-                input: &str,
-                _ctx: &ExecutionContext,
-            ) -> std::result::Result<ExecuteResult, crate::engine::ExecutionError> {
-                Ok(ExecuteResult::new(input.to_string()))
-            }
-            fn claims_language(
-                &self,
-                language: &str,
-                _first_class: Option<&str>,
-            ) -> crate::engine::LanguageClaim {
-                if language == "stub" {
-                    crate::engine::LanguageClaim::Primary(1)
-                } else {
-                    crate::engine::LanguageClaim::None
-                }
-            }
-            fn is_available(&self) -> bool {
-                true
+    /// bd-8svy3p89: an engine for the metadata round-trip tests. It claims
+    /// `{stub}` cells and returns its input passed through `transform`.
+    struct TransformEngine(fn(&str) -> String);
+    impl crate::engine::ExecutionEngine for TransformEngine {
+        fn name(&self) -> &str {
+            "stub"
+        }
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &crate::engine::ExecutionContext,
+        ) -> std::result::Result<crate::engine::ExecuteResult, crate::engine::ExecutionError>
+        {
+            Ok(crate::engine::ExecuteResult::new((self.0)(input)))
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "stub" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
             }
         }
+        fn is_available(&self) -> bool {
+            true
+        }
+    }
 
-        let mut registry = EngineRegistry::new();
-        registry.register(Arc::new(EchoEngine));
+    /// Run a one-cell document whose merged metadata also holds `probe:`
+    /// (the values a project or extension would contribute) through the
+    /// engine stage with `TransformEngine(transform)`.
+    async fn run_with_probe_meta(
+        transform: fn(&str) -> String,
+        probe: &[(&str, quarto_pandoc_types::ConfigValue)],
+    ) -> DocumentAst {
+        let mut registry = crate::engine::EngineRegistry::new();
+        registry.register(std::sync::Arc::new(TransformEngine(transform)));
         let stage = EngineExecutionStage::new();
         let mut ctx = make_test_context();
-        ctx.registry = Arc::new(registry);
+        ctx.registry = std::sync::Arc::new(registry);
 
-        let content = b"---\ntitle: Test\nengine: stub\n---\n\n```{stub}\nx\n```\n";
+        let content = b"---\ntitle: Before\nengine: stub\n---\n\n```{stub}\nx\n```\n";
         let mut doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
-        // What an extension's rebased `theme:` entry looks like by now.
-        doc_ast.ast.meta.insert_path(
-            &["theme"],
-            quarto_pandoc_types::ConfigValue::new_path(
-                "_extensions/acme/demo/_colors.scss".to_string(),
-                quarto_source_map::SourceInfo::for_test(),
-            ),
-        );
-
+        for (key, value) in probe {
+            doc_ast.ast.meta.insert_path(&["probe", key], value.clone());
+        }
         let output = stage
             .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
             .await
             .unwrap();
-        let result = output.into_document_ast().expect("Should be DocumentAst");
-        let theme = result.ast.meta.get("theme").expect("theme survives");
+        output.into_document_ast().expect("Should be DocumentAst")
+    }
+
+    /// One value of each kind the round-trip used to mangle (the
+    /// investigation's probe matrix,
+    /// `claude-notes/plans/engine-metadata-round-trip-investigation/`).
+    fn probe_values() -> Vec<(&'static str, quarto_pandoc_types::ConfigValue)> {
+        use quarto_pandoc_types::ConfigValue;
+        use yaml_rust2::Yaml;
+        // A real (non-sentinel) span, as a project file would give.
+        let si = || quarto_source_map::SourceInfo::original(quarto_source_map::FileId(77), 3, 9);
+        let s = |v: &str| ConfigValue::new_scalar(Yaml::String(v.into()), si());
+        vec![
+            // GH #1152: an extension's rebased theme path.
+            (
+                "path-underscores",
+                ConfigValue::new_path("_extensions/a/_b.scss".into(), si()),
+            ),
+            (
+                "path-plain",
+                ConfigValue::new_path("styles/main.css".into(), si()),
+            ),
+            (
+                "glob",
+                ConfigValue::new_glob("posts/*_draft_*.qmd".into(), si()),
+            ),
+            ("expr", ConfigValue::new_expr("params$x".into(), si())),
+            ("url", s("https://example.com/a_b_/c")),
+            ("markdown-chars", s("a [b](c) `d`")),
+            ("html", s("<b>x</b>")),
+            ("cite", s("@ref")),
+            ("math", s("$x$")),
+            ("multiline", s("line1\nline2")),
+            ("empty", s("")),
+            ("bool", ConfigValue::new_scalar(Yaml::Boolean(true), si())),
+        ]
+    }
+
+    // bd-8svy3p89 (and GH #1152): the round-trip re-reads the merged
+    // metadata as document markdown. Values the engine did not change
+    // come back exactly as they went in: kind, text and span.
+    #[tokio::test]
+    async fn engine_round_trip_keeps_untouched_metadata() {
+        let probe = probe_values();
+        let result = run_with_probe_meta(|input| input.to_string(), &probe).await;
+        for (key, before) in &probe {
+            let after = result
+                .ast
+                .meta
+                .get_path(&["probe", key])
+                .unwrap_or_else(|| panic!("probe.{key} survives"));
+            assert_eq!(after, before, "probe.{key} changed across the engine run");
+        }
+    }
+
+    // bd-8svy3p89: a value the engine does change (as front-matter span
+    // evaluation does) is taken from the engine's output, and its
+    // untouched siblings are not.
+    #[tokio::test]
+    async fn engine_change_to_metadata_is_taken() {
+        let probe = probe_values();
+        let result = run_with_probe_meta(
+            |input| input.replacen("title: Before", "title: After", 1),
+            &probe,
+        )
+        .await;
+        let title = result.ast.meta.get("title").expect("title");
+        assert_eq!(title.as_plain_text().as_deref(), Some("After"));
+        let (_, path_before) = &probe[0];
         assert_eq!(
-            theme.as_plain_text().as_deref(),
-            Some("extensions/acme/demo/colors.scss"),
-            "precondition: the round-trip re-reads the path as markdown"
-        );
-        assert_eq!(
-            crate::config_paths::config_value_text(theme, Some(&result.ast_context.source_context))
-                .as_deref(),
-            Some("_extensions/acme/demo/_colors.scss")
+            result.ast.meta.get_path(&["probe", "path-underscores"]),
+            Some(path_before)
         );
     }
 

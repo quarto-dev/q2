@@ -21,6 +21,7 @@ mod compute;
 #[cfg(test)]
 mod generators;
 mod hash;
+mod meta;
 mod remap;
 pub mod types;
 
@@ -32,6 +33,7 @@ pub use hash::{
     find_first_divergence, structural_eq_block, structural_eq_blocks, structural_eq_inline,
     structural_eq_inlines,
 };
+pub use meta::reconcile_meta;
 pub use remap::remap_file_ids;
 pub use types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,

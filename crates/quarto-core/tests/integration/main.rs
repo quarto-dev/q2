@@ -62,6 +62,7 @@ pub mod editorial_marks_ooxml_pipeline;
 pub mod engine_error_policy;
 pub mod engine_fixture_build;
 pub mod engine_merge;
+pub mod engine_metadata_round_trip;
 pub mod engine_output_parity;
 pub mod engine_record_stage;
 pub mod engine_registry_build;
