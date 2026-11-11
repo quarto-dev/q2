@@ -221,7 +221,15 @@ fn print_table(plan: &AddPlan) {
 }
 
 fn print_human_footer(plan: &AddPlan) {
+    let gitattributes =
+        std::path::Path::new(stage::EXTENSIONS_DIR).join(install::GITATTRIBUTES_FILENAME);
     if plan.dry_run {
+        if plan.writes_gitattributes {
+            println!(
+                "(dry run) would also create {}, so git keeps extension files byte-for-byte.",
+                gitattributes.display()
+            );
+        }
         println!("(dry run) nothing was written.");
         return;
     }
@@ -231,6 +239,13 @@ fn print_human_footer(plan: &AddPlan) {
     println!("Extension installation complete.");
     for ext in plan.extensions.iter().filter(|e| e.writes) {
         println!("  {}", ext.dest.display());
+    }
+    if plan.writes_gitattributes {
+        println!(
+            "Created {}, so git keeps extension files byte-for-byte \
+             (line-ending conversion would look like a local edit).",
+            gitattributes.display()
+        );
     }
     if let Some(url) = &plan.learn_more {
         println!();
@@ -248,6 +263,9 @@ struct AddResultJson<'a> {
     dry_run: bool,
     source: &'a str,
     extensions: Vec<ExtensionResultJson<'a>>,
+    /// Whether this run created `_extensions/.gitattributes`. False
+    /// under `--dry-run`, like `written`.
+    gitattributes_written: bool,
 }
 
 #[derive(Serialize)]
@@ -287,6 +305,7 @@ fn print_json_result(plan: &AddPlan) {
                 untracked: e.installed == InstalledState::Untracked,
             })
             .collect(),
+        gitattributes_written: plan.writes_gitattributes && !plan.dry_run,
     };
     match serde_json::to_string(&result) {
         Ok(line) => println!("{line}"),
