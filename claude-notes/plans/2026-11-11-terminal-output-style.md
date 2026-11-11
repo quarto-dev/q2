@@ -218,7 +218,7 @@ The maintainer chose the plain `Display` with rendering at the sinks
 - [x] End to end: rerun `claude-notes/issue-reports/1135/repro/count-escapes.sh`
       against the new binary and record the table below. Also check
       interactively in a real terminal that color and links still appear.
-- [ ] Full `cargo xtask verify`, including the WASM leg, because
+- [x] Full `cargo xtask verify`, including the WASM leg, because
       `quarto-util` is a pampa/WASM dependency. Known unrelated local
       failure: bd-54odm3rz (knitr `rlang_error`).
 - [ ] Close bd-be8ve52f and reply on #1135 (wording to be confirmed with the
@@ -262,3 +262,14 @@ passing after one test was updated. That test,
 even when stderr is not a terminal". It now asks for links with
 `FORCE_HYPERLINK=1`. Clippy `-D warnings` is clean on all six crates. The
 Windows clippy of `quarto-util` is clean.
+
+Final gate (2026-11-11, at `d1b5d53d0`), split so the known local failure
+can't stop the hub legs:
+
+- `cargo xtask verify --skip-rust-tests` passes. That covers the lints,
+  the workspace build, the strict claude-notes render, the ts-packages, and
+  the hub-client build with WASM and its tests.
+- `cargo nextest run --workspace --no-fail-fast`: 19356 run, 19355 pass. The
+  only failure is `quarto-core engine::knitr::capture_tests::capture_classifies_pieces`,
+  the local-R `rlang_error` issue (bd-54odm3rz). It also fails on clean
+  `main` at `e14065e79`.
