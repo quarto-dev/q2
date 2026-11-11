@@ -300,7 +300,11 @@ pub fn corpus_jobs() -> Vec<(Fixture, String)> {
         .into_iter()
         .filter(|f| only.as_ref().is_none_or(|o| f.name.contains(o.as_str())))
         .flat_map(|f| {
-            let formats = f.formats.clone();
+            // EXPERIMENT: `KNR_FORMAT=<fmt>` runs every fixture under that one format.
+            let formats = match std::env::var("KNR_FORMAT") {
+                Ok(fmt) => vec![fmt],
+                Err(_) => f.formats.clone(),
+            };
             formats.into_iter().map(move |fmt| (f.clone(), fmt))
         })
         .collect()
