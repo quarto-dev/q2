@@ -2,7 +2,7 @@
 title: 'Jupyter cell whose source contains three backticks mid-line is silently not executed (bd-f63cqoke)'
 date: 2026-11-11
 description: 'The qmd writer lengthens a cell fence to four backticks when the cell source contains a run of three backticks anywhere, and the Jupyter executor only runs three-backtick cells, so the cell silently renders as inert code; Quarto 1 runs any fence of three or more backticks.'
-status: in-progress  # Phases 0-1 implemented on braid/bd-f63cqoke-jupyter-cell-whose-source; PR pending
+status: done  # PR #1182 merged 2026-11-11 (56f334dea)
 braid:
   strand: bd-f63cqoke
 ---
