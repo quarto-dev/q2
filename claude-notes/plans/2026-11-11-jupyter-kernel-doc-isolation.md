@@ -2,13 +2,13 @@
 title: 'Parallel project render interleaves cells of different documents on one shared Jupyter kernel (bd-i7yz08uh)'
 date: 2026-11-11
 description: 'Documents of a project share one Jupyter kernel with no exclusivity, so parallel renders interleave cells and even serial renders leak state across documents; decide between a per-document kernel key (Quarto 1 parity) and a per-session document lease.'
-status: designed  # Design questions answered 2026-11-11; implementation not started
+status: implemented  # On branch braid/bd-i7yz08uh-parallel-project-render-interleaves; PR pending
 braid:
   strand: bd-i7yz08uh
 ---
 
 **Checkout:** main checkout, branch `main` @ `78b4863c6` (no topic branch yet; set one up before implementing).
-**Do not start implementation until the user gives the go-ahead.**
+**Implementation approved 2026-11-11; see Implementation below.**
 
 ## Triage verdict
 
@@ -60,7 +60,7 @@ Quarto 1 never shares one kernel's state between documents:
 1. **Isolation model: per-document key.** `SessionKey` gains the document's path, which matches Quarto 1. This fixes both the interleave and the sequential leak.
 2. **`q2 render`: shut a document's kernel down as soon as that document finishes.** A live kernel holds everything the document computed (data frames, models) plus a process and five ZeroMQ ports, so keeping one per document until the run ends could cost a lot on large projects. At most `QUARTO_JOBS` kernels are alive at once. Each document pays one kernel startup, the same cost as Quarto 1's one-shot path.
 3. **`q2 preview`: one warm kernel per previewed document, kept indefinitely (Quarto 1 keepalive).** A centralized per-process kernel manager is a possible follow-up; see the feasibility note below.
-4. **Re-render of the same document: keep state (Quarto 1 semantics) in this work.** A reset policy is a follow-up knob for the kernel manager; see the reset findings below.
+4. **Re-render of the same document: keep state, never reset.** This is Quarto 1's behavior: its keepalive daemon reuses a document's kernel as is, and restarts it only when the Python executable, the supervising process, or a kernel dependency changed (`notebook.py:162-191, 326-334`). No reset policy is planned.
 5. **The daemon-wide lock is fixed here.** Per-document sessions need per-session locking anyway.
 
 ### Feasibility: a per-process kernel manager
@@ -95,7 +95,7 @@ This work needs the release/retain distinction anyway (decision 2 versus decisio
 - Phase 3: Lifecycle policy on `KernelScope` (release for render, retain for preview), with release at the end of `execute_blocks_inner` on the success **and** error paths.
 - Phase 4: Docs. The isolation guarantee goes in `docs/guides/authoring/execution-context.qmd` or the Jupyter page. Update the shared-kernel comments from bd-8fmuyh4d in `text_execute.rs` and the `get_or_start_session` doc comment.
 - Phase 5: End-to-end through `q2 render` on both fixtures at `QUARTO_JOBS=1` and `2`, a process check that no kernels remain afterwards, and a manual `q2 preview` check that re-rendering one document reuses its warm kernel.
-- Follow-ups to file: an LRU cap for preview's warm kernels; a reset-on-reuse policy (Python `%reset -f`; Julia needs a prototype).
+- Possible follow-up: an LRU cap for preview's warm kernels (not filed; Quarto 1 has none either).
 
 ## Risks / tradeoffs (draft)
 
@@ -106,3 +106,33 @@ This work needs the release/retain distinction anyway (decision 2 versus decisio
 ## Incidental findings
 
 - Pre-flight `cargo xtask verify --skip-hub-build` failed on `quarto-core engine::knitr::capture_tests::capture_classifies_pieces` (`ename` `"rlang_error"` instead of `"simpleError"`). It depends on the environment: the locally installed knitr 1.52 reports a plain `stop("boom")` in rlang style (`Error:\n! boom`). Unrelated to Jupyter; filed as bd-3p8y4gdt.
+
+## Implementation (2026-11-11)
+
+- [x] Phase 0: failing tests, each verified red at `78b4863c6`:
+  - fake kernel (`text_execute_isolation.rs`): two documents in one directory ran on one kernel (same PID); the kernel outlived its document;
+  - real Python (`crates/quarto/tests/integration/jupyter_document_isolation_e2e.rs`): `doc a sees owner = b` under `QUARTO_JOBS=2`, three runs out of three; `b sees a: True` under `QUARTO_JOBS=1`;
+  - `render_leaves_no_kernel_behind` now expects two kernels and observed one.
+  The first interleave test (two cells: set; sleep and read) passed at HEAD. The old lock was fair and a document has at most one request waiting, so interleaving needed the other document to arrive in the gap between the two cells. Four cells (set, sleep, filler, read) make it deterministic; the test's doc comment explains why.
+- [x] Phase 1: `SessionKey` gains `document` (`ExecutionContext.source_path`).
+- [x] Phase 2: the map holds one `Arc<tokio::Mutex<Option<KernelSession>>>` slot per session, and `JupyterDaemon::acquire` returns a `SessionLease` (an owned guard) that the document holds for its whole run. The map's `std::sync::Mutex` is never held across an await. A releasing `finish` retires the slot while it still holds it, so a waiter on the same document starts over on a fresh slot (tested). Kernels start without any shared lock. The old `start_lock` also kept `peek_ports` calls from racing, so a `reserved_ports` set now keeps two starting kernels from being handed the same port; a reservation lasts until the kernel is ready.
+- [x] Phase 3: `KernelScope` carries a policy. `kernel_scope()` releases a document's kernel when the document finishes; `kernel_scope_retaining()` (used by `q2 preview`) keeps it. `execute_blocks_with_leases` finishes every lease on the success and error paths.
+- [x] Phase 4: docs. `guides/authoring/jupyter-kernels.qmd` gains "Each document has its own kernel", and `execution-context.qmd` drops the shared-kernel paragraph. Comments in `execute_info.rs`, `context.rs`, `render.rs`, `preview.rs` and `jupyter/mod.rs` are updated, and the `QUARTO_JOBS=1` workaround in `execute_env_cli_e2e.rs` is removed.
+- [x] Phase 5: end-to-end, inspected by hand (below).
+
+### End-to-end evidence
+
+`target/debug/q2 render <fixture>` on the investigation fixtures (copied out, config renamed to `_quarto.yml`):
+
+```text
+interleave       QUARTO_JOBS=1  doc a sees owner = a / doc b sees owner = b   (11.4 s)
+interleave       QUARTO_JOBS=2  doc a sees owner = a / doc b sees owner = b   (7.2 s)
+sequential-leak  QUARTO_JOBS=1  b sees: <undefined>
+sequential-leak  QUARTO_JOBS=2  b sees: <undefined>
+```
+
+`q2 preview <proj> --no-browser` with `JUPYTER_RUNTIME_DIR` isolated, driven by headless Playwright. A code edit marks the capture stale; clicking "Re-execute" twice ran `a.qmd`\'s cell on the same kernel (PID 79184 both times) with its state kept (`runs 1`, then `runs 2`), while `b.qmd` had its own kernel (PID 79466). After SIGINT to preview, both kernels were gone and their connection files removed. Note: preview does not re-execute on a prose-only edit, so an observation without a forced re-execution proves nothing.
+
+### Discovered
+
+- bd-wjg6sjxj: 105 orphaned `ipykernel` processes on this machine (Nov 2–11, PPID 1), from processes killed by a signal (hypothesis). Present at HEAD.
