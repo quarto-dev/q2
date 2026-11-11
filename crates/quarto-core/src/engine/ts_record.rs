@@ -679,7 +679,7 @@ pub(super) fn offers_presentation(ctx: &ExecutionContext) -> bool {
 /// gated until a parity case exists for them.
 ///
 /// `pdf` stays out until the LaTeX work exists (`latex` and `beamer` never reach an engine).
-/// Knitr keeps its own list (`knitr::target_route`, which excludes pptx); do not merge them.
+/// Knitr keeps its own list (`knitr::target_route`, which is smaller: no commonmark, odt and the other text formats); do not merge them.
 pub(super) const JULIA_PRESENTED_TARGETS: &[&str] = &[
     "html",
     "revealjs",

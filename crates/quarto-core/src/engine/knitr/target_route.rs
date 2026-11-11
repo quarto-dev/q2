@@ -4,13 +4,13 @@
 //! engine); a `Fallback` route tells R to skip structured capture for the whole document, and
 //! the chunk hook then writes finished-markdown fallback units (KNR-3's chunk-kinds table,
 //! epic decision 13). The structured set is what the KNR-1 corpus covers: HTML (and its
-//! revealjs and epub variants), Typst, docx and gfm. Adding a target is one entry in [`STRUCTURED_TARGETS`], plus corpus cases.
+//! revealjs and epub variants), Typst, docx, pptx and gfm. Adding a target is one entry in [`STRUCTURED_TARGETS`], plus corpus cases.
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 
 /// Format identifiers (extensions such as `+smart` ignored) presented from structured units.
 const STRUCTURED_TARGETS: &[&str] = &[
-    "html", "html4", "html5", "revealjs", "epub", "typst", "docx", "gfm",
+    "html", "html4", "html5", "revealjs", "epub", "typst", "docx", "gfm", "pptx",
 ];
 
 /// The LaTeX family, routed to fallback because kable and `df_print` choose LaTeX output by
@@ -22,7 +22,7 @@ const LATEX_TARGETS: &[&str] = &["latex", "beamer", "pdf"];
 pub enum FallbackReason {
     /// `latex`, `beamer` or `pdf`.
     Latex,
-    /// A target the corpus does not cover yet (pptx, context, ...).
+    /// A target the corpus does not cover yet (context, odt, rtf, ...).
     UncoveredTarget,
 }
 
@@ -54,7 +54,7 @@ pub fn fallback_diagnostic(reason: FallbackReason, format: &str) -> DiagnosticMe
         ),
         FallbackReason::UncoveredTarget => (
             "knitr output for this target is not presented from the execution record",
-            "Targets outside HTML, revealjs, epub, Typst, docx and gfm keep knitr's finished markdown for every chunk.",
+            "Targets outside HTML, revealjs, epub, Typst, docx, pptx and gfm keep knitr's finished markdown for every chunk.",
         ),
     };
     DiagnosticMessageBuilder::info(title)
@@ -113,6 +113,7 @@ mod tests {
             "typst",
             "docx",
             "gfm",
+            "pptx",
             "revealjs",
             "epub",
             "html+smart",
@@ -134,7 +135,7 @@ mod tests {
 
     #[test]
     fn an_uncovered_target_falls_back_until_the_corpus_covers_it() {
-        for f in ["pptx", "context", "unknown-format"] {
+        for f in ["context", "unknown-format"] {
             assert_eq!(
                 route_for_target(f),
                 TargetRoute::Fallback(FallbackReason::UncoveredTarget),
@@ -167,7 +168,7 @@ mod tests {
 
     #[test]
     fn a_fallback_caused_only_by_present_from_record_is_quiet() {
-        for f in ["pdf", "pptx"] {
+        for f in ["pdf", "context"] {
             let plan = plan_capture(false, true, true, f);
             assert!(!plan.capture && plan.diagnostic.is_none(), "{f}");
         }

@@ -356,12 +356,15 @@ fn the_fallback_table() {
         ("latex target", "latex", DOC, &[], vec![false, false], None),
         (
             "uncovered target",
-            "pptx",
+            "context",
             DOC,
             &[],
             vec![false, false],
             None,
         ),
+        // pptx joined the structured set after the corpus ran clean under it (the same cases
+        // as docx, 256 accepted) and a real render matched the fallback route slide for slide.
+        ("pptx target", "pptx", DOC, &[], vec![true, true], None),
     ];
     for (name, format, doc, files, flags, code) in cases {
         let (result, _dir) = run_doc_with_files(doc, files, format, true);
