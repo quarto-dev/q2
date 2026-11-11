@@ -22,13 +22,9 @@ use crate::render_cli_e2e::{knitr_r_package_available, rscript_available};
 const BRAND: &str = "color:\n  background:\n    light: \"#ffffff\"\n    dark: \"#1b1b1b\"\n  foreground:\n    light: \"#1b1b1b\"\n    dark: \"#ffffff\"\n";
 
 fn render(dir: &Path) -> std::process::Output {
-    // QUARTO_JOBS=1: documents sharing a Jupyter kernel must not run
-    // concurrently until bd-i7yz08uh is fixed (cells of different documents
-    // interleave on a shared kernel).
     let output = Command::new(env!("CARGO_BIN_EXE_q2"))
         .arg("render")
         .arg(dir)
-        .env("QUARTO_JOBS", "1")
         .output()
         .expect("q2 render runs");
     assert!(
@@ -147,7 +143,7 @@ file.copy(Sys.getenv("QUARTO_EXECUTE_INFO"), file.path(out, "info.json"), overwr
 }
 
 #[test]
-fn jupyter_cells_see_their_own_document_on_a_shared_kernel() {
+fn jupyter_cells_see_their_own_document() {
     if !jupyter_available() {
         eprintln!("skipping: jupyter not available");
         return;
@@ -160,8 +156,8 @@ fn jupyter_cells_see_their_own_document_on_a_shared_kernel() {
     let project = tmp.path().join("proj");
     std::fs::create_dir_all(&project).unwrap();
     std::fs::write(project.join("_quarto.yml"), "project:\n  type: default\n").unwrap();
-    // Two documents in one directory share one python3 kernel; the second
-    // must not see the first one's values.
+    // Two documents in one directory, rendered in parallel: each must see
+    // its own values (each runs on its own kernel since bd-i7yz08uh).
     let cell = r#"```{python}
 import json, os, shutil
 keys = ["QUARTO_PROJECT_ROOT", "QUARTO_DOCUMENT_PATH", "QUARTO_DOCUMENT_FILE",

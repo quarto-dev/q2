@@ -319,22 +319,33 @@ impl Drop for KernelSession {
 
 /// Key for identifying kernel sessions.
 ///
-/// Sessions are identified by their kernel name and working directory.
-/// This allows multiple kernels of the same type in different directories.
+/// A session belongs to one document (bd-i7yz08uh): the key is the kernel
+/// name, the working directory the kernel is started in, and the document
+/// whose cells it runs. Two documents never share a kernel, so neither their
+/// cells nor their globals can mix; this matches Quarto 1, whose keepalive
+/// kernel is keyed by the document's path and whose one-shot path starts a
+/// fresh kernel per document.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SessionKey {
     /// Kernelspec name (e.g., "python3", "julia-1.9").
     pub kernel_name: String,
     /// Working directory for the kernel.
     pub working_dir: PathBuf,
+    /// The document the kernel runs (`ExecutionContext.source_path`).
+    pub document: PathBuf,
 }
 
 impl SessionKey {
     /// Create a new session key.
-    pub fn new(kernel_name: impl Into<String>, working_dir: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        kernel_name: impl Into<String>,
+        working_dir: impl Into<PathBuf>,
+        document: impl Into<PathBuf>,
+    ) -> Self {
         SessionKey {
             kernel_name: kernel_name.into(),
             working_dir: working_dir.into(),
+            document: document.into(),
         }
     }
 }
@@ -345,14 +356,17 @@ mod tests {
 
     #[test]
     fn test_session_key_equality() {
-        let key1 = SessionKey::new("python3", "/project/a");
-        let key2 = SessionKey::new("python3", "/project/a");
-        let key3 = SessionKey::new("python3", "/project/b");
-        let key4 = SessionKey::new("julia-1.9", "/project/a");
+        let key1 = SessionKey::new("python3", "/project", "/project/a.qmd");
+        let key2 = SessionKey::new("python3", "/project", "/project/a.qmd");
+        let key3 = SessionKey::new("python3", "/other", "/project/a.qmd");
+        let key4 = SessionKey::new("julia-1.9", "/project", "/project/a.qmd");
+        // bd-i7yz08uh: same kernel and directory, another document.
+        let key5 = SessionKey::new("python3", "/project", "/project/b.qmd");
 
         assert_eq!(key1, key2);
         assert_ne!(key1, key3);
         assert_ne!(key1, key4);
+        assert_ne!(key1, key5);
     }
 
     #[test]
@@ -360,16 +374,22 @@ mod tests {
         use std::collections::HashMap;
 
         let mut map: HashMap<SessionKey, &str> = HashMap::new();
-        map.insert(SessionKey::new("python3", "/project"), "python");
-        map.insert(SessionKey::new("julia-1.9", "/project"), "julia");
+        map.insert(
+            SessionKey::new("python3", "/project", "/project/a.qmd"),
+            "a",
+        );
+        map.insert(
+            SessionKey::new("python3", "/project", "/project/b.qmd"),
+            "b",
+        );
 
         assert_eq!(
-            map.get(&SessionKey::new("python3", "/project")),
-            Some(&"python")
+            map.get(&SessionKey::new("python3", "/project", "/project/a.qmd")),
+            Some(&"a")
         );
         assert_eq!(
-            map.get(&SessionKey::new("julia-1.9", "/project")),
-            Some(&"julia")
+            map.get(&SessionKey::new("python3", "/project", "/project/b.qmd")),
+            Some(&"b")
         );
     }
 }

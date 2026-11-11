@@ -25,6 +25,7 @@ pub mod format_resolution_cli;
 pub mod founding_crash_config_span_e2e;
 pub mod get_config_cli;
 pub mod json_errors;
+pub mod jupyter_document_isolation_e2e;
 pub mod jupyter_kernel_cleanup_e2e;
 pub mod lmd_snapshots;
 pub mod lua_host_context_cli;

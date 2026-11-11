@@ -25,7 +25,7 @@
 //! unset and the entry test passes at once. No binary target is added to the crate.
 //!
 //! The canned responses are scripted per test as JSON in [`SCRIPT_ENV`], passed to the
-//! child through `get_or_start_session`'s `extra_env`. A kernelspec directory is
+//! child through `JupyterDaemon::acquire`'s `extra_env`. A kernelspec directory is
 //! written under a temp dir that `JUPYTER_PATH` points at, so
 //! `find_kernelspec` discovers it through the real code path. Setting the variable is
 //! process-global; nextest runs each test in its own process, which is what makes
@@ -76,6 +76,10 @@ pub(crate) enum FakeOutput {
     Display(serde_json::Value),
     /// An `error` message.
     Error { ename: String, evalue: String },
+    /// A `stream` message on stdout carrying the kernel process's id and a newline,
+    /// so a test can tell which kernel process ran a piece of code (bd-i7yz08uh). The
+    /// id is read in the kernel process, when the script is loaded.
+    KernelPid,
 }
 
 /// Code (exact match) to the outputs the kernel sends for it. Code not in the script
@@ -100,6 +104,7 @@ impl FakeOutput {
     fn into_message(self) -> JupyterMessageContent {
         match self {
             Self::Stdout(text) => StreamContent::stdout(&text).into(),
+            Self::KernelPid => StreamContent::stdout(&format!("{}\n", std::process::id())).into(),
             Self::Result(bundle) => ExecuteResult {
                 execution_count: ExecutionCount::new(1),
                 data: serde_json::from_value::<Media>(bundle).expect("valid mime bundle"),
@@ -143,7 +148,7 @@ pub(crate) struct FakeKernelHome {
 }
 
 /// An installed fake kernel: its kernelspec name and the environment to pass to
-/// `get_or_start_session` so the spawned process runs the scripted kernel.
+/// `JupyterDaemon::acquire` so the spawned process runs the scripted kernel.
 pub(crate) struct FakeKernel {
     pub name: String,
     pub env: Vec<(String, String)>,
@@ -287,15 +292,11 @@ mod tests {
 
         let mut said = Vec::new();
         for kernel in [&a, &b] {
-            let key = daemon
-                .get_or_start_session(&kernel.name, &cwd, &home.env_all())
+            let mut lease = daemon
+                .acquire(&kernel.name, &cwd, &cwd.join("doc.qmd"), &home.env_all())
                 .await
                 .expect("each fake kernelspec starts");
-            let r = daemon
-                .execute_in_session(&key, "who")
-                .await
-                .unwrap()
-                .unwrap();
+            let r = lease.execute("who").await.unwrap();
             said.push(match r.outputs.as_slice() {
                 [CellOutput::Stream { text, .. }] => text.clone(),
                 other => panic!("unexpected outputs {other:?}"),
@@ -312,17 +313,13 @@ mod tests {
         let cwd = std::env::current_dir().unwrap();
         let daemon = JupyterDaemon::new();
 
-        let key = daemon
-            .get_or_start_session(&kernel.name, &cwd, &kernel.env)
+        let mut lease = daemon
+            .acquire(&kernel.name, &cwd, &cwd.join("doc.qmd"), &kernel.env)
             .await
             .expect("fake kernel starts through the real session path");
 
         // Scripted: one stream, then the value.
-        let r = daemon
-            .execute_in_session(&key, "echo hi")
-            .await
-            .unwrap()
-            .unwrap();
+        let r = lease.execute("echo hi").await.unwrap();
         assert!(matches!(
             r.outputs.as_slice(),
             [CellOutput::Stream { name, text }, CellOutput::ExecuteResult { data, .. }]
@@ -331,35 +328,162 @@ mod tests {
         ));
 
         // A silent execution (statement, or a `None` value): no outputs at all.
-        let r = daemon
-            .execute_in_session(&key, "x = 1")
-            .await
-            .unwrap()
-            .unwrap();
+        let r = lease.execute("x = 1").await.unwrap();
         assert!(r.outputs.is_empty(), "got {:?}", r.outputs);
 
         // An error message.
-        let r = daemon
-            .execute_in_session(&key, "boom")
-            .await
-            .unwrap()
-            .unwrap();
+        let r = lease.execute("boom").await.unwrap();
         assert!(matches!(
             r.outputs.as_slice(),
             [CellOutput::Error { ename, .. }] if ename == "NameError"
         ));
 
         // Unscripted code is echoed as stdout (TestKernel's default).
-        let r = daemon
-            .execute_in_session(&key, "anything else")
-            .await
-            .unwrap()
-            .unwrap();
+        let r = lease.execute("anything else").await.unwrap();
         assert!(matches!(
             r.outputs.as_slice(),
             [CellOutput::Stream { text, .. }] if text == "anything else"
         ));
 
+        daemon.shutdown_lease(lease).await.unwrap();
+    }
+
+    // ── bd-i7yz08uh: leases ─────────────────────────────────────────────
+
+    use super::super::daemon::Retention;
+    use std::time::Duration;
+
+    fn pid_script() -> Script {
+        Script::from([("pid".to_string(), vec![FakeOutput::KernelPid])])
+    }
+
+    async fn pid_of(lease: &mut crate::engine::jupyter::SessionLease) -> String {
+        let r = lease.execute("pid").await.unwrap();
+        match r.outputs.as_slice() {
+            [CellOutput::Stream { text, .. }] => text.clone(),
+            other => panic!("unexpected outputs {other:?}"),
+        }
+    }
+
+    /// A document's lease is exclusive: a second render of the same document
+    /// waits until the first one is done, then gets the same (retained) kernel.
+    #[tokio::test]
+    async fn test_lease_is_exclusive_per_document() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let cwd = std::env::current_dir().unwrap();
+        let doc = cwd.join("a.qmd");
+        let daemon = JupyterDaemon::new();
+
+        let mut first = daemon
+            .acquire(&kernel.name, &cwd, &doc, &kernel.env)
+            .await
+            .unwrap();
+        let first_pid = pid_of(&mut first).await;
+        let waiting = tokio::time::timeout(
+            Duration::from_millis(300),
+            daemon.acquire(&kernel.name, &cwd, &doc, &kernel.env),
+        )
+        .await;
+        assert!(
+            waiting.is_err(),
+            "a second lease on a.qmd's kernel was granted while the first was held"
+        );
+
+        daemon.finish(first, Retention::Retain).await.unwrap();
+        let mut second = daemon
+            .acquire(&kernel.name, &cwd, &doc, &kernel.env)
+            .await
+            .unwrap();
+        assert_eq!(pid_of(&mut second).await, first_pid);
+        drop(second);
         daemon.shutdown_all().await.unwrap();
+    }
+
+    /// A held lease never blocks another document: a document's whole run
+    /// holds its own kernel, not a daemon-wide lock.
+    #[tokio::test]
+    async fn test_held_lease_does_not_block_another_document() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let cwd = std::env::current_dir().unwrap();
+        let daemon = JupyterDaemon::new();
+
+        let mut a = daemon
+            .acquire(&kernel.name, &cwd, &cwd.join("a.qmd"), &kernel.env)
+            .await
+            .unwrap();
+        let a_pid = pid_of(&mut a).await;
+        // `a` stays leased while b.qmd starts its kernel and runs a cell.
+        let b_pid = tokio::time::timeout(Duration::from_secs(30), async {
+            let mut b = daemon
+                .acquire(&kernel.name, &cwd, &cwd.join("b.qmd"), &kernel.env)
+                .await
+                .unwrap();
+            pid_of(&mut b).await
+        })
+        .await
+        .expect("b.qmd ran while a.qmd held its lease");
+        assert_ne!(a_pid, b_pid);
+        drop(a);
+        daemon.shutdown_all().await.unwrap();
+    }
+
+    /// `Release` shuts the kernel down and forgets the session; a later lease
+    /// on the same document starts a fresh kernel.
+    #[tokio::test]
+    async fn test_release_shuts_the_kernel_down() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let cwd = std::env::current_dir().unwrap();
+        let doc = cwd.join("a.qmd");
+        let daemon = JupyterDaemon::new();
+
+        let mut lease = daemon
+            .acquire(&kernel.name, &cwd, &doc, &kernel.env)
+            .await
+            .unwrap();
+        let first_pid = pid_of(&mut lease).await;
+        let key = lease.key().clone();
+        daemon.finish(lease, Retention::Release).await.unwrap();
+        assert!(!daemon.has_session(&key));
+        assert_eq!(daemon.session_count(), 0);
+
+        let mut again = daemon
+            .acquire(&kernel.name, &cwd, &doc, &kernel.env)
+            .await
+            .unwrap();
+        assert_ne!(pid_of(&mut again).await, first_pid);
+        daemon.shutdown_lease(again).await.unwrap();
+    }
+
+    /// A render waiting on a document's lease while the holder releases it
+    /// gets a freshly started kernel, tracked by the daemon (not the retired
+    /// session).
+    #[tokio::test]
+    async fn test_waiter_after_release_gets_a_tracked_fresh_kernel() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let cwd = std::env::current_dir().unwrap();
+        let doc = cwd.join("a.qmd");
+        let daemon = JupyterDaemon::new();
+
+        let mut first = daemon
+            .acquire(&kernel.name, &cwd, &doc, &kernel.env)
+            .await
+            .unwrap();
+        let first_pid = pid_of(&mut first).await;
+        let (second, ()) = tokio::join!(
+            daemon.acquire(&kernel.name, &cwd, &doc, &kernel.env),
+            async {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                daemon.finish(first, Retention::Release).await.unwrap();
+            }
+        );
+        let mut second = second.unwrap();
+        assert_ne!(pid_of(&mut second).await, first_pid);
+        assert!(daemon.has_session(second.key()));
+        daemon.shutdown_lease(second).await.unwrap();
+        assert_eq!(daemon.session_count(), 0);
     }
 }

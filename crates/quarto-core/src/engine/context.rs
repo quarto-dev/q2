@@ -217,9 +217,10 @@ pub struct ExecutionContext {
     /// (`QUARTO_PROJECT_ROOT`, `QUARTO_DOCUMENT_PATH`,
     /// `QUARTO_DOCUMENT_FILE`, `QUARTO_EXECUTE_INFO`, `QUARTO_FIG_*`; see
     /// `engine::execute_info`, GH #1131). Unlike [`Self::project_env`]
-    /// these values change from one document to the next, so an engine
-    /// whose process outlives a document (Jupyter's shared kernels) must
-    /// set them per document, not at spawn. Empty when no stage ran.
+    /// these values change from one render to the next, so an engine
+    /// whose process outlives a render (a Jupyter kernel `q2 preview`
+    /// keeps warm) must set them per render, not at spawn. Empty when no
+    /// stage ran.
     pub execute_env: Vec<(String, String)>,
 
     /// The document's execution units from the one shared scan

@@ -559,9 +559,9 @@ pub fn path_env(
 /// Code that sets `vars` in a running kernel's environment, for the kernel
 /// languages q2 knows how to address, or `None`.
 ///
-/// Jupyter kernels are shared by every document of a project (the daemon keys
-/// sessions by kernel and working directory), so these per-document values
-/// cannot be given when the kernel starts. The engine runs this code as a
+/// Each document has its own kernel (bd-i7yz08uh), but `q2 preview` keeps a
+/// document's kernel across renders, so these values cannot be given only
+/// when the kernel starts. The engine runs this code as a
 /// silent request before the document's first cell, the way Quarto 1's setup
 /// cell sets `QUARTO_FIG_*` inside the kernel. It changes only the kernel's
 /// environment, never q2's.

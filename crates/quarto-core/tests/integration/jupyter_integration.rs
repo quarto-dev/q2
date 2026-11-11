@@ -68,23 +68,22 @@ async fn test_kernel_execute_print() {
     }
 
     // bd-hxhnnlzs: panic-safety — if an assertion below fails before
-    // the explicit shutdown_session, this scope's drop still tears the
+    // the explicit shutdown_lease, this scope's drop still tears the
     // kernel down instead of leaking it to PID 1.
     let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
     // Start a kernel session
-    let key = daemon
-        .get_or_start_session("python3", &working_dir, &[])
+    let mut lease = daemon
+        .acquire("python3", &working_dir, &working_dir.join("doc.qmd"), &[])
         .await
         .expect("Failed to start kernel");
 
     // Execute code with print()
-    let result = daemon
-        .execute_in_session(&key, "print('Hello from Python!')")
+    let result = lease
+        .execute("print('Hello from Python!')")
         .await
-        .expect("Session not found")
         .expect("Execution failed");
 
     // Verify status is OK
@@ -108,10 +107,7 @@ async fn test_kernel_execute_print() {
     );
 
     // Shutdown
-    daemon
-        .shutdown_session(&key)
-        .await
-        .expect("Shutdown failed");
+    daemon.shutdown_lease(lease).await.expect("Shutdown failed");
 }
 
 /// Test evaluating an expression and getting execute_result.
@@ -124,23 +120,19 @@ async fn test_kernel_execute_expression() {
     }
 
     // bd-hxhnnlzs: panic-safety — if an assertion below fails before
-    // the explicit shutdown_session, this scope's drop still tears the
+    // the explicit shutdown_lease, this scope's drop still tears the
     // kernel down instead of leaking it to PID 1.
     let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
-    let key = daemon
-        .get_or_start_session("python3", &working_dir, &[])
+    let mut lease = daemon
+        .acquire("python3", &working_dir, &working_dir.join("doc.qmd"), &[])
         .await
         .expect("Failed to start kernel");
 
     // Execute code that returns a value
-    let result = daemon
-        .execute_in_session(&key, "2 + 2")
-        .await
-        .expect("Session not found")
-        .expect("Execution failed");
+    let result = lease.execute("2 + 2").await.expect("Execution failed");
 
     assert!(matches!(result.status, ExecuteStatus::Ok));
 
@@ -155,10 +147,7 @@ async fn test_kernel_execute_expression() {
     });
     assert!(has_result, "Expected execute_result with '4'");
 
-    daemon
-        .shutdown_session(&key)
-        .await
-        .expect("Shutdown failed");
+    daemon.shutdown_lease(lease).await.expect("Shutdown failed");
 }
 
 /// Test that errors are properly captured.
@@ -171,22 +160,21 @@ async fn test_kernel_execute_error() {
     }
 
     // bd-hxhnnlzs: panic-safety — if an assertion below fails before
-    // the explicit shutdown_session, this scope's drop still tears the
+    // the explicit shutdown_lease, this scope's drop still tears the
     // kernel down instead of leaking it to PID 1.
     let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
-    let key = daemon
-        .get_or_start_session("python3", &working_dir, &[])
+    let mut lease = daemon
+        .acquire("python3", &working_dir, &working_dir.join("doc.qmd"), &[])
         .await
         .expect("Failed to start kernel");
 
     // Execute code that raises an error
-    let result = daemon
-        .execute_in_session(&key, "raise ValueError('test error')")
+    let result = lease
+        .execute("raise ValueError('test error')")
         .await
-        .expect("Session not found")
         .expect("Execution failed");
 
     // Verify status is Error
@@ -201,10 +189,7 @@ async fn test_kernel_execute_error() {
         assert!(evalue.contains("test error"));
     }
 
-    daemon
-        .shutdown_session(&key)
-        .await
-        .expect("Shutdown failed");
+    daemon.shutdown_lease(lease).await.expect("Shutdown failed");
 }
 
 // =============================================================================
@@ -250,14 +235,14 @@ async fn test_kernel_execute_matplotlib() {
     }
 
     // bd-hxhnnlzs: panic-safety — if an assertion below fails before
-    // the explicit shutdown_session, this scope's drop still tears the
+    // the explicit shutdown_lease, this scope's drop still tears the
     // kernel down instead of leaking it to PID 1.
     let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
     let daemon = daemon();
     let working_dir = std::env::current_dir().unwrap();
 
-    let key = daemon
-        .get_or_start_session("python3", &working_dir, &[])
+    let mut lease = daemon
+        .acquire("python3", &working_dir, &working_dir.join("doc.qmd"), &[])
         .await
         .expect("Failed to start kernel");
 
@@ -269,11 +254,7 @@ plt.plot([1, 2, 3], [1, 4, 9])
 plt.show()
 "#;
 
-    let result = daemon
-        .execute_in_session(&key, code)
-        .await
-        .expect("Session not found")
-        .expect("Execution failed");
+    let result = lease.execute(code).await.expect("Execution failed");
 
     assert!(
         matches!(result.status, ExecuteStatus::Ok),
@@ -298,10 +279,7 @@ plt.show()
         println!("No image output (expected in non-interactive mode)");
     }
 
-    daemon
-        .shutdown_session(&key)
-        .await
-        .expect("Shutdown failed");
+    daemon.shutdown_lease(lease).await.expect("Shutdown failed");
 }
 
 // =============================================================================
