@@ -2,7 +2,7 @@
 title: 'Engine round-trip rewrites project metadata as document markdown (bd-8svy3p89)'
 date: 2026-11-10
 description: 'On pages that run code, the engine output''s re-parsed metadata replaces the real metadata wholesale; reconcile it three ways instead, against a parse of the exact markdown the engine received, so only changes the engine made are taken.'
-status: draft  # Design agreed 2026-11-11 (three-way metadata reconcile); blocks question open; do not implement before the go-ahead
+status: draft  # Design agreed 2026-11-11; all questions decided; do not implement before the go-ahead
 braid:
   strand: bd-8svy3p89
 ---
@@ -116,7 +116,7 @@ or `!str` tag; an evaluated front-matter span comes from the engine; keys
 an engine adds come through. It does not depend on masking being right
 for every engine, and needs no provenance rule.
 
-Blocks keep today's two-way reconcile (out of scope; see Risks).
+Blocks keep today's two-way reconcile (decision 4).
 
 ## Work items
 
@@ -190,11 +190,12 @@ Blocks keep today's two-way reconcile (out of scope; see Risks).
    engine output. Correctness first; no measurement gate.
 3. **A key the engine removed is dropped**: the engine's rewrite is
    followed. Rarely wanted, but the simpler rule.
-
-## Open questions for the user
-
-1. **Blocks.** Should blocks get the same three-way treatment? Under
-   discussion; see the conversation of 2026-11-11.
+4. **Blocks stay two-way.** A three-way block reconcile would stop writer
+   infidelity from changing blocks the engine never touched, but it needs
+   an S0-to-S1 block alignment and touches every engine page. No
+   writer-fidelity measurement now: the planned port of the Quarto 1
+   smoke-all tests will reason about round-trip mismatches deliberately,
+   and any leftover writer bugs it finds are the evidence to revisit this.
 
 ## Risks / tradeoffs
 
