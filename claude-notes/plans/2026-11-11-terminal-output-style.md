@@ -1,6 +1,7 @@
 ---
 title: "One terminal output-style policy for q2 (bd-be8ve52f, GH #1135)"
 date: 2026-11-11
+status: done  # Merged in PR #1184 (1f713756e), 2026-11-11
 ---
 
 ## Overview
@@ -221,8 +222,8 @@ The maintainer chose the plain `Display` with rendering at the sinks
 - [x] Full `cargo xtask verify`, including the WASM leg, because
       `quarto-util` is a pampa/WASM dependency. Known unrelated local
       failure: bd-54odm3rz (knitr `rlang_error`).
-- [ ] Close bd-be8ve52f and reply on #1135 (wording to be confirmed with the
-      maintainer).
+- [x] Close bd-be8ve52f (closed 2026-11-11). The merge of PR #1184 closed
+      GH #1135; the maintainer decided no separate reply was needed.
 
 ## End-to-end record
 
