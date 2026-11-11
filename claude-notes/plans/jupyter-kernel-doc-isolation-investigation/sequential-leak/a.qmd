@@ -1,0 +1,7 @@
+---
+title: a
+---
+
+```{python}
+secret = "defined in a.qmd"
+```
