@@ -38,6 +38,9 @@ use quarto_core::project::orchestrator::{
 };
 use quarto_core::project::render_scripts;
 use quarto_core::{Format, ProjectContext, QuartoError, RenderToFileOptions};
+use quarto_util::output_style::StreamStyle;
+
+use crate::commands::terminal_style::{stderr_text_options, text_render_options};
 use quarto_error_reporting::{
     CoalescedDiagnostic, DiagnosticMessage, DiagnosticMessageBuilder, JsonDiagnostic,
     JsonPass1Failure, TextRenderOptions, diagnostic_to_json_with_options, with_source_file,
@@ -630,11 +633,10 @@ fn colorize(text: &str, sgr_code: &str, color: bool) -> String {
 }
 
 /// Whether the error/warning summary should use ANSI color on stderr:
-/// stderr is a terminal and `NO_COLOR` is unset. (`--json-errors`
-/// suppression is handled separately at the call site.)
+/// the process-wide output style decided in `main` (bd-be8ve52f).
+/// (`--json-errors` suppression is handled separately at the call site.)
 fn stderr_use_color() -> bool {
-    use std::io::IsTerminal;
-    std::env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal()
+    quarto_util::output_style::get().stderr.color
 }
 
 /// bd-45yw: resolve the replay activation source and load the trace.
@@ -770,11 +772,12 @@ impl RenderReport {
     }
 
     /// The diagnostics exactly as `q2 render` prints them (per-page
-    /// diagnostics included, i.e. the non-`--quiet` form). With
-    /// `color: false` the text carries no ANSI escapes and no OSC 8
-    /// hyperlinks, for consumers that are not a terminal.
-    pub fn diagnostics_text(&self, color: bool) -> String {
-        format_render_diagnostics_text(&self.summary, false, &self.config_sources, color)
+    /// diagnostics included, i.e. the non-`--quiet` form), decorated as
+    /// `style` allows. [`StreamStyle::PLAIN`] gives text with no ANSI
+    /// escapes and no OSC 8 hyperlinks, for consumers that are not a
+    /// terminal.
+    pub fn diagnostics_text(&self, style: StreamStyle) -> String {
+        format_render_diagnostics_text(&self.summary, false, &self.config_sources, style)
     }
 }
 
@@ -1444,7 +1447,12 @@ fn print_render_diagnostics(
     } else {
         eprint!(
             "{}",
-            format_render_diagnostics_text(summary, args.quiet, config_sources, true)
+            format_render_diagnostics_text(
+                summary,
+                args.quiet,
+                config_sources,
+                quarto_util::output_style::get().stderr,
+            )
         );
         // Per-file output line stays on `tracing::info!` (opt-in via
         // `-v`); enumerating every file is too noisy for a large
@@ -1715,9 +1723,10 @@ fn failure_attribution_line(group: &quarto_error_reporting::CoalescedDiagnostic)
     }
 }
 
-/// The text form of a render's diagnostics: what `q2 render` prints
-/// on stderr (`color: true`), or the same content rendered with no ANSI
-/// color and no OSC 8 hyperlinks (`color: false`). One function,
+/// The text form of a render's diagnostics, decorated as `style`
+/// allows: what `q2 render` prints on stderr (the process's resolved
+/// stderr style, bd-be8ve52f), or the same content with no ANSI color
+/// and no OSC 8 hyperlinks ([`StreamStyle::PLAIN`]). One function,
 /// so the terminal and `q2 preview --static`'s browser overlay cannot
 /// drift apart (bd-sl79jjiq Phase 1).
 ///
@@ -1738,11 +1747,9 @@ fn format_render_diagnostics_text(
     summary: &quarto_core::project::orchestrator::ProjectRenderSummary,
     quiet: bool,
     config_sources: &[PathBuf],
-    color: bool,
+    style: StreamStyle,
 ) -> String {
-    // The no-color form also drops hyperlinks: it is for the browser
-    // overlay, where OSC 8 sequences are just noise.
-    let opts = TextRenderOptions::default().color(color).hyperlinks(color);
+    let opts = text_render_options(style);
     let mut out = String::new();
     let mut line = |text: &str| {
         out.push_str(text);
@@ -2153,7 +2160,9 @@ fn emit_cli_diagnostic(
         {
             emit_json_line(&json);
         }
-    } else if let Some(text) = render_diagnostic_guarded(code, || diagnostic.to_text(None)) {
+    } else if let Some(text) = render_diagnostic_guarded(code, || {
+        diagnostic.to_text_with_options(None, &stderr_text_options())
+    }) {
         eprintln!("{}", text);
     }
 }
@@ -3681,7 +3690,7 @@ mod render_once_tests {
             "good pages still render"
         );
 
-        let text = report.diagnostics_text(false);
+        let text = report.diagnostics_text(StreamStyle::PLAIN);
         // Q-1-1 "YAML Syntax Error" (was the generic Q-0-99 until bd-x30aq7ae).
         assert!(
             text.contains("Q-1-1"),
@@ -3696,7 +3705,12 @@ mod render_once_tests {
             "color=false must yield no ANSI escapes: {text:?}"
         );
         assert!(
-            report.diagnostics_text(true).contains("\x1b["),
+            report
+                .diagnostics_text(StreamStyle {
+                    color: true,
+                    hyperlinks: true
+                })
+                .contains("\x1b["),
             "color=true keeps the terminal colors"
         );
     }

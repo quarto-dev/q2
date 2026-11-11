@@ -1,0 +1,73 @@
+---
+title: "Color and links in terminal output"
+description: "Control whether q2 colors its messages and makes file paths clickable, with the --color option and the standard NO_COLOR, CLICOLOR, and FORCE_COLOR environment variables."
+---
+
+## Overview
+
+When `q2` prints errors, warnings, and log messages to a terminal, it colors
+them and turns file locations into clickable links. When the output goes
+somewhere else, such as a file, a pipe, or a CI log, `q2` prints plain text,
+so logs stay readable and easy to search:
+
+```sh
+q2 render index.qmd 2> render.log   # render.log contains plain text
+```
+
+`q2` makes this choice separately for standard output and standard error.
+
+## The `--color` option
+
+`--color` overrides the automatic choice for a single run. It works with
+every command and can go before or after the command name:
+
+```sh
+q2 render index.qmd --color=never    # never color
+q2 --color=always render index.qmd   # always color, even into a file
+q2 render index.qmd --color=auto     # the default: decide automatically
+```
+
+`--color=always` does not add clickable links when the output is not a
+terminal. Links in a log file are noise, not something you can click.
+
+## Environment variables
+
+`q2` follows the common conventions for these variables, so a setting you
+already use for other tools also applies to `q2`.
+
+| Variable | Effect |
+|----------|--------|
+| `NO_COLOR` | Set to any non-empty value: no color and no links. See [no-color.org](https://no-color.org). |
+| `CLICOLOR_FORCE`, `FORCE_COLOR` | Set to a non-empty value other than `0`: color even when the output is not a terminal. Useful in CI systems whose log viewers show color. |
+| `CLICOLOR` | Set to `0`: no color. |
+| `FORCE_HYPERLINK` | Set to `1`: always emit clickable links. Set to `0`: never emit them. |
+| `TERM` | Set to `dumb`: no color. |
+
+## Which setting wins
+
+When several settings apply, the first match in this list decides:
+
+1. The `--color` option.
+2. `NO_COLOR`.
+3. `CLICOLOR_FORCE` or `FORCE_COLOR`.
+4. `CLICOLOR=0`.
+5. Whether the output is a terminal that supports color.
+
+For example, `NO_COLOR=1 q2 render --color=always` prints color, because the
+option comes first. `NO_COLOR=1 CLICOLOR_FORCE=1 q2 render` prints plain
+text.
+
+## Clickable links
+
+`q2` emits clickable file links only when color is on, the output is a
+terminal, and `q2` recognizes the terminal as one that supports links.
+Recognized terminals include iTerm2, WezTerm, Ghostty, kitty, Alacritty,
+Windows Terminal, Konsole, GNOME Terminal and other VTE-based terminals,
+and the VS Code terminal. Inside a terminal multiplexer such as tmux,
+or in a terminal `q2` does not recognize, set `FORCE_HYPERLINK=1` if your
+terminal does support links.
+
+## Help output
+
+`q2 --help` follows the environment variables above, but not the `--color`
+option.

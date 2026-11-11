@@ -95,59 +95,65 @@ global state. Only command entry points call `output_style::get()`.
 
 ### Phase 0: tests first (all must fail before Phase 1)
 
-- [ ] Unit: `resolve` precedence table. Cover every rule above, per stream,
+- [x] Unit: `resolve` precedence table. Cover every rule above, per stream,
       with an injected env and tty. Include empty-value cases (`NO_COLOR=`,
       `CLICOLOR_FORCE=`), `FORCE_COLOR=0`, `--color` beating `NO_COLOR`,
       `NO_COLOR` beating `CLICOLOR_FORCE`, and the `FORCE_HYPERLINK` cases.
-- [ ] Unit: `get()` before `init` is plain.
-- [ ] Integration (`crates/quarto/tests/integration/terminal_output_style.rs`),
+- [x] Unit: `get()` before `init` is plain.
+- [x] Integration (`crates/quarto/tests/integration/terminal_output_style.rs`),
       driving the `q2` binary on the #1135 fixture (missing include) with
       stderr captured, which makes it non-tty:
-  - [ ] default → 0 SGR, 0 OSC 8 (the #1135 non-tty case);
-  - [ ] `NO_COLOR=1` with `CLICOLOR_FORCE=1` → 0 SGR, 0 OSC 8;
-  - [ ] `CLICOLOR_FORCE=1` → SGR > 0, 0 OSC 8;
-  - [ ] `--color=always` → SGR > 0, 0 OSC 8;
-  - [ ] `--color=never` with `CLICOLOR_FORCE=1` → 0 SGR;
-  - [ ] `--color=always` with `FORCE_HYPERLINK=1` → OSC 8 > 0;
-  - [ ] `-vv` tracing into a pipe → 0 SGR; `-vv --color=always` → SGR > 0.
-- [ ] Integration (pampa): the "no trailing newline" warning with stderr
+  - [x] default → 0 SGR, 0 OSC 8 (the #1135 non-tty case);
+  - [x] `NO_COLOR=1` with `CLICOLOR_FORCE=1` → 0 SGR, 0 OSC 8;
+  - [x] `CLICOLOR_FORCE=1` → SGR > 0, 0 OSC 8;
+  - [x] `--color=always` → SGR > 0, 0 OSC 8;
+  - [x] `--color=never` with `CLICOLOR_FORCE=1` → 0 SGR;
+  - [x] `--color=always` with `FORCE_HYPERLINK=1` → OSC 8 > 0;
+  - [x] `-vv` tracing into a pipe → 0 SGR; `-vv --color=always` → SGR > 0.
+- [x] Integration (pampa, `test_terminal_output_style.rs`): a parse error (unclosed fenced div; the newline warning has no snippet, hence no color) with stderr
       captured → 0 SGR, 0 OSC 8.
 
 ### Phase 1: resolver
 
-- [ ] `crates/quarto-util/src/output_style.rs` plus deps (`anstyle-query`,
+- [x] `crates/quarto-util/src/output_style.rs` plus deps (`anstyle-query`,
       `supports-hyperlinks`). Confirm `quarto-util` still builds for
       `wasm32-unknown-unknown` (pampa depends on it).
-- [ ] Phase 0 unit tests pass.
+- [x] Phase 0 unit tests pass.
 
 ### Phase 2: binaries resolve early
 
-- [ ] `q2`: global `--color <auto|always|never>` on `Cli`. Call `init` right
+- [x] `q2`: global `--color <auto|always|never>` on `Cli`. Call `init` right
       after `Cli::parse()` and before the tracing setup. Pass
       `.with_ansi(style.stderr.color)` to the fmt layer.
-- [ ] clap's own `--help` coloring: leave it on `anstream` auto (it already
+- [x] clap's own `--help` coloring: leave it on `anstream` auto (it already
       honors `NO_COLOR`). Document that `--color` does not affect help.
       Decide during implementation whether a pre-scan is worth it.
-- [ ] `hub`: same `--color` flag, `init` before tracing in both setup
+- [x] `hub`: same `--color` flag, `init` before tracing in both setup
       branches, `.with_ansi`.
-- [ ] `pampa`: `init(ColorFlag::Auto)` (a flag is optional). Every
+- [x] `pampa`: `init(ColorFlag::Auto)` (a flag is optional). Every
       `to_text(None)` print site renders with `get().stderr`.
-- [ ] `qmd-syntax-helper`: `colored::control::set_override(get().stdout.color)`.
+- [x] `qmd-syntax-helper`: `colored::control::set_override(get().stdout.color)`.
 
 ### Phase 3: thread to every q2 sink
 
-- [ ] `render.rs`: `print_render_diagnostics` passes the stderr style. This
-      replaces the hard-coded `true` at `render.rs:1447`. Delete
-      `stderr_use_color()` and use the same style for the counts clause.
-- [ ] `format_render_diagnostics_text` takes `StreamStyle` (color and
+- [x] `render.rs`: `print_render_diagnostics` passes the stderr style. This
+      replaces the hard-coded `true` at `render.rs:1447`.
+      `stderr_use_color()` stays as a one-line reader of `get().stderr.color`
+      for the counts clause.
+- [x] `format_render_diagnostics_text` takes `StreamStyle` (color and
       hyperlinks separately) in place of one `color: bool`.
       `RenderReport::diagnostics_text(false)` callers (preview overlay) pass
       plain.
-- [ ] `emit_cli_diagnostic` (`render.rs:2156`).
-- [ ] `create/mod.rs:94,145`, `add/mod.rs:149`, `use_cmd/mod.rs:134,143`.
-- [ ] `quarto-preview/src/lib.rs:602`.
-- [ ] Re-grep for `to_text(None)` and `eprintln!` of diagnostics in non-test
+- [x] `emit_cli_diagnostic` (`render.rs:2156`).
+- [x] `create/mod.rs:94,145`, `add/mod.rs:149`, `use_cmd/mod.rs:134,143`.
+- [x] `quarto-preview/src/lib.rs:602`.
+- [x] Re-grep for `to_text(None)` and `eprintln!` of diagnostics in non-test
       code. Every terminal sink must take the style.
+      Done 2026-11-11. The terminal sinks are all converted. What remains
+      either builds a string rather than printing it (moved to Phase 4) or
+      is the `pampa` dev binary `ast_reconcile` (left as is).
+- [x] Shared helper `crates/quarto/src/commands/terminal_style.rs`
+      (`text_render_options`, `stderr_text_options`).
 
 ### Phase 4: stop baking styling into strings (regression-guarded)
 
@@ -156,7 +162,15 @@ global state. Only command entry points call `output_style::get()`.
   - `RenderAbort::user_message` (`render.rs:809`);
   - `exit_with_abort` → `main`\'s anyhow `Error:` print;
   - `preview_static.rs:870` (abort `eprintln!`, then `strip_ansi_escapes`
-    for the browser).
+    for the browser);
+  - string producers that call `to_text(None)` with the default (styled)
+    options: `quarto-core/src/error.rs:35` (`ParseError`\'s `Display`),
+    `engine/ts_record.rs:527` (an engine failure message),
+    `pampa/src/utils/diagnostic_collector.rs:73`,
+    `pampa/src/wasm_entry_points/mod.rs:53,161`, and
+    `wasm-quarto-hub-client/src/lib.rs:4111,4221,4399`. The browser already
+    runs `stripAnsi` defensively (`ReactPreview.tsx:957`, the
+    preview-renderer overlays), so plain WASM strings are harmless.
 
   Record the full list here.
 - [ ] Before any change, add a `--color=always` test per terminal path that asserts SGR > 0. A plain `Display` that loses color must fail these tests.
@@ -171,20 +185,20 @@ global state. Only command entry points call `output_style::get()`.
 
 ### Phase 5: docs
 
-- [ ] New user-facing page `docs/tools/terminal-output.qmd`. Cover
+- [x] New user-facing page `docs/tools/terminal-output.qmd`. Cover
       `--color`, `NO_COLOR`, `CLICOLOR` / `CLICOLOR_FORCE` / `FORCE_COLOR`,
       `FORCE_HYPERLINK`, and the precedence. Explain that hyperlinks appear
       only in a capable terminal, and that `--help` follows the env vars, not
       `--color`. Add it to the `tools` sidebar in `docs/_quarto.yml`.
-- [ ] Render it with `cargo run --bin q2 -- render docs/` (Quarto 2).
+- [x] Render it with `cargo run --bin q2 -- render docs/` (Quarto 2).
 
 ### Phase 6: verification
 
-- [ ] `cargo nextest run -p quarto-util -p quarto -p pampa`, plus clippy
+- [x] `cargo nextest run -p quarto-util -p quarto -p pampa`, plus clippy
       `-D warnings` for every touched crate.
-- [ ] Windows cross-check:
+- [x] Windows cross-check:
       `cargo clippy -p quarto-util -p quarto --all-targets --target x86_64-pc-windows-msvc -- -D warnings`.
-- [ ] End to end: rerun `claude-notes/issue-reports/1135/repro/count-escapes.sh`
+- [x] End to end: rerun `claude-notes/issue-reports/1135/repro/count-escapes.sh`
       against the new binary and record the table below. Also check
       interactively in a real terminal that color and links still appear.
 - [ ] Full `cargo xtask verify`, including the WASM leg, because
@@ -195,4 +209,39 @@ global state. Only command entry points call `output_style::get()`.
 
 ## End-to-end record
 
-_(fill in at Phase 6)_
+Recorded 2026-11-11 with `target/debug/q2` built on branch `issue-1135`
+(Phases 0–3 and 5). All output below was inspected.
+
+Before and after, `claude-notes/issue-reports/1135/repro/count-escapes.sh`
+with stderr redirected to a file:
+
+| mode                          | before (main) | after |
+|-------------------------------|---------------|-------|
+| diagnostics                   | 162 SGR, 2 OSC 8 | 0, 0 |
+| diagnostics, `NO_COLOR=1`     | 162, 2        | 0, 0  |
+| `--json-errors`               | 0, 0          | 0, 0  |
+| tracing `-vv`                 | 980, 0        | 0, 0  |
+| tracing `-vv`, `NO_COLOR=1`   | 0, 0          | 0, 0  |
+| `render --help` piped         | 0, 0          | 0, 0  |
+
+A real terminal, simulated with `script -q tty.out q2 render index.qmd` and
+`TERM=xterm-256color`:
+
+| case                                   | SGR | OSC 8 |
+|----------------------------------------|----:|------:|
+| `TERM_PROGRAM=ghostty`                 | 164 | 2 (unchanged from before) |
+| `TERM_PROGRAM=Apple_Terminal`          | 164 | 0 (unrecognized terminal) |
+| `TERM_PROGRAM=Apple_Terminal FORCE_HYPERLINK=1` | 164 | 2 |
+| `NO_COLOR=1` / `CLICOLOR=0` / `TERM=dumb` | 0 | 0 |
+
+`--help` under the same terminal: 93 SGR by default, 0 with `NO_COLOR=1`,
+93 with `--color=never` (help follows the environment only, as the docs
+page says).
+
+Test runs: `cargo nextest run` for quarto, pampa, quarto-util,
+quarto-preview, quarto-hub and qmd-syntax-helper gives 7371 tests, all
+passing after one test was updated. That test,
+`json_errors::ipynb_diagnostic_hyperlinks_real_notebook`, pinned "hyperlinks
+even when stderr is not a terminal". It now asks for links with
+`FORCE_HYPERLINK=1`. Clippy `-D warnings` is clean on all six crates. The
+Windows clippy of `quarto-util` is clean.

@@ -599,7 +599,12 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         ))
         .chain(project.config.config_diagnostics.iter().cloned())
     {
-        eprintln!("{}", diagnostic.to_text(None));
+        // Decorated per the process's resolved stderr style (bd-be8ve52f).
+        let style = quarto_util::output_style::get().stderr;
+        let opts = quarto_error_reporting::TextRenderOptions::default()
+            .color(style.color)
+            .hyperlinks(style.hyperlinks);
+        eprintln!("{}", diagnostic.to_text_with_options(None, &opts));
     }
     if project.config.pre_render_scripts.is_empty() {
         return;

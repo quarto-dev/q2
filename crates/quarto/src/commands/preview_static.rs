@@ -826,7 +826,7 @@ fn record_failure(hub: &ReloadHub, report: &RenderReport) {
         hub.set_failure(None);
         return;
     }
-    let text = report.diagnostics_text(false);
+    let text = report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN);
     hub.set_failure(Some(if text.trim().is_empty() {
         "The render produced no output.".to_string()
     } else {
@@ -851,7 +851,7 @@ fn finish_render(
                 ok,
                 errors: counts.errors,
                 warnings: counts.warnings,
-                text: report.diagnostics_text(false),
+                text: report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN),
             });
             if ok {
                 let target = match ran {
