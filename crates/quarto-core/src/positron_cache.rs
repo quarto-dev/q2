@@ -357,6 +357,7 @@ fn cache_files(dir: &Path) -> Vec<(PathBuf, FileMeta)> {
                 FileMeta {
                     source: meta
                         .get("quarto_source")
+                        // lint:allow(metadata-as-str) serde_json::Value from a Positron cache file, not document metadata
                         .and_then(|s| s.as_str())
                         .map(str::to_string),
                     last_updated: meta
