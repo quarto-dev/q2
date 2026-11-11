@@ -38,13 +38,13 @@ print("Echoed cell, **bold** output.")
 print("Inside a **div**.")
 ```
 
-## E: a tabset (the reporter's use case)
+## E: a tabset (the reporter's use case, without code fences; see bd-f63cqoke)
 
 ```{python}
 #| echo: false
 #| output: asis
 print("::: {.panel-tabset}\n")
 for name in ["pip", "conda"]:
-    print(f"## {name}\n\n```bash\n{name} install thing\n```\n")
+    print(f"## {name}\n\nRun `{name} install thing`.\n")
 print(":::")
 ```

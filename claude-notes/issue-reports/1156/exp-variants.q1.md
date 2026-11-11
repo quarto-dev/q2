@@ -29,26 +29,22 @@ Echoed cell, **bold** output.
 
 ## D: a class forces the cell div (needCell)
 
-::: {#103a2bd2 .cell .keepme execution_count=4}
+::: {#eccbb286 .cell .keepme execution_count=4}
 Inside a **div**.
 :::
 
 
-## E: a tabset (the reporter's use case)
+## E: a tabset (the reporter's use case, without code fences; see bd-f63cqoke)
 
 ::: {.panel-tabset}
 
 ## pip
 
-```bash
-pip install thing
-```
+Run `pip install thing`.
 
 ## conda
 
-```bash
-conda install thing
-```
+Run `conda install thing`.
 
 :::
 

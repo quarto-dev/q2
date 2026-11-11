@@ -357,9 +357,9 @@ fn included_graphic(metadata: &serde_json::Value) -> Option<(String, Option<f64>
 }
 
 /// A figure\'s markdown in its output div, or bare for a linked image under `results = "asis"`
-/// (hooks.R).
+/// (hooks.R) and for any figure under Jupyter `output: asis` (`jupyter.ts`).
 fn push_figure(output: &mut String, options: &CellOptions, index: usize, md: &str) {
-    if options.bare_linked_image(index) {
+    if options.bare_linked_image(index) || options.output_asis() {
         output.push_str(&format!("\n{md}\n"));
     } else {
         output.push_str(&format!("\n::: {{.cell-output-display}}\n\n{md}\n\n:::\n"));
@@ -737,11 +737,22 @@ fn fenced_output_div(
 ) -> String {
     let ticks = ticks_for_code(text);
     let open = fence_attrs.map_or_else(|| ticks.clone(), |a| format!("{ticks}{{{a}}}"));
-    if options.collapse() || options.results_asis() {
+    if options.collapse() || options.results_asis() || options.output_asis() {
         // knitr\'s hook returns the bare fence under `collapse`; `collapse_fences` merges it.
+        // Jupyter `output: asis` writes every output without its div (`jupyter.ts`).
         return format!("\n{open}\n{text}\n{ticks}\n");
     }
     format!("\n::: {{{classes}}}\n\n{open}\n{text}\n{ticks}\n\n:::\n")
+}
+
+/// `body` in a `::: {<classes>}` output div, or bare under Jupyter `output: asis`, which
+/// writes no output div (`jupyter.ts`).
+fn output_div(classes: &str, body: &str, options: &CellOptions) -> String {
+    if options.output_asis() {
+        format!("\n{body}\n")
+    } else {
+        format!("\n::: {{{classes}}}\n\n{body}\n\n:::\n")
+    }
 }
 
 /// Format kernel outputs as markdown.
@@ -801,6 +812,16 @@ fn format_outputs_with(
         if options.results_hide() && widget_output(cell_output) {
             continue;
         }
+        // Jupyter `output: asis`: printed stdout is document markdown, written as is
+        // (`jupyter.ts`: `asis && stream.name === "stdout"`). Other outputs keep their own
+        // markup and only lose the output div.
+        if let CellOutput::Stream { name, text } = cell_output
+            && options.output_asis()
+            && name == "stdout"
+        {
+            output.push_str(&format!("\n{}\n", text.trim_end()));
+            continue;
+        }
         if is_printed_text(cell_output) {
             if options.results_hide() {
                 continue;
@@ -845,7 +866,7 @@ fn format_outputs_with(
                     // Opt-in (epic decision 22): the text is written as is, in a display
                     // div (bare under `results = "asis"`, like Q1\'s `wrap_asis_output`).
                     let s = asis.trim_matches('\n');
-                    if options.results_asis() {
+                    if options.results_asis() || options.output_asis() {
                         output.push_str(&format!("\n{s}\n"));
                     } else {
                         // An htmlwidget is wrapped by Q1\'s `add_html_caption`: the figure
@@ -867,15 +888,18 @@ fn format_outputs_with(
                 } else if let Some(html) = data.get("text/html") {
                     let s = extract_text_content(html);
                     let ticks = ticks_for_code(&s);
-                    output.push_str(&format!(
-                        "\n::: {{.cell-output .cell-output-display}}\n\n{ticks}{{=html}}\n{}\n{ticks}\n\n:::\n",
-                        s
+                    output.push_str(&output_div(
+                        ".cell-output .cell-output-display",
+                        &format!("{ticks}{{=html}}\n{s}\n{ticks}"),
+                        options,
                     ));
                 } else if let Some(markdown) = markdown_output(data) {
                     // Written as markdown itself (Q1's `mdMarkdownOutput`), with the
                     // extra class `isMarkdown` adds.
-                    output.push_str(&format!(
-                        "\n::: {{.cell-output .cell-output-display .cell-output-markdown}}\n\n{markdown}\n\n:::\n"
+                    output.push_str(&output_div(
+                        ".cell-output .cell-output-display .cell-output-markdown",
+                        &markdown,
+                        options,
                     ));
                 } else if let Some((path, width)) = included_graphic(match cell_output {
                     CellOutput::DisplayData { metadata, .. } => metadata,
@@ -937,9 +961,11 @@ fn format_outputs_with(
                     // the output silently. The brackets are escaped: a bare
                     // `[Image output]` is a span without attributes, which loses
                     // its brackets and raises Q-2-49.
-                    output.push_str(
-                        "\n::: {.cell-output .cell-output-display}\n\n\\[Image output\\]\n\n:::\n",
-                    );
+                    output.push_str(&output_div(
+                        ".cell-output .cell-output-display",
+                        "\\[Image output\\]",
+                        options,
+                    ));
                 }
             }
             CellOutput::Error {
@@ -3204,5 +3230,216 @@ mod option_tests {
         let options = CellOptions::from_knitr(&serde_json::json!({"warning": false}))
             .with_output_kinds(vec![Some(Warning)]);
         assert_eq!(options.warning_selection(), None);
+    }
+}
+
+/// Jupyter `output: asis` (GH #1156): the shapes Quarto 1's `jupyter.ts` writes, checked
+/// against its renders in `claude-notes/issue-reports/1156/*.q1.md`.
+#[cfg(test)]
+mod jupyter_asis_tests {
+    use super::*;
+    use std::path::Path;
+
+    use crate::cell_options::options_to_config;
+    use crate::presenter::figures::FsFigureSink;
+    use crate::presenter::output::MimeBundle;
+
+    fn jupyter(yaml: &str) -> CellOptions {
+        let parsed = quarto_yaml::parse(yaml).expect("test YAML parses");
+        CellOptions::from_config(Some(&options_to_config(parsed).0))
+    }
+
+    fn stream(name: &str, text: &str) -> CellOutput {
+        CellOutput::Stream {
+            name: name.into(),
+            text: text.into(),
+        }
+    }
+
+    fn bundle(mime: &str, text: &str) -> MimeBundle {
+        let mut data = MimeBundle::new();
+        data.insert(mime.to_string(), serde_json::json!(text));
+        data
+    }
+
+    fn display(mime: &str, text: &str) -> CellOutput {
+        CellOutput::DisplayData {
+            data: bundle(mime, text),
+            metadata: serde_json::json!({}),
+        }
+    }
+
+    fn present(options: &CellOptions, echo: bool, outputs: Vec<CellOutput>) -> String {
+        present_in(Path::new("/nonexistent/doc.qmd"), options, echo, outputs)
+    }
+
+    fn present_in(
+        doc: &Path,
+        options: &CellOptions,
+        echo: bool,
+        outputs: Vec<CellOutput>,
+    ) -> String {
+        let mut fig = FsFigureSink::new(doc);
+        fig.begin_cell();
+        render_cell_with(
+            "python",
+            "print(x)\n",
+            &CellResult {
+                status: ExecuteStatus::Ok,
+                outputs,
+                execution_count: Some(1),
+            },
+            options,
+            &mut fig,
+            CellVisibility {
+                echo,
+                ..CellVisibility::VISIBLE
+            },
+        )
+    }
+
+    const ASIS: &str = "output: asis\n";
+
+    #[test]
+    fn stdout_is_written_as_markdown_without_any_div() {
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![stream(
+                "stdout",
+                "## Generated heading\n\nSome **bold** text.\n\n::: {.callout-note}\nA note.\n:::\n",
+            )],
+        );
+        assert_eq!(
+            md,
+            "\n\n\n## Generated heading\n\nSome **bold** text.\n\n::: {.callout-note}\nA note.\n:::\n"
+        );
+    }
+
+    #[test]
+    fn a_plain_execute_result_stays_a_fenced_block_without_its_div() {
+        // Q1 (`exp-variants.q1.md`, A): `'a trailing value'` is a code block, not markdown.
+        let data = bundle("text/plain", "'a trailing value'");
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![
+                stream("stdout", "Printed **markdown**.\n"),
+                CellOutput::ExecuteResult {
+                    data,
+                    metadata: serde_json::json!({}),
+                    execution_count: 1,
+                },
+            ],
+        );
+        assert!(md.contains("\nPrinted **markdown**.\n"), "{md}");
+        assert!(md.contains("\n```\n'a trailing value'\n```\n"), "{md}");
+        assert!(!md.contains(":::"), "no cell or output div: {md}");
+    }
+
+    #[test]
+    fn stderr_and_errors_are_bare_fences() {
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![
+                stream("stderr", "to stderr\n"),
+                CellOutput::Error {
+                    ename: "ValueError".into(),
+                    evalue: "boom".into(),
+                    traceback: vec![],
+                },
+            ],
+        );
+        assert!(md.contains("\n```\nto stderr\n```\n"), "{md}");
+        assert!(md.contains("\n```\nValueError: boom\n```\n"), "{md}");
+        assert!(!md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn markdown_and_html_displays_lose_their_divs() {
+        let md = present(
+            &jupyter(ASIS),
+            false,
+            vec![
+                display("text/markdown", "Displayed *markdown*."),
+                display("text/html", "<b>hi</b>"),
+            ],
+        );
+        assert!(md.contains("\nDisplayed *markdown*.\n"), "{md}");
+        assert!(md.contains("\n```{=html}\n<b>hi</b>\n```\n"), "{md}");
+        assert!(!md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn an_image_is_bare_figure_markdown() {
+        let dir = tempfile::tempdir().unwrap();
+        let md = present_in(
+            &dir.path().join("doc.qmd"),
+            &jupyter(ASIS),
+            false,
+            vec![display(
+                "image/png",
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+            )],
+        );
+        assert!(md.contains("\n![]("), "{md}");
+        assert!(!md.contains(":::"), "{md}");
+    }
+
+    #[test]
+    fn an_echoed_source_still_precedes_the_bare_output() {
+        // Q1 (`exp-variants.q1.md`, C): the code fence, then the printed markdown, no div.
+        let md = present(&jupyter(ASIS), true, vec![stream("stdout", "**bold**\n")]);
+        assert_eq!(md, "\n```{.python .cell-code}\nprint(x)\n```\n\n**bold**\n");
+    }
+
+    #[test]
+    fn classes_keep_the_cell_div() {
+        // Q1 (`exp-variants.q1.md`, D): `needCell`.
+        let md = present(
+            &jupyter("output: asis\nclasses: keepme\n"),
+            false,
+            vec![stream("stdout", "Inside a **div**.\n")],
+        );
+        assert!(md.starts_with("::: {.cell .keepme}"), "{md}");
+        assert!(md.contains("\nInside a **div**.\n"), "{md}");
+        assert!(!md.contains("cell-output"), "{md}");
+    }
+
+    #[test]
+    fn a_table_label_keeps_the_cell_div_with_its_id() {
+        // Q1 writes `::: {#tbl-gen .cell tbl-cap='…'}` around the generated pipe table.
+        let md = present(
+            &jupyter("output: asis\nlabel: tbl-gen\ntbl-cap: Generated table\n"),
+            false,
+            vec![stream("stdout", "| a | b |\n|---|---|\n| 1 | 2 |\n")],
+        );
+        assert!(md.starts_with("::: {#tbl-gen .cell"), "{md}");
+        assert!(md.contains("\n| a | b |\n|---|---|\n| 1 | 2 |\n"), "{md}");
+        assert!(!md.contains("cell-output"), "{md}");
+    }
+
+    #[test]
+    fn output_true_and_unset_are_not_asis() {
+        for yaml in ["output: true\n", "echo: false\n"] {
+            let md = present(&jupyter(yaml), false, vec![stream("stdout", "**x**\n")]);
+            assert!(md.contains("cell-output-stdout"), "{yaml}: {md}");
+        }
+    }
+
+    #[test]
+    fn a_cell_output_overrides_a_document_level_asis() {
+        // Q1 (`exp-doc-level.q1.md`): `execute: output: asis`, overridden by a cell.
+        let doc = options_to_config(quarto_yaml::parse(ASIS).unwrap()).0;
+        let resolve = |cell: Option<&str>| {
+            let cell = cell.map(|c| quarto_yaml::parse(c).unwrap());
+            CellOptions::from_config(
+                crate::presenter::visibility::resolve_cell_options(Some(&doc), cell).as_ref(),
+            )
+        };
+        assert!(resolve(None).output_asis());
+        assert!(resolve(Some("echo: false\n")).output_asis());
+        assert!(!resolve(Some("output: true\n")).output_asis());
     }
 }

@@ -154,3 +154,16 @@ target/debug/q2 render repro.qmd --to html               # stdout in .cell-outpu
 - `crates/quarto-core/tests/fixtures/dashboard-goldens/contract/c14-hidden-empty-asis-cells.qmd`:
   a dashboard contract that asis cells do not become cards. Re-run the dashboard goldens after
   the fix.
+
+## Implementation follow-up (2026-11-11)
+
+- Step 3 (`needCell`): a `tbl-` label keeps the `.cell` div under Jupyter asis (Q1 writes
+  `::: {#tbl-gen .cell tbl-cap=…}` around the generated table, and q2 now does too). A plain
+  label (`#| label: my-cell`) does not, because q2 never writes plain labels as the cell div's
+  id, asis or not. That is a separate gap, filed as bd-gyzi1s9e.
+- Case E of `exp-variants.qmd` originally printed fenced ```` ```bash ```` blocks into
+  the tabset. q2 never executed that cell, a separate bug filed as bd-f63cqoke (repro:
+  `repro-triple-backtick-in-cell.qmd`). The qmd writer re-serializes the cell with a 4-backtick fence,
+  and the Jupyter executor's `runs_in_legacy_executor` only runs 3-backtick cells. Case E now
+  uses a tabset without code fences, and `exp-variants.q1.md` was regenerated.
+- With the fix, q2 renders every fixture here like the matching `*.q1.md`.
