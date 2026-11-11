@@ -2,7 +2,7 @@
 title: "`.quarto-source.yml` as a shared contract: unknown keys, schema version, spec, track/commit"
 strand: bd-yjg91sls
 issues: [1175, 1176, 1177, 1178]
-status: Phases 1–2 + CRLF/.gitattributes implemented (PR pending); Phases 3–4 for discussion
+status: "Phases 1–2 + CRLF/.gitattributes merged (PR #1183, 8e55bf4e1; #1175 and #1176 closed); Phases 3–4 (#1177, #1178) for discussion"
 date: 2026-11-11
 ---
 
@@ -308,6 +308,9 @@ Questions for you:
   `git check-attr` shows `text: unset` under a root `* text=auto`, and an LF file checks out
   as LF with `core.autocrlf=true`.
 - [x] Docs: `docs/guides/authoring/extensions.qmd` bullets.
+- [x] Merged: PR #1183 (8e55bf4e1, 2026-11-11). CI green on all platforms, including
+  Clippy (Windows), which covered the local cross-check gap (`ring` needs a Windows C
+  toolchain).
 - [ ] Phase 3 spec + schema (#1177): remaining questions are namespacing, the junk-files
   ignore list, and where the schema lives.
 - [ ] Phase 4 `track` / `commit` (#1178).
