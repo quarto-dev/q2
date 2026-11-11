@@ -1120,7 +1120,7 @@ fn render_preserves_source_image_and_copies_to_site() {
 // ====================================================================
 
 /// `true` when `Rscript` is on PATH.
-fn rscript_available() -> bool {
+pub(crate) fn rscript_available() -> bool {
     Command::new("Rscript")
         .arg("--version")
         .output()
@@ -1130,7 +1130,7 @@ fn rscript_available() -> bool {
 /// `true` when the R `knitr` package is installed. Checked separately
 /// from [`rscript_available`] — `KnitrEngine::is_available()` only looks
 /// for the binary, not the package.
-fn knitr_r_package_available() -> bool {
+pub(crate) fn knitr_r_package_available() -> bool {
     Command::new("Rscript")
         .args([
             "-e",

@@ -213,6 +213,15 @@ pub struct ExecutionContext {
     /// only because spawn sites apply them with `Command::env`.
     pub project_env: Vec<(String, String)>,
 
+    /// The per-document execute environment Quarto 1 gives code cells
+    /// (`QUARTO_PROJECT_ROOT`, `QUARTO_DOCUMENT_PATH`,
+    /// `QUARTO_DOCUMENT_FILE`, `QUARTO_EXECUTE_INFO`, `QUARTO_FIG_*`; see
+    /// `engine::execute_info`, GH #1131). Unlike [`Self::project_env`]
+    /// these values change from one document to the next, so an engine
+    /// whose process outlives a document (Jupyter's shared kernels) must
+    /// set them per document, not at spawn. Empty when no stage ran.
+    pub execute_env: Vec<(String, String)>,
+
     /// The document's execution units from the one shared scan
     /// (`engine::units::scan_units`), run by `EngineExecutionStage` before any
     /// engine. The list is shared: every engine receives the same one and
@@ -273,6 +282,7 @@ impl ExecutionContext {
             // document metadata (P1.1b).
             metadata: HashMap::new(),
             project_env: Vec::new(),
+            execute_env: Vec::new(),
             units: Vec::new(),
             author_texts: crate::record::AuthorTexts::default(),
             want_record: false,
@@ -312,6 +322,13 @@ impl ExecutionContext {
     /// [`crate::project::environment::env_for_subprocess`]).
     pub fn with_project_env(mut self, project_env: Vec<(String, String)>) -> Self {
         self.project_env = project_env;
+        self
+    }
+
+    /// Set the per-document execute environment (see
+    /// [`ExecutionContext::execute_env`]).
+    pub fn with_execute_env(mut self, execute_env: Vec<(String, String)>) -> Self {
+        self.execute_env = execute_env;
         self
     }
 

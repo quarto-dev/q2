@@ -1,0 +1,12 @@
+color:
+  palette:
+    blue: "#447099"
+  primary: blue
+  background:
+    light: "#ffffff"
+    dark: "#1b1b1b"
+  foreground:
+    light: "#1b1b1b"
+    dark: "#ffffff"
+typography:
+  base: Inter

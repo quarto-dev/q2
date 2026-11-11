@@ -1,0 +1,28 @@
+
+
+``` python
+import os
+
+for name in ("QUARTO_EXECUTE_INFO", "QUARTO_PROJECT_ROOT", "QUARTO_DOCUMENT_PATH", "QUARTO_DOCUMENT_FILE"):
+    print(name, "=", os.environ.get(name))
+
+info = os.environ.get("QUARTO_EXECUTE_INFO")
+if info:
+    import json
+    raw = open(info).read()
+    data = json.loads(raw)
+    print("execute-info bytes:", len(raw))
+    print("format keys:", sorted(data["format"].keys()))
+    print("bytes per format bin:", {k: len(json.dumps(v)) for k, v in data["format"].items()})
+    brand = data["format"]["render"].get("brand")
+    print("brand modes:", None if brand is None else {k: (v is not None) for k, v in brand.items()})
+```
+
+    QUARTO_EXECUTE_INFO = /var/folders/f6/n_sr6w3n5_73qcqr433715t00000gn/T/quarto-session500abb3327cf9d1a/d4bd83a39088ab40/efcf8a529c6c1ab8
+    QUARTO_PROJECT_ROOT = /Users/cscheid/rooms/room-2/q2/.worktrees/issue-1131/claude-notes/issue-reports/1131/repro-brand
+    QUARTO_DOCUMENT_PATH = /Users/cscheid/rooms/room-2/q2/.worktrees/issue-1131/claude-notes/issue-reports/1131/repro-brand
+    QUARTO_DOCUMENT_FILE = index.qmd
+    execute-info bytes: 7882
+    format keys: ['execute', 'identifier', 'language', 'metadata', 'pandoc', 'render']
+    bytes per format bin: {'identifier': 82, 'execute': 428, 'render': 2247, 'pandoc': 251, 'language': 4935, 'metadata': 202}
+    brand modes: {'light': True, 'dark': True}

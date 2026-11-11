@@ -298,6 +298,7 @@ impl ExecutionEngine for KnitrEngine {
         let call_options = CallROptions {
             quiet: ctx.quiet,
             project_env: ctx.project_env.clone(),
+            execute_env: ctx.execute_env.clone(),
             ..Default::default()
         };
 

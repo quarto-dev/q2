@@ -254,6 +254,14 @@ pub struct CallROptions {
     /// (`crate::project::environment::env_for_subprocess`). The real
     /// environment is inherited on spawn and always wins.
     pub project_env: Vec<(String, String)>,
+
+    /// The per-document execute environment (`QUARTO_DOCUMENT_FILE`,
+    /// `QUARTO_EXECUTE_INFO`, ...; `engine::execute_info`, GH #1131).
+    /// Applied after `project_env`, so a stale value inherited from the
+    /// caller's environment never reaches the document's code: these
+    /// describe *this* document. The R process lives for one document, so
+    /// spawn time is the right moment to set them.
+    pub execute_env: Vec<(String, String)>,
 }
 
 impl CallROptions {
@@ -385,6 +393,7 @@ where
         .arg(&rmd_script)
         .current_dir(working_dir)
         .envs(options.project_env.iter().map(|(k, v)| (k, v)))
+        .envs(options.execute_env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
 

@@ -576,6 +576,37 @@ async fn execute_blocks_inner(
         languages.insert(kernel.clone(), language);
     }
 
+    // GH #1131: the per-document execute environment. Kernels are shared by
+    // every document of a project, so these values cannot be given when the
+    // kernel starts; a silent request sets them inside the kernel before the
+    // document's first cell (Quarto 1 sets `QUARTO_FIG_*` the same way). It
+    // changes only the kernel's environment, never q2's.
+    if !ctx.execute_env.is_empty() {
+        for (kernel, key) in &sessions {
+            let language = &languages[kernel];
+            let Some(code) =
+                crate::engine::execute_info::jupyter_setup_code(language, &ctx.execute_env)
+            else {
+                tracing::debug!(
+                    kernel = %kernel.as_str(),
+                    language = %language,
+                    "no execute-environment setup for this kernel language"
+                );
+                continue;
+            };
+            let result = daemon
+                .execute_in_session_with(key, &code, ExecuteOpts::SETUP)
+                .await
+                .ok_or(JupyterError::NotConnected)??;
+            if let ExecuteStatus::Error { ename, evalue, .. } = &result.status {
+                tracing::warn!(
+                    kernel = %kernel.as_str(),
+                    "setting the execute environment in the kernel failed: {ename}: {evalue}"
+                );
+            }
+        }
+    }
+
     for (position, ((_, kernel), unit)) in plan.iter().zip(units).enumerate() {
         let key = &sessions[kernel];
         let result = match unit {
