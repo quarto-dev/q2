@@ -1,0 +1,34 @@
+body {
+  margin: 0;
+  background: #fff;
+  color: #1a1a1a;
+  font-family: system-ui, sans-serif;
+}
+
+.editor {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 16px;
+}
+
+.status {
+  max-width: 720px;
+  margin: 48px auto;
+  padding: 0 16px;
+  color: #666;
+}
+
+.status-error {
+  color: #b00020;
+}
+
+.editor-source {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 60vh;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: 14px/1.5 ui-monospace, monospace;
+  resize: vertical;
+}
