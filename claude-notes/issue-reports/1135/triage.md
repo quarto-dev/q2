@@ -169,6 +169,8 @@ confirm:
    to plain in `quarto-error-reporting`, so a forgotten call site fails safe.
    This is a breaking default for an externalized crate, so it goes through
    that repo.
+   Filed as posit-dev/quarto-error-reporting#12 (2026-11-11), deferred to
+   periodic maintenance of the externalized crates.
 5. **Tests.** Write these first, using TDD:
    - a binary-driven test that `NO_COLOR=1` yields 0 SGR and 0 OSC 8 even
      with forced color;
