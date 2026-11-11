@@ -27,9 +27,10 @@
 //! # Kernel Management
 //!
 //! Kernels are managed by an in-process daemon that:
-//! - Starts kernels on demand
-//! - Reuses kernels for documents in the same directory
-//! - Shuts down idle kernels after a timeout
+//! - Starts kernels on demand, one per document (bd-i7yz08uh), so documents
+//!   never share kernel state
+//! - Shuts a document's kernel down when the document finishes (`q2 render`),
+//!   or keeps it warm for the document's next render (`q2 preview`)
 //! - Cleans up kernel processes on shutdown
 //!
 //! # Availability
@@ -52,7 +53,10 @@ mod session;
 mod text_execute;
 
 pub use crate::engine::ipynb_replay::IpynbReplayEngine;
-pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
+pub use daemon::{
+    JupyterDaemon, KernelScope, Retention, SessionLease, daemon, kernel_scope,
+    kernel_scope_retaining,
+};
 pub use error::{JupyterError, Result};
 // The kernel result types live in the presenter (EXR-1); this public path stays for
 // the session API's callers.

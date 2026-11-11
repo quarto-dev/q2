@@ -1081,10 +1081,12 @@ fn render_single_doc(
         pipeline = pipeline.with_project_format(resolved.project_format.clone());
     }
 
-    // bd-hxhnnlzs: keep Jupyter kernels warm across the whole pipeline
-    // run. Scoped to the `block_on` (not the surrounding function)
-    // because callers may `std::process::exit` afterwards, which skips
-    // destructors — the scope must close before any exit.
+    // bd-hxhnnlzs: one kernel scope for the whole pipeline run, so any
+    // kernel still alive when it ends is shut down. Each document's kernel
+    // is its own and is shut down when the document finishes
+    // (bd-i7yz08uh). Scoped to the `block_on` (not the surrounding
+    // function) because callers may `std::process::exit` afterwards,
+    // which skips destructors — the scope must close before any exit.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
         pollster::block_on(pipeline.run_with_book_support())
@@ -1291,10 +1293,11 @@ fn render_project(
         pipeline = pipeline.with_mode(mode);
     }
 
-    // bd-hxhnnlzs: one kernel scope for the whole project render, so
-    // documents sharing a (kernel, dir) session key reuse one warm
-    // kernel. Scoped to the `block_on` because callers may
-    // `std::process::exit` afterwards, which skips destructors.
+    // bd-hxhnnlzs: one kernel scope for the whole project render, so any
+    // kernel still alive when it ends is shut down. Each document runs on
+    // its own kernel, shut down when the document finishes (bd-i7yz08uh).
+    // Scoped to the `block_on` because callers may `std::process::exit`
+    // afterwards, which skips destructors.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
         pollster::block_on(pipeline.run_with_book_support())

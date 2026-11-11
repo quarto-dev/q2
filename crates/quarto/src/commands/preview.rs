@@ -151,12 +151,14 @@ pub fn execute(args: PreviewArgs) -> Result<()> {
     // Multi-threaded runtime for the same reasons quarto hub uses
     // one: samod, websockets, file watching, periodic sync.
     let runtime = tokio::runtime::Runtime::new()?;
-    // bd-hxhnnlzs: hold a kernel scope for the server's lifetime so
-    // re-renders reuse warm kernels. It drops after `block_on` returns
-    // (the hub server resolves SIGINT/SIGTERM/Ctrl-C into a graceful
-    // return), outside the runtime — so kernels get the polite
-    // `shutdown_request` path before the kill backstop.
-    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
+    // bd-hxhnnlzs: hold a kernel scope for the server's lifetime. It is a
+    // retaining scope (bd-i7yz08uh): each previewed document keeps its own
+    // warm kernel, with its state, for its next re-render, as Quarto 1's
+    // keepalive daemon does. It drops after `block_on` returns (the hub
+    // server resolves SIGINT/SIGTERM/Ctrl-C into a graceful return),
+    // outside the runtime — so kernels get the polite `shutdown_request`
+    // path before the kill backstop.
+    let _kernel_scope = quarto_core::engine::jupyter::kernel_scope_retaining();
     runtime.block_on(run(args))
 }
 

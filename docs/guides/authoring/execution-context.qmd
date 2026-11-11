@@ -135,7 +135,7 @@ for mode, entry in brand.items():
 
 The knitr engine and Jupyter kernels for Python, R and Julia see all of these variables.
 
-A Jupyter kernel can serve several documents of a project during one render. Quarto sets the values for each document inside the kernel before that document's first cell runs, so code always sees the document it belongs to. For kernels in other languages, Quarto cannot set them.
+Quarto sets the values inside the document's Jupyter kernel before the document's first cell runs, on every render, so a kernel that `q2 preview` keeps running between re-renders still sees current values. For kernels in other languages, Quarto cannot set them.
 
 The `julia` and `marimo` engines do not receive these variables yet.
 

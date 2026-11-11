@@ -37,6 +37,19 @@ pub enum JupyterError {
     #[error("failed to spawn kernel process for '{kernel}': {message}")]
     ProcessSpawnError { kernel: String, message: String },
 
+    /// The kernel process exited before its shell channel came up (it
+    /// failed to bind a port, crashed on import, ...), with what it wrote
+    /// to stderr.
+    #[error(
+        "kernel '{kernel}' exited while starting (exit code {code:?}){}",
+        if stderr.trim().is_empty() { String::new() } else { format!("; its stderr:\n{}", stderr.trim_end()) }
+    )]
+    ExitedDuringStartup {
+        kernel: String,
+        code: Option<i32>,
+        stderr: String,
+    },
+
     /// Kernel process exited unexpectedly.
     #[error("kernel process exited unexpectedly with code {code:?}")]
     ProcessExited { code: Option<i32> },
