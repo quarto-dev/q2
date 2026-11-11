@@ -3807,7 +3807,18 @@ mod handshake_tests {
     /// presented by core.
     #[test]
     fn an_engine_named_julia_that_does_not_acknowledge_is_not_presented_by_core() {
+        // An engine named `julia` is gated on a julia binary being on PATH before the mock
+        // transport is reached. Point `QUARTO_JULIA` at `node` (answers `--version`, and the
+        // TS-engine tests already need it) so the test does not depend on a real Julia install
+        // (CI runners have none). Each nextest test runs in its own process, so mutating the
+        // environment is safe, as in `ensure_loaded_reports_runtime_not_found_...` above.
+        unsafe {
+            std::env::set_var("QUARTO_JULIA", "node");
+        }
         let (result, _) = run("julia", false, &ctx(true, false));
+        unsafe {
+            std::env::remove_var("QUARTO_JULIA");
+        }
         assert_eq!(result.markdown, ENGINE_MD);
     }
 
