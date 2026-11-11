@@ -2,7 +2,7 @@
 title: 'Dashboard themes: brand layers a second time after the theme (GH #1132)'
 date: 2026-11-11
 description: 'Match Quarto 1 so a dashboard theme file listed after the brand entry can use brand palette variables.'
-status: in-progress
+status: done  # Merged in PR #1185 (6540ff505), 2026-11-11
 braid:
   strand: bd-yawzm5ba
 ---
@@ -40,4 +40,4 @@ hashes the brand.
 - [x] Shared helper appending the brand layers for dashboards; call it at the three sites
 - [x] Test that plain HTML is unchanged (still fails, as in Quarto 1)
 - [x] Verify: nextest, clippy (host + Windows cross), xtask lint, notes render
-- [ ] PR
+- [x] PR (#1185, merged)
