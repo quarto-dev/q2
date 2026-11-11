@@ -2,14 +2,14 @@
 title: 'knitr capture reports rlang_error instead of simpleError (bd-54odm3rz)'
 date: 2026-11-11
 description: 'knitr 1.51+ entraces every chunk error through rlang, so capture.R records ename rlang_error; decide which class ename should carry, fix capture.R, and stop the local verify leg from failing on it.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: in-progress  # design agreed 2026-11-11; implementation on braid/bd-54odm3rz-knitr-rlang-error-ename
 braid:
   strand: bd-54odm3rz
 ---
 
 **Checkout:** main checkout, branch `main` @ `3743b5d6a`
 **Pre-flight verify (2026-11-11):** 8813 passed, 1 failed (`capture_classifies_pieces`, this strand); nextest fail-fast stopped the run at 8814 of 19251.
-**Do not start implementation until the user gives the go-ahead.**
+**Implementation:** branch `braid/bd-54odm3rz-knitr-rlang-error-ename`. Follow-up for the test cadence: bd-qbkwun87.
 
 ## Triage verdict
 
@@ -156,10 +156,10 @@ when someone upgrades packages. Possible mitigations (for discussion, not in thi
 
 ## Proposed phases (draft)
 
-- Phase 0: Tests first. Extend `capture_classifies_pieces` (or add a sibling) with a custom
+- Phase 0 (done): Tests first. Extend `capture_classifies_pieces` (or add a sibling) with a custom
   condition class, so the test pins the class the author raised, not just `simpleError`.
   Confirm it fails locally for the reason above.
-- Phase 1: capture.R. Unwrap the entraced condition before naming it, for example
+- Phase 1 (done; `call` too, see below): capture.R. Unwrap the entraced condition before naming it, for example
   `orig <- if (inherits(p, "rlang_error") && inherits(p$error, "error")) p$error else p`,
   then take `ename` (and possibly `evalue`) from `orig`. Decide what `text` carries
   (question 2).
@@ -167,6 +167,10 @@ when someone upgrades packages. Possible mitigations (for discussion, not in thi
   bd-lnu81d4a.
 - Phase 3: no R in CI (decided 2026-11-11). Whether to move live-R tests to an opt-in or
   periodic local cadence is a separate question (see "Exposure to future knitr changes").
+- Implementation note: entrace also replaces the condition call (a custom condition
+  built with `call = sys.call()` lost it entirely), so `ename`, `evalue` and `call` all
+  come from the unwrapped condition; `text` stays knitr's. `rlang::abort()` errors have
+  no `$error` and keep their own class (covered by the new test).
 - Phase 4: Retire the `project_local_knitr_rlang_error` memory note.
 
 ## Open design questions for the user

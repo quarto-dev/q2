@@ -110,6 +110,15 @@ capture_call_string <- function(condition) {
   if (is.null(cl)) NULL else deparse(cl)[[1]]
 }
 
+# knitr >= 1.51 passes rlang::entrace() to evaluate as an error handler when
+# rlang is installed (yihui/knitr#2388). entrace() re-signals every error as a
+# new `rlang_error`, keeping the original condition in `$error` and dropping
+# or replacing its call. Unwrap it so the record does not depend on the knitr
+# version. An error raised with rlang::abort() has no `$error` and is kept.
+capture_raised_error <- function(p) {
+  if (inherits(p, "rlang_error") && inherits(p$error, "error")) p$error else p
+}
+
 # One evaluate() piece to its wire form. Anything unrecognized is class
 # `other`, which makes the chunk a fallback unit downstream.
 capture_piece <- function(p) {
@@ -144,13 +153,15 @@ capture_piece <- function(p) {
     return(list(class = "output", text = paste(p, collapse = "")))
   }
   if (inherits(p, "error")) {
+    # name the condition the author raised; text stays as knitr formats it
+    raised <- capture_raised_error(p)
     piece <- list(
       class = "error",
       text = as.character(p),
-      ename = class(p)[[1]],
-      evalue = conditionMessage(p)
+      ename = class(raised)[[1]],
+      evalue = conditionMessage(raised)
     )
-    piece$call <- capture_call_string(p)
+    piece$call <- capture_call_string(raised)
     return(piece)
   }
   if (inherits(p, "warning")) {
