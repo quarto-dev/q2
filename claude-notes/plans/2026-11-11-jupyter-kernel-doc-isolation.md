@@ -2,7 +2,7 @@
 title: 'Parallel project render interleaves cells of different documents on one shared Jupyter kernel (bd-i7yz08uh)'
 date: 2026-11-11
 description: 'Documents of a project share one Jupyter kernel with no exclusivity, so parallel renders interleave cells and even serial renders leak state across documents; decide between a per-document kernel key (Quarto 1 parity) and a per-session document lease.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: designed  # Design questions answered 2026-11-11; implementation not started
 braid:
   strand: bd-i7yz08uh
 ---
@@ -12,7 +12,7 @@ braid:
 
 ## Triage verdict
 
-**Ready to design.** Both the reported interleave and a broader sequential state leak reproduce at HEAD, the root cause is a few lines in `daemon.rs`, and the remaining work is one design choice (how documents map to kernels) plus tests.
+**Ready to implement** (design questions answered 2026-11-11). Both the reported interleave and a broader sequential state leak reproduce at HEAD, the root cause is a few lines in `daemon.rs`, and the remaining work is one design choice (how documents map to kernels) plus tests.
 
 ## Issue context
 
@@ -55,22 +55,47 @@ Quarto 1 never shares one kernel's state between documents:
 - The default for non-interactive and CI renders is `executeKernelOneshot`, which starts a fresh kernel per document (`src/execute/jupyter/jupyter.ts:473-494`).
 - The keepalive daemon (interactive sessions and preview) is keyed by `md5(absolute target path)` (`jupyter-kernel.ts:303-324`, `kernelTransportFile`): one warm kernel **per document**, reused across re-renders of that document. On reuse it restarts the kernel only if the Python executable, the supervisor PID, or a kernel dependency changed (`resources/jupyter/notebook.py:162-191, 326-334`).
 
+## Decisions (2026-11-11, with the user)
+
+1. **Isolation model: per-document key.** `SessionKey` gains the document's path, which matches Quarto 1. This fixes both the interleave and the sequential leak.
+2. **`q2 render`: shut a document's kernel down as soon as that document finishes.** A live kernel holds everything the document computed (data frames, models) plus a process and five ZeroMQ ports, so keeping one per document until the run ends could cost a lot on large projects. At most `QUARTO_JOBS` kernels are alive at once. Each document pays one kernel startup, the same cost as Quarto 1's one-shot path.
+3. **`q2 preview`: one warm kernel per previewed document, kept indefinitely (Quarto 1 keepalive).** A centralized per-process kernel manager is a possible follow-up; see the feasibility note below.
+4. **Re-render of the same document: keep state (Quarto 1 semantics) in this work.** A reset policy is a follow-up knob for the kernel manager; see the reset findings below.
+5. **The daemon-wide lock is fixed here.** Per-document sessions need per-session locking anyway.
+
+### Feasibility: a per-process kernel manager
+
+The architecture already has the skeleton of one. `JupyterDaemon` is a process-wide singleton (`daemon()`, a `OnceLock<Arc<JupyterDaemon>>`). It owns every session, runs all kernel I/O on one shared `engine_runtime()`, and is torn down by the refcounted `KernelScope` (`daemon.rs:370-460`). Commands already open a scope for their own lifetime: `q2 render` at `crates/quarto/src/commands/render.rs:1089` and `:1299`, `q2 preview` at `crates/quarto/src/commands/preview.rs:159`, and the test runner at `crates/quarto-test/src/runner.rs:495`.
+
+What it lacks is **policy**. Today every caller gets the same behavior, decided implicitly by the key and the scope refcount. A manager means giving the daemon an explicit policy that the command sets when it opens its scope:
+
+- release mode: shut down when the document finishes (render), or retain warm (preview);
+- an optional cap on warm kernels (LRU), for later;
+- a reset-on-reuse choice per kernel language (point 4).
+
+This work needs the release/retain distinction anyway (decision 2 versus decision 3), so it can introduce a small policy type on the scope. LRU and reset can come later without reshaping it.
+
+### Findings: resetting state without restarting the kernel
+
+- **Python: yes, and it is cheap.** `%reset -f` clears the user namespace but leaves `sys.modules` intact. Checked locally with IPython: after `import pandas` and `%reset -f`, `x` is gone, `pandas` is still in `sys.modules`, and re-importing pandas takes about 0.1 ms. It does not undo process-level side effects: `os.chdir`, `os.environ`, `sys.path`, monkeypatches, and matplotlib `rcParams` survive. The per-document setup request already re-sets the execute variables on every run.
+- **Julia (IJulia): no equivalent.** Bindings cannot be removed from `Main`; `workspace()` was removed before Julia 1.0. Restarting is the only full reset, and it reloads packages, which is the cost you are worried about. A conceivable middle ground is evaluating each run in a fresh anonymous module, so loaded packages stay loaded but user bindings are new. IJulia evaluates into `Main`, though, so this needs prototyping. **Unverified: Julia is not installed on this machine.** Note also that `{julia}` reaches the Jupyter engine only as a fallback; the dedicated Julia engine extension wins when it is installed (`jupyter/mod.rs`, `claims_language`).
+- Under the decisions above, reuse happens only when **the same** document is re-rendered in preview. Keeping state there is Quarto 1's behavior. The visible symptom is a stale binding: a deleted cell's variable still exists. That makes reset a preview-only, per-language follow-up, not a requirement for this fix.
+
 ## Proposed phases (draft)
 
-- Phase 0: Tests first. A fake-kernel (CI-safe) two-document project test that fails on interleave (cell 1 sets state, cell 2 reads it, run under `QUARTO_JOBS=2` with a barrier or sleep). A sequential-leak test that fails at `QUARTO_JOBS=1`. A test that `QUARTO_DOCUMENT_PATH` read in a document's **last** cell names that document. Verify all fail at HEAD.
-- Phase 1: Change how documents map to kernel sessions (shape depends on Q1 below).
-- Phase 2: Make locking per session instead of per map (an `Arc<Mutex<KernelSession>>` per entry, or a held lease), so independent kernels run in parallel.
-- Phase 3: Lifecycle. If keying per document, bound the number of live kernels: release or shut down a document's kernel when one-shot render finishes with it, and decide preview's policy.
-- Phase 4: Docs. `docs/guides/authoring/execution-context.qmd` (or the Jupyter page) should state the isolation guarantee, and the shared-kernel caveat in the bd-8fmuyh4d code comment should be updated.
-- Phase 5: End-to-end through `q2 render` on both fixtures at `QUARTO_JOBS=1` and `2`, plus a manual `q2 preview` check that re-rendering one document still reuses its warm kernel.
-
-## Open design questions for the user
-
-1. **Isolation model.** Should documents ever share kernel state? Option A, **per-document key** (`SessionKey` gains the document path, which matches Quarto 1), fixes both the interleave and the sequential leak. Option B, a **per-session document lease** held across a document's whole run, fixes only the interleave: documents still see each other's globals, and documents that share a kernel serialize. My recommendation is A, unless sharing state across documents was an intended q2 feature.
-2. **One-shot render lifecycle under option A.** With 50 Python documents and `QUARTO_JOBS=8`, should `q2 render` shut each document's kernel down as soon as that document finishes (at most `jobs` live kernels, each document pays kernel startup, which is Quarto 1's one-shot cost), or keep them all until the end of the invocation (simpler, but 50 kernels)?
-3. **Preview lifecycle under option A.** Keep one warm kernel per previewed document indefinitely (Quarto 1 keepalive), or cap it with an LRU limit? Does preview ever render more than a handful of documents per session?
-4. **Restart policy on reuse.** When a warm kernel is reused for a re-render of the same document, Quarto 1 keeps its state (it restarts only if the interpreter or kernel dependencies changed). Keep that semantics, or restart on every re-render for reproducibility at the cost of speed?
-5. **Scope of the lock fix.** The daemon-wide write lock also serializes unrelated kernels. Fix it in this strand, since the per-document change requires it anyway, or file it separately?
+- Phase 0: Tests first, all using the fake kernel so they are CI-safe, and verified failing at HEAD:
+  - an interleave test: two documents, where cell 1 sets state and cell 2 reads it, under `QUARTO_JOBS=2` with a barrier;
+  - a sequential-leak test at `QUARTO_JOBS=1`;
+  - `QUARTO_DOCUMENT_PATH` read in a document's **last** cell names that document;
+  - in release mode, a document's kernel is gone once its render returns;
+  - in retain mode, a second render of the same document reuses its kernel;
+  - two documents on different kernels run concurrently (a lock regression test).
+- Phase 1: Per-document `SessionKey` (kernel name, working directory, document path). Decide the document identity for single-file renders and for preview (absolute input path).
+- Phase 2: Per-session locking. The map holds `Arc<tokio::sync::Mutex<KernelSession>>`. A document acquires its session once and holds it for its whole run, so the map lock is held only for lookup and insert. Keep `start_lock` semantics for spawn (bd-hxhnnlzs).
+- Phase 3: Lifecycle policy on `KernelScope` (release for render, retain for preview), with release at the end of `execute_blocks_inner` on the success **and** error paths.
+- Phase 4: Docs. The isolation guarantee goes in `docs/guides/authoring/execution-context.qmd` or the Jupyter page. Update the shared-kernel comments from bd-8fmuyh4d in `text_execute.rs` and the `get_or_start_session` doc comment.
+- Phase 5: End-to-end through `q2 render` on both fixtures at `QUARTO_JOBS=1` and `2`, a process check that no kernels remain afterwards, and a manual `q2 preview` check that re-rendering one document reuses its warm kernel.
+- Follow-ups to file: an LRU cap for preview's warm kernels; a reset-on-reuse policy (Python `%reset -f`; Julia needs a prototype).
 
 ## Risks / tradeoffs (draft)
 
