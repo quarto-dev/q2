@@ -175,6 +175,52 @@ fn capture_classifies_pieces() {
     }
 }
 
+/// knitr >= 1.51 re-signals every chunk error through `rlang::entrace()` when rlang is
+/// installed, which rewraps it as `rlang_error` (bd-54odm3rz). The error piece names
+/// the condition the author raised, so the record does not depend on the knitr version.
+#[test]
+fn capture_error_names_the_condition_the_author_raised() {
+    if !r_available("capture_error_names_the_condition_the_author_raised") {
+        return;
+    }
+    let (result, _dir) = execute(
+        "```{r e}\n#| error: true\n\
+         f <- function() {\n\
+           cnd <- structure(class = c('myError', 'error', 'condition'),\n\
+             list(message = 'custom', call = sys.call()))\n\
+           stop(cnd)\n\
+         }\n\
+         f()\n\
+         g <- function() stop('inner')\n\
+         g()\n\
+         h <- function() rlang::abort('aborted', class = 'myAbort')\n\
+         h()\n```\n",
+        true,
+    );
+    let errors: Vec<(&str, &str, Option<&str>)> = result.pieces[0]
+        .pieces
+        .iter()
+        .filter_map(|p| match p {
+            KnitrPiece::Error {
+                ename,
+                evalue,
+                call,
+                ..
+            } => Some((ename.as_str(), evalue.as_str(), call.as_deref())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        errors,
+        [
+            ("myError", "custom", Some("f()")),
+            ("simpleError", "inner", Some("g()")),
+            // an rlang error is not rewrapped; its own class is kept
+            ("myAbort", "aborted", Some("h()")),
+        ]
+    );
+}
+
 #[test]
 fn capture_plot_piece_names_a_file_that_exists() {
     if !r_available("capture_plot_piece_names_a_file_that_exists") {
