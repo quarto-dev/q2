@@ -1298,7 +1298,10 @@ mod tests {
         assert!(wrote, "a record-only run is published");
         assert!(ctx.index().has_capture("doc.qmd"));
 
-        // With the gate off the same run has no legacy form: refused, nothing published.
+        // With the gate off the same run has no legacy form: refused, nothing published. The
+        // engine is off for this call: a refused source falls through to the engine source, and
+        // on a machine with a Jupyter kernel that would run the document's `{python}` cell for
+        // real, so the outcome would depend on what is installed.
         ctx.index().remove_capture("doc.qmd").ok();
         let err = record_one(
             &abs,
@@ -1306,7 +1309,7 @@ mod tests {
             &ctx,
             &runtime,
             None,
-            &ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()),
+            &ReExecuteConfig::new(EnginePolicy::Off, cache_dir.clone()),
         )
         .await
         .unwrap_err();
