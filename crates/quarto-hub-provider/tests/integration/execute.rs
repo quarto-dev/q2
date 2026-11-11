@@ -579,6 +579,11 @@ impl ExecutionEngine for MustNotRun {
             LanguageClaim::None
         }
     }
+    /// Like the real `jupyter` engine: a Python kernel is the one Positron ran, so the import
+    /// gate (RFU-2) admits imported outputs for this engine's python units.
+    fn kernel_equivalence(&self, language: &str) -> Option<bool> {
+        Some(language == "python")
+    }
 }
 
 const PYTHON_QMD: &str = "---\ntitle: T\n---\n\n```{python}\nx = 1\n```\n";
