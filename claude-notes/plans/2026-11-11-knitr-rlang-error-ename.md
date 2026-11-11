@@ -8,6 +8,7 @@ braid:
 ---
 
 **Checkout:** main checkout, branch `main` @ `3743b5d6a`
+**Pre-flight verify (2026-11-11):** 8813 passed, 1 failed (`capture_classifies_pieces`, this strand); nextest fail-fast stopped the run at 8814 of 19251.
 **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
@@ -74,6 +75,27 @@ description still returned `simpleError`.
 
 Repro: `claude-notes/plans/knitr-rlang-error-ename-investigation/repro.R`.
 
+### What Quarto 1 does (checked 2026-11-11)
+
+Quarto 1 (`external-sources/quarto-cli` @ `ac310a424`) has no structured error record and no
+`ename`. `src/resources/rmd/patch.R` sends an error through `knitr:::sew.error`, and
+`hooks.R:607` renders it with `delegating_output_hook("error", c("error"))`: the user sees
+whatever text knitr produced. Quarto 1 sets no rlang options and does not unwrap or
+re-format conditions. So with knitr >= 1.51, Quarto 1 already shows rlang-format errors.
+Rendering a two-chunk `gfm` document with the local Quarto 1 dev build (99.9.9) gives:
+
+```
+Error:
+! boom
+
+Error in `f()`:
+! inner
+```
+
+Consequence for this plan: on the user-visible `text`, Q2 matches Quarto 1 if it keeps
+knitr's text. `ename` is new in Q2 (it exists for the structured execution records), so
+Quarto 1 does not constrain what it should be.
+
 ### Why CI never sees it
 
 `.github/workflows/test-suite.yml` installs no R. `r_available()` in `capture_tests.rs`
@@ -90,8 +112,8 @@ with whatever R packages each person has installed.
   `orig <- if (inherits(p, "rlang_error") && inherits(p$error, "error")) p$error else p`,
   then take `ename` (and possibly `evalue`) from `orig`. Decide what `text` carries
   (question 2).
-- Phase 2: bd-qwscag8b. Close it as a duplicate, and file the SQL `#|` skew as its own
-  strand (it is a separate knitr behavior change, not covered here).
+- Phase 2: done 2026-11-11. bd-qwscag8b closed as a duplicate; the SQL `#|` skew is
+  bd-lnu81d4a.
 - Phase 3 (optional): CI. Add an R leg, or a nightly job, that installs a pinned knitr,
   rmarkdown, jsonlite, rlang, DBI and RSQLite, so these tests run somewhere.
 - Phase 4: Retire the `project_local_knitr_rlang_error` memory note.
@@ -106,14 +128,14 @@ with whatever R packages each person has installed.
 2. **What should `text` carry?** Keep knitr's own rendering (`as.character(p)`, now in
    rlang's format, which is what the user sees in the knitted output), or rebuild the base
    R form from the unwrapped condition? Recommendation: keep knitr's text, since `text` is
-   "as knitr formats it" elsewhere in capture.R; the replay tests compare against live
-   knitr output.
+   "as knitr formats it" elsewhere in capture.R, the replay tests compare against live
+   knitr output, and Quarto 1 shows exactly that text (see "What Quarto 1 does").
 3. **Do we want R in CI?** The knitr capture and replay tests currently never run in CI.
    Should this strand add an R leg (cost: R + packages install time per run, and pinning
    versions to keep it stable), file a separate strand for it, or leave R tests as
    local-only?
-4. **Duplicate handling.** OK to close bd-qwscag8b as a duplicate of this strand, and file
-   its SQL `#|` failure as a new strand?
+4. **Duplicate handling.** Resolved 2026-11-11: yes. bd-qwscag8b closed, SQL failure
+   split into bd-lnu81d4a.
 
 ## Risks / tradeoffs (draft)
 
