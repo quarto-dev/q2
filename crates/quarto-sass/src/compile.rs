@@ -97,6 +97,7 @@ pub fn assemble_theme_scss(
     // title-block rule by declaring the same selector in a later layer.
     let mut user_layers = builtin_user_layers(config)?;
     user_layers.extend(result.layers);
+    user_layers.extend(dashboard_brand_layers(config, context)?);
 
     // Assemble SCSS
     let scss = crate::bundle::assemble_with_user_layers_opts(&user_layers, config.dashboard_layer)?;
@@ -140,6 +141,22 @@ fn builtin_user_layers(config: &ThemeConfig) -> Result<Vec<crate::SassLayer>, Sa
     }
     layers.push(load_search_layer()?);
     Ok(layers)
+}
+
+/// The `_brand.yml` layers a dashboard adds once more after the theme
+/// layers. Q1's dashboard format pushes the brand SCSS bundle after the
+/// HTML theme bundle (`format-dashboard.ts:191`); since user-layer
+/// defaults merge in reverse, this copy's `$brand-*` defaults come
+/// first, so a theme file listed after `brand` can use them (GH #1132).
+/// Plain HTML has no such copy, in Q1 or here.
+fn dashboard_brand_layers(
+    config: &ThemeConfig,
+    context: &ThemeContext<'_>,
+) -> Result<Vec<crate::SassLayer>, SassError> {
+    match context.brand() {
+        Some(brand) if config.dashboard_layer => crate::brand_layer::brand_to_layers(brand),
+        _ => Ok(Vec::new()),
+    }
 }
 
 /// Compile CSS from theme configuration.
@@ -262,7 +279,8 @@ pub fn compile_with_doc_vars(
     // Build user layers: title-block (unless dropped by
     // `title-block-style: plain|none`) + highlight built-ins,
     // matching `compile_default_css` and `assemble_theme_scss`, then any
-    // theme layers, then doc_vars LAST so it lands at the top of the
+    // theme layers (plus a dashboard's second copy of the brand
+    // layers), then doc_vars LAST so it lands at the top of the
     // merged-defaults section and wins the `!default` race.
     let mut user_layers = builtin_user_layers(config)?;
 
@@ -272,6 +290,7 @@ pub fn compile_with_doc_vars(
         user_layers.extend(result.layers);
         theme_dirs = result.load_paths;
     }
+    user_layers.extend(dashboard_brand_layers(config, context)?);
     let load_paths = theme_load_paths(theme_dirs, context);
 
     user_layers.push(doc_vars.clone());
@@ -538,6 +557,7 @@ pub async fn compile_with_doc_vars(
         user_layers.extend(result.layers);
         theme_dirs = result.load_paths;
     }
+    user_layers.extend(dashboard_brand_layers(config, context)?);
     let load_paths = theme_load_paths(theme_dirs, context);
 
     user_layers.push(doc_vars.clone());
@@ -1497,6 +1517,69 @@ mod tests {
         let css = compile_theme_css(&config, &context).unwrap().css;
         assert!(css.contains(".bslib-value-box"));
         assert!(css.contains(".quarto-dashboard"));
+    }
+
+    /// `theme: [cosmo, brand, custom.scss]` where `custom.scss` reads a
+    /// brand palette variable (GH #1132). Defaults merge in reverse, so
+    /// the `brand` entry's `$brand-*` defaults come after the custom
+    /// file's. Like Quarto 1, a dashboard adds the brand layers once
+    /// more after the theme, which defines them first; plain HTML does
+    /// not, and fails in both Quarto 1 and q2.
+    fn brand_then_custom(
+        dashboard: bool,
+    ) -> (Result<String, SassError>, Result<String, SassError>) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("custom.scss"),
+            "/*-- scss:defaults --*/\n$navbar-bg: $brand-navy;\n\
+             /*-- scss:rules --*/\n.probe { color: $navbar-bg; }\n",
+        )
+        .unwrap();
+        let brand = quarto_brand::UnifiedBrand::from_yaml_str(
+            "color:\n  palette:\n    navy: \"#1f4e79\"\n",
+        )
+        .unwrap()
+        .split()
+        .light;
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(dir.path().to_path_buf(), &runtime).with_brand(&brand);
+        let themes = ["cosmo", "brand", "custom.scss"]
+            .iter()
+            .map(|s| ThemeSpec::parse(s).unwrap())
+            .collect();
+        let mut config = ThemeConfig::new(themes, false);
+        config.dashboard_layer = dashboard;
+        let themed = compile_theme_css(&config, &context).map(|o| o.css);
+        let with_vars = compile_with_doc_vars(
+            &config,
+            &context,
+            &crate::SassLayer {
+                defaults: "$probe-var: 1;".to_string(),
+                ..Default::default()
+            },
+        )
+        .map(|o| o.css);
+        (themed, with_vars)
+    }
+
+    #[test]
+    fn test_dashboard_theme_after_brand_can_use_brand_variables() {
+        let (themed, with_vars) = brand_then_custom(true);
+        for css in [themed.unwrap(), with_vars.unwrap()] {
+            assert!(
+                css.contains("color: #1f4e79"),
+                "probe rule uses the brand navy"
+            );
+            assert!(css.contains(".quarto-dashboard"));
+        }
+    }
+
+    #[test]
+    fn test_html_theme_after_brand_cannot_use_brand_variables() {
+        let (themed, with_vars) = brand_then_custom(false);
+        for err in [themed.unwrap_err(), with_vars.unwrap_err()] {
+            assert!(err.to_string().contains("Undefined variable"), "{err}");
+        }
     }
 
     #[test]
