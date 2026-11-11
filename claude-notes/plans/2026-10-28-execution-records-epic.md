@@ -385,7 +385,7 @@ All made with Gordon in the design sessions of 2026-10-27/28 and the reviews of
     on one matching cell hash. Plans: EXR-4, EXR-16.
 40. **The scanner reports what the legacy executor skips (EXR-2).** `CellUnit` carries
     `indent`, `container_prefix`, `fence_len` and `attr_tail`; one quarantined function,
-    `runs_in_legacy_executor`, holds today\'s executor rule. It is not deleted by this epic: it retires when the strands that decide the executor\'s skipped cells (bd-9j6z311f, bd-rh4cce9e, bd-7gvl455a) are each decided.
+    `runs_in_legacy_executor`, holds today\'s executor rule. It is not deleted by this epic: it retires when the strands that decide the executor\'s skipped cells (bd-9j6z311f, bd-rh4cce9e, bd-7gvl455a) are each decided. (The opener-length skip, which no strand owned, was decided by bd-f63cqoke on 2026-11-11: any opener of three or more backticks runs.)
     Phase 0 pins the executor\'s quirks, a Phase 4 test shows the scanner filtered by it
     equals `parse_code_blocks`, and the mask\'s inline pattern is widened to the shared
     token class (a deliberate mask behavior change, consistent with decision 13). Plan:

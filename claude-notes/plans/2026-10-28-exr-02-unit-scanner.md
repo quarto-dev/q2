@@ -273,7 +273,9 @@ braces stays literal text.
    executor adopts it by consuming scanner units in Phase 4, and `runs_in_legacy_executor`
    drops its `closer_len == 3` requirement. The strand-owned skips (list-nested,
    attribute-tail, capitalization, indentation, fence length of the *opener*) stay
-   emulated.
+   emulated. *Update 2026-11-11:* the opener-length skip is decided. bd-f63cqoke relaxed
+   the rule to `fence_len >= 3` (Quarto 1 parity), because the qmd writer lengthens a cell's
+   fence over any backtick run in its source and those cells were silently skipped.
 
 ## Out of scope
 

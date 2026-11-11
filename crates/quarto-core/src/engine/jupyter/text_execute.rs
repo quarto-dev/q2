@@ -1665,7 +1665,6 @@ print("hello")
             // empty body
             "```{python}\n```\n",
             // not cells for either
-            "````{python}\nx=1\n````\n",
             "  ```{python}\n  x=1\n  ```\n",
             "```{=html}\nx\n```\n",
             "```{python .marimo}\nx=1\n```\n",
@@ -1731,16 +1730,61 @@ print("hello")
         assert!(ran("```{python}\nx=1\n```  trailing\n").is_empty());
     }
 
+    // bd-f63cqoke: a backtick run of three or more anywhere in a cell's source
+    // makes the qmd writer lengthen the fence (`determine_backticks`), so the
+    // text the engine receives opens with ````{python}. That cell must run, as
+    // it does in Quarto 1 (`jupyter.ts` opens on ```+). Before the fix it was
+    // silently left as an inert code block.
+    #[test]
+    fn bd_f63cqoke_cell_with_a_backtick_run_survives_the_qmd_round_trip() {
+        let qmd = "```{python}\nprint(\"a ``` b\")\n```\n\n```{python}\nprint(\"control\")\n```\n";
+        let mut output = Vec::<u8>::new();
+        let (doc, _ctx, _warnings) =
+            pampa::readers::qmd::read(qmd.as_bytes(), false, "t.qmd", &mut output, true, None)
+                .expect("parse");
+        let mut buf = Vec::new();
+        pampa::writers::qmd::write(&doc, &mut buf).expect("serialize");
+        let text = String::from_utf8(buf).expect("utf8");
+        assert!(
+            text.contains("````{python}\nprint(\"a ``` b\")\n````"),
+            "the writer lengthens this fence; if it stops doing so this test \
+             no longer covers the bug:\n{text}"
+        );
+
+        let run = ran(&text);
+        assert_eq!(
+            run.iter().map(|c| c.code.as_str()).collect::<Vec<_>>(),
+            ["print(\"a ``` b\")\n", "print(\"control\")\n"],
+            "both cells run"
+        );
+    }
+
+    #[test]
+    fn bd_f63cqoke_longer_opener_runs() {
+        for fence in ["````", "`````"] {
+            let run = ran(&format!("{fence}{{python}}\nx=1\n{fence}\n"));
+            assert_eq!(run.len(), 1, "{fence}: {run:?}");
+            assert_eq!(run[0].code, "x=1\n");
+        }
+    }
+
     // The Phase 3 corpus: the cells the scanner hands the executor equal what
     // the old finder found, except where the old finder was wrong or
     // unreachable. Each exception is named with its reason.
     #[test]
     fn exr2_p4_scanner_filtered_by_the_legacy_rule_equals_the_old_finder_on_the_corpus() {
-        const EXCEPTIONS: &[(&str, &str)] = &[(
-            "cell_inside_display_fence",
-            "quirk (i): the old finder runs an opener shown inside a longer fence; \
+        const EXCEPTIONS: &[(&str, &str)] = &[
+            (
+                "cell_inside_display_fence",
+                "quirk (i): the old finder runs an opener shown inside a longer fence; \
                  the mask hides it in the pipeline, the scanner never claims it",
-        )];
+            ),
+            (
+                "cells_nested",
+                "bd-f63cqoke: a four-backtick `{python}` cell runs (Quarto 1 parity); \
+                 the old finder needed exactly three",
+            ),
+        ];
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/units");
         let mut checked = 0;
         for entry in std::fs::read_dir(dir).unwrap() {

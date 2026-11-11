@@ -44,6 +44,14 @@ export interface RunConfig {
    * here; we parse the field for consistency with the Rust side.
    */
   requires_js?: boolean;
+  /**
+   * Execution engines whose runtime the fixture needs (e.g. `jupyter`), a
+   * string or a list, as in the Rust runner (`RunConfig::requires`), which
+   * skips the fixture when that runtime is not installed. The hub renders in
+   * WASM, which has no engine runtimes, so any entry skips it here. Keep in
+   * step with `shouldSkip` in `src/test-utils/smokeAllFixtures.ts`.
+   */
+  requires?: string | string[];
 }
 
 export interface FormatTestSpec {
@@ -314,6 +322,11 @@ export function shouldSkip(
 
   if (runConfig.ci === false && (process.env.CI || process.env.GITHUB_ACTIONS)) {
     return 'tests.run.ci is false';
+  }
+
+  const requires = runConfig.requires === undefined ? [] : [runConfig.requires].flat();
+  if (requires.length > 0) {
+    return `tests.run.requires ${requires.join(', ')} (no engine runtime in WASM)`;
   }
 
   const currentOs =
