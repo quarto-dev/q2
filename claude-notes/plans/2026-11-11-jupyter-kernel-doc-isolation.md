@@ -2,7 +2,7 @@
 title: 'Parallel project render interleaves cells of different documents on one shared Jupyter kernel (bd-i7yz08uh)'
 date: 2026-11-11
 description: 'Documents of a project share one Jupyter kernel with no exclusivity, so parallel renders interleave cells and even serial renders leak state across documents; decide between a per-document kernel key (Quarto 1 parity) and a per-session document lease.'
-status: implemented  # On branch braid/bd-i7yz08uh-parallel-project-render-interleaves; PR pending
+status: done  # Merged in PR #1173 (ee1d474e7), 2026-11-11
 braid:
   strand: bd-i7yz08uh
 ---
@@ -136,3 +136,13 @@ sequential-leak  QUARTO_JOBS=2  b sees: <undefined>
 ### Discovered
 
 - bd-wjg6sjxj: 105 orphaned `ipykernel` processes on this machine (Nov 2–11, PPID 1), from processes killed by a signal (hypothesis). Present at HEAD.
+
+## CI follow-up (PR #1173, 2026-11-11)
+
+The first CI run failed once on Ubuntu: `jupyter_inline_expressions::q1_equivalence_fixtures` hit `failed to create shell socket: Connect timed out after 30s` in its fifth sequential render. That test already started and stopped a kernel per render on `main` (temp dir per case, no outer scope), so kernel churn there is unchanged. One local failure of the same shape (`execute_env_cli_e2e`, right after a clippy build) never recurred in five full loops of all 301 Jupyter tests. Investigating it found:
+
+- [x] **A regression from this branch: every finished document's kernel was SIGKILLed.** `KernelSession::shutdown()` wrapped `shutdown_blocking()`, which skips the graceful `shutdown_request` on a tokio runtime thread, and leases end inside `engine_runtime().block_on`. `shutdown()` now sends the request on the current runtime and waits for the exit before the kill backstop. Test: `a_finished_documents_kernel_exits_gracefully` (an `atexit` marker), red before the fix.
+- [x] **Diagnostics.** A kernel that dies while starting now fails at once with `ExitedDuringStartup` (exit code and stderr), instead of a 30 s connect timeout with its stderr unread.
+- Still unexplained: whether the original timeout came from a dead kernel (a port collision) or a slow one (load). With the new error, the next occurrence will say which.
+
+The rerun on `fa24d2750` passed the Ubuntu Rust suite.
