@@ -2,7 +2,7 @@
 title: 'Engine round-trip rewrites project metadata as document markdown (bd-8svy3p89)'
 date: 2026-11-10
 description: 'On pages that run code, the engine output''s re-parsed metadata replaces the real metadata wholesale; reconcile it three ways instead, against a parse of the exact markdown the engine received, so only changes the engine made are taken.'
-status: draft  # Design agreed 2026-11-11 (three-way metadata reconcile); awaiting the user's read of this plan before implementation
+status: draft  # Design agreed 2026-11-11 (three-way metadata reconcile); blocks question open; do not implement before the go-ahead
 braid:
   strand: bd-8svy3p89
 ---
@@ -102,7 +102,7 @@ and S1 is the round-trip's. The rule, applied recursively from the root:
 | S1 vs S2 at this node | Result |
 |---|---|
 | equal (structural hash, spans ignored) | **S0** |
-| both maps | per key: recurse where the key is in S0, S1 and S2; S2's value for a key only in S2 (added by the engine); drop a key the engine removed (in S1, not S2) |
+| both maps | per key: recurse where the key is in S0, S1 and S2; S2's value for a key only in S2 (added by the engine); drop a key the engine removed (in S1, not S2; decision 3) |
 | both arrays of the same length | per index, recurse |
 | anything else (kinds differ, lengths differ) | **S2** |
 
@@ -161,9 +161,9 @@ Blocks keep today's two-way reconcile (out of scope; see Risks).
       edits) as the baseline. Splice never edits front-matter units, so
       every value should come back as S0; add a test that says so.
 
-### Phase 3: the #1152 machinery (pending question 1)
+### Phase 3: revert the #1152 machinery (decision 1)
 
-- [ ] If reverted: remove `config_value_text`, `literal_config_strings`,
+- [ ] Remove `config_value_text`, `literal_config_strings`,
       `ConfigPath::from_value_in`, the theme-stage `literal_theme_meta`,
       and storing the intermediate's text in its source slot; keep the
       regression test for GH #1152 (an extension `theme:` with two
@@ -182,19 +182,19 @@ Blocks keep today's two-way reconcile (out of scope; see Risks).
 - [ ] Update the `config_paths` module docs and the `apply.rs` comments.
 - [ ] Mark this plan done; comment on the strand.
 
+## Decisions (2026-11-11)
+
+1. **The #1152 machinery: revert it** in Phase 3, and see whether anything
+   still needs it before adding redundancy back.
+2. **Baseline parse: the whole engine input**, with the same reader as the
+   engine output. Correctness first; no measurement gate.
+3. **A key the engine removed is dropped**: the engine's rewrite is
+   followed. Rarely wanted, but the simpler rule.
+
 ## Open questions for the user
 
-1. **The #1152 machinery.** Revert it in Phase 3 (proposed: one mechanism;
-   it also stops keeping every engine output's text for the document's
-   lifetime), or keep `config_value_text` as a second line of defence?
-2. **Baseline parse cost.** Parse the whole baseline text with
-   `pampa::readers::qmd::read` (simple, same reader as S2), or only its
-   front matter? Proposed: the whole text first, measure on a large
-   document, and narrow only if it shows up.
-3. **A key the engine removed.** The table drops it (follows the engine).
-   Agree, or keep S0's value?
-4. **Blocks.** The same three-way idea would stop blocks from depending on
-   a faithful writer. Proposed: out of scope; file a strand if wanted.
+1. **Blocks.** Should blocks get the same three-way treatment? Under
+   discussion; see the conversation of 2026-11-11.
 
 ## Risks / tradeoffs
 
