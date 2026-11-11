@@ -14,15 +14,17 @@ const STRUCTURED_TARGETS: &[&str] = &[
 ];
 
 /// The LaTeX family, routed to fallback because kable and `df_print` choose LaTeX output by
-/// format and the LaTeX epic owns that presentation.
-const LATEX_TARGETS: &[&str] = &["latex", "beamer", "pdf"];
+/// format and the LaTeX epic owns that presentation. `context` is in it because knitr treats
+/// it as a TeX target: `pandoc_to` in knitr's `pandoc.R` maps `latex`, `beamer`, `context` and
+/// `texinfo` alike to the `pdf` figure device.
+const LATEX_TARGETS: &[&str] = &["latex", "beamer", "pdf", "context"];
 
 /// Why a document's chunks are captured as finished markdown instead of structured units.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FallbackReason {
-    /// `latex`, `beamer` or `pdf`.
+    /// `latex`, `beamer`, `pdf` or `context`.
     Latex,
-    /// A target the corpus does not cover yet (context, odt, rtf, ...).
+    /// A target the corpus does not cover yet (odt, rtf, ...).
     UncoveredTarget,
 }
 
@@ -49,8 +51,8 @@ pub fn route_for_target(format: &str) -> TargetRoute {
 pub fn fallback_diagnostic(reason: FallbackReason, format: &str) -> DiagnosticMessage {
     let (title, detail) = match reason {
         FallbackReason::Latex => (
-            "knitr output for LaTeX is not presented from the execution record",
-            "LaTeX targets keep knitr's finished markdown for every chunk.",
+            "knitr output for LaTeX and ConTeXt is not presented from the execution record",
+            "LaTeX and ConTeXt targets keep knitr's finished markdown for every chunk.",
         ),
         FallbackReason::UncoveredTarget => (
             "knitr output for this target is not presented from the execution record",
@@ -124,7 +126,7 @@ mod tests {
 
     #[test]
     fn the_latex_family_falls_back() {
-        for f in ["latex", "beamer", "pdf", "pdf+smart"] {
+        for f in ["latex", "beamer", "pdf", "pdf+smart", "context"] {
             assert_eq!(
                 route_for_target(f),
                 TargetRoute::Fallback(FallbackReason::Latex),
@@ -135,7 +137,7 @@ mod tests {
 
     #[test]
     fn an_uncovered_target_falls_back_until_the_corpus_covers_it() {
-        for f in ["context", "unknown-format"] {
+        for f in ["odt", "unknown-format"] {
             assert_eq!(
                 route_for_target(f),
                 TargetRoute::Fallback(FallbackReason::UncoveredTarget),
@@ -168,7 +170,7 @@ mod tests {
 
     #[test]
     fn a_fallback_caused_only_by_present_from_record_is_quiet() {
-        for f in ["pdf", "context"] {
+        for f in ["pdf", "context", "odt"] {
             let plan = plan_capture(false, true, true, f);
             assert!(!plan.capture && plan.diagnostic.is_none(), "{f}");
         }
@@ -181,6 +183,11 @@ mod tests {
     fn the_diagnostic_names_the_target_and_the_reason() {
         let text = fallback_diagnostic(FallbackReason::Latex, "pdf").to_text(None);
         assert!(text.contains("pdf") && text.contains("LaTeX"), "{text}");
+        let text = fallback_diagnostic(FallbackReason::Latex, "context").to_text(None);
+        assert!(
+            text.contains("context") && text.contains("ConTeXt"),
+            "{text}"
+        );
         let text = fallback_diagnostic(FallbackReason::UncoveredTarget, "epub").to_text(None);
         assert!(text.contains("epub") && !text.contains("LaTeX"), "{text}");
     }

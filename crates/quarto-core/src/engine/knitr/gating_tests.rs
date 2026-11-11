@@ -354,9 +354,19 @@ fn the_fallback_table() {
             Some("Q-18-13"),
         ),
         ("latex target", "latex", DOC, &[], vec![false, false], None),
+        // knitr treats context as a TeX target (pandoc.R maps it to the pdf device), so it
+        // follows the LaTeX family and keeps knitr's markdown.
+        (
+            "context target",
+            "context",
+            DOC,
+            &[],
+            vec![false, false],
+            None,
+        ),
         (
             "uncovered target",
-            "context",
+            "odt",
             DOC,
             &[],
             vec![false, false],
