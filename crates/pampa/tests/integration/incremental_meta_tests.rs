@@ -343,3 +343,27 @@ fn text_starting_like_a_block_reads_back_as_text() {
         assert_eq!(title_text(&result), text, "written as:\n{result}");
     }
 }
+
+// =============================================================================
+// Front matter the reader couldn't read
+// =============================================================================
+
+#[test]
+fn unreadable_front_matter_is_reported_alongside_the_ast() {
+    let broken = "---\ntitle: \"Quarterly report\nsubtitle: Third\n---\n\nBody.\n";
+    let (ast, _context, reported) =
+        pampa::wasm_entry_points::qmd_to_pandoc_with_diagnostics(broken.as_bytes())
+            .expect("the document still reads");
+    // The AST has none of the metadata...
+    assert!(matches!(&ast.meta.value, ConfigValueKind::Map(entries) if entries.is_empty()));
+    // ...and the reader says why.
+    assert!(
+        reported.iter().any(|d| d.code.as_deref() == Some("Q-1-1")),
+        "reported: {reported:?}"
+    );
+
+    let fine = "---\ntitle: Quarterly report\n---\n\nBody.\n";
+    let (_, _, reported) =
+        pampa::wasm_entry_points::qmd_to_pandoc_with_diagnostics(fine.as_bytes()).unwrap();
+    assert!(reported.is_empty());
+}

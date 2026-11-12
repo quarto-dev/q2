@@ -4016,15 +4016,20 @@ struct AstResponse {
 /// JSON: `{ "success": true, "ast": "<json-ast-string>" }`
 /// or `{ "success": false, "error": "...", "diagnostics": [...] }`
 ///
+/// A successful response has `warnings` when the reader reported anything
+/// about the document. An entry of kind `error` means part of the document
+/// is missing from the AST: front matter that isn't valid YAML (Q-1-1)
+/// leaves the AST without its metadata.
+///
 /// The `ast` field contains the JSON-serialized Pandoc AST with source info,
 /// matching the `RustQmdJson` TypeScript type from `@quarto/annotated-qmd`.
 #[wasm_bindgen]
 pub fn parse_qmd_content(content: &str) -> String {
-    use pampa::wasm_entry_points::qmd_to_pandoc;
+    use pampa::wasm_entry_points::qmd_to_pandoc_with_diagnostics;
     use pampa::writers::json::{write_with_config, JsonConfig};
 
-    match qmd_to_pandoc(content.as_bytes()) {
-        Ok((pandoc, context)) => {
+    match qmd_to_pandoc_with_diagnostics(content.as_bytes()) {
+        Ok((pandoc, context, reported)) => {
             let mut buf = Vec::new();
             let config = JsonConfig {
                 include_inline_locations: false,
@@ -4039,7 +4044,8 @@ pub fn parse_qmd_content(content: &str) -> String {
                         qmd: None,
                         error: None,
                         diagnostics: None,
-                        warnings: None,
+                        warnings: (!reported.is_empty())
+                            .then(|| diagnostics_to_json(&reported, &context.source_context)),
                     })
                     .unwrap()
                 }

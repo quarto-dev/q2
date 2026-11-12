@@ -42,12 +42,26 @@ pub fn qmd_to_pandoc(
     ),
     Vec<String>,
 > {
+    qmd_to_pandoc_with_diagnostics(input).map(|(pandoc, context, _diagnostics)| (pandoc, context))
+}
+
+/// Like [`qmd_to_pandoc`], and also returns what the reader reported about
+/// a document it could still read. Some of it is an error: front matter
+/// that isn't valid YAML is reported (Q-1-1) and the AST then has none of
+/// its metadata, so a caller that writes the AST back must check.
+pub fn qmd_to_pandoc_with_diagnostics(
+    input: &[u8],
+) -> Result<
+    (
+        crate::pandoc::Pandoc,
+        crate::pandoc::ast_context::ASTContext,
+        Vec<quarto_error_reporting::DiagnosticMessage>,
+    ),
+    Vec<String>,
+> {
     let mut output = VerboseOutput::Sink(io::sink());
     match readers::qmd::read(input, false, "<input>", &mut output, true, None) {
-        Ok((pandoc, context, _warnings)) => {
-            // TODO: Decide how to handle warnings in WASM context
-            Ok((pandoc, context))
-        }
+        Ok((pandoc, context, diagnostics)) => Ok((pandoc, context, diagnostics)),
         Err(diagnostics) => {
             // Convert diagnostics to strings for backward compatibility
             Err(diagnostics.iter().map(|d| d.to_text(None)).collect())
