@@ -32,6 +32,10 @@ test.describe('paragraphs', () => {
     // Someone else sees the same paragraph, still editable.
     const other = await editor.join()
     expect((await other.paragraphs())[0]).toBe('Some Plain text, with “quotes” and an author’s apostrophe.')
+    // The edited paragraph is written with the quotes it showed.
+    await expect
+      .poll(() => editor.document.source())
+      .toContain('\n\nSome Plain text, with “quotes” and an author\'s apostrophe.\n\n')
   })
 
   test('a paragraph with any formatting is shown with it', async ({ page }) => {
@@ -54,6 +58,21 @@ test.describe('paragraphs', () => {
     await expect(p.locator('span.mark')).toHaveText('a span')
     await expect(p.locator('span.smallcaps')).toHaveText('small caps')
     await expect(p.locator('u')).toHaveText('underline')
+  })
+
+  test('quotes and an image in a paragraph with formatting are shown, and a citation and a note are not', async ({ page }) => {
+    const editor = await (
+      await createDocument(
+        '---\ntitle: Notes\n---\n\nAn *emphasised* "quote" and \'another\', see [@smith2020], ![a picture](picture.png){.wide} and a note.^[Hidden.]\n',
+      )
+    ).open(page)
+    const p = shown(editor, 'p')
+
+    // Quotes are curly; a citation and a note aren't shown.
+    await expect(p).toHaveText('An emphasised “quote” and ‘another’, see ,  and a note.')
+    await expect(p.locator('img.wide')).toHaveAttribute('src', 'picture.png')
+    await expect(p.locator('img.wide')).toHaveAttribute('alt', 'a picture')
+    expect(await editor.paragraphs()).toEqual([])
   })
 
   test('a line break within a paragraph is shown, and the paragraph can\'t be edited', async ({ page }) => {

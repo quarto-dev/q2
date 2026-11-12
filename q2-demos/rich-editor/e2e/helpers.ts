@@ -88,8 +88,11 @@ export class Document {
     this.client.applyEditorOperations(FILE, [{ rangeOffset: at, rangeLength: find.length, text: replacement }])
   }
 
-  /** Open the document in the visual editor on `page`, themed and ready. */
-  async open(page: Page): Promise<Editor> {
+  /**
+   * Open the document in the visual editor on `page`, themed and ready.
+   * (`shows: 'nothing'` for a document with nothing in it to wait for.)
+   */
+  async open(page: Page, { shows = 'something' }: { shows?: 'something' | 'nothing' } = {}): Promise<Editor> {
     // The hub must have the document before a browser asks for it.
     if (!(await this.hub.hubHasHeadsOf(this.client))) throw new Error('The hub never received the document.')
     const query = new URLSearchParams({ server: this.hub.url, doc: this.indexDocId, file: FILE, view: 'visual' })
@@ -97,7 +100,9 @@ export class Document {
     await page.locator('iframe.visual-frame').waitFor()
     const frame = page.frameLocator('iframe.visual-frame')
     // The title block, or the first block of a document without one.
-    await frame.locator('#title-block-header, #quarto-document-content > *').first().waitFor()
+    if (shows === 'something') await frame.locator('#title-block-header, #quarto-document-content > *').first().waitFor()
+    else await frame.locator('#quarto-document-content').waitFor({ state: 'attached' })
+    await expect(page.locator('.visual-editor .status')).toContainText('Title block derived')
     await expect(page.locator('.visual-editor .status')).not.toContainText('Compiling')
     const handle = await page.locator('iframe.visual-frame').elementHandle()
     const doc = (await handle!.contentFrame())!
@@ -236,6 +241,11 @@ export class Editor {
       (selector) => [...document.querySelectorAll(selector)].map((el) => el.textContent ?? ''),
       PARAGRAPH,
     )
+  }
+
+  /** The body's `index`th editable paragraph. */
+  paragraph(index: number) {
+    return this.frame.locator(PARAGRAPH).nth(index)
   }
 
   /** Put the caret in the body's `index`th editable paragraph (of one line), `offset` characters in. */
