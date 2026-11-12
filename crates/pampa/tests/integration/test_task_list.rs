@@ -172,7 +172,9 @@ fn html_mixed_list_has_no_task_list_class_but_renders_checkboxes() {
         "mixed list must not get task-list class: {html}"
     );
     assert!(
-        html.contains("<li class=\"task-list-item\"><label><input type=\"checkbox\" disabled=\"\" />"),
+        html.contains(
+            "<li class=\"task-list-item\"><label><input type=\"checkbox\" disabled=\"\" />"
+        ),
         "task item in mixed list still renders a checkbox and the per-item class: {html}"
     );
     assert!(
