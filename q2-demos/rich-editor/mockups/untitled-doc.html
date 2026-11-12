@@ -71,18 +71,9 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 .title-block:hover .add-sub, .title-block:focus-within .add-sub { opacity:1; pointer-events:auto; }
 .add-sub:hover, .add-sub:focus { background:#eef0f3; color:var(--ink); outline:none; }
 
-/* Option: in-place widget. "+" buttons in each absent field's place, only
-   while the title block is active (`show`); a row with nothing in it collapses. */
-.ghost { font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:3px 8px; margin-left:-8px; border-radius:4px; cursor:pointer; }
+/* The widgets' "+ Field" buttons (in .widget rows, below). */
+.ghost { font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:3px 8px; border-radius:4px; cursor:pointer; }
 .ghost:hover, .ghost:focus { background:#eef0f3; color:var(--ink); outline:none; }
-.meta .ghost { margin-left:0; align-self:flex-start; }
-.meta .ghost:first-child { margin-left:-8px; }
-.ghost-row { margin:.1rem 0; }
-.opt-inplace .title-block:not(.show) .ghost-row,
-.opt-inplace .title-block:not(.show) .ghost { display:none; }
-.opt-inplace .title-block:not(.show) .meta:not(:has(.field)) { display:none; }
-.opt-inplace .title-block:not(.show):not(:has(.field)) { display:none; }
-.opt-inplace .title-block.show .meta { gap:1rem 3rem; }
 .title-block.untitled:not(.open) .add-sub { display:none; }
 
 /* Option: inline widget */
@@ -130,13 +121,13 @@ const OPTIONS = {
     flags: { persistentTitle: true, subtitleButton: true },
   },
   widget: {
-    name: 'Inline widget', desc: 'Faint “+ Title + Subtitle …” rows: one row to start, split around the fields you add, shown while the caret is in the title block.',
-    tips: 'Hover the top of the page, or press <kbd>↑</kbd> on the first line of the body. <kbd>←</kbd><kbd>→</kbd> go along a row and on into the fields; <kbd>↑</kbd><kbd>↓</kbd> move between rows and fields. <kbd>Enter</kbd> adds. An empty field keeps its placeholder; <kbd>Backspace</kbd> in it removes it.',
+    name: 'Inline widget', desc: 'A faint “+ Title + Subtitle …” row at the top of the page, shown while the caret is in the title block or on hover.',
+    tips: 'Hover the top of the page, or press <kbd>↑</kbd> on the first line of the body / title block. <kbd>←</kbd><kbd>→</kbd> go along the row and on into the fields; <kbd>↓</kbd> or <kbd>Esc</kbd> back. <kbd>Enter</kbd> adds. An empty field keeps its placeholder; <kbd>Backspace</kbd> in it removes it.',
     flags: { widget: true },
   },
   inplace: {
-    name: 'In-place widget', desc: 'The widget’s “+” buttons sit where each field would appear in the title block, while the caret is in it.',
-    tips: '<kbd>↑</kbd> from the body’s first line enters the title block; the “+” buttons appear where their fields go. Arrows move through fields and buttons alike, <kbd>Enter</kbd> on a button adds that field, <kbd>Backspace</kbd> in an empty field removes it.',
+    name: 'In-place widget', desc: 'The same “+” rows, but split around the fields you add: each run of missing fields is a row where those fields would go.',
+    tips: 'Hover the top of the page, or press <kbd>↑</kbd> on the first line of the body. <kbd>←</kbd><kbd>→</kbd> go along a row and on into the fields; <kbd>↑</kbd><kbd>↓</kbd> move between rows and fields. <kbd>Enter</kbd> adds. An empty field keeps its placeholder; <kbd>Backspace</kbd> in it removes it.',
     flags: { inplace: true },
   },
   slash: {
@@ -339,9 +330,10 @@ function build() {
       l.textContent = 'Abstract'; w.append(l, mk('abstract', 'div', 'abstract-text'));
       return w;
     };
-    if (f.widget) {
-      // The absent fields' "+" buttons, in rows between the fields that are
-      // there: each run of absent fields is one row, where its fields would go.
+    if (f.widget || f.inplace) {
+      // The absent fields' "+" buttons, in rows. Inline: one row above the
+      // fields. In place: rows between the fields that are there, each run
+      // of absent fields one row, where its fields would go.
       let run = [], metaRow = null;
       const flush = () => {
         if (!run.length) return;
@@ -349,8 +341,9 @@ function build() {
         for (const k of run) r.append(ghost(k));
         header.append(r); run = [];
       };
+      if (f.widget) { run = FIELDS.filter((k) => !p.includes(k)); flush(); }
       for (const k of FIELDS) {
-        if (!p.includes(k)) { run.push(k); continue; }
+        if (!p.includes(k)) { if (f.inplace) run.push(k); continue; }
         if (k === 'date' && metaRow) { metaRow.append(metaItem(k)); continue; } // right after author
         flush();
         if (k === 'title') header.append(mk('title', 'h1', 'title'));
@@ -359,19 +352,6 @@ function build() {
         else { metaRow = el('div', 'meta'); metaRow.append(metaItem(k)); header.append(metaRow); }
       }
       flush();
-      if (focusKey) focusField(focusKey, end);
-      update();
-      return;
-    }
-    if (f.inplace) {
-      // Every field has its place; an absent one shows a "+" button there.
-      const row = (g) => { const d = el('div', 'ghost-row'); d.append(g); return d; };
-      header.append(p.includes('title') ? mk('title', 'h1', 'title') : row(ghost('title')));
-      header.append(p.includes('subtitle') ? mk('subtitle', 'p', 'subtitle') : row(ghost('subtitle')));
-      const m = el('div', 'meta');
-      for (const k of ['author', 'date']) m.append(p.includes(k) ? metaItem(k) : ghost(k));
-      header.append(m);
-      header.append(p.includes('abstract') ? abstract() : row(ghost('abstract')));
       if (focusKey) focusField(focusKey, end);
       update();
       return;
