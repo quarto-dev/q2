@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Untitled-doc mockups</title>
+<style>
+:root { --ink:#212529; --muted:#6c757d; --ph:#adb5bd; --ph-faint:#d3d8dd; --line:#dee2e6; --accent:#2780e3; --chrome:#f6f7f9; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#fff; }
+.app { display:grid; grid-template-columns: 270px 1fr 340px; height:100vh; }
+@media (max-width: 1000px) { .app { grid-template-columns: 1fr; height:auto; } }
+aside { background:var(--chrome); border-right:1px solid var(--line); padding:16px; overflow:auto; font-size:14px; }
+aside h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
+aside h2:first-child { margin-top:0; }
+.opt { display:block; padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+.opt:hover { background:#eceef1; }
+.opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
+.opt b { display:block; font-weight:600; }
+.opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.sc { display:flex; gap:6px; align-items:center; padding:4px 2px; cursor:pointer; }
+.reset { margin-top:10px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
+.center { overflow:auto; position:relative; }
+.tips { max-width:760px; margin:16px auto 0; padding:9px 14px; background:#fff8e1; border:1px solid #f3e1a6; border-radius:6px; font-size:13px; color:#5c4b00; line-height:1.5; }
+kbd { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; border-bottom-width:2px; border-radius:3px; padding:0 4px; background:#fffdf3; }
+.source { border-left:1px solid var(--line); background:var(--chrome); padding:16px; overflow:auto; }
+.source h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+.source pre { font:12.5px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; margin:0; }
+.source pre.empty { color:var(--muted); font-style:italic; }
+
+/* The "rendered" document */
+.page { max-width:760px; margin:0 auto; padding:28px 32px 160px; position:relative; }
+[contenteditable] { outline:none; }
+.field { white-space:pre-wrap; }
+.field:empty::before { content:attr(data-placeholder); color:var(--ph); pointer-events:none; }
+.title-block { margin-bottom:1.75rem; }
+.title-block:empty { display:none; }
+h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem; }
+.subtitle { font-size:1.3rem; font-weight:300; color:#495057; margin:0 0 1rem; }
+.meta { display:flex; gap:3rem; margin-top:1.25rem; }
+.meta-label { font-size:.72rem; text-transform:uppercase; color:var(--muted); letter-spacing:.04em; margin-bottom:.2rem; }
+.abstract { margin-top:1.5rem; }
+.abstract-label { font-weight:600; margin-bottom:.35rem; }
+.body { font-size:1.0625rem; line-height:1.6; min-height:2em; }
+.body p { margin:0 0 1rem; }
+.body h1 { font-size:2rem; font-weight:600; margin:1.5rem 0 1rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+.body h2 { font-size:1.6rem; font-weight:600; margin:1.5rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; }
+.body > :first-child { margin-top:0; }
+.callout { border-left:4px solid var(--accent); background:#f1f7fd; padding:.6rem 1rem; margin:0 0 1rem; border-radius:4px; }
+.callout p { margin:0; }
+.body pre { background:#f8f9fa; border:1px solid var(--line); padding:.6rem .8rem; border-radius:4px; font:14px/1.5 ui-monospace, Menlo, monospace; margin:0 0 1rem; white-space:pre-wrap; }
+.body .hint::before { content:attr(data-hint); color:var(--ph); position:absolute; pointer-events:none; }
+
+/* Option: placeholder title (collapsed when untitled, unless empty doc / hover / focus) */
+.opt-persist .title-block.untitled h1.title { height:1rem; overflow:hidden; margin:0; }
+.opt-persist .title-block.untitled h1.title:empty::before { color:transparent; }
+.opt-persist .title-block.untitled h1.title:hover,
+.opt-persist .title-block.untitled h1.title:focus,
+.opt-persist.doc-empty .title-block.untitled h1.title { height:auto; margin:0 0 .5rem; }
+.opt-persist .title-block.untitled h1.title:hover:empty::before { color:var(--ph-faint); }
+.opt-persist .title-block.untitled h1.title:focus:empty::before,
+.opt-persist.doc-empty .title-block.untitled h1.title:empty::before { color:var(--ph); }
+.opt-persist .title-block.untitled { margin-bottom:.75rem; }
+.opt-persist.doc-empty .title-block.untitled, .opt-persist .title-block.untitled:focus-within { margin-bottom:1.75rem; }
+
+/* Option: inline widget */
+.widget { display:flex; flex-wrap:wrap; gap:2px; min-height:30px; align-items:center; opacity:0; transition:opacity .12s; margin:0 0 6px -8px; }
+.widget.none { display:none; }
+.top:hover .widget, .widget:focus-within, .doc-empty .widget { opacity:1; }
+.widget button { font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:4px 8px; border-radius:4px; cursor:pointer; }
+.widget button:hover, .widget button:focus { background:#eef0f3; color:var(--ink); outline:none; }
+
+/* Option: toolbar */
+.toolbar { position:sticky; top:0; z-index:2; background:#fff; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:4px; padding:8px 16px; justify-content:center; margin-top:12px; }
+.toolbar button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; }
+.toolbar button:hover { background:#f1f3f5; }
+.toolbar button[aria-pressed="true"] { background:#e7f1fc; border-color:#c5dcf5; color:#145ca8; }
+.toolbar .sep { width:1px; background:var(--line); margin:2px 6px; }
+.toolbar .lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; align-self:center; margin-right:2px; }
+
+/* Option: slash menu */
+.menu { position:absolute; z-index:5; width:250px; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,.12); padding:6px; font-size:14px; }
+.menu .grp { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:6px 8px 3px; }
+.menu .item { padding:6px 8px; border-radius:5px; cursor:pointer; display:flex; justify-content:space-between; }
+.menu .item small { color:var(--muted); }
+.menu .item.sel { background:#eef3fb; }
+.menu .nores { padding:6px 8px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="side"></aside>
+  <div class="center" id="center"></div>
+  <div class="source"><h2>Source the editor would write</h2><pre id="source"></pre></div>
+</div>
+<script>
+const FIELDS = ['title', 'subtitle', 'author', 'date', 'abstract'];
+const LABEL = { title: 'Title', subtitle: 'Subtitle', author: 'Author', date: 'Date', abstract: 'Abstract' };
+const PH = { title: 'Title', subtitle: 'Subtitle', author: 'Name', date: 'e.g. 2026-11-12', abstract: 'Summarize the document' };
+
+const OPTIONS = {
+  today: {
+    name: 'Today', desc: "What the prototype does now: absent fields aren't shown and only a subtitle can be added.",
+    tips: 'Try the <b>Empty file</b> scenario: nothing to click or type into. In <b>Body, no front matter</b> there is no way to add a title.',
+    flags: { today: true, enterAddsSubtitle: true },
+  },
+  persist: {
+    name: 'Placeholder title', desc: 'The title slot always exists. Its placeholder shows only in an empty doc, on hover, or with the caret in it.',
+    tips: '<kbd>↑</kbd> at the start of the body enters the hidden title. Hover just above the body to see it. <kbd>Enter</kbd> in the title adds a subtitle.',
+    flags: { persistentTitle: true, enterAddsSubtitle: true },
+  },
+  widget: {
+    name: 'Inline widget', desc: 'A faint “+ Title + Subtitle …” row above the page, on hover or from the keyboard.',
+    tips: 'Hover the top of the page, or press <kbd>↑</kbd> at the start of the body / title block. <kbd>←</kbd><kbd>→</kbd> pick, <kbd>Enter</kbd> add, <kbd>↓</kbd> or <kbd>Esc</kbd> back.',
+    flags: { widget: true },
+  },
+  slash: {
+    name: 'Slash menu', desc: 'Type / on an empty line for title-block fields and body blocks.',
+    tips: 'Type <kbd>/</kbd> on an empty line, then filter (e.g. <code>/ti</code>). <kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> <kbd>Esc</kbd>.',
+    flags: { slash: true },
+  },
+  toolbar: {
+    name: 'Toolbar', desc: 'Always-visible buttons for title-block fields and blocks.',
+    tips: 'Click a field to add it, or to jump to it when it’s already there. Blocks go after the current line.',
+    flags: { toolbar: true },
+  },
+  hash: {
+    name: '“# ” makes a title', desc: 'Typing “# ” on the first line of an untitled doc makes a title; elsewhere it makes a heading.',
+    tips: 'In <b>Empty file</b>, type <code>#&nbsp;</code>. Then try getting a level-1 <i>heading</i> as the first block of an untitled doc. <code>## </code> makes an H2. <kbd>Backspace</kbd> at a heading’s start turns it back into a paragraph.',
+    flags: { hashTitle: true },
+  },
+};
+
+const SCENARIOS = {
+  empty: { name: 'Empty file', meta: {}, body: [] },
+  body: { name: 'Body, no front matter', meta: {}, body: [['p', 'Quarto documents mix prose, code and output.'], ['p', 'This one has no front matter yet.']] },
+  titled: { name: 'Has a title', meta: { title: 'Palmer penguins' }, body: [['p', 'Three species of penguin, measured over three years.']] },
+};
+
+const params = new URLSearchParams(location.hash.slice(1));
+const state = { opt: OPTIONS[params.get('opt')] ? params.get('opt') : 'persist', sc: SCENARIOS[params.get('sc')] ? params.get('sc') : 'empty' };
+document.execCommand('defaultParagraphSeparator', false, 'p');
+
+const $ = (id) => document.getElementById(id);
+function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
+
+function renderSide() {
+  const side = $('side');
+  side.innerHTML = '<h2>Option</h2>';
+  for (const [key, o] of Object.entries(OPTIONS)) {
+    const d = el('div', 'opt' + (key === state.opt ? ' on' : ''));
+    d.innerHTML = `<b>${o.name}</b><span>${o.desc}</span>`;
+    d.onclick = () => { state.opt = key; go(); };
+    side.append(d);
+  }
+  const h = el('h2'); h.textContent = 'Start from'; side.append(h);
+  for (const [key, s] of Object.entries(SCENARIOS)) {
+    const l = el('label', 'sc');
+    l.innerHTML = `<input type="radio" name="sc" ${key === state.sc ? 'checked' : ''}> ${s.name}`;
+    l.querySelector('input').onchange = () => { state.sc = key; go(); };
+    side.append(l);
+  }
+  const r = el('button', 'reset'); r.textContent = 'Reset document'; r.onclick = go; side.append(r);
+}
+
+function go() {
+  location.replace('#opt=' + state.opt + '&sc=' + state.sc);
+  renderSide();
+  build();
+}
+
+// ---- caret helpers -------------------------------------------------------
+function sel() { return getSelection(); }
+function caretAtStart(e) {
+  const s = sel(); if (!s.rangeCount || !s.isCollapsed || !e.contains(s.anchorNode)) return false;
+  const r = document.createRange(); r.selectNodeContents(e); r.setEnd(s.anchorNode, s.anchorOffset);
+  return r.toString() === '';
+}
+function caretAtEnd(e) {
+  const s = sel(); if (!s.rangeCount || !s.isCollapsed || !e.contains(s.anchorNode)) return false;
+  const r = document.createRange(); r.selectNodeContents(e); r.setStart(s.anchorNode, s.anchorOffset);
+  return r.toString() === '';
+}
+function textBefore(e) {
+  const s = sel(); if (!s.rangeCount || !e.contains(s.anchorNode)) return '';
+  const r = document.createRange(); r.selectNodeContents(e); r.setEnd(s.anchorNode, s.anchorOffset);
+  return r.toString().replace(/ /g, ' ');
+}
+function placeIn(e, end) {
+  const r = document.createRange(); r.selectNodeContents(e); r.collapse(!end);
+  const s = sel(); s.removeAllRanges(); s.addRange(r);
+}
+
+let cur = null;
+document.addEventListener('selectionchange', () => cur && cur.onSelection());
+
+// ---- the editor ----------------------------------------------------------
+function build() {
+  const opt = OPTIONS[state.opt], f = opt.flags, sc = SCENARIOS[state.sc];
+  const center = $('center'); center.innerHTML = '';
+  const tips = el('div', 'tips'); tips.innerHTML = opt.tips; center.append(tips);
+
+  const meta = { ...sc.meta };
+  const page = el('div', 'page opt-' + state.opt);
+  let toolbar = null, widget = null;
+  if (f.toolbar) { toolbar = el('div', 'toolbar'); center.append(toolbar); }
+  const top = el('div', 'top');
+  if (f.widget) { widget = el('div', 'widget'); widget.setAttribute('role', 'toolbar'); top.append(widget); }
+  const header = el('header', 'title-block'); top.append(header);
+  const body = el('div', 'body'); body.contentEditable = 'true';
+  const menu = el('div', 'menu'); menu.hidden = true;
+  page.append(top, body, menu);
+  center.append(page);
+
+  for (const [tag, text] of sc.body) { const b = el(tag); b.textContent = text; body.append(b); }
+  const startsEmpty = !sc.body.length && !Object.keys(meta).length;
+  if (f.today && startsEmpty) body.contentEditable = 'false';
+  else if (!body.firstElementChild) body.innerHTML = '<p><br></p>';
+
+  const isPersistent = (k) => f.persistentTitle && k === 'title';
+  const present = () => FIELDS.filter((k) => meta[k] !== undefined || isPersistent(k));
+  const fieldEl = (k) => header.querySelector(`[data-field="${k}"]`);
+  const order = () => present().map(fieldEl).filter(Boolean);
+  const blank = (b) => b.textContent.replace(/ /g, ' ').trim() === '';
+
+  function focusBlock(b, end) { body.focus({ preventScroll: true }); placeIn(b, end); }
+  function focusField(k, end = true) { const e = fieldEl(k); if (e) { e.focus(); placeIn(e, end); } }
+  function focusWidget() { const b = widget && widget.querySelector('button'); if (b) { b.focus(); return true; } return false; }
+  function currentBlock() {
+    const s = sel(); if (!s.rangeCount) return null;
+    let n = s.anchorNode;
+    if (n === body) return body.children[s.anchorOffset] || body.lastElementChild;
+    while (n && n.parentNode !== body) n = n.parentNode;
+    return n && n.nodeType === 1 ? n : null;
+  }
+
+  // -- title block --
+  function renderHeader(focusKey, end = true) {
+    header.innerHTML = '';
+    const p = present();
+    const mk = (k, tag, cls) => {
+      const e = el(tag, 'field ' + cls);
+      e.contentEditable = 'true'; e.dataset.field = k; e.dataset.placeholder = PH[k];
+      e.textContent = meta[k] || '';
+      wireField(e, k);
+      return e;
+    };
+    if (p.includes('title')) header.append(mk('title', 'h1', 'title'));
+    if (p.includes('subtitle')) header.append(mk('subtitle', 'p', 'subtitle'));
+    if (p.includes('author') || p.includes('date')) {
+      const m = el('div', 'meta');
+      for (const k of ['author', 'date']) if (p.includes(k)) {
+        const w = el('div', 'meta-item'), l = el('div', 'meta-label');
+        l.textContent = k === 'author' ? 'Author' : 'Published';
+        w.append(l, mk(k, 'div', 'meta-value')); m.append(w);
+      }
+      header.append(m);
+    }
+    if (p.includes('abstract')) {
+      const w = el('div', 'abstract'), l = el('div', 'abstract-label');
+      l.textContent = 'Abstract'; w.append(l, mk('abstract', 'div', 'abstract-text')); header.append(w);
+    }
+    if (focusKey) focusField(focusKey, end);
+    update();
+  }
+
+  function move(fromEl, dir) {
+    const o = order(), i = o.indexOf(fromEl), t = o[i + dir];
+    if (t) { t.focus(); placeIn(t, dir < 0); return; }
+    if (dir > 0) focusBlock(body.firstElementChild, false);
+    else if (f.widget) focusWidget();
+  }
+
+  function addField(k) {
+    if (meta[k] === undefined) meta[k] = '';
+    renderHeader(k);
+  }
+
+  function wireField(e, k) {
+    e.addEventListener('input', () => {
+      if (e.innerHTML === '<br>') e.innerHTML = '';
+      meta[k] = e.textContent;
+      update();
+    });
+    e.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        if (f.enterAddsSubtitle && k === 'title' && meta.subtitle === undefined && e.textContent) { addField('subtitle'); return; }
+        move(e, 1);
+      } else if (ev.key === 'ArrowDown' && caretAtEnd(e)) { ev.preventDefault(); move(e, 1); }
+      else if (ev.key === 'ArrowUp' && caretAtStart(e)) { ev.preventDefault(); move(e, -1); }
+      else if (ev.key === 'Backspace' && e.textContent === '') {
+        ev.preventDefault();
+        const o = order(), prev = o[o.indexOf(e) - 1];
+        const prevKey = prev && prev.dataset.field;
+        if (!isPersistent(k)) { delete meta[k]; renderHeader(); }
+        if (prevKey) focusField(prevKey, true);
+        else if (!(f.widget && focusWidget())) focusBlock(body.firstElementChild, false);
+      }
+    });
+    e.addEventListener('focusout', () => setTimeout(() => {
+      if (document.activeElement === e || !header.contains(e)) return;
+      if (meta[k] === '' && !isPersistent(k)) {
+        // An emptied field disappears when the caret leaves it.
+        const a = document.activeElement, ak = a && a.dataset && a.dataset.field;
+        delete meta[k];
+        renderHeader();
+        if (ak) focusField(ak, true);
+      } else update();
+    }));
+  }
+
+  // -- widget --
+  let widgetKeys = null;
+  function renderWidget() {
+    const missing = FIELDS.filter((k) => meta[k] === undefined);
+    const key = missing.join();
+    if (key === widgetKeys) return;
+    widgetKeys = key;
+    widget.innerHTML = '';
+    widget.classList.toggle('none', !missing.length);
+    for (const k of missing) {
+      const b = el('button'); b.type = 'button'; b.textContent = '+ ' + LABEL[k];
+      b.onclick = () => addField(k);
+      widget.append(b);
+    }
+  }
+  if (widget) widget.addEventListener('keydown', (ev) => {
+    const bs = [...widget.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+    if (ev.key === 'ArrowRight') { ev.preventDefault(); (bs[i + 1] || bs[0]).focus(); }
+    else if (ev.key === 'ArrowLeft') { ev.preventDefault(); (bs[i - 1] || bs[bs.length - 1]).focus(); }
+    else if (ev.key === 'ArrowDown' || ev.key === 'Escape') {
+      ev.preventDefault();
+      const first = order()[0];
+      if (first) { first.focus(); placeIn(first, false); } else focusBlock(body.firstElementChild, false);
+    }
+  });
+
+  // -- toolbar --
+  function insertBlock(kind, at) {
+    let n;
+    if (kind === 'h2') { n = el('h2'); n.innerHTML = '<br>'; }
+    else if (kind === 'callout') { n = el('div', 'callout'); n.innerHTML = '<p><br></p>'; }
+    else { n = el('pre'); n.innerHTML = '<br>'; }
+    at = at || body.lastElementChild;
+    if (at && at.tagName === 'P' && blank(at)) at.replaceWith(n); else if (at) at.after(n); else body.append(n);
+    focusBlock(n.querySelector('p') || n, false);
+    update();
+  }
+  let lastBlock = null;
+  if (toolbar) {
+    const lbl = el('span', 'lbl'); lbl.textContent = 'Title block'; toolbar.append(lbl);
+    for (const k of FIELDS) {
+      const b = el('button'); b.type = 'button'; b.textContent = LABEL[k]; b.dataset.k = k;
+      b.onmousedown = (ev) => ev.preventDefault();
+      b.onclick = () => (meta[k] === undefined ? addField(k) : focusField(k));
+      toolbar.append(b);
+    }
+    toolbar.append(el('span', 'sep'));
+    for (const [kind, label] of [['h2', 'Heading'], ['callout', 'Callout'], ['code', 'Code cell']]) {
+      const b = el('button'); b.type = 'button'; b.textContent = label;
+      b.onmousedown = (ev) => ev.preventDefault();
+      b.onclick = () => insertBlock(kind, lastBlock && body.contains(lastBlock) ? lastBlock : null);
+      toolbar.append(b);
+    }
+  }
+
+  // -- slash menu --
+  const ITEMS = [
+    ...FIELDS.map((k) => ({ group: 'Title block', label: LABEL[k], key: k })),
+    { group: 'Blocks', label: 'Heading', kind: 'h2', hint: '##' },
+    { group: 'Blocks', label: 'Callout', kind: 'callout', hint: ':::' },
+    { group: 'Blocks', label: 'Code cell', kind: 'code', hint: '```' },
+  ];
+  const m = { open: false, block: null, items: [], i: 0, dismissed: null };
+  function slashCheck() {
+    const b = currentBlock();
+    const text = b ? b.textContent.replace(/ /g, ' ') : '';
+    const match = b && b.tagName === 'P' && textBefore(b) === text && text.match(/^\/(\w*)$/);
+    if (!match || m.dismissed === b) { if (!match) m.dismissed = null; return closeMenu(); }
+    const q = match[1].toLowerCase();
+    m.items = ITEMS.filter((it) => (it.key ? meta[it.key] === undefined : true) && it.label.toLowerCase().includes(q));
+    if (m.block !== b || !m.open) m.i = 0;
+    m.i = Math.min(m.i, Math.max(0, m.items.length - 1));
+    m.block = b; m.open = true; renderMenu();
+  }
+  function renderMenu() {
+    menu.hidden = false; menu.innerHTML = '';
+    let g = null;
+    m.items.forEach((it, i) => {
+      if (it.group !== g) { g = it.group; const h = el('div', 'grp'); h.textContent = g; menu.append(h); }
+      const d = el('div', 'item' + (i === m.i ? ' sel' : ''));
+      d.innerHTML = `<span>${it.label}</span><small>${it.hint || ''}</small>`;
+      d.onmousedown = (ev) => { ev.preventDefault(); choose(it); };
+      menu.append(d);
+    });
+    if (!m.items.length) { const n = el('div', 'nores'); n.textContent = 'No results'; menu.append(n); }
+    const pr = page.getBoundingClientRect(), br = m.block.getBoundingClientRect();
+    menu.style.top = (br.bottom - pr.top + 4) + 'px';
+    menu.style.left = (br.left - pr.left) + 'px';
+  }
+  function closeMenu() { m.open = false; menu.hidden = true; }
+  function choose(it) {
+    const b = m.block; closeMenu();
+    if (it.key) {
+      if (body.children.length > 1) b.remove(); else b.innerHTML = '<br>';
+      addField(it.key);
+    } else {
+      b.innerHTML = '<br>';
+      insertBlock(it.kind, b);
+    }
+  }
+
+  // -- "# " shortcut --
+  function hashCheck() {
+    const b = currentBlock(); if (!b || !/^(P|H1|H2)$/.test(b.tagName)) return;
+    const before = textBefore(b), mm = before.match(/^(#{1,2}) $/);
+    if (!mm) return;
+    const rest = b.textContent.replace(/ /g, ' ').slice(before.length);
+    if (mm[1] === '#' && b === body.firstElementChild && !meta.title) {
+      if (body.children.length > 1) b.remove(); else b.innerHTML = '<br>';
+      meta.title = rest;
+      renderHeader('title', false);
+      return;
+    }
+    const h = el(mm[1] === '#' ? 'h1' : 'h2');
+    if (rest) h.textContent = rest; else h.innerHTML = '<br>';
+    b.replaceWith(h); focusBlock(h, false);
+  }
+
+  // -- body events --
+  body.addEventListener('keydown', (ev) => {
+    if (m.open) {
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); m.i = (m.i + 1) % Math.max(1, m.items.length); renderMenu(); return; }
+      if (ev.key === 'ArrowUp') { ev.preventDefault(); m.i = (m.i - 1 + m.items.length) % Math.max(1, m.items.length); renderMenu(); return; }
+      if ((ev.key === 'Enter' || ev.key === 'Tab') && m.items.length) { ev.preventDefault(); choose(m.items[m.i]); return; }
+      if (ev.key === 'Escape') { ev.preventDefault(); m.dismissed = m.block; closeMenu(); return; }
+    }
+    const b = currentBlock();
+    if (ev.key === 'ArrowUp' && b === body.firstElementChild && caretAtStart(b)) {
+      const o = order(), last = o[o.length - 1];
+      if (last) { ev.preventDefault(); last.focus(); placeIn(last, true); }
+      else if (f.widget && focusWidget()) ev.preventDefault();
+    }
+    if (ev.key === 'Backspace' && b && /^H[12]$/.test(b.tagName) && caretAtStart(b)) {
+      ev.preventDefault();
+      const p = el('p'); if (blank(b)) p.innerHTML = '<br>'; else p.textContent = b.textContent;
+      b.replaceWith(p); focusBlock(p, false); update();
+    }
+  });
+  body.addEventListener('input', () => {
+    if (!body.firstElementChild) { body.innerHTML = '<p><br></p>'; focusBlock(body.firstElementChild, false); }
+    if (f.hashTitle) hashCheck();
+    if (f.slash) slashCheck();
+    update();
+  });
+
+  cur = {
+    onSelection() {
+      if (f.slash) { if (m.open || document.activeElement === body) slashCheck(); }
+      const b = document.activeElement === body ? currentBlock() : null;
+      if (b) lastBlock = b;
+      hints();
+    },
+  };
+
+  // -- derived UI --
+  function hints() {
+    const empty = page.classList.contains('doc-empty');
+    const focused = document.activeElement === body ? currentBlock() : null;
+    [...body.children].forEach((b, i) => {
+      let h = null;
+      if (body.isContentEditable && blank(b) && b.tagName === 'P') {
+        if (empty && i === 0 && body.children.length === 1) h = f.slash ? 'Start writing, or type / for commands' : 'Start writing…';
+        else if (f.slash && b === focused) h = 'Type / for commands';
+      }
+      if (b.tagName === 'H2' || b.tagName === 'H1') if (blank(b)) h = 'Heading';
+      b.classList.toggle('hint', !!h);
+      if (h) b.dataset.hint = h; else delete b.dataset.hint;
+    });
+  }
+
+  function update() {
+    const hasMeta = FIELDS.some((k) => meta[k]);
+    const bodyBlank = [...body.children].every(blank) && body.children.length <= 1;
+    page.classList.toggle('doc-empty', !hasMeta && bodyBlank);
+    header.classList.toggle('untitled', !meta.title);
+    hints();
+    if (widget) renderWidget();
+    if (toolbar) toolbar.querySelectorAll('[data-k]').forEach((b) => b.setAttribute('aria-pressed', String(meta[b.dataset.k] !== undefined)));
+    const src = serialize(), pre = $('source');
+    pre.textContent = src || '(empty file)';
+    pre.classList.toggle('empty', !src);
+  }
+
+  function yaml(v) { return /^[\w\s.,'()-]*$/.test(v) && !/^\s|\s$/.test(v) ? v : JSON.stringify(v); }
+  function serialize() {
+    const keys = FIELDS.filter((k) => meta[k]);
+    const fm = keys.length ? '---\n' + keys.map((k) => `${k}: ${yaml(meta[k].trim())}`).join('\n') + '\n---\n' : '';
+    const blocks = [...body.children].map((b) => {
+      const t = b.innerText.replace(/\n+$/, '');
+      if (b.tagName === 'H1') return '# ' + t;
+      if (b.tagName === 'H2') return '## ' + t;
+      if (b.classList.contains('callout')) return '::: {.callout-note}\n' + t + '\n:::';
+      if (b.tagName === 'PRE') return '```{python}\n' + t + '\n```';
+      return t.trim() ? t : null;
+    }).filter((x) => x !== null);
+    return fm + (fm && blocks.length ? '\n' : '') + blocks.join('\n\n');
+  }
+
+  renderHeader();
+  if (startsEmpty && !f.today) {
+    if (f.persistentTitle) focusField('title'); else focusBlock(body.firstElementChild, false);
+  }
+}
+
+go();
+</script>
+</body>
+</html>
