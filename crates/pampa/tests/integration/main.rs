@@ -49,6 +49,7 @@ static GLOBAL: alloc_counter::Counting = alloc_counter::Counting;
 pub mod annotated_qmd_fixture_guard;
 pub mod attribution_html_coalescing_test;
 pub mod attribution_json_wire_test;
+pub mod incremental_meta_tests;
 pub mod incremental_writer_investigation;
 pub mod incremental_writer_tests;
 pub mod inline_span_investigation;

@@ -371,6 +371,9 @@ fn emit_metadata_prefix(
         None
     };
 
+    // A document with no blocks is all metadata region.
+    let first_block_start = first_block_start.or(Some(original_qmd.len()));
+
     // Check if there's a metadata region before the first block
     if let Some(start) = first_block_start
         && start > 0
@@ -379,6 +382,11 @@ fn emit_metadata_prefix(
         if metadata_content_eq(&original_ast.meta, &new_ast.meta) {
             // Metadata unchanged — copy verbatim
             result.push_str(&original_qmd[..start]);
+        } else if let Some(region) =
+            rewrite_changed_meta_entries(&original_qmd[..start], &original_ast.meta, &new_ast.meta)?
+        {
+            // Metadata changed, and only the changed keys were rewritten.
+            result.push_str(&region);
         } else {
             // Metadata changed — rewrite the front matter, but preserve
             // the original gap (blank lines) between the closing --- and
@@ -396,6 +404,140 @@ fn emit_metadata_prefix(
 
     // No metadata prefix
     Ok(false)
+}
+
+/// Rewrite the metadata region (the front matter and the gap after it),
+/// changing only the top-level keys whose values differ between `original`
+/// and `new`. Every other byte is kept: unchanged keys with their own
+/// formatting, comments, blank lines and the order of the keys.
+///
+/// - A changed key's lines (its `key:` line and the lines of its value) are
+///   replaced by the standard writer's rendering of the new entry.
+/// - A removed key's lines are dropped.
+/// - Added keys go after the last original key, in `new`'s order. (The
+///   order of `new`'s other keys is ignored: an AST read from JSON has its
+///   keys sorted.)
+///
+/// Comment and blank lines between two keys belong to neither, and are
+/// kept whatever happens to the keys around them.
+///
+/// Returns `None` when the region can't be split into its keys with
+/// confidence (no front matter at the start, a key that doesn't begin a
+/// line, CRLF line endings, duplicate keys, ...), and when either metadata
+/// is empty. The caller then rewrites the whole front matter.
+fn rewrite_changed_meta_entries(
+    region: &str,
+    original: &ConfigValue,
+    new: &ConfigValue,
+) -> Result<Option<String>, Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let (ConfigValueKind::Map(old_entries), ConfigValueKind::Map(new_entries)) =
+        (&original.value, &new.value)
+    else {
+        return Ok(None);
+    };
+    if old_entries.is_empty() || new_entries.is_empty() || region.contains('\r') {
+        return Ok(None);
+    }
+    let unique = |entries: &[ConfigMapEntry]| {
+        let mut keys: Vec<&str> = entries.iter().map(|e| e.key.as_str()).collect();
+        keys.sort_unstable();
+        keys.windows(2).all(|pair| pair[0] != pair[1])
+    };
+    if !unique(old_entries) || !unique(new_entries) {
+        return Ok(None);
+    }
+
+    // The delimiters: `---` on the first line, and the first `---` or `...`
+    // line after it.
+    const OPENING: &str = "---\n";
+    if !region.starts_with(OPENING) {
+        return Ok(None);
+    }
+    let mut close_start = None;
+    let mut offset = OPENING.len();
+    for line in region[OPENING.len()..].split_inclusive('\n') {
+        if matches!(line.trim_end(), "---" | "...") {
+            close_start = Some(offset);
+            break;
+        }
+        offset += line.len();
+    }
+    let Some(close_start) = close_start else {
+        return Ok(None);
+    };
+
+    // Where each original key starts: at the start of a line inside the
+    // front matter, in order.
+    let mut starts: Vec<usize> = Vec::with_capacity(old_entries.len());
+    for entry in old_entries {
+        let Some((_, start, _)) = entry.key_source.resolve_byte_range() else {
+            return Ok(None);
+        };
+        let in_front_matter = start >= OPENING.len() && start < close_start;
+        if !in_front_matter
+            || region.as_bytes()[start - 1] != b'\n'
+            || starts.last().is_some_and(|&previous| start <= previous)
+        {
+            return Ok(None);
+        }
+        let at_key = &region[start..];
+        if !(at_key.starts_with(&entry.key) || at_key.starts_with(['"', '\''])) {
+            return Ok(None);
+        }
+        starts.push(start);
+    }
+
+    let write = |entry: &ConfigMapEntry| {
+        qmd::write_metadata_entry(entry).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write metadata: {}", e))
+                    .build(),
+            ]
+        })
+    };
+
+    let mut result = String::with_capacity(region.len());
+    result.push_str(&region[..starts[0]]);
+    for (i, entry) in old_entries.iter().enumerate() {
+        let start = starts[i];
+        let bound = starts.get(i + 1).copied().unwrap_or(close_start);
+        let own_end = start + meta_entry_own_len(&region[start..bound]);
+        match new_entries.iter().find(|n| n.key == entry.key) {
+            None => {}
+            Some(n) if config_value_content_eq(&entry.value, &n.value) => {
+                result.push_str(&region[start..own_end]);
+            }
+            Some(n) => result.push_str(&write(n)?),
+        }
+        if i + 1 == old_entries.len() {
+            for added in new_entries {
+                if !old_entries.iter().any(|o| o.key == added.key) {
+                    result.push_str(&write(added)?);
+                }
+            }
+        }
+        result.push_str(&region[own_end..bound]);
+    }
+    result.push_str(&region[close_start..]);
+    Ok(Some(result))
+}
+
+/// The length of a top-level metadata entry's own lines within `span`,
+/// which runs from the entry's key to the next key (or the closing
+/// delimiter): everything up to the trailing blank and comment lines.
+fn meta_entry_own_len(span: &str) -> usize {
+    let mut own = 0;
+    let mut offset = 0;
+    for (i, line) in span.split_inclusive('\n').enumerate() {
+        offset += line.len();
+        let between_keys = line.trim().is_empty() || line.starts_with('#');
+        if i == 0 || !between_keys {
+            own = offset;
+        }
+    }
+    own
 }
 
 /// Find the gap (whitespace) between the end of the YAML front matter and the
@@ -623,11 +765,17 @@ fn config_value_kind_content_eq(a: &ConfigValueKind, b: &ConfigValueKind) -> boo
                     .zip(b.iter())
                     .all(|(a, b)| config_value_content_eq(a, b))
         }
+        // Whatever the order of the keys: an AST read from JSON has them
+        // sorted, and reordering alone is no reason to rewrite an entry.
         (ConfigValueKind::Map(a), ConfigValueKind::Map(b)) => {
             a.len() == b.len()
-                && a.iter()
-                    .zip(b.iter())
-                    .all(|(a, b)| config_map_entry_content_eq(a, b))
+                && a.iter().all(|a| {
+                    let mut same_key = b.iter().filter(|b| b.key == a.key);
+                    matches!(
+                        (same_key.next(), same_key.next()),
+                        (Some(b), None) if config_map_entry_content_eq(a, b)
+                    )
+                })
         }
         _ => false, // Different variants
     }

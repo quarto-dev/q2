@@ -4228,16 +4228,18 @@ pub fn ast_to_qmd(ast_json: &str) -> String {
 ///   and corrupt the write.
 /// * `new_ast_json` - JSON-serialized Pandoc AST representing the
 ///   modified document, in the same tier as `baseline_ast_json`.
+///   Nodes an editor created may omit their source info (`s`).
 ///
 /// # Returns
 /// JSON: `{ "success": true, "qmd": "<result-qmd-text>" }`
 /// or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
 pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
-    use pampa::readers::json::read as json_read;
+    use pampa::readers::json::read_completing_source_info;
     use pampa::wasm_entry_points::qmd_to_pandoc;
     use pampa::writers::incremental::incremental_write;
     use quarto_ast_reconcile::compute_reconciliation;
+    use quarto_source_map::By;
 
     // Step 1: Parse original QMD to get AST with accurate source spans
     let (original_ast, _original_context) = match qmd_to_pandoc(original_qmd.as_bytes()) {
@@ -4256,9 +4258,11 @@ pub fn incremental_write_qmd(original_qmd: &str, new_ast_json: &str) -> String {
         }
     };
 
-    // Step 2: Deserialize new AST from JSON
+    // Step 2: Deserialize new AST from JSON. Nodes without source info
+    // (`s`) are the caller's edits.
     let mut cursor = std::io::Cursor::new(new_ast_json.as_bytes());
-    let (new_ast, _new_context) = match json_read(&mut cursor) {
+    let (new_ast, _new_context) = match read_completing_source_info(&mut cursor, By::user_edit())
+    {
         Ok(result) => result,
         Err(e) => {
             return serde_json::to_string(&AstResponse {

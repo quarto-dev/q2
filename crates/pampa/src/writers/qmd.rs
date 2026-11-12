@@ -14,7 +14,7 @@ use crate::pandoc::{
     LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
 use hashlink::LinkedHashMap;
-use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use std::io::{self, Write};
 use yaml_rust2::{Yaml, YamlEmitter};
 
@@ -353,9 +353,12 @@ fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
             // Render inlines using the qmd writer
             let mut buffer = Vec::<u8>::new();
             let mut ctx = QmdWriterContext::new(); // Errors in metadata inlines are unexpected
-            for inline in content {
-                write_inline(inline, &mut buffer, &mut ctx)?;
-            }
+            // The value is read back as a markdown document of its own, so
+            // its first inline begins a line, as a paragraph's does: text
+            // like `- x` or `1. x` there must be escaped, or it reads back
+            // as a list.
+            ctx.at_line_start = true;
+            write_prose_inlines(content, &mut buffer, &mut ctx)?;
             // If any errors accumulated, this is truly unexpected in metadata
             if !ctx.errors.is_empty() {
                 return Err(std::io::Error::other(format!(
@@ -475,6 +478,76 @@ fn write_config_value_meta<T: std::io::Write + ?Sized>(
             Ok(false)
         }
     }
+}
+
+/// Write one top-level metadata entry as the YAML lines `key: value`,
+/// ending in a newline, for splicing into existing front matter.
+///
+/// Text of more than one line is written as a literal block (`key: |`)
+/// when a literal block can hold it exactly; markdown values (inlines and
+/// blocks) don't count trailing newlines as content, so they always can.
+pub(crate) fn write_metadata_entry(entry: &ConfigMapEntry) -> std::io::Result<String> {
+    let yaml = config_value_to_yaml(&entry.value)?;
+    let markdown = matches!(
+        entry.value.value,
+        ConfigValueKind::PandocInlines(_) | ConfigValueKind::PandocBlocks(_)
+    );
+    let plain_key = !entry.key.is_empty()
+        && entry
+            .key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'));
+    if let Yaml::String(text) = &yaml
+        && plain_key
+        && let Some(block) = yaml_literal_block(text, markdown)
+    {
+        return Ok(format!("{}: {}", entry.key, block));
+    }
+
+    let mut map = LinkedHashMap::new();
+    map.insert(Yaml::String(entry.key.clone()), yaml);
+    let mut out = String::new();
+    YamlEmitter::new(&mut out)
+        .dump(&Yaml::Hash(map))
+        .map_err(std::io::Error::other)?;
+    let mut out = out.strip_prefix("---\n").unwrap_or(&out).to_string();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    Ok(out)
+}
+
+/// `text` as a YAML literal block scalar (from the `|` on), indented by two
+/// spaces, or `None` when `text` is a single line or a literal block can't
+/// hold it exactly. With `markdown`, trailing newlines aren't content.
+fn yaml_literal_block(text: &str, markdown: bool) -> Option<String> {
+    let (indicator, body) = if markdown {
+        ("|", text.trim_end_matches('\n'))
+    } else if let Some(body) = text.strip_suffix('\n') {
+        ("|", body)
+    } else {
+        ("|-", text)
+    };
+    let representable = body.contains('\n')
+        && !body.ends_with('\n')
+        && !body.starts_with([' ', '\n'])
+        && !body.chars().any(|c| c.is_control() && c != '\n')
+        && body
+            .lines()
+            .all(|line| line.is_empty() || !line.trim().is_empty());
+    if !representable {
+        return None;
+    }
+    let mut out = String::from(indicator);
+    out.push('\n');
+    for line in body.lines() {
+        if !line.is_empty() {
+            out.push_str("  ");
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    Some(out)
 }
 
 fn escape_quotes(s: &str) -> String {
