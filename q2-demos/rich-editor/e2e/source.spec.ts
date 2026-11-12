@@ -326,3 +326,29 @@ test.describe('adding and removing fields', () => {
     await editor.document.expectSource(basic.replace('Quarterly report', 'Annual report'))
   })
 })
+
+test.describe('how the file is written', () => {
+  test('a file with Windows line endings keeps them', async ({ page }) => {
+    const source = '---\r\ntitle: Notes\r\n---\r\n\r\nFirst.\r\n\r\nSecond.\r\n'
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    expect(await editor.text('title')).toBe('Notes')
+    expect(await editor.paragraphs()).toEqual(['First.', 'Second.'])
+
+    await editor.placeCaretInParagraph(0, 6)
+    await page.keyboard.type(' More')
+
+    await document.expectSource(source.replace('First.', 'First. More'))
+  })
+
+  test('a file with no line break at its end still has none', async ({ page }) => {
+    const source = '---\ntitle: Notes\n---\n\nFirst.\n\nSecond.'
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+
+    await editor.placeCaretInParagraph(0, 6)
+    await page.keyboard.type(' More')
+
+    await document.expectSource(source.replace('First.', 'First. More'))
+  })
+})
