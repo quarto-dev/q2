@@ -4,8 +4,8 @@ title: Execution records
 
 ## Overview
 
-When Quarto runs the code in a document, it can keep what the code produced
---- each cell's outputs and each inline expression's value --- as an
+When Quarto runs the code in a document, it can keep what the code
+produced --- each cell's outputs and each inline expression's value --- as an
 **execution record**. A record lets Quarto present the document again
 without running anything: `q2 preview` and hub use
 this to show an up-to-date page while you edit prose.

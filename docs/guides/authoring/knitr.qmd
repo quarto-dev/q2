@@ -305,11 +305,11 @@ output knitr produced separately: source code, printed text, messages and
 plots.
 
 For some cells, there are no structured outputs for Quarto to save. In that
-case it stores the rendered markdown from knitr as a single block in the
-notebook. The rendered page comes out identical, but tools that read the
-notebook directly, such as Positron, see one markdown blob instead of
-individual outputs, so they won't display those outputs or populate them from
-their own cache.
+case it stores knitr's rendered markdown in the execution record as a single
+output with the MIME type `text/x-quarto-markdown`. The rendered page comes
+out identical, but tools that read the record directly, such as Positron, find
+one block of Quarto markdown instead of the cell's individual outputs, so they
+won't display those outputs or populate them from their own cache.
 
 These cells keep knitr's markdown:
 
