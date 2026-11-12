@@ -263,9 +263,13 @@ function build() {
 
   function focusBlock(b, end) { body.focus({ preventScroll: true }); placeIn(b, end); }
   function focusField(k, end = true) { const e = fieldEl(k); if (e) { e.focus(); placeIn(e, end); } }
-  /** Focus the widget's button for `k`, or its first button. */
+  /** Focus the widget's button for field `k`, its last button (`'last'`), or its first. */
   function focusWidget(k) {
-    const b = widget && ((k && widget.querySelector(`button[data-k="${k}"]`)) || widget.querySelector('button'));
+    if (!widget) return false;
+    // A row still fading out from adding a field is stale; bring it up to date.
+    if (widgetFrozen) { widgetFrozen = false; renderWidget(); }
+    const bs = widget.querySelectorAll('button');
+    const b = k === 'last' ? bs[bs.length - 1] : (k && widget.querySelector(`button[data-k="${k}"]`)) || bs[0];
     if (b) { b.focus(); return true; }
     return false;
   }
@@ -318,7 +322,9 @@ function build() {
     const o = order(), i = o.indexOf(fromEl), t = o[i + dir];
     if (t) { t.focus(); placeAtX(t, x, dir < 0); return; }
     if (dir > 0) { body.focus({ preventScroll: true }); placeAtX(body.firstElementChild, x, false); }
-    else if (f.widget) focusWidget();
+    // ← from the first field lands on the widget's last item, as if the row
+    // were the text just before it.
+    else if (f.widget) focusWidget(x === undefined ? 'last' : undefined);
   }
 
   function addField(k) {
@@ -350,6 +356,9 @@ function build() {
       // field's "+" button, so Enter puts it back.
       else if (ev.key === 'Backspace' && caretAtStart(e)) {
         ev.preventDefault();
+        // Holding Backspace empties this field and stops; it never runs on
+        // into removing it and erasing the field above.
+        if (ev.repeat) return;
         const empty = e.textContent === '';
         const o = order(), prev = o[o.indexOf(e) - 1];
         const prevKey = prev && prev.dataset.field;
