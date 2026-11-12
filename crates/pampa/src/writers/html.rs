@@ -1946,15 +1946,12 @@ fn write_blocks_inline<W: Write>(
     blocks: &[Block],
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    // For simple list items with just a single paragraph, write the content inline
-    if blocks.len() == 1 {
-        if let Block::Paragraph(para) = &blocks[0] {
-            write_inlines(&para.content, ctx)?;
-            return Ok(());
-        } else if let Block::Plain(plain) = &blocks[0] {
-            write_inlines(&plain.content, ctx)?;
-            return Ok(());
-        }
+    // A tight item (a lone `Plain`) is written inline: `<li>a</li>`. A loose
+    // item's `Para` keeps its `<p>`, as in Pandoc, whose writer decides on
+    // the block kind alone (bd-nnvvomg6): `<li><p>a</p></li>`.
+    if let [Block::Plain(plain)] = blocks {
+        write_inlines(&plain.content, ctx)?;
+        return Ok(());
     }
 
     // For complex list items, write blocks normally

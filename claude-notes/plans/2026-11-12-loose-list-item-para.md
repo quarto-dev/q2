@@ -2,14 +2,13 @@
 title: 'HTML writer drops `<p>` in loose list items (bd-nnvvomg6)'
 date: 2026-11-12
 description: 'The pampa HTML writer collapses a single-Para list item to bare inlines; key the `<p>` on Plain vs Para, as Pandoc does.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: active
 braid:
   strand: bd-nnvvomg6
 ---
 
 **Branch:** `braid/bd-nnvvomg6-loose-list-item-para` (topic branch in the main
 checkout, based on `main` @ `0d7b3cfab`)
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -71,23 +70,48 @@ Tight:        identical
 A minor whitespace difference also shows up: for a multi-block item, pampa
 writes `<p>second</p>\n</li>`, and Pandoc writes `<p>second</p></li>`.
 
-## Proposed phases (draft)
+## Decisions (user, 2026-11-12)
 
-- Phase 0: tests first. Add writer unit tests in `html.rs` for a loose bullet
-  item, a loose ordered item, the mixed list, a loose task item, and a tight
-  item (which must stay unchanged). Add one end-to-end `q2 render` fixture
-  that asserts `<li><p>` for a loose list. Confirm that they fail.
-- Phase 1: the fix. Unwrap only `Plain`. A `Paragraph` goes through
-  `write_blocks`, which emits `<p>` with its attr and source location as
-  usual. `write_blocks_inline` may then collapse into `write_list_item`.
-- Phase 2: snapshot churn. Run the workspace suite, review each `.snap`
-  change, and document the count and nature of the changes in the commit
-  (AGENTS.md § Snapshot Test Changes). See Q2.
-- Phase 3: visual check. Loose lists will gain Bootstrap's `<p>` bottom
-  margin, so items will space out more, as they do in Q1 and Pandoc.
-  Compare a loose list and a loose task list in `q2 render` against
-  `q2 preview` (which already has the `<p>`) and confirm that the
-  task-list checkbox hang from PR #1191 still lines up inside a `<p>`.
+1. Whitespace: leave it unchanged. A multi-block item keeps `\n</li>`.
+2. Snapshot updates go in a separate commit from the fix.
+3. lmd block fragments: option (b). Change the fixture and
+   `components.qmd:141` to `pandoc.Plain({=[ … ]=})`, and add a note to
+   `lmd.qmd` that a block fragment per item makes a loose list. lmd builds
+   the AST in code, so authors can choose tight or loose easily.
+4. A hoisted trailing attr stays on the `<li>`.
+
+## Checklist
+
+### Phase 0: tests (must fail first)
+
+- [x] `crates/pampa/tests/integration/test_html_list_item_para.rs`: loose
+      bullet, loose ordered, mixed, tight (unchanged), and a hoisted attr on
+      a loose item (stays on the `<li>`; the `<p>` has no attr)
+- [x] `test_task_list.rs`: a loose task item renders
+      `<li class="task-list-item"><p><label>…</label></p></li>`
+- [x] End-to-end: a `q2 render` test that asserts `<li><p>` for a loose list
+- [x] Run them and confirm that they fail
+
+### Phase 1: lmd fixture and docs (before the fix, so that no snapshot moves)
+
+- [x] The lmd-blog fixture and `components.qmd:141` use
+      `pandoc.Plain({=[ … ]=})`
+- [x] `lmd.qmd`: add a note that a `{=: :=}` per item gives a loose list
+- [x] Check that the `blog.main.html` snapshot is unchanged (today Plain and
+      a single-Para item render the same)
+
+### Phase 2: the fix
+
+- [x] `write_blocks_inline`: unwrap only `Plain`
+- [x] Phase 0 tests pass; workspace suite green
+- [x] Snapshot updates, if any, go in their own commit. None were needed:
+      with the fixture on `Plain` first, no `.snap` file changes
+
+### Phase 3: verification
+
+- [x] `q2 render` of the repro, with the output inspected (loose list, loose
+      task list with the checkbox hang)
+- [x] `cargo xtask verify --skip-hub-build`, plus a clippy check of pampa
 
 ## Open design questions for the user
 
@@ -159,3 +183,37 @@ Also noted: the unit tests contain no loose-list HTML assertion at all. Phase
 
 Pre-flight `cargo xtask verify --skip-hub-build` passed on `main` @
 `0d7b3cfab` before the investigation.
+
+## End-to-end verification (2026-11-12)
+
+`cargo run --bin q2 -- render repro.qmd` (a copy of
+`loose-list-item-para-investigation/repro.qmd`). The `<main>` list markup was
+inspected:
+
+```
+<ul>
+<li><p>a</p>
+</li>
+...
+<ol type="1">
+<li><p>one</p>
+</li>
+...
+<ul class="task-list">
+<li class="task-list-item"><p><label><input type="checkbox" disabled="" />loose one</label></p>
+</li>
+...
+<ul>
+<li>a</li>
+<li>b</li>
+```
+
+The checkbox hang from PR #1191 already targets
+`li.task-list-item > p:first-child > label > input`
+(`resources/scss/bootstrap/_bootstrap-rules.scss:3600`), so loose task items
+still hang the checkbox. I checked the selector against the new markup but
+did not compare screenshots in a browser.
+
+Workspace: `cargo nextest run --workspace` passed 19,939 tests (7 new), and
+`cargo clippy -p pampa -p quarto --all-targets -D warnings` was clean. No
+snapshot files changed.
