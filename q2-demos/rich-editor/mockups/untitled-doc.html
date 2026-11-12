@@ -75,7 +75,8 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 /* Option: inline widget */
 .widget { display:flex; flex-wrap:wrap; gap:2px; min-height:30px; align-items:center; opacity:0; transition:opacity .12s; margin:0 0 6px -8px; }
 .widget.none { display:none; }
-.top:hover .widget, .widget:focus-within, .doc-empty .widget { opacity:1; }
+/* Also stays while a field you added is still blank (just its placeholder). */
+.top:hover .widget, .widget:focus-within, .doc-empty .widget, .top.has-blank .widget { opacity:1; }
 .widget button { font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:4px 8px; border-radius:4px; cursor:pointer; }
 .widget button:hover, .widget button:focus { background:#eef0f3; color:var(--ink); outline:none; }
 
@@ -535,6 +536,7 @@ function build() {
     const bodyBlank = [...body.children].every(blank) && body.children.length <= 1;
     page.classList.toggle('doc-empty', !hasMeta && bodyBlank);
     header.classList.toggle('untitled', !meta.title);
+    top.classList.toggle('has-blank', FIELDS.some((k) => meta[k] === ''));
     hints();
     if (widget) renderWidget();
     if (toolbar) toolbar.querySelectorAll('[data-k]').forEach((b) => b.setAttribute('aria-pressed', String(meta[b.dataset.k] !== undefined)));
