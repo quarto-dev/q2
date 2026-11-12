@@ -258,7 +258,12 @@ function build() {
 
   function focusBlock(b, end) { body.focus({ preventScroll: true }); placeIn(b, end); }
   function focusField(k, end = true) { const e = fieldEl(k); if (e) { e.focus(); placeIn(e, end); } }
-  function focusWidget() { const b = widget && widget.querySelector('button'); if (b) { b.focus(); return true; } return false; }
+  /** Focus the widget's button for `k`, or its first button. */
+  function focusWidget(k) {
+    const b = widget && ((k && widget.querySelector(`button[data-k="${k}"]`)) || widget.querySelector('button'));
+    if (b) { b.focus(); return true; }
+    return false;
+  }
   function currentBlock() {
     const s = sel(); if (!s.rangeCount) return null;
     let n = s.anchorNode;
@@ -333,6 +338,9 @@ function build() {
         const o = order(), prev = o[o.indexOf(e) - 1];
         const prevKey = prev && prev.dataset.field;
         if (!isPersistent(k)) { delete meta[k]; renderHeader(); }
+        // With the widget, a removed field hands the caret back to its own
+        // "+" button, where you added it from.
+        if (!isPersistent(k) && f.widget && focusWidget(k)) return;
         if (prevKey) focusField(prevKey, true);
         else if (!(f.widget && focusWidget())) focusBlock(body.firstElementChild, false);
       }
@@ -352,7 +360,7 @@ function build() {
     widget.innerHTML = '';
     widget.classList.toggle('none', !missing.length);
     for (const k of missing) {
-      const b = el('button'); b.type = 'button'; b.textContent = '+ ' + LABEL[k];
+      const b = el('button'); b.type = 'button'; b.textContent = '+ ' + LABEL[k]; b.dataset.k = k;
       b.onclick = () => addField(k);
       widget.append(b);
     }
