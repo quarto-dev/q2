@@ -46,6 +46,15 @@ export function record<T>(h: History<T>, next: T, options: RecordOptions<T> = {}
   return { past: [...h.past, pushed], present: next, future: [], open }
 }
 
+/**
+ * Replace the present state without adding an undo step, for changes that
+ * aren't edits of their own (adding an empty field that disappears again
+ * if it's left empty).
+ */
+export function replacePresent<T>(h: History<T>, present: T): History<T> {
+  return { ...h, present }
+}
+
 /** Close the open step, so the next edit starts a new one. */
 export function endGroup<T>(h: History<T>): History<T> {
   return h.open === null ? h : { ...h, open: null }

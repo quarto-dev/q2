@@ -11,14 +11,21 @@
  * (after an undo, say), so typing never moves the caret.
  *
  * Undo and redo are routed to `onUndo` / `onRedo` instead of the browser's
- * own undo stack, which can't see edits made outside this span.
+ * own undo stack, which can't see edits made outside this span. Enter, Up /
+ * Down on the first / last line, and Left / Right at the start / end are
+ * routed to the owner, which moves the caret between fields.
  */
 
 import { useLayoutEffect, useRef } from 'react'
+import { caretLine } from './lines.ts'
 import { getTextRange, type TextRange } from './textRange.ts'
+
+export type ArrowDirection = 'up' | 'down' | 'left' | 'right'
 
 export interface EditableTextProps {
   value: string
+  /** Shown, faintly, while the field is empty. */
+  placeholder?: string
   /**
    * The new text, the edit's `InputEvent.inputType`, and the selection just
    * before and just after the edit.
@@ -26,13 +33,39 @@ export interface EditableTextProps {
   onEdit: (text: string, inputType: string, before: TextRange | null, after: TextRange | null) => void
   onUndo: () => void
   onRedo: () => void
-  /** Called when the field loses focus (click-away or Enter). */
+  /** Enter was pressed. The field never inserts a line break itself. */
+  onEnter?: () => void
+  /**
+   * The caret is about to leave the field: Up on the first line, Down on
+   * the last, Left at the start, or Right at the end. `x` is the caret's
+   * horizontal position. Return true when the owner moved the caret
+   * elsewhere; otherwise the browser's default applies.
+   */
+  onArrowOut?: (direction: ArrowDirection, x: number) => boolean
+  /** Called when the field loses focus. */
   onLeave?: () => void
   /** Receives the span, so the owner can restore the selection after an undo. */
   elementRef?: (el: HTMLElement | null) => void
 }
 
-export function EditableText({ value, onEdit, onUndo, onRedo, onLeave, elementRef }: EditableTextProps) {
+const ARROWS: Record<string, ArrowDirection> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+}
+
+export function EditableText({
+  value,
+  placeholder,
+  onEdit,
+  onUndo,
+  onRedo,
+  onEnter,
+  onArrowOut,
+  onLeave,
+  elementRef,
+}: EditableTextProps) {
   const ref = useRef<HTMLSpanElement | null>(null)
   // The edit in progress, from `beforeinput` until `input`.
   const pending = useRef<{ inputType: string; before: TextRange | null } | null>(null)
@@ -84,6 +117,7 @@ export function EditableText({ value, onEdit, onUndo, onRedo, onLeave, elementRe
         elementRef?.(el)
       }}
       className="qe-field"
+      data-placeholder={placeholder}
       contentEditable="plaintext-only"
       suppressContentEditableWarning
       spellCheck={false}
@@ -99,7 +133,20 @@ export function EditableText({ value, onEdit, onUndo, onRedo, onLeave, elementRe
           onRedo()
         } else if (e.key === 'Enter') {
           e.preventDefault()
-          e.currentTarget.blur()
+          if (!e.shiftKey && !mod) onEnter?.()
+        } else if (e.key in ARROWS && !e.shiftKey && !mod && !e.altKey && onArrowOut) {
+          const el = e.currentTarget
+          const line = caretLine(el)
+          if (!line) return
+          const direction = ARROWS[e.key]
+          const range = getTextRange(el)
+          const atEdge = {
+            up: line.onFirstLine,
+            down: line.onLastLine,
+            left: range?.start === 0,
+            right: range?.end === (el.textContent ?? '').length,
+          }[direction]
+          if (atEdge && onArrowOut(direction, line.x)) e.preventDefault()
         }
       }}
       onInput={(e) => {

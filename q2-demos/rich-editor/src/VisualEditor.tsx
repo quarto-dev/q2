@@ -18,8 +18,17 @@ import { createPortal } from 'react-dom'
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-renderer/title-block'
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
-import { EditableText } from './editing/EditableText.tsx'
-import { createHistory, endGroup, record, redo, undo, type History } from './editing/history.ts'
+import { EditableText, type ArrowDirection } from './editing/EditableText.tsx'
+import {
+  createHistory,
+  endGroup,
+  record,
+  redo,
+  replacePresent,
+  undo,
+  type History,
+} from './editing/history.ts'
+import { placeCaretOnLine } from './editing/lines.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
 import { undoGroup } from './editing/undoGroup.ts'
 import { setTextRange, type TextRange } from './editing/textRange.ts'
@@ -44,8 +53,27 @@ const SRCDOC = `<!doctype html>
 </body></html>`
 
 // Editable fields render exactly like the text they replace: no focus
-// ring, no hover state. `min-height` keeps an emptied field one line tall.
-const EDITING_CSS = `.qe-field { display: block; min-height: 1lh; outline: none; }`
+// ring, no hover state. `min-height` keeps an emptied field one line tall;
+// the placeholder is positioned out of the flow so the caret sits at the
+// start of the line, not after the placeholder text.
+const EDITING_CSS = `
+.qe-field { display: block; position: relative; min-height: 1lh; outline: none; }
+.qe-field:empty::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  pointer-events: none;
+  color: #adb5bd;
+}`
+
+/** The editable fields in reading order: Enter and the arrows move along it. */
+const FIELD_ORDER: TitleBlockField[] = ['title', 'subtitle']
+
+const PLACEHOLDERS: Record<TitleBlockField, string> = {
+  title: 'Title',
+  subtitle: 'Subtitle',
+}
+
+const START = { start: 0, end: 0 }
 
 const noop = () => {}
 
@@ -75,7 +103,7 @@ export function VisualEditor({ ast }: VisualEditorProps) {
     return () => style.remove()
   }, [frameDoc])
 
-  const { history, edit, leave, step } = useEditHistory(ast)
+  const { history, edit, leave, step, addEmpty } = useEditHistory(ast)
   const fields = useRef(new Map<TitleBlockField, HTMLElement>())
 
   // After an undo or redo, put the caret back where it was.
@@ -95,6 +123,49 @@ export function VisualEditor({ ast }: VisualEditorProps) {
   const doRedo = useCallback(() => {
     pendingCaret.current = step('redo')
   }, [step])
+
+  /**
+   * Enter: move the caret to the start of the next field, never splitting
+   * the text. A missing subtitle is added as an empty line, which goes away
+   * again if it's left empty.
+   */
+  const enter = useCallback(
+    (field: TitleBlockField) => {
+      const next = FIELD_ORDER[FIELD_ORDER.indexOf(field) + 1]
+      if (!next) return
+      const el = fields.current.get(next)
+      if (el) {
+        el.focus()
+        setTextRange(el, START)
+      } else if (next === 'subtitle') {
+        pendingCaret.current = { field: next, range: START }
+        addEmpty(next)
+      }
+    },
+    [addEmpty],
+  )
+
+  /**
+   * Arrows past a field's edge go to the nearest field that way: Up / Down
+   * keep the caret's horizontal position, Left lands at the end of the
+   * previous field and Right at the start of the next, as between
+   * paragraphs in a word processor.
+   */
+  const arrowOut = useCallback((field: TitleBlockField, direction: ArrowDirection, x: number) => {
+    const i = FIELD_ORDER.indexOf(field)
+    const forward = direction === 'down' || direction === 'right'
+    const order = forward ? FIELD_ORDER.slice(i + 1) : FIELD_ORDER.slice(0, i).reverse()
+    const target = order.map((f) => fields.current.get(f)).find((el) => el !== undefined)
+    if (!target) return false
+    if (direction === 'up' || direction === 'down') {
+      placeCaretOnLine(target, x, forward ? 'first' : 'last')
+    } else {
+      target.focus()
+      const at = forward ? 0 : (target.textContent ?? '').length
+      setTextRange(target, { start: at, end: at })
+    }
+    return true
+  }, [])
 
   // Undo and redo with the caret outside any field.
   useEffect(() => {
@@ -127,9 +198,12 @@ export function VisualEditor({ ast }: VisualEditorProps) {
       text === undefined ? null : (
         <EditableText
           value={text}
+          placeholder={PLACEHOLDERS[field]}
           onEdit={(next, inputType, before, after) => edit(field, next, inputType, before, after)}
           onUndo={doUndo}
           onRedo={doRedo}
+          onEnter={() => enter(field)}
+          onArrowOut={(direction, x) => arrowOut(field, direction, x)}
           onLeave={() => leave(field)}
           elementRef={(el) => {
             if (el) fields.current.set(field, el)
@@ -137,7 +211,7 @@ export function VisualEditor({ ast }: VisualEditorProps) {
           }}
         />
       ),
-    [edit, leave, doUndo, doRedo],
+    [edit, leave, enter, arrowOut, doUndo, doRedo],
   )
 
   return (
@@ -213,16 +287,24 @@ function useEditHistory(ast: RustQmdJson | null) {
     [],
   )
 
-  /** End the field's undo step; an emptied field is removed. */
+  /**
+   * End the field's undo step. An emptied field is removed, without an undo
+   * step of its own: undo brings back the text that was deleted.
+   */
   const leave = useCallback((field: TitleBlockField) => {
     setHistory((h) => {
       if (!h) return h
       const value = h.present.meta[field] as { t: string; c: unknown } | undefined
       if (value?.t === 'MetaString' && value.c === '') {
-        h = record(h, { meta: setMetaText(h.present.meta, field, undefined), caret: null }, { group: field })
+        h = replacePresent(h, { ...h.present, meta: setMetaText(h.present.meta, field, undefined) })
       }
       return endGroup(h)
     })
+  }, [])
+
+  /** Add an empty field, without an undo step (it's removed if left empty). */
+  const addEmpty = useCallback((field: TitleBlockField) => {
+    setHistory((h) => h && replacePresent(h, { ...h.present, meta: setMetaText(h.present.meta, field, '') }))
   }, [])
 
   /** Undo or redo; returns the caret position of the state moved to. */
@@ -236,7 +318,7 @@ function useEditHistory(ast: RustQmdJson | null) {
     return next.present.caret
   }, [])
 
-  return { history, edit, leave, step }
+  return { history, edit, leave, step, addEmpty }
 }
 
 /** The default theme's CSS, compiled once per page load. */

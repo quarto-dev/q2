@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createHistory, record, redo, undo, endGroup } from './history.ts'
+import { createHistory, record, redo, replacePresent, undo, endGroup } from './history.ts'
 
 describe('history', () => {
   it('undoes and redoes single steps', () => {
@@ -62,6 +62,21 @@ describe('history', () => {
     h = record(h, 'ab', { group: 'title', now: 10 })
     h = undo(h)
     h = record(h, 'x', { group: 'title', now: 20 })
+    expect(undo(h).present).toBe('')
+  })
+
+  it('replaces the present state without adding an undo step', () => {
+    let h = record(createHistory('a'), 'b')
+    h = replacePresent(h, 'b2')
+    expect(h.present).toBe('b2')
+    expect(undo(h).present).toBe('a')
+  })
+
+  it('keeps the open step open across a replaced present', () => {
+    let h = createHistory('')
+    h = record(h, 'a', { group: 'title', now: 0 })
+    h = replacePresent(h, 'a2')
+    h = record(h, 'a2b', { group: 'title', now: 10 })
     expect(undo(h).present).toBe('')
   })
 })
