@@ -171,6 +171,43 @@ investigation alone.
    `disabled` in static `q2 render` output. A clickable checkbox that does
    not persist is misleading.
 
+### Decisions (user, 2026-11-12)
+
+1. **Per-item marker hiding (b).** The writer and the preview emit an
+   additive `class="task-list-item"` on each task `<li>`. `ul.task-list`
+   keeps its Pandoc all-or-nothing rule. The CSS hides the marker and
+   hangs the checkbox per item.
+2. **Ordered lists keep their numbers by default, with a user escape
+   hatch.** The hatch is a theme SCSS variable, declared `!default` in
+   the bootstrap layer and settable from a user theme's
+   `/*-- scss:defaults --*/` layer. The name is provisional:
+
+   ``` scss
+   /*-- scss:defaults --*/
+   $task-list-ordered-markers: false;   // default true: keep numbers
+   ```
+
+   One variable gates **both** `list-style` and the checkbox's negative
+   hang margin on `ol > li.task-list-item`. The two must flip together:
+   - hiding the number without hanging the checkbox leaves an empty
+     gutter;
+   - hanging the checkbox while keeping the number makes them overlap.
+
+   Plain user CSS also works, because the per-item class gives a stable
+   selector. It needs both properties overridden, which is why the
+   variable is the documented route. The revealjs layer must honor the
+   same variable. Document it in `docs/guides/formats/html/themes.qmd`,
+   or wherever theme variables are listed. Check that `q2 preview`
+   compiles user themes the same way, so the escape hatch works there
+   too.
+3. **An empty `- [ ]` renders an empty checkbox** (Pandoc parity). This
+   matters for the collaborative editor: a user typing `- [ ] ` expects
+   the preview to show the box immediately. The reader currently drops
+   the marker when the item has no content.
+4. **Static `q2 render` output emits `disabled`.** Edit-capable surfaces
+   (`q2 preview --allow-edit` and hub-client, bd-tvtknbhx) render them
+   enabled.
+
 ## Outcome / recommended next step
 
 - Filed **bd-2ydvebkc**. Fix scope: port the marker-hiding and hang
