@@ -339,6 +339,10 @@ function build() {
         ev.preventDefault();
         move(e, 1);
       } else if (ev.key === 'ArrowDown' && onEdgeLine(e, true)) { ev.preventDefault(); move(e, 1, caretRect().left); }
+      // ← at a field's start / → at its end cross to the neighbouring field
+      // (or the body), like moving across the end of a line.
+      else if (ev.key === 'ArrowRight' && !ev.shiftKey && caretAtEnd(e)) { ev.preventDefault(); move(e, 1); }
+      else if (ev.key === 'ArrowLeft' && !ev.shiftKey && caretAtStart(e)) { ev.preventDefault(); move(e, -1); }
       else if (ev.key === 'ArrowUp' && onEdgeLine(e, false)) { ev.preventDefault(); move(e, -1, caretRect().left); }
       // Backspace at a field's start goes up to the field before (subtitle to
       // title), or from the first field to the widget; in an empty field it
@@ -498,6 +502,11 @@ function build() {
       if (ev.key === 'Escape') { ev.preventDefault(); m.dismissed = m.block; closeMenu(); return; }
     }
     const b = currentBlock();
+    // ← at the start of the body goes to the end of the title block.
+    if (ev.key === 'ArrowLeft' && !ev.shiftKey && b === body.firstElementChild && caretAtStart(b)) {
+      const o = order(), last = o[o.length - 1];
+      if (last) { ev.preventDefault(); last.focus(); placeIn(last, true); }
+    }
     // ↑ anywhere on the body's first line goes up into the title block.
     if (ev.key === 'ArrowUp' && b === body.firstElementChild && onEdgeLine(b, false)) {
       const o = order(), last = o[o.length - 1];
