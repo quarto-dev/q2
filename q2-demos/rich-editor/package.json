@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test:unit": "vitest run",
     "test:wasm": "vitest run --config vitest.wasm.config.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "NODE_OPTIONS=--conditions=source playwright test"
   },
   "dependencies": {
     "@quarto/pandoc-types": "*",

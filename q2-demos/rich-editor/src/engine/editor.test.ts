@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { insertText, deleteBackward, select } from './commands.ts'
-import { apply, createEditor, redo, undo, type Editor } from './editor.ts'
+import { apply, createEditor, fieldChanges, redo, settle, undo, type Editor } from './editor.ts'
 import { caret, type Schema } from './model.ts'
 
 const schema: Schema = { order: ['title', 'subtitle'] }
@@ -88,5 +88,30 @@ describe('editor history', () => {
     expect(e.present.fields.subtitle).toBeUndefined()
     e = undo(e)
     expect(e.present.fields.subtitle).toBe('Q3')
+  })
+})
+
+describe('fieldChanges', () => {
+  it('lists the fields whose text differs, with emptied ones as removed', () => {
+    expect(fieldChanges(schema, { title: 'A', subtitle: 'B' }, { title: 'A2', subtitle: '' })).toEqual({
+      title: 'A2',
+      subtitle: undefined,
+    })
+  })
+  it('counts an absent field and an empty one as the same', () => {
+    expect(fieldChanges(schema, { title: 'A' }, { title: 'A', subtitle: '' })).toEqual({})
+  })
+})
+
+describe('settle', () => {
+  it('shows the document\'s text in the fields the selection is not in', () => {
+    const editor = createEditor({ title: 'A ', subtitle: 'B ' })
+    const held = apply(editor, { fields: editor.present.fields, selection: caret('title', 2) })
+    const settled = settle(schema, held, { title: 'A', subtitle: 'B' })
+    expect(settled.present.fields).toEqual({ title: 'A ', subtitle: 'B' })
+  })
+  it('returns the same editor when nothing differs', () => {
+    const editor = createEditor({ title: 'A' })
+    expect(settle(schema, editor, { title: 'A' })).toBe(editor)
   })
 })

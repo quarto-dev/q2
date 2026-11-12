@@ -1,10 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * Browser tests for the visual editor. They run against the hub-free
- * fixture page (`fixture.html`), so they need only the Vite dev server,
- * which Playwright starts. Build the WASM module first
- * (`npm run build:wasm`).
+ * Browser tests for the visual editor. Each test puts a document on a sync
+ * hub (started in the test worker; see `e2e/helpers.ts`) and opens it in
+ * the app, served by the Vite dev server that Playwright starts. Build
+ * the WASM module first (`npm run build:wasm`).
  */
 const PORT = 5192
 
@@ -20,7 +20,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: `npx vite --port ${PORT} --strictPort`,
-    url: `http://localhost:${PORT}/fixture.html`,
+    url: `http://localhost:${PORT}/`,
     reuseExistingServer: !process.env.CI,
   },
 })

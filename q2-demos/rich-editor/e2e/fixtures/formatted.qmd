@@ -1,0 +1,20 @@
+---
+# Working draft
+title: Quarterly report
+subtitle:   "Third quarter"   # to confirm
+
+author:
+  - name: Ana Silva
+    affiliations: [{name: Example University}]
+date: 2026-11-12
+abstract: |
+  We summarise the third quarter's results.
+
+  Then we look ahead.
+# The end
+---
+
+Body   text, with  its own spacing.
+
+* A list
+* of two

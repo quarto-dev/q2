@@ -20,8 +20,21 @@ fields, and renders it back. Its rules (Enter moves to the next field,
 fields are never joined or split, an empty field disappears when left) and
 its single undo history are pure TypeScript with unit tests. Like
 `src/quarto-synced-file/`, it imports nothing from the rest of the demo;
-the title block's fields are configured in `src/VisualEditor.tsx`. Edits
-are local for now and don't reach the source text.
+the title block's fields are configured in `src/VisualEditor.tsx`.
+
+Every edit is written to the file's source text as it's made, so
+collaborators see it at once, whether they use this editor or a source
+editor. The engine reaches the document only through `FieldSource`
+(`src/engine/source.ts`): read the fields, write a change and read back
+what the document made of it, and hear when the document changes. A change
+from someone else is made to the editor's own state too (`rebase.ts`), so
+the caret and selection stay on the text they were on, typed text stays,
+and undo undoes only this editor's edits. `src/editing/fieldSource.ts`
+implements `FieldSource` for a qmd file's metadata: it writes the edited
+document with the incremental qmd writer, which rewrites only the changed
+front-matter keys, and sends the difference as one splice. While the
+source doesn't parse, the editor shows the last text it could read and
+takes no edits.
 
 The non-UI part lives in `src/quarto-synced-file/`: one qmd file kept in sync
 with a hub, its parsed AST, and splice-based edits. It has no UI dependencies
@@ -58,10 +71,20 @@ besides an optional React hook, so it could become its own package.
 ```bash
 npm run test:unit   # editing logic, in Node
 npm run test:wasm   # needs the WASM build from step 1
-npm run test:e2e    # the visual editor in Chromium; needs the WASM build
+npm run test:e2e    # the app in Chromium, on a test hub; needs the WASM build
 ```
 
-The e2e tests run against `fixture.html`, which opens the visual editor on
-a document from `e2e/fixtures/` with no hub
-(`/fixture.html?fixture=<name>`, default `basic`). Playwright starts the
-dev server itself.
+The e2e tests are the specification of the editing experience, written
+against what a person sees and what the source text holds, not against
+this implementation: `title-block.spec.ts` and `cross-field.spec.ts`
+(editing), `source.spec.ts` (what an edit does to the source text) and
+`collaboration.spec.ts` (more than one person in a document). Tests marked
+`fixme` describe behaviour we want and don't have yet.
+
+Each test puts a document from `e2e/fixtures/` on an in-process sync hub
+and opens it in the app, once per collaborator, each in a browser of its
+own; the test itself is one more collaborator, reading and editing the
+source text. Playwright starts the dev server itself.
+
+`/fixture.html?fixture=<name>` (default `basic`) opens the visual editor
+on a fixture held in memory, with no hub, for trying it without a server.

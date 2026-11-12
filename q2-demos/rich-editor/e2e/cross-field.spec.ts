@@ -4,8 +4,7 @@
  * history for the whole block.
  */
 
-import { expect, test } from '@playwright/test'
-import { openEditor, type Editor } from './helpers.ts'
+import { expect, openEditor, test, type Editor } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 
@@ -30,7 +29,9 @@ test.describe('selecting across fields', () => {
     await page.keyboard.type('X')
 
     expect(await editor.text('title')).toBe('Quarterly X')
-    expect(await editor.text('subtitle')).toBe(' quarter')
+    // What's left of the subtitle is " quarter"; qmd doesn't keep the
+    // leading space, and the caret isn't in the field to hold it.
+    expect(await editor.text('subtitle')).toBe('quarter')
     expect(await editor.caret()).toMatchObject({ field: 'title', start: 11, end: 11 })
   })
 
@@ -41,7 +42,7 @@ test.describe('selecting across fields', () => {
     await page.keyboard.press('Backspace')
 
     expect(await editor.text('title')).toBe('Quarterly ')
-    expect(await editor.text('subtitle')).toBe(' quarter')
+    expect(await editor.text('subtitle')).toBe('quarter')
     expect(await editor.caret()).toMatchObject({ field: 'title', start: 10, end: 10 })
   })
 
@@ -144,7 +145,10 @@ test.describe('one history', () => {
 
 /** Record, in the page, whether every selection change kept the caret in a field. */
 async function watchSelection(editor: Editor) {
-  await editor.frame.evaluate(() => {
+  await editor.frame.evaluate(async () => {
+    // `selectionchange` arrives up to a frame after the selection moves:
+    // let the one from whatever the test just did arrive first.
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
     const w = window as unknown as { leftFields: boolean }
     w.leftFields = false
     document.addEventListener('selectionchange', () => {

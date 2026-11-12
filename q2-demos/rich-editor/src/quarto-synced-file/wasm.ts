@@ -40,7 +40,10 @@ export async function initWasmFromBytes(bytes: BufferSource): Promise<void> {
 
 /**
  * Parse QMD content into a RustQmdJson AST.
- * Returns null if parsing fails (logs warning).
+ * Returns null if parsing fails (logs warning), and also if the parser
+ * read the document but reported an error about it: front matter that
+ * isn't valid YAML then comes back as an AST with no metadata at all,
+ * which must not be shown or written back as if the document had none.
  *
  * Must call initWasm() before first use.
  */
@@ -54,6 +57,11 @@ export function parseQmdContent(content: string): RustQmdJson | null {
 
   if (!response.success || !response.ast) {
     console.warn('[wasm] Parse failed:', response.error)
+    return null
+  }
+  const error = response.warnings?.find((w) => w.kind === 'error')
+  if (error) {
+    console.warn('[wasm] Parse incomplete:', error.title, error.problem)
     return null
   }
 

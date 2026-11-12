@@ -1,6 +1,6 @@
 /**
- * The visual editor on a fixture document, with no hub: for the e2e tests
- * and for trying the editor without a server.
+ * The visual editor on a fixture document held in memory, with no hub:
+ * for trying the editor without a server. (The e2e tests use a hub.)
  *
  *   /fixture.html?fixture=<name>   loads e2e/fixtures/<name>.qmd
  *
@@ -9,8 +9,7 @@
 
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { RustQmdJson } from '@quarto/pandoc-types'
-import { initWasm, parseQmdContent } from '../quarto-synced-file/index.ts'
+import { createLocalFile, initWasm, type SyncedFile } from '../quarto-synced-file/index.ts'
 import { VisualEditor } from '../VisualEditor.tsx'
 import '../index.css'
 
@@ -21,7 +20,7 @@ const fixtures = import.meta.glob<string>('../../e2e/fixtures/*.qmd', {
 })
 
 function FixtureApp() {
-  const [ast, setAst] = useState<RustQmdJson | null>(null)
+  const [file, setFile] = useState<SyncedFile | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -32,20 +31,16 @@ function FixtureApp() {
       return
     }
     initWasm().then(
-      () => {
-        const parsed = parseQmdContent(text)
-        if (parsed) setAst(parsed)
-        else setError(`Fixture ${name} doesn't parse.`)
-      },
+      () => setFile(createLocalFile(text)),
       (e) => setError(`Failed to initialize WASM: ${e}`),
     )
   }, [])
 
   if (error) return <p className="status status-error">{error}</p>
-  if (!ast) return <p className="status">Loading…</p>
+  if (!file) return <p className="status">Loading…</p>
   return (
     <div className="panes panes-single">
-      <VisualEditor ast={ast} />
+      <VisualEditor file={file} />
     </div>
   )
 }

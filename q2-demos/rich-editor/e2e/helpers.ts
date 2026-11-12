@@ -1,4 +1,19 @@
-import { expect, type Frame, type Page } from '@playwright/test'
+/**
+ * What the e2e tests drive: a qmd document on a sync hub, opened in the
+ * visual editor by one or more collaborators, each in a browser of their
+ * own. The tests read and edit the document's source text directly too
+ * (`Document`), as a collaborator in a source editor would.
+ *
+ * Import `test` from here, not from Playwright: it disconnects each test's
+ * collaborators when the test ends.
+ */
+
+import { readFileSync } from 'node:fs'
+import { test as base, expect, type Frame, type Page } from '@playwright/test'
+import { createSyncClient, setSyncLogger, type SyncClient } from '../../../ts-packages/quarto-sync-client/src/index.ts'
+import { startTestHub, type TestHub } from '../../../ts-packages/quarto-sync-client/src/test-hub.ts'
+
+export { expect }
 
 export type Field = 'title' | 'subtitle' | 'abstract'
 
@@ -8,16 +23,102 @@ const SELECTORS: Record<Field, string> = {
   abstract: '.abstract .qe-field',
 }
 
-/** Open the visual editor on `e2e/fixtures/<fixture>.qmd`, themed and ready. */
-export async function openEditor(page: Page, fixture = 'basic') {
-  await page.goto(`/fixture.html?fixture=${fixture}`)
-  await page.locator('iframe.visual-frame').waitFor()
-  const frame = page.frameLocator('iframe.visual-frame')
-  await frame.locator('#title-block-header').waitFor()
-  await expect(page.locator('.visual-editor .status')).not.toContainText('Compiling')
-  const handle = await page.locator('iframe.visual-frame').elementHandle()
-  const doc = (await handle!.contentFrame())!
-  return new Editor(page, doc)
+const FILE = 'index.qmd'
+
+// The sync client's connection progress isn't the tests' output.
+setSyncLogger(() => {})
+
+// One hub per worker process, started when a test first needs it.
+let hub: Promise<TestHub> | null = null
+const cleanups: (() => Promise<unknown>)[] = []
+
+export const test = base.extend<{ disconnectCollaborators: void }>({
+  disconnectCollaborators: [
+    async ({}, use) => {
+      await use()
+      for (const cleanup of cleanups.splice(0).reverse()) await cleanup().catch(() => {})
+    },
+    { auto: true },
+  ],
+})
+
+/** The text of `e2e/fixtures/<name>.qmd`. */
+export function fixture(name: string): string {
+  return readFileSync(new URL(`./fixtures/${name}.qmd`, import.meta.url), 'utf-8')
+}
+
+/**
+ * A qmd document on the hub, and a collaborator who works on its source
+ * text: reads it, and edits it without a visual editor.
+ */
+export class Document {
+  constructor(
+    private readonly hub: TestHub,
+    private readonly client: SyncClient,
+    readonly indexDocId: string,
+  ) {}
+
+  /** The document's source text now, as this collaborator has it. */
+  source(): string {
+    return this.client.getFileContent(FILE) ?? ''
+  }
+
+  /** Wait until the source text is `expected`. */
+  async expectSource(expected: string) {
+    await expect.poll(() => this.source()).toBe(expected)
+  }
+
+  /** Replace the first occurrence of `find` in the source text. */
+  replace(find: string, replacement: string) {
+    const at = this.source().indexOf(find)
+    if (at < 0) throw new Error(`The source has no ${JSON.stringify(find)}:\n${this.source()}`)
+    this.client.applyEditorOperations(FILE, [{ rangeOffset: at, rangeLength: find.length, text: replacement }])
+  }
+
+  /** Open the document in the visual editor on `page`, themed and ready. */
+  async open(page: Page): Promise<Editor> {
+    // The hub must have the document before a browser asks for it.
+    if (!(await this.hub.hubHasHeadsOf(this.client))) throw new Error('The hub never received the document.')
+    const query = new URLSearchParams({ server: this.hub.url, doc: this.indexDocId, file: FILE, view: 'visual' })
+    await page.goto(`/?${query}`)
+    await page.locator('iframe.visual-frame').waitFor()
+    const frame = page.frameLocator('iframe.visual-frame')
+    await frame.locator('#title-block-header').waitFor()
+    await expect(page.locator('.visual-editor .status')).not.toContainText('Compiling')
+    const handle = await page.locator('iframe.visual-frame').elementHandle()
+    const doc = (await handle!.contentFrame())!
+    return new Editor(page, doc, this)
+  }
+}
+
+/** Put a document with the given source text on the hub. */
+export async function createDocument(source: string): Promise<Document> {
+  hub ??= startTestHub()
+  const testHub = await hub
+  const client = createSyncClient({
+    onFileAdded() {},
+    onFileChanged() {},
+    onBinaryChanged() {},
+    onFileRemoved() {},
+    onConnectionChange() {},
+    onError(error) {
+      console.error('[e2e collaborator]', error.message)
+    },
+  })
+  const project = await client.createNewProject({
+    syncServer: testHub.url,
+    files: [{ path: FILE, content: source, contentType: 'text' }],
+    peerTimeoutMs: 10000,
+    storage: 'memory',
+  })
+  cleanups.push(() => client.disconnect())
+  return new Document(testHub, client, project.indexDocId)
+}
+
+/** Open the visual editor on a new document made from `e2e/fixtures/<name>.qmd`. */
+export async function openEditor(page: Page, name = 'basic'): Promise<Editor> {
+  const document = await createDocument(fixture(name))
+  return document.open(page)
 }
 
 export interface Caret {
@@ -34,19 +135,57 @@ export interface Position {
   offset: number
 }
 
+/** One collaborator's visual editor, in a browser page of its own. */
 export class Editor {
   constructor(
     readonly page: Page,
     readonly frame: Frame,
+    readonly document: Document,
   ) {}
+
+  /** Another collaborator opens the same document, in a browser of their own. */
+  async join(): Promise<Editor> {
+    const context = await this.page.context().browser()!.newContext()
+    cleanups.push(() => context.close())
+    return this.document.open(await context.newPage())
+  }
+
+  /** Put the caret in a one-line field, `offset` characters in. */
+  async placeCaret(field: Field, offset: number) {
+    await this.clickAt(field, 5)
+    await this.page.keyboard.press('Home')
+    for (let i = 0; i < offset; i++) await this.page.keyboard.press('ArrowRight')
+  }
+
+  /** Select the characters from `from` to `to` in a one-line field. */
+  async select(field: Field, from: number, to: number) {
+    await this.placeCaret(field, from)
+    for (let i = from; i < to; i++) await this.page.keyboard.press('Shift+ArrowRight')
+  }
+
+  /** The text the selection covers. */
+  selectedText(): Promise<string> {
+    return this.frame.evaluate(() => String(document.getSelection() ?? ''))
+  }
+
+  /** Wait until the caret is at `offset` in `field`. */
+  async expectCaret(field: Field, offset: number) {
+    await expect.poll(() => this.caret()).toMatchObject({ field, start: offset, end: offset })
+  }
+
+  /** Wait until a field shows `expected` (null: the field is absent). */
+  async expectText(field: Field, expected: string | null) {
+    await expect.poll(() => this.text(field)).toBe(expected)
+  }
 
   field(field: Field) {
     return this.frame.locator(SELECTORS[field])
   }
 
-  async text(field: Field): Promise<string | null> {
-    const locator = this.field(field)
-    return (await locator.count()) === 0 ? null : await locator.textContent()
+  /** A field's text now, or null when the field is absent. */
+  text(field: Field): Promise<string | null> {
+    // In one step: a collaborator's edit can remove the field at any time.
+    return this.frame.evaluate((selector) => document.querySelector(selector)?.textContent ?? null, SELECTORS[field])
   }
 
   /** Click inside a field, `x` pixels from its left edge on its first line. */

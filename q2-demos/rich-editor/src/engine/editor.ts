@@ -15,7 +15,8 @@ import {
   replacePresent,
   type History,
 } from './history.ts'
-import { contentChanged, sameSelection, type Fields, type Selection, type State } from './model.ts'
+import { contentChanged, sameSelection, type Fields, type Schema, type Selection, type State } from './model.ts'
+import type { FieldChanges } from './source.ts'
 import { undoGroup } from './undoGroup.ts'
 
 export { redo, undo } from './history.ts'
@@ -58,4 +59,32 @@ export function apply(editor: Editor, next: State, options: ApplyOptions = {}): 
     now,
     before: { ...present, selection: before },
   })
+}
+
+/** What an edit from `before` to `after` changed, to write to the document. */
+export function fieldChanges(schema: Schema, before: Fields, after: Fields): FieldChanges {
+  const changes: Record<string, string | undefined> = {}
+  for (const field of schema.order) {
+    if ((before[field] ?? '') !== (after[field] ?? '')) changes[field] = after[field] || undefined
+  }
+  return changes
+}
+
+/**
+ * Show the document's text (`base`) in every field the selection isn't
+ * in. While the caret is in a field, the field shows what was typed, even
+ * where the document reads it differently (a trailing space it drops);
+ * once the caret leaves, the field shows what the document says.
+ */
+export function settle(schema: Schema, editor: Editor, base: Fields): Editor {
+  const { fields, selection } = editor.present
+  let next: Record<string, string | undefined> | null = null
+  for (const field of schema.order) {
+    if (selection && (selection.anchor.field === field || selection.focus.field === field)) continue
+    if ((fields[field] ?? '') === (base[field] ?? '')) continue
+    next ??= { ...fields }
+    if (base[field]) next[field] = base[field]
+    else delete next[field]
+  }
+  return next ? replacePresent(editor, { fields: next, selection }) : editor
 }

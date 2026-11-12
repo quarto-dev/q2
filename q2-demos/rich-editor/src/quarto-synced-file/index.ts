@@ -12,6 +12,7 @@ export {
   type SyncedFileParams,
   type SyncedFileSnapshot,
 } from './syncedFile.ts'
+export { createLocalFile } from './localFile.ts'
 export { useSyncedFile, type SyncedFileState } from './useSyncedFile.ts'
 export { diffToChange } from './diff.ts'
 export {

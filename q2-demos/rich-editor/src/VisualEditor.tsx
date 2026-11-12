@@ -7,24 +7,26 @@
  * `PreviewTitleBlock`, from metadata derived on demand by
  * `deriveTitleBlockMeta` instead of a full render.
  *
- * Editing is local for now: edits change a local copy of the title-block
- * fields, with their own undo history, and never reach the source text. A
- * change to the source text (from the source pane or a collaborator)
- * replaces the local copy and clears the history. The editing itself is
- * the generic engine in `engine/`.
+ * The title, subtitle and abstract are edited in place. Every edit is
+ * written to the file's source text as it's made, and a change to the
+ * source from elsewhere (the source pane or a collaborator) shows up here
+ * without disturbing the caret, the selection or the undo history. The
+ * editing itself is the generic engine in `engine/`; `editing/` connects
+ * it to the qmd file. Nothing can be edited while the source doesn't
+ * parse.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import type { RustQmdJson } from '@quarto/pandoc-types'
 import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-renderer/title-block'
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
 import { Field, useFieldEditor } from './engine/react.tsx'
 import type { Fields, Schema } from './engine/model.ts'
-import { metaText, setMetaText, type Meta } from './editing/meta.ts'
+import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
+import { setMetaText, type Meta } from './editing/meta.ts'
 
 interface VisualEditorProps {
-  ast: RustQmdJson | null
+  file: QmdFile
 }
 
 // The page structure `q2 render` emits for an article without a TOC.
@@ -71,7 +73,12 @@ const PLACEHOLDERS: Record<TitleBlockField, string> = {
 
 const noop = () => {}
 
-export function VisualEditor({ ast }: VisualEditorProps) {
+export function VisualEditor({ file }: VisualEditorProps) {
+  const { ast, parseError } = useSyncExternalStore(file.subscribe, file.getSnapshot)
+  const source = useMemo(
+    () => createMetaFieldSource(file, { keys: SCHEMA.order, multiline: SCHEMA.multiline }),
+    [file],
+  )
   const [mount, setMount] = useState<HTMLElement | null>(null)
   const [frameDoc, setFrameDoc] = useState<Document | null>(null)
   const themeCss = useThemeCss()
@@ -104,9 +111,7 @@ export function VisualEditor({ ast }: VisualEditorProps) {
     const header = mount?.querySelector<HTMLElement>('#title-block-header') ?? null
     if (header !== root) setRoot(header)
   })
-  const { state, editor } = useFieldEditor(root, SCHEMA, () => fieldsFromMeta(ast?.meta), ast, {
-    autoFocus: true,
-  })
+  const { state, writable } = useFieldEditor(root, SCHEMA, source, { autoFocus: true })
 
   const derived = useMemo(() => {
     if (!ast) return null
@@ -138,7 +143,9 @@ export function VisualEditor({ ast }: VisualEditorProps) {
       <p className="status">
         {themeCss === null ? 'Compiling theme CSS… ' : ''}
         {derived && `Title block derived in ${derived.ms.toFixed(2)} ms. `}
-        {editor.past.length > 0 && 'Local edits only; not saved to the source. '}
+        {parseError
+          ? "Read-only: the source doesn't parse. "
+          : !writable && 'Read-only: not connected. '}
         {derived && derived.issues.length > 0 && ` Issues: ${derived.issues.join('; ')}`}
       </p>
       {mount && derived &&
@@ -150,10 +157,6 @@ export function VisualEditor({ ast }: VisualEditorProps) {
         )}
     </div>
   )
-}
-
-function fieldsFromMeta(meta: Meta | undefined): Fields {
-  return Object.fromEntries(SCHEMA.order.map((f) => [f, metaText(meta?.[f])]))
 }
 
 /** The source metadata with the edited fields written over it. */

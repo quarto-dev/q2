@@ -4,6 +4,7 @@
  *   ?server=ws://127.0.0.1:8080/ws&doc=<index-doc-id>&file=index.qmd
  *
  * `server` defaults to the local-prod hub (`npm run local-prod` in hub-client).
+ * `&view=visual` shows the visual editor alone, without the source pane.
  */
 
 import { useMemo, type ReactNode } from 'react'
@@ -18,12 +19,17 @@ function readParams() {
   const indexDocId = q.get('doc')
   const filePath = q.get('file')
   if (!indexDocId || !filePath) return null
-  return { syncServer: q.get('server') ?? DEFAULT_SERVER, indexDocId, filePath }
+  return {
+    syncServer: q.get('server') ?? DEFAULT_SERVER,
+    indexDocId,
+    filePath,
+    visualOnly: q.get('view') === 'visual',
+  }
 }
 
 export function App() {
   const params = useMemo(readParams, [])
-  const { text, ast, parseError, connected, connecting, error, applyEdits } = useSyncedFile(params)
+  const { file, text, parseError, connected, connecting, error, applyEdits } = useSyncedFile(params)
 
   if (!params) {
     return (
@@ -36,12 +42,19 @@ export function App() {
   if (error) return <Status error>{error}</Status>
   if (connecting) return <Status>Connecting to {params.syncServer}…</Status>
   if (!connected) return <Status>Disconnected.</Status>
-  if (text === null) return <Status>Waiting for {params.filePath}…</Status>
+  if (text === null || !file) return <Status>Waiting for {params.filePath}…</Status>
 
+  if (params.visualOnly) {
+    return (
+      <div className="panes panes-single">
+        <VisualEditor file={file} />
+      </div>
+    )
+  }
   return (
     <div className="panes">
       <Editor text={text} parseError={parseError} onEdit={applyEdits} />
-      <VisualEditor ast={ast} />
+      <VisualEditor file={file} />
     </div>
   )
 }

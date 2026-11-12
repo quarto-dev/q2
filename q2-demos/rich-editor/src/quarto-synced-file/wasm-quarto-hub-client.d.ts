@@ -16,7 +16,8 @@ declare module 'wasm-quarto-hub-client' {
     ast?: string;
     qmd?: string;
     error?: string;
-    warnings?: unknown[];
+    /** What the reader reported about a document it could still read. */
+    warnings?: { kind: string; code?: string; title?: string; problem?: string }[];
   }
 
   export interface TitleBlockMetaResponse {

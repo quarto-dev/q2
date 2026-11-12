@@ -14,6 +14,8 @@ import {
 } from './syncedFile.ts'
 
 export interface SyncedFileState extends SyncedFileSnapshot {
+  /** The file itself, for code that subscribes on its own. Null until created. */
+  file: SyncedFile | null
   /** Splice edits into the synced text. Null when not connected. */
   applyEdits: ((changes: EditorContentChange[]) => void) | null
 }
@@ -39,5 +41,5 @@ export function useSyncedFile(params: SyncedFileParams | null): SyncedFileState 
     file ? file.getSnapshot : getIdleSnapshot,
   )
 
-  return { ...snapshot, applyEdits: file && snapshot.connected ? file.applyEdits : null }
+  return { ...snapshot, file, applyEdits: file && snapshot.connected ? file.applyEdits : null }
 }

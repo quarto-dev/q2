@@ -1,11 +1,10 @@
 /**
  * Editing the title and subtitle in the visual editor: the caret, Enter,
- * the arrow keys, undo, and adding and removing fields. Edits are local to
- * the editor; nothing is written to the source yet.
+ * the arrow keys, undo, and adding and removing fields. What the edits do
+ * to the source text is in `source.spec.ts`.
  */
 
-import { expect, test } from '@playwright/test'
-import { openEditor } from './helpers.ts'
+import { expect, openEditor, test } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 

@@ -19,6 +19,9 @@ import { createSyncClient, type EditorContentChange } from '@quarto/quarto-sync-
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import { initWasm, parseQmdContent } from './wasm.ts'
 
+/** How long to wait for the hub before going on offline. */
+const PEER_TIMEOUT_MS = 10000
+
 export interface SyncedFileParams {
   syncServer: string
   indexDocId: string
@@ -39,7 +42,10 @@ export interface SyncedFile {
   subscribe(listener: () => void): () => void
   /** The current snapshot. Stable until the next change. */
   getSnapshot(): SyncedFileSnapshot
-  /** Splice edits into the synced text. Ignored while not connected. */
+  /**
+   * Splice edits into the synced text. Ignored while not connected. On
+   * return, the snapshot has the edited text and its parse.
+   */
   applyEdits(changes: EditorContentChange[]): void
   /** Disconnect and stop notifying listeners. */
   dispose(): void
@@ -70,6 +76,7 @@ export function createSyncedFile({ syncServer, indexDocId, filePath }: SyncedFil
       update({ text: null, parseError: false })
       return
     }
+    if (text === snapshot.text) return
     const parsed = parseQmdContent(text)
     update({ text, ast: parsed ?? snapshot.ast, parseError: parsed === null })
   }
@@ -99,7 +106,12 @@ export function createSyncedFile({ syncServer, indexDocId, filePath }: SyncedFil
     if (disposed) return
 
     try {
-      await client.connect(syncServer, indexDocId)
+      // Wait for the hub before loading. The client's default is not to
+      // (1 ms, then offline mode with a background reconnect), which can
+      // leave collaborators' changes seconds late.
+      await client.connect(syncServer, indexDocId, undefined, undefined, undefined, {
+        peerTimeoutMs: PEER_TIMEOUT_MS,
+      })
       if (disposed) return
       // The file may have loaded before our callbacks saw it.
       if (snapshot.text === null) setText(client.getFileContent(filePath))
@@ -123,6 +135,9 @@ export function createSyncedFile({ syncServer, indexDocId, filePath }: SyncedFil
     applyEdits(changes) {
       if (disposed || !snapshot.connected) return
       client.applyEditorOperations(filePath, changes)
+      // Normally the client has already reported the change; make sure.
+      const text = client.getFileContent(filePath)
+      if (text !== null && text !== snapshot.text) setText(text)
     },
     dispose() {
       disposed = true

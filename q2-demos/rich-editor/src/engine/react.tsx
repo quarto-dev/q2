@@ -14,9 +14,15 @@
  * the model. The one exception is IME composition, which can't be
  * cancelled: the browser edits the field's text itself, and the result is
  * read back when the composition ends.
+ *
+ * The fields belong to a document (`FieldSource`). Every edit is written
+ * to it as it's made, and a change to it from elsewhere (a collaborator)
+ * is made to the editor's state too, keeping the caret, the selection and
+ * the undo history (`rebase.ts`). Nothing can be edited while the document
+ * isn't writable.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { flushSync } from 'react-dom'
 import { deleteBackward, deleteForward, enter, insertText, paste, select, selectAllStep } from './commands.ts'
 import {
@@ -32,8 +38,10 @@ import {
   targetRange,
   writeSelection,
 } from './dom.ts'
-import { apply, createEditor, redo, undo, type ApplyOptions, type Editor } from './editor.ts'
-import { caret, presentFields, selectedText, type Fields, type Schema, type State } from './model.ts'
+import { apply, createEditor, fieldChanges, redo, settle, undo, type ApplyOptions, type Editor } from './editor.ts'
+import { caret, contentChanged, presentFields, selectedText, type Schema, type State } from './model.ts'
+import { rebaseHistory } from './rebase.ts'
+import type { FieldSource } from './source.ts'
 
 export interface FieldProps {
   name: string
@@ -71,6 +79,8 @@ export function Field({ name, text, placeholder, className }: FieldProps) {
 export interface FieldEditor {
   state: State
   editor: Editor
+  /** Whether edits are accepted now (see `FieldSource.writable`). */
+  writable: boolean
 }
 
 export interface FieldEditorOptions {
@@ -79,35 +89,80 @@ export interface FieldEditorOptions {
 }
 
 /**
- * Edit `schema`'s fields inside `root`, starting from `initial`. A new
- * `resetKey` starts over from `initial`, clearing the history.
+ * Edit `schema`'s fields of the document `source` inside `root`. Another
+ * `source` starts over, clearing the history.
  */
 export function useFieldEditor(
   root: HTMLElement | null,
   schema: Schema,
-  initial: () => Fields,
-  resetKey: unknown,
+  source: FieldSource,
   { autoFocus = false }: FieldEditorOptions = {},
 ): FieldEditor {
-  const [key, setKey] = useState(resetKey)
-  const [editor, setEditor] = useState(() => createEditor(initial()))
-  if (key !== resetKey) {
-    setKey(resetKey)
-    setEditor(createEditor(initial()))
+  const [edited, setEdited] = useState(source)
+  const [editor, setEditor] = useState(() => createEditor(source.get()))
+  // The document's fields as the editor last saw them.
+  const base = useRef(source.get())
+  if (edited !== source) {
+    setEdited(source)
+    setEditor(createEditor(source.get()))
+    base.current = source.get()
   }
+  const writable = useSyncExternalStore(source.subscribe, source.writable)
 
   // Events can arrive faster than React renders; they read and write this.
   const latest = useRef(editor)
   latest.current = editor
   // Whether the next render puts the page's selection back from the model.
   const restore = useRef(false)
+  // Whether the editor is writing to the document, or the browser is
+  // composing text (IME) in a field.
+  const writing = useRef(false)
+  const composing = useRef(false)
 
-  const commit = useCallback((next: Editor, restoreSelection: boolean) => {
-    if (next === latest.current) return
-    latest.current = next
-    if (restoreSelection) restore.current = true
-    setEditor(next)
-  }, [])
+  /**
+   * Make `next` the editor's state. A change to the fields' text is
+   * written to the document, unless it came from the document (`from`).
+   */
+  const commit = useCallback(
+    (next: Editor, restoreSelection: boolean, from: 'editor' | 'document' = 'editor') => {
+      const previous = latest.current
+      if (next === previous) return
+      if (from === 'editor' && contentChanged(previous.present.fields, next.present.fields)) {
+        writing.current = true
+        try {
+          source.set(fieldChanges(schema, previous.present.fields, next.present.fields))
+        } finally {
+          writing.current = false
+        }
+        base.current = source.get()
+      }
+      next = settle(schema, next, base.current)
+      latest.current = next
+      if (restoreSelection) restore.current = true
+      setEditor(next)
+    },
+    [schema, source],
+  )
+
+  // A change to the document that isn't the editor's own: make it to the
+  // editor's state too. (Not while the browser is composing text in a
+  // field: it's made when the composition ends.)
+  const followDocument = useCallback(() => {
+    if (writing.current || composing.current) return
+    const before = base.current
+    const now = source.get()
+    if (now === before) return
+    base.current = now
+    const next = rebaseHistory(schema, latest.current, before, now)
+    const focused = root !== null && root.ownerDocument.activeElement === root
+    commit(next, focused && next.present.selection !== null, 'document')
+  }, [schema, source, root, commit])
+
+  useEffect(() => {
+    const unsubscribe = source.subscribe(followDocument)
+    followDocument()
+    return unsubscribe
+  }, [source, followDocument])
 
   // Once per mount, not per reset: a source change mustn't steal focus.
   const autoFocused = useRef(false)
@@ -143,7 +198,6 @@ export function useFieldEditor(
   useEffect(() => {
     if (!root) return
     const doc = root.ownerDocument
-    let composing = false
     // Whether the mouse button is down, and whether the page's selection
     // was last set by the mouse (rather than the keyboard).
     let dragging = false
@@ -155,21 +209,26 @@ export function useFieldEditor(
 
     /** Apply a command to the state with the page's current selection. */
     const edit = (command: (state: State) => State, options: Omit<ApplyOptions, 'before'> = {}) => {
-      // Nothing to edit with the selection outside the fields.
-      if (selectionOutside(root) === 'all') return
+      // Nothing to edit with the selection outside the fields, or while
+      // the document can't be written.
+      if (selectionOutside(root) === 'all' || !source.writable()) return
       const h = latest.current
       const before = currentSelection() ?? h.present.selection
       const at = select(schema, h.present, before)
       commit(apply(h, command(at), { ...options, before }), true)
     }
 
+    const history = (step: (editor: Editor) => Editor) => {
+      if (source.writable()) commit(step(latest.current), true)
+    }
+
     const onBeforeInput = (e: InputEvent) => {
-      if (composing || e.inputType === 'insertCompositionText') return
+      if (composing.current || e.inputType === 'insertCompositionText') return
       e.preventDefault()
       const type = e.inputType
       const target = () => targetRange(root, e)
-      if (type === 'historyUndo') commit(undo(latest.current), true)
-      else if (type === 'historyRedo') commit(redo(latest.current), true)
+      if (type === 'historyUndo') history(undo)
+      else if (type === 'historyRedo') history(redo)
       else if (type === 'insertText') edit((s) => insertText(schema, s, e.data ?? ''), { inputType: type })
       else if (type === 'insertReplacementText') {
         // Autocorrect or a spelling suggestion: replace the target range.
@@ -189,22 +248,31 @@ export function useFieldEditor(
     }
 
     const onCompositionStart = () => {
-      composing = true
+      composing.current = true
     }
     const onCompositionEnd = () => {
-      composing = false
+      composing.current = false
       // The browser has already changed the field's text; read it back.
       const h = latest.current
       const selection = readSelection(root)
       const field = selection?.focus.field
       const el = field && root.querySelector<HTMLElement>(`[data-field="${field}"]`)
-      if (!selection || !field || !el) return
-      const text = el.textContent ?? ''
-      if (text === h.present.fields[field]) return
-      commit(
-        apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText' }),
-        true,
-      )
+      if (selection && field && el) {
+        const text = el.textContent ?? ''
+        if (text !== h.present.fields[field]) {
+          if (source.writable()) {
+            commit(
+              apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText' }),
+              true,
+            )
+          } else {
+            // Not accepted: put the field's text back.
+            el.textContent = h.present.fields[field] ?? ''
+          }
+        }
+      }
+      // Changes to the document that arrived meanwhile.
+      followDocument()
     }
 
     const onPaste = (e: ClipboardEvent) => {
@@ -284,11 +352,11 @@ export function useFieldEditor(
       if (NAVIGATION_KEYS.has(e.key)) byMouse = false
       if (primary && key === 'z') {
         e.preventDefault()
-        commit(e.shiftKey ? redo(latest.current) : undo(latest.current), true)
+        history(e.shiftKey ? redo : undo)
       } else if (primary && !IS_MAC && key === 'y') {
         e.preventDefault()
-        commit(redo(latest.current), true)
-      } else if (doc.activeElement !== root || composing) {
+        history(redo)
+      } else if (doc.activeElement !== root || composing.current) {
         return
       } else if (primary && key === 'a') {
         e.preventDefault()
@@ -302,7 +370,7 @@ export function useFieldEditor(
     // up to a frame late, so `keyup` and `mouseup`, which follow the
     // browser's caret move, sync it as soon as it has happened.
     const syncSelection = () => {
-      if (composing || doc.activeElement !== root) return
+      if (composing.current || doc.activeElement !== root) return
       const h = latest.current
       const selection = currentSelection()
       // Rendered at once, like an edit: an empty field the caret just left
@@ -355,9 +423,9 @@ export function useFieldEditor(
       doc.removeEventListener('keydown', onKeyDown)
       doc.removeEventListener('selectionchange', syncSelection)
     }
-  }, [root, schema, commit])
+  }, [root, schema, source, commit, followDocument])
 
-  return { state: editor.present, editor }
+  return { state: editor.present, editor, writable }
 }
 
 /** Keys that move the selection: after one, it is no longer the mouse's. */
