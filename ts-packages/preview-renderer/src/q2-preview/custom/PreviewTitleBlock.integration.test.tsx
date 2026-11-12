@@ -878,6 +878,33 @@ describe('PreviewTitleBlock — renderField slot', () => {
         expect(container.querySelector('h1.title')?.textContent).toBe('Hello');
     });
 
+    it('renders the subtitle through the slot, inside the same p.subtitle', () => {
+        const { container } = renderDirect(
+            derived({ title: ms('T'), subtitle: ms('Sub') }),
+            (field, text) =>
+                field === 'subtitle' ? <span data-testid="slot">{`[${text}]`}</span> : null,
+        );
+        const p = container.querySelector('p.subtitle.lead');
+        expect(p?.querySelector('[data-testid="slot"]')?.textContent).toBe('[Sub]');
+        expect(container.querySelector('h1.title')?.textContent).toBe('T');
+    });
+
+    it('renders an absent subtitle when the slot renders it', () => {
+        const { container } = renderDirect(derived({ title: ms('T') }), (field, text) =>
+            field === 'subtitle' && text === undefined ? <span data-testid="slot" /> : null,
+        );
+        expect(container.querySelector('p.subtitle [data-testid="slot"]')).not.toBeNull();
+    });
+
+    it('renders the subtitle slot in the title-block-style: none layout', () => {
+        const meta = derived({ title: ms('T'), subtitle: ms('Sub') });
+        (meta.rendered as any).c['title-block-none'] = mb(true);
+        const { container } = renderDirect(meta, (field) =>
+            field === 'subtitle' ? <span data-testid="slot" /> : null,
+        );
+        expect(container.querySelector('p.subtitle [data-testid="slot"]')).not.toBeNull();
+    });
+
     it('renders no h1 for an empty title when the slot returns null', () => {
         const { container } = renderDirect(derived({ title: ms('') }), () => null);
         expect(container.querySelector('h1.title')).toBeNull();

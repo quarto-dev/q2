@@ -13,7 +13,7 @@ import {
 import { inlinesToPlainText } from '../../framework/plainText';
 
 /** A title-block field that `renderField` can render. */
-export type TitleBlockField = 'title';
+export type TitleBlockField = 'title' | 'subtitle';
 
 export type PreviewTitleBlockProps = AstProps & {
     /**
@@ -94,6 +94,13 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
             <h1 className="title">{title}</h1>
         ) : null;
     const subtitle = extractMetaString(meta.subtitle);
+    const subtitleSlot = renderField?.('subtitle', subtitle) ?? null;
+    const subtitleLine = (className: string) =>
+        subtitleSlot !== null ? (
+            <p className={className}>{subtitleSlot}</p>
+        ) : subtitle ? (
+            <p className={className}>{subtitle}</p>
+        ) : null;
     const date = extractMetaString(meta.date);
     const dateModified = extractMetaString(meta['date-modified']);
     const doi = extractMetaString(meta.doi);
@@ -142,7 +149,7 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
         return (
             <header id="title-block-header">
                 {titleHeading}
-                {subtitle ? <p className="subtitle">{subtitle}</p> : null}
+                {subtitleLine('subtitle')}
                 {authors.map((author, i) => (
                     <p className="author" key={i}>
                         {author.name}
@@ -206,9 +213,7 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
                 <div className="quarto-title-banner page-columns page-full">
                     <div className={`quarto-title ${bannerColumn}`}>
                         {titleHeading}
-                        {subtitle ? (
-                            <p className="subtitle lead">{subtitle}</p>
-                        ) : null}
+                        {subtitleLine('subtitle lead')}
                         {descriptionBlock}
                         {categoryChips}
                     </div>
@@ -234,9 +239,7 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
         >
             <div className="quarto-title">
                 {titleHeading}
-                {subtitle ? (
-                    <p className="subtitle lead">{subtitle}</p>
-                ) : null}
+                {subtitleLine('subtitle lead')}
                 {categoryChips}
             </div>
             {/* Q11 gate: hide-description suppresses the block (set by
