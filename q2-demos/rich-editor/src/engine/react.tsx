@@ -317,10 +317,21 @@ export function useFieldEditor(
         const text = was.slice(0, shown.start) + (el.textContent ?? '') + was.slice(shown.end)
         if (text !== was) {
           if (source.writable()) {
-            commit(
-              apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText' }),
-              true,
+            let edited = apply(
+              h,
+              { fields: { ...h.present.fields, [field]: text }, selection },
+              { inputType: 'insertText' },
             )
+            // A change to the document that arrived meanwhile: make it to
+            // the editor's state as it was, then to the composed text too,
+            // so that what's written has both.
+            const before = base.current
+            const now = source.get()
+            if (now !== before) {
+              followDocument()
+              edited = rebaseHistory(schema, edited, before, now)
+            }
+            commit(edited, true)
           } else {
             // Not accepted: put the element's text back.
             el.textContent = was.slice(shown.start, shown.end)
