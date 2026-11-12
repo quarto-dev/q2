@@ -163,6 +163,19 @@ section wrappers (see Parity below).
 - [x] `Schema.inputRule` and `applyInputRule`; `react.tsx` applies it after
       `insertText` as its own undo step, so undo restores `## `.
 
+### Phase 5: complete the spec
+
+- [x] e2e specs for what Phases 0-4 left unspecified: joins and selection
+      deletes in both directions around a heading, attributes on Backspace
+      and on a split, empty headings (left, in the source, Enter on one), a
+      body that starts with a heading, `#` in the abstract, what a copy from
+      a heading takes in, and level, class and text changes from
+      collaborators, and Up/Down through headings.
+- [x] They found a bug: a level changed in the source (`##` to `###`)
+      showed an empty heading, because `Field` only rewrote its element\'s
+      text when the text or offset changed, not when React swapped the
+      element for one of another type. Fixed in `engine/react.tsx`.
+
 ### Phase 4: clipboard, parity, docs
 
 - [x] `Schema.prefixText`: a selection that takes in a heading's start

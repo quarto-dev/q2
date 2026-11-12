@@ -264,3 +264,220 @@ test.describe('with collaborators', () => {
     await editor.expectLineCaret(3, 3)
   })
 })
+
+test.describe('joining lines around a heading', () => {
+  test('Backspace at the start of a paragraph after a heading joins it into the heading', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(2, 0)
+
+    await page.keyboard.press('Backspace')
+
+    expect((await editor.lines())[1]).toBe('h2: ResultsMiddle.')
+    await editor.document.expectSource(headings.replace('## Results {#res .big}\n\nMiddle.', '## ResultsMiddle. {#res .big}'))
+    await editor.expectLineCaret(1, 7)
+  })
+
+  test('Delete on an empty paragraph before a heading leaves the heading a heading', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(2, 7)
+    await page.keyboard.press('Enter')
+    expect((await editor.lines()).slice(2, 5)).toEqual(['p: Middle.', 'p: ', 'h3: Details'])
+
+    await page.keyboard.press('Delete')
+
+    expect((await editor.lines()).slice(2, 4)).toEqual(['p: Middle.', 'h3: Details'])
+    await editor.document.expectSource(headings)
+    await editor.expectLineCaret(3, 0)
+  })
+
+  test('deleting a selection from a heading into a paragraph keeps the heading', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(1, 3)
+    // "ults", the line break, and "Mid".
+    for (let i = 0; i < 8; i++) await page.keyboard.press('Shift+ArrowRight')
+
+    await page.keyboard.press('Backspace')
+
+    expect((await editor.lines()).slice(1, 3)).toEqual(['h2: Resdle.', 'h3: Details'])
+    await editor.document.expectSource(headings.replace('## Results {#res .big}\n\nMiddle.', '## Resdle. {#res .big}'))
+  })
+
+  test('deleting a selection from a paragraph into a heading keeps the paragraph', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(2, 3)
+    // "dle.", the line break, and "Det".
+    for (let i = 0; i < 8; i++) await page.keyboard.press('Shift+ArrowRight')
+
+    await page.keyboard.press('Backspace')
+
+    expect((await editor.lines()).slice(2, 4)).toEqual(['p: Midails', 'p: End.'])
+    await editor.document.expectSource(headings.replace('Middle.\n\n### Details', 'Midails'))
+  })
+})
+
+test.describe('a heading\'s attributes', () => {
+  test('a heading made a paragraph loses its attributes', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(1, 0)
+
+    await page.keyboard.press('Backspace')
+
+    expect((await editor.lines())[1]).toBe('p: Results')
+    await editor.document.expectSource(headings.replace('## Results {#res .big}', 'Results'))
+  })
+
+  test('splitting a heading leaves its attributes on the first half', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(1, 3)
+
+    await page.keyboard.press('Enter')
+
+    await editor.document.expectSource(headings.replace('## Results {#res .big}', '## Res {#res .big}\n\n## ults'))
+    await expect(editor.frame.locator('main > h2.qe-field').nth(0)).toHaveClass(/\bbig\b/)
+    await expect(editor.frame.locator('main > h2.qe-field').nth(1)).not.toHaveClass(/\bbig\b/)
+  })
+})
+
+test.describe('an empty heading', () => {
+  test('an emptied heading stays when the caret leaves it, and is written as its #s', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(3, 7)
+    for (let i = 0; i < 7; i++) await page.keyboard.press('Backspace')
+
+    await editor.placeCaretInLine(0, 0)
+
+    // (The qmd writer leaves a space after the #s.)
+    await editor.document.expectSource(headings.replace('### Details', '### '))
+    expect((await editor.lines())[3]).toBe('h3: ')
+  })
+
+  test('an empty heading in the source is an empty heading line the caret stops on', async ({ page }) => {
+    const editor = await openEditor(page, 'empty-heading')
+    expect(await editor.lines()).toEqual(['p: Intro.', 'h2: ', 'p: End.'])
+    await editor.placeCaretInLine(0, 6)
+
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.type('Title')
+
+    expect((await editor.lines())[1]).toBe('h2: Title')
+    await editor.document.expectSource(fixture('empty-heading').replace('##', '## Title'))
+  })
+
+  test('Enter on an empty heading adds an empty paragraph above it', async ({ page }) => {
+    const editor = await openEditor(page, 'empty-heading')
+    await editor.placeCaretInLine(1, 0)
+
+    await page.keyboard.press('Enter')
+
+    expect(await editor.lines()).toEqual(['p: Intro.', 'p: ', 'h2: ', 'p: End.'])
+    await editor.expectLineCaret(2, 0)
+  })
+})
+
+test.describe('a body that starts with a heading', () => {
+  test('Enter at the end of the title block goes to the heading\'s text', async ({ page }) => {
+    const editor = await openEditor(page, 'heading-first')
+    await editor.placeCaret('subtitle', 13)
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('Key ')
+
+    await editor.expectLineCaret(0, 4)
+    await editor.document.expectSource(fixture('heading-first').replace('## Results', '## Key Results'))
+  })
+
+  test('typing over the whole body selected keeps the first line a heading', async ({ page }) => {
+    const editor = await openEditor(page, 'heading-first')
+    await editor.placeCaretInLine(1, 2)
+
+    await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.type('Summary')
+
+    expect(await editor.lines()).toEqual(['h2: Summary'])
+    await editor.document.expectSource(fixture('heading-first').replace('## Results\n\nText.', '## Summary'))
+  })
+})
+
+test.describe('where #s make a heading', () => {
+  test('#s and a space in the abstract are text', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.placeCaret('abstract', 0)
+
+    await page.keyboard.type('# ')
+    // Read back from the source once the caret has left.
+    await editor.placeCaret('title', 0)
+
+    await expect.poll(() => editor.text('abstract')).toMatch(/^# We summarise/)
+    await expect.poll(() => editor.document.source()).toContain('\\# We summarise')
+  })
+})
+
+test.describe('copying from a heading', () => {
+  test('a selection from the start of a heading\'s text copies its #s', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(1, 0)
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight')
+
+    expect(await editor.copy()).toBe('## Res')
+  })
+
+  test('a selection inside a heading\'s text copies only the text', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(1, 1)
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight')
+
+    expect(await editor.copy()).toBe('esu')
+  })
+})
+
+test.describe('headings and collaborators', () => {
+  test('a heading\'s level changed in the source changes it here, and the caret stays on its text', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(1, 3)
+
+    editor.document.replace('## Results', '### Results')
+
+    await expect.poll(async () => (await editor.lines())[1]).toBe('h3: Results')
+    await expect(editor.frame.locator('main > h3.qe-field').first()).toHaveClass(/\bbig\b/)
+    await editor.expectLineCaret(1, 3)
+  })
+
+  test('a class added to a heading in the source shows here', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+
+    editor.document.replace('### Details', '### Details {.extra}')
+
+    await expect(editor.frame.locator('main > h3.qe-field')).toHaveClass(/\bextra\b/)
+    expect((await editor.lines())[3]).toBe('h3: Details')
+  })
+
+  test('someone edits the heading I am typing in, and both edits stay', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(1, 7)
+    await page.keyboard.type(' now')
+    await editor.document.expectSource(headings.replace('## Results', '## Results now'))
+
+    editor.document.replace('## Results', '## Key Results')
+    await expect.poll(async () => (await editor.lines())[1]).toBe('h2: Key Results now')
+    await page.keyboard.type('!')
+
+    await editor.document.expectSource(headings.replace('## Results', '## Key Results now!'))
+  })
+})
+
+test.describe('moving through headings', () => {
+  test('Up and Down move onto and off headings', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(2, 3)
+
+    await page.keyboard.press('ArrowUp')
+    await page.keyboard.type('x')
+    await expect.poll(async () => (await editor.lines())[1]).toMatch(/^h2: R\w*x/)
+
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.type('y')
+    await expect.poll(async () => (await editor.lines())[3]).toMatch(/^h3: D\w*y/)
+    expect((await editor.lines())[2]).toBe('p: Middle.')
+  })
+})

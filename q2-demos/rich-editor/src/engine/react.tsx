@@ -97,7 +97,9 @@ export function Field({ name, text, placeholder, className, as = 'span', start }
     if (el.textContent === text && hasBreak === wantsBreak) return
     el.replaceChildren(...(text === '' ? [] : [text]))
     if (wantsBreak) el.append(el.ownerDocument.createElement('br'))
-  }, [text, start])
+    // `as`: another element type is a new, empty element (a heading whose
+    // level changed), even when the text is the same.
+  }, [text, start, as])
   if (text === undefined) return null
   return createElement(as, {
     ref,
