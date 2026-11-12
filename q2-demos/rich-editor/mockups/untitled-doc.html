@@ -107,8 +107,8 @@ const OPTIONS = {
   },
   persist: {
     name: 'Placeholder title', desc: 'The title slot always exists. Its placeholder shows only in an empty doc, on hover, or with the caret in it.',
-    tips: '<kbd>↑</kbd> at the start of the body enters the hidden title. Hover just above the body to see it. <kbd>Enter</kbd> in the title adds a subtitle.',
-    flags: { persistentTitle: true, enterAddsSubtitle: true },
+    tips: '<kbd>↑</kbd> on the body’s first line enters the hidden title. Hover just above the body to see it. <kbd>Enter</kbd> in the title goes to the body (there’s no way to add a subtitle in this option).',
+    flags: { persistentTitle: true },
   },
   widget: {
     name: 'Inline widget', desc: 'A faint “+ Title + Subtitle …” row above the page, on hover or from the keyboard.',
@@ -476,6 +476,12 @@ function build() {
       if (last) { const x = caretRect().left; ev.preventDefault(); last.focus(); placeAtX(last, x, true); }
       else if (f.widget && focusWidget()) ev.preventDefault();
     }
+    // Backspace in the body's only, empty line would delete the line itself
+    // (and its placeholder); there's nothing to delete.
+    if (ev.key === 'Backspace' && b && body.children.length === 1 && blank(b) && b.tagName === 'P') {
+      ev.preventDefault();
+      return;
+    }
     if (ev.key === 'Backspace' && b && /^H[12]$/.test(b.tagName) && caretAtStart(b)) {
       ev.preventDefault();
       const p = el('p'); if (blank(b)) p.innerHTML = '<br>'; else p.textContent = b.textContent;
@@ -483,7 +489,8 @@ function build() {
     }
   });
   body.addEventListener('input', () => {
-    if (!body.firstElementChild) { body.innerHTML = '<p><br></p>'; focusBlock(body.firstElementChild, false); }
+    // Selecting everything and deleting can leave no block, or a bare <br>.
+    if (![...body.children].some((c) => c.tagName !== 'BR')) { body.innerHTML = '<p><br></p>'; focusBlock(body.firstElementChild, false); }
     if (f.hashTitle) hashCheck();
     if (f.slash) slashCheck();
     update();
