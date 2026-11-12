@@ -6,7 +6,7 @@
  * tests marked `fixme` say what we want and don't have yet.
  */
 
-import { expect, fixture, openEditor, test, lineEnd } from './helpers.ts'
+import { createDocument, expect, fixture, openEditor, test, lineEnd } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 const formatted = fixture('formatted')
@@ -84,6 +84,16 @@ test.describe('what an edit changes', () => {
     await editor.document.expectSource(formatted.replace('Then we look ahead.\n', 'Then we look ahead.\n\n  Last.\n'))
   })
 
+  test.fixme('editing a paragraph leaves the source of a table elsewhere in the body alone', async ({ page }) => {
+    const editor = await openEditor(page, 'blocks')
+    await editor.placeCaretInParagraph(1, 11)
+    await page.keyboard.type('!')
+
+    // Today the table is written again too, with its columns padded:
+    // `| a   | b   |`.
+    await editor.document.expectSource(fixture('blocks').replace('Last words.', 'Last words.!'))
+  })
+
   test('undo puts the source back exactly', async ({ page }) => {
     const editor = await openEditor(page, 'formatted')
     await editor.placeCaret('title', 9)
@@ -145,6 +155,59 @@ test.describe('typed text is text', () => {
     const other = await editor.join()
     expect(await other.text('title')).toBe('- 1. Costs')
   })
+
+  test('an apostrophe typed in the title is shown curly, as the document reads it, once the caret leaves', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 16)
+    await page.keyboard.type("'s")
+    expect(await editor.text('title')).toBe("Quarterly report's")
+
+    await page.keyboard.press('ArrowDown')
+
+    await editor.expectText('title', 'Quarterly report’s')
+    // The source has what was typed.
+    await editor.document.expectSource(basic.replace('Quarterly report', '"Quarterly report\'s"'))
+  })
+
+  test('in a paragraph, what would be markdown stays the text that was typed', async ({ page }) => {
+    const typed = [
+      '# Not a heading',
+      '- not an item',
+      '1. not an item',
+      '> not a quote',
+      '```',
+      '---',
+      ':::',
+      '| not | a table |',
+      '<div>not HTML</div> &amp; <!-- no comment -->',
+      '$not$ $$math$$',
+      '@not a citation, [@nor] this',
+      '[not a link](https://example.com), ![nor an image](image.png)',
+      '{{< not a shortcode >}}',
+      '[not a span]{.mark}, `not code`, _not_ **emphasis**, ~not~ ^sub^ ~~or struck~~',
+      'not a dash -- or --- an ellipsis...',
+      'a\\backslash',
+    ]
+    const document = await createDocument('---\ntitle: Notes\n---\n\nFirst.\n')
+    const editor = await document.open(page)
+    await editor.placeCaretInParagraph(0, 6)
+
+    for (const line of typed) {
+      await page.keyboard.press('Enter')
+      await page.keyboard.type(line)
+    }
+    // (With the caret out of them, the paragraphs show what the document reads.)
+    await editor.placeCaret('title', 0)
+
+    const expected = ['First.', ...typed]
+    await expect.poll(() => editor.blocks()).toEqual(expected.map((text) => `p: ${text}`))
+    expect(await editor.paragraphs()).toEqual(expected)
+    // Someone else opening the document sees the same paragraphs.
+    const other = await editor.join()
+    expect(await other.paragraphs()).toEqual(expected)
+  })
 })
 
 test.describe('spaces the source does not keep', () => {
@@ -160,6 +223,20 @@ test.describe('spaces the source does not keep', () => {
     await page.keyboard.type('2026')
     expect(await editor.text('title')).toBe('Quarterly report 2026')
     await editor.document.expectSource(basic.replace('Quarterly report', 'Quarterly report 2026'))
+  })
+
+  test('spaces typed in a row are one space in the source', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 9)
+
+    await page.keyboard.type('  ')
+    expect(await editor.text('title')).toBe('Quarterly   report')
+    expect(editor.document.source()).toBe(basic)
+
+    await page.keyboard.type('x')
+    await editor.document.expectSource(basic.replace('Quarterly report', 'Quarterly x report'))
+    await page.keyboard.press('ArrowDown')
+    await editor.expectText('title', 'Quarterly x report')
   })
 
   test('a field shows what the source says once the caret leaves it', async ({ page }) => {
@@ -214,6 +291,16 @@ test.describe('adding and removing fields', () => {
     await page.keyboard.type('Annual report')
 
     await editor.document.expectSource(basic.replace('Quarterly report', 'Annual report'))
+  })
+
+  test.fixme('undoing the removal of a field puts it back on its line, as it was written', async ({ page }) => {
+    const editor = await openEditor(page, 'formatted')
+    await editor.select('subtitle', 0, 13)
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press(`${mod}+z`)
+
+    // Today the subtitle comes back after the last key, in the standard form.
+    await editor.document.expectSource(formatted)
   })
 
   test('replacing a field\'s whole text keeps it on its line', async ({ page }) => {

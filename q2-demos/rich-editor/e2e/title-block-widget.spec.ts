@@ -11,7 +11,7 @@
  * it's empty removes it; the source holds it, empty, all along.
  */
 
-import { expect, fixture, lineStart, openEditor, test } from './helpers.ts'
+import { createDocument, expect, fixture, lineStart, openEditor, test } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 
@@ -51,7 +51,7 @@ test.describe('the "+" row', () => {
   })
 
   test('shows in an empty document', async ({ page }) => {
-    const editor = await openEditor(page, 'empty')
+    const editor = await createDocument(fixture('empty')).then((d) => d.open(page, { shows: 'nothing' }))
     await editor.pointAway()
 
     await editor.expectWidgetShown(true)
@@ -124,7 +124,7 @@ test.describe('adding a field', () => {
   })
 
   test('an empty document gets a title', async ({ page }) => {
-    const editor = await openEditor(page, 'empty')
+    const editor = await createDocument(fixture('empty')).then((d) => d.open(page, { shows: 'nothing' }))
 
     await editor.addField('title')
     await page.keyboard.type('Notes')

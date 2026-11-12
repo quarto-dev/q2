@@ -120,6 +120,11 @@ they are meant to be complete: someone with only the specs should be able
 to build this editor again. Behaviour that no spec describes is a gap in
 the specs; add the spec with (or before) the behaviour.
 
+The tests start a dev server on port 5192, and use one that's already
+there. To run them in two checkouts at once, give one a port of its own
+(`E2E_PORT=5200 npm run test:e2e`), or each will be testing the other's
+app.
+
 Every spec runs in Chromium, Firefox and WebKit (`npx playwright install`
 fetches them; `--project=firefox` runs one). The engines differ most
 where an editor lives: the caret, selections and `contenteditable`. A
@@ -128,10 +133,15 @@ reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts` and
 `body.spec.ts` (editing), `title-block-widget.spec.ts` (adding and removing
-title-block fields), `source.spec.ts` (what an edit does to the source
-text),
-`collaboration.spec.ts` (more than one person in a document) and
-`render-parity.spec.ts` (the editor shows a document as `q2 render` would).
+title-block fields), `keys.spec.ts` (moving and deleting by word and
+by line), `clipboard.spec.ts` (copy, cut, paste, drag and drop),
+`composition.spec.ts` (input methods), `blocks.spec.ts` (how each kind of
+block is shown), `read-only.spec.ts` (when nothing can be edited),
+`source.spec.ts` (what an edit does to the source text),
+`collaboration.spec.ts` (more than one person in a document),
+`render-parity.spec.ts` (the editor shows a document as `q2 render` would)
+and `app.spec.ts` (the page around the editor: which document it opens,
+the source pane, the status line).
 Tests marked `fixme` describe behaviour we want and don't have yet.
 
 `render-parity.spec.ts` compares the editor's page with the same fixture
@@ -142,9 +152,7 @@ it opens fixtures in `/fixture.html` instead of on a hub.
 Every other test puts a document from `e2e/fixtures/` on an in-process sync hub
 and opens it in the app, once per collaborator, each in a browser of its
 own; the test itself is one more collaborator, reading and editing the
-source text. Playwright starts the dev server itself, on port 5192, or
-reuses one already running there: to run the tests in two checkouts at
-once, give each its own port with `E2E_PORT`.
+source text. Playwright starts the dev server itself.
 
 `/fixture.html?fixture=<name>` (default `basic`) opens the visual editor
 on a fixture held in memory, with no hub, for trying it without a server.

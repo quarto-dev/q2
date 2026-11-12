@@ -22,6 +22,9 @@ export { expect }
 export const lineStart = process.platform === 'darwin' ? 'Meta+ArrowLeft' : 'Home'
 export const lineEnd = process.platform === 'darwin' ? 'Meta+ArrowRight' : 'End'
 
+/** The modifier that moves and deletes a word at a time. */
+export const wordKey = process.platform === 'darwin' ? 'Alt' : 'Control'
+
 export type Field = 'title' | 'subtitle' | 'abstract'
 
 const SELECTORS: Record<Field, string> = {
@@ -88,16 +91,21 @@ export class Document {
     this.client.applyEditorOperations(FILE, [{ rangeOffset: at, rangeLength: find.length, text: replacement }])
   }
 
-  /** Open the document in the visual editor on `page`, themed and ready. */
-  async open(page: Page): Promise<Editor> {
+  /**
+   * Open the document in the visual editor on `page`, themed and ready.
+   * (`shows: 'nothing'` for a document with nothing in it to wait for.)
+   */
+  async open(page: Page, { shows = 'something' }: { shows?: 'something' | 'nothing' } = {}): Promise<Editor> {
     // The hub must have the document before a browser asks for it.
     if (!(await this.hub.hubHasHeadsOf(this.client))) throw new Error('The hub never received the document.')
     const query = new URLSearchParams({ server: this.hub.url, doc: this.indexDocId, file: FILE, view: 'visual' })
     await page.goto(`/?${query}`)
     await page.locator('iframe.visual-frame').waitFor()
     const frame = page.frameLocator('iframe.visual-frame')
-    // The "+" row is there for every document, with a title block or not.
-    await frame.locator(WIDGET).waitFor({ state: 'attached' })
+    // The title block, or the first block of a document without one.
+    if (shows === 'something') await frame.locator('#title-block-header, #quarto-document-content > *').first().waitFor()
+    else await frame.locator('#quarto-document-content').waitFor({ state: 'attached' })
+    await expect(page.locator('.visual-editor .status')).toContainText('Title block derived')
     await expect(page.locator('.visual-editor .status')).not.toContainText('Compiling')
     const handle = await page.locator('iframe.visual-frame').elementHandle()
     const doc = (await handle!.contentFrame())!
@@ -238,6 +246,11 @@ export class Editor {
     )
   }
 
+  /** The body's `index`th editable paragraph. */
+  paragraph(index: number) {
+    return this.frame.locator(PARAGRAPH).nth(index)
+  }
+
   /** Put the caret in the body's `index`th editable paragraph (of one line), `offset` characters in. */
   async placeCaretInParagraph(index: number, offset: number) {
     await this.frame.locator(PARAGRAPH).nth(index).click({ position: { x: 5, y: 5 } })
@@ -359,7 +372,8 @@ export class Editor {
   }
 
   /** The "+" items' labels, in order. */
-  widgetItems(): Promise<string[]> {
+  async widgetItems(): Promise<string[]> {
+    await this.widget().waitFor({ state: 'attached' })
     return this.widget().getByRole('button').allTextContents()
   }
 
@@ -434,16 +448,79 @@ export class Editor {
     })
   }
 
-  /** Paste plain text at the caret. */
-  paste(text: string) {
-    return this.frame.evaluate((text) => {
+  /** Paste plain text at the caret (with `html` as its formatted form, if given). */
+  paste(text: string, html?: string) {
+    return this.frame.evaluate(([text, html]) => {
       const data = new DataTransfer()
-      data.setData('text/plain', text)
+      data.setData('text/plain', text!)
+      if (html !== undefined) data.setData('text/html', html)
       // Set on the event, not given to its constructor: Firefox gives a
       // constructed paste event an empty clipboard of its own.
       const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true })
       Object.defineProperty(event, 'clipboardData', { value: data })
       document.activeElement!.dispatchEvent(event)
+    }, [text, html] as const)
+  }
+
+  /**
+   * Copy (or cut) the selection, and return the text that goes on the
+   * clipboard. (The event is made here, so the system's clipboard isn't
+   * touched.)
+   */
+  copy(kind: 'copy' | 'cut' = 'copy'): Promise<string> {
+    return this.frame.evaluate((kind) => {
+      const data = new DataTransfer()
+      const event = new ClipboardEvent(kind, { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: data })
+      document.activeElement!.dispatchEvent(event)
+      // Left to the browser, a copy takes the text the page shows selected.
+      return event.defaultPrevented ? data.getData('text/plain') : String(document.getSelection() ?? '')
+    }, kind)
+  }
+
+  /**
+   * Compose text at the caret with an input method (as for Japanese, or a
+   * dead key): `text` is the composition so far, shown in the page and not
+   * yet final. Call it again as the composition changes, and
+   * `endComposition` to finish.
+   *
+   * The browser's part is played here: during a composition the browser
+   * itself writes the text into the page, between `compositionstart` and
+   * `compositionend`, and an editor can't prevent it.
+   */
+  compose(text: string): Promise<void> {
+    return this.frame.evaluate((text) => {
+      const w = window as unknown as { __composition?: { node: Text; start: number; length: number } }
+      const selection = document.getSelection()!
+      const target = document.activeElement!
+      let c = w.__composition
+      if (!c) {
+        const range = selection.getRangeAt(0)
+        range.deleteContents()
+        let node = range.startContainer
+        let start = range.startOffset
+        if (node.nodeType !== Node.TEXT_NODE) {
+          const text = document.createTextNode('')
+          node.insertBefore(text, node.childNodes[start] ?? null)
+          node = text
+          start = 0
+        }
+        c = w.__composition = { node: node as Text, start, length: 0 }
+        target.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' }))
+      }
+      c.node.replaceData(c.start, c.length, text)
+      c.length = text.length
+      selection.collapse(c.node, c.start + c.length)
+      target.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: text }))
+    }, text)
+  }
+
+  /** Finish the composition, with `text` as what was composed. */
+  async endComposition(text: string): Promise<void> {
+    await this.compose(text)
+    await this.frame.evaluate((text) => {
+      delete (window as unknown as { __composition?: unknown }).__composition
+      document.activeElement!.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: text }))
     }, text)
   }
 }

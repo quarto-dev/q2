@@ -56,7 +56,7 @@ const EDITING_CSS = `
 #quarto-document-content[contenteditable] { outline: none; }
 .qe-unknown { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px dashed #ced4da; color: #6c757d; font-size: 0.875em; }
 .qe-field { display: block; position: relative; min-height: 1lh; outline: none; white-space: pre-wrap; }
-.qe-field[data-empty]::before {
+.qe-field[data-empty][data-placeholder]::before {
   content: attr(data-placeholder);
   position: absolute;
   pointer-events: none;

@@ -388,10 +388,21 @@ export function useFieldEditor(
         const text = was.slice(0, shown.start) + (el.textContent ?? '') + was.slice(shown.end)
         if (text !== was) {
           if (source.writable()) {
-            commit(
-              apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText', schema }),
-              true,
+            let edited = apply(
+              h,
+              { fields: { ...h.present.fields, [field]: text }, selection },
+              { inputType: 'insertText', schema },
             )
+            // A change to the document that arrived meanwhile: make it to
+            // the editor's state as it was, then to the composed text too,
+            // so that what's written has both.
+            const before = base.current
+            const now = source.get()
+            if (now !== before) {
+              followDocument()
+              edited = rebaseHistory(schema, edited, before, now)
+            }
+            commit(edited, true)
           } else {
             // Not accepted: put the element's text back.
             el.textContent = was.slice(shown.start, shown.end)
@@ -434,9 +445,10 @@ export function useFieldEditor(
      * Move the caret for an arrow key, the way the browser would, except
      * that it never leaves the fields: a move that would goes to the next
      * field that way (on the nearest line, at the same x, for Up / Down),
-     * or doesn't happen. Returns false to leave the key to the browser.
+     * or doesn't happen. Returns false to leave the key to the browser, and
+     * 'left' when the caret left the fields (for what's before them).
      */
-    const arrow = (e: KeyboardEvent): boolean => {
+    const arrow = (e: KeyboardEvent): boolean | 'left' => {
       const key = ARROW_KEYS[e.key]
       const selection = doc.getSelection()
       if (!key || !selection?.anchorNode || !selection.focusNode) return false
@@ -466,6 +478,14 @@ export function useFieldEditor(
         selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
         return true
       }
+      if (granularity === 'character' && !e.shiftKey && !selection.isCollapsed) {
+        // Left and Right put the caret at that end of a selection.
+        // (Firefox's `modify` would move it a character from the focus.)
+        const range = selection.getRangeAt(0)
+        if (key.forward) selection.collapse(range.endContainer, range.endOffset)
+        else selection.collapse(range.startContainer, range.startOffset)
+        return true
+      }
       const x = caretX(doc, saved.focus.node, saved.focus.offset) ?? origin.getBoundingClientRect().left
       // Back past the first field (Left at its start, Up on its first
       // line): out of the fields, to what's before them. Checked before the
@@ -480,7 +500,7 @@ export function useFieldEditor(
             granularity !== 'lineboundary' && atStart(origin, saved.focus.node, saved.focus.offset))
       if (leaving && leaveStart.current) {
         leaveStart.current(key.vertical ? { x } : {})
-        return true
+        return 'left'
       }
       selection.modify(e.shiftKey ? 'extend' : 'move', key.direction, granularity)
       if (fieldOf(root, selection.focusNode)) return true
@@ -524,8 +544,11 @@ export function useFieldEditor(
         // field is removed.
         e.preventDefault()
         backspace('deleteContentBackward')
-      } else if (arrow(e)) {
-        syncSelection()
+      } else {
+        // Not once the caret has left the fields: reading the page's
+        // selection back would put the caret (and the focus) back in them.
+        const moved = arrow(e)
+        if (moved === true) syncSelection()
       }
     }
 

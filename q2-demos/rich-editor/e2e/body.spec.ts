@@ -6,10 +6,11 @@
  * changes its source.
  */
 
-import { expect, fixture, openEditor, test } from './helpers.ts'
+import { createDocument, expect, fixture, lineEnd, openEditor, test, type Editor } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 const body = fixture('body')
+const basic = fixture('basic')
 
 test.describe('showing the body', () => {
   test('the body is under the title block, block by block', async ({ page }) => {
@@ -71,6 +72,51 @@ test.describe('editing a paragraph', () => {
 
     await expect.poll(() => editor.paragraphs()).toContain('*not* emphasis: First paragraph.')
     await expect(editor.frame.locator('main p em')).toHaveCount(1)
+    await editor.document.expectSource(body.replace('First paragraph.', '\\*not\\* emphasis: First paragraph.'))
+  })
+
+  test('spaces the source does not keep show while the caret is in the paragraph', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaretInParagraph(0, 10)
+
+    // At the end of the paragraph: written with the next character.
+    await page.keyboard.type('  ')
+    expect(await editor.paragraphs()).toEqual(['Body text.  '])
+    expect(editor.document.source()).toBe(basic)
+
+    // More than one in a row: one in the source.
+    await page.keyboard.type('x')
+    expect(await editor.paragraphs()).toEqual(['Body text.  x'])
+    await editor.document.expectSource(basic.replace('Body text.', 'Body text. x'))
+
+    await page.keyboard.press('ArrowUp')
+    await expect.poll(() => editor.paragraphs()).toEqual(['Body text. x'])
+  })
+
+  test('Shift+Enter inserts nothing', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 6)
+
+    await page.keyboard.press('Shift+Enter')
+
+    expect(await editor.paragraphs()).toEqual(['First paragraph.', 'Second paragraph.', 'Last paragraph.'])
+    await editor.expectParagraphCaret(0, 6)
+    expect(editor.document.source()).toBe(body)
+  })
+
+  test('a typed apostrophe is shown curly, as the document reads it, once the caret leaves the paragraph', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+    await page.keyboard.type(" It's \"so\".")
+    expect((await editor.paragraphs())[0]).toBe('First paragraph. It\'s "so".')
+
+    await editor.placeCaretInParagraph(1, 0)
+
+    // The source has what was typed; a typed double quote stays as typed.
+    await expect.poll(async () => (await editor.paragraphs())[0]).toBe('First paragraph. It’s "so".')
+    await editor.document.expectSource(body.replace('First paragraph.', 'First paragraph. It\'s \\"so\\".'))
   })
 
   test('undo takes back the typing', async ({ page }) => {
@@ -135,6 +181,35 @@ test.describe('splitting and joining paragraphs', () => {
     await editor.document.expectSource(body.replace('First paragraph.', 'First paragraph.\n\nNew one.'))
   })
 
+  test('Enter at the start puts an empty paragraph above, and the caret stays with the text', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 0)
+
+    await page.keyboard.press('Enter')
+
+    await editor.expectParagraphCaret(2, 0)
+    expect(await editor.paragraphs()).toEqual(['First paragraph.', '', 'Second paragraph.', 'Last paragraph.'])
+    await editor.document.expectSource(body.replace('Second paragraph.', '\u00a0\n\nSecond paragraph.'))
+  })
+
+  test('Enter is an undo step of its own', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+    await page.keyboard.type('ab')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('cd')
+    const firstTwo = async () => (await editor.paragraphs()).slice(0, 2)
+    expect(await firstTwo()).toEqual(['First paragraph.ab', 'cd'])
+
+    await page.keyboard.press(`${mod}+z`)
+    expect(await firstTwo()).toEqual(['First paragraph.ab', ''])
+    await page.keyboard.press(`${mod}+z`)
+    expect(await firstTwo()).toEqual(['First paragraph.ab', 'Second paragraph.'])
+    await page.keyboard.press(`${mod}+z`)
+    expect(await firstTwo()).toEqual(['First paragraph.', 'Second paragraph.'])
+    await editor.document.expectSource(body)
+  })
+
   test('Backspace at the start joins the paragraph to the one before', async ({ page }) => {
     const editor = await openEditor(page, 'body')
     await editor.placeCaretInParagraph(1, 0)
@@ -156,6 +231,21 @@ test.describe('splitting and joining paragraphs', () => {
 
     await editor.expectParagraphCaret(0, 16)
     expect(await editor.paragraphs()).toEqual(['First paragraph.Second paragraph.', 'Last paragraph.'])
+  })
+
+  test('deleting a selection across paragraphs joins them', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 6)
+    await editor.shiftClickParagraph(1, 6)
+
+    await page.keyboard.press('Backspace')
+
+    await editor.expectParagraphCaret(0, 6)
+    expect((await editor.paragraphs()).slice(1)).toEqual(['Last paragraph.'])
+    // ("First " and " paragraph.": the two spaces are one in the source.)
+    await editor.document.expectSource(
+      body.replace('First paragraph.\n\nSecond paragraph.', 'First paragraph.'),
+    )
   })
 
   test('undo splits a joined paragraph again', async ({ page }) => {
@@ -214,6 +304,48 @@ test.describe('splitting and joining paragraphs', () => {
     await editor.document.expectSource(body)
   })
 
+  test('an empty paragraph shows nothing: it has no placeholder', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+    await page.keyboard.press('Enter')
+
+    const empty = editor.paragraph(1)
+    expect(await empty.evaluate((el) => (el as HTMLElement).innerText.trim())).toBe('')
+    expect(await empty.evaluate((el) => getComputedStyle(el, '::before').content)).toBe('none')
+  })
+
+  test('a paragraph emptied of its text stays, as an empty paragraph, until Backspace removes it', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 0)
+    await page.keyboard.press(`Shift+${lineEnd}`)
+
+    await page.keyboard.press('Backspace')
+    expect(await editor.paragraphs()).toEqual(['First paragraph.', '', 'Last paragraph.'])
+    await editor.document.expectSource(body.replace('Second paragraph.', '\u00a0'))
+
+    await page.keyboard.press('Backspace')
+    await editor.expectParagraphCaret(0, 16)
+    await editor.document.expectSource(body.replace('Second paragraph.\n\n', ''))
+  })
+
+  test('the only paragraph, emptied, is gone from the source, and from the page when the caret leaves it', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaretInParagraph(0, 4)
+    await page.keyboard.press(`${mod}+a`)
+
+    await page.keyboard.press('Backspace')
+    expect(await editor.blocks()).toEqual(['p: '])
+    await editor.document.expectSource(basic.replace('Body text.\n', ''))
+
+    await page.keyboard.press('ArrowUp')
+    expect((await editor.caret()).field).toBe('subtitle')
+    expect(await editor.blocks()).toEqual([])
+  })
+
   test('an empty paragraph in the source is an empty line', async ({ page }) => {
     const editor = await openEditor(page, 'body')
 
@@ -231,6 +363,66 @@ test.describe('splitting and joining paragraphs', () => {
     await editor.paste(' One.\nTwo.')
 
     await editor.document.expectSource(body.replace('First paragraph.', 'First paragraph. One.\n\nTwo.'))
+  })
+
+  test('a blank line in pasted text is an empty paragraph, and its tabs and runs of spaces are single spaces', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+
+    await editor.paste(' One.\n\nTwo.\r\n\tThree  four.')
+
+    await editor.document.expectSource(
+      body.replace('First paragraph.', 'First paragraph. One.\n\n\u00a0\n\nTwo.\n\nThree four.'),
+    )
+    await editor.expectParagraphCaret(3, 13)
+  })
+
+  test('the character that stands for an object in text is never put in', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+
+    await editor.paste(' a\uFFFCb')
+
+    await editor.document.expectSource(body.replace('First paragraph.', 'First paragraph. ab'))
+    expect(await editor.blocks()).toHaveLength(5)
+  })
+})
+
+test.describe('select all', () => {
+  test('in a paragraph selects the whole body, then the whole document', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 3)
+
+    await page.keyboard.press(`${mod}+a`)
+    const lines = (await editor.selectedText()).split('\n').filter((line) => line !== '')
+    expect(lines).toEqual(['First paragraph.', 'Second paragraph.', 'Results', 'Some emphasised text.', 'Last paragraph.'])
+
+    await page.keyboard.press(`${mod}+a`)
+    expect((await editor.selectedText()).startsWith('Quarterly report')).toBe(true)
+    expect((await editor.selectedText()).endsWith('Last paragraph.')).toBe(true)
+  })
+
+  test('then Backspace deletes every paragraph and keeps what can\'t be edited, and undo brings them back', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 3)
+    await page.keyboard.press(`${mod}+a`)
+
+    await page.keyboard.press('Backspace')
+    expect(await editor.blocks()).toEqual(['h2: Results', 'p: Some emphasised text.'])
+    expect(await editor.text('title')).toBe('Quarterly report')
+    await editor.document.expectSource(
+      body
+        .replace('First paragraph.\n\nSecond paragraph.\n\n', '')
+        .replace('\n\nLast paragraph.', ''),
+    )
+
+    await page.keyboard.press(`${mod}+z`)
+    await editor.document.expectSource(body)
+    expect(await editor.blocks()).toHaveLength(5)
   })
 })
 
@@ -266,6 +458,127 @@ test.describe('around what can\'t be edited', () => {
   })
 })
 
+test.describe('around what can\'t be edited, with the mouse and the keys', () => {
+  const caretColor = (editor: Editor) =>
+    editor.frame.evaluate(() => {
+      const node = document.getSelection()!.focusNode!
+      const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement!
+      return getComputedStyle(el).caretColor
+    })
+
+  test('clicking a heading shows no caret', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.frame.locator('main h2').click()
+    await page.waitForTimeout(100)
+
+    expect(await caretColor(editor)).toBe('rgba(0, 0, 0, 0)')
+  })
+
+  test('an arrow key after clicking a heading goes to the nearest paragraph that way', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    const heading = editor.frame.locator('main h2')
+
+    // Forward, past the formatted paragraph too.
+    await heading.click()
+    await page.keyboard.press('ArrowDown')
+    await editor.expectParagraphCaret(2, 0)
+    await heading.click()
+    await page.keyboard.press('ArrowRight')
+    await editor.expectParagraphCaret(2, 0)
+
+    await heading.click()
+    await page.keyboard.press('ArrowUp')
+    await editor.expectParagraphCaret(1, 17)
+    await heading.click()
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectParagraphCaret(1, 17)
+  })
+
+  test('Delete at the end of the paragraph before one deletes nothing', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 17)
+
+    await page.keyboard.press('Delete')
+    await page.keyboard.type('!')
+
+    await editor.document.expectSource(body.replace('Second paragraph.', 'Second paragraph.!'))
+  })
+
+  test('Enter at the end of the paragraph before one starts a paragraph between them', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 17)
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('New')
+
+    expect(await editor.blocks()).toEqual([
+      'p: First paragraph.',
+      'p: Second paragraph.',
+      'p: New',
+      'h2: Results',
+      'p: Some emphasised text.',
+      'p: Last paragraph.',
+    ])
+    await editor.document.expectSource(body.replace('Second paragraph.', 'Second paragraph.\n\nNew'))
+  })
+
+  test('Right and Left step over them, to the nearest paragraph that way', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 17)
+
+    await page.keyboard.press('ArrowRight')
+    await editor.expectParagraphCaret(2, 0)
+
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectParagraphCaret(1, 17)
+  })
+
+  // One way it could work: a click on a block that can't be edited, then
+  // Enter, starts a paragraph after it.
+  test.fixme('a paragraph can be started between two of them', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.frame.locator('main h2').click()
+
+    // Today there is nowhere between the heading and the formatted
+    // paragraph for the caret to be.
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('New')
+
+    await editor.document.expectSource(body.replace('## Results', '## Results\n\nNew'))
+  })
+
+  test.fixme('a paragraph can be started after one at the end of the document', async ({ page }) => {
+    const source = '---\ntitle: Notes\n---\n\nSome text.\n\n## The end\n'
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    await editor.frame.locator('main h2').click()
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('New')
+
+    await document.expectSource(`${source}\nNew\n`)
+  })
+
+  test('typing over a selection across them puts the text in the first paragraph', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 6)
+    await editor.shiftClickParagraph(2, 4)
+
+    await page.keyboard.type('X')
+
+    expect(await editor.blocks()).toEqual([
+      'p: First paragraph.',
+      'p: SecondX',
+      'h2: Results',
+      'p: Some emphasised text.',
+      'p: paragraph.',
+    ])
+    await editor.document.expectSource(
+      body.replace('Second paragraph.', 'SecondX').replace('Last paragraph.', 'paragraph.'),
+    )
+  })
+})
+
 test.describe('between the title block and the body', () => {
   test('Enter in the last field of the title block goes to the body', async ({ page }) => {
     const editor = await openEditor(page)
@@ -295,6 +608,129 @@ test.describe('between the title block and the body', () => {
 
     await page.keyboard.press('ArrowLeft')
     await editor.expectCaret('subtitle', 13)
+  })
+})
+
+test.describe('between the title block and a body that starts with what can\'t be edited', () => {
+  const source = '---\ntitle: Notes\nsubtitle: Rough\n---\n\n## Results\n\nSome text.\n'
+
+  test('Enter in the last field of the title block goes to the first paragraph', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+    await editor.placeCaret('subtitle', 5)
+
+    await page.keyboard.press('Enter')
+
+    await editor.expectParagraphCaret(0, 0)
+  })
+
+  test('Left at the start of the first paragraph goes to the title block, and Backspace there does nothing', async ({
+    page,
+  }) => {
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    await editor.placeCaretInParagraph(0, 0)
+
+    await page.keyboard.press('Backspace')
+    await editor.expectParagraphCaret(0, 0)
+    expect(document.source()).toBe(source)
+
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectCaret('subtitle', 5)
+  })
+
+  test('Enter stays where it is when the body has no paragraph to go to', async ({ page }) => {
+    const headingOnly = '---\ntitle: Notes\nsubtitle: Rough\n---\n\n## Results\n'
+    const document = await createDocument(headingOnly)
+    const editor = await document.open(page)
+    await editor.placeCaret('subtitle', 5)
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('!')
+
+    await editor.expectCaret('subtitle', 6)
+    await document.expectSource(headingOnly.replace('Rough', 'Rough!'))
+    expect(await editor.blocks()).toEqual(['h2: Results'])
+  })
+})
+
+test.describe('a document without a subtitle', () => {
+  test('Enter in the title goes to the body, and adds no subtitle', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaret('title', 16)
+
+    await page.keyboard.press('Enter')
+
+    await editor.expectParagraphCaret(0, 0)
+    expect(await editor.text('subtitle')).toBeNull()
+    expect(editor.document.source()).toBe(body)
+  })
+})
+
+test.describe('a document without a title block', () => {
+  const source = 'Just text.\n\nMore.\n'
+
+  test('is its body, with the caret at the start of the first paragraph', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    await expect(editor.frame.locator('#title-block-header')).toHaveCount(0)
+    expect(await editor.blocks()).toEqual(['p: Just text.', 'p: More.'])
+    await editor.expectParagraphCaret(0, 0)
+  })
+
+  test('Backspace at its start stays put; Left and Up go to the "+" row, and back', async ({ page }) => {
+    // Adding a title from the row is in `title-block-widget.spec.ts`.
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    await editor.expectParagraphCaret(0, 0)
+
+    await page.keyboard.press('Backspace')
+    await editor.expectParagraphCaret(0, 0)
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectFocusedWidgetItem('+ Abstract')
+    await page.keyboard.press('ArrowRight')
+    await editor.expectParagraphCaret(0, 0)
+    await page.keyboard.press('ArrowUp')
+    await editor.expectFocusedWidgetItem('+ Title')
+    await page.keyboard.press('ArrowDown')
+    await editor.expectParagraphCaret(0, 0)
+
+    await page.keyboard.type('Only ')
+    await document.expectSource(`Only ${source}`)
+    await expect(editor.frame.locator('#title-block-header')).toHaveCount(0)
+  })
+})
+
+test.describe('a document without a body', () => {
+  const source = '---\ntitle: Notes\nsubtitle: Rough\n---\n'
+
+  test('Enter in the last field of the title block starts the body, with the caret in it', async ({ page }) => {
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    expect(await editor.blocks()).toEqual([])
+    await editor.placeCaret('subtitle', 5)
+
+    await page.keyboard.press('Enter')
+    expect(await editor.blocks()).toEqual(['p: '])
+    expect(document.source()).toBe(source)
+
+    await page.keyboard.type('Hello')
+    await editor.expectParagraphCaret(0, 5)
+    // On the line after the title block, or with a blank line between.
+    await expect.poll(() => document.source()).toMatch(/^---\ntitle: Notes\nsubtitle: Rough\n---\n\n?Hello\n$/)
+  })
+
+  test('a body started and left empty goes away', async ({ page }) => {
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    await editor.placeCaret('subtitle', 5)
+    await page.keyboard.press('Enter')
+    expect(await editor.blocks()).toEqual(['p: '])
+
+    await page.keyboard.press('ArrowUp')
+
+    expect((await editor.caret()).field).toBe('subtitle')
+    expect(await editor.blocks()).toEqual([])
+    expect(document.source()).toBe(source)
   })
 })
 
@@ -348,6 +784,32 @@ test.describe('with collaborators', () => {
   })
 })
 
+test.describe('with collaborators, when the paragraph my caret is in goes', () => {
+  test('someone deletes it, and my caret goes to the end of the paragraph before', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 6)
+
+    editor.document.replace('Second paragraph.\n\n', '')
+
+    await expect.poll(() => editor.paragraphs()).toEqual(['First paragraph.', 'Last paragraph.'])
+    await editor.expectParagraphCaret(0, 16)
+  })
+
+  test('someone gives it formatting, and my caret goes to the end of the paragraph before', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 6)
+
+    editor.document.replace('Second paragraph.', 'Second **bold** paragraph.')
+
+    await expect.poll(() => editor.paragraphs()).toEqual(['First paragraph.', 'Last paragraph.'])
+    await editor.expectParagraphCaret(0, 16)
+    await page.keyboard.type('!')
+    await editor.document.expectSource(
+      body.replace('First paragraph.', 'First paragraph.!').replace('Second paragraph.', 'Second **bold** paragraph.'),
+    )
+  })
+})
+
 test.describe('moving through the document', () => {
   test('the keys for the document\'s start and end go to its first and last text', async ({ page }) => {
     const editor = await openEditor(page, 'body')
@@ -358,6 +820,22 @@ test.describe('moving through the document', () => {
 
     await page.keyboard.press(`${mod}+ArrowUp`)
     await editor.expectCaret('title', 0)
+  })
+
+  test('with Shift, the same keys select to there', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(1, 3)
+
+    await page.keyboard.press(`Shift+${mod}+ArrowDown`)
+    const toEnd = await editor.selectedText()
+    expect(toEnd.startsWith('ond paragraph.')).toBe(true)
+    expect(toEnd.endsWith('Last paragraph.')).toBe(true)
+
+    // From where the selection started, not from where it ended.
+    await page.keyboard.press(`Shift+${mod}+ArrowUp`)
+    const toStart = await editor.selectedText()
+    expect(toStart.startsWith('Quarterly report')).toBe(true)
+    expect(toStart.endsWith('Sec')).toBe(true)
   })
 
   test('the arrow keys stop on each empty paragraph', async ({ page }) => {

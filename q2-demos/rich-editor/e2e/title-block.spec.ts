@@ -1,12 +1,13 @@
 /**
  * Editing the title and subtitle in the visual editor: the caret, Enter,
- * the arrow keys, undo, and adding and removing fields. What the edits do
- * to the source text is in `source.spec.ts`.
+ * the arrow keys, undo, adding and removing fields, and what an empty field
+ * shows. What the edits do to the source text is in `source.spec.ts`.
  */
 
-import { expect, fixture, openEditor, test, lineStart, lineEnd } from './helpers.ts'
+import { createDocument, expect, fixture, openEditor, test, lineStart, lineEnd } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
+const basic = fixture('basic')
 
 test.describe('placing the caret', () => {
   test('clicking a field puts the caret at the click point without moving anything', async ({ page }) => {
@@ -32,6 +33,41 @@ test.describe('placing the caret', () => {
     })
     expect(style).toEqual({ outline: 'none', background: 'rgba(0, 0, 0, 0)', boxShadow: 'none' })
   })
+
+  test('nor has the page around it, and its text is not spell-checked', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+
+    // What has the focus is the whole document, not the field.
+    const surface = await editor.frame.evaluate(() => {
+      const el = document.activeElement as HTMLElement
+      return { tag: el.tagName, outline: getComputedStyle(el).outlineStyle, spellcheck: el.spellcheck }
+    })
+    expect(surface).toEqual({ tag: 'MAIN', outline: 'none', spellcheck: false })
+  })
+
+  test('a double click selects a word', async ({ page }) => {
+    const editor = await openEditor(page)
+    const box = (await editor.field('title').boundingBox())!
+
+    await editor.field('title').dblclick({ position: { x: 30, y: box.height / 2 } })
+
+    // (With the space after it, on some systems.)
+    expect((await editor.selectedText()).trim()).toBe('Quarterly')
+  })
+
+  test('a triple click selects the field\'s text, and typing replaces it and nothing else', async ({ page }) => {
+    const editor = await openEditor(page)
+    const box = (await editor.field('title').boundingBox())!
+
+    await editor.field('title').click({ clickCount: 3, position: { x: 30, y: box.height / 2 } })
+    expect((await editor.selectedText()).trim()).toBe('Quarterly report')
+    await page.keyboard.type('Annual')
+
+    expect(await editor.text('title')).toBe('Annual')
+    expect(await editor.text('subtitle')).toBe('Third quarter')
+    await editor.document.expectSource(basic.replace('Quarterly report', 'Annual'))
+  })
 })
 
 test.describe('typing', () => {
@@ -43,6 +79,84 @@ test.describe('typing', () => {
 
     expect(await editor.text('title')).toBe('Quarterly report (draft)')
     expect(await editor.caret()).toMatchObject({ field: 'title', start: 24, end: 24 })
+  })
+
+  test('Backspace deletes a whole character, however it is encoded', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+    // A thumbs-up with a skin tone: two code points, four UTF-16 units.
+    await page.keyboard.insertText(' 👍🏽')
+    expect(await editor.text('title')).toBe('Quarterly report 👍🏽')
+
+    await page.keyboard.press('Backspace')
+
+    expect(await editor.text('title')).toBe('Quarterly report ')
+  })
+
+  test('Delete deletes the character after the caret, a whole one too', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 9)
+    await page.keyboard.insertText('👍🏽')
+    await editor.placeCaret('title', 9)
+
+    await page.keyboard.press('Delete')
+    expect(await editor.text('title')).toBe('Quarterly report')
+    await editor.expectCaret('title', 9)
+
+    await page.keyboard.press('Delete')
+    expect(await editor.text('title')).toBe('Quarterlyreport')
+    await editor.expectCaret('title', 9)
+  })
+
+  test('Tab types nothing', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 9)
+
+    await page.keyboard.press('Tab')
+
+    expect(await editor.text('title')).toBe('Quarterly report')
+    expect(editor.document.source()).toBe(basic)
+  })
+
+  test('the keys for bold and italic format nothing', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.select('title', 0, 9)
+
+    await page.keyboard.press(`${mod}+b`)
+    await page.keyboard.press(`${mod}+i`)
+
+    expect(await editor.field('title').innerHTML()).toBe('Quarterly report')
+    expect(await editor.selectedText()).toBe('Quarterly')
+    expect(editor.document.source()).toBe(basic)
+  })
+
+  test('a correction from the system (autocorrect, a spelling suggestion) replaces the text it is for', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', "WebKit can't make the event a correction arrives as")
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+
+    // The system replaces "Quarterly" with "Yearly", wherever the caret is.
+    await editor.field('title').evaluate((el) => {
+      const text = el.firstChild!
+      const range = new StaticRange({ startContainer: text, startOffset: 0, endContainer: text, endOffset: 9 })
+      document.activeElement!.dispatchEvent(
+        new InputEvent('beforeinput', {
+          inputType: 'insertReplacementText',
+          data: 'Yearly',
+          targetRanges: [range],
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+    })
+
+    expect(await editor.text('title')).toBe('Yearly report')
+    await editor.document.expectSource(fixture('basic').replace('Quarterly report', 'Yearly report'))
   })
 
   test('Escape does nothing', async ({ page }) => {
@@ -87,6 +201,16 @@ test.describe('Enter', () => {
 
     expect(await editor.text('title')).toBe('Quarterly report')
     expect(await editor.text('subtitle')).toBe('Third quarter')
+    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
+  })
+
+  test('Enter with a selection deletes it and moves to the next field', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.select('title', 9, 16)
+
+    await page.keyboard.press('Enter')
+
+    expect(await editor.text('title')).toBe('Quarterly')
     expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
   })
 
@@ -165,6 +289,21 @@ test.describe('arrow keys between fields', () => {
 
     await editor.expectParagraphCaret(0, 10)
   })
+
+  test('Backspace at the start of the document stays put, and Left goes to the "+" row; neither deletes', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 0)
+
+    await page.keyboard.press('Backspace')
+    await editor.expectCaret('title', 0)
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectFocusedWidgetItem('+ Abstract')
+
+    expect(await editor.text('title')).toBe('Quarterly report')
+    expect(editor.document.source()).toBe(basic)
+  })
 })
 
 test.describe('undo', () => {
@@ -209,6 +348,33 @@ test.describe('undo', () => {
     expect(await editor.text('title')).toBe('Quarterly reportX')
   })
 
+  test('typing after a pause of a second is a new step', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+    await page.keyboard.type(' one')
+    await page.waitForTimeout(1200)
+    await page.keyboard.type(' two')
+
+    await page.keyboard.press(`${mod}+z`)
+    expect(await editor.text('title')).toBe('Quarterly report one')
+    await page.keyboard.press(`${mod}+z`)
+    expect(await editor.text('title')).toBe('Quarterly report')
+  })
+
+  test('an edit after an undo leaves nothing to redo', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+    await page.keyboard.type(' one')
+    await page.keyboard.press(`${mod}+z`)
+    await page.keyboard.type('!')
+
+    await page.keyboard.press(`${mod}+Shift+z`)
+
+    expect(await editor.text('title')).toBe('Quarterly report!')
+  })
+
   test('a paste is its own step', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
@@ -234,6 +400,25 @@ test.describe('undo', () => {
 
     expect(await editor.text('title')).toBe('Quarterly report')
     expect(await editor.caret()).toMatchObject({ field: 'title', start: 16, end: 16 })
+  })
+
+  test('elsewhere than on a Mac, the keys are Ctrl+Z to undo, and Ctrl+Y or Ctrl+Shift+Z to redo', async ({
+    page,
+  }) => {
+    // The editor goes by the system the browser says it is on.
+    await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { get: () => 'Win32' }))
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+    await page.keyboard.type('!')
+
+    await page.keyboard.press('Control+z')
+    expect(await editor.text('title')).toBe('Quarterly report')
+    await page.keyboard.press('Control+y')
+    expect(await editor.text('title')).toBe('Quarterly report!')
+    await page.keyboard.press('Control+z')
+    await page.keyboard.press('Control+Shift+z')
+    expect(await editor.text('title')).toBe('Quarterly report!')
   })
 
   test('undo in one field can undo an edit in another', async ({ page }) => {
@@ -274,5 +459,79 @@ test.describe('emptying fields', () => {
     await page.keyboard.press('Backspace')
 
     expect((await editor.field('title').boundingBox())!.height).toBe(height)
+  })
+
+  test('the title goes away like any other field, and the rest of the title block stays', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.press('Backspace')
+    // Emptied, it stays; Backspace in it, empty, removes it.
+    await page.keyboard.press('Backspace')
+
+    await editor.clickAt('subtitle', 30)
+
+    expect(await editor.text('title')).toBeNull()
+    expect(await editor.text('subtitle')).toBe('Third quarter')
+    await expect(editor.frame.locator('#title-block-header')).toContainText('Ana Silva')
+    await editor.document.expectSource(basic.replace('title: Quarterly report\n', ''))
+  })
+})
+
+test.describe('an empty field', () => {
+  const NAMES = { title: 'Title', subtitle: 'Subtitle', abstract: 'Abstract' } as const
+
+  for (const field of ['title', 'subtitle', 'abstract'] as const) {
+    test(`an emptied ${field} shows “${NAMES[field]}”, faintly, until something is typed`, async ({ page }) => {
+      const editor = await openEditor(page, 'abstract')
+      const placeholder = () =>
+        editor.field(field).evaluate((el) => {
+          const s = getComputedStyle(el, '::before')
+          return { content: s.content, color: s.color, position: s.position }
+        })
+      const left = (await editor.field(field).boundingBox())!.x
+      if (field === 'abstract') await editor.placeCaretAtEnd(field)
+      else await editor.clickAt(field, 20)
+      await page.keyboard.press(`${mod}+a`)
+      await page.keyboard.press('Backspace')
+      expect(await editor.text(field)).toBe('')
+
+      // It's out of the flow of the text: the caret is at the start of the
+      // line, where the first character will go, not after it.
+      expect(await placeholder()).toEqual({
+        content: `"${NAMES[field]}"`,
+        color: 'rgb(173, 181, 189)',
+        position: 'absolute',
+      })
+      expect((await editor.field(field).boundingBox())!.x).toBe(left)
+
+      await page.keyboard.type('x')
+      expect(await editor.text(field)).toBe('x')
+      expect((await placeholder()).content).toBe('none')
+    })
+  }
+})
+
+test.describe('formatting in the title block', () => {
+  const source =
+    '---\ntitle: "A *bold* claim, with `code`"\nsubtitle: See [the site](https://example.com)\n---\n\nBody text.\n'
+
+  test('is not shown: a field is its text', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    expect(await editor.text('title')).toBe('A bold claim, with code')
+    expect(await editor.text('subtitle')).toBe('See the site')
+    expect(await editor.field('title').innerHTML()).toBe('A bold claim, with code')
+    expect(await editor.field('subtitle').innerHTML()).toBe('See the site')
+  })
+
+  test.fixme('stays in the source when the field is edited', async ({ page }) => {
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    await editor.placeCaret('title', 23)
+    await page.keyboard.type('!')
+
+    // Today the title is written as the text it showed: `A bold claim, with code!`.
+    await document.expectSource(source.replace('`code`', '`code`!'))
   })
 })

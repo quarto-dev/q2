@@ -5,10 +5,9 @@ import { defineConfig, devices } from '@playwright/test'
  * hub (started in the test worker; see `e2e/helpers.ts`) and opens it in
  * the app, served by the Vite dev server that Playwright starts. Build
  * the WASM module first (`npm run build:wasm`).
- *
- * An already running dev server on the port is reused, so two checkouts
- * running the tests at once each need a port of their own: set `E2E_PORT`.
  */
+// Another checkout's tests may be running at the same time, with a dev
+// server of their own: `E2E_PORT` gives this run a different port.
 const PORT = Number(process.env.E2E_PORT ?? 5192)
 
 export default defineConfig({
