@@ -1,6 +1,7 @@
 /**
  * The app around the visual editor: which document it opens, the source
- * pane beside the editor, and the line of status under the editor.
+ * pane beside the editor, the connection to the hub, the line of status
+ * under the editor, and the layout in a narrow window.
  *
  * The document is named in the URL: `?doc=<index document id>&file=<path>`,
  * with `&server=<hub's WebSocket URL>` unless the hub is the local one, and
@@ -130,6 +131,120 @@ test.describe('the source pane', () => {
     await expect(parseFailed).toHaveCount(0)
     await expect(page.locator('.visual-editor .status')).not.toContainText('Read-only')
     await document.expectSource(basic)
+  })
+})
+
+test.describe('the connection to the hub', () => {
+  /** Route the page's connections to the hub through the test, which can cut them. */
+  async function cuttableHub(page: import('@playwright/test').Page) {
+    const open: { close: () => Promise<void> }[] = []
+    let down = false
+    await page.routeWebSocket(/\/\/127\.0\.0\.1:\d+\/ws/, (ws) => {
+      if (down) {
+        void ws.close()
+        return
+      }
+      const server = ws.connectToServer()
+      open.push({ close: () => server.close() })
+    })
+    return {
+      /** Close every connection, and refuse new ones until `restore`. */
+      async cut() {
+        down = true
+        for (const socket of open.splice(0)) await socket.close()
+      },
+      /** Close every connection, and let the page connect again. */
+      async drop() {
+        for (const socket of open.splice(0)) await socket.close()
+      },
+      restore() {
+        down = false
+      },
+    }
+  }
+
+  /** Open the page of a real document, on a hub that isn't there. */
+  async function openOnNoHub(page: import('@playwright/test').Page) {
+    await (await createDocument(basic)).open(page)
+    await page.goto(withQuery(page.url(), (query) => query.set('server', 'ws://127.0.0.1:1/ws')))
+  }
+
+  test('while connecting, the page says so', async ({ page }) => {
+    await openOnNoHub(page)
+
+    await expect(page.locator('.status')).toHaveText('Connecting to ws://127.0.0.1:1/ws…')
+    await expect(page.locator('iframe')).toHaveCount(0)
+  })
+
+  // Today it says it's connecting for 10–15 s, then "Disconnected." for ever.
+  test.fixme('a hub that can\'t be reached is an error that names it', async ({ page }) => {
+    test.setTimeout(60000)
+    await openOnNoHub(page)
+
+    await expect(page.locator('.status.status-error')).toContainText('ws://127.0.0.1:1/ws', { timeout: 30000 })
+  })
+
+  test('when the connection drops, the editor comes back with the document once it reconnects', async ({ page }) => {
+    const hub = await cuttableHub(page)
+    const document = await createDocument(basic)
+    await document.open(page)
+    const title = page.frameLocator('iframe.visual-frame').locator('h1.title')
+
+    await hub.drop()
+    document.replace('Quarterly report', 'Annual report')
+
+    // It tries again after a few seconds.
+    await expect(page.locator('.status')).toHaveText('Disconnected.')
+    await expect(title).toHaveText('Annual report', { timeout: 15000 })
+    await page.frameLocator('iframe.visual-frame').locator('h1.title .qe-field').click()
+    await page.keyboard.type('!')
+    await expect.poll(() => document.source()).toContain('!')
+  })
+
+  // Today the page says it is connecting instead, and the editor, its
+  // caret and its undo history are gone until the connection is back.
+  test.fixme('while the connection is down, the editor stays, read-only, with its caret', async ({ page }) => {
+    const hub = await cuttableHub(page)
+    const editor = await (await createDocument(basic)).open(page)
+    await editor.placeCaret('title', 4)
+
+    await hub.cut()
+
+    await expect(page.locator('.visual-editor .status')).toContainText('Read-only: not connected')
+    await editor.expectCaret('title', 4)
+    await page.keyboard.type('x')
+    expect(await editor.text('title')).toBe('Quarterly report')
+
+    hub.restore()
+    await expect(page.locator('.visual-editor .status')).not.toContainText('Read-only')
+    await editor.expectCaret('title', 4)
+  })
+})
+
+test.describe('a narrow window', () => {
+  async function openNarrow(page: import('@playwright/test').Page) {
+    const document = await createDocument(basic)
+    await document.open(page)
+    await page.setViewportSize({ width: 700, height: 800 })
+    await page.goto(withQuery(page.url(), (query) => query.delete('view')))
+    await page.frameLocator('iframe.visual-frame').locator('h1.title').waitFor()
+  }
+
+  test('has the source pane above the visual editor, each as wide as the window', async ({ page }) => {
+    await openNarrow(page)
+
+    const source = (await page.locator('textarea').boundingBox())!
+    const visual = (await page.locator('iframe.visual-frame').boundingBox())!
+    expect(source.y + source.height).toBeLessThanOrEqual(visual.y)
+    expect(Math.abs(source.x - visual.x)).toBeLessThan(2)
+    expect(Math.abs(source.width - visual.width)).toBeLessThan(4)
+  })
+
+  // Today it is a few lines tall (68px).
+  test.fixme('has a source pane tall enough to read', async ({ page }) => {
+    await openNarrow(page)
+
+    expect((await page.locator('textarea').boundingBox())!.height).toBeGreaterThanOrEqual(300)
   })
 })
 

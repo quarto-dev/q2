@@ -535,3 +535,79 @@ test.describe('formatting in the title block', () => {
     await document.expectSource(source.replace('`code`', '`code`!'))
   })
 })
+
+test.describe('titles written other ways', () => {
+  test('a title written as a number is its text, and can be edited', async ({ page }) => {
+    const document = await createDocument('---\ntitle: 2024\n---\n\nBody.\n')
+    const editor = await document.open(page)
+    expect(await editor.text('title')).toBe('2024')
+    await editor.expectCaret('title', 0)
+
+    await page.keyboard.press(lineEnd)
+    await page.keyboard.type(' review')
+
+    expect(await editor.text('title')).toBe('2024 review')
+    await expect.poll(() => document.source()).toContain('title: 2024 review\n')
+  })
+
+  test('a title written as a block of text is its text, and can be edited', async ({ page }) => {
+    const document = await createDocument('---\ntitle: |\n  Block scalar title\n---\n\nBody.\n')
+    const editor = await document.open(page)
+    expect(await editor.text('title')).toBe('Block scalar title')
+
+    await page.keyboard.press(lineEnd)
+    await page.keyboard.type('!')
+
+    expect(await editor.text('title')).toBe('Block scalar title!')
+    await expect.poll(() => document.source()).toContain('Block scalar title!')
+  })
+
+  test('a title that is not text (a list) is not shown, and there is no title to edit', async ({ page }) => {
+    const editor = await (await createDocument('---\ntitle: [a, b]\n---\n\nBody.\n')).open(page)
+
+    expect(await editor.text('title')).toBeNull()
+    await expect(editor.frame.locator('#title-block-header')).toHaveCount(0)
+    expect(await editor.blocks()).toEqual(['p: Body.'])
+  })
+})
+
+test.describe('a subtitle without a title', () => {
+  for (const [name, front] of [
+    ['no title', 'subtitle: Only a subtitle'],
+    ['an empty title', 'title: ""\nsubtitle: Only a subtitle'],
+  ]) {
+    test(`with ${name}, the subtitle is shown, and the caret starts in it`, async ({ page }) => {
+      const editor = await (await createDocument(`---\n${front}\n---\n\nBody.\n`)).open(page)
+
+      expect(await editor.text('title')).toBeNull()
+      expect(await editor.text('subtitle')).toBe('Only a subtitle')
+      await expect.poll(() => editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
+    })
+  }
+})
+
+test.describe('the rest of the title block', () => {
+  const source = '---\ntitle: Notes\ndescription: A description\nkeywords: [alpha, beta]\ncategories: [news]\n---\n\nBody.\n'
+
+  test('a description, keywords and categories are shown', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+    const header = editor.frame.locator('#title-block-header')
+
+    await expect(header.getByText('A description')).toBeVisible()
+    await expect(header.getByText('alpha, beta')).toBeVisible()
+    await expect(header.getByText('news')).toBeVisible()
+  })
+
+  test('and can\'t be edited', async ({ page }) => {
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+
+    for (const text of ['A description', 'alpha, beta', 'news']) {
+      await editor.frame.locator('#title-block-header').getByText(text).click()
+      await page.keyboard.type('x')
+    }
+
+    await expect(editor.frame.locator('#title-block-header').getByText('A description')).toHaveText('A description')
+    expect(document.source()).toBe(source)
+  })
+})
