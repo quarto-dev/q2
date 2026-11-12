@@ -50,18 +50,31 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
     if (enabled) {
         return (
             <ol {...olProps} {...dataLocProps(args.node)}>
-                {args.node.c[1].map((item, i) => (
-                    <PlainHost as="li" key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental)}>
-                        {item.map((block, j) => (
-                            <Node
-                                key={`${i}:${j}`}
-                                node={block}
-                                onNavigateToDocument={args.onNavigateToDocument}
-                                setLocalAst={NOOP}
-                            />
-                        ))}
-                    </PlainHost>
-                ))}
+                {args.node.c[1].map((item, i) => {
+                    const checked = taskItemChecked(item);
+                    return (
+                        <PlainHost as="li" key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental, checked !== null)}>
+                            {checked !== null ? (
+                                // Incremental (reveal) surfaces are never edit-enabled:
+                                // render the checkbox, but inert (BulletList parity).
+                                <TaskItemBlocks
+                                    item={item}
+                                    checked={checked}
+                                    onNavigateToDocument={args.onNavigateToDocument}
+                                />
+                            ) : (
+                                item.map((block, j) => (
+                                    <Node
+                                        key={`${i}:${j}`}
+                                        node={block}
+                                        onNavigateToDocument={args.onNavigateToDocument}
+                                        setLocalAst={NOOP}
+                                    />
+                                ))
+                            )}
+                        </PlainHost>
+                    );
+                })}
             </ol>
         );
     }
@@ -73,8 +86,10 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
     return (
         <ol {...olProps} {...dataLocProps(args.node)}>
             {args.node.c[1].map((item, i) => {
-                // Per-item block attr (bd-aeyss6p5) applies to every <li>.
-                const itemAttrProps = liItemAttrProps(args.node.itemAttr?.[i], false);
+                const checked = taskItemChecked(item);
+                // Per-item block attr (bd-aeyss6p5) applies to every <li>;
+                // task items also get `task-list-item` (bd-2ydvebkc).
+                const itemAttrProps = liItemAttrProps(args.node.itemAttr?.[i], false, checked !== null);
                 // Empty-item guard: render a bare <li> to avoid accessing item[0].s on an empty array.
                 if (item.length === 0) {
                     return <li key={i} {...itemAttrProps} />;
@@ -90,7 +105,6 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
                     : {};
                 // Task items render checkboxes but the <ol> never gets the
                 // task-list class (Pandoc writer parity).
-                const checked = taskItemChecked(item);
                 if (checked !== null) {
                     return (
                         <PlainHost as="li" key={i} {...itemAttrProps} {...liProps}>

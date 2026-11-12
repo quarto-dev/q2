@@ -204,6 +204,11 @@ $heading4-size: $revealjs-h4-font-size !default;
 $code-font: $font-family-monospace !default;
 $selection-background-color: $selection-bg !default;
 
+// --- task lists ---------------------------------------------------------------
+// Shared with the HTML theme (see bootstrap/_bootstrap-variables.scss): set
+// `false` to hide ordered task-item numbers as well as bullets.
+$task-list-ordered-markers: true !default;
+
 /*-- scss:functions --*/
 
 // Color helpers ported from Quarto 1 quarto.scss (used by callouts, kbd, code
@@ -644,14 +649,26 @@ pre.mermaid.quarto-figure-right > svg {
   list-style-type: decimal;
 }
 
-.reveal ul.task-list {
-  list-style: none;
+// Task lists (GH #892, bd-2ydvebkc): the marker is hidden per task item
+// (`li.task-list-item`, emitted by the HTML writer), so a task item in a mixed
+// list loses its bullet too; ordered task items keep their number unless
+// `$task-list-ordered-markers: false`. Checkbox geometry from Quarto 1's
+// quarto.scss (quarto-cli#2834).
+$_task-hidden-marker-lists: ul;
+@if not $task-list-ordered-markers {
+  $_task-hidden-marker-lists: ul, ol;
 }
-.reveal ul.task-list li input[type="checkbox"] {
-  width: 2em;
-  height: 2em;
-  margin: 0 1em 0.5em -1.6em;
-  vertical-align: middle;
+@each $list in $_task-hidden-marker-lists {
+  .reveal #{$list} > li.task-list-item {
+    list-style-type: none;
+  }
+  .reveal #{$list} > li.task-list-item > label > input[type="checkbox"],
+  .reveal #{$list} > li.task-list-item > p:first-child > label > input[type="checkbox"] {
+    width: 2em;
+    height: 2em;
+    margin: 0 1em 0.5em -1.6em;
+    vertical-align: middle;
+  }
 }
 
 // --- kbd ---------------------------------------------------------------------

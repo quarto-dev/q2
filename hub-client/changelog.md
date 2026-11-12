@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-12
+
+- [`2ec078671`](https://github.com/quarto-dev/q2/commits/2ec078671): Task-list items in the preview now show their checkbox in place of the bullet (also in lists that mix tasks and plain items), and an empty `- [ ] ` item shows its checkbox as soon as you type it.
+
 ### 2026-11-10
 
 - [`f2b971353`](https://github.com/quarto-dev/q2/commits/f2b971353): Collaborator display names now accept full Connect first/last-name combinations (up to 513 Unicode code points) and remain readable in presence, version history, tooltips, and attribution on narrow screens.

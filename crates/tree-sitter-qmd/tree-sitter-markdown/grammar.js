@@ -987,10 +987,20 @@ module.exports = grammar({
             // would lex as a marker and could never backtrack to the inline
             // `[` interpretation; with it, `[x](`/`[xx]` fail the token and
             // parse as inline spans/links.
+            //
+            // Everything after the marker is optional so an empty task item (`- [ ] ` with
+            // nothing after the marker's whitespace) parses as a task item
+            // instead of an ERROR: that is exactly what a user has typed in
+            // the collaborative editor just before the item text
+            // (bd-2ydvebkc). Like an empty plain item (see `_list_item_minus`),
+            // the empty task item consumes the rest of its line as a
+            // `_blank_line`.
             prec(1, seq(
                 choice($.task_list_marker_checked, $.task_list_marker_unchecked),
-                $.pandoc_paragraph,
-                repeat($._block),
+                optional(choice(
+                    seq($.pandoc_paragraph, repeat($._block)),
+                    $._blank_line,
+                )),
             )),
         )),
 

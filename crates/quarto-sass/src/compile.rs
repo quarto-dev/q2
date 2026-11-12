@@ -1273,13 +1273,14 @@ mod tests {
             "code a:hover should underline on hover per Q1 (bd-bthmzyrc)"
         );
 
-        // Should have the task-list rules ported from TS Quarto's
-        // _quarto-rules.scss (bd-obkvhlam): the ul.task-list indent and the
-        // checkbox right-margin that space `<input type="checkbox">` from the
+        // Should have the task-list rules (bd-obkvhlam): the ul.task-list
+        // indent — sized to the hung checkbox since bd-2ydvebkc (Q1 used 1em
+        // with a -1em checkbox) — and the checkbox right-margin ported from
+        // _quarto-rules.scss that spaces `<input type="checkbox">` from the
         // item text emitted by the HTML writer's task-list rendering.
         assert!(
-            css.contains("ul.task-list{padding-left:1em}"),
-            "Should contain the ul.task-list rule ported from _quarto-rules.scss (bd-obkvhlam)"
+            css.contains("ul.task-list{padding-left:1.2em}"),
+            "Should contain the ul.task-list indent (bd-obkvhlam, bd-2ydvebkc)"
         );
         assert!(
             css.contains("input[type=checkbox]{margin-right:.5ch}"),
@@ -2079,6 +2080,98 @@ mod tests {
                 || css.contains(".quarto-container{min-height:calc(100vh-132px)}")
                 || css.contains(".quarto-container { min-height: calc(100vh - 132px) }"),
             "missing `.quarto-container {{ min-height: calc(100vh - 132px) }}` (Q1 parity)"
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // Task lists (GH #892, bd-2ydvebkc). The HTML writer marks each task
+    // `<li>` with `task-list-item`; the theme hides the list marker per item
+    // and hangs the checkbox into the marker's gutter. Ordered task items
+    // keep their number unless a theme sets `$task-list-ordered-markers:
+    // false` in its `scss:defaults` layer.
+    // ---------------------------------------------------------------------
+
+    const TASK_UL_MARKER_RULE: &str = "ul>li.task-list-item{list-style-type:none}";
+    const TASK_OL_MARKER_RULE: &str = "ol>li.task-list-item{list-style-type:none}";
+
+    /// Compile the default HTML theme stacked with a user `custom.scss`.
+    fn compile_with_user_theme(custom_scss: &str) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("custom.scss"), custom_scss).unwrap();
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(dir.path().to_path_buf(), &runtime);
+        let themes = vec![
+            ThemeSpec::parse("cosmo").unwrap(),
+            ThemeSpec::parse("custom.scss").unwrap(),
+        ];
+        let config = ThemeConfig::new(themes, true);
+        compile_theme_css(&config, &context).unwrap().css
+    }
+
+    #[test]
+    fn test_task_list_items_hide_bullet_and_hang_checkbox() {
+        let runtime = NativeRuntime::new();
+        let css = compile_default_css(&runtime, true).unwrap();
+        assert!(
+            css.contains(TASK_UL_MARKER_RULE),
+            "bullet task items must hide their marker per item (GH #892)"
+        );
+        assert!(
+            css.contains("ul>li.task-list-item>label>input[type=checkbox]"),
+            "tight bullet task items must hang the checkbox into the marker gutter"
+        );
+        assert!(
+            css.contains("ul>li.task-list-item>p:first-child>label>input[type=checkbox]"),
+            "loose bullet task items (li > p > label > input) must hang the checkbox too"
+        );
+        // Ordered task items keep their numbers by default.
+        assert!(
+            !css.contains("ol>li.task-list-item"),
+            "ordered task items keep their number unless the theme opts out"
+        );
+    }
+
+    #[test]
+    fn test_task_list_ordered_markers_escape_hatch() {
+        let css = compile_with_user_theme(
+            "/*-- scss:defaults --*/\n$task-list-ordered-markers: false;\n/*-- scss:rules --*/\n",
+        );
+        assert!(css.contains(TASK_UL_MARKER_RULE));
+        assert!(
+            css.contains(TASK_OL_MARKER_RULE),
+            "$task-list-ordered-markers: false must hide ordered task-item numbers"
+        );
+        assert!(
+            css.contains("ol>li.task-list-item>label>input[type=checkbox]"),
+            "...and hang their checkboxes into the freed gutter"
+        );
+
+        // The default value set explicitly is the same as not setting it.
+        let css = compile_with_user_theme(
+            "/*-- scss:defaults --*/\n$task-list-ordered-markers: true;\n/*-- scss:rules --*/\n",
+        );
+        assert!(css.contains(TASK_UL_MARKER_RULE));
+        assert!(!css.contains("ol>li.task-list-item"));
+    }
+
+    #[test]
+    fn test_reveal_task_list_items_hide_bullet() {
+        let runtime = NativeRuntime::new();
+        let css = compile_reveal_theme_css(&runtime, true, &[], &[]).unwrap();
+        assert!(
+            css.contains(".reveal ul>li.task-list-item{list-style-type:none}"),
+            "reveal bullet task items must hide their marker per item"
+        );
+        assert!(!css.contains(".reveal ol>li.task-list-item"));
+
+        let layer = crate::SassLayer {
+            defaults: "$task-list-ordered-markers: false;".to_string(),
+            ..Default::default()
+        };
+        let css = compile_reveal_theme_css(&runtime, true, &[layer], &[]).unwrap();
+        assert!(
+            css.contains(".reveal ol>li.task-list-item{list-style-type:none}"),
+            "the escape hatch applies to reveal decks too"
         );
     }
 }
