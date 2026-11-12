@@ -23,6 +23,9 @@ const SELECTORS: Record<Field, string> = {
   abstract: '.abstract .qe-field',
 }
 
+/** The body's editable paragraphs. */
+const PARAGRAPH = '#quarto-document-content > p.qe-field'
+
 const FILE = 'index.qmd'
 
 // The sync client's connection progress isn't the tests' output.
@@ -157,6 +160,12 @@ export class Editor {
     for (let i = 0; i < offset; i++) await this.page.keyboard.press('ArrowRight')
   }
 
+  /** Put the caret at the end of a field's text, with a click after its last line. */
+  async placeCaretAtEnd(field: Field) {
+    const box = (await this.field(field).boundingBox())!
+    await this.field(field).click({ position: { x: box.width - 2, y: box.height - 4 } })
+  }
+
   /** Select the characters from `from` to `to` in a one-line field. */
   async select(field: Field, from: number, to: number) {
     await this.placeCaret(field, from)
@@ -195,10 +204,76 @@ export class Editor {
     await this.field(field).click({ position: { x, y: Math.min(box.height, lineHeight) / 2 } })
   }
 
-  /** Click the page below the title block, outside every field. */
+  /** Click the page below the document, outside every field. */
   async clickAway() {
-    const box = (await this.frame.locator('#title-block-header').boundingBox())!
-    await this.page.mouse.click(box.x + 5, box.y + box.height + 40)
+    const frame = (await this.page.locator('iframe.visual-frame').boundingBox())!
+    await this.page.mouse.click(frame.x + frame.width / 2, frame.y + frame.height - 10)
+  }
+
+  /** The body's blocks as shown, each as `tag: text`. */
+  blocks(): Promise<string[]> {
+    return this.frame.evaluate(() =>
+      [...document.querySelectorAll('#quarto-document-content > :not(header)')].map(
+        (el) => `${el.tagName.toLowerCase()}: ${el.textContent}`,
+      ),
+    )
+  }
+
+  /** The text of each of the body's editable paragraphs. */
+  paragraphs(): Promise<string[]> {
+    return this.frame.evaluate(
+      (selector) => [...document.querySelectorAll(selector)].map((el) => el.textContent ?? ''),
+      PARAGRAPH,
+    )
+  }
+
+  /** Put the caret in the body's `index`th editable paragraph (of one line), `offset` characters in. */
+  async placeCaretInParagraph(index: number, offset: number) {
+    await this.frame.locator(PARAGRAPH).nth(index).click({ position: { x: 5, y: 5 } })
+    await this.page.keyboard.press('Home')
+    for (let i = 0; i < offset; i++) await this.page.keyboard.press('ArrowRight')
+  }
+
+  /** Extend the selection to `offset` characters into the body's `index`th editable paragraph. */
+  async shiftClickParagraph(index: number, offset: number) {
+    const point = await this.frame.evaluate(
+      ([selector, index, offset]) => {
+        const text = document.querySelectorAll(selector as string)[index as number].firstChild!
+        const range = document.createRange()
+        range.setStart(text, offset as number)
+        range.setEnd(text, offset as number)
+        const rect = range.getBoundingClientRect()
+        return { x: rect.left, y: rect.top + rect.height / 2 }
+      },
+      [PARAGRAPH, index, offset] as const,
+    )
+    const frame = (await this.page.locator('iframe.visual-frame').boundingBox())!
+    await this.page.keyboard.down('Shift')
+    await this.page.mouse.click(frame.x + point.x + 1, frame.y + point.y)
+    await this.page.keyboard.up('Shift')
+  }
+
+  /** Wait until the caret is `offset` characters into the body's `index`th editable paragraph. */
+  async expectParagraphCaret(index: number, offset: number) {
+    await expect
+      .poll(() =>
+        this.frame.evaluate((selector) => {
+          const selection = document.getSelection()!
+          const focused = (document.activeElement as HTMLElement | null)?.isContentEditable === true
+          const node = selection.focusNode
+          const el = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement
+          const paragraph = el?.closest(selector)
+          if (!focused || !selection.isCollapsed || !paragraph || !node) return null
+          const prefix = document.createRange()
+          prefix.selectNodeContents(paragraph)
+          prefix.setEnd(node, selection.focusOffset)
+          return {
+            index: [...document.querySelectorAll(selector)].indexOf(paragraph),
+            offset: prefix.toString().length,
+          }
+        }, PARAGRAPH),
+      )
+      .toEqual({ index, offset })
   }
 
   /**

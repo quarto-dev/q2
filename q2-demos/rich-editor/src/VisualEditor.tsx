@@ -3,11 +3,13 @@
  * it, inside an iframe so the theme's Bootstrap CSS can't leak into the
  * rest of the app (hub-client's preview does the same).
  *
- * So far it renders only the title block, with hub-client's own
- * `PreviewTitleBlock`, from metadata derived on demand by
- * `deriveTitleBlockMeta` instead of a full render.
+ * The title block is hub-client's own `PreviewTitleBlock`, from metadata
+ * derived on demand by `deriveTitleBlockMeta` instead of a full render.
+ * The body is under it, block by block, from the parsed source.
  *
- * The title, subtitle and abstract are edited in place. Every edit is
+ * The title, subtitle and abstract are edited in place, and so are the
+ * body's paragraphs of plain text; the rest of the body (headings,
+ * formatted text, lists) is shown and can't be edited yet. Every edit is
  * written to the file's source text as it's made, and a change to the
  * source from elsewhere (the source pane or a collaborator) shows up here
  * without disturbing the caret, the selection or the undo history. The
@@ -20,10 +22,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExte
 import { createPortal } from 'react-dom'
 import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-renderer/title-block'
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
-import { Field, useFieldEditor } from './engine/react.tsx'
+import { Field, Lines, useFieldEditor } from './engine/react.tsx'
 import type { Fields, Schema } from './engine/model.ts'
+import { readOnlyBlocks, type Node } from './editing/body.ts'
 import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
+import { ReadOnlyBlock } from './ReadOnlyBlock.tsx'
 
 interface VisualEditorProps {
   file: QmdFile
@@ -44,7 +48,8 @@ const SRCDOC = `<!doctype html>
 // emptied field one line tall; the placeholder is positioned out of the flow so
 // the caret sits at the start of the line, not after the placeholder text.
 const EDITING_CSS = `
-#title-block-header[contenteditable] { outline: none; }
+#quarto-document-content[contenteditable] { outline: none; }
+.qe-unknown { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px dashed #ced4da; color: #6c757d; font-size: 0.875em; }
 .qe-field { display: block; position: relative; min-height: 1lh; outline: none; white-space: pre-wrap; }
 .qe-field:empty::before {
   content: attr(data-placeholder);
@@ -53,16 +58,20 @@ const EDITING_CSS = `
   color: #adb5bd;
 }`
 
+/** The title block's editable fields, in reading order. */
+const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[]
+
 /**
- * The title block's editable fields, in reading order: Enter, Backspace at
- * a field's start, and selections across fields follow it. Enter in the
- * title adds a missing subtitle; the abstract takes line breaks (one per
- * paragraph).
+ * The editable fields, in reading order: Enter, Backspace at a field's
+ * start, and selections across fields follow it. Enter in the title adds
+ * a missing subtitle, and Enter in the last one-line field of the title
+ * block goes to the body, starting one if there's none. The abstract and
+ * the body take line breaks (one per paragraph).
  */
 const SCHEMA: Schema = {
-  order: ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[],
-  addable: ['subtitle'],
-  multiline: ['abstract'],
+  order: [...TITLE_BLOCK, 'body'],
+  addable: ['subtitle', 'body'],
+  multiline: ['abstract', 'body'],
 }
 
 const PLACEHOLDERS: Record<TitleBlockField, string> = {
@@ -76,7 +85,7 @@ const noop = () => {}
 export function VisualEditor({ file }: VisualEditorProps) {
   const { ast, parseError } = useSyncExternalStore(file.subscribe, file.getSnapshot)
   const source = useMemo(
-    () => createMetaFieldSource(file, { keys: SCHEMA.order, multiline: SCHEMA.multiline }),
+    () => createMetaFieldSource(file, { keys: TITLE_BLOCK, multiline: ['abstract'], body: 'body' }),
     [file],
   )
   const [mount, setMount] = useState<HTMLElement | null>(null)
@@ -104,12 +113,12 @@ export function VisualEditor({ file }: VisualEditorProps) {
     return () => style.remove()
   }, [frameDoc])
 
-  // The whole title block is one editing surface; the engine keeps the
-  // caret inside the fields.
+  // The whole document is one editing surface, once it has a field to
+  // edit; the engine keeps the caret inside the fields.
   const [root, setRoot] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => {
-    const header = mount?.querySelector<HTMLElement>('#title-block-header') ?? null
-    if (header !== root) setRoot(header)
+    const ready = mount?.querySelector('[data-field]') ? mount : null
+    if (ready !== root) setRoot(ready)
   })
   const { state, writable } = useFieldEditor(root, SCHEMA, source, { autoFocus: true })
 
@@ -119,6 +128,13 @@ export function VisualEditor({ file }: VisualEditorProps) {
     const { meta, issues } = deriveTitleBlockMeta({ ...ast, meta: metaWithFields(ast.meta, state.fields) })
     return { ast: { ...ast, meta }, issues, ms: performance.now() - start }
   }, [ast, state.fields])
+
+  // The blocks the body's read-only lines stand for, in order.
+  const readOnly = useMemo(() => (ast ? readOnlyBlocks(ast.blocks as Node[]) : []), [ast])
+  const renderAtom = useCallback(
+    (index: number) => (readOnly[index] ? <ReadOnlyBlock block={readOnly[index]} /> : null),
+    [readOnly],
+  )
 
   const renderField = useCallback(
     (field: TitleBlockField) =>
@@ -150,9 +166,12 @@ export function VisualEditor({ file }: VisualEditorProps) {
       </p>
       {mount && derived &&
         createPortal(
-          // PreviewTitleBlock is typed against preview-renderer's own AST
-          // type; the JSON shape is the same.
-          <PreviewTitleBlock ast={derived.ast as never} setAst={noop} renderField={renderField} />,
+          <>
+            {/* PreviewTitleBlock is typed against preview-renderer's own AST
+                type; the JSON shape is the same. */}
+            <PreviewTitleBlock ast={derived.ast as never} setAst={noop} renderField={renderField} />
+            <Lines name="body" text={state.fields.body} className="qe-field" renderAtom={renderAtom} />
+          </>,
           mount,
         )}
     </div>
@@ -161,7 +180,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
 
 /** The source metadata with the edited fields written over it. */
 function metaWithFields(meta: Meta, fields: Fields): Meta {
-  return SCHEMA.order.reduce((m, f) => setMetaText(m, f, fields[f]), meta)
+  return TITLE_BLOCK.reduce((m, f) => setMetaText(m, f, fields[f]), meta)
 }
 
 /** The default theme's CSS, compiled once per page load. */

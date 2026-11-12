@@ -1,6 +1,7 @@
 /**
- * A qmd file's metadata text fields as the document an editor edits
- * (`FieldSource`): the title block's title, subtitle and abstract.
+ * A qmd file's metadata text fields, and its body, as the document an
+ * editor edits (`FieldSource`): the title block's title, subtitle and
+ * abstract, and the body as one multi-line field (see `body.ts`).
  *
  * Reading: a field's text is the plain text of its metadata value, as the
  * title block shows it; an abstract has one line per paragraph.
@@ -11,7 +12,8 @@
  * as one splice. The incremental writer rewrites only the changed keys,
  * so nothing else in the source moves. An empty field is written as no
  * key at all, and spaces that qmd doesn't keep (at the ends of a line, or
- * more than one in a row) aren't written.
+ * more than one in a row) aren't written. In the body, only the
+ * paragraphs whose text changed are written.
  */
 
 import type { RustQmdJson } from '@quarto/pandoc-types'
@@ -20,6 +22,7 @@ import type { Fields } from '../engine/model.ts'
 import type { FieldChanges, FieldSource } from '../engine/source.ts'
 import { diffToChange } from '../quarto-synced-file/diff.ts'
 import { incrementalWriteQmd } from '../quarto-synced-file/wasm.ts'
+import { bodyText, editBody, kept as keptLine, words } from './body.ts'
 import { metaText, type Meta } from './meta.ts'
 
 /** The part of a synced (or local) file this needs. */
@@ -35,9 +38,14 @@ export interface MetaFieldSourceOptions {
   keys: readonly string[]
   /** Keys whose text has one paragraph per line. */
   multiline?: readonly string[]
+  /** The name of the field that is the document's body, if it's edited. */
+  body?: string
 }
 
-export function createMetaFieldSource(file: QmdFile, { keys, multiline = [] }: MetaFieldSourceOptions): FieldSource {
+export function createMetaFieldSource(
+  file: QmdFile,
+  { keys, multiline = [], body }: MetaFieldSourceOptions,
+): FieldSource {
   let readFrom: RustQmdJson | null | undefined
   let fields: Fields = {}
 
@@ -51,8 +59,10 @@ export function createMetaFieldSource(file: QmdFile, { keys, multiline = [] }: M
           return text ? [[key, text]] : []
         }),
       )
+      const text = body === undefined || !ast ? '' : bodyText(ast.blocks as Node[])
+      if (body !== undefined && text) next[body] = text
       // The same object while no field changes, however else the file does.
-      if (keys.some((key) => next[key] !== fields[key])) fields = next
+      if ([...keys, ...(body === undefined ? [] : [body])].some((key) => next[key] !== fields[key])) fields = next
     }
     return fields
   }
@@ -67,8 +77,16 @@ export function createMetaFieldSource(file: QmdFile, { keys, multiline = [] }: M
     if (!writable() || text === null || ast === null) return
     const current = get()
     const meta: Meta = { ...ast.meta }
+    let blocks = ast.blocks
     let changed = false
     for (const [key, value] of Object.entries(changes)) {
+      if (key === body) {
+        const edited = editBody(ast.blocks as Node[], value ?? '')
+        if (!edited || (edited.length === blocks.length && edited.every((block, i) => block === blocks[i]))) continue
+        changed = true
+        blocks = edited as typeof blocks
+        continue
+      }
       const lines = kept(value ?? '', multiline.includes(key))
       // Nothing to write when the document already reads this way.
       if (lines.join('\n') === (current[key] ?? '')) continue
@@ -78,7 +96,7 @@ export function createMetaFieldSource(file: QmdFile, { keys, multiline = [] }: M
       else meta[key] = { t: 'MetaInlines', c: words(lines[0]) } as Meta[string]
     }
     if (!changed) return
-    const change = diffToChange(text, incrementalWriteQmd(text, { ...ast, meta }))
+    const change = diffToChange(text, incrementalWriteQmd(text, { ...ast, meta, blocks }))
     if (change) file.applyEdits([change])
   }
 
@@ -94,14 +112,7 @@ type Node = { t: string; c?: unknown }
  */
 function kept(text: string, multiline: boolean): string[] {
   const lines = multiline ? text.split('\n') : [text]
-  return lines.map((line) => line.trim().replace(/\s+/g, ' ')).filter((line) => line !== '')
-}
-
-/** A line of plain text as inlines: words and the spaces between them. */
-function words(line: string): Node[] {
-  return line
-    .split(' ')
-    .flatMap((word, i): Node[] => (i === 0 ? [{ t: 'Str', c: word }] : [{ t: 'Space' }, { t: 'Str', c: word }]))
+  return lines.map(keptLine).filter((line) => line !== '')
 }
 
 /** A text value with a paragraph per line. */

@@ -4,7 +4,7 @@
  * to the source text is in `source.spec.ts`.
  */
 
-import { expect, openEditor, test } from './helpers.ts'
+import { expect, fixture, openEditor, test } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 
@@ -90,15 +90,15 @@ test.describe('Enter', () => {
     expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
   })
 
-  test('Enter in the last field does nothing', async ({ page }) => {
+  test('Enter in the last field goes to the body and changes nothing', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('subtitle', 30)
-    const caret = await editor.caret()
 
     await page.keyboard.press('Enter')
 
     expect(await editor.text('subtitle')).toBe('Third quarter')
-    expect(await editor.caret()).toEqual(caret)
+    await editor.expectParagraphCaret(0, 0)
+    await editor.document.expectSource(fixture('basic'))
   })
 
   test('Enter in the title adds an empty subtitle with a placeholder', async ({ page }) => {
@@ -190,14 +190,13 @@ test.describe('arrow keys between fields', () => {
     expect(await editor.caret()).toMatchObject({ field: 'title', start: 16, end: 16 })
   })
 
-  test('Right at the end of the last field stays put', async ({ page }) => {
+  test('Right at the end of the document stays put', async ({ page }) => {
     const editor = await openEditor(page)
-    await editor.clickAt('subtitle', 30)
-    await page.keyboard.press('End')
+    await editor.placeCaretInParagraph(0, 10)
 
     await page.keyboard.press('ArrowRight')
 
-    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 13, end: 13 })
+    await editor.expectParagraphCaret(0, 10)
   })
 })
 

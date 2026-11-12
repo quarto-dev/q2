@@ -66,8 +66,7 @@ test.describe('what an edit changes', () => {
 
   test('typing in the abstract changes only the abstract\'s lines', async ({ page }) => {
     const editor = await openEditor(page, 'formatted')
-    await editor.field('abstract').click()
-    await page.keyboard.press(`${mod}+ArrowDown`)
+    await editor.placeCaretAtEnd('abstract')
     await page.keyboard.type(' Briefly.')
 
     await editor.document.expectSource(formatted.replace('Then we look ahead.', 'Then we look ahead. Briefly.'))
@@ -75,8 +74,7 @@ test.describe('what an edit changes', () => {
 
   test('a line in the abstract is a paragraph in the source', async ({ page }) => {
     const editor = await openEditor(page, 'formatted')
-    await editor.field('abstract').click()
-    await page.keyboard.press(`${mod}+ArrowDown`)
+    await editor.placeCaretAtEnd('abstract')
 
     // An empty line isn't a paragraph: nothing is written for it.
     await page.keyboard.press('Enter')

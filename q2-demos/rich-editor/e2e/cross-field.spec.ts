@@ -79,7 +79,7 @@ test.describe('selecting across fields', () => {
     })
   })
 
-  test('select all selects the field, then the whole title block', async ({ page }) => {
+  test('select all selects the field, then the whole document', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('subtitle', 30)
 
@@ -90,10 +90,10 @@ test.describe('selecting across fields', () => {
     })
 
     await page.keyboard.press(`${mod}+a`)
-    expect(await editor.selection()).toEqual({
-      anchor: { field: 'title', offset: 0 },
-      focus: { field: 'subtitle', offset: 13 },
-    })
+    const selected = await editor.selectedText()
+    expect(selected.startsWith('Quarterly report')).toBe(true)
+    expect(selected).toContain('Third quarter')
+    expect(selected.endsWith('Body text.')).toBe(true)
   })
 })
 
@@ -197,16 +197,15 @@ test.describe('arrow keys past the author grid', () => {
     expect(await leftFields()).toBe(false)
   })
 
-  test('Right and Down at the end of the last field never move the caret', async ({ page }) => {
+  test('Right and Down at the end of the document never move the caret', async ({ page }) => {
     const editor = await openEditor(page)
-    await editor.clickAt('subtitle', 30)
-    await page.keyboard.press('End')
+    await editor.placeCaretInParagraph(0, 10)
     const leftFields = await watchSelection(editor)
 
     await page.keyboard.press('ArrowRight')
     await page.keyboard.press('ArrowDown')
 
-    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 13, end: 13 })
+    await editor.expectParagraphCaret(0, 10)
     expect(await leftFields()).toBe(false)
   })
 
@@ -224,11 +223,9 @@ test.describe('arrow keys past the author grid', () => {
 test.describe('the abstract', () => {
   test('is editable, and Enter starts a new line in it', async ({ page }) => {
     const editor = await openEditor(page, 'abstract')
-    await editor.frame.getByText('We summarise').click()
-    await page.waitForTimeout(100)
+    await editor.placeCaretAtEnd('abstract')
     expect((await editor.caret()).field).toBe('abstract')
 
-    await page.keyboard.press(`${'ControlOrMeta'}+ArrowDown`)
     await page.keyboard.press('Enter')
     await page.keyboard.type('More.')
 
@@ -240,8 +237,7 @@ test.describe('the abstract', () => {
 
   test('Enter at the end moves the caret onto the new, empty line at once', async ({ page }) => {
     const editor = await openEditor(page, 'abstract')
-    await editor.frame.getByText('We summarise').click()
-    await page.keyboard.press(`${'ControlOrMeta'}+ArrowDown`)
+    await editor.placeCaretAtEnd('abstract')
     // A collapsed range at an element position (before the new line's
     // <br>) has no rectangle; measure the node after it instead.
     const caretTop = () =>

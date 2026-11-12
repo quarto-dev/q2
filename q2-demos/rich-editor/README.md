@@ -6,13 +6,19 @@ hub-client: `@quarto/quarto-sync-client` for automerge sync and the
 the UI lives in one component, `src/Editor.tsx`.
 
 The window has two panes: on the left, the file's source in a plain textarea
-(for debugging); on the right, the visual editor, which so far renders only
-the title block. It uses hub-client's `PreviewTitleBlock` with the default
-theme CSS, fed by `deriveTitleBlockMeta`, a WASM call that runs the render
-pipeline's author normalization on the document's metadata in well under a
-millisecond instead of waiting for a full render.
+(for debugging); on the right, the visual editor, which renders the title
+block and, under it, the body. The title block is hub-client's
+`PreviewTitleBlock` with the default theme CSS, fed by
+`deriveTitleBlockMeta`, a WASM call that runs the render pipeline's author
+normalization on the document's metadata in well under a millisecond instead
+of waiting for a full render. The body is rendered block by block from the
+parsed source.
 
-The title, subtitle and abstract are editable in place. The title block is one
+The title, subtitle and abstract are editable in place, and so are the body's
+paragraphs of plain text: Enter splits a paragraph, and Backspace at its
+start joins it to the one before. The rest of the body (headings, paragraphs
+with formatting, lists, code) is shown by `src/ReadOnlyBlock.tsx` and can't
+be edited yet; no edit removes it or changes its source. The document is one
 `contenteditable` surface run by a small editing engine in `src/engine/`:
 the browser moves the caret and selection (so selections can span fields),
 and the engine intercepts every edit, applies it to a model of plain-text
@@ -20,7 +26,15 @@ fields, and renders it back. Its rules (Enter moves to the next field,
 fields are never joined or split, an empty field disappears when left) and
 its single undo history are pure TypeScript with unit tests. Like
 `src/quarto-synced-file/`, it imports nothing from the rest of the demo;
-the title block's fields are configured in `src/VisualEditor.tsx`.
+the document's fields are configured in `src/VisualEditor.tsx`.
+
+The body is one field, like the abstract: its text has a line per block, so
+splitting and joining paragraphs, undo, and following a collaborator's edit
+are the same text operations as everywhere else. A block that can't be
+edited is a line holding one placeholder character (`ATOM`), which the
+engine never removes, joins to another line or lets text onto, and which
+is rendered as the block it stands for (`src/editing/body.ts`). Each line
+that can be edited is an element of its own (`Lines`).
 
 Every edit is written to the file's source text as it's made, so
 collaborators see it at once, whether they use this editor or a source
@@ -32,9 +46,14 @@ the caret and selection stay on the text they were on, typed text stays,
 and undo undoes only this editor's edits. `src/editing/fieldSource.ts`
 implements `FieldSource` for a qmd file's metadata: it writes the edited
 document with the incremental qmd writer, which rewrites only the changed
-front-matter keys, and sends the difference as one splice. While the
-source doesn't parse, the editor shows the last text it could read and
-takes no edits.
+front-matter keys and body paragraphs, and sends the difference as one
+splice. While the source doesn't parse, the editor shows the last text it
+could read and takes no edits.
+
+Not done yet in the body: a paragraph can't be started between two blocks
+that can't be edited, or after one at the end of the document; and editing
+a paragraph that the source wraps over several lines writes it back on
+one.
 
 The non-UI part lives in `src/quarto-synced-file/`: one qmd file kept in sync
 with a hub, its parsed AST, and splice-based edits. It has no UI dependencies
@@ -76,8 +95,9 @@ npm run test:e2e    # the app in Chromium, on a test hub; needs the WASM build
 
 The e2e tests are the specification of the editing experience, written
 against what a person sees and what the source text holds, not against
-this implementation: `title-block.spec.ts` and `cross-field.spec.ts`
-(editing), `source.spec.ts` (what an edit does to the source text) and
+this implementation: `title-block.spec.ts`, `cross-field.spec.ts` and
+`body.spec.ts` (editing), `source.spec.ts` (what an edit does to the source
+text) and
 `collaboration.spec.ts` (more than one person in a document). Tests marked
 `fixme` describe behaviour we want and don't have yet.
 
