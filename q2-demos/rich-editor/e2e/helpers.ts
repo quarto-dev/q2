@@ -220,7 +220,10 @@ export class Editor {
     await this.field(field).click({ position: { x, y: Math.min(box.height, lineHeight) / 2 } })
   }
 
-  /** Click the page below the document, outside every field. */
+  /**
+   * Click the page below the document, outside every field. (With a body,
+   * typing then goes to the end of its last paragraph: see `body.spec.ts`.)
+   */
   async clickAway() {
     const frame = (await this.page.locator('iframe.visual-frame').boundingBox())!
     await this.page.mouse.click(frame.x + frame.width / 2, frame.y + frame.height - 10)
