@@ -17,7 +17,7 @@
  * cannot drift apart, and so the Rust twin has a single counterpart to
  * stay in sync with.
  */
-import { extractMetaBool, extractMetaString, getMetaPath } from '../framework';
+import { extractMetaBool, extractMetaString, getMetaPath } from '../framework/meta';
 
 const nonEmpty = (v: string | undefined): boolean =>
     v !== undefined && v !== '';

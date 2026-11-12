@@ -31,6 +31,11 @@
       "source": "./src/q2-preview/entry.tsx",
       "import": "./dist/q2-preview/entry.js"
     },
+    "./title-block": {
+      "types": "./src/q2-preview/custom/PreviewTitleBlock.tsx",
+      "source": "./src/q2-preview/custom/PreviewTitleBlock.tsx",
+      "import": "./dist/q2-preview/custom/PreviewTitleBlock.js"
+    },
     "./iframe/*": {
       "types": "./src/iframe/*.tsx",
       "source": "./src/iframe/*.tsx",

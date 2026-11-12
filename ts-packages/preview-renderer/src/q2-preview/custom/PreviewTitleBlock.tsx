@@ -1,12 +1,15 @@
-import type { AstProps, BlockNode, InlineNode } from '../../framework';
+// Imports name the framework's leaf modules rather than its barrel, so
+// the `./title-block` export can load this component without the rest of
+// the preview framework (attribution UI, dispatchers, ...).
+import type { AstProps, BlockNode, InlineNode } from '../../framework/types';
 import { suggestMainColumn } from '../mainColumn';
 import {
     extractMetaBool,
     extractMetaString,
     extractMetaStringList,
     getMetaPath,
-    inlinesToPlainText,
-} from '../../framework';
+} from '../../framework/meta';
+import { inlinesToPlainText } from '../../framework/plainText';
 
 /**
  * Built-in `__title_block__` synthetic-registry entry (Plan 2D Phase 7,
