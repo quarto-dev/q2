@@ -876,3 +876,96 @@ test.describe('moving through the document', () => {
     await expect.poll(async () => (await editor.paragraphs())[1]).toContain('y')
   })
 })
+
+test.describe('the mouse in the body', () => {
+  test('a double click in a paragraph selects a word', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+
+    await editor.paragraph(0).click({ clickCount: 2, position: { x: 10, y: 8 } })
+
+    expect(await editor.selectedText()).toBe('First')
+  })
+
+  test('a triple click selects the paragraph, and typing replaces it and nothing else', async ({ page, browserName }) => {
+    test.fixme(
+      browserName !== 'firefox',
+      'The selection takes in the break after the paragraph, and typing joins the next paragraph to it',
+    )
+    const editor = await openEditor(page, 'body')
+
+    await editor.paragraph(0).click({ clickCount: 3, position: { x: 10, y: 8 } })
+    expect((await editor.selectedText()).trim()).toBe('First paragraph.')
+    await page.keyboard.type('Z')
+
+    expect((await editor.paragraphs()).slice(0, 2)).toEqual(['Z', 'Second paragraph.'])
+    await editor.document.expectSource(body.replace('First paragraph.', 'Z'))
+  })
+
+  test('typing after a click below the document adds to its last paragraph', async ({ page, browserName }) => {
+    test.fixme(browserName === 'firefox', 'What is typed after the click goes nowhere')
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaret('title', 4)
+
+    await editor.clickAway()
+    await page.keyboard.type('!')
+
+    await expect.poll(async () => (await editor.paragraphs()).at(-1)).toBe('Last paragraph.!')
+    expect(await editor.text('title')).toBe('Quarterly report')
+    await editor.document.expectSource(body.replace('Last paragraph.', 'Last paragraph.!'))
+  })
+})
+
+test.describe('scrolling', () => {
+  const long = `---\ntitle: Notes\n---\n\n${Array.from({ length: 80 }, (_, i) => `Paragraph ${i}.`).join('\n\n')}\n`
+
+  /** Whether the caret is inside the visual editor's window. */
+  const caretInView = (editor: Editor) =>
+    editor.frame.evaluate(() => {
+      const selection = document.getSelection()!
+      if (selection.rangeCount === 0) return false
+      const range = selection.getRangeAt(0)
+      const rect = range.getClientRects()[0] ?? (range.startContainer as Element).getBoundingClientRect?.()
+      return !!rect && rect.top >= 0 && rect.bottom <= window.innerHeight
+    })
+
+  test('a document opens at its start', async ({ page }) => {
+    const editor = await (await createDocument(long)).open(page)
+
+    expect(await editor.frame.evaluate(() => window.scrollY)).toBe(0)
+    expect(await caretInView(editor)).toBe(true)
+  })
+
+  // Today the page stays where it was, with the caret out of view.
+  test.fixme('a key that moves the caret out of view scrolls to it', async ({ page }) => {
+    const editor = await (await createDocument(long)).open(page)
+
+    await page.keyboard.press(`${mod}+ArrowDown`)
+
+    await expect.poll(() => caretInView(editor)).toBe(true)
+  })
+
+  test('typing with the caret out of view scrolls back to it', async ({ page, browserName }) => {
+    test.fixme(browserName !== 'webkit', 'The page stays where it was')
+    const editor = await (await createDocument(long)).open(page)
+    await editor.placeCaretInParagraph(79, 0)
+    await editor.frame.evaluate(() => window.scrollTo(0, 0))
+
+    await page.keyboard.type('x')
+
+    await expect.poll(() => caretInView(editor)).toBe(true)
+  })
+})
+
+test.describe('characters that look like spaces', () => {
+  // Today it's written, and shown, as a plain space.
+  test.fixme('a non-breaking space typed in a paragraph stays one', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 5)
+
+    await page.keyboard.insertText(' x')
+    await page.keyboard.press('ArrowDown')
+
+    await expect.poll(async () => (await editor.paragraphs())[0]).toBe('First x paragraph.')
+    await editor.document.expectSource(body.replace('First paragraph.', 'First x paragraph.'))
+  })
+})
