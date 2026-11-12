@@ -83,21 +83,16 @@ p.subtitle { font-size:21.25px; font-weight:300; line-height:1.5; margin:5.3125p
 .ghost:hover, .ghost:focus { background:#eef0f3; color:var(--ink); outline:none; }
 .title-block.untitled:not(.open) .add-sub { display:none; }
 
-/* Widget rows of "+" buttons. */
-.widget { display:flex; flex-wrap:wrap; gap:2px; align-items:center; margin-left:-8px; line-height:1.2; }
-/* Inline (top) row: laid over the space above the title block, so showing
-   and hiding it moves nothing. Shows while the caret is anywhere in the title
-   block, on hover, and in an empty doc until a field is added. */
-.opt-widget .title-block { position:relative; }
-.opt-widget .widget { position:absolute; bottom:100%; left:0; right:0; padding-bottom:4px; opacity:0; transition:opacity .12s; }
-.opt-widget .top:hover .widget, .opt-widget .top:focus-within .widget, .opt-widget.doc-empty .top:not(.has-blank) .widget { opacity:1; }
-/* Bottom and in-place rows take no space at all while hidden, so the page
-   is laid out exactly like `q2 render`'s. While the caret is in the title
-   block (`show`, set before a "+" button takes focus) they take their place
-   in the flow, pushing what's below down. */
-.opt-bottom .widget, .opt-inplace .widget { display:none; margin-top:4px; margin-bottom:4px; }
-.opt-bottom .title-block.show .widget, .opt-inplace .title-block.show .widget { display:flex; }
-.widget button { font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:4px 8px; border-radius:4px; cursor:pointer; }
+/* Widget rows of "+" buttons. They never take space: each is laid over the
+   gap it belongs in (`layoutRows`), so the page is laid out exactly like
+   `q2 render`'s whether they show or not, and nothing moves when they do.
+   They show while the caret is in the title block (`show`, also set in an
+   empty doc) and on hover. */
+.title-block { position:relative; }
+.widget { position:absolute; left:-6px; right:0; z-index:1; display:flex; flex-wrap:wrap; gap:2px; align-items:center;
+  opacity:0; pointer-events:none; transition:opacity .12s; }
+.top:hover .widget, .title-block.show .widget { opacity:1; pointer-events:auto; }
+.widget button { font:12px/12px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:2px 6px; border-radius:4px; cursor:pointer; }
 .widget button:hover, .widget button:focus { background:#eef0f3; color:var(--ink); outline:none; }
 .widget .ghost { margin-left:0; }
 
@@ -256,6 +251,7 @@ function placeAtX(t, x, bottom) {
 
 let cur = null;
 document.addEventListener('selectionchange', () => cur && cur.onSelection());
+addEventListener('resize', () => cur && cur.layout());
 
 // ---- the editor ----------------------------------------------------------
 function build() {
@@ -439,8 +435,11 @@ function build() {
     });
     e.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') {
+        // Enter goes on to the next field (or the body), past any "+" buttons.
         ev.preventDefault();
-        move(e, 1);
+        const o = order().filter((s) => s === e || s.dataset.field);
+        const t = o[o.indexOf(e) + 1];
+        if (t) focusSlot(t, false); else focusBlock(body.firstElementChild, false);
       } else if (ev.key === 'ArrowDown' && onEdgeLine(e, true)) { ev.preventDefault(); move(e, 1, caretRect().left); }
       // ← at a field's start / → at its end cross to the neighbouring field
       // (or the body), like moving across the end of a line.
@@ -606,6 +605,7 @@ function build() {
   });
 
   cur = {
+    layout: layoutRows,
     onSelection() {
       if (f.slash) { if (m.open || document.activeElement === body) slashCheck(); }
       const b = document.activeElement === body ? currentBlock() : null;
@@ -644,6 +644,41 @@ function build() {
     const src = serialize(), pre = $('source');
     pre.textContent = src || '(empty file)';
     pre.classList.toggle('empty', !src);
+    layoutRows();
+  }
+
+  /**
+   * Lay each widget row over its gap: centred between the fields (or the
+   * body) above and below it; a row with no field above sits just above the
+   * one below it (above the title block, in the page's top padding).
+   */
+  function layoutRows() {
+    const rows = [...header.querySelectorAll('.widget')];
+    if (!rows.length) return;
+    const h = header.getBoundingClientRect().top;
+    const slots = order();
+    // The extent of a field's visible text, with its label (author, date,
+    // abstract); an empty field (just its placeholder) is its box.
+    const box = (s) => {
+      const e = s.closest('.quarto-title-meta > div, .abstract') || s;
+      let top = Infinity, bottom = -Infinity;
+      const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
+      for (let n; (n = w.nextNode());) {
+        if (!n.textContent.trim()) continue;
+        const r = document.createRange(); r.selectNodeContents(n);
+        for (const x of r.getClientRects()) { top = Math.min(top, x.top); bottom = Math.max(bottom, x.bottom); }
+      }
+      return top === Infinity ? e.getBoundingClientRect() : { top, bottom };
+    };
+    const inkTop = (el) => { const r = document.createRange(); r.selectNodeContents(el); const x = r.getClientRects()[0]; return x ? x.top : el.getBoundingClientRect().top; };
+    for (const r of rows) {
+      const bs = [...r.querySelectorAll('.ghost')];
+      const prev = slots[slots.indexOf(bs[0]) - 1], next = slots[slots.indexOf(bs[bs.length - 1]) + 1];
+      const below = next ? box(next).top : inkTop(body.firstElementChild);
+      const rh = r.offsetHeight;
+      const top = prev ? (box(prev).bottom + below) / 2 - rh / 2 : (next ? below : h) - rh - 2;
+      r.style.top = top - h + 'px';
+    }
   }
 
   function yaml(v) { return v && /^[\w\s.,'()-]*$/.test(v) && !/^\s|\s$/.test(v) ? v : JSON.stringify(v); }
