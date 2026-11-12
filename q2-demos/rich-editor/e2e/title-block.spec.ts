@@ -572,18 +572,26 @@ test.describe('titles written other ways', () => {
 })
 
 test.describe('a subtitle without a title', () => {
-  for (const [name, front] of [
-    ['no title', 'subtitle: Only a subtitle'],
-    ['an empty title', 'title: ""\nsubtitle: Only a subtitle'],
-  ]) {
-    test(`with ${name}, the subtitle is shown, and the caret starts in it`, async ({ page }) => {
-      const editor = await (await createDocument(`---\n${front}\n---\n\nBody.\n`)).open(page)
+  test('with no title, the subtitle is shown, and the caret starts in it', async ({ page }) => {
+    const editor = await (await createDocument('---\nsubtitle: Only a subtitle\n---\n\nBody.\n')).open(page)
 
-      expect(await editor.text('title')).toBeNull()
-      expect(await editor.text('subtitle')).toBe('Only a subtitle')
-      await expect.poll(() => editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
-    })
-  }
+    expect(await editor.text('title')).toBeNull()
+    expect(await editor.text('subtitle')).toBe('Only a subtitle')
+    await expect.poll(() => editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
+  })
+
+  test('with an empty title, the title is there, empty, with its placeholder, and the caret starts in it', async ({
+    page,
+  }) => {
+    // An empty title is a title the author added and hasn't filled in
+    // (see `title-block-widget.spec.ts`).
+    const editor = await (await createDocument('---\ntitle: ""\nsubtitle: Only a subtitle\n---\n\nBody.\n')).open(page)
+
+    expect(await editor.text('title')).toBe('')
+    expect(await editor.placeholderShown('title')).toBe(true)
+    expect(await editor.text('subtitle')).toBe('Only a subtitle')
+    await expect.poll(() => editor.caret()).toMatchObject({ field: 'title', start: 0, end: 0 })
+  })
 })
 
 test.describe('the rest of the title block', () => {
