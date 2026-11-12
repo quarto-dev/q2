@@ -32,6 +32,71 @@ allocation count and memory use, and is the lifetime complexity worth it?
 4. **Recommendation:** do not introduce `Inline<'a>`. Do the layout work
    in the order given under "Recommended path".
 
+## Where this stands (end of 2026-11-12)
+
+PR #1192 (`feature/ast-node-layout`) carries everything marked "merged"
+below. The detail for each item is under "Progress".
+
+| Item | Strand | State | Result |
+|---|---|---|---|
+| Box cold `Inline` variants | bd-xrfun6mn | merged | `Inline` 360 → 64 bytes |
+| Box cold `Block` variants | bd-09g8zl30 | merged | `Block` 824 → 64 bytes |
+| Slim `Attr` / `AttrSourceInfo` | bd-gz80k6c6 | merged | 104 / 80 → 8 / 8 bytes |
+| Hub response streams to JS | bd-fz5ls4vq | merged | hub memory over an editing session 57 → 15.6 MiB |
+| `ast-memory` and `wasm-mem.mjs` tools | bd-akgst1fi, bd-r17a0k7v | merged | — |
+| `ecow` for `Str.text` | bd-v6cug77d | implemented, **not merged** | heap blocks −64% in the reader; neutral end to end |
+| Failed parse costs +40 MiB in the hub | bd-q3ocwexr | open | — |
+| Node locations sent twice on the wire | bd-vmdfc8y5 | open | JavaScript-side cost only |
+| Reader allocation fast paths, `Concat` hull | bd-cwprgmo2 | open | — |
+| `quarto-source-map` `u32` offsets | bd-9iyh0220 | open | native only |
+| Text runs | bd-jmn62md8 | deferred | needs a flag design |
+| Incremental hub updates | — | deferred indefinitely | cross-call state dependency |
+
+Native, reader only (`ast-memory` on `claude-notes/plans`, 26.3 MiB):
+
+| | `main` | PR #1192 |
+|---|---|---|
+| AST heap | 2,304 MiB (87.7× source) | 480 MiB (18.3×) |
+| Peak RSS of the run | 2.75 GiB | 0.65 GiB |
+| Parse wall time | 7.7 s | 6.1 s |
+
+Hub WASM, 188 KiB document (`wasm-mem.mjs`):
+
+| | `main` | PR #1192 |
+|---|---|---|
+| First parse | 57.1 MiB | 15.4 MiB |
+| After 30 valid edits | 57.1 MiB | 15.6 MiB |
+| After one failed parse | 57.1 MiB | 55.9 MiB |
+
+What the day's measurements taught, in the order they overturned
+expectations:
+
+1. **Strings were the wrong target.** `Str.text` was 70% of heap blocks
+   but 1.9% of bytes. Node layout was 96% of bytes.
+2. **Layout estimates held.** Each of the three layout steps landed within
+   a few percent of the arithmetic estimate made from the census.
+3. **Allocation count alone does not show up end to end.** `ecow` removed
+   64% of AST heap blocks and moved neither render time, RSS nor hub
+   memory by more than noise.
+4. **In the hub, serialization outweighed the AST.** Two thirds of the
+   single-parse peak was JSON buffers.
+5. **Single-parse numbers mislead for WASM.** Memory there never shrinks
+   and cannot be compacted, so what matters is the high-water mark over a
+   session. The layout work alone looked like −24% and was 0% after 30
+   edits; a first unwrap-only fix looked like −37% and was about −3%.
+6. **The error path is now the hub's ceiling.** One failed parse costs
+   more than everything else combined.
+
+Not measured, and worth knowing before leaning on these numbers:
+
+- End-to-end `q2 render` peak RSS on a real project before and after the
+  layout steps. The only end-to-end render numbers here compare the
+  `ecow` branch against the layout branch (no difference); the 1.1 GB case
+  in bd-is4q72tt has not been re-run.
+- Browser-side cost of the response (JavaScript heap, `JSON.parse` time).
+- Any Windows run. Only `quarto-pandoc-types` could be cross-checked from
+  macOS; the other touched crates depend on tree-sitter's C sources.
+
 ## Measurements
 
 Tool: `crates/perf-harness/src/bin/ast_memory.rs` (new, uncommitted). It
