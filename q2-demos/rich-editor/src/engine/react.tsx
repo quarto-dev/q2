@@ -48,15 +48,21 @@ export interface FieldProps {
  * One field. React never renders its children: its text is written to the
  * DOM only when it differs from the model, so the browser's own text
  * (during IME composition) is left alone.
+ *
+ * Text ending in a line break gets a trailing `<br>`: without one, the
+ * browser draws no empty last line, so the caret can't sit on it until
+ * something is typed. A `<br>` adds no text, so offsets are unchanged.
  */
 export function Field({ name, text, placeholder, className }: FieldProps) {
   const ref = useRef<HTMLSpanElement | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
     if (!el || text === undefined) return
-    if (el.textContent !== text) el.textContent = text
-    // An emptied element can keep a stray <br>.
-    if (text === '' && el.firstChild) el.replaceChildren()
+    const wantsBreak = text.endsWith('\n')
+    const hasBreak = el.lastChild?.nodeName === 'BR'
+    if (el.textContent === text && hasBreak === wantsBreak) return
+    el.replaceChildren(...(text === '' ? [] : [text]))
+    if (wantsBreak) el.append(el.ownerDocument.createElement('br'))
   }, [text])
   if (text === undefined) return null
   return <span ref={ref} className={className} data-field={name} data-placeholder={placeholder} />

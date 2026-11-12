@@ -178,6 +178,13 @@ function locate(root: HTMLElement, position: Position): { node: Node; offset: nu
 }
 
 function locateIn(field: HTMLElement, offset: number): { node: Node; offset: number } {
+  // At the very end of text ending in a line break, the end of the text
+  // node draws at the end of the line above; the caret belongs just before
+  // the trailing <br> (see `Field`).
+  const text = field.textContent ?? ''
+  if (offset >= text.length && text.endsWith('\n') && field.lastChild?.nodeName === 'BR') {
+    return { node: field, offset: field.childNodes.length - 1 }
+  }
   const walker = field.ownerDocument.createTreeWalker(field, NodeFilter.SHOW_TEXT)
   let remaining = Math.max(0, offset)
   let last: Text | null = null

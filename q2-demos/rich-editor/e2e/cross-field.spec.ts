@@ -234,6 +234,30 @@ test.describe('the abstract', () => {
     expect(await editor.caret()).toMatchObject({ field: 'abstract' })
   })
 
+  test('Enter at the end moves the caret onto the new, empty line at once', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.frame.getByText('We summarise').click()
+    await page.keyboard.press(`${'ControlOrMeta'}+ArrowDown`)
+    // A collapsed range at an element position (before the new line's
+    // <br>) has no rectangle; measure the node after it instead.
+    const caretTop = () =>
+      editor.frame.evaluate(() => {
+        const s = document.getSelection()!
+        const rects = s.getRangeAt(0).getClientRects()
+        if (rects.length > 0) return rects[0].top
+        const next = s.focusNode!.childNodes[s.focusOffset] as Element
+        return next.getBoundingClientRect().top
+      })
+    const field = (await editor.field('abstract').boundingBox())!
+    const before = await caretTop()
+
+    await page.keyboard.press('Enter')
+
+    expect(await caretTop()).toBeGreaterThan(before + 10)
+    expect((await editor.field('abstract').boundingBox())!.height).toBeGreaterThan(field.height + 10)
+    expect(await editor.caret()).toMatchObject({ field: 'abstract' })
+  })
+
   test('Enter at the end of the subtitle moves to the abstract', async ({ page }) => {
     const editor = await openEditor(page, 'abstract')
     await editor.clickAt('subtitle', 30)
