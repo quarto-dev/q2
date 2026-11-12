@@ -3,7 +3,7 @@
  * Only includes the functions used by this demo app.
  */
 declare module 'wasm-quarto-hub-client' {
-  export function parse_qmd_content(content: string): string;
+  export function parse_qmd_content(content: string): AstResponse;
   export function ast_to_qmd(ast_json: string): string;
   export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
 
