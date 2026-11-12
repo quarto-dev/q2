@@ -1,0 +1,6 @@
+---
+title: Quarterly report
+date: 2026-11-12
+---
+
+Body text.

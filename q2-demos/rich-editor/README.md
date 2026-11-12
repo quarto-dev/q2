@@ -116,11 +116,17 @@ reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts` and
 `body.spec.ts` (editing), `source.spec.ts` (what an edit does to the source
-text) and
-`collaboration.spec.ts` (more than one person in a document). Tests marked
-`fixme` describe behaviour we want and don't have yet.
+text),
+`collaboration.spec.ts` (more than one person in a document) and
+`render-parity.spec.ts` (the editor shows a document as `q2 render` would).
+Tests marked `fixme` describe behaviour we want and don't have yet.
 
-Each test puts a document from `e2e/fixtures/` on an in-process sync hub
+`render-parity.spec.ts` compares the editor's page with the same fixture
+rendered by the WASM module's full render pipeline, without the editor's
+own markup. It compares HTML, not styles, so it runs in Chromium only, and
+it opens fixtures in `/fixture.html` instead of on a hub.
+
+Every other test puts a document from `e2e/fixtures/` on an in-process sync hub
 and opens it in the app, once per collaborator, each in a browser of its
 own; the test itself is one more collaborator, reading and editing the
 source text. Playwright starts the dev server itself.

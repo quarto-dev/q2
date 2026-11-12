@@ -7,6 +7,7 @@ declare module 'wasm-quarto-hub-client' {
   export function ast_to_qmd(ast_json: string): string;
   export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
   export function title_block_meta(ast_json: string): string;
+  export function render_qmd_content(content: string, template_bundle: string): Promise<string>;
   export function compile_default_bootstrap_css(minified: boolean): Promise<string>;
   export function vfs_read_file(path: string): string;
   export function vfs_list_files(): string;

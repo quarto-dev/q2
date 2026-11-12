@@ -1,0 +1,13 @@
+---
+title: Quarterly report
+subtitle: Third quarter
+author:
+  - name: Ana Silva
+    affiliations:
+      - name: Example University
+  - name: Ben Okafor
+abstract: |
+  We summarise the third quarter's results and what they mean for the next one.
+---
+
+Body text.

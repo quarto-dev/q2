@@ -111,6 +111,28 @@ export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): s
   return response.qmd
 }
 
+/**
+ * Render qmd text to a standalone HTML page with the full render pipeline,
+ * as `q2 render` does for a single file outside a project.
+ *
+ * Must call initWasm() before first use.
+ */
+export async function renderQmdContent(content: string): Promise<string> {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+
+  const response = JSON.parse(await wasmModule.render_qmd_content(content, '')) as {
+    success: boolean
+    html?: string
+    error?: string
+  }
+  if (!response.success || response.html === undefined) {
+    throw new Error(`Render failed: ${response.error}`)
+  }
+  return response.html
+}
+
 export interface TitleBlockMeta {
   /** The input metadata plus the derived title-block keys. */
   meta: RustQmdJson['meta']
