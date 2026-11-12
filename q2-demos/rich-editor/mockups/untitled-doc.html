@@ -324,6 +324,7 @@ function build() {
   function addField(k) {
     if (meta[k] === undefined) meta[k] = '';
     top.classList.add('quiet');
+    freezeWidget();
     renderHeader(k);
   }
 
@@ -362,7 +363,16 @@ function build() {
 
   // -- widget --
   let widgetKeys = null;
+  // While the widget fades out after adding a field, its buttons stay as they
+  // were (the added one too, inert) so the row doesn't reflow as it hides.
+  let widgetFrozen = false;
+  function freezeWidget() {
+    if (!widget) return;
+    widgetFrozen = true;
+    setTimeout(() => { widgetFrozen = false; renderWidget(); }, 200); // > the .12s fade
+  }
   function renderWidget() {
+    if (widgetFrozen) return;
     const missing = FIELDS.filter((k) => meta[k] === undefined);
     const key = missing.join();
     if (key === widgetKeys) return;
@@ -371,7 +381,8 @@ function build() {
     widget.classList.toggle('none', !missing.length);
     for (const k of missing) {
       const b = el('button'); b.type = 'button'; b.textContent = '+ ' + LABEL[k]; b.dataset.k = k;
-      b.onclick = () => addField(k);
+      // Inert once its field is added (it lingers while the widget fades).
+      b.onclick = () => meta[k] === undefined && addField(k);
       widget.append(b);
     }
   }
