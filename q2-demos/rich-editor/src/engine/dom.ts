@@ -6,6 +6,11 @@
  * inside it with a `data-field` attribute holding only its text; everything
  * else inside the root is made non-editable, so the browser's caret moves
  * only through the fields.
+ *
+ * A multi-line field can be several elements instead, one per line, each
+ * with the offset of its line in the field's text as `data-start`. A line
+ * with no element of its own (one that can't be edited) has no caret
+ * positions: a position on it is shown at the end of the line before.
  */
 
 import type { Position, Selection } from './model.ts'
@@ -14,6 +19,22 @@ const FIELD = '[data-field]'
 
 function fieldsIn(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FIELD)]
+}
+
+/** Where the text of a field's element starts in the field's text. */
+function startOf(el: HTMLElement): number {
+  return Number(el.dataset.start ?? 0)
+}
+
+/**
+ * The part of a field's text that the element `el` shows: all of it, or
+ * one line of it.
+ */
+export function shownRange(el: HTMLElement, text: string): { start: number; end: number } {
+  if (el.dataset.start === undefined) return { start: 0, end: text.length }
+  const start = startOf(el)
+  const lineEnd = text.indexOf('\n', start)
+  return { start, end: lineEnd < 0 ? text.length : lineEnd }
 }
 
 /**
@@ -36,7 +57,7 @@ export function positionAt(
     const prefix = doc.createRange()
     prefix.selectNodeContents(field)
     prefix.setEnd(node, offset)
-    return { field: field.dataset.field!, offset: prefix.toString().length }
+    return { field: field.dataset.field!, offset: startOf(field) + prefix.toString().length }
   }
   const fields = fieldsIn(root)
   if (fields.length === 0) return null
@@ -44,8 +65,8 @@ export function positionAt(
   point.setStart(node, offset)
   const after = fields.find((f) => point.comparePoint(f, 0) >= 0)
   const before = fields.filter((f) => f !== after && point.comparePoint(f, f.childNodes.length) <= 0).pop()
-  const start = after && { field: after.dataset.field!, offset: 0 }
-  const end = before && { field: before.dataset.field!, offset: (before.textContent ?? '').length }
+  const start = after && { field: after.dataset.field!, offset: startOf(after) }
+  const end = before && { field: before.dataset.field!, offset: startOf(before) + (before.textContent ?? '').length }
   return (bias === 'backward' ? (end ?? start) : (start ?? end)) ?? null
 }
 
@@ -173,8 +194,11 @@ export function markIslands(root: HTMLElement): void {
 }
 
 function locate(root: HTMLElement, position: Position): { node: Node; offset: number } | null {
-  const field = fieldsIn(root).find((f) => f.dataset.field === position.field)
-  return field ? locateIn(field, position.offset) : null
+  const elements = fieldsIn(root).filter((f) => f.dataset.field === position.field)
+  if (elements.length === 0) return null
+  // The element whose text holds the offset, or else the one before it.
+  const field = elements.filter((f) => startOf(f) <= position.offset).pop() ?? elements[0]
+  return locateIn(field, position.offset - startOf(field))
 }
 
 function locateIn(field: HTMLElement, offset: number): { node: Node; offset: number } {

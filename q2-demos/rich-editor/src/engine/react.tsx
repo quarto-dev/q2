@@ -22,7 +22,17 @@
  * isn't writable.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  createElement,
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 import { flushSync } from 'react-dom'
 import { deleteBackward, deleteForward, enter, insertText, paste, select, selectAllStep } from './commands.ts'
 import {
@@ -35,11 +45,12 @@ import {
   readMouseSelection,
   readSelection,
   selectionOutside,
+  shownRange,
   targetRange,
   writeSelection,
 } from './dom.ts'
 import { apply, createEditor, fieldChanges, redo, settle, undo, type ApplyOptions, type Editor } from './editor.ts'
-import { caret, contentChanged, presentFields, selectedText, type Schema, type State } from './model.ts'
+import { ATOM, caret, contentChanged, presentFields, selectedText, type Schema, type State } from './model.ts'
 import { rebaseHistory } from './rebase.ts'
 import type { FieldSource } from './source.ts'
 
@@ -50,6 +61,10 @@ export interface FieldProps {
   /** Shown, faintly, while the field is empty (style `[data-placeholder]`). */
   placeholder?: string
   className?: string
+  /** The element to render (a `span` unless given). */
+  as?: string
+  /** For one line of a field: where the line starts in the field's text. */
+  start?: number
 }
 
 /**
@@ -61,8 +76,8 @@ export interface FieldProps {
  * browser draws no empty last line, so the caret can't sit on it until
  * something is typed. A `<br>` adds no text, so offsets are unchanged.
  */
-export function Field({ name, text, placeholder, className }: FieldProps) {
-  const ref = useRef<HTMLSpanElement | null>(null)
+export function Field({ name, text, placeholder, className, as = 'span', start }: FieldProps) {
+  const ref = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
     if (!el || text === undefined) return
@@ -73,7 +88,43 @@ export function Field({ name, text, placeholder, className }: FieldProps) {
     if (wantsBreak) el.append(el.ownerDocument.createElement('br'))
   }, [text])
   if (text === undefined) return null
-  return <span ref={ref} className={className} data-field={name} data-placeholder={placeholder} />
+  return createElement(as, {
+    ref,
+    className,
+    'data-field': name,
+    'data-start': start,
+    'data-placeholder': placeholder,
+  })
+}
+
+export interface LinesProps {
+  name: string
+  /** The field's text; nothing is rendered when it's undefined. */
+  text: string | undefined
+  className?: string
+  /** The element to render for each line (a `p` unless given). */
+  as?: string
+  /** What to show for the `index`th line that can't be edited (`ATOM`). */
+  renderAtom: (index: number) => ReactNode
+}
+
+/**
+ * A multi-line field as one element per line. The lines that can't be
+ * edited are rendered by the caller, and get no caret.
+ */
+export function Lines({ name, text, className, as = 'p', renderAtom }: LinesProps) {
+  if (text === undefined) return null
+  let start = 0
+  let atoms = 0
+  return text.split('\n').map((line, i) => {
+    const at = start
+    start += line.length + 1
+    return line === ATOM ? (
+      <Fragment key={i}>{renderAtom(atoms++)}</Fragment>
+    ) : (
+      <Field key={i} name={name} text={line} className={className} as={as} start={at} />
+    )
+  })
 }
 
 export interface FieldEditor {
@@ -256,18 +307,21 @@ export function useFieldEditor(
       const h = latest.current
       const selection = readSelection(root)
       const field = selection?.focus.field
-      const el = field && root.querySelector<HTMLElement>(`[data-field="${field}"]`)
+      const el = fieldOf(root, root.ownerDocument.getSelection()?.focusNode ?? null)
       if (selection && field && el) {
-        const text = el.textContent ?? ''
-        if (text !== h.present.fields[field]) {
+        // The element shows all of the field's text, or one line of it.
+        const was = h.present.fields[field] ?? ''
+        const shown = shownRange(el, was)
+        const text = was.slice(0, shown.start) + (el.textContent ?? '') + was.slice(shown.end)
+        if (text !== was) {
           if (source.writable()) {
             commit(
               apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText' }),
               true,
             )
           } else {
-            // Not accepted: put the field's text back.
-            el.textContent = h.present.fields[field] ?? ''
+            // Not accepted: put the element's text back.
+            el.textContent = was.slice(shown.start, shown.end)
           }
         }
       }
@@ -290,7 +344,10 @@ export function useFieldEditor(
       e.preventDefault()
       const { present } = latest.current
       const selection = selectionOutside(root) === 'none' ? currentSelection() : null
-      const text = selection ? selectedText(schema, present.fields, selection) : String(doc.getSelection() ?? '')
+      const fromModel = selection ? selectedText(schema, present.fields, selection) : null
+      // What the page shows, when the selection covers something that
+      // isn't the fields' text.
+      const text = fromModel === null || fromModel.includes(ATOM) ? String(doc.getSelection() ?? '') : fromModel
       e.clipboardData?.setData('text/plain', text)
     }
     const onCopy = (e: ClipboardEvent) => copySelection(e)
@@ -328,11 +385,18 @@ export function useFieldEditor(
         anchor: { node: selection.anchorNode, offset: selection.anchorOffset },
         focus: { node: selection.focusNode, offset: selection.focusOffset },
       }
+      const fields = fieldElements(root)
+      if (granularity === 'documentboundary') {
+        // The start of the first field, or the end of the last.
+        const to = key.forward ? edge(fields[fields.length - 1], 'end') : edge(fields[0], 'start')
+        const from = e.shiftKey ? saved.anchor : to
+        selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
+        return true
+      }
       const x = caretX(doc, saved.focus.node, saved.focus.offset) ?? origin.getBoundingClientRect().left
       selection.modify(e.shiftKey ? 'extend' : 'move', key.direction, granularity)
       if (fieldOf(root, selection.focusNode)) return true
 
-      const fields = fieldElements(root)
       const target = fields[fields.indexOf(origin) + (key.forward ? 1 : -1)]
       let to = saved.focus
       if (target) {
