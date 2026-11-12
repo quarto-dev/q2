@@ -16,7 +16,7 @@
  * the end of the variant's replacement.
  */
 
-import { ordered, type Fields, type Position, type Schema, type Selection, type State } from './model.ts'
+import { keepsEmpty, ordered, type Fields, type Position, type Schema, type Selection, type State } from './model.ts'
 import type { History } from './history.ts'
 
 /** Replace `removed` characters at `start` with `inserted`. */
@@ -177,19 +177,22 @@ export function mapOffset(offset: number, splice: Splice, stick: 'before' | 'aft
 /**
  * `state` after the document's fields changed from `base` to `source`.
  * A field emptied by the change stays (empty) only while it holds an end
- * of the selection.
+ * of the selection, unless it's one that stays when empty: that one is
+ * there whenever the document has it (and while it holds the selection).
  */
 export function rebaseState(schema: Schema, state: State, base: Fields, source: Fields): State {
   let fields: Record<string, string | undefined> | null = null
   let selection = state.selection
   for (const field of schema.order) {
+    const kept = keepsEmpty(schema, field)
     const changes = diffs(base[field] ?? '', source[field] ?? '')
-    if (changes.length === 0) continue
+    const presence = kept && (base[field] === undefined) !== (source[field] === undefined)
+    if (changes.length === 0 && !presence) continue
     const { text, splices } = rebaseText(state.fields[field] ?? '', base[field] ?? '', changes)
     selection = selection && mapSelection(schema, selection, field, splices)
     const held = selection !== null && (selection.anchor.field === field || selection.focus.field === field)
     fields ??= { ...state.fields }
-    if (text !== '' || held) fields[field] = text
+    if (text !== '' || held || (kept && source[field] !== undefined)) fields[field] = text
     else delete fields[field]
   }
   return fields ? { fields, selection } : state

@@ -176,23 +176,11 @@ test.describe('spaces the source does not keep', () => {
 })
 
 test.describe('adding and removing fields', () => {
-  test('a new subtitle is written when it gets text, not before', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    const source = fixture('no-subtitle')
-    await editor.placeCaret('title', 16)
-
-    await page.keyboard.press('Enter')
-    expect(await editor.text('subtitle')).toBe('')
-    expect(editor.document.source()).toBe(source)
-
-    await page.keyboard.type('Draft')
-    await expect.poll(() => editor.document.source()).toContain('\nsubtitle: Draft\n')
-  })
+  // A new field is written at once, empty: see `title-block-widget.spec.ts`.
 
   test.fixme('a new subtitle goes on the line under the title', async ({ page }) => {
     const editor = await openEditor(page, 'no-subtitle')
-    await editor.placeCaret('title', 16)
-    await page.keyboard.press('Enter')
+    await editor.addField('subtitle')
     await page.keyboard.type('Draft')
 
     // Today it goes after the last key.
@@ -201,33 +189,30 @@ test.describe('adding and removing fields', () => {
     )
   })
 
-  test('a new subtitle left empty is never written', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.placeCaret('title', 16)
-    await page.keyboard.press('Enter')
-    await page.keyboard.press('ArrowUp')
-
-    expect(await editor.text('subtitle')).toBeNull()
-    expect(editor.document.source()).toBe(fixture('no-subtitle'))
-  })
-
-  test('emptying a field removes its line, and only its line', async ({ page }) => {
+  test('emptying a field empties its line, and only its line', async ({ page }) => {
     const editor = await openEditor(page, 'formatted')
     await editor.select('subtitle', 0, 13)
     await page.keyboard.press('Backspace')
 
-    await editor.document.expectSource(formatted.replace('subtitle:   "Third quarter"   # to confirm\n', ''))
-    // The source never holds an empty field, even while the caret is in it.
+    await editor.document.expectSource(formatted.replace('subtitle:   "Third quarter"   # to confirm', 'subtitle: ""'))
     expect(await editor.text('subtitle')).toBe('')
   })
 
-  test.fixme('retyping an emptied field puts it back on its line', async ({ page }) => {
+  test('removing an empty field removes its line, and only its line', async ({ page }) => {
+    const editor = await openEditor(page, 'formatted')
+    await editor.select('subtitle', 0, 13)
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Backspace')
+
+    await editor.document.expectSource(formatted.replace('subtitle:   "Third quarter"   # to confirm\n', ''))
+  })
+
+  test('retyping an emptied field puts it back on its line', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.select('title', 0, 16)
     await page.keyboard.press('Backspace')
     await page.keyboard.type('Annual report')
 
-    // Today the title comes back after the last key.
     await editor.document.expectSource(basic.replace('Quarterly report', 'Annual report'))
   })
 

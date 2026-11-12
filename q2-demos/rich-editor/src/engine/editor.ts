@@ -17,6 +17,8 @@ import {
 } from './history.ts'
 import {
   contentChanged,
+  documentChanged,
+  keepsEmpty,
   sameSelection,
   type Fields,
   type Position,
@@ -47,34 +49,55 @@ export interface ApplyOptions {
   before?: Selection | null
   /** The current time in ms (defaults to `Date.now()`). */
   now?: number
+  /**
+   * The document's schema, which says which fields stay when empty: adding
+   * or removing one of those is an edit too.
+   */
+  schema?: Schema
 }
 
 export function apply(editor: Editor, next: State, options: ApplyOptions = {}): Editor {
-  const { inputType = '', before = editor.present.selection, now } = options
+  const { inputType = '', before = editor.present.selection, now, schema = NO_SCHEMA } = options
   const present = editor.present
   if (next === present) return editor
 
-  if (!contentChanged(present.fields, next.fields)) {
+  if (!documentChanged(schema, present.fields, next.fields)) {
     // A selection change. Moving the caret ends the open undo step.
     const moved = !sameSelection(present.selection, next.selection)
     const h = replacePresent(editor, next)
     return moved ? endGroup(h) : h
   }
 
-  const h = sameSelection(before, present.selection) ? editor : endGroup(editor)
+  // Adding or removing a field is a step of its own, never merged with
+  // the typing or deleting around it.
+  const addsOrRemoves = !contentChanged(present.fields, next.fields) || presenceChanged(schema, present.fields, next.fields)
+  const h = sameSelection(before, present.selection) && !addsOrRemoves ? editor : endGroup(editor)
   const field = before?.focus.field ?? next.selection?.focus.field ?? ''
   return record(h, next, {
-    group: undoGroup(field, inputType),
+    group: addsOrRemoves ? undefined : undoGroup(field, inputType),
     now,
     before: { ...present, selection: before },
   })
 }
 
-/** What an edit from `before` to `after` changed, to write to the document. */
+/** Whether a field that stays when empty was added or removed. */
+function presenceChanged(schema: Schema, a: Fields, b: Fields): boolean {
+  return (schema.keepEmpty ?? []).some((k) => (a[k] === undefined) !== (b[k] === undefined))
+}
+
+const NO_SCHEMA: Schema = { order: [] }
+
+/**
+ * What an edit from `before` to `after` changed, to write to the document.
+ * An emptied field is removed, unless it's one that stays when empty: that
+ * one is written empty, and is removed only once it's absent.
+ */
 export function fieldChanges(schema: Schema, before: Fields, after: Fields): FieldChanges {
   const changes: Record<string, string | undefined> = {}
   for (const field of schema.order) {
-    if ((before[field] ?? '') !== (after[field] ?? '')) changes[field] = after[field] || undefined
+    if (keepsEmpty(schema, field)) {
+      if (before[field] !== after[field]) changes[field] = after[field]
+    } else if ((before[field] ?? '') !== (after[field] ?? '')) changes[field] = after[field] || undefined
   }
   return changes
 }
@@ -92,12 +115,14 @@ export function settle(schema: Schema, editor: Editor, base: Fields): Editor {
   let selection = editor.present.selection
   let next: Record<string, string | undefined> | null = null
   for (const field of schema.order) {
+    const kept = keepsEmpty(schema, field)
     const was = fields[field] ?? ''
-    if (was === (base[field] ?? '')) continue
+    if (kept ? fields[field] === base[field] : was === (base[field] ?? '')) continue
     const ends = selection ? [selection.anchor, selection.focus].filter((p) => p.field === field) : []
     if (ends.length === 0) {
       next ??= { ...fields }
-      if (base[field]) next[field] = base[field]
+      // A field that stays when empty is there exactly when the document has it.
+      if (kept ? base[field] !== undefined : base[field]) next[field] = base[field]
       else delete next[field]
     } else if (schema.multiline?.includes(field)) {
       const settled = settleLines(was, base[field] ?? '', ends.map((p) => p.offset))

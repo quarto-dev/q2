@@ -111,9 +111,9 @@ test.describe('Backspace at a field edge', () => {
   })
 
   test('in an empty subtitle removes it', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.clickAt('title', 60)
-    await page.keyboard.press('Enter')
+    const editor = await openEditor(page)
+    await editor.select('subtitle', 0, 13)
+    await page.keyboard.press('Backspace')
 
     await page.keyboard.press('Backspace')
 
@@ -361,7 +361,9 @@ test.describe('the authors', () => {
     const { start } = await editor.caret()
     await page.keyboard.type('X')
     expect(await editor.text('title')).toBe('Quarterly report'.slice(0, start) + 'X')
-    expect(await editor.text('subtitle')).toBeNull()
+    // The subtitle, all selected, is emptied, and stays (only Backspace in
+    // it removes it).
+    expect(await editor.text('subtitle')).toBe('')
     expect(await editor.frame.getByText('Ana Silva').textContent()).toBe('Ana Silva')
     expect(await editor.text('abstract')).toMatch(/^We summarise/)
   })

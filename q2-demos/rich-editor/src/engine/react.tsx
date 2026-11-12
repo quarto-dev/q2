@@ -20,6 +20,11 @@
  * is made to the editor's state too, keeping the caret, the selection and
  * the undo history (`rebase.ts`). Nothing can be edited while the document
  * isn't writable.
+ *
+ * Whatever comes before the first field (a row of buttons that add
+ * fields, say) is the caller's: an arrow key that would take the caret
+ * back past the first field, or Backspace that removes the first field,
+ * goes there through `onLeaveStart`.
  */
 
 import {
@@ -34,7 +39,7 @@ import {
   type ReactNode,
 } from 'react'
 import { flushSync } from 'react-dom'
-import { deleteBackward, deleteForward, enter, insertText, paste, select, selectAllStep } from './commands.ts'
+import { addField, deleteBackward, deleteForward, enter, insertText, paste, select, selectAllStep } from './commands.ts'
 import {
   edge,
   fieldElements,
@@ -50,7 +55,7 @@ import {
   writeSelection,
 } from './dom.ts'
 import { apply, createEditor, fieldChanges, redo, settle, undo, type ApplyOptions, type Editor } from './editor.ts'
-import { ATOM, caret, contentChanged, presentFields, selectedText, type Schema, type State } from './model.ts'
+import { ATOM, caret, documentChanged, presentFields, selectedText, type Schema, type State } from './model.ts'
 import { rebaseHistory } from './rebase.ts'
 import type { FieldSource } from './source.ts'
 
@@ -134,11 +139,29 @@ export interface FieldEditor {
   editor: Editor
   /** Whether edits are accepted now (see `FieldSource.writable`). */
   writable: boolean
+  /** Add `field`, empty, if it's absent, and put the caret at its start. An edit like any other. */
+  add(field: string): void
+  /** Put the caret at the start of the first field (none: nothing happens). */
+  focusStart(): void
+}
+
+/** How the caret left the fields before the first one. */
+export interface LeaveStart {
+  /** Up from the first line: the caret's horizontal position. Left or Backspace: none. */
+  x?: number
+  /** Backspace removed the first field, which was empty: its name. */
+  removed?: string
 }
 
 export interface FieldEditorOptions {
   /** Put the caret at the start of the first field once `root` appears. */
   autoFocus?: boolean
+  /**
+   * Left at the start of the first field, Up on its first line, or
+   * Backspace removing it, empty: the caret leaves the fields. The caller
+   * takes the focus somewhere before them; without this, the caret stays.
+   */
+  onLeaveStart?: (how: LeaveStart) => void
 }
 
 /**
@@ -149,7 +172,7 @@ export function useFieldEditor(
   root: HTMLElement | null,
   schema: Schema,
   source: FieldSource,
-  { autoFocus = false }: FieldEditorOptions = {},
+  { autoFocus = false, onLeaveStart }: FieldEditorOptions = {},
 ): FieldEditor {
   const [edited, setEdited] = useState(source)
   const [editor, setEditor] = useState(() => createEditor(source.get()))
@@ -171,6 +194,10 @@ export function useFieldEditor(
   // composing text (IME) in a field.
   const writing = useRef(false)
   const composing = useRef(false)
+  // Whether the last key down was Backspace, held down and repeating.
+  const repeatingBackspace = useRef(false)
+  const leaveStart = useRef(onLeaveStart)
+  leaveStart.current = onLeaveStart
 
   /**
    * Make `next` the editor's state. A change to the fields' text is
@@ -180,7 +207,7 @@ export function useFieldEditor(
     (next: Editor, restoreSelection: boolean, from: 'editor' | 'document' = 'editor') => {
       const previous = latest.current
       if (next === previous) return
-      if (from === 'editor' && contentChanged(previous.present.fields, next.present.fields)) {
+      if (from === 'editor' && documentChanged(schema, previous.present.fields, next.present.fields)) {
         writing.current = true
         try {
           source.set(fieldChanges(schema, previous.present.fields, next.present.fields))
@@ -224,8 +251,23 @@ export function useFieldEditor(
     autoFocused.current = true
     const h = latest.current
     const [first] = presentFields(schema, h.present.fields)
-    if (first !== undefined) commit(apply(h, select(schema, h.present, caret(first, 0))), true)
+    if (first !== undefined) commit(apply(h, select(schema, h.present, caret(first, 0)), { schema }), true)
   }, [root, autoFocus, schema, commit])
+
+  const add = useCallback(
+    (field: string) => {
+      if (!source.writable()) return
+      const h = latest.current
+      commit(apply(h, addField(schema, h.present, field), { schema, before: h.present.selection }), true)
+    },
+    [schema, source, commit],
+  )
+
+  const focusStart = useCallback(() => {
+    const h = latest.current
+    const [first] = presentFields(schema, h.present.fields)
+    if (first !== undefined) commit(apply(h, select(schema, h.present, caret(first, 0)), { schema }), true)
+  }, [schema, commit])
 
   useLayoutEffect(() => {
     if (!root) return
@@ -268,7 +310,33 @@ export function useFieldEditor(
       const h = latest.current
       const before = currentSelection() ?? h.present.selection
       const at = select(schema, h.present, before)
-      commit(apply(h, command(at), { ...options, before }), true)
+      commit(apply(h, command(at), { ...options, before, schema }), true)
+    }
+
+    /** Delete backward (`inputType`), over `target` when the browser gave one. */
+    const backspace = (inputType: string, target?: ReturnType<typeof targetRange>) => {
+      const was = latest.current.present
+      const repeat = repeatingBackspace.current
+      edit((s) => deleteBackward(schema, s, target, { repeat }), { inputType })
+      const now = latest.current.present
+      if (was.selection && !now.selection) {
+        // Backspace removed the first field: the caret has left the fields.
+        const removed = schema.order.find((f) => was.fields[f] !== undefined && now.fields[f] === undefined)
+        leaveStart.current?.({ removed })
+      }
+    }
+
+    /** Whether the caret is at the very start of the first field (nothing before it to delete). */
+    const atDocumentStart = () => {
+      const selection = currentSelection()
+      const [first] = presentFields(schema, latest.current.present.fields)
+      return (
+        selection !== null &&
+        selection.anchor.field === first &&
+        selection.anchor.offset === 0 &&
+        selection.focus.field === first &&
+        selection.focus.offset === 0
+      )
     }
 
     const history = (step: (editor: Editor) => Editor) => {
@@ -293,7 +361,7 @@ export function useFieldEditor(
         )
       } else if (type === 'insertParagraph') edit((s) => enter(schema, s), { inputType: type })
       else if (type.startsWith('delete') && type.endsWith('Backward')) {
-        edit((s) => deleteBackward(schema, s, target()), { inputType: type })
+        backspace(type, target())
       } else if (type.startsWith('delete') && type.endsWith('Forward')) {
         edit((s) => deleteForward(schema, s, target()), { inputType: type })
       }
@@ -318,7 +386,7 @@ export function useFieldEditor(
         if (text !== was) {
           if (source.writable()) {
             commit(
-              apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText' }),
+              apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText', schema }),
               true,
             )
           } else {
@@ -396,6 +464,21 @@ export function useFieldEditor(
         return true
       }
       const x = caretX(doc, saved.focus.node, saved.focus.offset) ?? origin.getBoundingClientRect().left
+      // Back past the first field (Left at its start, Up on its first
+      // line): out of the fields, to what's before them. Checked before the
+      // browser moves the caret, which at the very start may not move at all.
+      const leaving =
+        !key.forward &&
+        !e.shiftKey &&
+        fields.indexOf(origin) === 0 &&
+        (key.vertical
+          ? granularity === 'line' && onFirstLine(origin, saved.focus.node, saved.focus.offset)
+          : // Not the key for the line's start (like Home, it stays in the line).
+            granularity !== 'lineboundary' && atStart(origin, saved.focus.node, saved.focus.offset))
+      if (leaving && leaveStart.current) {
+        leaveStart.current(key.vertical ? { x } : {})
+        return true
+      }
       selection.modify(e.shiftKey ? 'extend' : 'move', key.direction, granularity)
       if (fieldOf(root, selection.focusNode)) return true
 
@@ -416,6 +499,7 @@ export function useFieldEditor(
       const key = e.key.toLowerCase()
       const primary = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
       if (NAVIGATION_KEYS.has(e.key)) byMouse = false
+      repeatingBackspace.current = e.key === 'Backspace' && e.repeat
       if (primary && key === 'z') {
         e.preventDefault()
         history(e.shiftKey ? redo : undo)
@@ -431,6 +515,12 @@ export function useFieldEditor(
       } else if (primary && key === 'a') {
         e.preventDefault()
         edit((s) => selectAllStep(schema, s))
+      } else if (e.key === 'Backspace' && !e.altKey && !e.metaKey && !e.ctrlKey && atDocumentStart()) {
+        // WebKit sends no `beforeinput` for a Backspace with nothing before
+        // the caret to delete, but here it still has work: an empty first
+        // field is removed.
+        e.preventDefault()
+        backspace('deleteContentBackward')
       } else if (arrow(e)) {
         syncSelection()
       }
@@ -445,7 +535,7 @@ export function useFieldEditor(
       const selection = currentSelection()
       // Rendered at once, like an edit: an empty field the caret just left
       // disappears in the same frame.
-      flushSync(() => commit(apply(h, select(schema, h.present, selection)), false))
+      flushSync(() => commit(apply(h, select(schema, h.present, selection), { schema }), false))
       // A keyboard move the arrow handling didn't cover (Home, Page Down)
       // put the caret outside the fields: put it where the model has it. A
       // mouse selection there is the user's, and is left alone.
@@ -462,7 +552,7 @@ export function useFieldEditor(
     }
     const onBlur = () => {
       const h = latest.current
-      commit(apply(h, select(schema, h.present, null)), false)
+      commit(apply(h, select(schema, h.present, null), { schema }), false)
     }
 
     root.addEventListener('beforeinput', onBeforeInput)
@@ -495,7 +585,7 @@ export function useFieldEditor(
     }
   }, [root, schema, source, commit, followDocument])
 
-  return { state: editor.present, editor, writable }
+  return { state: editor.present, editor, writable, add, focusStart }
 }
 
 /** Keys that move the selection: after one, it is no longer the mouse's. */
@@ -529,6 +619,24 @@ function arrowGranularity(e: KeyboardEvent, vertical: boolean): string | null {
   const plain = !e.altKey && !e.metaKey && !e.ctrlKey
   if (vertical) return plain ? 'line' : boundary ? 'documentboundary' : null
   return plain ? 'character' : word ? 'word' : boundary ? 'lineboundary' : null
+}
+
+/** Whether a DOM point is at the very start of `field`'s text. */
+function atStart(field: HTMLElement, node: Node, offset: number): boolean {
+  const range = field.ownerDocument.createRange()
+  range.selectNodeContents(field)
+  range.setEnd(node, offset)
+  return range.toString() === ''
+}
+
+/** Whether a caret at a DOM point is on `field`'s first line. */
+function onFirstLine(field: HTMLElement, node: Node, offset: number): boolean {
+  const range = field.ownerDocument.createRange()
+  range.setStart(node, offset)
+  const caretTop = range.getClientRects()[0]?.top ?? field.getBoundingClientRect().top
+  const style = getComputedStyle(field)
+  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2
+  return caretTop - field.getBoundingClientRect().top < lineHeight * 0.75
 }
 
 /** The horizontal position of a caret at a DOM point. */

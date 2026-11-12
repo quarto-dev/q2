@@ -101,41 +101,8 @@ test.describe('Enter', () => {
     await editor.document.expectSource(fixture('basic'))
   })
 
-  test('Enter in the title adds an empty subtitle with a placeholder', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    expect(await editor.text('subtitle')).toBeNull()
-    await editor.clickAt('title', 60)
-
-    await page.keyboard.press('Enter')
-
-    expect(await editor.text('subtitle')).toBe('')
-    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
-    const placeholder = await editor
-      .field('subtitle')
-      .evaluate((el) => getComputedStyle(el, '::before').content)
-    expect(placeholder).toBe('"Subtitle"')
-  })
-
-  test('a new subtitle left empty goes away', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.clickAt('title', 60)
-    await page.keyboard.press('Enter')
-
-    await page.keyboard.press('ArrowUp')
-
-    expect(await editor.text('subtitle')).toBeNull()
-    expect((await editor.caret()).field).toBe('title')
-  })
-
-  test('typing into a new subtitle keeps it', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.clickAt('title', 60)
-    await page.keyboard.press('Enter')
-    await page.keyboard.type('Fourth quarter')
-    await editor.clickAway()
-
-    expect(await editor.text('subtitle')).toBe('Fourth quarter')
-  })
+  // Enter never adds a field: see `title-block-widget.spec.ts`, which adds
+  // them with the "+" row.
 })
 
 test.describe('arrow keys between fields', () => {
@@ -283,8 +250,9 @@ test.describe('undo', () => {
   })
 })
 
-test.describe('removing fields', () => {
-  test('a field emptied and left goes away, and undo brings its text back', async ({ page }) => {
+test.describe('emptying fields', () => {
+  // Removing an empty field is in `title-block-widget.spec.ts`.
+  test('a field emptied and left stays, empty, and undo brings its text back', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('subtitle', 30)
     await page.keyboard.press(`${mod}+a`)
@@ -292,7 +260,7 @@ test.describe('removing fields', () => {
     expect(await editor.text('subtitle')).toBe('')
 
     await editor.clickAt('title', 60)
-    expect(await editor.text('subtitle')).toBeNull()
+    expect(await editor.text('subtitle')).toBe('')
 
     await page.keyboard.press(`${mod}+z`)
     expect(await editor.text('subtitle')).toBe('Third quarter')

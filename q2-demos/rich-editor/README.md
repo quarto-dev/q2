@@ -14,6 +14,17 @@ normalization on the document's metadata in well under a millisecond instead
 of waiting for a full render. The body is rendered block by block from the
 parsed source.
 
+A document has only the title-block fields its author adds. A row of "+"
+items above the title block ("+ Title  + Subtitle  + Abstract", one for each
+field the document doesn't have, in `src/TitleBlockWidget.tsx`) adds them:
+it shows while the caret is in the title block, the pointer is over it or
+the document is empty, and it is laid over the space above the title block,
+so showing it moves nothing. The keyboard reaches it too: Left at the start
+of the first field or Up on its first line goes to it. An added field stays,
+empty, with its placeholder, until Backspace in it removes it, and the
+source holds it all along as an empty value (`subtitle: ""`). Enter never
+adds a field.
+
 The title, subtitle and abstract are editable in place, and so are the body's
 paragraphs of plain text: Enter splits a paragraph, and Backspace at its
 start joins it to the one before. The rest of the body (headings, paragraphs
@@ -23,7 +34,8 @@ be edited yet; no edit removes it or changes its source. The document is one
 the browser moves the caret and selection (so selections can span fields),
 and the engine intercepts every edit, applies it to a model of plain-text
 fields, and renders it back. Its rules (Enter moves to the next field,
-fields are never joined or split, an empty field disappears when left) and
+fields are never joined or split, an empty field disappears when left
+unless it's one that stays when empty) and
 its single undo history are pure TypeScript with unit tests. Like
 `src/quarto-synced-file/`, it imports nothing from the rest of the demo;
 the document's fields are configured in `src/VisualEditor.tsx`.
@@ -115,7 +127,8 @@ spec that can't hold in one engine says so where it's skipped, with the
 reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts` and
-`body.spec.ts` (editing), `source.spec.ts` (what an edit does to the source
+`body.spec.ts` (editing), `title-block-widget.spec.ts` (adding and removing
+title-block fields), `source.spec.ts` (what an edit does to the source
 text),
 `collaboration.spec.ts` (more than one person in a document) and
 `render-parity.spec.ts` (the editor shows a document as `q2 render` would).
@@ -129,7 +142,9 @@ it opens fixtures in `/fixture.html` instead of on a hub.
 Every other test puts a document from `e2e/fixtures/` on an in-process sync hub
 and opens it in the app, once per collaborator, each in a browser of its
 own; the test itself is one more collaborator, reading and editing the
-source text. Playwright starts the dev server itself.
+source text. Playwright starts the dev server itself, on port 5192, or
+reuses one already running there: to run the tests in two checkouts at
+once, give each its own port with `E2E_PORT`.
 
 `/fixture.html?fixture=<name>` (default `basic`) opens the visual editor
 on a fixture held in memory, with no hub, for trying it without a server.

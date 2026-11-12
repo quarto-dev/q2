@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addField,
   deleteBackward,
   deleteForward,
   enter,
@@ -129,6 +130,66 @@ describe('select', () => {
   it('keeps an empty field that holds the selection', () => {
     const next = select(schema, state({ title: 'T', subtitle: '' }, caret('title', 0)), caret('subtitle', 0))
     expect(next.fields).toEqual({ title: 'T', subtitle: '' })
+  })
+})
+
+describe('fields that stay when empty (keepEmpty)', () => {
+  const kept: Schema = { order: ['title', 'subtitle', 'body'], keepEmpty: ['title', 'subtitle'] }
+
+  it('stay once the selection leaves them', () => {
+    const next = select(kept, state({ title: 'T', subtitle: '' }, caret('subtitle', 0)), caret('title', 0))
+    expect(next.fields).toEqual({ title: 'T', subtitle: '' })
+  })
+
+  it('stay when nothing is selected', () => {
+    const next = select(kept, state({ title: '', body: '' }, caret('title', 0)), null)
+    expect(next.fields).toEqual({ title: '' })
+  })
+
+  it('Backspace in one that is empty removes it, moving to the end of the previous field', () => {
+    const next = deleteBackward(kept, state({ title: 'T', subtitle: '' }, caret('subtitle', 0)))
+    expect(next.fields).toEqual({ title: 'T' })
+    expect(next.selection).toEqual(caret('title', 1))
+  })
+
+  it('Backspace in the first field, empty, removes it and leaves nothing selected', () => {
+    const next = deleteBackward(kept, state({ title: '', body: 'B' }, caret('title', 0)))
+    expect(next.fields).toEqual({ body: 'B' })
+    expect(next.selection).toBeNull()
+  })
+
+  it('Backspace at the start of a field with text still only moves', () => {
+    const next = deleteBackward(kept, state({ title: 'T', subtitle: 'S' }, caret('subtitle', 0)))
+    expect(next.fields).toEqual({ title: 'T', subtitle: 'S' })
+    expect(next.selection).toEqual(caret('title', 1))
+  })
+})
+
+describe('a repeated Backspace (the key held down)', () => {
+  it('deletes within the field as usual', () => {
+    const next = deleteBackward(schema, state(both, caret('subtitle', 5)), undefined, { repeat: true })
+    expect(next.fields.subtitle).toBe('Thir quarter')
+  })
+
+  it('stops at the start of the field: it neither moves on nor removes the field', () => {
+    const atStart = state(both, caret('subtitle', 0))
+    expect(deleteBackward(schema, atStart, undefined, { repeat: true })).toBe(atStart)
+    const empty = state({ title: 'T', subtitle: '' }, caret('subtitle', 0))
+    expect(deleteBackward(schema, empty, undefined, { repeat: true })).toBe(empty)
+  })
+})
+
+describe('addField', () => {
+  it('adds an absent field, empty, with the caret in it', () => {
+    const next = addField(schema, state({ title: 'T' }, null), 'subtitle')
+    expect(next.fields).toEqual({ title: 'T', subtitle: '' })
+    expect(next.selection).toEqual(caret('subtitle', 0))
+  })
+
+  it('puts the caret at the start of a field that is already there', () => {
+    const next = addField(schema, state(both, caret('title', 3)), 'subtitle')
+    expect(next.fields).toEqual(both)
+    expect(next.selection).toEqual(caret('subtitle', 0))
   })
 })
 

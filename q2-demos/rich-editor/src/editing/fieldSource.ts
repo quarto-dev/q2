@@ -11,8 +11,10 @@
  * incremental writer, and the difference from the current source is sent
  * as one splice. The incremental writer rewrites only the changed keys,
  * so nothing else in the source moves. An empty field is written as no
- * key at all, and spaces that qmd doesn't keep (at the ends of a line, or
- * more than one in a row) aren't written. In the body, only the
+ * key at all, unless it's one that stays when empty (`keepEmpty`): that one
+ * is written as an empty value (`subtitle: ""`), and is removed only when
+ * it's written as undefined. Spaces that qmd doesn't keep (at the ends of a
+ * line, or more than one in a row) aren't written. In the body, only the
  * paragraphs whose text changed are written.
  */
 
@@ -40,11 +42,16 @@ export interface MetaFieldSourceOptions {
   multiline?: readonly string[]
   /** The name of the field that is the document's body, if it's edited. */
   body?: string
+  /**
+   * Keys that are fields even when they're empty: read as empty (not
+   * absent) when the source has them with no text, and written empty.
+   */
+  keepEmpty?: readonly string[]
 }
 
 export function createMetaFieldSource(
   file: QmdFile,
-  { keys, multiline = [], body }: MetaFieldSourceOptions,
+  { keys, multiline = [], body, keepEmpty = [] }: MetaFieldSourceOptions,
 ): FieldSource {
   let readFrom: RustQmdJson | null | undefined
   let fields: Fields = {}
@@ -56,7 +63,7 @@ export function createMetaFieldSource(
       const next = Object.fromEntries(
         keys.flatMap((key) => {
           const text = metaText(ast?.meta[key])
-          return text ? [[key, text]] : []
+          return text || (text !== undefined && keepEmpty.includes(key)) ? [[key, text]] : []
         }),
       )
       const text = body === undefined || !ast ? '' : bodyText(ast.blocks as Node[])
@@ -88,10 +95,14 @@ export function createMetaFieldSource(
         continue
       }
       const lines = kept(value ?? '', multiline.includes(key))
+      // Removed when it's written as undefined, or when it's emptied and
+      // isn't a key that stays when empty.
+      const remove = value === undefined || (lines.length === 0 && !keepEmpty.includes(key))
       // Nothing to write when the document already reads this way.
-      if (lines.join('\n') === (current[key] ?? '')) continue
+      if (remove ? current[key] === undefined : lines.join('\n') === current[key]) continue
       changed = true
-      if (lines.length === 0) delete meta[key]
+      if (remove) delete meta[key]
+      else if (lines.length === 0) meta[key] = { t: 'MetaString', c: '' } as Meta[string]
       else if (multiline.includes(key)) meta[key] = paragraphs(lines) as Meta[string]
       else meta[key] = { t: 'MetaInlines', c: words(lines[0]) } as Meta[string]
     }
