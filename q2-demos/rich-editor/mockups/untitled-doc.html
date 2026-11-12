@@ -63,6 +63,15 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 .opt-persist .title-block h1.title:empty::before { color:var(--ph-faint); }
 .opt-persist .title-block h1.title:empty:focus::before,
 .opt-persist.doc-empty .title-block h1.title:empty::before { color:var(--ph); }
+/* "+ Subtitle": under the title, in the title block's bottom margin so it
+   moves nothing when it appears; only while the title block is hovered or
+   has the caret. */
+.opt-persist .title-block { position:relative; }
+.add-sub { position:absolute; top:calc(100% + 2px); left:-8px; opacity:0; pointer-events:none; transition:opacity .12s;
+  font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:4px 8px; border-radius:4px; cursor:pointer; }
+.title-block:hover .add-sub, .title-block:focus-within .add-sub { opacity:1; pointer-events:auto; }
+.add-sub:hover, .add-sub:focus { background:#eef0f3; color:var(--ink); outline:none; }
+.title-block.untitled:not(.open) .add-sub { display:none; }
 
 /* Option: inline widget */
 .widget { display:flex; flex-wrap:wrap; gap:2px; min-height:30px; align-items:center; opacity:0; transition:opacity .12s; margin:0 0 6px -8px; }
@@ -102,8 +111,8 @@ const PH = { title: 'Title', subtitle: 'Subtitle', author: 'Name', date: 'e.g. 2
 const OPTIONS = {
   persist: {
     name: 'Placeholder title', desc: 'The title slot always exists. Its placeholder shows only in an empty doc, on hover, or with the caret in it.',
-    tips: '<kbd>↑</kbd> on the body’s first line enters the hidden title. Hover just above the body to see it. <kbd>Enter</kbd> in the title goes to the body (there’s no way to add a subtitle in this option).',
-    flags: { persistentTitle: true },
+    tips: '<kbd>↑</kbd> on the body’s first line enters the hidden title. Hover just above the body to see it. <kbd>Enter</kbd> in the title goes to the body. “+ Subtitle” shows under the title while you hover it or edit it: click it, or <kbd>Tab</kbd> to it and press <kbd>Enter</kbd>.',
+    flags: { persistentTitle: true, subtitleButton: true },
   },
   widget: {
     name: 'Inline widget', desc: 'A faint “+ Title + Subtitle …” row above the page, on hover or from the keyboard.',
@@ -271,6 +280,11 @@ function build() {
       return e;
     };
     if (p.includes('title')) header.append(mk('title', 'h1', 'title'));
+    if (f.subtitleButton && !p.includes('subtitle')) {
+      const b = el('button', 'add-sub'); b.type = 'button'; b.textContent = '+ Subtitle';
+      b.onclick = () => addField('subtitle');
+      header.append(b);
+    }
     if (p.includes('subtitle')) header.append(mk('subtitle', 'p', 'subtitle'));
     if (p.includes('author') || p.includes('date')) {
       const m = el('div', 'meta');
