@@ -411,6 +411,13 @@ export class Editor {
     )
   }
 
+  /** Whether a caret in `field` would be drawn: the field is editable, and its caret isn't transparent. */
+  caretVisible(field: Field): Promise<boolean> {
+    return this.field(field).evaluate(
+      (el) => (el as HTMLElement).isContentEditable && getComputedStyle(el).caretColor !== 'rgba(0, 0, 0, 0)',
+    )
+  }
+
   /** Whether a field's placeholder is showing. */
   placeholderShown(field: Field): Promise<boolean> {
     return this.field(field).evaluate((el) => {

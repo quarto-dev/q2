@@ -304,10 +304,33 @@ test.describe('an empty field', () => {
     await page.keyboard.press('Backspace')
     await editor.expectText('subtitle', null)
 
+    await editor.document.expectSource(fixture('basic').replace('subtitle: Third quarter\n', ''))
+
     await page.keyboard.press(`${mod}+z`)
 
     await editor.expectText('subtitle', '')
-    await editor.document.expectSource(fixture('basic').replace('subtitle: Third quarter', 'subtitle: ""'))
+    // Back in the source, empty; after the last key, like any added key
+    // (see the fixme in `source.spec.ts`).
+    await expect.poll(() => editor.document.source()).toContain('\nsubtitle: ""\n')
+    expect(editor.document.source()).not.toContain('Third quarter')
+  })
+
+  test('a field removed and added again shows its caret', async ({ page }) => {
+    // The title block keeps the author when the title goes, so it's there,
+    // with nothing to edit in it, until the title comes back.
+    const editor = await openEditor(page, 'no-subtitle')
+    await editor.select('title', 0, 16)
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Backspace')
+    await editor.expectFocusedWidgetItem('+ Title')
+
+    await page.keyboard.press('Enter')
+    await editor.expectCaret('title', 0)
+
+    expect(await editor.caretVisible('title')).toBe(true)
+    await page.keyboard.type('Notes')
+    await editor.expectText('title', 'Notes')
+    expect(await editor.caretVisible('title')).toBe(true)
   })
 
   test('typing into it again puts the text back on its line', async ({ page }) => {

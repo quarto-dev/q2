@@ -185,13 +185,25 @@ export function markIslands(root: HTMLElement): void {
   // elements are instances of that frame's own classes.
   for (const child of root.children as HTMLCollectionOf<HTMLElement>) {
     if (child.matches(FIELD)) continue
-    if (child.querySelector(FIELD)) markIslands(child)
-    else if (child.contentEditable !== 'false') {
+    if (child.querySelector(FIELD)) {
+      // A field came back into what was an island (a removed title added
+      // again to the title block): editable again, with a caret.
+      if (child.hasAttribute(ISLAND)) {
+        child.removeAttribute(ISLAND)
+        child.removeAttribute('contenteditable')
+        child.style.caretColor = ''
+      }
+      markIslands(child)
+    } else if (child.contentEditable !== 'false') {
+      child.setAttribute(ISLAND, '')
       child.contentEditable = 'false'
       child.style.caretColor = 'transparent'
     }
   }
 }
+
+/** Marks what `markIslands` made non-editable, so it can be made editable again. */
+const ISLAND = 'data-qe-island'
 
 function locate(root: HTMLElement, position: Position): { node: Node; offset: number } | null {
   const elements = fieldsIn(root).filter((f) => f.dataset.field === position.field)
