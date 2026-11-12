@@ -13,12 +13,23 @@
  * - A line that can't be edited (`ATOM`) stays as it is, on a line of its
  *   own: a deletion that covers it keeps it, and one that would join it
  *   to another line does nothing.
+ * - A line's prefix (see `isPrefix`) is never typed, and the caret never
+ *   goes before it. A line joined to the one before takes that line's
+ *   prefix. Enter in the middle of a line keeps the prefix on both halves;
+ *   at the end of the line the new line has none; and at the start of the
+ *   line's text, the new line goes above, so the prefix stays with the
+ *   text.
  */
 
 import {
   ATOM,
   caret,
   isCollapsed,
+  isPrefix,
+  lineStartOf,
+  linePrefix,
+  pastPrefixes,
+  withoutPrefixes,
   ordered,
   presentFields,
   sameSelection,
@@ -70,7 +81,7 @@ export function paste(schema: Schema, state: State, text: string): State {
 export function enter(schema: Schema, state: State): State {
   if (!state.selection) return state
   const field = ordered(schema, state.selection).from.field
-  if (schema.multiline?.includes(field)) return insertText(schema, state, '\n')
+  if (schema.multiline?.includes(field)) return lineBreak(schema, state)
   const next = schema.order
     .slice(schema.order.indexOf(field) + 1)
     .find((f) => state.fields[f] !== undefined || schema.addable?.includes(f))
@@ -80,9 +91,54 @@ export function enter(schema: Schema, state: State): State {
   return select(schema, { fields, selection: cleared.selection }, caret(next, 0))
 }
 
-/** Move the selection, removing any empty field it leaves. */
+/**
+ * Enter in a multi-line field: a line break, which keeps a line's prefix
+ * on both halves of a line split in the middle, gives none to the line
+ * started at its end, and goes before the prefix at the start of its text.
+ */
+function lineBreak(schema: Schema, state: State): State {
+  const cleared = insertText(schema, state, '')
+  const at = cleared.selection!.focus
+  const text = cleared.fields[at.field] ?? ''
+  const start = lineStartOf(text, at.offset)
+  const prefix = linePrefix(text, at.offset)
+  const lineEnd = text.indexOf('\n', at.offset) < 0 ? text.length : text.indexOf('\n', at.offset)
+  if (prefix === '' || at.offset === lineEnd && at.offset > start + prefix.length) {
+    return insertText(schema, cleared, '\n')
+  }
+  const fields = { ...cleared.fields }
+  if (at.offset === start + prefix.length) {
+    fields[at.field] = text.slice(0, start) + '\n' + text.slice(start)
+    return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + 1))
+  }
+  fields[at.field] = text.slice(0, at.offset) + '\n' + prefix + text.slice(at.offset)
+  return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + 1 + prefix.length))
+}
+
+/**
+ * Apply the schema's input rule to the text before a collapsed caret:
+ * replace it with what the rule gives (the same state when it gives
+ * nothing).
+ */
+export function applyInputRule(schema: Schema, state: State): State {
+  const { selection, fields } = state
+  if (!schema.inputRule || !selection || !isCollapsed(selection)) return state
+  const { field, offset } = selection.focus
+  const text = fields[field] ?? ''
+  const start = lineStartOf(text, offset)
+  const replacement = schema.inputRule(field, text.slice(start, offset))
+  if (replacement === null) return state
+  const next = { ...fields, [field]: text.slice(0, start) + replacement + text.slice(offset) }
+  return select(schema, { fields: next, selection }, caret(field, start + replacement.length))
+}
+
+/**
+ * Move the selection, removing any empty field it leaves. Neither end of
+ * it stays before a line's prefix.
+ */
 export function select(schema: Schema, state: State, selection: Selection | null): State {
   const fields = removeEmpty(schema, state.fields, selection)
+  selection = pastPrefixes(fields, selection)
   if (fields === state.fields && sameSelection(selection, state.selection)) return state
   return { fields, selection }
 }
@@ -161,7 +217,7 @@ function deleteDirection(
  * keeps what follows `to`; fields in between are emptied.
  */
 function replace(schema: Schema, state: State, from: Position, to: Position, typed: string): State {
-  const text = typed.replaceAll(ATOM, '')
+  const text = withoutPrefixes(typed.replaceAll(ATOM, ''))
   const fields: Record<string, string | undefined> = { ...state.fields }
   const first = schema.order.indexOf(from.field)
   const last = schema.order.indexOf(to.field)
@@ -173,7 +229,16 @@ function replace(schema: Schema, state: State, from: Position, to: Position, typ
     const start = i === first ? from.offset : 0
     const end = i === last ? to.offset : value.length
     const atoms = ATOM.repeat(value.slice(start, end).split(ATOM).length - 1)
-    const next = value.slice(0, start) + (i === first ? text : '') + atoms + value.slice(end)
+    const before = value.slice(0, start) + (i === first ? text : '') + atoms
+    // A line joined to the one before takes that line's prefix, unless
+    // that line is left empty.
+    let after = value.slice(end)
+    if (value.slice(start, end).includes('\n') && !(before === '' || before.endsWith('\n'))) {
+      let prefixEnd = 0
+      while (prefixEnd < after.length && isPrefix(after[prefixEnd])) prefixEnd++
+      after = after.slice(prefixEnd)
+    }
+    const next = before + after
     if (!next.includes(ATOM)) fields[field] = next
     else {
       const apart = atomsApart(next, i === first ? offset : 0)

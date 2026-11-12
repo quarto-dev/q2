@@ -96,3 +96,73 @@ describe('createMetaFieldSource', () => {
     expect(text()).toBe(broken)
   })
 })
+
+describe('headings in the body', () => {
+  const H = (level: number) => String.fromCharCode(0xfdd0 + level)
+  const BODY = `---
+title: T
+---
+
+Intro.
+
+## Results {#res .big}
+
+Middle.
+
+### Plain heading
+
+End.
+`
+  function openBody(text = BODY) {
+    const file = createLocalFile(text)
+    const source = createMetaFieldSource(file, { keys: ['title'], body: 'body' })
+    return { source, text: () => file.getSnapshot().text }
+  }
+
+  it('reads a heading as a line with its level\'s prefix', () => {
+    expect(openBody().source.get().body).toBe(`Intro.\n${H(2)}Results\nMiddle.\n${H(3)}Plain heading\nEnd.`)
+  })
+
+  it('writes typing in a heading to its own line, keeping its attributes', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${H(2)}Results so far\nMiddle.\n${H(3)}Plain heading\nEnd.` })
+    expect(text()).toBe(BODY.replace('## Results {#res .big}', '## Results so far {#res .big}'))
+  })
+
+  it('writes typing in a heading without attributes without making its id up', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${H(2)}Results\nMiddle.\n${H(3)}Plain headings\nEnd.` })
+    expect(text()).toBe(BODY.replace('### Plain heading', '### Plain headings'))
+  })
+
+  it('writes a heading whose prefix was removed as a paragraph', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${H(2)}Results\nMiddle.\nPlain heading\nEnd.` })
+    expect(text()).toBe(BODY.replace('### Plain heading', 'Plain heading'))
+  })
+
+  it('writes a paragraph given a prefix as a heading', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${H(2)}Results\n${H(4)}Middle.\n${H(3)}Plain heading\nEnd.` })
+    expect(text()).toBe(BODY.replace('Middle.', '#### Middle.'))
+  })
+
+  it('writes a new heading, and markdown typed in it as text', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${H(1)}A *new* # one\n${H(2)}Results\nMiddle.\n${H(3)}Plain heading\nEnd.` })
+    expect(text()).toBe(BODY.replace('Intro.\n', 'Intro.\n\n# A \\*new\\* \\# one\n'))
+    expect(openBody(text()!).source.get().body).toContain(`${H(1)}A *new* # one\n`)
+  })
+
+  it('writes an empty heading, and reads it back as one', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${H(2)}Results\nMiddle.\n${H(3)}\nEnd.` })
+    expect(openBody(text()!).source.get().body).toBe(`Intro.\n${H(2)}Results\nMiddle.\n${H(3)}\nEnd.`)
+  })
+
+  it('splits a heading into a heading and a paragraph', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${H(2)}Results\nMiddle.\n${H(3)}Plain\nheading\nEnd.` })
+    expect(text()).toBe(BODY.replace('### Plain heading', '### Plain\n\nheading'))
+  })
+})

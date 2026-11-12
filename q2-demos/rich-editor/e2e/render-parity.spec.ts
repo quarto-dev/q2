@@ -38,6 +38,14 @@ test("an abstract's paragraphs are shown as paragraphs", async ({ page }) => {
   await expectRenderParity(page, 'abstract-paragraphs')
 })
 
+test('headings are shown in sections, as `q2 render` does', async ({ page }) => {
+  test.fixme(
+    true,
+    'Headings are flat lines: `q2 render` puts each in a <section> with what follows it, and marks them `anchored`',
+  )
+  await expectRenderParity(page, 'headings')
+})
+
 async function expectRenderParity(page: Page, name: string) {
   await page.goto(`/fixture.html?fixture=${name}`)
   const frame = page.frameLocator('iframe.visual-frame')

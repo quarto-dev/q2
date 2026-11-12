@@ -33,6 +33,9 @@ const SELECTORS: Record<Field, string> = {
 /** The body's editable paragraphs. */
 const PARAGRAPH = '#quarto-document-content > p.qe-field'
 
+/** The body's editable lines: paragraphs and headings. */
+const LINE = '#quarto-document-content > .qe-field'
+
 const FILE = 'index.qmd'
 
 // The sync client's connection progress isn't the tests' output.
@@ -234,6 +237,27 @@ export class Editor {
     )
   }
 
+  /** The body's editable lines (paragraphs and headings), each as `tag: text`. */
+  lines(): Promise<string[]> {
+    return this.frame.evaluate(
+      (selector) =>
+        [...document.querySelectorAll(selector)].map((el) => `${el.tagName.toLowerCase()}: ${el.textContent ?? ''}`),
+      LINE,
+    )
+  }
+
+  /** Put the caret in the body's `index`th editable line (paragraph or heading), `offset` characters in. */
+  async placeCaretInLine(index: number, offset: number) {
+    await this.frame.locator(LINE).nth(index).click({ position: { x: 5, y: 5 } })
+    await this.page.keyboard.press(lineStart)
+    for (let i = 0; i < offset; i++) await this.page.keyboard.press('ArrowRight')
+  }
+
+  /** Wait until the caret is `offset` characters into the body's `index`th editable line. */
+  async expectLineCaret(index: number, offset: number) {
+    await expect.poll(() => this.lineCaret(LINE)).toEqual({ index, offset })
+  }
+
   /** Put the caret in the body's `index`th editable paragraph (of one line), `offset` characters in. */
   async placeCaretInParagraph(index: number, offset: number) {
     await this.frame.locator(PARAGRAPH).nth(index).click({ position: { x: 5, y: 5 } })
@@ -262,25 +286,26 @@ export class Editor {
 
   /** Wait until the caret is `offset` characters into the body's `index`th editable paragraph. */
   async expectParagraphCaret(index: number, offset: number) {
-    await expect
-      .poll(() =>
-        this.frame.evaluate((selector) => {
-          const selection = document.getSelection()!
-          const focused = (document.activeElement as HTMLElement | null)?.isContentEditable === true
-          const node = selection.focusNode
-          const el = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement
-          const paragraph = el?.closest(selector)
-          if (!focused || !selection.isCollapsed || !paragraph || !node) return null
-          const prefix = document.createRange()
-          prefix.selectNodeContents(paragraph)
-          prefix.setEnd(node, selection.focusOffset)
-          return {
-            index: [...document.querySelectorAll(selector)].indexOf(paragraph),
-            offset: prefix.toString().length,
-          }
-        }, PARAGRAPH),
-      )
-      .toEqual({ index, offset })
+    await expect.poll(() => this.lineCaret(PARAGRAPH)).toEqual({ index, offset })
+  }
+
+  /** Which of the elements `selector` matches the caret is in, and how far into its text. */
+  private lineCaret(selector: string) {
+    return this.frame.evaluate((selector) => {
+      const selection = document.getSelection()!
+      const focused = (document.activeElement as HTMLElement | null)?.isContentEditable === true
+      const node = selection.focusNode
+      const el = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement
+      const paragraph = el?.closest(selector)
+      if (!focused || !selection.isCollapsed || !paragraph || !node) return null
+      const prefix = document.createRange()
+      prefix.selectNodeContents(paragraph)
+      prefix.setEnd(node, selection.focusOffset)
+      return {
+        index: [...document.querySelectorAll(selector)].indexOf(paragraph),
+        offset: prefix.toString().length,
+      }
+    }, selector)
   }
 
   /**
@@ -363,5 +388,21 @@ export class Editor {
       Object.defineProperty(event, 'clipboardData', { value: data })
       document.activeElement!.dispatchEvent(event)
     }, text)
+  }
+
+  /**
+   * Copy (or cut) the selection, and return the text that goes on the
+   * clipboard. (The event is made here, so the system's clipboard isn't
+   * touched.)
+   */
+  copy(kind: 'copy' | 'cut' = 'copy'): Promise<string> {
+    return this.frame.evaluate((kind) => {
+      const data = new DataTransfer()
+      const event = new ClipboardEvent(kind, { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: data })
+      document.activeElement!.dispatchEvent(event)
+      // Left to the browser, a copy takes the text the page shows selected.
+      return event.defaultPrevented ? data.getData('text/plain') : String(document.getSelection() ?? '')
+    }, kind)
   }
 }

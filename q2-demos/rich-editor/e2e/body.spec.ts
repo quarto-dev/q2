@@ -1,9 +1,9 @@
 /**
  * The document's body, under the title block. Paragraphs of plain text are
  * edited in place: Enter splits one, Backspace at its start joins it to
- * the one before. Everything else (headings, formatted text, code) is
- * shown as `q2 render` would show it and can't be edited yet, and no edit
- * changes its source.
+ * the one before. (So are headings of plain text: see `headings.spec.ts`.)
+ * Everything else (formatted text, code) is shown as `q2 render` would
+ * show it and can't be edited yet, and no edit changes its source.
  */
 
 import { expect, fixture, openEditor, test } from './helpers.ts'
@@ -40,7 +40,7 @@ test.describe('showing the body', () => {
     ])
   })
 
-  test('typing on a heading changes nothing', async ({ page }) => {
+  test('typing on a heading with formatting changes nothing', async ({ page }) => {
     const editor = await openEditor(page, 'body')
     await editor.frame.locator('main h2').click()
     await page.keyboard.type('x')

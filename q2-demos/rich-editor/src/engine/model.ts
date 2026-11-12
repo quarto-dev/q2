@@ -13,6 +13,38 @@
  */
 export const ATOM = '\uFFFC'
 
+/**
+ * A line of a multi-line field can start with a run of prefix characters,
+ * the Unicode noncharacters U+FDD0 to U+FDEF, which give it a kind (what
+ * each means is up to the schema; in the qmd editor, a heading's level).
+ * A prefix can't be typed or pasted, the caret never goes before it, and
+ * it's dropped anywhere but at the start of a line, so a line joined to
+ * the one before takes that line's kind.
+ */
+export function isPrefix(char: string): boolean {
+  return char.length === 1 && char >= '\uFDD0' && char <= '\uFDEF'
+}
+
+const PREFIXES = /[\uFDD0-\uFDEF]/g
+
+/** `text` without prefix characters. */
+export function withoutPrefixes(text: string): string {
+  return text.replace(PREFIXES, '')
+}
+
+/** Where the line that `offset` is on starts in `text`. */
+export function lineStartOf(text: string, offset: number): number {
+  return text.lastIndexOf('\n', offset - 1) + 1
+}
+
+/** The prefix of the line that `offset` is on. */
+export function linePrefix(text: string, offset: number): string {
+  const start = lineStartOf(text, offset)
+  let end = start
+  while (end < text.length && isPrefix(text[end])) end++
+  return text.slice(start, end)
+}
+
 /** Each field's text, or undefined when the field is absent. */
 export type Fields = Readonly<Record<string, string | undefined>>
 
@@ -45,6 +77,15 @@ export interface Schema {
    * field, and pasted line breaks become spaces.
    */
   readonly multiline?: readonly string[]
+  /**
+   * What typing turns into: given a field and the text of the caret's line
+   * up to the caret (its prefix included) just after something was typed,
+   * the text to replace it with, or null to leave it. Applied as an undo
+   * step of its own (see `applyInputRule`).
+   */
+  readonly inputRule?: (field: string, line: string) => string | null
+  /** A line prefix as text, for the clipboard (none unless given). */
+  readonly prefixText?: (prefix: string) => string
 }
 
 export function caret(field: string, offset: number): Selection {
@@ -57,6 +98,23 @@ export function range(anchorField: string, anchorOffset: number, focusField: str
     anchor: { field: anchorField, offset: anchorOffset },
     focus: { field: focusField, offset: focusOffset },
   }
+}
+
+/** `position`, moved past the prefix of its line if it's before the end of it. */
+export function pastPrefix(fields: Fields, position: Position): Position {
+  const text = fields[position.field]
+  if (text === undefined) return position
+  const start = lineStartOf(text, position.offset)
+  const end = start + linePrefix(text, position.offset).length
+  return position.offset < end ? { field: position.field, offset: end } : position
+}
+
+/** `selection` with neither end before a line's prefix. */
+export function pastPrefixes(fields: Fields, selection: Selection | null): Selection | null {
+  if (!selection) return selection
+  const anchor = pastPrefix(fields, selection.anchor)
+  const focus = pastPrefix(fields, selection.focus)
+  return anchor === selection.anchor && focus === selection.focus ? selection : { anchor, focus }
 }
 
 /** Negative when `a` comes before `b`, zero when they're the same. */
@@ -94,7 +152,10 @@ export function contentChanged(a: Fields, b: Fields): boolean {
   return [...keys].some((k) => (a[k] ?? '') !== (b[k] ?? ''))
 }
 
-/** The selected text, one line per field. */
+/**
+ * The selected text, one line per field. A line's prefix, when the
+ * selection takes it in, is written as the schema's `prefixText` says.
+ */
 export function selectedText(schema: Schema, fields: Fields, selection: Selection): string {
   const { from, to } = ordered(schema, selection)
   const first = schema.order.indexOf(from.field)
@@ -103,7 +164,13 @@ export function selectedText(schema: Schema, fields: Fields, selection: Selectio
   for (let i = first; i <= last; i++) {
     const value = fields[schema.order[i]]
     if (value === undefined) continue
-    lines.push(value.slice(i === first ? from.offset : 0, i === last ? to.offset : value.length))
+    let start = i === first ? from.offset : 0
+    // A selection from the start of a line's text takes in its prefix.
+    if (i === first && linePrefix(value, start) !== '' && pastPrefix(fields, { field: from.field, offset: lineStartOf(value, start) }).offset === start) {
+      start = lineStartOf(value, start)
+    }
+    const text = value.slice(start, i === last ? to.offset : value.length)
+    lines.push(text.replace(/(^|\n)([\uFDD0-\uFDEF]+)/g, (_, start: string, prefix: string) => start + (schema.prefixText?.(prefix) ?? '')))
   }
-  return lines.join('\n')
+  return withoutPrefixes(lines.join('\n'))
 }

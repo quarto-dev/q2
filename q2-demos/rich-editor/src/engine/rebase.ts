@@ -16,7 +16,7 @@
  * the end of the variant's replacement.
  */
 
-import { ordered, type Fields, type Position, type Schema, type Selection, type State } from './model.ts'
+import { ordered, pastPrefixes, type Fields, type Position, type Schema, type Selection, type State } from './model.ts'
 import type { History } from './history.ts'
 
 /** Replace `removed` characters at `start` with `inserted`. */
@@ -192,7 +192,9 @@ export function rebaseState(schema: Schema, state: State, base: Fields, source: 
     if (text !== '' || held) fields[field] = text
     else delete fields[field]
   }
-  return fields ? { fields, selection } : state
+  if (!fields) return state
+  // A caret at the start of a line that got a prefix goes after it.
+  return { fields, selection: pastPrefixes(fields, selection) }
 }
 
 /** Every state of `history` after the document's fields changed from `base` to `source`. */

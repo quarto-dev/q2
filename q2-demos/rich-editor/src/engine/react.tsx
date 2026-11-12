@@ -34,7 +34,16 @@ import {
   type ReactNode,
 } from 'react'
 import { flushSync } from 'react-dom'
-import { deleteBackward, deleteForward, enter, insertText, paste, select, selectAllStep } from './commands.ts'
+import {
+  applyInputRule,
+  deleteBackward,
+  deleteForward,
+  enter,
+  insertText,
+  paste,
+  select,
+  selectAllStep,
+} from './commands.ts'
 import {
   edge,
   fieldElements,
@@ -50,7 +59,7 @@ import {
   writeSelection,
 } from './dom.ts'
 import { apply, createEditor, fieldChanges, redo, settle, undo, type ApplyOptions, type Editor } from './editor.ts'
-import { ATOM, caret, contentChanged, presentFields, selectedText, type Schema, type State } from './model.ts'
+import { ATOM, caret, contentChanged, linePrefix, presentFields, selectedText, type Schema, type State } from './model.ts'
 import { rebaseHistory } from './rebase.ts'
 import type { FieldSource } from './source.ts'
 
@@ -106,25 +115,40 @@ export interface LinesProps {
   className?: string
   /** The element to render for each line (a `p` unless given). */
   as?: string
+  /**
+   * The element to render for the `index`th line, which starts with
+   * `prefix` (see `isPrefix`), and a class to add to it. Lines without a
+   * prefix are rendered as `as`.
+   */
+  lineElement?: (prefix: string, index: number) => { as: string; className?: string }
   /** What to show for the `index`th line that can't be edited (`ATOM`). */
   renderAtom: (index: number) => ReactNode
 }
 
 /**
  * A multi-line field as one element per line. The lines that can't be
- * edited are rendered by the caller, and get no caret.
+ * edited are rendered by the caller, and get no caret. A line's prefix
+ * isn't shown: it chooses the line's element, whose text starts after it.
  */
-export function Lines({ name, text, className, as = 'p', renderAtom }: LinesProps) {
+export function Lines({ name, text, className, as = 'p', lineElement, renderAtom }: LinesProps) {
   if (text === undefined) return null
   let start = 0
   let atoms = 0
   return text.split('\n').map((line, i) => {
     const at = start
     start += line.length + 1
-    return line === ATOM ? (
-      <Fragment key={i}>{renderAtom(atoms++)}</Fragment>
-    ) : (
-      <Field key={i} name={name} text={line} className={className} as={as} start={at} />
+    if (line === ATOM) return <Fragment key={i}>{renderAtom(atoms++)}</Fragment>
+    const prefix = linePrefix(line, 0)
+    const element = prefix === '' ? undefined : lineElement?.(prefix, i)
+    return (
+      <Field
+        key={i}
+        name={name}
+        text={line.slice(prefix.length)}
+        className={[className, element?.className].filter(Boolean).join(' ') || undefined}
+        as={element?.as ?? as}
+        start={at + prefix.length}
+      />
     )
   })
 }
@@ -282,7 +306,14 @@ export function useFieldEditor(
       const target = () => targetRange(root, e)
       if (type === 'historyUndo') history(undo)
       else if (type === 'historyRedo') history(redo)
-      else if (type === 'insertText') edit((s) => insertText(schema, s, e.data ?? ''), { inputType: type })
+      else if (type === 'insertText') {
+        edit((s) => insertText(schema, s, e.data ?? ''), { inputType: type })
+        // What the typing turns into, as an undo step of its own, so undo
+        // gives back what was typed.
+        const h = latest.current
+        const ruled = applyInputRule(schema, h.present)
+        if (ruled !== h.present && source.writable()) commit(apply(h, ruled, { inputType: 'formatBlock' }), true)
+      }
       else if (type === 'insertReplacementText') {
         // Autocorrect or a spelling suggestion: replace the target range.
         const range = target()

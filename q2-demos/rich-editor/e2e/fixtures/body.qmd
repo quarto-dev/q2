@@ -6,7 +6,7 @@ First paragraph.
 
 Second paragraph.
 
-## Results
+## *Results*
 
 Some *emphasised* text.
 

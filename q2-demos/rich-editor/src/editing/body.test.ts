@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { ATOM } from '../engine/model.ts'
-import { bodyText, editBody, plainParagraph, words, type Node } from './body.ts'
+import { bodyText, editBody, headingLevel, headingPrefix, plainParagraph, readOnlyBlocks, words, type Node } from './body.ts'
 
 const para = (text: string): Node => ({ t: 'Para', c: words(text) })
-const heading: Node = { t: 'Header', c: [2, ['', [], []], words('Results')] }
+// A heading with formatting, which can't be edited.
+const heading: Node = { t: 'Header', c: [2, ['', [], []], [{ t: 'Emph', c: words('Results') }]] }
 const formatted: Node = { t: 'Para', c: [{ t: 'Emph', c: words('really') }] }
 const empty: Node = { t: 'Para', c: [{ t: 'Str', c: '\u00a0' }] }
 const blocks = [para('One.'), heading, para('Two.'), formatted, para('Three.')]
@@ -85,5 +86,69 @@ describe('editBody', () => {
   })
   it('refuses a text without the read-only blocks', () => {
     expect(editBody(blocks, 'One.')).toBeNull()
+  })
+})
+
+describe('headings', () => {
+  const H2 = headingPrefix(2)
+  const h = (level: number, text: string, id = '', classes: string[] = []): Node => ({
+    t: 'Header',
+    c: [level, [id, classes, []], text === '' ? [] : words(text)],
+  })
+  // An id the reader made from the text, not written in the source.
+  const auto: Node = { ...h(2, 'Results', 'results'), a: { classes: [], id: null, kvs: [] } } as Node
+  const explicit: Node = { ...h(1, 'One', 'first', ['unnumbered']), a: { classes: [3], id: 4, kvs: [] } } as Node
+
+  it('a heading of plain text is a line with its level\'s prefix', () => {
+    expect(headingPrefix(1)).toBe('﷑')
+    expect(headingPrefix(6)).toBe('﷖')
+    expect(bodyText([para('One.'), auto, h(6, 'Six')])).toBe(`One.\n${H2}Results\n${headingPrefix(6)}Six`)
+    expect(headingLevel(`${H2}Results`)).toBe(2)
+    expect(headingLevel('Results')).toBe(0)
+  })
+  it('an empty heading is a line of only its prefix', () => {
+    expect(bodyText([h(2, '')])).toBe(H2)
+  })
+  it('a heading with formatting can\'t be edited', () => {
+    const formattedHeading: Node = { t: 'Header', c: [2, ['', [], []], [{ t: 'Emph', c: words('Results') }]] }
+    expect(bodyText([formattedHeading])).toBe(ATOM)
+    expect(readOnlyBlocks([formattedHeading, auto])).toEqual([formattedHeading])
+  })
+  it('text holding a prefix character can\'t be edited', () => {
+    expect(bodyText([para(`a${H2}b`)])).toBe(ATOM)
+  })
+
+  it('writes a line with a prefix as a heading', () => {
+    expect(editBody([para('One.')], `One.\n${H2}New`)).toEqual([para('One.'), h(2, 'New')])
+    expect(editBody([para('One.')], `${headingPrefix(3)}One.`)).toEqual([h(3, 'One.')])
+    expect(editBody([para('One.')], `${H2}`)).toEqual([h(2, '')])
+  })
+  it('drops the spaces qmd doesn\'t keep, after the prefix too', () => {
+    expect(editBody([para('One.')], `${H2}  New  heading `)).toEqual([h(2, 'New heading')])
+  })
+  it('keeps an unchanged heading as it was', () => {
+    const edited = editBody([auto, para('One.')], `${H2}Results\nOne!`)!
+    expect(edited[0]).toBe(auto)
+  })
+  it('keeps an edited heading\'s written attributes and source', () => {
+    const [edited] = editBody([explicit], `${headingPrefix(1)}Two`)!
+    expect(edited).toEqual({ ...explicit, c: [1, ['first', ['unnumbered'], []], words('Two')] })
+  })
+  it('drops an edited heading\'s id when the reader made it up', () => {
+    const [edited] = editBody([auto], `${H2}Findings`)!
+    expect(edited).toEqual({ ...auto, c: [2, ['', [], []], words('Findings')] })
+  })
+  it('keeps the attributes when the level changes', () => {
+    const [edited] = editBody([explicit], `${headingPrefix(3)}One`)!
+    expect((edited.c as unknown[])[0]).toBe(3)
+    expect((edited.c as unknown[])[1]).toEqual(['first', ['unnumbered'], []])
+  })
+  it('writes a heading whose prefix was removed as a paragraph', () => {
+    expect(editBody([para('One.'), auto], 'One.\nResults')).toEqual([para('One.'), para('Results')])
+  })
+  it('a new heading among others doesn\'t take a neighbour\'s attributes', () => {
+    const edited = editBody([explicit, para('Two.')], `${headingPrefix(1)}One\n${H2}New\nTwo.`)!
+    expect(edited[0]).toBe(explicit)
+    expect(edited[1]).toEqual(h(2, 'New'))
   })
 })

@@ -8,8 +8,8 @@
  * The body is under it, block by block, from the parsed source.
  *
  * The title, subtitle and abstract are edited in place, and so are the
- * body's paragraphs of plain text; the rest of the body (headings,
- * formatted text, lists) is shown and can't be edited yet. Every edit is
+ * body's paragraphs and headings of plain text; the rest of the body
+ * (formatted text, lists, code) is shown and can't be edited yet. Every edit is
  * written to the file's source text as it's made, and a change to the
  * source from elsewhere (the source pane or a collaborator) shows up here
  * without disturbing the caret, the selection or the undo history. The
@@ -24,7 +24,15 @@ import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-rendere
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
 import { Field, Lines, useFieldEditor } from './engine/react.tsx'
 import type { Fields, Schema } from './engine/model.ts'
-import { readOnlyBlocks, type Node } from './editing/body.ts'
+import {
+  blockClasses,
+  blocksOfLines,
+  bodyInputRule,
+  headingLevel,
+  prefixMarkdown,
+  readOnlyBlocks,
+  type Node,
+} from './editing/body.ts'
 import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
 import { ReadOnlyBlock } from './ReadOnlyBlock.tsx'
@@ -66,12 +74,16 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * start, and selections across fields follow it. Enter in the title adds
  * a missing subtitle, and Enter in the last one-line field of the title
  * block goes to the body, starting one if there's none. The abstract and
- * the body take line breaks (one per paragraph).
+ * the body take line breaks (one per paragraph). In the body, `## ` at
+ * the start of a paragraph makes it a heading, and a heading is copied
+ * with its `#`s.
  */
 const SCHEMA: Schema = {
   order: [...TITLE_BLOCK, 'body'],
   addable: ['subtitle', 'body'],
   multiline: ['abstract', 'body'],
+  inputRule: (field, line) => (field === 'body' ? bodyInputRule(line) : null),
+  prefixText: prefixMarkdown,
 }
 
 const PLACEHOLDERS: Record<TitleBlockField, string> = {
@@ -136,6 +148,20 @@ export function VisualEditor({ file }: VisualEditorProps) {
     [readOnly],
   )
 
+  // A heading line is an `h1`-`h6`, with the classes written on its block.
+  const lineBlocks = useMemo(
+    () => (ast && state.fields.body !== undefined ? blocksOfLines(ast.blocks as Node[], state.fields.body) : []),
+    [ast, state.fields.body],
+  )
+  const lineElement = useCallback(
+    (prefix: string, index: number) => {
+      const level = headingLevel(prefix)
+      const classes = blockClasses(lineBlocks[index])
+      return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined }
+    },
+    [lineBlocks],
+  )
+
   const renderField = useCallback(
     (field: TitleBlockField) =>
       state.fields[field] === undefined ? null : (
@@ -170,7 +196,13 @@ export function VisualEditor({ file }: VisualEditorProps) {
             {/* PreviewTitleBlock is typed against preview-renderer's own AST
                 type; the JSON shape is the same. */}
             <PreviewTitleBlock ast={derived.ast as never} setAst={noop} renderField={renderField} />
-            <Lines name="body" text={state.fields.body} className="qe-field" renderAtom={renderAtom} />
+            <Lines
+              name="body"
+              text={state.fields.body}
+              className="qe-field"
+              lineElement={lineElement}
+              renderAtom={renderAtom}
+            />
           </>,
           mount,
         )}
