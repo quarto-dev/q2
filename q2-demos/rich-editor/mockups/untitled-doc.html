@@ -115,7 +115,7 @@ const OPTIONS = {
   },
   widget: {
     name: 'Inline widget', desc: 'A faint “+ Title + Subtitle …” row above the page, on hover or from the keyboard.',
-    tips: 'Hover the top of the page, or press <kbd>↑</kbd> at the start of the body / title block. <kbd>←</kbd><kbd>→</kbd> pick, <kbd>Enter</kbd> add, <kbd>↓</kbd> or <kbd>Esc</kbd> back.',
+    tips: 'Hover the top of the page, or press <kbd>↑</kbd> on the first line of the body / title block. <kbd>←</kbd><kbd>→</kbd> pick, <kbd>Enter</kbd> add, <kbd>↓</kbd> or <kbd>Esc</kbd> back. An empty field keeps its placeholder; <kbd>Backspace</kbd> in it removes it.',
     flags: { widget: true },
   },
   slash: {
@@ -337,16 +337,9 @@ function build() {
         else if (!(f.widget && focusWidget())) focusBlock(body.firstElementChild, false);
       }
     });
-    e.addEventListener('focusout', () => setTimeout(() => {
-      if (document.activeElement === e || !header.contains(e)) return;
-      if (meta[k] === '' && !isPersistent(k)) {
-        // An emptied field disappears when the caret leaves it.
-        const a = document.activeElement, ak = a && a.dataset && a.dataset.field;
-        delete meta[k];
-        renderHeader();
-        if (ak) focusField(ak, true);
-      } else update();
-    }));
+    // An emptied field stays, showing its placeholder, until Backspace in it
+    // removes it (above): you added it, so only you take it away.
+    e.addEventListener('focusout', () => setTimeout(update));
   }
 
   // -- widget --
