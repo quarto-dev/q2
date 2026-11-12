@@ -157,11 +157,11 @@ fn wrap_in_place(block: &mut Block, decoration: &CodeBlockDecoration) {
     // info has zero rendered output and zero cost; it's the cheapest
     // sentinel we can construct.
     let source_info = block.source_info().clone();
-    let placeholder = Block::RawBlock(RawBlock {
+    let placeholder = Block::RawBlock(Box::new(RawBlock {
         format: "html".to_string(),
         text: String::new(),
         source_info: source_info.clone(),
-    });
+    }));
     let mut inner: Block = std::mem::replace(block, placeholder);
 
     // Layer 1 (Phase 1): filename header. When present, wrap `inner`
@@ -191,7 +191,7 @@ fn wrap_with_filename(
     filename: &str,
     source_info: quarto_source_map::SourceInfo,
 ) -> Block {
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec!["code-with-filename".to_string()],
@@ -200,7 +200,7 @@ fn wrap_with_filename(
         content: vec![make_filename_header(filename, source_info.clone()), inner],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Build a `<div class="code-copy-outer-scaffold">` wrapper around
@@ -208,7 +208,7 @@ fn wrap_with_filename(
 /// Hover-vs-always visibility is controlled by the ported SCSS, not
 /// by the markup.
 fn wrap_with_copy_scaffold(inner: Block, source_info: quarto_source_map::SourceInfo) -> Block {
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec!["code-copy-outer-scaffold".to_string()],
@@ -217,7 +217,7 @@ fn wrap_with_copy_scaffold(inner: Block, source_info: quarto_source_map::SourceI
         content: vec![inner, make_copy_button(source_info.clone())],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Build the copy-button RawBlock. The `title=` attribute drives the
@@ -237,11 +237,11 @@ fn make_copy_button(source_info: quarto_source_map::SourceInfo) -> Block {
                 <i class=\"bi\"></i>\
                 </button>"
         .to_string();
-    Block::RawBlock(RawBlock {
+    Block::RawBlock(Box::new(RawBlock {
         format: "html".to_string(),
         text,
         source_info,
-    })
+    }))
 }
 
 /// Build the filename-header sub-block. Emitted as a `RawBlock("html", …)`
@@ -255,11 +255,11 @@ fn make_filename_header(filename: &str, source_info: quarto_source_map::SourceIn
         "<div class=\"code-with-filename-file\"><pre><strong>{}</strong></pre></div>",
         escaped
     );
-    Block::RawBlock(RawBlock {
+    Block::RawBlock(Box::new(RawBlock {
         format: "html".to_string(),
         text,
         source_info,
-    })
+    }))
 }
 
 /// Minimal HTML escape — enough for an attribute / element text
@@ -305,12 +305,12 @@ mod tests {
         for (k, v) in kvs {
             kv_map.insert(k.to_string(), v.to_string());
         }
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec!["python".to_string()], kv_map),
             text: text.to_string(),
             source_info: source_info_at(0, 0, text.len()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_test_project() -> ProjectContext {

@@ -537,7 +537,7 @@ mod tests {
             .insert("content".to_string(), Slot::Inlines(vec![eq()]));
         let mut blocks = vec![
             para(vec![eq()]),
-            Block::Div(Div {
+            Block::Div(Box::new(Div {
                 attr: quarto_pandoc_types::attr::empty_attr(),
                 content: vec![para(vec![Inline::Emph(Emph {
                     content: vec![eq()],
@@ -545,12 +545,12 @@ mod tests {
                 })])],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
             Block::BulletList(BulletList {
                 content: vec![vec![para(vec![eq()])]],
                 source_info: si(),
             }),
-            Block::Custom(custom),
+            Block::Custom(Box::new(custom)),
         ];
         let out = walk(&mut blocks, NumberEncoding::TexTag);
         assert_eq!(out.encoded, 4);

@@ -41,7 +41,7 @@ fn figure_with_kvs(kvs: &[(&str, &str)], caption: Option<&str>) -> Block {
     for (k, v) in kvs {
         map.insert(k.to_string(), v.to_string());
     }
-    Block::Figure(Figure {
+    Block::Figure(Box::new(Figure {
         attr: (
             String::new(),
             vec!["quarto-float".to_string(), "quarto-float-fig".to_string()],
@@ -58,7 +58,7 @@ fn figure_with_kvs(kvs: &[(&str, &str)], caption: Option<&str>) -> Block {
         })],
         source_info: si(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn to_html(block: Block) -> String {
@@ -141,7 +141,7 @@ fn uncaptioned_kv_adds_uncaptioned_class() {
 
 #[test]
 fn plain_figure_without_kvs_is_unchanged() {
-    let html = to_html(Block::Figure(Figure {
+    let html = to_html(Block::Figure(Box::new(Figure {
         attr: ("fig-x".to_string(), Vec::new(), LinkedHashMap::new()),
         caption: Caption {
             short: None,
@@ -154,7 +154,7 @@ fn plain_figure_without_kvs_is_unchanged() {
         })],
         source_info: si(),
         attr_source: AttrSourceInfo::empty(),
-    }));
+    })));
     assert!(
         html.contains("<figure id=\"fig-x\">"),
         "plain figure: {html}"

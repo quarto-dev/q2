@@ -249,7 +249,7 @@ fn transform_block(
     };
 
     if let Some(custom) = converted {
-        *block = Block::Custom(custom);
+        *block = Block::Custom(Box::new(custom));
     }
 }
 
@@ -349,7 +349,7 @@ fn convert_codeblock(
     });
     node.slots.insert(
         "content".into(),
-        Slot::Blocks(vec![Block::CodeBlock(inner)]),
+        Slot::Blocks(vec![Block::CodeBlock(Box::new(inner))]),
     );
     node.slots.insert(
         "caption_long".into(),
@@ -408,12 +408,12 @@ fn maybe_wrap_bare_table_into_div(block: &mut Block, reg: &RefTypeRegistry) {
     // move the Table into the Div's content.
     let table_block = std::mem::replace(
         block,
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: div_attr,
             content: Vec::new(),
             source_info,
             attr_source: div_attr_source,
-        }),
+        })),
     );
     if let Block::Div(div) = block {
         div.content.push(table_block);
@@ -854,12 +854,12 @@ mod tests {
     }
 
     fn code(lang: &str, body: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec![lang.into()], LinkedHashMap::new()),
             text: body.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn run_transform(blocks: Vec<Block>, reg: &RefTypeRegistry) -> Vec<Block> {
@@ -872,12 +872,12 @@ mod tests {
     #[test]
     fn div_with_trailing_paragraph_becomes_float_ref_target() {
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("fig-hello"),
             content: vec![code("python", "pyplot.show()"), para("Hello, world.")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         assert_eq!(out.len(), 1);
 
@@ -919,7 +919,7 @@ mod tests {
         // produced bottom-up, caption-stealing registration; section headers
         // are registered by CrossrefIndexTransform directly instead.
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "sec-x".to_string(),
                 vec!["section".to_string(), "level1".to_string()],
@@ -928,7 +928,7 @@ mod tests {
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         let Block::Div(d) = &out[0] else {
             panic!("section div must stay a Div, got {:?}", out[0]);
@@ -942,21 +942,21 @@ mod tests {
         // Excluding `.section` divs must not shield their contents: a figure
         // div nested inside a section is still a crossref target.
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "sec-x".to_string(),
                 vec!["section".to_string()],
                 LinkedHashMap::new(),
             ),
-            content: vec![Block::Div(Div {
+            content: vec![Block::Div(Box::new(Div {
                 attr: attr_id("fig-inner"),
                 content: vec![code("python", "1+1"), para("Inner cap")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         let Block::Div(section) = &out[0] else {
             panic!("section div must stay a Div, got {:?}", out[0]);
@@ -973,12 +973,12 @@ mod tests {
         // `section` class keeps today's float-path behavior. Q1's treatment
         // of that shape is its own question, not P0's.
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("sec-x"),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         let view = crossref_target_view(&out[0]).expect("bare sec div is a target");
         assert_eq!(view.ref_type, "sec");
@@ -1008,7 +1008,7 @@ mod tests {
         // Lua filters or the JSON reader; Pandoc itself emits Plain).
         use quarto_pandoc_types::table::{Table, TableFoot, TableHead};
         let reg = RefTypeRegistry::builtin();
-        let table = Block::Table(Table {
+        let table = Block::Table(Box::new(Table {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -1031,13 +1031,13 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let div = Block::Div(Div {
+        }));
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("tbl-nums"),
             content: vec![table],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         let Block::Custom(node) = &out[0] else {
             panic!("expected custom node");
@@ -1048,12 +1048,12 @@ mod tests {
     #[test]
     fn div_without_trailing_paragraph_has_no_caption_slot() {
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("fig-no-cap"),
             content: vec![code("python", "pyplot.show()")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         let Block::Custom(node) = &out[0] else {
             panic!("expected custom node");
@@ -1065,7 +1065,7 @@ mod tests {
     #[test]
     fn figure_with_id_becomes_float_ref_target() {
         let reg = RefTypeRegistry::builtin();
-        let fig = Block::Figure(Figure {
+        let fig = Block::Figure(Box::new(Figure {
             attr: attr_id("fig-plain"),
             caption: Caption {
                 short: None,
@@ -1075,7 +1075,7 @@ mod tests {
             content: vec![para("image placeholder")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![fig], &reg);
         let view = crossref_target_view(&out[0]).expect("is a target");
         assert_eq!(view.identifier, "fig-plain");
@@ -1098,7 +1098,7 @@ mod tests {
     #[test]
     fn figure_image_classes_and_attributes_merge_onto_float() {
         let reg = RefTypeRegistry::builtin();
-        let fig = Block::Figure(Figure {
+        let fig = Block::Figure(Box::new(Figure {
             attr: attr_id("fig-margin"),
             caption: Caption {
                 short: None,
@@ -1111,7 +1111,7 @@ mod tests {
             )],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![fig], &reg);
         let Block::Custom(node) = &out[0] else {
             panic!("expected FloatRefTarget");
@@ -1144,7 +1144,7 @@ mod tests {
     #[test]
     fn div_over_table_clears_the_tables_own_caption() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
-        let table = Block::Table(Table {
+        let table = Block::Table(Box::new(Table {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -1174,14 +1174,14 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("tbl-one"),
             content: vec![table],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         let Block::Custom(node) = &out[0] else {
             panic!("expected custom node");
@@ -1215,7 +1215,7 @@ mod tests {
     #[test]
     fn div_over_figure_flattens_to_single_target() {
         let reg = RefTypeRegistry::builtin();
-        let inner_fig = Block::Figure(Figure {
+        let inner_fig = Block::Figure(Box::new(Figure {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -1225,13 +1225,13 @@ mod tests {
             content: vec![para("image")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let div = Block::Div(Div {
+        }));
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("fig-outer"),
             content: vec![inner_fig],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         assert_eq!(out.len(), 1);
         let view = crossref_target_view(&out[0]).expect("is a target");
@@ -1251,12 +1251,12 @@ mod tests {
     #[test]
     fn div_without_crossref_id_left_alone() {
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("just-a-div"),
             content: vec![para("content")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div.clone()], &reg);
         assert_eq!(out, vec![div]);
     }
@@ -1264,12 +1264,12 @@ mod tests {
     #[test]
     fn citation_shaped_id_not_mistaken_for_crossref() {
         let reg = RefTypeRegistry::builtin();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("smithfoo-2020"),
             content: vec![para("biblio-looking div")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div.clone()], &reg);
         assert_eq!(out, vec![div]);
     }
@@ -1277,13 +1277,13 @@ mod tests {
     #[test]
     fn nested_crossref_target_sugared() {
         let reg = RefTypeRegistry::builtin();
-        let inner = Block::Div(Div {
+        let inner = Block::Div(Box::new(Div {
             attr: attr_id("fig-nested"),
             content: vec![code("python", "x=1"), para("cap")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let outer = Block::Div(Div {
+        }));
+        let outer = Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["callout-note".into()],
@@ -1292,7 +1292,7 @@ mod tests {
             content: vec![inner],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![outer], &reg);
         let Block::Div(outer_div) = &out[0] else {
             panic!("outer remains a Div");
@@ -1305,12 +1305,12 @@ mod tests {
     fn custom_category_honored_if_registered() {
         let mut reg = RefTypeRegistry::builtin();
         reg.register_custom("dia", "Diagram", None).unwrap();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("dia-one"),
             content: vec![para("diagram caption")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![div], &reg);
         let view = crossref_target_view(&out[0]).expect("is a target");
         assert_eq!(view.ref_type, "dia");
@@ -1329,12 +1329,12 @@ mod tests {
         let reg = RefTypeRegistry::builtin();
         let mut kvs = LinkedHashMap::new();
         kvs.insert("lst-cap".to_string(), "Hello World in Python".to_string());
-        let cb = Block::CodeBlock(CodeBlock {
+        let cb = Block::CodeBlock(Box::new(CodeBlock {
             attr: ("lst-hello".to_string(), vec!["python".to_string()], kvs),
             text: "def hello():\n    print(\"Hello, World!\")\n".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![cb], &reg);
         let Block::Custom(node) = &out[0] else {
             panic!(
@@ -1397,12 +1397,12 @@ mod tests {
     #[test]
     fn code_block_without_lst_cap_is_not_sugared() {
         let reg = RefTypeRegistry::builtin();
-        let cb = Block::CodeBlock(CodeBlock {
+        let cb = Block::CodeBlock(Box::new(CodeBlock {
             attr: attr_id("lst-nocap"),
             text: "1 + 1\n".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![cb], &reg);
         assert!(
             matches!(&out[0], Block::CodeBlock(_)),
@@ -1418,12 +1418,12 @@ mod tests {
         let reg = RefTypeRegistry::builtin();
         let mut kvs = LinkedHashMap::new();
         kvs.insert("fig-cap".to_string(), "Not a float".to_string());
-        let cb = Block::CodeBlock(CodeBlock {
+        let cb = Block::CodeBlock(Box::new(CodeBlock {
             attr: ("fig-cb".to_string(), vec!["python".to_string()], kvs),
             text: "1\n".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run_transform(vec![cb], &reg);
         assert!(
             matches!(&out[0], Block::CodeBlock(_)),

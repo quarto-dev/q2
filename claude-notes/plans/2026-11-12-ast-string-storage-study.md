@@ -2,7 +2,7 @@
 title: "Study: arena / borrowed string storage for the Pandoc AST"
 strand: bd-akgst1fi
 related: [bd-is4q72tt]
-status: "Direction agreed (no lifetimes; node layout first; text runs deferred). Step 1 (box cold Inline variants) done: AST heap 88x -> 26x of source. Steps 2-5 open under epic bd-4x6kih4c."
+status: "Direction agreed (no lifetimes; node layout first; text runs deferred). Inline and Block cold variants boxed: AST heap 88x -> 20.5x of source. Attr slimming and steps 3-5 open under epic bd-4x6kih4c."
 date: 2026-11-12
 ---
 
@@ -460,6 +460,25 @@ Notes for the next steps, from doing this one:
   needed no change; only about 30 sites destructured.
 - Or-patterns that mix boxed and unboxed variants must be split into one
   arm per boxed variant.
+
+### Step 2a: box cold `Block` variants (bd-09g8zl30) — measured
+
+Boxed the payloads of `CodeBlock`, `RawBlock`, `OrderedList`, `Header`,
+`Table`, `Figure`, `Div`, `BlockMetadata`, `NoteDefinitionPara`,
+`NoteDefinitionFencedBlock` and `Custom`. The same 8-word assertion now
+guards `Block` (64 bytes native, 32 on wasm32).
+
+| | Start | After step 1 | After step 2a |
+|---|---|---|---|
+| `size_of::<Block>()` | 824 | 824 | 64 |
+| `Vec<Block>` buffers | 160 MiB | 160 MiB | 12.5 MiB |
+| AST heap | 2,304 MiB (87.7×) | 678 MiB (25.8×) | 538 MiB (20.5×) |
+| AST heap blocks | 4.06 M | 4.36 M | 4.39 M |
+| Peak RSS of the run | 2.75 GiB | 0.87 GiB | 0.72 GiB |
+| Wall time | 7.7 s | 6.5 s | 6.2 s |
+
+This matches the option-A estimate (~535 MiB). `Vec<Inline>` buffers are
+now 68% of the AST heap, and text fields 10.5%.
 
 ## Decisions (2026-11-12)
 

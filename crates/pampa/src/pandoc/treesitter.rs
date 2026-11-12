@@ -203,11 +203,11 @@ fn process_list(
                 // Increment counter by the number of items in this list
                 context.example_list_counter.set(start_num + content.len());
             }
-            PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(OrderedList {
+            PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(Box::new(OrderedList {
                 attr,
                 content,
                 source_info: node_source_info_with_context(node, context),
-            }))
+            })))
         }
         None => PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
             content,
@@ -275,13 +275,13 @@ fn process_list_item(
             PandocNativeIntermediate::IntermediateSection(section) => blocks.extend(section),
             PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
                 // for now we assume it's metadata and emit it as a rawblock
-                blocks.push(Block::RawBlock(RawBlock {
+                blocks.push(Block::RawBlock(Box::new(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     source_info: crate::pandoc::location::range_to_source_info_with_context(
                         &range, context,
                     ),
-                }));
+                })));
             }
             // Tokens with no AST-level meaning: tree-sitter ERROR nodes from
             // error recovery, fence delimiters, etc. all dispatch to
@@ -1672,11 +1672,11 @@ fn native_visitor<T: Write>(
             let msg = builder.build();
             error_collector.add(msg);
 
-            PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
+            PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(Box::new(RawBlock {
                 format: "qmd-grid-table".to_string(),
                 text: raw_text.to_string(),
                 source_info: node_source_info_with_context(node, context),
-            }))
+            })))
         }
         "comment" => {
             // HTML comments (<!-- ... -->) are preserved as RawInline(html)

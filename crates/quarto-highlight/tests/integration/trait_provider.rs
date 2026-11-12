@@ -64,12 +64,12 @@ fn empty_attr_source() -> AttrSourceInfo {
 }
 
 fn make_code_block(class: &str, text: &str) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: attr_with_class(class),
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    })
+    }))
 }
 
 fn empty_pandoc() -> Pandoc {

@@ -284,7 +284,7 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn header(level: usize, id: &str, classes: &[&str]) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (
                 id.to_string(),
@@ -294,11 +294,11 @@ mod tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn div(id: &str, classes: &[&str], content: Blocks) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 id.to_string(),
                 classes.iter().map(|c| c.to_string()).collect(),
@@ -307,7 +307,7 @@ mod tests {
             content,
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn classes(b: &Block) -> Vec<String> {

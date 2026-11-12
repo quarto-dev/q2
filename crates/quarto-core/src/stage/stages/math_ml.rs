@@ -358,18 +358,18 @@ mod tests {
             Slot::Inlines(vec![math(MathType::InlineMath, "c^2")]),
         );
         let mut blocks = vec![
-            Block::Header(Header {
+            Block::Header(Box::new(Header {
                 level: 1,
                 attr: quarto_pandoc_types::attr::empty_attr(),
                 content: vec![math(MathType::InlineMath, "h^2")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
             para(vec![Inline::Note(quarto_pandoc_types::inline::Note {
                 content: vec![para(vec![math(MathType::InlineMath, "n^2")])],
                 source_info: si(),
             })]),
-            Block::Custom(custom),
+            Block::Custom(Box::new(custom)),
         ];
         let out = convert_document(&mut blocks);
         assert_eq!((out.converted, out.left), (3, 0));

@@ -2291,12 +2291,12 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 })?
                 .to_string();
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Block::CodeBlock(CodeBlock {
+            Ok(Block::CodeBlock(Box::new(CodeBlock {
                 attr,
                 text,
                 source_info,
                 attr_source,
-            }))
+            })))
         }
         "RawBlock" => {
             let c = obj
@@ -2322,11 +2322,11 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                     JsonReadError::InvalidType("RawBlock text must be string".to_string())
                 })?
                 .to_string();
-            Ok(Block::RawBlock(RawBlock {
+            Ok(Block::RawBlock(Box::new(RawBlock {
                 format,
                 text,
                 source_info,
-            }))
+            })))
         }
         "BlockQuote" => {
             let c = obj
@@ -2353,11 +2353,11 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let attr = read_list_attributes(&arr[0])?;
             let mut content = read_blockss(&arr[1], deserializer)?;
             fold_item_attrs(&mut content, obj.get("itemAttr"), &source_info)?;
-            Ok(Block::OrderedList(OrderedList {
+            Ok(Block::OrderedList(Box::new(OrderedList {
                 attr,
                 content,
                 source_info,
-            }))
+            })))
         }
         "BulletList" => {
             let c = obj
@@ -2416,13 +2416,13 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let attr = read_attr(&arr[1])?;
             let content = read_inlines(&arr[2], deserializer)?;
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Block::Header(Header {
+            Ok(Block::Header(Box::new(Header {
                 level,
                 attr,
                 content,
                 source_info,
                 attr_source,
-            }))
+            })))
         }
         "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule { source_info })),
         "Figure" => {
@@ -2444,13 +2444,13 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let caption = read_caption(&arr[1], deserializer, caption_source)?;
             let content = read_blocks(&arr[2], deserializer)?;
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Block::Figure(Figure {
+            Ok(Block::Figure(Box::new(Figure {
                 attr,
                 caption,
                 content,
                 source_info,
                 attr_source,
-            }))
+            })))
         }
         "Table" => {
             let c = obj
@@ -2494,7 +2494,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .collect::<Result<Vec<_>>>()?;
             let foot = read_table_foot(&arr[5], deserializer, foot_source)?;
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Block::Table(Table {
+            Ok(Block::Table(Box::new(Table {
                 attr,
                 caption,
                 colspec,
@@ -2503,7 +2503,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 foot,
                 source_info,
                 attr_source,
-            }))
+            })))
         }
         "Div" => {
             let c = obj
@@ -2526,12 +2526,12 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
 
             let content = read_blocks(&arr[1], deserializer)?;
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Block::Div(Div {
+            Ok(Block::Div(Box::new(Div {
                 attr,
                 content,
                 source_info,
                 attr_source,
-            }))
+            })))
         }
         "BlockMetadata" => {
             let c = obj
@@ -2539,7 +2539,10 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             // Phase 5: Read ConfigValue directly without MetaValueWithSourceInfo intermediate
             let meta = read_config_value(c, deserializer)?;
-            Ok(Block::BlockMetadata(MetaBlock { meta, source_info }))
+            Ok(Block::BlockMetadata(Box::new(MetaBlock {
+                meta,
+                source_info,
+            })))
         }
         "NoteDefinitionPara" => {
             let c = obj
@@ -2560,13 +2563,13 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 })?
                 .to_string();
             let content = read_inlines(&arr[1], deserializer)?;
-            Ok(Block::NoteDefinitionPara(
+            Ok(Block::NoteDefinitionPara(Box::new(
                 crate::pandoc::block::NoteDefinitionPara {
                     id,
                     content,
                     source_info,
                 },
-            ))
+            )))
         }
         "NoteDefinitionFencedBlock" => {
             let c = obj
@@ -2591,13 +2594,13 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 })?
                 .to_string();
             let content = read_blocks(&arr[1], deserializer)?;
-            Ok(Block::NoteDefinitionFencedBlock(
+            Ok(Block::NoteDefinitionFencedBlock(Box::new(
                 crate::pandoc::block::NoteDefinitionFencedBlock {
                     id,
                     content,
                     source_info,
                 },
-            ))
+            )))
         }
         // Raw-json extension vocabulary (bd-en2hvrwn); see the inline
         // reader's raw arms for the convention.
@@ -3054,13 +3057,13 @@ fn read_custom_block_from_div(
         slots.insert(slot_name, slot);
     }
 
-    Ok(Block::Custom(CustomNode {
+    Ok(Block::Custom(Box::new(CustomNode {
         type_name,
         slots,
         plain_data,
         attr,
         source_info,
-    }))
+    })))
 }
 
 /// Read a CustomNode from a wrapper Span with __quarto_custom_node class.

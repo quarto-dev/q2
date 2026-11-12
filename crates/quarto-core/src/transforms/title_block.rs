@@ -186,13 +186,13 @@ pub(crate) fn create_title_header(content: Vec<Inline>) -> Block {
     for inline in &mut content {
         stamp_generated(inline, &source_info);
     }
-    Block::Header(Header {
+    Block::Header(Box::new(Header {
         level: 1,
         attr: empty_attr(),
         content,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Recursively stamp `provenance` over an inline subtree.
@@ -420,7 +420,7 @@ mod tests {
                 dummy_source_info(),
             ),
             blocks: vec![
-                Block::Header(Header {
+                Block::Header(Box::new(Header {
                     level: 1,
                     attr: empty_attr(),
                     content: vec![Inline::Str(Str {
@@ -429,7 +429,7 @@ mod tests {
                     })],
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
                 Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
                         text: "Content".to_string(),

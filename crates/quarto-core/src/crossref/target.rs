@@ -142,7 +142,7 @@ mod tests {
             "identifier": ident,
         });
         node.slots.insert("content".into(), Slot::Blocks(vec![]));
-        Block::Custom(node)
+        Block::Custom(Box::new(node))
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests {
     fn view_none_for_unrelated_custom_node() {
         // Callout without crossref plain_data returns None.
         let node = CustomNode::new("Callout", empty_attr(), si());
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());
     }
 
@@ -181,7 +181,7 @@ mod tests {
             "kind": "Theorem",
             "identifier": "thm-one",
         });
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         let view = crossref_target_view(&block).expect("theorem recognized");
         assert_eq!(view.ref_type, "thm");
         assert_eq!(view.kind, "Theorem");
@@ -200,7 +200,7 @@ mod tests {
             "kind": "Note",
             "identifier": "nte-one",
         });
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         let view = crossref_target_view(&block).expect("callout recognized");
         assert_eq!(view.ref_type, "nte");
     }
@@ -210,7 +210,7 @@ mod tests {
         let attr = (String::new(), vec![], LinkedHashMap::new());
         let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
         node.plain_data = json!({"ref_type": "fig", "kind": "Figure"});
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());
     }
 
@@ -219,7 +219,7 @@ mod tests {
         let attr = ("fig-one".to_string(), vec![], LinkedHashMap::new());
         let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
         node.plain_data = json!({"kind": "Figure"});
-        let block = Block::Custom(node);
+        let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());
     }
 

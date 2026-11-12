@@ -591,13 +591,13 @@ mod tests {
         })
     }
     fn heading(level: usize, content: Vec<Inline>) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: empty_attr(),
             content,
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
     fn img(src: &str) -> Inline {
         Inline::Image(Box::new(Image {

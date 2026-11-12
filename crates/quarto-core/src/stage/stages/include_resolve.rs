@@ -996,11 +996,11 @@ mod tests {
     // branch.
 
     fn raw_html_block(text: &str) -> Block {
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
-        })
+        }))
     }
 
     fn para_of_raw_html(text: &str) -> Block {
@@ -1059,12 +1059,12 @@ mod tests {
 
     #[test]
     fn text_holding_blocks_inside_div_recurses_into_container() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: quarto_pandoc_types::empty_attr(),
             content: vec![raw_html_block("<meta name=\"nested\">")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (header, diags) = resolve_text_blocks(blocks(vec![div]));
         assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
         assert_eq!(header.len(), 1);

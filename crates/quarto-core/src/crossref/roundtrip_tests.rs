@@ -47,18 +47,18 @@ fn attr_with_class(class: &str) -> Attr {
 
 /// Build a synthetic `Div(#<ident>) > CodeBlock(class=<lang>, text=<body>)`.
 fn synthetic_div_over_code_block(ident: &str, lang: &str, body: &str) -> Pandoc {
-    let code_block = Block::CodeBlock(CodeBlock {
+    let code_block = Block::CodeBlock(Box::new(CodeBlock {
         attr: attr_with_class(lang),
         text: body.to_string(),
         source_info: si(),
         attr_source: empty_attr_source(),
-    });
-    let div = Block::Div(Div {
+    }));
+    let div = Block::Div(Box::new(Div {
         attr: attr_with_id(ident),
         content: vec![code_block],
         source_info: si(),
         attr_source: empty_attr_source(),
-    });
+    }));
     Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![div],

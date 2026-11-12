@@ -955,7 +955,7 @@ mod tests {
             .slots
             .insert("content".to_string(), Slot::Blocks(vec![inner_para]));
 
-        let math = run_and_get_math(vec![Block::Custom(callout)], empty_meta()).await;
+        let math = run_and_get_math(vec![Block::Custom(Box::new(callout))], empty_meta()).await;
         assert!(
             math.is_some(),
             "math inside CustomNode block-slot must trigger meta.math"
@@ -968,12 +968,12 @@ mod tests {
     async fn math_inside_codeblock_is_not_math() {
         // Code block whose text happens to contain dollar-signs; this
         // is not an Inline::Math node, just a CodeBlock with a string.
-        let cb = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+        let cb = Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
             attr: empty_attr(),
             text: "$x = y$".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
+        }));
 
         let math = run_and_get_math(vec![cb], empty_meta()).await;
         assert!(

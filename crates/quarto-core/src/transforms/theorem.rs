@@ -42,7 +42,7 @@
 
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
-use quarto_pandoc_types::block::{Block, Blocks, Div, Header};
+use quarto_pandoc_types::block::{Block, Blocks, Div};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::inline::Inlines;
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -209,7 +209,7 @@ fn transform_block(
                 ref_type,
                 &kind,
             );
-            *block = Block::Custom(converted);
+            *block = Block::Custom(Box::new(converted));
         }
     }
 }
@@ -366,8 +366,8 @@ fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<In
 fn extract_first_header_title(content: &mut Blocks) -> Option<Inlines> {
     if let Some(Block::Header(_)) = content.first() {
         let first = content.remove(0);
-        if let Block::Header(Header { content: title, .. }) = first {
-            return Some(title);
+        if let Block::Header(header) = first {
+            return Some(header.content);
         }
     }
     None
@@ -456,12 +456,12 @@ mod tests {
 
     #[test]
     fn plain_theorem_div_becomes_theorem_custom_node() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("thm-pyth", &["theorem"]),
             content: vec![para("For a right triangle...")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
 
         let Block::Custom(node) = &out[0] else {
@@ -494,12 +494,12 @@ mod tests {
             ("example", "exm", "Example"),
             ("exercise", "exr", "Exercise"),
         ] {
-            let div = Block::Div(Div {
+            let div = Block::Div(Box::new(Div {
                 attr: attr_id_classes(&format!("{ref_type}-x"), &[class]),
                 content: vec![para("body")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            });
+            }));
             let out = run(vec![div]);
             let Block::Custom(node) = &out[0] else {
                 panic!("{} did not sugar", class);
@@ -511,12 +511,12 @@ mod tests {
 
     #[test]
     fn div_without_theorem_class_untouched() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("thm-fake", &["callout-note"]),
             content: vec![para("not a theorem")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div.clone()]);
         assert_eq!(out, vec![div]);
     }
@@ -525,12 +525,12 @@ mod tests {
     fn name_attribute_becomes_title_slot() {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("name".into(), "Pythagorean Theorem".into());
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: ("thm-pyth".into(), vec!["theorem".into()], kvs),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
         let Block::Custom(node) = &out[0] else {
             panic!()
@@ -550,10 +550,10 @@ mod tests {
 
     #[test]
     fn first_header_becomes_title_if_no_name_attribute() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("thm-x", &["theorem"]),
             content: vec![
-                Block::Header(Header {
+                Block::Header(Box::new(Header {
                     level: 3,
                     attr: (String::new(), Vec::new(), LinkedHashMap::new()),
                     content: vec![Inline::Str(Str {
@@ -562,12 +562,12 @@ mod tests {
                     })],
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
                 para("body"),
             ],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
         let Block::Custom(node) = &out[0] else {
             panic!();
@@ -589,12 +589,12 @@ mod tests {
 
     #[test]
     fn crossref_target_view_recognizes_sugared_theorem() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("thm-x", &["theorem"]),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
         let view = crossref_target_view(&out[0]).expect("theorem visible as crossref target");
         assert_eq!(view.identifier, "thm-x");
@@ -606,12 +606,12 @@ mod tests {
     fn theorem_without_id_still_sugars() {
         // Unnumbered theorem: no id. Still becomes a Theorem custom
         // node so renderers can style it consistently.
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("", &["theorem"]),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
         let Block::Custom(node) = &out[0] else {
             panic!()
@@ -625,12 +625,12 @@ mod tests {
         // (see plan bd-gvhe §D1). Without this, FloatRefTargetSugarTransform
         // would claim it later and render as a generic Div with a
         // "Theorem 1: " caption on the last paragraph.
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("thm-x", &[]),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (out, diags) = run_with_registry(vec![div]);
         assert!(diags.is_empty(), "unexpected diags: {diags:?}");
         let Block::Custom(node) = &out[0] else {
@@ -644,12 +644,12 @@ mod tests {
     #[test]
     fn id_prefix_detects_all_theorem_flavors() {
         for (_class, ref_type, kind) in THEOREM_CLASSES {
-            let div = Block::Div(Div {
+            let div = Block::Div(Box::new(Div {
                 attr: attr_id_classes(&format!("{ref_type}-x"), &[]),
                 content: vec![para("body")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            });
+            }));
             let (out, _) = run_with_registry(vec![div]);
             let Block::Custom(node) = &out[0] else {
                 panic!("{ref_type} by id alone did not sugar");
@@ -662,12 +662,12 @@ mod tests {
     #[test]
     fn id_only_non_theorem_prefix_leaves_div_alone() {
         // `::: {#fig-foo}` must NOT be theorem-sugared — it's a float.
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("fig-foo", &[]),
             content: vec![para("caption")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (out, diags) = run_with_registry(vec![div.clone()]);
         assert!(diags.is_empty());
         // Still a Div, not a Custom node.
@@ -679,12 +679,12 @@ mod tests {
         // Plan §D1 edge case: `.theorem #fig-x` → warn. The div still
         // sugars as a theorem (class wins for display), but the id
         // prefix (`fig`) disagrees with the theorem flavor.
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("fig-x", &["theorem"]),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (out, diags) = run_with_registry(vec![div]);
         assert!(matches!(out[0], Block::Custom(_)));
         assert_eq!(
@@ -702,12 +702,12 @@ mod tests {
     #[test]
     fn class_id_match_emits_no_diagnostic() {
         // `::: {.theorem #thm-x}` — consistent. No warning.
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr_id_classes("thm-x", &["theorem"]),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (_out, diags) = run_with_registry(vec![div]);
         assert!(diags.is_empty(), "unexpected diags: {diags:?}");
     }

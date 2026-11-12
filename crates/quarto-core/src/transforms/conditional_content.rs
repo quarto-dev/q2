@@ -684,7 +684,7 @@ mod tests {
     }
 
     fn div(classes: &[&str], kvs: &[(&str, &str)], text: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: attr(classes, kvs),
             content: vec![Block::Plain(quarto_pandoc_types::block::Plain {
                 content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
@@ -695,7 +695,7 @@ mod tests {
             })],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn run(
@@ -910,12 +910,12 @@ mod tests {
         // `adv` is not active, so the inner block is removed; the outer
         // condition holds, so the outer's *other* content survives.
         let inner = div(&["content-visible"], &[("when-profile", "adv")], "INNER");
-        let outer = Block::Div(Div {
+        let outer = Block::Div(Box::new(Div {
             attr: attr(&["content-visible"], &[("when-format", "html")]),
             content: vec![inner, plain("OUTER")],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let mut blocks = vec![outer];
         run(&mut blocks, "html", &[], &meta);
         assert!(!texts(&blocks).contains("INNER"), "inner removed");
@@ -1271,13 +1271,13 @@ mod tests {
             }))],
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
         });
-        let hidden_codeblock = Block::CodeBlock(CodeBlock {
+        let hidden_codeblock = Block::CodeBlock(Box::new(CodeBlock {
             attr: attr(&["content-hidden"], &[("when-format", "docx")]),
             text: "HIDDEN-CODEBLOCK".to_string(),
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let nested_in_custom = Block::Custom(
+        }));
+        let nested_in_custom = Block::Custom(Box::new(
             CustomNode::new(
                 "test-custom",
                 attr(&[], &[]),
@@ -1291,7 +1291,7 @@ mod tests {
                     "VISIBLE-IN-CUSTOM",
                 ))),
             ),
-        );
+        ));
 
         let mut blocks = vec![
             hidden_div,
@@ -1632,7 +1632,7 @@ mod tests {
                 "SECRET",
             )])]),
         );
-        let mut blocks = vec![Block::Custom(outer)];
+        let mut blocks = vec![Block::Custom(Box::new(outer))];
         let meta = empty_meta();
         run(&mut blocks, "html", &[], &meta);
 

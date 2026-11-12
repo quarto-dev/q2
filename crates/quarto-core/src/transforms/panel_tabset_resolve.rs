@@ -156,7 +156,7 @@ fn resolve_block(block: &mut Block, counter: &mut u32) {
                 // Nested tabsets inside the panes resolve after the
                 // parent claimed its id (document-order numbering).
                 resolve_blocks(&mut resolved_div.content, counter);
-                *block = Block::Div(resolved_div);
+                *block = Block::Div(Box::new(resolved_div));
             } else {
                 for (_name, slot) in &mut custom.slots {
                     match slot {
@@ -246,14 +246,14 @@ fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32) -> Div {
             Some(Slot::Blocks(blocks)) => blocks,
             _ => Vec::new(),
         };
-        panes.push(Block::Div(Div {
+        panes.push(Block::Div(Box::new(Div {
             attr: pane_attr,
             content,
             source_info: tabset_source(),
             attr_source: AttrSourceInfo::empty(),
-        }));
+        })));
     }
-    let tab_content = Block::Div(Div {
+    let tab_content = Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec!["tab-content".to_string()],
@@ -262,7 +262,7 @@ fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32) -> Div {
         content: panes,
         source_info: tabset_source(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     // ── Outer div: the original attr (panel-tabset class and any
     // group= attribute, which the HTML writer emits as data-group=). ──
@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn resolves_to_nav_and_panes() {
-        let mut blocks = vec![Block::Custom(make_tabset(&["Alpha", "Beta"], 0))];
+        let mut blocks = vec![Block::Custom(Box::new(make_tabset(&["Alpha", "Beta"], 0)))];
         let mut counter = 1u32;
         resolve_blocks(&mut blocks, &mut counter);
 
@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn active_index_places_active_on_selected_tab_only() {
-        let mut blocks = vec![Block::Custom(make_tabset(&["A", "B"], 1))];
+        let mut blocks = vec![Block::Custom(Box::new(make_tabset(&["A", "B"], 1)))];
         let mut counter = 1u32;
         resolve_blocks(&mut blocks, &mut counter);
 
@@ -413,8 +413,8 @@ mod tests {
     #[test]
     fn counter_increments_in_document_order() {
         let mut blocks = vec![
-            Block::Custom(make_tabset(&["A"], 0)),
-            Block::Custom(make_tabset(&["B"], 0)),
+            Block::Custom(Box::new(make_tabset(&["A"], 0))),
+            Block::Custom(Box::new(make_tabset(&["B"], 0))),
         ];
         let mut counter = 1u32;
         resolve_blocks(&mut blocks, &mut counter);
@@ -441,9 +441,12 @@ mod tests {
         let mut inner = make_tabset(&["Inner"], 0);
         inner.plain_data["level"] = json!(3);
         let mut outer = make_tabset(&["Outer"], 0);
-        outer.set_slot("content-0", Slot::Blocks(vec![Block::Custom(inner)]));
+        outer.set_slot(
+            "content-0",
+            Slot::Blocks(vec![Block::Custom(Box::new(inner))]),
+        );
 
-        let mut blocks = vec![Block::Custom(outer)];
+        let mut blocks = vec![Block::Custom(Box::new(outer))];
         let mut counter = 1u32;
         resolve_blocks(&mut blocks, &mut counter);
 

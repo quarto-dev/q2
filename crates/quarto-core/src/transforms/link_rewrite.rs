@@ -783,12 +783,12 @@ mod tests {
     /// Plan test 32: link inside a `Div`.
     #[tokio::test]
     async fn link_rewrite_walks_div_blocks() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: Attr::default(),
             content: vec![para(vec![link_inline("about.qmd", "About")])],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (out, _) = run(
             vec![div],
             "index.qmd",
@@ -837,7 +837,7 @@ mod tests {
         custom
             .slots
             .insert("content".to_string(), Slot::Inlines(vec![link]));
-        let blocks = vec![Block::Custom(custom)];
+        let blocks = vec![Block::Custom(Box::new(custom))];
         let (out, _) = run(
             blocks,
             "index.qmd",
@@ -1047,7 +1047,7 @@ mod tests {
     }
 
     fn figure_with_caption_image() -> Block {
-        Block::Figure(quarto_pandoc_types::Figure {
+        Block::Figure(Box::new(quarto_pandoc_types::Figure {
             attr: Attr::default(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
@@ -1057,7 +1057,7 @@ mod tests {
             content: vec![para(vec![image_inline("/images/main.svg", "main")])],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// R9 task 5, intended behaviour change: an image inside a figure

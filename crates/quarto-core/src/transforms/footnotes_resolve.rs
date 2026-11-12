@@ -469,15 +469,15 @@ fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
     let list_items: Vec<Blocks> = footnotes.iter().map(create_footnote_item).collect();
 
     // Create the ordered list
-    let ordered_list = Block::OrderedList(OrderedList {
+    let ordered_list = Block::OrderedList(Box::new(OrderedList {
         attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
         content: list_items,
         source_info: source_info.clone(),
-    });
+    }));
 
     // Wrap in a section Div with appropriate attributes
     // Note: We use a Div with class "section" so the HTML writer emits <section>
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             "footnotes".to_string(),
             vec!["footnotes".to_string(), "section".to_string()],
@@ -491,7 +491,7 @@ fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
         ],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Create a single footnote list item.
@@ -551,12 +551,12 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
     // with OrderedList. So we wrap content in a Div with ID.
     // Actually, looking at Pandoc output more carefully, the ID is on the <li>.
     // Our OrderedList doesn't support per-item IDs, so we'll wrap in a Div.
-    vec![Block::Div(Div {
+    vec![Block::Div(Box::new(Div {
         attr: (fn_id, Vec::new(), LinkedHashMap::new()),
         content: content_blocks,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 #[cfg(test)]

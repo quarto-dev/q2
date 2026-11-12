@@ -421,13 +421,13 @@ mod tests {
 
         let mut pandoc = Pandoc {
             meta: metadata,
-            blocks: vec![Block::Header(Header {
+            blocks: vec![Block::Header(Box::new(Header {
                 level: 1,
                 attr: Default::default(),
                 content: vec![make_meta_shortcode("title")],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let transform = MetaShortcodeTransform;
@@ -493,7 +493,7 @@ mod tests {
 
         let mut pandoc = Pandoc {
             meta: metadata,
-            blocks: vec![Block::Header(Header {
+            blocks: vec![Block::Header(Box::new(Header {
                 level: 2,
                 attr: Default::default(),
                 content: vec![
@@ -505,7 +505,7 @@ mod tests {
                 ],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let transform = MetaShortcodeTransform;

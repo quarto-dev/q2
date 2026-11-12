@@ -541,7 +541,7 @@ mod tests {
     }
 
     fn header() -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level: 2,
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
@@ -550,22 +550,22 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn section(classes: &[&str], content: Vec<Block>) -> Block {
         let mut cls = vec!["section".to_string()];
         cls.extend(classes.iter().map(|s| s.to_string()));
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (String::new(), cls, LinkedHashMap::new()),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn figure(blocks: Vec<Block>) -> Block {
-        Block::Figure(Figure {
+        Block::Figure(Box::new(Figure {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -575,13 +575,13 @@ mod tests {
             content: blocks,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A `Figure` with an `id` and a `caption.long` of `[Plain[caption]]`,
     /// mirroring what `![caption](x)` parses to.
     fn figure_with_caption(blocks: Vec<Block>, caption: Vec<Inline>, id: &str) -> Block {
-        Block::Figure(Figure {
+        Block::Figure(Box::new(Figure {
             attr: (id.to_string(), vec![], LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -594,7 +594,7 @@ mod tests {
             content: blocks,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn caption_inlines() -> Vec<Inline> {
@@ -857,7 +857,7 @@ mod tests {
     fn slide_with_aside_skipped() {
         // A peripheral aside (e.g. a coalesced footnote) suppresses auto-stretch,
         // matching Q1 (`aside:not(.notes)`).
-        let aside = Block::Div(Div {
+        let aside = Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["aside".to_string()],
@@ -869,7 +869,7 @@ mod tests {
             })])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let blocks = vec![section(
             &[],
             vec![header(), para(vec![image(&[], &[])]), aside],
@@ -881,7 +881,7 @@ mod tests {
     fn image_nested_in_column_div_skipped() {
         // A single image inside a `.column` is not a top-level standalone block,
         // so it is left alone (Q1 screens out layout/column/fragment parents).
-        let column = Block::Div(Div {
+        let column = Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["column".to_string()],
@@ -890,7 +890,7 @@ mod tests {
             content: vec![para(vec![image(&[], &[])])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let blocks = vec![section(&[], vec![header(), column])];
         assert!(!stretch_classes(blocks, true).contains(&"r-stretch".to_string()));
     }

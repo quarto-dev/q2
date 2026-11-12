@@ -219,12 +219,14 @@ fn write_block<T: std::io::Write>(
         }
 
         // Header: write inlines (no # prefix in plain text)
-        Block::Header(Header { content, .. }) => {
+        Block::Header(header) => {
+            let Header { content, .. } = &**header;
             write_inlines(content, buf, ctx)?;
         }
 
         // CodeBlock: mimic markdown (fenced with backticks)
-        Block::CodeBlock(CodeBlock { text, .. }) => {
+        Block::CodeBlock(code_block) => {
+            let CodeBlock { text, .. } = &**code_block;
             writeln!(buf, "```")?;
             write!(buf, "{}", text)?;
             if !text.ends_with('\n') {
@@ -250,7 +252,8 @@ fn write_block<T: std::io::Write>(
         }
 
         // OrderedList: mimic markdown (1. 2. 3.)
-        Block::OrderedList(OrderedList { content, attr, .. }) => {
+        Block::OrderedList(ordered_list) => {
+            let OrderedList { content, attr, .. } = &**ordered_list;
             let start = attr.0;
             for (i, item) in content.iter().enumerate() {
                 if i > 0 {
@@ -278,21 +281,24 @@ fn write_block<T: std::io::Write>(
         }
 
         // Div: write contents only (no ::: scaffold)
-        Block::Div(Div { content, .. }) => {
+        Block::Div(div) => {
+            let Div { content, .. } = &**div;
             write_blocks(content, buf, ctx)?;
         }
 
         // Figure: write contents only
-        Block::Figure(Figure { content, .. }) => {
+        Block::Figure(figure) => {
+            let Figure { content, .. } = &**figure;
             write_blocks(content, buf, ctx)?;
         }
 
         // RawBlock: echo if 'plaintext', else drop with warning
-        Block::RawBlock(RawBlock {
-            format,
-            text,
-            source_info,
-        }) => {
+        Block::RawBlock(raw) => {
+            let RawBlock {
+                format,
+                text,
+                source_info,
+            } = &**raw;
             if format == "plaintext" {
                 write!(buf, "{}", text)?;
             } else {
@@ -306,18 +312,22 @@ fn write_block<T: std::io::Write>(
         }
 
         // Table: complex structure, drop with warning
-        Block::Table(Table { source_info, .. }) => {
+        Block::Table(table) => {
+            let Table { source_info, .. } = &**table;
             ctx.warn_dropped_node("Table", source_info);
         }
 
         // Quarto extensions: drop with warning
-        Block::BlockMetadata(MetaBlock { source_info, .. }) => {
+        Block::BlockMetadata(meta_block) => {
+            let MetaBlock { source_info, .. } = &**meta_block;
             ctx.warn_dropped_node("BlockMetadata", source_info);
         }
-        Block::NoteDefinitionPara(NoteDefinitionPara { source_info, .. }) => {
+        Block::NoteDefinitionPara(note_definition_para) => {
+            let NoteDefinitionPara { source_info, .. } = &**note_definition_para;
             ctx.warn_dropped_node("NoteDefinitionPara", source_info);
         }
-        Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock { source_info, .. }) => {
+        Block::NoteDefinitionFencedBlock(note_def) => {
+            let NoteDefinitionFencedBlock { source_info, .. } = &**note_def;
             ctx.warn_dropped_node("NoteDefinitionFencedBlock", source_info);
         }
         Block::CaptionBlock(CaptionBlock { source_info, .. }) => {
@@ -538,12 +548,12 @@ mod tests {
 
     #[test]
     fn test_code_block_fenced() {
-        let blocks = vec![Block::CodeBlock(CodeBlock {
+        let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "let x = 1;".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "```\nlet x = 1;\n```");
         assert!(diags.is_empty());
@@ -571,7 +581,7 @@ mod tests {
 
     #[test]
     fn test_table_dropped_with_warning() {
-        let blocks = vec![Block::Table(Table {
+        let blocks = vec![Block::Table(Box::new(Table {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             caption: crate::pandoc::caption::Caption {
                 short: None,
@@ -594,7 +604,7 @@ mod tests {
             },
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
@@ -939,13 +949,13 @@ mod tests {
 
     #[test]
     fn test_header_block() {
-        let blocks = vec![Block::Header(Header {
+        let blocks = vec![Block::Header(Box::new(Header {
             level: 2,
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("Heading")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         // No # prefix in plain text
         assert_eq!(result, "Heading");
@@ -1006,7 +1016,7 @@ mod tests {
     fn test_ordered_list() {
         use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
 
-        let blocks = vec![Block::OrderedList(OrderedList {
+        let blocks = vec![Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![
                 vec![Block::Plain(Plain {
@@ -1019,7 +1029,7 @@ mod tests {
                 })],
             ],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "1. First\n2. Second");
         assert!(diags.is_empty());
@@ -1029,7 +1039,7 @@ mod tests {
     fn test_ordered_list_start_number() {
         use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
 
-        let blocks = vec![Block::OrderedList(OrderedList {
+        let blocks = vec![Block::OrderedList(Box::new(OrderedList {
             attr: (5, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![
                 vec![Block::Plain(Plain {
@@ -1042,7 +1052,7 @@ mod tests {
                 })],
             ],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "5. Fifth\n6. Sixth");
         assert!(diags.is_empty());
@@ -1060,7 +1070,7 @@ mod tests {
 
     #[test]
     fn test_div_contents_only() {
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: (
                 "myid".to_string(),
                 vec!["myclass".to_string()],
@@ -1072,7 +1082,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         // No ::: scaffold
         assert_eq!(result, "Div content");
@@ -1081,7 +1091,7 @@ mod tests {
 
     #[test]
     fn test_figure_contents_only() {
-        let blocks = vec![Block::Figure(Figure {
+        let blocks = vec![Block::Figure(Box::new(Figure {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             caption: crate::pandoc::caption::Caption {
                 short: None,
@@ -1094,7 +1104,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "Figure content");
         assert!(diags.is_empty());
@@ -1102,11 +1112,11 @@ mod tests {
 
     #[test]
     fn test_raw_block_plaintext() {
-        let blocks = vec![Block::RawBlock(RawBlock {
+        let blocks = vec![Block::RawBlock(Box::new(RawBlock {
             format: "plaintext".to_string(),
             text: "Raw plaintext content".to_string(),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "Raw plaintext content");
         assert!(diags.is_empty());
@@ -1114,11 +1124,11 @@ mod tests {
 
     #[test]
     fn test_raw_block_html_dropped_with_warning() {
-        let blocks = vec![Block::RawBlock(RawBlock {
+        let blocks = vec![Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>HTML content</div>".to_string(),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
@@ -1148,10 +1158,10 @@ mod tests {
     fn test_block_metadata_dropped_with_warning() {
         use quarto_pandoc_types::config_value::ConfigValue;
 
-        let blocks = vec![Block::BlockMetadata(MetaBlock {
+        let blocks = vec![Block::BlockMetadata(Box::new(MetaBlock {
             meta: ConfigValue::null(dummy_source_info()),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
@@ -1160,11 +1170,11 @@ mod tests {
 
     #[test]
     fn test_note_definition_para_dropped_with_warning() {
-        let blocks = vec![Block::NoteDefinitionPara(NoteDefinitionPara {
+        let blocks = vec![Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
             id: "fn1".to_string(),
             content: vec![make_str("Note content")],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
@@ -1173,7 +1183,7 @@ mod tests {
 
     #[test]
     fn test_note_definition_fenced_block_dropped_with_warning() {
-        let blocks = vec![Block::NoteDefinitionFencedBlock(
+        let blocks = vec![Block::NoteDefinitionFencedBlock(Box::new(
             NoteDefinitionFencedBlock {
                 id: "fn2".to_string(),
                 content: vec![Block::Paragraph(Paragraph {
@@ -1182,7 +1192,7 @@ mod tests {
                 })],
                 source_info: dummy_source_info(),
             },
-        )];
+        ))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
@@ -1205,13 +1215,13 @@ mod tests {
     fn test_custom_block_with_warning() {
         use crate::pandoc::custom::CustomNode;
 
-        let blocks = vec![Block::Custom(CustomNode {
+        let blocks = vec![Block::Custom(Box::new(CustomNode {
             type_name: "TestCallout".to_string(),
             slots: hashlink::LinkedHashMap::new(),
             plain_data: serde_json::Value::Null,
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
@@ -1250,12 +1260,12 @@ mod tests {
 
     #[test]
     fn test_code_block_with_trailing_newline() {
-        let blocks = vec![Block::CodeBlock(CodeBlock {
+        let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "let x = 1;\n".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = blocks_to_string(&blocks);
         // Text already has trailing newline, so no extra added
         assert_eq!(result, "```\nlet x = 1;\n```");

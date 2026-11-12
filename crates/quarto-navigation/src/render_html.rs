@@ -1732,7 +1732,7 @@ mod tests {
             target_source: TargetSourceInfo::empty(),
         }));
         let cv = ConfigValue {
-            value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Figure {
+            value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Box::new(Figure {
                 attr: Default::default(),
                 caption: Caption {
                     short: None,
@@ -1748,7 +1748,7 @@ mod tests {
                 })],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })]),
+            }))]),
             source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         };

@@ -133,7 +133,7 @@ fn test_paragraph_spacing() {
 fn test_header_level_1() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Header(Header {
+        blocks: vec![Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![Inline::Str(Str {
@@ -142,7 +142,7 @@ fn test_header_level_1() {
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -153,7 +153,7 @@ fn test_header_level_1() {
 fn test_header_level_2() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Header(Header {
+        blocks: vec![Block::Header(Box::new(Header {
             level: 2,
             attr: empty_attr(),
             content: vec![Inline::Str(Str {
@@ -162,7 +162,7 @@ fn test_header_level_2() {
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -174,7 +174,7 @@ fn test_header_level_3_to_6() {
     for level in 3..=6 {
         let pandoc = Pandoc {
             meta: Default::default(),
-            blocks: vec![Block::Header(Header {
+            blocks: vec![Block::Header(Box::new(Header {
                 level,
                 attr: empty_attr(),
                 content: vec![Inline::Str(Str {
@@ -183,7 +183,7 @@ fn test_header_level_3_to_6() {
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            })],
+            }))],
         };
 
         let output = write_ansi(&pandoc);
@@ -247,7 +247,7 @@ fn test_bullet_list() {
 fn test_ordered_list() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::OrderedList(OrderedList {
+        blocks: vec![Block::OrderedList(Box::new(OrderedList {
             attr: (
                 1,
                 pampa::pandoc::ListNumberStyle::Decimal,
@@ -270,7 +270,7 @@ fn test_ordered_list() {
                 })],
             ],
             source_info: empty_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -339,7 +339,7 @@ fn test_blockquote() {
 fn test_div() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Div(Div {
+        blocks: vec![Block::Div(Box::new(Div {
             attr: empty_attr(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
@@ -350,7 +350,7 @@ fn test_div() {
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -365,7 +365,7 @@ fn test_div_with_color() {
 
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Div(Div {
+        blocks: vec![Block::Div(Box::new(Div {
             attr,
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
@@ -376,7 +376,7 @@ fn test_div_with_color() {
             })],
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -391,11 +391,11 @@ fn test_div_with_color() {
 fn test_rawblock_ansi_format() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::RawBlock(RawBlock {
+        blocks: vec![Block::RawBlock(Box::new(RawBlock {
             format: "ansi".to_string(),
             text: "Raw ANSI content".to_string(),
             source_info: empty_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -406,11 +406,11 @@ fn test_rawblock_ansi_format() {
 fn test_rawblock_other_format_skipped() {
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::RawBlock(RawBlock {
+        blocks: vec![Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<p>HTML content</p>".to_string(),
             source_info: empty_source(),
-        })],
+        }))],
     };
 
     let output = write_ansi(&pandoc);
@@ -1149,12 +1149,12 @@ fn test_unsupported_codeblock() {
 
     let pandoc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::CodeBlock(CodeBlock {
+        blocks: vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: empty_attr(),
             text: "code".to_string(),
             source_info: empty_source(),
             attr_source: empty_attr_source(),
-        })],
+        }))],
     };
 
     let mut buf = Vec::new();
@@ -1175,7 +1175,7 @@ fn test_mixed_blocks_and_inlines() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![
-            Block::Header(Header {
+            Block::Header(Box::new(Header {
                 level: 1,
                 attr: empty_attr(),
                 content: vec![Inline::Str(Str {
@@ -1184,7 +1184,7 @@ fn test_mixed_blocks_and_inlines() {
                 })],
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
-            }),
+            })),
             Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {

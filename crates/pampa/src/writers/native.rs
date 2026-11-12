@@ -577,18 +577,20 @@ fn write_block<T: std::io::Write>(
             write!(buf, "Para ")?;
             write_inlines(content, context, buf, errors)?;
         }
-        Block::CodeBlock(crate::pandoc::CodeBlock {
-            attr,
-            text,
-            source_info: _,
-            attr_source: _,
-        }) => {
+        Block::CodeBlock(code_block) => {
+            let crate::pandoc::CodeBlock {
+                attr,
+                text,
+                source_info: _,
+                attr_source: _,
+            } = &**code_block;
             write!(buf, "CodeBlock ")?;
             write_native_attr(attr, buf)?;
             write!(buf, " ")?;
             write_safe_string(text, buf)?;
         }
-        Block::RawBlock(crate::pandoc::RawBlock { format, text, .. }) => {
+        Block::RawBlock(raw) => {
+            let crate::pandoc::RawBlock { format, text, .. } = &**raw;
             write!(buf, "RawBlock (Format ")?;
             write_safe_string(format, buf)?;
             write!(buf, ") ")?;
@@ -611,7 +613,8 @@ fn write_block<T: std::io::Write>(
             }
             write!(buf, "]")?;
         }
-        Block::OrderedList(crate::pandoc::OrderedList { content, attr, .. }) => {
+        Block::OrderedList(ordered_list) => {
+            let crate::pandoc::OrderedList { content, attr, .. } = &**ordered_list;
             let (number, style, delim) = attr;
             write!(buf, "OrderedList ({}, ", number)?;
             write_list_number_style(style, buf)?;
@@ -643,7 +646,8 @@ fn write_block<T: std::io::Write>(
             }
             write!(buf, "]")?;
         }
-        Block::Div(crate::pandoc::Div { attr, content, .. }) => {
+        Block::Div(div) => {
+            let crate::pandoc::Div { attr, content, .. } = &**div;
             write!(buf, "Div ")?;
             write_native_attr(attr, buf)?;
             write!(buf, " [")?;
@@ -655,12 +659,13 @@ fn write_block<T: std::io::Write>(
             }
             write!(buf, "]")?;
         }
-        Block::Figure(crate::pandoc::Figure {
-            attr,
-            caption,
-            content,
-            ..
-        }) => {
+        Block::Figure(figure) => {
+            let crate::pandoc::Figure {
+                attr,
+                caption,
+                content,
+                ..
+            } = &**figure;
             write!(buf, "Figure ")?;
             write_native_attr(attr, buf)?;
             write!(buf, " ")?;
@@ -674,12 +679,13 @@ fn write_block<T: std::io::Write>(
             }
             write!(buf, "]")?;
         }
-        Block::Header(crate::pandoc::Header {
-            level,
-            attr,
-            content,
-            ..
-        }) => {
+        Block::Header(header) => {
+            let crate::pandoc::Header {
+                level,
+                attr,
+                content,
+                ..
+            } = &**header;
             write!(buf, "Header {} ", level)?;
             write_native_attr(attr, buf)?;
             write!(buf, " ")?;
@@ -688,15 +694,16 @@ fn write_block<T: std::io::Write>(
         Block::HorizontalRule(crate::pandoc::HorizontalRule { .. }) => {
             write!(buf, "HorizontalRule")?
         }
-        Block::Table(crate::pandoc::Table {
-            attr,
-            caption,
-            colspec,
-            head,
-            bodies,
-            foot,
-            ..
-        }) => {
+        Block::Table(table) => {
+            let crate::pandoc::Table {
+                attr,
+                caption,
+                colspec,
+                head,
+                bodies,
+                foot,
+                ..
+            } = &**table;
             write!(buf, "Table ")?;
             write_native_attr(attr, buf)?;
             write!(buf, " ")?;

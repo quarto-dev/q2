@@ -1066,12 +1066,12 @@ mod tests {
             start_offset: 200,
             end_offset: 300,
         };
-        let codeblock = Block::CodeBlock(CodeBlock {
+        let codeblock = Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             text: "print('hello')".to_string(),
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let lua_block = LuaBlock::new(codeblock);
         lua.globals()
             .set("test_codeblock", lua.create_userdata(lua_block).unwrap())

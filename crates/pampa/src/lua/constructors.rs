@@ -273,7 +273,7 @@ fn is_attr_alias(key: &str) -> bool {
 /// both sides in a synthetic Table block and reuse the JSON writer's
 /// source-free comparison (same approach as elements and Citation).
 fn synthetic_table_eq(a: PandocTable, b: PandocTable) -> bool {
-    super::types::block_structurally_eq(&Block::Table(a), &Block::Table(b))
+    super::types::block_structurally_eq(&Block::Table(Box::new(a)), &Block::Table(Box::new(b)))
 }
 
 fn empty_synthetic_table() -> PandocTable {
@@ -1338,13 +1338,13 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (level, content, attr): (i64, Value, Option<Value>)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock::new(Block::Header(Header {
+            lua.create_userdata(LuaBlock::new(Block::Header(Box::new(Header {
                 level: level as usize,
                 content: inlines,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1353,12 +1353,12 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "CodeBlock",
         lua.create_function(|lua, (text, attr): (String, Option<Value>)| {
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock::new(Block::CodeBlock(CodeBlock {
+            lua.create_userdata(LuaBlock::new(Block::CodeBlock(Box::new(CodeBlock {
                 text,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1366,11 +1366,11 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "RawBlock",
         lua.create_function(|lua, (format, text): (String, String)| {
-            lua.create_userdata(LuaBlock::new(Block::RawBlock(RawBlock {
+            lua.create_userdata(LuaBlock::new(Block::RawBlock(Box::new(RawBlock {
                 format,
                 text,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1411,11 +1411,11 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     crate::pandoc::ListNumberDelim::Default,
                 ),
             };
-            lua.create_userdata(LuaBlock::new(Block::OrderedList(OrderedList {
+            lua.create_userdata(LuaBlock::new(Block::OrderedList(Box::new(OrderedList {
                 content,
                 attr,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1425,12 +1425,12 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
             let blocks = peek_blocks_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaBlock::new(Block::Div(Div {
+            lua.create_userdata(LuaBlock::new(Block::Div(Box::new(Div {
                 content: blocks,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1479,13 +1479,13 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let blocks = peek_blocks_fuzzy(lua, content)?;
                 let caption = parse_caption(lua, caption)?;
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaBlock::new(Block::Figure(Figure {
+                lua.create_userdata(LuaBlock::new(Block::Figure(Box::new(Figure {
                     content: blocks,
                     caption,
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;
@@ -1509,7 +1509,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let bodies = parse_table_bodies(lua, bodies)?;
                 let foot = parse_table_foot(lua, foot)?;
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaBlock::new(Block::Table(PandocTable {
+                lua.create_userdata(LuaBlock::new(Block::Table(Box::new(PandocTable {
                     caption,
                     colspec: colspecs,
                     head,
@@ -1518,7 +1518,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;

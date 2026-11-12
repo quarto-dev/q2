@@ -1058,7 +1058,7 @@ mod tests {
         for (k, v) in kvs {
             attrs.insert(k.to_string(), v.to_string());
         }
-        Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+        Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
             attr: (
                 String::new(),
                 classes.iter().map(|c| c.to_string()).collect(),
@@ -1067,7 +1067,7 @@ mod tests {
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Recognize on one line, for the strictness tests.

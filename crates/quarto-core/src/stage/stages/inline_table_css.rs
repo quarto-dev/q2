@@ -181,11 +181,11 @@ mod tests {
                           <table><tr><td>x</td></tr></table>";
 
     fn raw(format: &str, text: &str) -> Block {
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format: format.to_string(),
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
-        })
+        }))
     }
 
     fn div(attrs: &[(&str, &str)], content: Vec<Block>) -> Block {
@@ -193,12 +193,12 @@ mod tests {
         for (k, v) in attrs {
             attr.2.insert(k.to_string(), v.to_string());
         }
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr,
             content,
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn text(block: &Block) -> &str {

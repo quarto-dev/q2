@@ -1162,14 +1162,14 @@ mod tests {
         let attr = || quarto_pandoc_types::empty_attr();
         let attr_source = quarto_pandoc_types::AttrSourceInfo::empty;
 
-        let display_block = Block::CodeBlock(CodeBlock {
+        let display_block = Block::CodeBlock(Box::new(CodeBlock {
             attr: attr(),
             text: "```{r}\ncat(\"x\")\n```".to_string(),
             source_info: source.clone(),
             attr_source: attr_source(),
-        });
+        }));
 
-        let table = Block::Table(quarto_pandoc_types::Table {
+        let table = Block::Table(Box::new(quarto_pandoc_types::Table {
             attr: attr(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
@@ -1195,7 +1195,7 @@ mod tests {
             },
             source_info: source.clone(),
             attr_source: attr_source(),
-        });
+        }));
 
         let mut doc = Pandoc {
             blocks: vec![table],

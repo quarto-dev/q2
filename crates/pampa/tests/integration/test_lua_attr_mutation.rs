@@ -37,7 +37,7 @@ fn si() -> quarto_source_map::SourceInfo {
 }
 
 fn code_block_with(class: &str, text: &str) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: (
             String::new(),
             vec![class.to_string()],
@@ -46,7 +46,7 @@ fn code_block_with(class: &str, text: &str) -> Block {
         text: text.to_string(),
         source_info: si(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn para_with_inline_code(class: &str, text: &str) -> Block {

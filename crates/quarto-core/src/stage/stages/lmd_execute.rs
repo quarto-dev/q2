@@ -176,7 +176,7 @@ impl ListVisitor for Numberer<'_> {
 /// its (option-stripped) desugared Lua. Used for `echo: true` and for
 /// failures.
 fn displayed_block_cell(code: &str, source_info: &SourceInfo) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: (
             String::new(),
             vec![LMD_LANG.to_string()],
@@ -185,7 +185,7 @@ fn displayed_block_cell(code: &str, source_info: &SourceInfo) -> Block {
         text: code.to_string(),
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// The displayed form of a failed inline cell: a plain `lmd` code span

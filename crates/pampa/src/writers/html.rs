@@ -2541,7 +2541,7 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
 
         let ctx = ASTContext::anonymous();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "my-section".to_string(),
                 vec!["section".to_string(), "level2".to_string()],
@@ -2556,7 +2556,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let pandoc = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![div],
@@ -2605,7 +2605,7 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
 
         let ctx = ASTContext::anonymous();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "my-div".to_string(),
                 vec!["callout".to_string(), "warning".to_string()],
@@ -2620,7 +2620,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let pandoc = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![div],
@@ -2657,12 +2657,12 @@ mod tests {
         use hashlink::LinkedHashMap;
         let mut kvs = LinkedHashMap::new();
         kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec![language.to_string()], kvs),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn render_block_to_html(block: Block) -> String {
@@ -2708,7 +2708,7 @@ mod tests {
     fn codeblock_without_hl_spans_falls_back_to_plain() {
         // No data-hl-spans attr: output looks like before this feature.
         use hashlink::LinkedHashMap;
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
@@ -2717,7 +2717,7 @@ mod tests {
             text: "def foo():".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(block);
         assert!(!html.contains("<span class=\"hl-"), "no spans expected");
         assert!(html.contains("def foo():"));
@@ -2941,7 +2941,7 @@ mod tests {
 
     #[test]
     fn ordered_list_item_trailing_attr_becomes_li_class() {
-        let list = Block::OrderedList(crate::pandoc::block::OrderedList {
+        let list = Block::OrderedList(Box::new(crate::pandoc::block::OrderedList {
             attr: (
                 1,
                 crate::pandoc::ListNumberStyle::Decimal,
@@ -2953,7 +2953,7 @@ mod tests {
                 li_attr("", &["foo"], &[]),
             ])]],
             source_info: dummy_source_info(),
-        });
+        }));
         let html = render_block_to_html(list);
         assert!(
             html.contains("<li class=\"foo\">item</li>"),
@@ -3039,7 +3039,7 @@ mod tests {
         use hashlink::LinkedHashMap;
         let mut kvs = LinkedHashMap::new();
         kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 id.to_string(),
                 classes.into_iter().map(|s| s.to_string()).collect(),
@@ -3048,7 +3048,7 @@ mod tests {
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[test]
@@ -3170,7 +3170,7 @@ mod tests {
     fn unhighlighted_codeblock_has_no_div_wrapper() {
         // No data-hl-spans => no highlighting => no div.sourceCode wrapper.
         use hashlink::LinkedHashMap;
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "cb1".to_string(),
                 vec!["python".to_string()],
@@ -3179,7 +3179,7 @@ mod tests {
             text: "def foo()".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(block);
         assert!(
             !html.contains("<div class=\"sourceCode"),
@@ -3217,7 +3217,7 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
-        Block::Table(Table {
+        Block::Table(Box::new(Table {
             attr: empty_attr(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
@@ -3247,7 +3247,7 @@ mod tests {
             },
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// bd-hixmy: an all-default colspec carries no information, so the
@@ -3339,7 +3339,7 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
-        Block::Table(Table {
+        Block::Table(Box::new(Table {
             attr: empty_attr(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
@@ -3369,7 +3369,7 @@ mod tests {
             },
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// bd-12fpz (D5): head rows get `<tr class="header">`.

@@ -626,7 +626,7 @@ mod tests {
     }
 
     fn header(level: usize, id: &str, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: attr_id(id),
             content: vec![Inline::Str(Str {
@@ -635,11 +635,11 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn header_with_class(level: usize, id: &str, class: &str, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (
                 id.to_string(),
@@ -652,19 +652,19 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn fig_div(id: &str, caption: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: attr_id(id),
             content: vec![
-                Block::CodeBlock(CodeBlock {
+                Block::CodeBlock(Box::new(CodeBlock {
                     attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
                     text: "x=1".into(),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
                 Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
                         text: caption.into(),
@@ -675,7 +675,7 @@ mod tests {
             ],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(text: &str) -> Block {
@@ -692,7 +692,7 @@ mod tests {
     /// whose first child is the header with its id moved onto the div (the
     /// header's own id is empty).
     fn section_div(id: &str, level: usize, children: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 id.to_string(),
                 vec!["section".to_string(), format!("level{level}")],
@@ -701,7 +701,7 @@ mod tests {
             content: children,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Run sugaring + indexing end-to-end on a block list and return the
@@ -1190,7 +1190,7 @@ mod tests {
             fig_div("fig-one", "f1"),
             fig_div("fig-two", "f2"),
             // tbl has its own counter — wrap in a tbl-prefix div.
-            Block::Div(Div {
+            Block::Div(Box::new(Div {
                 attr: attr_id("tbl-one"),
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![],
@@ -1198,7 +1198,7 @@ mod tests {
                 })],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ])
         .await;
         assert_eq!(idx.get("fig-one").unwrap().order.order, 1);

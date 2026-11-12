@@ -2466,7 +2466,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_header() {
-        let blocks = vec![Block::Header(Header {
+        let blocks = vec![Block::Header(Box::new(Header {
             level: 1,
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
@@ -2475,19 +2475,19 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "Heading");
     }
 
     #[test]
     fn test_blocks_to_text_code_block() {
-        let blocks = vec![Block::CodeBlock(CodeBlock {
+        let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: quarto_pandoc_types::attr::Attr::default(),
             text: "fn main() {}".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "fn main() {}");
     }
@@ -2510,7 +2510,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_div() {
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
@@ -2521,7 +2521,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "div content");
     }
@@ -2548,7 +2548,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_ordered_list() {
-        let blocks = vec![Block::OrderedList(OrderedList {
+        let blocks = vec![Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
             content: vec![vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
@@ -2558,7 +2558,7 @@ mod tests {
                 source_info: dummy_source_info(),
             })]],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert!(text.contains("Item 1"));
     }

@@ -4838,7 +4838,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
         };
 
-        let block = Block::Custom(custom);
+        let block = Block::Custom(Box::new(custom));
 
         // Create a minimal Pandoc document with this block
         let pandoc = crate::pandoc::Pandoc {
@@ -5047,7 +5047,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
         };
 
-        let block = Block::Custom(custom);
+        let block = Block::Custom(Box::new(custom));
 
         // Create a minimal Pandoc document
         let pandoc = crate::pandoc::Pandoc {
@@ -5282,14 +5282,14 @@ mod tests {
     fn test_ordered_list_item_attr_emits_itemattr_key() {
         use crate::pandoc::{Block, ListNumberDelim, ListNumberStyle, OrderedList};
         let foo: Attr = (String::new(), vec!["foo".to_string()], LinkedHashMap::new());
-        let list = Block::OrderedList(OrderedList {
+        let list = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![
                 vec![li_attr_plain("first", None)],
                 vec![li_attr_plain("second", Some(foo))],
             ],
             source_info: SourceInfo::for_test(),
-        });
+        }));
         let v = write_blocks_to_json(vec![list]);
         let node = &v["blocks"][0];
         assert_eq!(node["t"], "OrderedList");

@@ -295,7 +295,7 @@ fn title_inlines(title: &str, source_info: &SourceInfo) -> Vec<Inline> {
 /// a `Vec<String>` is not idempotent the way Quarto 1's `classList.add` is).
 fn appendix_heading(meta: &ConfigValue, term_key: &str, english: &str) -> Block {
     let source_info = SourceInfo::generated(By::appendix());
-    Block::Header(Header {
+    Block::Header(Box::new(Header {
         level: 2,
         attr: (
             String::new(),
@@ -308,7 +308,7 @@ fn appendix_heading(meta: &ConfigValue, term_key: &str, english: &str) -> Block 
         content: title_inlines(&appendix_title(meta, term_key, english), &source_info),
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Title the footnotes section in place.
@@ -351,7 +351,7 @@ fn wrap_bibliography(bibliography: Block, meta: &ConfigValue) -> Block {
     // Create header for the bibliography section
     let header = appendix_heading(meta, "section-title-references", "References");
 
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             "quarto-bibliography".to_string(),
             vec!["section".to_string()],
@@ -360,12 +360,12 @@ fn wrap_bibliography(bibliography: Block, meta: &ConfigValue) -> Block {
         content: vec![header, bibliography],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Create the appendix container div.
 fn create_appendix_container(sections: Blocks, style_class: &str) -> Block {
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             "quarto-appendix".to_string(),
             vec![style_class.to_string()],
@@ -374,7 +374,7 @@ fn create_appendix_container(sections: Blocks, style_class: &str) -> Block {
         content: sections,
         source_info: SourceInfo::generated(By::appendix()),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Create license section from metadata.
@@ -407,7 +407,7 @@ fn create_license_section(meta: &ConfigValue) -> Option<Block> {
         source_info: source_info.clone(),
     });
 
-    Some(Block::Div(Div {
+    Some(Block::Div(Box::new(Div {
         attr: (
             "quarto-reuse".to_string(),
             vec!["section".to_string()],
@@ -416,7 +416,7 @@ fn create_license_section(meta: &ConfigValue) -> Option<Block> {
         content: vec![header, content],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    }))
+    })))
 }
 
 /// Create copyright section from metadata.
@@ -449,7 +449,7 @@ fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
         source_info: source_info.clone(),
     });
 
-    Some(Block::Div(Div {
+    Some(Block::Div(Box::new(Div {
         attr: (
             "quarto-copyright".to_string(),
             vec!["section".to_string()],
@@ -458,7 +458,7 @@ fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
         content: vec![header, content],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    }))
+    })))
 }
 
 /// Create citation section from metadata.
@@ -508,7 +508,7 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
         source_info: source_info.clone(),
     });
 
-    Some(Block::Div(Div {
+    Some(Block::Div(Box::new(Div {
         attr: (
             "quarto-citation".to_string(),
             vec!["section".to_string()],
@@ -517,7 +517,7 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
         content: vec![header, content],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    }))
+    })))
 }
 
 #[cfg(test)]
@@ -569,7 +569,7 @@ mod tests {
     }
 
     fn make_appendix_div(id: &str, content: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 id.to_string(),
                 vec!["appendix".to_string()],
@@ -581,7 +581,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Metadata carrying a resolved `quarto.language` table, shaped exactly as
@@ -606,7 +606,7 @@ mod tests {
     /// `make_footnotes_section` helper omits the rule, which is precisely the
     /// element the appendix transform has to strip (bd-v9zs83zj).
     fn make_footnotes_section_with_rule() -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 "footnotes".to_string(),
                 vec!["footnotes".to_string(), "section".to_string()],
@@ -623,7 +623,7 @@ mod tests {
             ],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// The `Header` an appendix section leads with.
@@ -676,7 +676,7 @@ mod tests {
     }
 
     fn make_footnotes_section() -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 "footnotes".to_string(),
                 vec!["footnotes".to_string(), "section".to_string()],
@@ -688,7 +688,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn meta_entry(key: &str, value: ConfigValue) -> ConfigMapEntry {
@@ -704,7 +704,7 @@ mod tests {
     }
 
     fn make_bibliography() -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 "refs".to_string(),
                 vec!["references".to_string()],
@@ -716,7 +716,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[tokio::test]

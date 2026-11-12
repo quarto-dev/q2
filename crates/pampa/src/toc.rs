@@ -568,7 +568,7 @@ mod tests {
     }
 
     fn make_header(level: usize, id: &str, classes: Vec<&str>, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (
                 id.to_string(),
@@ -581,7 +581,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_section(
@@ -594,7 +594,7 @@ mod tests {
         let mut section_classes = vec!["section".to_string(), format!("level{}", level)];
         section_classes.extend(classes.iter().map(|s| s.to_string()));
 
-        let header = Block::Header(Header {
+        let header = Block::Header(Box::new(Header {
             level,
             attr: (
                 String::new(),
@@ -607,17 +607,17 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         let mut section_content = vec![header];
         section_content.extend(content);
 
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (id.to_string(), section_classes, LinkedHashMap::new()),
             content: section_content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_para(text: &str) -> Block {
@@ -755,7 +755,7 @@ mod tests {
     }
 
     fn make_plain_div(id: &str, classes: Vec<&str>, content: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
@@ -764,7 +764,7 @@ mod tests {
             content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[test]
@@ -1139,7 +1139,7 @@ mod tests {
             })),
         ];
 
-        let blocks = vec![Block::Header(Header {
+        let blocks = vec![Block::Header(Box::new(Header {
             level: 2,
             attr: (
                 "using-a-raw-volume".to_string(),
@@ -1149,7 +1149,7 @@ mod tests {
             content: header_content.clone(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
 
         let toc = generate_toc(&blocks, &TocConfig::default());
 

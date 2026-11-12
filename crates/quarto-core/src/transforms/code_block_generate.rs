@@ -364,7 +364,7 @@ mod tests {
         for (k, v) in kvs {
             kv_map.insert(k.to_string(), v.to_string());
         }
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 classes.into_iter().map(String::from).collect(),
@@ -373,7 +373,7 @@ mod tests {
             text: text.to_string(),
             source_info: source_info_at(0, 0, text.len()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_test_project() -> ProjectContext {
@@ -851,12 +851,12 @@ mod tests {
             blocks: vec![Block::BlockQuote(BlockQuote {
                 content: vec![
                     cb_inside_blockquote,
-                    Block::Div(Div {
+                    Block::Div(Box::new(Div {
                         attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                         content: vec![cb_inside_div],
                         source_info: source_info_at(0, 100, 200),
                         attr_source: AttrSourceInfo::empty(),
-                    }),
+                    })),
                 ],
                 source_info: source_info_at(0, 0, 300),
             })],
@@ -964,7 +964,7 @@ mod tests {
         );
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::Custom(callout)],
+            blocks: vec![Block::Custom(Box::new(callout))],
         };
 
         let project = make_test_project();

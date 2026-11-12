@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn inline_and_figure_images_keep_their_alt_inlines() {
-        let figure = Block::Figure(Figure {
+        let figure = Block::Figure(Box::new(Figure {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -163,7 +163,7 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(
             summary(vec![
                 para(vec![word("Text"), image("Alt D", &[])]),

@@ -179,9 +179,9 @@ mod tests {
         );
         callout.set_slot(
             "content",
-            Slot::Blocks(vec![Block::Div(column_div(Some("40%"), None))]),
+            Slot::Blocks(vec![Block::Div(Box::new(column_div(Some("40%"), None)))]),
         );
-        let mut blocks = vec![Block::Custom(callout)];
+        let mut blocks = vec![Block::Custom(Box::new(callout))];
         walk_blocks(&mut blocks);
         let Block::Custom(node) = &blocks[0] else {
             panic!("custom node survives");

@@ -406,9 +406,9 @@ fn apply_custom_node_block_reconciliation(
     slot_plan: &CustomNodeSlotPlan,
 ) -> Block {
     match (orig_block, exec_block) {
-        (Block::Custom(orig), Block::Custom(exec)) => {
-            Block::Custom(apply_custom_node_reconciliation(orig, exec, slot_plan))
-        }
+        (Block::Custom(orig), Block::Custom(exec)) => Block::Custom(Box::new(
+            apply_custom_node_reconciliation(*orig, *exec, slot_plan),
+        )),
         // Fallback: shouldn't happen, return original
         (orig, _) => orig,
     }
@@ -537,9 +537,9 @@ fn apply_table_block_reconciliation(
     table_plan: &TableReconciliationPlan,
 ) -> Block {
     match (orig_block, exec_block) {
-        (Block::Table(orig), Block::Table(exec)) => {
-            Block::Table(apply_table_reconciliation(orig, exec, table_plan))
-        }
+        (Block::Table(orig), Block::Table(exec)) => Block::Table(Box::new(
+            apply_table_reconciliation(*orig, *exec, table_plan),
+        )),
         // Fallback: shouldn't happen, return original
         (orig, _) => orig,
     }
@@ -765,12 +765,12 @@ mod tests {
     }
 
     fn make_div_with_source(blocks: Vec<Block>, source: SourceInfo) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: blocks,
             source_info: source,
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     // ==================== Basic Apply Tests ====================
@@ -923,19 +923,19 @@ mod tests {
     fn test_ordered_list_reconciliation() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![Block::OrderedList(OrderedList {
+            blocks: vec![Block::OrderedList(Box::new(OrderedList {
                 attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
                 content: vec![vec![make_para_with_source("item1", source_a())]],
                 source_info: source_a(),
-            })],
+            }))],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![Block::OrderedList(OrderedList {
+            blocks: vec![Block::OrderedList(Box::new(OrderedList {
                 attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
                 content: vec![vec![make_para_with_source("item1", source_b())]],
                 source_info: source_b(),
-            })],
+            }))],
         };
 
         let plan = compute_reconciliation(&original, &executed);
@@ -954,23 +954,23 @@ mod tests {
     fn test_header_inline_reconciliation() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![Block::Header(Header {
+            blocks: vec![Block::Header(Box::new(Header {
                 level: 1,
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![make_str("Title", source_a())],
                 source_info: source_a(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![Block::Header(Header {
+            blocks: vec![Block::Header(Box::new(Header {
                 level: 1,
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![make_str("Title", source_b())],
                 source_info: source_b(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let plan = compute_reconciliation(&original, &executed);

@@ -243,12 +243,12 @@ fn try_desugar_code_block(
     if let Some(align) = fig_align {
         attr.2.insert("fig-align".to_string(), align);
     }
-    let new_code_block = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+    let new_code_block = Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
         attr,
         text,
         source_info: cb.source_info.clone(),
         attr_source: cb.attr_source.clone(),
-    });
+    }));
 
     Some(match wrapper {
         Wrapper::Float {
@@ -263,12 +263,12 @@ fn try_desugar_code_block(
             }
             let attr_map: hashlink::LinkedHashMap<String, String> =
                 attributes.into_iter().collect();
-            Block::Div(Div {
+            Block::Div(Box::new(Div {
                 attr: (label, classes, attr_map),
                 content,
                 source_info: cb.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         }
         Wrapper::Figure { caption, short } => {
             let long = match caption_paragraph(caption, diagnostics) {
@@ -278,7 +278,7 @@ fn try_desugar_code_block(
                 })],
                 other => vec![other],
             };
-            Block::Figure(Figure {
+            Block::Figure(Box::new(Figure {
                 attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
                 caption: Caption {
                     short: short.map(|s| caption_inlines(s, diagnostics)),
@@ -288,7 +288,7 @@ fn try_desugar_code_block(
                 content: vec![new_code_block],
                 source_info: cb.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         }
         // Nothing to wrap — the cell was rewritten in place (by the
         // accessibility injection and/or the `fig-align` attribute).
@@ -990,12 +990,12 @@ mod tests {
     }
 
     fn code_in(language: &str, text: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec![language.into()], LinkedHashMap::new()),
             text: text.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Tests don't need real provenance — the desugar only uses it to
@@ -1726,12 +1726,12 @@ mod tests {
     fn desugar_recurses_into_div_content() {
         let reg = RefTypeRegistry::builtin();
         let inner = code("#| label: fig-inner\n#| fig-cap: inner cap\nprint(1)\n");
-        let outer = Block::Div(Div {
+        let outer = Block::Div(Box::new(Div {
             attr: (String::new(), vec!["wrapper".into()], LinkedHashMap::new()),
             content: vec![inner],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let mut blocks = vec![outer];
         desugar(&mut blocks, &reg);
         let Block::Div(wrapper) = &blocks[0] else {

@@ -179,7 +179,7 @@ impl Walker<'_> {
                         attr,
                         plain_data,
                         ..
-                    } = &mut *c;
+                    } = &mut **c;
                     let own = FloatScope {
                         attr: &*attr,
                         plain_data: &*plain_data,

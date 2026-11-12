@@ -1651,7 +1651,7 @@ fn to_blocks_inner(output: &Output) -> Vec<quarto_pandoc_types::Block> {
                 let mut attr = quarto_pandoc_types::empty_attr();
                 attr.1.push(class.to_string());
 
-                blocks.push(Block::Div(Div {
+                blocks.push(Block::Div(Box::new(Div {
                     attr,
                     content: vec![Block::Plain(Plain {
                         content: inlines,
@@ -1659,7 +1659,7 @@ fn to_blocks_inner(output: &Output) -> Vec<quarto_pandoc_types::Block> {
                     })],
                     source_info: empty_source_info(),
                     attr_source: empty_attr_source(),
-                }));
+                })));
             }
             None => {
                 // No display attribute - wrap in Plain
