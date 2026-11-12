@@ -50,10 +50,12 @@ front-matter keys and body paragraphs, and sends the difference as one
 splice. While the source doesn't parse, the editor shows the last text it
 could read and takes no edits.
 
+A paragraph that the source wraps over several lines is one line here. An
+edit keeps its line breaks wherever the text around them stays, so typing
+in a wrapped paragraph changes only what was typed.
+
 Not done yet in the body: a paragraph can't be started between two blocks
-that can't be edited, or after one at the end of the document; and editing
-a paragraph that the source wraps over several lines writes it back on
-one.
+that can't be edited, or after one at the end of the document.
 
 The non-UI part lives in `src/quarto-synced-file/`: one qmd file kept in sync
 with a hub, its parsed AST, and splice-based edits. It has no UI dependencies

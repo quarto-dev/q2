@@ -92,6 +92,24 @@ test.describe('editing a paragraph', () => {
 
     await editor.document.expectSource(fixture('wrapped').replace('Another paragraph.', 'Another short paragraph.'))
   })
+
+  test('typing in a wrapped paragraph keeps its line breaks', async ({ page }) => {
+    const editor = await openEditor(page, 'wrapped')
+    await editor.placeCaretInParagraph(0, 11)
+
+    await page.keyboard.type(' long')
+
+    await editor.document.expectSource(fixture('wrapped').replace('A paragraph', 'A paragraph long'))
+  })
+
+  test('splitting a wrapped paragraph keeps each half\'s line breaks', async ({ page }) => {
+    const editor = await openEditor(page, 'wrapped')
+    await editor.placeCaretInParagraph(0, 2)
+
+    await page.keyboard.press('Enter')
+
+    await editor.document.expectSource(fixture('wrapped').replace('A paragraph', 'A\n\nparagraph'))
+  })
 })
 
 test.describe('splitting and joining paragraphs', () => {

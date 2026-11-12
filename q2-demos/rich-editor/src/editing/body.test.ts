@@ -47,6 +47,25 @@ describe('editBody', () => {
     const one = para('One.')
     expect(editBody([one], 'One. ')![0]).toBe(one)
   })
+  it('keeps the line breaks of a wrapped paragraph around what changed', () => {
+    const wrapped: Node = {
+      t: 'Para',
+      c: [...words('One two'), { t: 'SoftBreak' }, ...words('three four'), { t: 'SoftBreak' }, ...words('five.')],
+    }
+    const breaks = (block: Node) => (block.c as Node[]).filter((inline) => inline.t !== 'Str').map((inline) => inline.t)
+    // Typing in the middle line.
+    expect(breaks(editBody([wrapped], 'One two three more four five.')![0])).toEqual([
+      'Space', 'SoftBreak', 'Space', 'Space', 'SoftBreak',
+    ])
+    // Removing a line break's space removes the line break.
+    expect(breaks(editBody([wrapped], 'One twothree four five.')![0])).toEqual(['Space', 'Space', 'SoftBreak'])
+    // Splitting: each half keeps its own.
+    const split = editBody([para('Top.'), wrapped], 'Top.\nOne two three\nfour five.')!
+    expect(split.slice(1).map(breaks)).toEqual([['Space', 'SoftBreak'], ['SoftBreak']])
+    // Joining.
+    const joined = editBody([wrapped, wrapped], 'One two three four five.One two three four five.')!
+    expect(breaks(joined[0])).toEqual(['Space', 'SoftBreak', 'Space', 'SoftBreak', 'Space', 'SoftBreak', 'Space', 'SoftBreak'])
+  })
   it('refuses a text without the read-only blocks', () => {
     expect(editBody(blocks, 'One.')).toBeNull()
   })
