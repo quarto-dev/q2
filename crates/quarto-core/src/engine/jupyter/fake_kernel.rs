@@ -66,6 +66,18 @@ pub(crate) const SCRIPTS_ENV: &str = "QUARTO_FAKE_KERNEL_SCRIPTS";
 /// with code 3 instead of serving, like a kernel that cannot bind its ports.
 pub(crate) const EXIT_ENV: &str = "QUARTO_FAKE_KERNEL_EXIT";
 
+/// When set to `<n>:<path>`, each kernel process appends a line to the file at
+/// `<path>` (before any [`EXIT_ENV`] exit, so the file counts every spawn) and,
+/// while the file then holds at most `n` lines, exits with code 1 and a
+/// port-conflict message instead of serving: the first `n` kernel starts lose
+/// a port, later ones serve (bd-e87d5tmn).
+pub(crate) const FAIL_FIRST_ENV: &str = "QUARTO_FAKE_KERNEL_FAIL_FIRST";
+
+/// What a [`FAIL_FIRST_ENV`] kernel writes to stderr, as ipykernel does when
+/// a port it was handed is taken.
+pub(crate) const PORT_CONFLICT_STDERR: &str =
+    "zmq.error.ZMQError: Address already in use (addr='tcp://127.0.0.1:38829')";
+
 /// The libtest name of the entry test the kernelspec argv runs.
 const ENTRY_TEST: &str = "engine::jupyter::fake_kernel::tests::fake_kernel_process_entry";
 
@@ -254,9 +266,31 @@ mod tests {
     /// returns (the kernel runs until killed); otherwise it passes immediately.
     #[test]
     fn fake_kernel_process_entry() {
+        // Count the spawn first, so a test can count spawns that then exit.
+        let fail_first = std::env::var(FAIL_FIRST_ENV).ok().map(|spec| {
+            let (n, path) = spec.split_once(':').expect("<n>:<path>");
+            let n: usize = n.parse().expect("failure count");
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .expect("spawn count file");
+            writeln!(file, "spawn").expect("count the spawn");
+            drop(file);
+            let spawns = std::fs::read_to_string(path)
+                .expect("spawn count")
+                .lines()
+                .count();
+            spawns <= n
+        });
         if let Ok(message) = std::env::var(EXIT_ENV) {
             eprintln!("{message}");
             std::process::exit(3);
+        }
+        if fail_first == Some(true) {
+            eprintln!("{PORT_CONFLICT_STDERR}");
+            std::process::exit(1);
         }
         run_kernel_process(
             std::env::var(SCRIPT_ENV).ok(),
@@ -504,7 +538,7 @@ mod tests {
         let mut env = kernel.env.clone();
         env.push((
             EXIT_ENV.to_string(),
-            "zmq.error.ZMQError: Address already in use".to_string(),
+            "ModuleNotFoundError: No module named 'ipykernel_launcher'".to_string(),
         ));
         let cwd = std::env::current_dir().unwrap();
         let daemon = JupyterDaemon::new();
@@ -529,10 +563,97 @@ mod tests {
                 ..
             } => {
                 assert_eq!(*code, Some(3));
-                assert!(stderr.contains("Address already in use"), "{stderr}");
+                assert!(stderr.contains("No module named"), "{stderr}");
             }
             other => panic!("unexpected error {other:?}"),
         }
         assert_eq!(daemon.session_count(), 0);
+    }
+
+    /// Environment for a kernel whose first `failures` starts lose a port,
+    /// counting its spawns in `count_file`.
+    fn failing_first(
+        kernel: &FakeKernel,
+        failures: usize,
+        count_file: &Path,
+    ) -> Vec<(String, String)> {
+        let mut env = kernel.env.clone();
+        env.push((
+            FAIL_FIRST_ENV.to_string(),
+            format!("{failures}:{}", count_file.display()),
+        ));
+        env
+    }
+
+    fn spawns(count_file: &Path) -> usize {
+        std::fs::read_to_string(count_file).map_or(0, |s| s.lines().count())
+    }
+
+    /// bd-e87d5tmn: a kernel that loses a port it was handed (another socket
+    /// took it between the daemon peeking it and the kernel binding it) is
+    /// started again on fresh ports, and the document gets a working kernel.
+    #[tokio::test]
+    async fn test_kernel_losing_a_port_at_startup_is_retried() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let count = home.jupyter_path().join("spawns");
+        let env = failing_first(&kernel, 1, &count);
+        let cwd = std::env::current_dir().unwrap();
+        let daemon = JupyterDaemon::new();
+
+        let mut lease = daemon
+            .acquire(&kernel.name, &cwd, &cwd.join("a.qmd"), &env)
+            .await
+            .expect("the retry starts a kernel");
+        assert!(!pid_of(&mut lease).await.trim().is_empty());
+        assert_eq!(spawns(&count), 2);
+        daemon.shutdown_lease(lease).await.unwrap();
+        assert_eq!(daemon.session_count(), 0);
+    }
+
+    /// The retry is bounded: a kernel that loses a port on every attempt fails
+    /// the start with the kernel's own report.
+    #[tokio::test]
+    async fn test_kernel_always_losing_a_port_fails_after_bounded_retries() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let count = home.jupyter_path().join("spawns");
+        let env = failing_first(&kernel, usize::MAX, &count);
+        let cwd = std::env::current_dir().unwrap();
+        let daemon = JupyterDaemon::new();
+
+        let err = match daemon
+            .acquire(&kernel.name, &cwd, &cwd.join("a.qmd"), &env)
+            .await
+        {
+            Ok(_) => panic!("a kernel that never binds cannot be leased"),
+            Err(e) => e,
+        };
+        assert!(err.is_port_conflict(), "{err:?}");
+        assert_eq!(spawns(&count), 3);
+        assert_eq!(daemon.session_count(), 0);
+    }
+
+    /// A kernel that exits for any other reason is not retried.
+    #[tokio::test]
+    async fn test_kernel_exiting_for_another_reason_is_not_retried() {
+        let home = FakeKernelHome::new();
+        let kernel = home.install("fake-py", "python", &pid_script());
+        let count = home.jupyter_path().join("spawns");
+        // A fail-first of 0 only counts the spawns; EXIT_ENV makes it exit.
+        let mut env = failing_first(&kernel, 0, &count);
+        env.push((EXIT_ENV.to_string(), "SyntaxError: boom".to_string()));
+        let cwd = std::env::current_dir().unwrap();
+        let daemon = JupyterDaemon::new();
+
+        let err = match daemon
+            .acquire(&kernel.name, &cwd, &cwd.join("a.qmd"), &env)
+            .await
+        {
+            Ok(_) => panic!("a kernel that exits cannot be leased"),
+            Err(e) => e,
+        };
+        assert!(!err.is_port_conflict(), "{err:?}");
+        assert_eq!(spawns(&count), 1);
     }
 }

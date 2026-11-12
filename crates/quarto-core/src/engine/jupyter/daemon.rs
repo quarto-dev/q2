@@ -64,6 +64,10 @@ use super::error::{JupyterError, Result};
 use super::kernelspec;
 use super::session::{KernelSession, SessionKey};
 
+/// How many times a kernel start is tried when the kernel keeps losing
+/// a port it was handed (see [`JupyterDaemon::start_kernel`]).
+const KERNEL_START_ATTEMPTS: usize = 3;
+
 /// One session's slot: `None` until its kernel has started, and again once a
 /// releasing [`JupyterDaemon::finish`] has shut it down.
 type Slot = AsyncMutex<Option<KernelSession>>;
@@ -287,8 +291,35 @@ impl JupyterDaemon {
         )))
     }
 
-    /// Start a new kernel for the given key.
+    /// Start a new kernel for the given key, retrying on fresh ports when
+    /// the kernel exits because one of its ports was taken (bd-e87d5tmn).
+    ///
+    /// Ports are only peeked (bound to port 0, then released) before the
+    /// kernel is spawned, so a port can be taken before the kernel binds it:
+    /// by a concurrently starting kernel's client sockets, whose connect
+    /// retries draw ephemeral ports from the same range, or by another
+    /// process. No reservation closes that gap, since the kernel must bind
+    /// the ports itself, so the start is retried instead.
     async fn start_kernel(
+        &self,
+        key: &SessionKey,
+        extra_env: &[(String, String)],
+    ) -> Result<KernelSession> {
+        let mut attempt = 1;
+        loop {
+            match self.start_kernel_once(key, extra_env).await {
+                Err(e) if e.is_port_conflict() && attempt < KERNEL_START_ATTEMPTS => {
+                    tracing::warn!(kernel = %key.kernel_name, attempt,
+                        "kernel could not bind a port it was handed; retrying on fresh ports");
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    /// One attempt at starting a new kernel for the given key.
+    async fn start_kernel_once(
         &self,
         key: &SessionKey,
         extra_env: &[(String, String)],

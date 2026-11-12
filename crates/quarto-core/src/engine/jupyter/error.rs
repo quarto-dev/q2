@@ -117,6 +117,32 @@ pub enum JupyterError {
     RuntimeLibError(String),
 }
 
+impl JupyterError {
+    /// Whether this is a kernel that exited while starting because a port it
+    /// was handed was already taken (bd-e87d5tmn).
+    ///
+    /// The daemon picks a kernel's ports by binding port 0 and closing the
+    /// listener; the kernel binds them only once it is up. In between, any
+    /// socket can take one: a concurrently starting kernel's client
+    /// connections, or another process. Such a start is worth retrying on
+    /// fresh ports. The kernel reports the conflict only on stderr, so this
+    /// matches the messages kernels print for `EADDRINUSE`: the POSIX
+    /// `strerror` text (ipykernel's `ZMQError`, Linux and macOS), the MSVC
+    /// CRT's (`zmq_strerror` on Windows) and Winsock's `WSAEADDRINUSE` text.
+    pub fn is_port_conflict(&self) -> bool {
+        let JupyterError::ExitedDuringStartup { stderr, .. } = self else {
+            return false;
+        };
+        const MARKERS: &[&str] = &[
+            "Address already in use",
+            "Address in use",
+            "EADDRINUSE",
+            "Only one usage of each socket address",
+        ];
+        MARKERS.iter().any(|m| stderr.contains(m))
+    }
+}
+
 impl From<runtimelib::RuntimeError> for JupyterError {
     fn from(err: runtimelib::RuntimeError) -> Self {
         match err {
@@ -159,4 +185,35 @@ fn format_kernelspec_not_found(name: &str, searched: &[PathBuf], available: &[St
         "\nhint: if `jupyter kernelspec list` shows a kernel we missed, run quarto from the same shell where `jupyter` resolves to the kernel's environment, or set JUPYTER_PATH to include its parent directory.",
     );
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn exited(stderr: &str) -> JupyterError {
+        JupyterError::ExitedDuringStartup {
+            kernel: "python3".to_string(),
+            code: Some(1),
+            stderr: stderr.to_string(),
+        }
+    }
+
+    #[test]
+    fn port_conflicts_are_recognized_on_every_platform() {
+        for stderr in [
+            "zmq.error.ZMQError: Address already in use (addr='tcp://127.0.0.1:38829')",
+            "zmq.error.ZMQError: Address in use (addr='tcp://127.0.0.1:38829')",
+            "Error: bind EADDRINUSE 127.0.0.1:38829",
+            "Only one usage of each socket address (protocol/network address/port) is normally permitted.",
+        ] {
+            assert!(exited(stderr).is_port_conflict(), "{stderr}");
+        }
+    }
+
+    #[test]
+    fn other_startup_failures_are_not_port_conflicts() {
+        assert!(!exited("ModuleNotFoundError: No module named 'ipykernel'").is_port_conflict());
+        assert!(!JupyterError::ProcessExited { code: Some(1) }.is_port_conflict());
+    }
 }
