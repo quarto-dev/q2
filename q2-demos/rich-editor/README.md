@@ -50,6 +50,12 @@ front-matter keys and body paragraphs, and sends the difference as one
 splice. While the source doesn't parse, the editor shows the last text it
 could read and takes no edits.
 
+An empty line in the body is an empty paragraph, so Enter on an empty
+line adds another and they stay when the caret leaves. qmd has no syntax
+for one (blank lines between paragraphs don't add up), so it's written as
+a paragraph of one non-breaking space, which `q2 render` shows as an empty
+line too; `&nbsp;` on a line of its own in the source reads the same.
+
 A paragraph that the source wraps over several lines is one line here. An
 edit keeps its line breaks wherever the text around them stays, so typing
 in a wrapped paragraph changes only what was typed.

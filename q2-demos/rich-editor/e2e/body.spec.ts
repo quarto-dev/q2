@@ -169,6 +169,61 @@ test.describe('splitting and joining paragraphs', () => {
     await editor.expectParagraphCaret(1, 0)
   })
 
+  test('Enter on an empty line adds another, and each is an empty paragraph', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('New one.')
+
+    await editor.expectParagraphCaret(3, 8)
+    expect((await editor.paragraphs()).slice(0, 4)).toEqual(['First paragraph.', '', '', 'New one.'])
+    // An empty paragraph is a non-breaking space on a line of its own.
+    await editor.document.expectSource(
+      body.replace('First paragraph.', 'First paragraph.\n\n\u00a0\n\n\u00a0\n\nNew one.'),
+    )
+  })
+
+  test('an empty paragraph stays, as tall as a line, when the caret leaves it', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+    await page.keyboard.press('Enter')
+
+    await editor.placeCaretInParagraph(2, 0)
+
+    expect(await editor.paragraphs()).toEqual(['First paragraph.', '', 'Second paragraph.', 'Last paragraph.'])
+    const [first, emptyLine] = await editor.frame.evaluate(() =>
+      [...document.querySelectorAll('#quarto-document-content > p.qe-field')]
+        .slice(0, 2)
+        .map((el) => el.getBoundingClientRect().height),
+    )
+    expect(emptyLine).toBe(first)
+  })
+
+  test('Backspace on an empty paragraph removes it', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+    await page.keyboard.press('Enter')
+    await editor.document.expectSource(body.replace('First paragraph.', 'First paragraph.\n\n\u00a0'))
+
+    await page.keyboard.press('Backspace')
+
+    await editor.expectParagraphCaret(0, 16)
+    await editor.document.expectSource(body)
+  })
+
+  test('an empty paragraph in the source is an empty line', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+
+    editor.document.replace('First paragraph.', 'First paragraph.\n\n&nbsp;')
+
+    await expect
+      .poll(() => editor.paragraphs())
+      .toEqual(['First paragraph.', '', 'Second paragraph.', 'Last paragraph.'])
+  })
+
   test('pasted lines become paragraphs', async ({ page }) => {
     const editor = await openEditor(page, 'body')
     await editor.placeCaretInParagraph(0, 16)

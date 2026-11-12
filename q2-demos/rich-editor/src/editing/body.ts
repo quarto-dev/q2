@@ -4,6 +4,10 @@
  * heading, a paragraph with formatting, a list) is a line that can't be
  * edited (`ATOM`), and comes back from an edit as the block it was.
  *
+ * An empty line is an empty paragraph, which qmd has no syntax for: it's
+ * written as a paragraph of one non-breaking space, which takes up a line
+ * when rendered, and a paragraph of only that reads as an empty line.
+ *
  * A paragraph that the source wraps over several lines reads as one line,
  * and an edit keeps its line breaks wherever the text around them stays.
  */
@@ -13,13 +17,17 @@ import { diff, matchLines } from '../engine/rebase.ts'
 
 export type Node = { t: string; c?: unknown }
 
+/** What an empty paragraph holds. */
+const NBSP = '\u00a0'
+
 /**
- * The text of a paragraph that can be edited as plain text, or undefined
- * for any other block.
+ * The text of a paragraph that can be edited as plain text (none, for an
+ * empty paragraph), or undefined for any other block.
  */
 export function plainParagraph(block: Node): string | undefined {
   if (block.t !== 'Para' || !Array.isArray(block.c)) return undefined
   const text = plainText(block.c as Node[], ' ')
+  if (text === NBSP) return ''
   return text === undefined || text === '' || text.includes(ATOM) ? undefined : text
 }
 
@@ -35,13 +43,13 @@ export function bodyText(blocks: readonly Node[]): string {
 
 /**
  * The blocks of a body edited to read `text`. A line that reads as its
- * block did is that block, untouched; any other line of text is a new
- * paragraph, wrapped in the source where the text it keeps was. Null when
+ * block did is that block, untouched; any other line is a new paragraph
+ * (an empty one, for a line without text), wrapped in the source where the text it keeps was. Null when
  * `text` doesn't have the body's read-only blocks, which no edit should
  * bring about.
  */
 export function editBody(blocks: readonly Node[], text: string): Node[] | null {
-  const lines = text.split('\n').map(kept).filter((line) => line !== '')
+  const lines = text === '' ? [] : text.split('\n').map(kept)
   const before = blocks.map((block) => plainParagraph(block) ?? ATOM)
   const readOnly = readOnlyBlocks(blocks)
   if (lines.filter((line) => line === ATOM).length !== readOnly.length) return null
@@ -54,6 +62,7 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
     start += line.length + 1
     if (line === ATOM) return readOnly[atoms++]
     if (match[i] >= 0) return blocks[match[i]]
+    if (line === '') return { t: 'Para', c: [{ t: 'Str', c: NBSP }] }
     return { t: 'Para', c: words(line, (offset) => wrapped(lineStart + offset)) }
   })
 }
@@ -68,7 +77,10 @@ function keptWraps(blocks: readonly Node[], before: string, after: string): (off
   if (!change) return () => false
   // The body's text with a line break where the source wraps a paragraph.
   const source = blocks
-    .map((block) => (plainParagraph(block) === undefined ? ATOM : plainText(block.c as Node[], '\n')))
+    .map((block) => {
+      const text = plainParagraph(block)
+      return text === undefined ? ATOM : text && plainText(block.c as Node[], '\n')
+    })
     .join('\n')
   const changeEnd = change.start + change.inserted.length
   const moved = before.length - after.length

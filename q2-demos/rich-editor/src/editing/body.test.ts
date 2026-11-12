@@ -5,6 +5,7 @@ import { bodyText, editBody, plainParagraph, words, type Node } from './body.ts'
 const para = (text: string): Node => ({ t: 'Para', c: words(text) })
 const heading: Node = { t: 'Header', c: [2, ['', [], []], words('Results')] }
 const formatted: Node = { t: 'Para', c: [{ t: 'Emph', c: words('really') }] }
+const empty: Node = { t: 'Para', c: [{ t: 'Str', c: '\u00a0' }] }
 const blocks = [para('One.'), heading, para('Two.'), formatted, para('Three.')]
 
 describe('plainParagraph', () => {
@@ -14,6 +15,9 @@ describe('plainParagraph', () => {
     expect(
       plainParagraph({ t: 'Para', c: [{ t: 'Quoted', c: [{ t: 'DoubleQuote' }, words('so called')] }] }),
     ).toBe('“so called”')
+  })
+  it('is empty for a paragraph of one non-breaking space', () => {
+    expect(plainParagraph(empty)).toBe('')
   })
   it('is undefined for anything else', () => {
     expect(plainParagraph(heading)).toBeUndefined()
@@ -26,6 +30,9 @@ describe('bodyText', () => {
     expect(bodyText(blocks)).toBe(`One.\n${ATOM}\nTwo.\n${ATOM}\nThree.`)
     expect(bodyText([])).toBe('')
   })
+  it('has an empty line for an empty paragraph', () => {
+    expect(bodyText([para('One.'), empty, empty, para('Two.')])).toBe('One.\n\n\nTwo.')
+  })
 })
 
 describe('editBody', () => {
@@ -37,10 +44,20 @@ describe('editBody', () => {
     expect(edited[3]).toBe(formatted)
     expect(edited[4]).toBe(blocks[4])
   })
-  it('makes a paragraph of each new line, and none of an empty one', () => {
+  it('makes a paragraph of each new line, and an empty paragraph of an empty one', () => {
     const edited = editBody(blocks, `One.\n\nNew.\n${ATOM}\nTwo.\n${ATOM}\nThree.`)!
-    expect(edited).toEqual([blocks[0], para('New.'), heading, blocks[2], formatted, blocks[4]])
+    expect(edited).toEqual([blocks[0], empty, para('New.'), heading, blocks[2], formatted, blocks[4]])
     expect(edited[0]).toBe(blocks[0])
+  })
+  it('keeps the empty paragraphs that are still there', () => {
+    const before = [para('One.'), empty, para('Two.')]
+    const edited = editBody(before, 'One.\n\n\nTwo!')!
+    expect(edited).toEqual([before[0], empty, empty, para('Two!')])
+    expect(edited[1]).toBe(before[1])
+    expect(editBody(before, 'One.\nTwo.')).toEqual([before[0], before[2]])
+  })
+  it('makes no blocks of an empty text', () => {
+    expect(editBody([para('One.')], '')).toEqual([])
   })
   it('drops the spaces qmd doesn\'t keep', () => {
     expect(editBody([para('One.')], ' One  more. ')).toEqual([para('One more.')])
