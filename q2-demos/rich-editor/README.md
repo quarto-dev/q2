@@ -160,7 +160,8 @@ block is shown), `read-only.spec.ts` (when nothing can be edited),
 `collaboration.spec.ts` (more than one person in a document),
 `render-parity.spec.ts` (the editor shows a document as `q2 render` would)
 and `app.spec.ts` (the page around the editor: which document it opens,
-the source pane, the status line).
+the source pane, the connection to the hub, the status line, the layout
+in a narrow window).
 Tests marked `fixme` describe behaviour we want and don't have yet.
 
 `render-parity.spec.ts` compares the editor's page with the same fixture
@@ -175,3 +176,51 @@ source text. Playwright starts the dev server itself.
 
 `/fixture.html?fixture=<name>` (default `basic`) opens the visual editor
 on a fixture held in memory, with no hub, for trying it without a server.
+
+### What the specs take as given
+
+The specs describe the editor, not the parts of Quarto 2 it is built on.
+Someone building the editor again from the specs has these as they are:
+
+- **The `wasm-quarto-hub-client` module** (`src/quarto-synced-file/wasm.ts`
+  wraps it): it parses qmd into a Pandoc JSON AST, writes an AST back as
+  qmd, either whole or incrementally (rewriting only the changed
+  front-matter keys and blocks, so the rest of the source stays as it
+  was), renders a document with the full pipeline (for
+  `render-parity.spec.ts`), works out the title block's metadata
+  (`deriveTitleBlockMeta`, which normalizes the authors), and compiles the
+  default theme's CSS.
+- **`@quarto/quarto-sync-client`**: the automerge sync client, and the
+  in-process test hub the specs put documents on.
+- **`@quarto/preview-renderer`'s `PreviewTitleBlock`**: the title block's
+  markup, as `q2 render` emits it.
+
+The specs find their way around the page by this markup, which a new
+editor has to keep:
+
+- The page: `?doc=<index document id>&file=<path>`, with
+  `&server=<ws-url>` and `&view=visual` (see `app.spec.ts`), and
+  `/fixture.html?fixture=<name>`. The source pane is a `textarea`. The
+  page's own status is `.status` (`.status-error` for an error), and the
+  line under the editor is `.visual-editor .status`.
+- The document is in `iframe.visual-frame`, in the page structure `q2
+  render` emits. `#quarto-document-content` is the one `contenteditable`
+  element: it holds the title block (`#title-block-header`, with
+  `h1.title`, `p.subtitle` and `.abstract`) and then the body's blocks as
+  its children.
+- Text that can be edited is in `.qe-field` elements: one in each
+  title-block field, and one for each editable line of the body (a direct
+  child of `#quarto-document-content`). An empty field's placeholder is
+  its `::before` content. A block the editor doesn't know is a
+  `.qe-unknown` box, and the row that adds title-block fields is
+  `.qe-widget`.
+
+### What no spec covers
+
+No spec describes these, and the prototype doesn't do them: right-to-left
+and mixed-direction text, touch input, and showing where collaborators'
+carets are. Accessibility is barely covered: the title-block widget's
+buttons are found by their role and name, and nothing else is. Pressing Enter
+to confirm an input-method composition is also unspecified: the specs
+play an input method's part with synthetic events (`Editor.compose`),
+which can't reproduce that key.
