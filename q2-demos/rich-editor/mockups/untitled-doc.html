@@ -191,6 +191,33 @@ function placeIn(e, end) {
   const r = document.createRange(); r.selectNodeContents(e); r.collapse(!end);
   const s = sel(); s.removeAllRanges(); s.addRange(r);
 }
+function lineHeight(e) {
+  const cs = getComputedStyle(e), lh = parseFloat(cs.lineHeight);
+  return Number.isNaN(lh) ? parseFloat(cs.fontSize) * 1.2 : lh;
+}
+/** The caret's box, or its element's box when the caret is in an empty element. */
+function caretRect() {
+  const s = sel(); if (!s.rangeCount) return null;
+  const r = s.getRangeAt(0).cloneRange(); r.collapse(true);
+  const rect = r.getClientRects()[0];
+  if (rect) return rect;
+  const n = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement;
+  return n.getBoundingClientRect();
+}
+/** Whether a collapsed caret in `e` is on its first (or last) visual line. */
+function onEdgeLine(e, last) {
+  const s = sel(); if (!s.rangeCount || !s.isCollapsed || !e.contains(s.anchorNode)) return false;
+  const c = caretRect(), box = e.getBoundingClientRect(), lh = lineHeight(e);
+  return last ? box.bottom - c.bottom < lh * 0.75 : c.top - box.top < lh * 0.75;
+}
+/** Put the caret in `t` on its top or bottom line, as near as possible to `x`. */
+function placeAtX(t, x, bottom) {
+  if (x === undefined || !t.textContent) return placeIn(t, bottom);
+  const box = t.getBoundingClientRect(), lh = lineHeight(t);
+  const r = document.caretRangeFromPoint && document.caretRangeFromPoint(x, bottom ? box.bottom - lh / 2 : box.top + lh / 2);
+  if (!r || !t.contains(r.startContainer)) return placeIn(t, bottom);
+  const s = sel(); s.removeAllRanges(); s.addRange(r);
+}
 
 let cur = null;
 document.addEventListener('selectionchange', () => cur && cur.onSelection());
@@ -268,10 +295,12 @@ function build() {
     update();
   }
 
-  function move(fromEl, dir) {
+  // `x` (from ↑/↓) keeps the caret's horizontal position, like moving
+  // between lines; without it (Enter), the caret goes to the start or end.
+  function move(fromEl, dir, x) {
     const o = order(), i = o.indexOf(fromEl), t = o[i + dir];
-    if (t) { t.focus(); placeIn(t, dir < 0); return; }
-    if (dir > 0) focusBlock(body.firstElementChild, false);
+    if (t) { t.focus(); placeAtX(t, x, dir < 0); return; }
+    if (dir > 0) { body.focus({ preventScroll: true }); placeAtX(body.firstElementChild, x, false); }
     else if (f.widget) focusWidget();
   }
 
@@ -291,8 +320,8 @@ function build() {
         ev.preventDefault();
         if (f.enterAddsSubtitle && k === 'title' && meta.subtitle === undefined && e.textContent) { addField('subtitle'); return; }
         move(e, 1);
-      } else if (ev.key === 'ArrowDown' && caretAtEnd(e)) { ev.preventDefault(); move(e, 1); }
-      else if (ev.key === 'ArrowUp' && caretAtStart(e)) { ev.preventDefault(); move(e, -1); }
+      } else if (ev.key === 'ArrowDown' && onEdgeLine(e, true)) { ev.preventDefault(); move(e, 1, caretRect().left); }
+      else if (ev.key === 'ArrowUp' && onEdgeLine(e, false)) { ev.preventDefault(); move(e, -1, caretRect().left); }
       else if (ev.key === 'Backspace' && e.textContent === '') {
         ev.preventDefault();
         const o = order(), prev = o[o.indexOf(e) - 1];
@@ -441,9 +470,10 @@ function build() {
       if (ev.key === 'Escape') { ev.preventDefault(); m.dismissed = m.block; closeMenu(); return; }
     }
     const b = currentBlock();
-    if (ev.key === 'ArrowUp' && b === body.firstElementChild && caretAtStart(b)) {
+    // ↑ anywhere on the body's first line goes up into the title block.
+    if (ev.key === 'ArrowUp' && b === body.firstElementChild && onEdgeLine(b, false)) {
       const o = order(), last = o[o.length - 1];
-      if (last) { ev.preventDefault(); last.focus(); placeIn(last, true); }
+      if (last) { const x = caretRect().left; ev.preventDefault(); last.focus(); placeAtX(last, x, true); }
       else if (f.widget && focusWidget()) ev.preventDefault();
     }
     if (ev.key === 'Backspace' && b && /^H[12]$/.test(b.tagName) && caretAtStart(b)) {
