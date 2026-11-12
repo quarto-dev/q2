@@ -408,6 +408,10 @@ offsets do nothing on wasm32, D moves behind the small-string step. A
 breaking `quarto-source-map` release is acceptable.
 
 Each step is separately shippable and measurable with `ast-memory`.
+Tracked under epic bd-4x6kih4c: bd-xrfun6mn (step 1), bd-09g8zl30 and
+bd-gz80k6c6 (step 2), bd-cwprgmo2 (step 3), bd-v6cug77d (step 4),
+bd-9iyh0220 (step 5), bd-r17a0k7v (wasm32 tracking), bd-jmn62md8 (text
+runs, deferred).
 
 1. **Prototype A on `Inline` only** and re-measure. This is the test of the
    central estimate; if `Vec<Inline>` does not fall to about 370 MiB, stop
