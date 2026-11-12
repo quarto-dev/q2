@@ -35,19 +35,31 @@ const ONE_PIXEL_PNG: &[u8] = &[
 
 const REFS_BIB: &str = "@book{knuth1984,\n  author = {Knuth, Donald E.},\n  title = {The TeXbook},\n  year = {1984},\n  publisher = {Addison-Wesley}\n}\n@article{doe2020,\n  author = {Doe, Jane},\n  title = {A Paper},\n  year = {2020}\n}\n";
 
-/// A directory outside `/tmp` (request mounts reject it).
+/// A project directory outside `/tmp` (request mounts reject it), with a
+/// private resource cache beside it.
 fn scratch() -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::Builder::new()
         .prefix("q2-r9-books-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .unwrap();
-    let root = std::fs::canonicalize(dir.path()).unwrap();
+    let base = std::fs::canonicalize(dir.path()).unwrap();
+    let root = base.join("project");
+    std::fs::create_dir(&root).unwrap();
+    // A typst book request mounts the extracted orange-book subtree at its
+    // cache path, and `replay_in_pandoc` writes `files` back at those paths.
+    // Against the shared per-user cache, that truncate-then-write raced with
+    // concurrent test processes reading the same files, so one could read and
+    // write back an empty `_extension.yml` for every later reader. A private
+    // cache, outside the project root as the real one is, keeps the writes
+    // in this test's own copy.
+    // SAFETY: one test per process under nextest.
+    unsafe { std::env::set_var("QUARTO_RESOURCE_CACHE_DIR", base.join("resource-cache")) };
     // The hub's VFS project root is the runtime's working directory, and
     // capture keys are relative to it (`sidecar_key`). Each nextest test is
     // its own process, so changing the directory is private to the test.
     std::env::set_current_dir(&root).unwrap();
-    // Extension bundles (orange-book) extract into the process temp dir, which is `/tmp` on Linux;
-    // the request mounts reject that prefix, so keep it under the target dir too.
+    // The process temp dir is `/tmp` on Linux and the request mounts reject
+    // that prefix, so keep temp files under the target dir too.
     // SAFETY: one test per process under nextest, as for the directory change above.
     unsafe { std::env::set_var("TMPDIR", env!("CARGO_TARGET_TMPDIR")) };
     (dir, root)

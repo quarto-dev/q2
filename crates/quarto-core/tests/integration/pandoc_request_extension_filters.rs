@@ -52,11 +52,15 @@ fn copy_tree(src: &Path, dst: &Path) {
 /// under the scratch root. Each nextest test is its own process, so setting
 /// the environment is safe.
 fn relocate_subtrees() -> (tempfile::TempDir, PathBuf) {
+    // Outside the project root, as the extracted subtrees are.
+    let (guard, root) = scratch();
+    // Extract into a private cache too, so the copy never reads the shared
+    // per-user cache while another test process might be writing it.
+    // SAFETY: one test per process under nextest.
+    unsafe { std::env::set_var("QUARTO_RESOURCE_CACHE_DIR", root.join("resource-cache")) };
     let runtime = NativeRuntime::new();
     let extracted = builtin_extension_subtree_roots(&runtime);
     let src = extracted.first().expect("an extracted subtree root");
-    // Outside the project root, as the extracted subtrees are.
-    let (guard, root) = scratch();
     let dst = root.join("subtrees");
     copy_tree(src, &dst);
     unsafe { std::env::set_var("QUARTO_EXTENSION_SUBTREES_DIR", &dst) };
