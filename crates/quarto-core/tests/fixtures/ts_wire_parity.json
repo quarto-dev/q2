@@ -19,6 +19,10 @@
   "TsExecuteOptions": {
     "cwd": "/project",
     "dependencies": true,
+    "executeEnv": {
+      "QUARTO_DOCUMENT_FILE": "doc.qmd",
+      "QUARTO_PROFILE": "prod"
+    },
     "format": {
       "identifier": {
         "base-format": "html",

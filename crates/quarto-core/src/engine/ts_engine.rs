@@ -582,6 +582,14 @@ impl TsEngine {
             units: crate::engine::ts_record::wire_units(input, ctx),
             // Set by `execute` when core offers to present (`offers_presentation`).
             presented_by: None,
+            // bd-x3h4zjhl: `project_env` is already filtered, with `QUARTO_PROFILE`
+            // applied (`EngineExecutionStage`); `execute_env` wins on a shared key.
+            execute_env: ctx
+                .project_env
+                .iter()
+                .chain(ctx.execute_env.iter())
+                .cloned()
+                .collect(),
         }
     }
 
@@ -2273,6 +2281,58 @@ mod tests {
         let options = TsEngine::build_execute_options(doc, &ctx);
         assert_eq!(options.handled_languages, handled);
         assert_eq!(options.owned_languages, vec!["julia".to_string()]);
+    }
+
+    // ── bd-x3h4zjhl: execute environment on the execute options ───────────────
+
+    fn env_ctx(project: &[(&str, &str)], execute: &[(&str, &str)]) -> ExecutionContext {
+        let pairs = |v: &[(&str, &str)]| {
+            v.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<Vec<_>>()
+        };
+        ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_project_env(pairs(project))
+        .with_execute_env(pairs(execute))
+    }
+
+    #[test]
+    fn execute_options_merge_project_env_then_execute_env() {
+        let ctx = env_ctx(
+            &[("FROM_ENVFILE", "a"), ("SHARED", "project")],
+            &[("QUARTO_DOCUMENT_FILE", "doc.qmd"), ("SHARED", "execute")],
+        );
+        let env = TsEngine::build_execute_options("", &ctx).execute_env;
+        assert_eq!(env.get("FROM_ENVFILE").map(String::as_str), Some("a"));
+        assert_eq!(
+            env.get("QUARTO_DOCUMENT_FILE").map(String::as_str),
+            Some("doc.qmd")
+        );
+        // execute_env wins on a shared key, as for knitr.
+        assert_eq!(env.get("SHARED").map(String::as_str), Some("execute"));
+        assert_eq!(env.len(), 3);
+    }
+
+    #[test]
+    fn execute_options_pass_quarto_profile_through() {
+        let ctx = env_ctx(&[("QUARTO_PROFILE", "prod")], &[]);
+        let env = TsEngine::build_execute_options("", &ctx).execute_env;
+        assert_eq!(env.get("QUARTO_PROFILE").map(String::as_str), Some("prod"));
+    }
+
+    #[test]
+    fn execute_options_env_is_empty_when_both_maps_are() {
+        let ctx = env_ctx(&[], &[]);
+        assert!(
+            TsEngine::build_execute_options("", &ctx)
+                .execute_env
+                .is_empty()
+        );
     }
 
     #[test]

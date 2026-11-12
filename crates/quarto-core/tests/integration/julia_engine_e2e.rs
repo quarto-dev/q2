@@ -1652,3 +1652,187 @@ fn j9_units_qnr_does_not_run_stay_as_source_and_the_rest_are_recorded() {
         body_excerpt(&html)
     );
 }
+
+// ── bd-x3h4zjhl: julia cells see the execute environment ──────────────────────
+//
+// q2 passes the per-document execute environment to the engine as `executeEnv`;
+// the julia engine hands it to QuartoNotebookRunner's per-run `env`. Every case
+// asserts on what the cell itself printed, read back from the rendered HTML.
+// Cells have no JSON package, so the info file is checked with `isfile` and
+// `occursin`.
+
+const EXEC_ENV_KEYS: &[&str] = &[
+    "QUARTO_PROJECT_ROOT",
+    "QUARTO_DOCUMENT_PATH",
+    "QUARTO_DOCUMENT_FILE",
+    "QUARTO_EXECUTE_INFO",
+    "QUARTO_FIG_WIDTH",
+    "QUARTO_FIG_HEIGHT",
+    "QUARTO_FIG_DPI",
+    "QUARTO_FIG_FORMAT",
+];
+
+/// A document that prints every execute variable, then whether the execute-info
+/// file exists and names this document.
+fn env_doc(yaml_extra: &str, file_name: &str) -> String {
+    let keys = EXEC_ENV_KEYS
+        .iter()
+        .map(|k| format!("\"{k}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "---\nengine: julia\nexecute:\n  fig-width: 5.5\n{yaml_extra}---\n\n\
+```{{julia}}\n\
+for k in [{keys}]\n    println(k, \"=\", get(ENV, k, \"<unset>\"))\nend\n\
+info = get(ENV, \"QUARTO_EXECUTE_INFO\", \"\")\n\
+println(\"INFO_IS_FILE=\", isfile(info))\n\
+println(\"INFO_NAMES_DOC=\", isfile(info) && occursin(\"{file_name}\", read(info, String)))\n\
+```\n"
+    )
+}
+
+/// The value a cell printed for `key` (`KEY=value` in the rendered HTML).
+fn printed(html: &str, key: &str) -> String {
+    let needle = format!("{key}=");
+    let start = html
+        .find(&needle)
+        .unwrap_or_else(|| panic!("`{needle}` not printed:\n{}", body_excerpt(html)))
+        + needle.len();
+    let end = html[start..]
+        .find(['\n', '<'])
+        .unwrap_or(html.len() - start);
+    html[start..start + end]
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+}
+
+fn same_dir(printed_path: &str, expected: &Path) -> bool {
+    std::fs::canonicalize(printed_path).ok() == std::fs::canonicalize(expected).ok()
+}
+
+/// Assert the cell saw this document's variables.
+fn assert_doc_env(html: &str, project_root: Option<&Path>, doc_dir: &Path, file_name: &str) {
+    if let Some(root) = project_root {
+        let got = printed(html, "QUARTO_PROJECT_ROOT");
+        assert!(same_dir(&got, root), "QUARTO_PROJECT_ROOT={got}");
+    }
+    let got = printed(html, "QUARTO_DOCUMENT_PATH");
+    assert!(same_dir(&got, doc_dir), "QUARTO_DOCUMENT_PATH={got}");
+    assert_eq!(printed(html, "QUARTO_DOCUMENT_FILE"), file_name);
+    assert_eq!(printed(html, "QUARTO_FIG_WIDTH"), "5.5");
+    assert_eq!(printed(html, "QUARTO_FIG_HEIGHT"), "5");
+    assert_eq!(printed(html, "QUARTO_FIG_DPI"), "96");
+    assert_eq!(printed(html, "QUARTO_FIG_FORMAT"), "png");
+    assert_eq!(printed(html, "INFO_IS_FILE"), "true");
+    assert_eq!(printed(html, "INFO_NAMES_DOC"), "true");
+}
+
+/// What an isolated live-daemon case holds for its whole body (drop order:
+/// the server guard last, so it still kills the server on a panic).
+struct IsolatedDaemon {
+    _guard: IsolatedJuliaServerGuard,
+    _home: TempDir,
+}
+
+/// Isolate the julia server as j7 does: temp `HOME`, seeded runtime dir, a guard
+/// that kills the detached server. `None` means skip (reason printed).
+fn isolated_daemon(name: &str) -> Option<IsolatedDaemon> {
+    if !cfg!(unix) {
+        eprintln!("SKIP: requires unix process groups — {name}");
+        return None;
+    }
+    if !node_available_for_tests() || !julia_available() {
+        eprintln!("SKIP: node or julia not available — {name}");
+        return None;
+    }
+    let real_home = PathBuf::from(std::env::var("HOME").ok()?);
+    let home = TempDir::new().unwrap();
+    if !seed_isolated_julia_runtime(&real_home, home.path()) {
+        eprintln!("SKIP: julia runtime dir not instantiated — {name}");
+        return None;
+    }
+    // SAFETY/scope: process-local under nextest (one process per test).
+    unsafe {
+        std::env::set_var("HOME", home.path());
+    }
+    let transport = home
+        .path()
+        .join("Library/Caches/quarto/julia/julia_transport.txt");
+    Some(IsolatedDaemon {
+        _guard: IsolatedJuliaServerGuard { transport },
+        _home: home,
+    })
+}
+
+#[test]
+#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
+fn julia_daemon_rerender_sees_the_new_execute_environment() {
+    let Some(_iso) = isolated_daemon("julia_daemon_rerender_sees_the_new_execute_environment")
+    else {
+        return;
+    };
+    let tmp = setup_julia_project();
+    let input = tmp.path().join("doc.qmd");
+
+    write_file(&input, &env_doc("  daemon: true\n", "doc.qmd"));
+    let first = render_html(&input);
+    assert_doc_env(&first, None, tmp.path(), "doc.qmd");
+    let first_info = printed(&first, "QUARTO_EXECUTE_INFO");
+
+    write_file(
+        &input,
+        &env_doc("  daemon: true\n", "doc.qmd").replace("fig-width: 5.5", "fig-width: 6.5"),
+    );
+    let second = render_html(&input);
+    assert_eq!(printed(&second, "QUARTO_FIG_WIDTH"), "6.5");
+    assert_ne!(printed(&second, "QUARTO_EXECUTE_INFO"), first_info);
+    assert_eq!(printed(&second, "INFO_IS_FILE"), "true");
+}
+
+#[test]
+#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
+fn julia_shared_worker_documents_each_see_their_own_environment() {
+    let Some(_iso) =
+        isolated_daemon("julia_shared_worker_documents_each_see_their_own_environment")
+    else {
+        return;
+    };
+    let tmp = setup_julia_project();
+    let extra = "  daemon: true\njulia:\n  share_worker_process: true\n";
+    for name in ["a.qmd", "b.qmd"] {
+        write_file(&tmp.path().join(name), &env_doc(extra, name));
+    }
+    for name in ["a.qmd", "b.qmd"] {
+        let html = render_html(&tmp.path().join(name));
+        assert_doc_env(&html, None, tmp.path(), name);
+    }
+}
+
+#[test]
+#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
+fn julia_single_file_outside_a_project_sees_the_execute_environment() {
+    if !node_available_for_tests() || !julia_available() {
+        eprintln!("SKIP: node or julia not available");
+        return;
+    }
+    let tmp = setup_julia_project();
+    let input = tmp.path().join("doc.qmd");
+    write_file(&input, &env_doc("  daemon: false\n", "doc.qmd"));
+    let html = render_html(&input);
+    assert_doc_env(&html, None, tmp.path(), "doc.qmd");
+}
+
+#[test]
+#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
+fn julia_document_path_with_a_space_sees_the_execute_environment() {
+    if !node_available_for_tests() || !julia_available() {
+        eprintln!("SKIP: node or julia not available");
+        return;
+    }
+    let tmp = setup_julia_project();
+    let input = tmp.path().join("my doc.qmd");
+    write_file(&input, &env_doc("  daemon: false\n", "my doc.qmd"));
+    let html = render_html(&input);
+    assert_doc_env(&html, None, tmp.path(), "my doc.qmd");
+}

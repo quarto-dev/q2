@@ -21,7 +21,7 @@
 //! - `TsFormatIdentifier`: explicit kebab-case per-field renames; `extension-name` omitted when `None`.
 //! - `TsMetadataValue`: untagged (each variant serializes bare).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -423,6 +423,15 @@ pub struct TsExecuteOptions {
     /// before. Defined here, not by EXR-7; nothing sets it until the Julia flip.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presented_by: Option<TsPresentedBy>,
+    /// q2-only (bd-x3h4zjhl): the environment the engine merges into the processes
+    /// that run user code. It holds the filtered project environment (`_environment`
+    /// files, `QUARTO_PROFILE`), then the per-document execute environment
+    /// (`QUARTO_DOCUMENT_*`, `QUARTO_EXECUTE_INFO`, `QUARTO_FIG_*`,
+    /// `QUARTO_PROJECT_ROOT`) on top, the same precedence knitr uses. Left out when
+    /// empty; an absent key deserializes as empty. May carry secrets from
+    /// `_environment.local`: never log it. A `BTreeMap` keeps the parity fixture stable.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub execute_env: BTreeMap<String, String>,
 }
 
 /// Who presents an engine's output (`presentedBy` on the wire).
@@ -685,6 +694,7 @@ mod tests {
             dependencies: true,
             units: None,
             presented_by: None,
+            execute_env: BTreeMap::new(),
         }
     }
 
@@ -1849,6 +1859,24 @@ mod tests {
     }
 
     #[test]
+    fn execute_env_is_absent_when_empty_and_roundtrips() {
+        let v = serde_json::to_value(make_execute_options()).unwrap();
+        assert!(v.get("executeEnv").is_none());
+        let mut opts = make_execute_options();
+        opts.execute_env
+            .insert("QUARTO_DOCUMENT_FILE".to_string(), "doc.qmd".to_string());
+        let v = serde_json::to_value(&opts).unwrap();
+        assert_eq!(v["executeEnv"]["QUARTO_DOCUMENT_FILE"], "doc.qmd");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert_eq!(back, opts);
+        // An older core's options, without the key, still deserialize.
+        let mut v = serde_json::to_value(make_execute_options()).unwrap();
+        v.as_object_mut().unwrap().remove("executeEnv");
+        let back: TsExecuteOptions = serde_json::from_value(v).unwrap();
+        assert!(back.execute_env.is_empty());
+    }
+
+    #[test]
     fn execute_options_with_units_roundtrip() {
         let mut opts = make_execute_options();
         opts.units = Some(sample_units());
@@ -2102,6 +2130,12 @@ mod tests {
         };
         let mut exec_opts = make_execute_options();
         exec_opts.units = Some(vec![full_unit.clone()]);
+        exec_opts.execute_env = [
+            ("QUARTO_DOCUMENT_FILE".to_string(), "doc.qmd".to_string()),
+            ("QUARTO_PROFILE".to_string(), "prod".to_string()),
+        ]
+        .into_iter()
+        .collect();
         let exec_result = TsExecuteResult {
             notebook: Some(serde_json::json!({"nbformat": 4})),
             record_info: Some(record_info.clone()),
