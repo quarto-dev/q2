@@ -1,6 +1,7 @@
 // Imports name the framework's leaf modules rather than its barrel, so
 // the `./title-block` export can load this component without the rest of
 // the preview framework (attribution UI, dispatchers, ...).
+import type { ReactNode } from 'react';
 import type { AstProps, BlockNode, InlineNode } from '../../framework/types';
 import { suggestMainColumn } from '../mainColumn';
 import {
@@ -10,6 +11,21 @@ import {
     getMetaPath,
 } from '../../framework/meta';
 import { inlinesToPlainText } from '../../framework/plainText';
+
+/** A title-block field that `renderField` can render. */
+export type TitleBlockField = 'title';
+
+export type PreviewTitleBlockProps = AstProps & {
+    /**
+     * Renders a field's contents in place of its plain text, inside the
+     * field's usual element (e.g. `h1.title`), so an editor can make the
+     * field editable without changing the surrounding markup. `text` is
+     * the field's plain text, or undefined when the key is absent.
+     * Returning null or undefined keeps the default rendering; anything
+     * else is rendered even when `text` is empty or absent.
+     */
+    renderField?: (field: TitleBlockField, text: string | undefined) => ReactNode;
+};
 
 /**
  * Built-in `__title_block__` synthetic-registry entry (Plan 2D Phase 7,
@@ -58,7 +74,7 @@ import { inlinesToPlainText } from '../../framework/plainText';
  * here while the Rust side renders it as HTML. Paragraph structure
  * is preserved (one `<p>` per abstract paragraph, since P2).
  */
-export const PreviewTitleBlock = ({ ast }: AstProps) => {
+export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) => {
     const meta = ast.meta ?? {};
 
     // Mirror TITLE_BLOCK_PARTIAL's $if(rendered.has-title-block)$
@@ -70,6 +86,13 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     if (!hasTitleBlock) return null;
 
     const title = extractMetaString(meta.title);
+    const titleSlot = renderField?.('title', title) ?? null;
+    const titleHeading =
+        titleSlot !== null ? (
+            <h1 className="title">{titleSlot}</h1>
+        ) : title ? (
+            <h1 className="title">{title}</h1>
+        ) : null;
     const subtitle = extractMetaString(meta.subtitle);
     const date = extractMetaString(meta.date);
     const dateModified = extractMetaString(meta['date-modified']);
@@ -118,7 +141,7 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
     if (noneStyle) {
         return (
             <header id="title-block-header">
-                {title ? <h1 className="title">{title}</h1> : null}
+                {titleHeading}
                 {subtitle ? <p className="subtitle">{subtitle}</p> : null}
                 {authors.map((author, i) => (
                     <p className="author" key={i}>
@@ -182,7 +205,7 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
             >
                 <div className="quarto-title-banner page-columns page-full">
                     <div className={`quarto-title ${bannerColumn}`}>
-                        {title ? <h1 className="title">{title}</h1> : null}
+                        {titleHeading}
                         {subtitle ? (
                             <p className="subtitle lead">{subtitle}</p>
                         ) : null}
@@ -210,7 +233,7 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
             className="quarto-title-block default"
         >
             <div className="quarto-title">
-                {title ? <h1 className="title">{title}</h1> : null}
+                {titleHeading}
                 {subtitle ? (
                     <p className="subtitle lead">{subtitle}</p>
                 ) : null}

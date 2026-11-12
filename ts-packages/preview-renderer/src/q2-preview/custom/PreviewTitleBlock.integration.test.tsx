@@ -844,3 +844,42 @@ describe('PreviewTitleBlock — user override via registry', () => {
         ).not.toBeNull();
     });
 });
+
+describe('PreviewTitleBlock — renderField slot', () => {
+    const renderDirect = (
+        meta: Record<string, unknown>,
+        renderField: Parameters<typeof PreviewTitleBlock>[0]['renderField'],
+    ) =>
+        render(
+            <PreviewTitleBlock
+                ast={JSON.parse(astJson(meta))}
+                setAst={() => {}}
+                renderField={renderField}
+            />,
+        );
+
+    it('renders the title through the slot, inside the same h1.title', () => {
+        const { container } = renderDirect(derived({ title: ms('Hello') }), (field, text) =>
+            field === 'title' ? <span data-testid="slot">{`[${text}]`}</span> : null,
+        );
+        const h1 = container.querySelector('h1.title');
+        expect(h1?.querySelector('[data-testid="slot"]')?.textContent).toBe('[Hello]');
+    });
+
+    it('keeps the h1 for an empty title when the slot renders it', () => {
+        const { container } = renderDirect(derived({ title: ms('') }), (field) =>
+            field === 'title' ? <span data-testid="slot" /> : null,
+        );
+        expect(container.querySelector('h1.title [data-testid="slot"]')).not.toBeNull();
+    });
+
+    it('falls back to the default rendering when the slot returns null', () => {
+        const { container } = renderDirect(derived({ title: ms('Hello') }), () => null);
+        expect(container.querySelector('h1.title')?.textContent).toBe('Hello');
+    });
+
+    it('renders no h1 for an empty title when the slot returns null', () => {
+        const { container } = renderDirect(derived({ title: ms('') }), () => null);
+        expect(container.querySelector('h1.title')).toBeNull();
+    });
+});
