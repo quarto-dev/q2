@@ -45,6 +45,47 @@ test.describe('typing', () => {
     expect(await editor.caret()).toMatchObject({ field: 'title', start: 24, end: 24 })
   })
 
+  test('Backspace deletes a whole character, however it is encoded', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+    // A thumbs-up with a skin tone: two code points, four UTF-16 units.
+    await page.keyboard.insertText(' 👍🏽')
+    expect(await editor.text('title')).toBe('Quarterly report 👍🏽')
+
+    await page.keyboard.press('Backspace')
+
+    expect(await editor.text('title')).toBe('Quarterly report ')
+  })
+
+  test('a correction from the system (autocorrect, a spelling suggestion) replaces the text it is for', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', "WebKit can't make the event a correction arrives as")
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+
+    // The system replaces "Quarterly" with "Yearly", wherever the caret is.
+    await editor.field('title').evaluate((el) => {
+      const text = el.firstChild!
+      const range = new StaticRange({ startContainer: text, startOffset: 0, endContainer: text, endOffset: 9 })
+      document.activeElement!.dispatchEvent(
+        new InputEvent('beforeinput', {
+          inputType: 'insertReplacementText',
+          data: 'Yearly',
+          targetRanges: [range],
+          bubbles: true,
+          cancelable: true,
+        }),
+      )
+    })
+
+    expect(await editor.text('title')).toBe('Yearly report')
+    await editor.document.expectSource(fixture('basic').replace('Quarterly report', 'Yearly report'))
+  })
+
   test('Escape does nothing', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
@@ -87,6 +128,16 @@ test.describe('Enter', () => {
 
     expect(await editor.text('title')).toBe('Quarterly report')
     expect(await editor.text('subtitle')).toBe('Third quarter')
+    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
+  })
+
+  test('Enter with a selection deletes it and moves to the next field', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.select('title', 9, 16)
+
+    await page.keyboard.press('Enter')
+
+    expect(await editor.text('title')).toBe('Quarterly')
     expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
   })
 
@@ -240,6 +291,33 @@ test.describe('undo', () => {
     await page.keyboard.press(`${mod}+z`)
 
     expect(await editor.text('title')).toBe('Quarterly reportX')
+  })
+
+  test('typing after a pause of a second is a new step', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+    await page.keyboard.type(' one')
+    await page.waitForTimeout(1200)
+    await page.keyboard.type(' two')
+
+    await page.keyboard.press(`${mod}+z`)
+    expect(await editor.text('title')).toBe('Quarterly report one')
+    await page.keyboard.press(`${mod}+z`)
+    expect(await editor.text('title')).toBe('Quarterly report')
+  })
+
+  test('an edit after an undo leaves nothing to redo', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+    await page.keyboard.press(lineEnd)
+    await page.keyboard.type(' one')
+    await page.keyboard.press(`${mod}+z`)
+    await page.keyboard.type('!')
+
+    await page.keyboard.press(`${mod}+Shift+z`)
+
+    expect(await editor.text('title')).toBe('Quarterly report!')
   })
 
   test('a paste is its own step', async ({ page }) => {

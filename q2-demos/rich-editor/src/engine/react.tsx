@@ -74,6 +74,7 @@ export interface FieldProps {
   as?: string
   /** For one line of a field: where the line starts in the field's text. */
   start?: number
+  id?: string
 }
 
 /**
@@ -87,7 +88,7 @@ export interface FieldProps {
  * An empty line of a multi-line field gets one too: Firefox's arrow keys
  * skip a block with nothing in it.
  */
-export function Field({ name, text, placeholder, className, as = 'span', start }: FieldProps) {
+export function Field({ name, text, placeholder, className, as = 'span', start, id }: FieldProps) {
   const ref = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
@@ -103,6 +104,7 @@ export function Field({ name, text, placeholder, className, as = 'span', start }
   if (text === undefined) return null
   return createElement(as, {
     ref,
+    id,
     className,
     'data-field': name,
     'data-start': start,
@@ -119,10 +121,10 @@ export interface LinesProps {
   as?: string
   /**
    * The element to render for the `index`th line, which starts with
-   * `prefix` (see `isPrefix`), and a class to add to it. Lines without a
-   * prefix are rendered as `as`.
+   * `prefix` (see `isPrefix`), with a class to add to it and its id.
+   * Lines without a prefix are rendered as `as`.
    */
-  lineElement?: (prefix: string, index: number) => { as: string; className?: string }
+  lineElement?: (prefix: string, index: number) => { as: string; className?: string; id?: string }
   /** What to show for the `index`th line that can't be edited (`ATOM`). */
   renderAtom: (index: number) => ReactNode
 }
@@ -150,6 +152,7 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
         className={[className, element?.className].filter(Boolean).join(' ') || undefined}
         as={element?.as ?? as}
         start={at + prefix.length}
+        id={element?.id}
       />
     )
   })
@@ -350,10 +353,21 @@ export function useFieldEditor(
         const text = was.slice(0, shown.start) + (el.textContent ?? '') + was.slice(shown.end)
         if (text !== was) {
           if (source.writable()) {
-            commit(
-              apply(h, { fields: { ...h.present.fields, [field]: text }, selection }, { inputType: 'insertText' }),
-              true,
+            let edited = apply(
+              h,
+              { fields: { ...h.present.fields, [field]: text }, selection },
+              { inputType: 'insertText' },
             )
+            // A change to the document that arrived meanwhile: make it to
+            // the editor's state as it was, then to the composed text too,
+            // so that what's written has both.
+            const before = base.current
+            const now = source.get()
+            if (now !== before) {
+              followDocument()
+              edited = rebaseHistory(schema, edited, before, now)
+            }
+            commit(edited, true)
           } else {
             // Not accepted: put the element's text back.
             el.textContent = was.slice(shown.start, shown.end)
@@ -426,6 +440,14 @@ export function useFieldEditor(
         const to = key.forward ? edge(fields[fields.length - 1], 'end') : edge(fields[0], 'start')
         const from = e.shiftKey ? saved.anchor : to
         selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
+        return true
+      }
+      if (granularity === 'character' && !e.shiftKey && !selection.isCollapsed) {
+        // Left and Right put the caret at that end of a selection.
+        // (Firefox's `modify` would move it a character from the focus.)
+        const range = selection.getRangeAt(0)
+        if (key.forward) selection.collapse(range.endContainer, range.endOffset)
+        else selection.collapse(range.startContainer, range.startOffset)
         return true
       }
       const x = caretX(doc, saved.focus.node, saved.focus.offset) ?? origin.getBoundingClientRect().left

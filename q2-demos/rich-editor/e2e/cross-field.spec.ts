@@ -122,6 +122,19 @@ test.describe('Backspace at a field edge', () => {
   })
 })
 
+test.describe('Delete at a field edge', () => {
+  test('at the end of the title moves to the start of the subtitle without deleting', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 16)
+
+    await page.keyboard.press('Delete')
+
+    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
+    expect(await editor.text('title')).toBe('Quarterly report')
+    expect(await editor.text('subtitle')).toBe('Third quarter')
+  })
+})
+
 test.describe('one history', () => {
   test('undo undoes the latest edit wherever the caret is', async ({ page }) => {
     const editor = await openEditor(page)
@@ -263,6 +276,40 @@ test.describe('the abstract', () => {
     expect(await caretTop()).toBeGreaterThan(before + 10)
     expect((await editor.field('abstract').boundingBox())!.height).toBeGreaterThan(field.height + 10)
     expect(await editor.caret()).toMatchObject({ field: 'abstract' })
+  })
+
+  test('pasted lines stay lines, each a paragraph in the source', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.placeCaretAtEnd('abstract')
+
+    await editor.paste('\nTwo.\nThree.')
+
+    expect(await editor.text('abstract')).toMatch(/next one\.\nTwo\.\nThree\.$/)
+    await expect.poll(() => editor.document.source()).toContain('the next one.\n\n  Two.\n\n  Three.\n---')
+  })
+
+  test('Backspace at the start of a line joins it to the line before', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.placeCaretAtEnd('abstract')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('More.')
+    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft')
+
+    await page.keyboard.press('Backspace')
+
+    expect(await editor.text('abstract')).toMatch(/next one\.More\.$/)
+    await expect.poll(() => editor.document.source()).toContain('the next one.More.')
+  })
+
+  test('select all selects the abstract first, as it does any field', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.placeCaretAtEnd('abstract')
+
+    await page.keyboard.press(`${mod}+a`)
+
+    expect(await editor.copy()).toBe(
+      'We summarise the third quarter’s results and what they mean for the next one.',
+    )
   })
 
   test('Enter at the end of the subtitle moves to the abstract', async ({ page }) => {

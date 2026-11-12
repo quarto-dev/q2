@@ -25,9 +25,9 @@ import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-fi
 import { Field, Lines, useFieldEditor } from './engine/react.tsx'
 import type { Fields, Schema } from './engine/model.ts'
 import {
-  blockClasses,
   blocksOfLines,
   bodyInputRule,
+  headingAttr,
   headingLevel,
   prefixMarkdown,
   readOnlyBlocks,
@@ -148,7 +148,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
     [readOnly],
   )
 
-  // A heading line is an `h1`-`h6`, with the classes written on its block.
+  // A heading line is an `h1`-`h6`, with its block's id and classes.
   const lineBlocks = useMemo(
     () => (ast && state.fields.body !== undefined ? blocksOfLines(ast.blocks as Node[], state.fields.body) : []),
     [ast, state.fields.body],
@@ -156,8 +156,8 @@ export function VisualEditor({ file }: VisualEditorProps) {
   const lineElement = useCallback(
     (prefix: string, index: number) => {
       const level = headingLevel(prefix)
-      const classes = blockClasses(lineBlocks[index])
-      return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined }
+      const { id, classes } = headingAttr(lineBlocks[index])
+      return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined, id }
     },
     [lineBlocks],
   )

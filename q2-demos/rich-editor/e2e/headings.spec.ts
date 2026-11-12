@@ -18,10 +18,13 @@ test.describe('showing headings', () => {
     expect(await editor.blocks()).toContain('h2: Formatted heading')
   })
 
-  test('a heading shows the classes written on it', async ({ page }) => {
+  test('a heading has its id and the classes written on it', async ({ page }) => {
     const editor = await openEditor(page, 'headings')
 
     await expect(editor.frame.locator('main > h2.qe-field')).toHaveClass(/\bbig\b/)
+    await expect(editor.frame.locator('main > h2.qe-field')).toHaveId('res')
+    // An id the source doesn't write is the one `q2 render` makes from the text.
+    await expect(editor.frame.locator('main > h3.qe-field')).toHaveId('details')
   })
 })
 

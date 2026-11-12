@@ -100,10 +100,14 @@ export function blocksOfLines(blocks: readonly Node[], text: string): (Node | un
   return matchLines(before, text.split('\n')).map((i) => (i >= 0 ? blocks[i] : undefined))
 }
 
-/** The classes written on a block, if it has attributes. */
-export function blockClasses(block: Node | undefined): string[] {
-  if (block?.t !== 'Header') return []
-  return (block.c as [number, Attr])[1][1] ?? []
+/**
+ * A heading's id (written, or made by the reader from its text) and the
+ * classes written on it.
+ */
+export function headingAttr(block: Node | undefined): { id?: string; classes: string[] } {
+  if (block?.t !== 'Header') return { classes: [] }
+  const [id, classes] = (block.c as [number, Attr])[1]
+  return { id: id || undefined, classes }
 }
 
 /** The body's text: a line per block. */
