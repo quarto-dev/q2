@@ -660,84 +660,90 @@ mod tests {
 
     #[tokio::test]
     async fn test_inlines_quoted_single() {
-        let inlines = vec![Inline::Quoted(quarto_pandoc_types::inline::Quoted {
-            quote_type: quarto_pandoc_types::inline::QuoteType::SingleQuote,
-            content: vec![Inline::Str(Str {
-                text: "quoted".to_string(),
+        let inlines = vec![Inline::Quoted(Box::new(
+            quarto_pandoc_types::inline::Quoted {
+                quote_type: quarto_pandoc_types::inline::QuoteType::SingleQuote,
+                content: vec![Inline::Str(Str {
+                    text: "quoted".to_string(),
+                    source_info: dummy_source_info(),
+                })],
                 source_info: dummy_source_info(),
-            })],
-            source_info: dummy_source_info(),
-        })];
+            },
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "'quoted'");
     }
 
     #[tokio::test]
     async fn test_inlines_quoted_double() {
-        let inlines = vec![Inline::Quoted(quarto_pandoc_types::inline::Quoted {
-            quote_type: quarto_pandoc_types::inline::QuoteType::DoubleQuote,
-            content: vec![Inline::Str(Str {
-                text: "quoted".to_string(),
+        let inlines = vec![Inline::Quoted(Box::new(
+            quarto_pandoc_types::inline::Quoted {
+                quote_type: quarto_pandoc_types::inline::QuoteType::DoubleQuote,
+                content: vec![Inline::Str(Str {
+                    text: "quoted".to_string(),
+                    source_info: dummy_source_info(),
+                })],
                 source_info: dummy_source_info(),
-            })],
-            source_info: dummy_source_info(),
-        })];
+            },
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "\"quoted\"");
     }
 
     #[tokio::test]
     async fn test_inlines_cite() {
-        let inlines = vec![Inline::Cite(quarto_pandoc_types::inline::Cite {
+        let inlines = vec![Inline::Cite(Box::new(quarto_pandoc_types::inline::Cite {
             citations: vec![],
             content: vec![Inline::Str(Str {
                 text: "citation".to_string(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "citation");
     }
 
     #[tokio::test]
     async fn test_inlines_code() {
-        let inlines = vec![Inline::Code(quarto_pandoc_types::inline::Code {
+        let inlines = vec![Inline::Code(Box::new(quarto_pandoc_types::inline::Code {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "code()".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "code()");
     }
 
     #[tokio::test]
     async fn test_inlines_math() {
-        let inlines = vec![Inline::Math(quarto_pandoc_types::inline::Math {
+        let inlines = vec![Inline::Math(Box::new(quarto_pandoc_types::inline::Math {
             math_type: quarto_pandoc_types::inline::MathType::InlineMath,
             text: "E=mc^2".to_string(),
             source_info: dummy_source_info(),
             text_source: None,
-        })];
+        }))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "E=mc^2");
     }
 
     #[tokio::test]
     async fn test_inlines_raw_inline() {
-        let inlines = vec![Inline::RawInline(quarto_pandoc_types::inline::RawInline {
-            format: "html".to_string(),
-            text: "<b>bold</b>".to_string(),
-            source_info: dummy_source_info(),
-        })];
+        let inlines = vec![Inline::RawInline(Box::new(
+            quarto_pandoc_types::inline::RawInline {
+                format: "html".to_string(),
+                text: "<b>bold</b>".to_string(),
+                source_info: dummy_source_info(),
+            },
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "<b>bold</b>");
     }
 
     #[tokio::test]
     async fn test_inlines_link() {
-        let inlines = vec![Inline::Link(quarto_pandoc_types::inline::Link {
+        let inlines = vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
                 text: "link text".to_string(),
@@ -747,31 +753,33 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "link text");
     }
 
     #[tokio::test]
     async fn test_inlines_image() {
-        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-            content: vec![Inline::Str(Str {
-                text: "alt text".to_string(),
+        let inlines = vec![Inline::Image(Box::new(
+            quarto_pandoc_types::inline::Image {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Str(Str {
+                    text: "alt text".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                target: ("image.png".to_string(), String::new()),
                 source_info: dummy_source_info(),
-            })],
-            target: ("image.png".to_string(), String::new()),
-            source_info: dummy_source_info(),
-            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-            target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-        })];
+                attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+                target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
+            },
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "alt text");
     }
 
     #[tokio::test]
     async fn test_inlines_span() {
-        let inlines = vec![Inline::Span(quarto_pandoc_types::inline::Span {
+        let inlines = vec![Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
                 text: "span content".to_string(),
@@ -779,59 +787,65 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "span content");
     }
 
     #[tokio::test]
     async fn test_inlines_insert() {
-        let inlines = vec![Inline::Insert(quarto_pandoc_types::inline::Insert {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-            content: vec![Inline::Str(Str {
-                text: "inserted".to_string(),
+        let inlines = vec![Inline::Insert(Box::new(
+            quarto_pandoc_types::inline::Insert {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Str(Str {
+                    text: "inserted".to_string(),
+                    source_info: dummy_source_info(),
+                })],
                 source_info: dummy_source_info(),
-            })],
-            source_info: dummy_source_info(),
-            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+                attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+            },
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "inserted");
     }
 
     #[tokio::test]
     async fn test_inlines_delete() {
-        let inlines = vec![Inline::Delete(quarto_pandoc_types::inline::Delete {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-            content: vec![Inline::Str(Str {
-                text: "deleted".to_string(),
+        let inlines = vec![Inline::Delete(Box::new(
+            quarto_pandoc_types::inline::Delete {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Str(Str {
+                    text: "deleted".to_string(),
+                    source_info: dummy_source_info(),
+                })],
                 source_info: dummy_source_info(),
-            })],
-            source_info: dummy_source_info(),
-            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+                attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+            },
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "deleted");
     }
 
     #[tokio::test]
     async fn test_inlines_highlight() {
-        let inlines = vec![Inline::Highlight(quarto_pandoc_types::inline::Highlight {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
-            content: vec![Inline::Str(Str {
-                text: "highlighted".to_string(),
+        let inlines = vec![Inline::Highlight(Box::new(
+            quarto_pandoc_types::inline::Highlight {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Str(Str {
+                    text: "highlighted".to_string(),
+                    source_info: dummy_source_info(),
+                })],
                 source_info: dummy_source_info(),
-            })],
-            source_info: dummy_source_info(),
-            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+                attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+            },
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "highlighted");
     }
 
     #[tokio::test]
     async fn test_inlines_edit_comment() {
-        let inlines = vec![Inline::EditComment(
+        let inlines = vec![Inline::EditComment(Box::new(
             quarto_pandoc_types::inline::EditComment {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 content: vec![Inline::Str(Str {
@@ -841,7 +855,7 @@ mod tests {
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             },
-        )];
+        ))];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "comment");
     }
@@ -870,13 +884,13 @@ mod tests {
                 text: "before".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Shortcode(quarto_pandoc_types::shortcode::Shortcode {
+            Inline::Shortcode(Box::new(quarto_pandoc_types::shortcode::Shortcode {
                 name: "test".to_string(),
                 is_escaped: false,
                 positional_args: vec![],
                 keyword_args: hashlink::LinkedHashMap::new(),
                 source_info: dummy_source_info(),
-            }),
+            })),
             Inline::Str(Str {
                 text: "after".to_string(),
                 source_info: dummy_source_info(),

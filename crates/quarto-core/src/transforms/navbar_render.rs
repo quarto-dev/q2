@@ -397,7 +397,7 @@ mod tests {
     fn nav_image(url: &str, alt: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Image, Inline, Str};
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
                 text: alt.to_string(),
@@ -407,13 +407,13 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn nav_link(url: &str, text: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Inline, Link, Str};
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -423,7 +423,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Like `run_with`, but wires a website resolver pinned at a
@@ -1091,7 +1091,7 @@ mod tests {
 
         let title_cv = ConfigValue {
             value: quarto_pandoc_types::config_value::ConfigValueKind::PandocInlines(vec![
-                Inline::Image(Image {
+                Inline::Image(Box::new(Image {
                     attr: Default::default(),
                     content: vec![Inline::Str(Str {
                         text: "Brand".to_string(),
@@ -1101,7 +1101,7 @@ mod tests {
                     source_info: SourceInfo::for_test(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                }),
+                })),
             ]),
             source_info: SourceInfo::for_test(),
             merge_op: Default::default(),

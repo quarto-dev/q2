@@ -239,7 +239,7 @@ mod tests {
 
     fn image_para(alt: &str, id: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Image(Image {
+            content: vec![Inline::Image(Box::new(Image {
                 attr: (
                     id.to_string(),
                     vec!["cls".to_string()],
@@ -257,7 +257,7 @@ mod tests {
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })],
+            }))],
             source_info: empty_source_info(),
         })
     }

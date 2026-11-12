@@ -238,7 +238,7 @@ fn collect_symbols_from_blocks(
                 }
             }
             // Paragraphs can contain inline crossref targets — labelled
-            // display equations end up as `Inline::Custom("Equation")`
+            // display equations end up as `Inline::Custom(Box::new("Equation"))`
             // inside a paragraph after `EquationLabelTransform` runs.
             Block::Paragraph(p) => {
                 collect_crossref_symbols_from_inlines(&p.content, ctx, symbols);

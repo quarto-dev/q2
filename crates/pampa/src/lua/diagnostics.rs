@@ -970,7 +970,7 @@ mod tests {
         register_quarto_namespace(&lua).unwrap();
 
         // Shortcode has source_info — Inline::source_info() returns it directly
-        let shortcode = Inline::Shortcode(Shortcode {
+        let shortcode = Inline::Shortcode(Box::new(Shortcode {
             is_escaped: false,
             name: "test".to_string(),
             positional_args: vec![],
@@ -980,7 +980,7 @@ mod tests {
                 10,
                 20,
             ),
-        });
+        }));
         let lua_inline = LuaInline::new(shortcode);
         lua.globals()
             .set("test_shortcode", lua.create_userdata(lua_inline).unwrap())

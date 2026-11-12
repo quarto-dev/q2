@@ -905,7 +905,7 @@ mod tests {
                 Block::Paragraph(Paragraph {
                     content: vec![
                         make_str("Ref."),
-                        Inline::Span(Span {
+                        Inline::Span(Box::new(Span {
                             attr: (
                                 String::new(),
                                 vec!["quarto-note-reference".to_string()],
@@ -914,7 +914,7 @@ mod tests {
                             content: vec![],
                             source_info: dummy_source_info(),
                             attr_source: AttrSourceInfo::empty(),
-                        }),
+                        })),
                     ],
                     source_info: dummy_source_info(),
                 }),

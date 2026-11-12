@@ -180,7 +180,7 @@ impl AstTransform for BookCoverImageTransform {
             .as_deref()
             .map(split_string_to_inlines)
             .unwrap_or_default();
-        let image = Inline::Image(Image {
+        let image = Inline::Image(Box::new(Image {
             attr: (
                 String::new(),
                 vec!["quarto-cover-image".to_string(), "nolightbox".to_string()],
@@ -191,7 +191,7 @@ impl AstTransform for BookCoverImageTransform {
             source_info: SourceInfo::generated(By::programmatic_config()),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let paragraph = Block::Paragraph(Paragraph {
             content: vec![image],
             source_info: SourceInfo::generated(By::programmatic_config()),

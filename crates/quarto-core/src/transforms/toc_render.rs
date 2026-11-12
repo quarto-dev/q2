@@ -225,34 +225,34 @@ pub(crate) fn strip_links_and_notes(inlines: &[Inline]) -> Inlines {
                 content: strip_links_and_notes(&s.content),
                 ..s.clone()
             })),
-            Inline::Quoted(q) => out.push(Inline::Quoted(Quoted {
+            Inline::Quoted(q) => out.push(Inline::Quoted(Box::new(Quoted {
                 content: strip_links_and_notes(&q.content),
-                ..q.clone()
-            })),
-            Inline::Cite(c) => out.push(Inline::Cite(Cite {
+                ..*q.clone()
+            }))),
+            Inline::Cite(c) => out.push(Inline::Cite(Box::new(Cite {
                 content: strip_links_and_notes(&c.content),
-                ..c.clone()
-            })),
-            Inline::Span(s) => out.push(Inline::Span(Span {
+                ..*c.clone()
+            }))),
+            Inline::Span(s) => out.push(Inline::Span(Box::new(Span {
                 content: strip_links_and_notes(&s.content),
-                ..s.clone()
-            })),
-            Inline::Insert(i) => out.push(Inline::Insert(Insert {
+                ..*s.clone()
+            }))),
+            Inline::Insert(i) => out.push(Inline::Insert(Box::new(Insert {
                 content: strip_links_and_notes(&i.content),
-                ..i.clone()
-            })),
-            Inline::Delete(d) => out.push(Inline::Delete(Delete {
+                ..*i.clone()
+            }))),
+            Inline::Delete(d) => out.push(Inline::Delete(Box::new(Delete {
                 content: strip_links_and_notes(&d.content),
-                ..d.clone()
-            })),
-            Inline::Highlight(h) => out.push(Inline::Highlight(Highlight {
+                ..*d.clone()
+            }))),
+            Inline::Highlight(h) => out.push(Inline::Highlight(Box::new(Highlight {
                 content: strip_links_and_notes(&h.content),
-                ..h.clone()
-            })),
-            Inline::EditComment(e) => out.push(Inline::EditComment(EditComment {
+                ..*h.clone()
+            }))),
+            Inline::EditComment(e) => out.push(Inline::EditComment(Box::new(EditComment {
                 content: strip_links_and_notes(&e.content),
-                ..e.clone()
-            })),
+                ..*e.clone()
+            }))),
             // An Image's `content` is alt text, not rendered children —
             // leave the node intact so the writer emits the `<img>`.
             Inline::Image(_)
@@ -744,24 +744,24 @@ mod tests {
                 text: "Using a ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
                     text: "raw".to_string(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
-            }),
+            })),
             Inline::Str(Str {
                 text: " ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Code(Code {
+            Inline::Code(Box::new(Code {
                 text: "volume".to_string(),
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-            }),
+            })),
         ];
 
         let html = render_toc_label(&title);
@@ -783,7 +783,7 @@ mod tests {
                 text: "See ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Link(Link {
+            Inline::Link(Box::new(Link {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 content: vec![Inline::Str(Str {
                     text: "the docs".to_string(),
@@ -793,7 +793,7 @@ mod tests {
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
                 target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-            }),
+            })),
             Inline::Note(Note {
                 content: vec![],
                 source_info: dummy_source_info(),

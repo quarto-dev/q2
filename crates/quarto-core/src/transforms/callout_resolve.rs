@@ -321,7 +321,7 @@ fn resolve_callout(
         Some(mut inlines) if title_is_user_supplied && !is_crossref => {
             inlines.insert(
                 0,
-                Inline::Span(quarto_pandoc_types::inline::Span {
+                Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
                     attr: make_attr(&["screen-reader-only"]),
                     content: vec![Inline::Str(Str {
                         text: callout_display_name(&callout_type, terms),
@@ -329,7 +329,7 @@ fn resolve_callout(
                     })],
                     source_info: SourceInfo::generated(By::callout()),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
             );
             Some(inlines)
         }
@@ -480,13 +480,13 @@ fn build_titled_content(
 
         // Trailing toggle button.
         header_content.push(Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "<div class=\"callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 \
                        float-end\"><i class=\"callout-toggle\"></i></div>"
                     .to_string(),
                 source_info: source_info.clone(),
-            })],
+            }))],
             source_info: source_info.clone(),
         }));
     }
@@ -574,11 +574,11 @@ fn icon_container_div(source_info: &SourceInfo, icon: bool) -> Div {
     Div {
         attr: make_attr(&["callout-icon-container"]),
         content: vec![Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: format!("<i class=\"{}\"></i>", i_class),
                 source_info: source_info.clone(),
-            })],
+            }))],
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),

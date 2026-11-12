@@ -183,18 +183,18 @@ fn register_quarto_component(lua: &Lua, quarto: &Table) -> Result<()> {
                 _ => false,
             };
             if inline {
-                let mut inlines = vec![Inline::RawInline(RawInline {
+                let mut inlines = vec![Inline::RawInline(Box::new(RawInline {
                     format: "html".to_string(),
                     text: script,
                     source_info: source_info.clone(),
-                })];
+                }))];
                 inlines.extend(peek_inlines_fuzzy(lua, content)?);
-                return lua.create_userdata(LuaInline::new(Inline::Span(Span {
+                return lua.create_userdata(LuaInline::new(Inline::Span(Box::new(Span {
                     attr,
                     content: inlines,
                     source_info,
                     attr_source: AttrSourceInfo::empty(),
-                })));
+                }))));
             }
             let mut blocks = vec![Block::RawBlock(RawBlock {
                 format: "html".to_string(),

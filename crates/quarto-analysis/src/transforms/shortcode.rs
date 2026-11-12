@@ -384,13 +384,13 @@ mod tests {
     use yaml_rust2::Yaml;
 
     fn make_meta_shortcode(key: &str) -> Inline {
-        Inline::Shortcode(Shortcode {
+        Inline::Shortcode(Box::new(Shortcode {
             is_escaped: false,
             name: "meta".to_string(),
             positional_args: vec![ShortcodeArg::String(key.to_string())],
             keyword_args: Default::default(),
             source_info: SourceInfo::for_test(),
-        })
+        }))
     }
 
     fn make_metadata(entries: Vec<(&str, &str)>) -> ConfigValue {

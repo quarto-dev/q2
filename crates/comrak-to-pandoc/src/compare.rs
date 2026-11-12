@@ -347,127 +347,127 @@ mod tests {
     #[test]
     fn test_code_inline_eq() {
         use hashlink::LinkedHashMap;
-        let a = Inline::Code(quarto_pandoc_types::Code {
+        let a = Inline::Code(Box::new(quarto_pandoc_types::Code {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
-        let b = Inline::Code(quarto_pandoc_types::Code {
+        }));
+        let b = Inline::Code(Box::new(quarto_pandoc_types::Code {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             text: "code".to_string(),
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
+        }));
         assert!(inline_eq(&a, &b));
     }
 
     #[test]
     fn test_link_eq() {
         use hashlink::LinkedHashMap;
-        let a = Inline::Link(quarto_pandoc_types::Link {
+        let a = Inline::Link(Box::new(quarto_pandoc_types::Link {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             target: ("url".to_string(), "title".to_string()),
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-        });
-        let b = Inline::Link(quarto_pandoc_types::Link {
+        }));
+        let b = Inline::Link(Box::new(quarto_pandoc_types::Link {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             target: ("url".to_string(), "title".to_string()),
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-        });
+        }));
         assert!(inline_eq(&a, &b));
     }
 
     #[test]
     fn test_image_eq() {
         use hashlink::LinkedHashMap;
-        let a = Inline::Image(quarto_pandoc_types::Image {
+        let a = Inline::Image(Box::new(quarto_pandoc_types::Image {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             target: ("img.png".to_string(), "alt".to_string()),
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-        });
-        let b = Inline::Image(quarto_pandoc_types::Image {
+        }));
+        let b = Inline::Image(Box::new(quarto_pandoc_types::Image {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             target: ("img.png".to_string(), "alt".to_string()),
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-        });
+        }));
         assert!(inline_eq(&a, &b));
     }
 
     #[test]
     fn test_span_eq() {
         use hashlink::LinkedHashMap;
-        let a = Inline::Span(quarto_pandoc_types::Span {
+        let a = Inline::Span(Box::new(quarto_pandoc_types::Span {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
-        let b = Inline::Span(quarto_pandoc_types::Span {
+        }));
+        let b = Inline::Span(Box::new(quarto_pandoc_types::Span {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
+        }));
         assert!(inline_eq(&a, &b));
     }
 
     #[test]
     fn test_quoted_eq() {
-        let a = Inline::Quoted(quarto_pandoc_types::Quoted {
+        let a = Inline::Quoted(Box::new(quarto_pandoc_types::Quoted {
             quote_type: quarto_pandoc_types::QuoteType::DoubleQuote,
             content: vec![],
             source_info: dummy_source(),
-        });
-        let b = Inline::Quoted(quarto_pandoc_types::Quoted {
+        }));
+        let b = Inline::Quoted(Box::new(quarto_pandoc_types::Quoted {
             quote_type: quarto_pandoc_types::QuoteType::DoubleQuote,
             content: vec![],
             source_info: other_source(),
-        });
+        }));
         assert!(inline_eq(&a, &b));
     }
 
     #[test]
     fn test_math_eq() {
-        let a = Inline::Math(quarto_pandoc_types::Math {
+        let a = Inline::Math(Box::new(quarto_pandoc_types::Math {
             math_type: quarto_pandoc_types::MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source(),
             text_source: None,
-        });
-        let b = Inline::Math(quarto_pandoc_types::Math {
+        }));
+        let b = Inline::Math(Box::new(quarto_pandoc_types::Math {
             math_type: quarto_pandoc_types::MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: other_source(),
             text_source: None,
-        });
+        }));
         assert!(inline_eq(&a, &b));
     }
 
     #[test]
     fn test_rawinline_eq() {
-        let a = Inline::RawInline(quarto_pandoc_types::RawInline {
+        let a = Inline::RawInline(Box::new(quarto_pandoc_types::RawInline {
             format: "html".to_string(),
             text: "<b>".to_string(),
             source_info: dummy_source(),
-        });
-        let b = Inline::RawInline(quarto_pandoc_types::RawInline {
+        }));
+        let b = Inline::RawInline(Box::new(quarto_pandoc_types::RawInline {
             format: "html".to_string(),
             text: "<b>".to_string(),
             source_info: other_source(),
-        });
+        }));
         assert!(inline_eq(&a, &b));
     }
 

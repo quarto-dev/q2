@@ -118,11 +118,13 @@ fn marker_blocks(item: &BookRenderItem) -> [Block; 2] {
     let block_text = file_metadata_marker_text(&file_metadata_json(item, &dir));
 
     let inline_marker = Block::Paragraph(Paragraph {
-        content: vec![quarto_pandoc_types::Inline::RawInline(RawInline {
-            format: "html".to_string(),
-            text: inline_text,
-            source_info: generated_source_info(),
-        })],
+        content: vec![quarto_pandoc_types::Inline::RawInline(Box::new(
+            RawInline {
+                format: "html".to_string(),
+                text: inline_text,
+                source_info: generated_source_info(),
+            },
+        ))],
         source_info: generated_source_info(),
     });
     let block_marker = Block::RawBlock(RawBlock {

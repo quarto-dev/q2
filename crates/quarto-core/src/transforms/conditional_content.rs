@@ -1256,7 +1256,7 @@ mod tests {
             "VISIBLE-DIV",
         );
         let visible_span = Block::Paragraph(quarto_pandoc_types::block::Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: attr(&["content-visible"], &[("when-format", "docx")]),
                 content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
                     text: "VISIBLE-SPAN".to_string(),
@@ -1268,7 +1268,7 @@ mod tests {
                     quarto_source_map::By::unknown(),
                 ),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
         });
         let hidden_codeblock = Block::CodeBlock(CodeBlock {
@@ -1371,7 +1371,7 @@ mod tests {
     }
 
     fn inline_span(classes: &[&str], kvs: &[(&str, &str)], text: &str) -> Inline {
-        Inline::Span(Span {
+        Inline::Span(Box::new(Span {
             attr: attr(classes, kvs),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -1379,7 +1379,7 @@ mod tests {
             })],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn inline_str(text: &str) -> Inline {
@@ -1401,7 +1401,7 @@ mod tests {
             SourceInfo::generated(By::unknown()),
         );
         node.slots.insert("content".into(), Slot::Inlines(content));
-        Inline::Custom(node)
+        Inline::Custom(Box::new(node))
     }
 
     /// `Inline::Custom` with a single `Slot::Inline` (the *singular*,
@@ -1419,7 +1419,7 @@ mod tests {
         );
         node.slots
             .insert("content".into(), Slot::Inline(Box::new(inline)));
-        Inline::Custom(node)
+        Inline::Custom(Box::new(node))
     }
 
     fn paragraph(content: Vec<Inline>) -> Block {

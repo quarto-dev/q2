@@ -13,7 +13,7 @@
 //! Span(id="eq-xxx", classes=["quarto-math-with-attribute"], [Math(DisplayMath, text)])
 //! ```
 //!
-//! This transform converts such Spans into `Inline::Custom(CustomNode("Equation"))`
+//! This transform converts such Spans into `Inline::Custom(Box::new(CustomNode("Equation")))`
 //! carrying the standard crossref triple (`ref_type`, `kind`, `identifier`) in
 //! `plain_data`, so the shared crossref indexer and resolver handle equations
 //! uniformly alongside block-level crossref targets.
@@ -167,7 +167,7 @@ fn transform_inline(inline: &mut Inline) {
     if let Inline::Span(span) = inline
         && let Some(node) = try_convert_equation(span)
     {
-        *inline = Inline::Custom(node);
+        *inline = Inline::Custom(Box::new(node));
     }
 }
 
@@ -242,21 +242,21 @@ mod tests {
     }
 
     fn display_math_span(id: &str, text: &str) -> Inline {
-        Inline::Span(Span {
+        Inline::Span(Box::new(Span {
             attr: (
                 id.to_string(),
                 vec![MATH_WITH_ATTR_CLASS.to_string()],
                 LinkedHashMap::new(),
             ),
-            content: vec![Inline::Math(Math {
+            content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: text.to_string(),
                 source_info: si(),
                 text_source: None,
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[test]
@@ -287,21 +287,21 @@ mod tests {
     #[test]
     fn leaves_non_equation_span_alone() {
         // Span with quarto-math-with-attribute but id doesn't start with eq-.
-        let mut inline = Inline::Span(Span {
+        let mut inline = Inline::Span(Box::new(Span {
             attr: (
                 "fig-plot".to_string(),
                 vec![MATH_WITH_ATTR_CLASS.to_string()],
                 LinkedHashMap::new(),
             ),
-            content: vec![Inline::Math(Math {
+            content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: "x^2".to_string(),
                 source_info: si(),
                 text_source: None,
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         transform_inline(&mut inline);
         assert!(matches!(inline, Inline::Span(_)));
     }
@@ -309,42 +309,42 @@ mod tests {
     #[test]
     fn leaves_inline_math_alone() {
         // InlineMath (not DisplayMath) should not be converted.
-        let mut inline = Inline::Span(Span {
+        let mut inline = Inline::Span(Box::new(Span {
             attr: (
                 "eq-inline".to_string(),
                 vec![MATH_WITH_ATTR_CLASS.to_string()],
                 LinkedHashMap::new(),
             ),
-            content: vec![Inline::Math(Math {
+            content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::InlineMath,
                 text: "x^2".to_string(),
                 source_info: si(),
                 text_source: None,
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         transform_inline(&mut inline);
         assert!(matches!(inline, Inline::Span(_)));
     }
 
     #[test]
     fn leaves_span_without_marker_class() {
-        let mut inline = Inline::Span(Span {
+        let mut inline = Inline::Span(Box::new(Span {
             attr: (
                 "eq-foo".to_string(),
                 vec!["other-class".to_string()],
                 LinkedHashMap::new(),
             ),
-            content: vec![Inline::Math(Math {
+            content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: "x".to_string(),
                 source_info: si(),
                 text_source: None,
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         transform_inline(&mut inline);
         assert!(matches!(inline, Inline::Span(_)));
     }

@@ -432,7 +432,7 @@ fn with_number_label(
     order: u64,
     source_info: &SourceInfo,
 ) -> Vec<Block> {
-    let label = Inline::Span(Span {
+    let label = Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec![LABEL_CLASS.to_string()],
@@ -446,7 +446,7 @@ fn with_number_label(
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
     let sep = Inline::Str(Str {
         text: ": ".to_string(),
         source_info: source_info.clone(),
@@ -628,7 +628,7 @@ mod tests {
 
     fn source_link(text: &str, href: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Link(Link {
+            content: vec![Inline::Link(Box::new(Link {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![Inline::Str(Str {
                     text: text.to_string(),
@@ -638,7 +638,7 @@ mod tests {
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })],
+            }))],
             source_info: dummy_source_info(),
         })
     }

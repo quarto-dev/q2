@@ -150,11 +150,11 @@ fn generated() -> SourceInfo {
 }
 
 fn raw_inline(text: String) -> Inline {
-    Inline::RawInline(RawInline {
+    Inline::RawInline(Box::new(RawInline {
         format: "typst".to_string(),
         text,
         source_info: generated(),
-    })
+    }))
 }
 
 fn raw_block(text: String) -> Block {

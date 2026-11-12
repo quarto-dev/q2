@@ -23,9 +23,8 @@ use crate::pandoc::block::{
     OrderedList, Paragraph, Plain, RawBlock,
 };
 use crate::pandoc::inline::{
-    Cite, Code, Delete, EditComment, Emph, Highlight, Image, Inline, Inlines, Insert, Link, Math,
-    NoteReference, QuoteType, Quoted, RawInline, SmallCaps, Span, Strikeout, Strong, Subscript,
-    Superscript, Underline,
+    Code, Emph, Inline, Inlines, Math, NoteReference, QuoteType, Quoted, RawInline, SmallCaps,
+    Strikeout, Strong, Subscript, Superscript, Underline,
 };
 use crate::pandoc::table::Table;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
@@ -105,14 +104,15 @@ fn write_inline<T: std::io::Write>(
         Inline::Superscript(Superscript { content, .. }) => write_inlines(content, buf, ctx)?,
         Inline::Subscript(Subscript { content, .. }) => write_inlines(content, buf, ctx)?,
         Inline::SmallCaps(SmallCaps { content, .. }) => write_inlines(content, buf, ctx)?,
-        Inline::Span(Span { content, .. }) => write_inlines(content, buf, ctx)?,
+        Inline::Span(span) => write_inlines(&span.content, buf, ctx)?,
 
         // Quoted: use actual quote characters
-        Inline::Quoted(Quoted {
-            quote_type,
-            content,
-            ..
-        }) => {
+        Inline::Quoted(quoted) => {
+            let Quoted {
+                quote_type,
+                content,
+                ..
+            } = &**quoted;
             let (open, close) = match quote_type {
                 QuoteType::SingleQuote => ('\u{2018}', '\u{2019}'), // ' '
                 QuoteType::DoubleQuote => ('\u{201C}', '\u{201D}'), // " "
@@ -123,31 +123,34 @@ fn write_inline<T: std::io::Write>(
         }
 
         // Code: mimic markdown with backticks
-        Inline::Code(Code { text, .. }) => {
+        Inline::Code(code) => {
+            let Code { text, .. } = &**code;
             write!(buf, "`{}`", text)?;
         }
 
         // Math: output raw TeX
-        Inline::Math(Math { text, .. }) => {
+        Inline::Math(math) => {
+            let Math { text, .. } = &**math;
             write!(buf, "{}", text)?;
         }
 
         // Link/Image: recurse into content only (no ![], [] markers)
-        Inline::Link(Link { content, .. }) => write_inlines(content, buf, ctx)?,
-        Inline::Image(Image { content, .. }) => write_inlines(content, buf, ctx)?,
+        Inline::Link(link) => write_inlines(&link.content, buf, ctx)?,
+        Inline::Image(image) => write_inlines(&image.content, buf, ctx)?,
 
         // Cite: recurse into content
-        Inline::Cite(Cite { content, .. }) => write_inlines(content, buf, ctx)?,
+        Inline::Cite(cite) => write_inlines(&cite.content, buf, ctx)?,
 
         // Note: skip (no warning - expected behavior)
         Inline::Note(_) => {}
 
         // RawInline: echo if 'plaintext', else drop with warning
-        Inline::RawInline(RawInline {
-            format,
-            text,
-            source_info,
-        }) => {
+        Inline::RawInline(raw) => {
+            let RawInline {
+                format,
+                text,
+                source_info,
+            } = &**raw;
             if format == "plaintext" {
                 write!(buf, "{}", text)?;
             } else {
@@ -156,10 +159,10 @@ fn write_inline<T: std::io::Write>(
         }
 
         // CriticMarkup extensions: recurse into content
-        Inline::Insert(Insert { content, .. }) => write_inlines(content, buf, ctx)?,
-        Inline::Delete(Delete { content, .. }) => write_inlines(content, buf, ctx)?,
-        Inline::Highlight(Highlight { content, .. }) => write_inlines(content, buf, ctx)?,
-        Inline::EditComment(EditComment { content, .. }) => write_inlines(content, buf, ctx)?,
+        Inline::Insert(insert) => write_inlines(&insert.content, buf, ctx)?,
+        Inline::Delete(delete) => write_inlines(&delete.content, buf, ctx)?,
+        Inline::Highlight(highlight) => write_inlines(&highlight.content, buf, ctx)?,
+        Inline::EditComment(comment) => write_inlines(&comment.content, buf, ctx)?,
 
         // Quarto extensions: drop (Shortcode and Attr don't have source_info)
         Inline::Shortcode(_) => {
@@ -474,12 +477,12 @@ mod tests {
 
     #[test]
     fn test_code_with_backticks() {
-        let inlines = vec![Inline::Code(Code {
+        let inlines = vec![Inline::Code(Box::new(Code {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "code".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "`code`");
         assert!(diags.is_empty());
@@ -487,11 +490,11 @@ mod tests {
 
     #[test]
     fn test_quoted_with_smart_quotes() {
-        let inlines = vec![Inline::Quoted(Quoted {
+        let inlines = vec![Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::DoubleQuote,
             content: vec![make_str("quoted")],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "\u{201C}quoted\u{201D}");
         assert!(diags.is_empty());
@@ -499,11 +502,11 @@ mod tests {
 
     #[test]
     fn test_raw_inline_plaintext_format() {
-        let inlines = vec![Inline::RawInline(RawInline {
+        let inlines = vec![Inline::RawInline(Box::new(RawInline {
             format: "plaintext".to_string(),
             text: "raw text".to_string(),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "raw text");
         assert!(diags.is_empty());
@@ -511,11 +514,11 @@ mod tests {
 
     #[test]
     fn test_raw_inline_html_dropped_with_warning() {
-        let inlines = vec![Inline::RawInline(RawInline {
+        let inlines = vec![Inline::RawInline(Box::new(RawInline {
             format: "html".to_string(),
             text: "<b>bold</b>".to_string(),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
@@ -698,12 +701,12 @@ mod tests {
 
     #[test]
     fn test_span_stripped() {
-        let inlines = vec![Inline::Span(Span {
+        let inlines = vec![Inline::Span(Box::new(Span {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("span content")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "span content");
         assert!(diags.is_empty());
@@ -711,11 +714,11 @@ mod tests {
 
     #[test]
     fn test_quoted_single_quotes() {
-        let inlines = vec![Inline::Quoted(Quoted {
+        let inlines = vec![Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::SingleQuote,
             content: vec![make_str("quoted")],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         // Single quotes: ' (U+2018) and ' (U+2019)
         assert_eq!(result, "\u{2018}quoted\u{2019}");
@@ -724,12 +727,12 @@ mod tests {
 
     #[test]
     fn test_math_inline() {
-        let inlines = vec![Inline::Math(Math {
+        let inlines = vec![Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "E = mc^2".to_string(),
             source_info: dummy_source_info(),
             text_source: None,
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "E = mc^2");
         assert!(diags.is_empty());
@@ -737,14 +740,14 @@ mod tests {
 
     #[test]
     fn test_link_content_only() {
-        let inlines = vec![Inline::Link(Link {
+        let inlines = vec![Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("link text")],
             target: ("https://example.com".to_string(), String::new()),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "link text");
         assert!(diags.is_empty());
@@ -752,14 +755,14 @@ mod tests {
 
     #[test]
     fn test_image_content_only() {
-        let inlines = vec![Inline::Image(Image {
+        let inlines = vec![Inline::Image(Box::new(Image {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("alt text")],
             target: ("image.png".to_string(), String::new()),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "alt text");
         assert!(diags.is_empty());
@@ -767,11 +770,11 @@ mod tests {
 
     #[test]
     fn test_cite_content() {
-        let inlines = vec![Inline::Cite(Cite {
+        let inlines = vec![Inline::Cite(Box::new(Cite {
             citations: vec![],
             content: vec![make_str("citation content")],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "citation content");
         assert!(diags.is_empty());
@@ -798,12 +801,12 @@ mod tests {
 
     #[test]
     fn test_insert_stripped() {
-        let inlines = vec![Inline::Insert(Insert {
+        let inlines = vec![Inline::Insert(Box::new(Insert {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("inserted")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "inserted");
         assert!(diags.is_empty());
@@ -811,12 +814,12 @@ mod tests {
 
     #[test]
     fn test_delete_stripped() {
-        let inlines = vec![Inline::Delete(Delete {
+        let inlines = vec![Inline::Delete(Box::new(Delete {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("deleted")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "deleted");
         assert!(diags.is_empty());
@@ -824,12 +827,12 @@ mod tests {
 
     #[test]
     fn test_highlight_stripped() {
-        let inlines = vec![Inline::Highlight(Highlight {
+        let inlines = vec![Inline::Highlight(Box::new(Highlight {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("highlighted")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "highlighted");
         assert!(diags.is_empty());
@@ -837,12 +840,12 @@ mod tests {
 
     #[test]
     fn test_edit_comment_stripped() {
-        let inlines = vec![Inline::EditComment(EditComment {
+        let inlines = vec![Inline::EditComment(Box::new(EditComment {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str("comment")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "comment");
         assert!(diags.is_empty());
@@ -854,13 +857,13 @@ mod tests {
 
         let inlines = vec![
             make_str("before"),
-            Inline::Shortcode(Shortcode {
+            Inline::Shortcode(Box::new(Shortcode {
                 is_escaped: false,
                 name: "include".to_string(),
                 positional_args: vec![],
                 keyword_args: hashlink::LinkedHashMap::new(),
                 source_info: dummy_source_info(),
-            }),
+            })),
             make_str("after"),
         ];
         let (result, diags) = inlines_to_string(&inlines);
@@ -885,7 +888,7 @@ mod tests {
     fn test_attr_inline_silently_dropped() {
         let inlines = vec![
             make_str("text"),
-            Inline::Attr(crate::pandoc::inline::InlineAttr::new(
+            Inline::Attr(Box::new(crate::pandoc::inline::InlineAttr::new(
                 (
                     "id".to_string(),
                     vec!["class".to_string()],
@@ -893,7 +896,7 @@ mod tests {
                 ),
                 crate::pandoc::attr::AttrSourceInfo::empty(),
                 quarto_source_map::SourceInfo::for_test(),
-            )),
+            ))),
         ];
         let (result, diags) = inlines_to_string(&inlines);
         // Attr is dropped silently (uses AttrSourceInfo, not SourceInfo)
@@ -905,13 +908,13 @@ mod tests {
     fn test_custom_inline_with_warning() {
         use crate::pandoc::custom::CustomNode;
 
-        let inlines = vec![Inline::Custom(CustomNode {
+        let inlines = vec![Inline::Custom(Box::new(CustomNode {
             type_name: "TestCustom".to_string(),
             slots: hashlink::LinkedHashMap::new(),
             plain_data: serde_json::Value::Null,
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);

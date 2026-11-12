@@ -352,7 +352,7 @@ fn write_inline<T: std::io::Write>(
         }
         Inline::Shortcode(shortcode) => {
             // Convert shortcode to span representation for native format output
-            let span = shortcode_to_span(shortcode.clone());
+            let span = shortcode_to_span(*shortcode.clone());
             write!(buf, "Span ")?;
             write_native_attr(&span.attr, buf)?;
             write!(buf, " ")?;

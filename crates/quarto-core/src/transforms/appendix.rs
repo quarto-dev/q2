@@ -483,7 +483,7 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
                 text: "For attribution, please cite this work as: ".to_string(),
                 source_info: source_info.clone(),
             }),
-            Inline::Link(Link {
+            Inline::Link(Box::new(Link {
                 attr: (String::new(), Vec::new(), LinkedHashMap::new()),
                 content: vec![Inline::Str(Str {
                     text: url.clone(),
@@ -493,7 +493,7 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-            }),
+            })),
         ]
     } else {
         // If no URL, just note that citation info is available

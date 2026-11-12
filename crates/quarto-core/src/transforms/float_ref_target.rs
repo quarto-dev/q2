@@ -837,7 +837,7 @@ mod tests {
             attrs.insert(k.to_string(), v.to_string());
         }
         Block::Plain(Plain {
-            content: vec![Inline::Image(Image {
+            content: vec![Inline::Image(Box::new(Image {
                 attr: (
                     String::new(),
                     classes.into_iter().map(String::from).collect(),
@@ -848,7 +848,7 @@ mod tests {
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
         })
     }

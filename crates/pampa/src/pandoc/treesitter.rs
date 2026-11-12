@@ -670,7 +670,7 @@ fn process_native_inline<T: Write>(
                 // Multiple inlines need to be wrapped in a Span
                 // This shouldn't normally happen in practice, but handle it gracefully
                 use crate::pandoc::attr::{AttrSourceInfo, empty_attr};
-                Inline::Span(crate::pandoc::inline::Span {
+                Inline::Span(Box::new(crate::pandoc::inline::Span {
                     attr: empty_attr(),
                     attr_source: AttrSourceInfo {
                         id: None,
@@ -679,7 +679,7 @@ fn process_native_inline<T: Write>(
                     },
                     content: inlines,
                     source_info: node_source_info_fn(),
-                })
+                }))
             }
         }
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
@@ -705,7 +705,7 @@ fn process_native_inline<T: Write>(
         // see tests/cursed/002.qmd for why this cannot be parsed directly in
         // the block grammar.
         PandocNativeIntermediate::IntermediateAttr(attr, attr_source, source_info) => {
-            Inline::Attr(InlineAttr::new(attr, attr_source, source_info))
+            Inline::Attr(Box::new(InlineAttr::new(attr, attr_source, source_info)))
         }
         PandocNativeIntermediate::IntermediateUnknown(range) => {
             writeln!(
@@ -716,11 +716,11 @@ fn process_native_inline<T: Write>(
                 node_name
             )
             .unwrap();
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: node_source_info_fn(),
-            })
+            }))
         }
         other => {
             writeln!(
@@ -729,11 +729,11 @@ fn process_native_inline<T: Write>(
                 other
             )
             .unwrap();
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: node_source_info_fn(),
-            })
+            }))
         }
     }
 }
@@ -837,12 +837,12 @@ fn native_visitor<T: Write>(
             // collapse each pandoc_soft_break range to a single `\n`.
             let (text, text_source) = extract_inline_math_text(node, input_bytes, context);
 
-            PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
+            PandocNativeIntermediate::IntermediateInline(Inline::Math(Box::new(Math {
                 math_type: MathType::InlineMath,
                 text,
                 source_info: node_source_info_with_context(node, context),
                 text_source: Some(text_source),
-            }))
+            })))
         }
         "pandoc_display_math" => {
             // Extract display math content (text between $$ delimiters)
@@ -866,12 +866,12 @@ fn native_visitor<T: Write>(
             let mut builder = provenance_builder_with_context(context, content_start);
             let text = strip_continuation_prefix(content, content_start, start_col, &mut builder);
 
-            PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
+            PandocNativeIntermediate::IntermediateInline(Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text,
                 source_info: node_source_info_with_context(node, context),
                 text_source: Some(builder.finish()),
-            }))
+            })))
         }
         "pandoc_str" => {
             // Tree-sitter may include leading ASCII whitespace in the
@@ -1688,11 +1688,11 @@ fn native_visitor<T: Write>(
             // maintain correct spacing (e.g., "Hello <!-- comment --> world"
             // — the space before <!-- is part of the comment node).
             let text = node.utf8_text(input_bytes).unwrap().to_string();
-            PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+            PandocNativeIntermediate::IntermediateInline(Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text,
                 source_info: node_source_info_with_context(node, context),
-            }))
+            })))
         }
         "html_element" => {
             // Extract the text from the HTML element node
@@ -1749,7 +1749,7 @@ fn native_visitor<T: Write>(
                     context,
                 );
 
-                result.push(Inline::Link(Link {
+                result.push(Inline::Link(Box::new(Link {
                     attr: (
                         String::new(),
                         vec!["anchor".to_string()],
@@ -1769,7 +1769,7 @@ fn native_visitor<T: Write>(
                         attributes: Vec::new(),
                     },
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-                }));
+                })));
 
                 if trailing_ws > 0 {
                     let space_range = quarto_source_map::Range {
@@ -1855,11 +1855,11 @@ fn native_visitor<T: Write>(
                     }));
                 }
 
-                result.push(Inline::RawInline(RawInline {
+                result.push(Inline::RawInline(Box::new(RawInline {
                     format: "html".to_string(),
                     text,
                     source_info: trimmed_source_info,
-                }));
+                })));
 
                 if trailing_ws > 0 {
                     let space_range = quarto_source_map::Range {

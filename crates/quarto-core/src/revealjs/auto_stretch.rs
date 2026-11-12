@@ -291,7 +291,7 @@ fn hoist_figure(f: &mut Figure, fallback_id: &str) -> Vec<Block> {
     }
     let img_source = image.source_info.clone();
     let mut blocks = vec![Block::Plain(Plain {
-        content: vec![Inline::Image(image)],
+        content: vec![Inline::Image(Box::new(image))],
         source_info: img_source,
     })];
 
@@ -325,11 +325,11 @@ fn caption_paragraph(mut content: Vec<Inline>) -> Block {
         vec!["caption".to_string()],
         LinkedHashMap::new(),
     );
-    content.push(Inline::Attr(InlineAttr::new(
+    content.push(Inline::Attr(Box::new(InlineAttr::new(
         caption_attr,
         AttrSourceInfo::empty(),
         SourceInfo::generated(By::revealjs()),
-    )));
+    ))));
     Block::Paragraph(Paragraph {
         content,
         source_info: SourceInfo::generated(By::revealjs()),
@@ -519,7 +519,7 @@ mod tests {
         for (k, v) in kvs {
             m.insert(k.to_string(), v.to_string());
         }
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: (
                 String::new(),
                 classes.iter().map(|s| s.to_string()).collect(),
@@ -530,7 +530,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(inlines: Vec<Inline>) -> Block {

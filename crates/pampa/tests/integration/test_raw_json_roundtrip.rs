@@ -122,7 +122,11 @@ fn test_raw_json_roundtrip_standalone_attr() {
         blocks: vec![para(
             vec![
                 str_inline("Hello.", 0, 6),
-                Inline::Attr(InlineAttr::new(attr, AttrSourceInfo::empty(), si(8, 32))),
+                Inline::Attr(Box::new(InlineAttr::new(
+                    attr,
+                    AttrSourceInfo::empty(),
+                    si(8, 32),
+                ))),
                 str_inline("Here?", 34, 39),
             ],
             0,
@@ -174,30 +178,30 @@ fn test_raw_json_roundtrip_critic_markup() {
         meta: ConfigValue::default(),
         blocks: vec![para(
             vec![
-                Inline::Insert(Insert {
+                Inline::Insert(Box::new(Insert {
                     attr: attr.clone(),
                     content: vec![str_inline("added", 3, 8)],
                     source_info: si(0, 11),
                     attr_source: AttrSourceInfo::empty(),
-                }),
-                Inline::Delete(Delete {
+                })),
+                Inline::Delete(Box::new(Delete {
                     attr: empty_attr(),
                     content: vec![str_inline("removed", 14, 21)],
                     source_info: si(11, 24),
                     attr_source: AttrSourceInfo::empty(),
-                }),
-                Inline::Highlight(Highlight {
+                })),
+                Inline::Highlight(Box::new(Highlight {
                     attr: empty_attr(),
                     content: vec![str_inline("marked", 27, 33)],
                     source_info: si(24, 36),
                     attr_source: AttrSourceInfo::empty(),
-                }),
-                Inline::EditComment(EditComment {
+                })),
+                Inline::EditComment(Box::new(EditComment {
                     attr: empty_attr(),
                     content: vec![str_inline("why?", 39, 43)],
                     source_info: si(36, 46),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
             ],
             0,
             46,
@@ -230,7 +234,7 @@ fn test_raw_json_roundtrip_shortcode() {
     let doc = Pandoc {
         meta: ConfigValue::default(),
         blocks: vec![para(
-            vec![Inline::Shortcode(Shortcode {
+            vec![Inline::Shortcode(Box::new(Shortcode {
                 is_escaped: true,
                 name: "video".to_string(),
                 positional_args: vec![
@@ -241,7 +245,7 @@ fn test_raw_json_roundtrip_shortcode() {
                 ],
                 keyword_args,
                 source_info: si(0, 40),
-            })],
+            }))],
             0,
             40,
         )],
@@ -323,7 +327,7 @@ fn test_raw_json_roundtrip_custom_nodes() {
         meta: ConfigValue::default(),
         blocks: vec![
             Block::Custom(block_custom),
-            para(vec![Inline::Custom(inline_custom)], 31, 40),
+            para(vec![Inline::Custom(Box::new(inline_custom))], 31, 40),
         ],
     };
     assert_roundtrip_identity(&doc, &ASTContext::new());
@@ -778,7 +782,7 @@ fn test_raw_json_roundtrip_sidecar_source_infos() {
         meta: ConfigValue::default(),
         blocks: vec![para(
             vec![
-                Inline::Link(pampa::pandoc::Link {
+                Inline::Link(Box::new(pampa::pandoc::Link {
                     attr: empty_attr(),
                     content: vec![str_inline("a link", 1, 7)],
                     target: ("./hello".to_string(), "out".to_string()),
@@ -788,8 +792,8 @@ fn test_raw_json_roundtrip_sidecar_source_infos() {
                         url: Some(si(9, 16)),
                         title: Some(si(17, 22)),
                     },
-                }),
-                Inline::Cite(pampa::pandoc::Cite {
+                })),
+                Inline::Cite(Box::new(pampa::pandoc::Cite {
                     citations: vec![pampa::pandoc::Citation {
                         id: "knuth1984".to_string(),
                         prefix: vec![str_inline("see", 48, 51)],
@@ -801,7 +805,7 @@ fn test_raw_json_roundtrip_sidecar_source_infos() {
                     }],
                     content: vec![str_inline("[@knuth1984]", 47, 68)],
                     source_info: si(47, 68),
-                }),
+                })),
             ],
             0,
             68,

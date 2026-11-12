@@ -342,12 +342,12 @@ mod tests {
                 text: "Branding with ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Code(Code {
+            Inline::Code(Box::new(Code {
                 attr: empty_attr(),
                 text: "_brand.yml".to_string(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ];
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(

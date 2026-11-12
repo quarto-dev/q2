@@ -31,7 +31,11 @@ pub fn process_paragraph(
         {
             // Attributes can appear in paragraphs (e.g., after math expressions)
             // They will be processed by postprocess.rs to create Spans
-            inlines.push(Inline::Attr(InlineAttr::new(attr, attr_source, attr_si)));
+            inlines.push(Inline::Attr(Box::new(InlineAttr::new(
+                attr,
+                attr_source,
+                attr_si,
+            ))));
         }
     }
 

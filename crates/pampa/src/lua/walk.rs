@@ -151,53 +151,53 @@ pub(crate) async fn walk_inline_children<W: LuaWalker>(w: &W, inline: Inline) ->
             content: w.walk_inlines(s.content).await?,
             ..s
         }),
-        Inline::Quoted(q) => Inline::Quoted(pandoc::Quoted {
+        Inline::Quoted(q) => Inline::Quoted(Box::new(pandoc::Quoted {
             content: w.walk_inlines(q.content).await?,
-            ..q
-        }),
+            ..*q
+        })),
         Inline::Cite(c) => {
             let mut citations = Vec::with_capacity(c.citations.len());
             for citation in c.citations {
                 citations.push(walk_citation(w, citation).await?);
             }
-            Inline::Cite(pandoc::Cite {
+            Inline::Cite(Box::new(pandoc::Cite {
                 citations,
                 content: w.walk_inlines(c.content).await?,
-                ..c
-            })
+                ..*c
+            }))
         }
-        Inline::Link(l) => Inline::Link(pandoc::Link {
+        Inline::Link(l) => Inline::Link(Box::new(pandoc::Link {
             content: w.walk_inlines(l.content).await?,
-            ..l
-        }),
-        Inline::Image(i) => Inline::Image(pandoc::Image {
+            ..*l
+        })),
+        Inline::Image(i) => Inline::Image(Box::new(pandoc::Image {
             content: w.walk_inlines(i.content).await?,
-            ..i
-        }),
+            ..*i
+        })),
         Inline::Note(n) => Inline::Note(pandoc::Note {
             content: w.walk_blocks(n.content).await?,
             ..n
         }),
-        Inline::Span(s) => Inline::Span(pandoc::Span {
+        Inline::Span(s) => Inline::Span(Box::new(pandoc::Span {
             content: w.walk_inlines(s.content).await?,
-            ..s
-        }),
-        Inline::Insert(i) => Inline::Insert(pandoc::Insert {
+            ..*s
+        })),
+        Inline::Insert(i) => Inline::Insert(Box::new(pandoc::Insert {
             content: w.walk_inlines(i.content).await?,
-            ..i
-        }),
-        Inline::Delete(d) => Inline::Delete(pandoc::Delete {
+            ..*i
+        })),
+        Inline::Delete(d) => Inline::Delete(Box::new(pandoc::Delete {
             content: w.walk_inlines(d.content).await?,
-            ..d
-        }),
-        Inline::Highlight(h) => Inline::Highlight(pandoc::Highlight {
+            ..*d
+        })),
+        Inline::Highlight(h) => Inline::Highlight(Box::new(pandoc::Highlight {
             content: w.walk_inlines(h.content).await?,
-            ..h
-        }),
-        Inline::EditComment(e) => Inline::EditComment(pandoc::EditComment {
+            ..*h
+        })),
+        Inline::EditComment(e) => Inline::EditComment(Box::new(pandoc::EditComment {
             content: w.walk_inlines(e.content).await?,
-            ..e
-        }),
+            ..*e
+        })),
         // Terminal inlines (no walkable children)
         Inline::Str(_)
         | Inline::Code(_)

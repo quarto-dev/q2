@@ -879,12 +879,12 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .ok_or_else(|| JsonReadError::InvalidType("Code text must be string".to_string()))?
                 .to_string();
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Inline::Code(Code {
+            Ok(Inline::Code(Box::new(Code {
                 attr,
                 text,
                 source_info,
                 attr_source,
-            }))
+            })))
         }
         "Math" => {
             let c = obj
@@ -927,12 +927,12 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 Some(v) if !v.is_null() => Some(deserializer.from_json_ref(v)?),
                 _ => None,
             };
-            Ok(Inline::Math(Math {
+            Ok(Inline::Math(Box::new(Math {
                 math_type,
                 text,
                 source_info,
                 text_source,
-            }))
+            })))
         }
         "Underline" => {
             let c = obj
@@ -1016,11 +1016,11 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             };
 
             let content = read_inlines(&arr[1], deserializer)?;
-            Ok(Inline::Quoted(Quoted {
+            Ok(Inline::Quoted(Box::new(Quoted {
                 quote_type,
                 content,
                 source_info,
-            }))
+            })))
         }
         "Link" => {
             let c = obj
@@ -1057,14 +1057,14 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let target = (url, title);
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
-            Ok(Inline::Link(Link {
+            Ok(Inline::Link(Box::new(Link {
                 attr,
                 content,
                 target,
                 source_info,
                 attr_source,
                 target_source: read_target_source(obj.get("targetS"), deserializer)?,
-            }))
+            })))
         }
         "RawInline" => {
             let c = obj
@@ -1090,11 +1090,11 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                     JsonReadError::InvalidType("RawInline text must be string".to_string())
                 })?
                 .to_string();
-            Ok(Inline::RawInline(RawInline {
+            Ok(Inline::RawInline(Box::new(RawInline {
                 format,
                 text,
                 source_info,
-            }))
+            })))
         }
         "Image" => {
             let c = obj
@@ -1133,14 +1133,14 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let target = (url, title);
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
 
-            Ok(Inline::Image(Image {
+            Ok(Inline::Image(Box::new(Image {
                 attr,
                 content,
                 target,
                 source_info,
                 attr_source,
                 target_source: read_target_source(obj.get("targetS"), deserializer)?,
-            }))
+            })))
         }
         "Span" => {
             let c = obj
@@ -1164,12 +1164,12 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
 
             let content = read_inlines(&arr[1], deserializer)?;
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Inline::Span(Span {
+            Ok(Inline::Span(Box::new(Span {
                 attr,
                 content,
                 source_info,
                 attr_source,
-            }))
+            })))
         }
         "Note" => {
             let c = obj
@@ -1261,11 +1261,11 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             // Second element is the content inlines
             let content = read_inlines(&c_arr[1], deserializer)?;
 
-            Ok(Inline::Cite(Cite {
+            Ok(Inline::Cite(Box::new(Cite {
                 citations,
                 content,
                 source_info,
-            }))
+            })))
         }
         // Raw-json extension vocabulary (bd-en2hvrwn). Only accepted when
         // the deserializer runs in raw mode; the Pandoc-superset reader
@@ -1289,11 +1289,11 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let attr = read_attr(c)?;
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
-            Ok(Inline::Attr(InlineAttr {
+            Ok(Inline::Attr(Box::new(InlineAttr {
                 attr,
                 attr_source,
                 source_info,
-            }))
+            })))
         }
         "Insert" | "Delete" | "Highlight" | "EditComment" if deserializer.raw => {
             // Span-shaped payload: c = [attr, inlines], a = attr sources.
@@ -1313,30 +1313,30 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(&arr[1], deserializer)?;
             let attr_source = read_attr_source(obj.get("a"), deserializer)?;
             Ok(match t {
-                "Insert" => Inline::Insert(Insert {
+                "Insert" => Inline::Insert(Box::new(Insert {
                     attr,
                     content,
                     source_info,
                     attr_source,
-                }),
-                "Delete" => Inline::Delete(Delete {
+                })),
+                "Delete" => Inline::Delete(Box::new(Delete {
                     attr,
                     content,
                     source_info,
                     attr_source,
-                }),
-                "Highlight" => Inline::Highlight(Highlight {
+                })),
+                "Highlight" => Inline::Highlight(Box::new(Highlight {
                     attr,
                     content,
                     source_info,
                     attr_source,
-                }),
-                "EditComment" => Inline::EditComment(EditComment {
+                })),
+                "EditComment" => Inline::EditComment(Box::new(EditComment {
                     attr,
                     content,
                     source_info,
                     attr_source,
-                }),
+                })),
                 _ => unreachable!("guarded by the match arm pattern"),
             })
         }
@@ -1344,11 +1344,11 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            Ok(Inline::Shortcode(read_raw_shortcode_body(
+            Ok(Inline::Shortcode(Box::new(read_raw_shortcode_body(
                 c,
                 source_info,
                 deserializer,
-            )?))
+            )?)))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),
     }
@@ -1779,11 +1779,11 @@ fn fold_item_attrs(
         if crate::pandoc::attr::is_empty_attr(&attr) {
             continue;
         }
-        let node = Inline::Attr(InlineAttr::new(
+        let node = Inline::Attr(Box::new(InlineAttr::new(
             attr,
             AttrSourceInfo::empty(),
             source_info.clone(),
-        ));
+        )));
         match item.last_mut() {
             Some(Block::Paragraph(p)) => p.content.push(node),
             Some(Block::Plain(p)) => p.content.push(node),
@@ -2233,11 +2233,11 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             if let Some(attr_val) = obj.get("attr") {
                 let attr = read_attr(attr_val)?;
                 if !crate::pandoc::attr::is_empty_attr(&attr) {
-                    content.push(Inline::Attr(InlineAttr::new(
+                    content.push(Inline::Attr(Box::new(InlineAttr::new(
                         attr,
                         AttrSourceInfo::empty(),
                         source_info.clone(),
-                    )));
+                    ))));
                 }
             }
             Ok(Block::Paragraph(Paragraph {
@@ -3171,13 +3171,13 @@ fn read_custom_inline_from_span(
         slots.insert(slot_name, slot);
     }
 
-    Ok(Inline::Custom(CustomNode {
+    Ok(Inline::Custom(Box::new(CustomNode {
         type_name,
         slots,
         plain_data,
         attr,
         source_info,
-    }))
+    })))
 }
 
 #[cfg(test)]

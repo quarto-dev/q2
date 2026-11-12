@@ -276,14 +276,14 @@ mod tests {
     }
 
     fn image(classes: &[&str], kvs: &[(&str, &str)]) -> Inline {
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: attr(classes, kvs),
             content: vec![],
             target: ("wide.png".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(inlines: Vec<Inline>) -> Block {
@@ -528,25 +528,25 @@ mod tests {
                     content: vec![img()],
                     source_info: si(),
                 }),
-                Inline::Quoted(Quoted {
+                Inline::Quoted(Box::new(Quoted {
                     quote_type: QuoteType::DoubleQuote,
                     content: vec![img()],
                     source_info: si(),
-                }),
-                Inline::Span(Span {
+                })),
+                Inline::Span(Box::new(Span {
                     attr: attr(&[], &[]),
                     content: vec![img()],
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
-                }),
-                Inline::Link(Link {
+                })),
+                Inline::Link(Box::new(Link {
                     attr: attr(&[], &[]),
                     content: vec![img()],
                     target: ("x".to_string(), String::new()),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                }),
+                })),
                 Inline::Note(Note {
                     content: vec![para(vec![img()])],
                     source_info: si(),

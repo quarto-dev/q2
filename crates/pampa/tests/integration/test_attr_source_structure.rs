@@ -503,12 +503,12 @@ fn test_inline_enum_variants_with_source_fields() {
     // Verify that we can pattern match on Inline variants and access
     // their source fields where applicable
 
-    let span_inline = Inline::Span(Span {
+    let span_inline = Inline::Span(Box::new(Span {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     match span_inline {
         Inline::Span(s) => {
@@ -517,12 +517,12 @@ fn test_inline_enum_variants_with_source_fields() {
         _ => panic!("Expected Span"),
     }
 
-    let code_inline = Inline::Code(Code {
+    let code_inline = Inline::Code(Box::new(Code {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         text: "code".to_string(),
         source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     match code_inline {
         Inline::Code(c) => {
@@ -531,14 +531,14 @@ fn test_inline_enum_variants_with_source_fields() {
         _ => panic!("Expected Code"),
     }
 
-    let link_inline = Inline::Link(Link {
+    let link_inline = Inline::Link(Box::new(Link {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         target: (String::new(), String::new()),
         source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
-    });
+    }));
 
     match link_inline {
         Inline::Link(l) => {

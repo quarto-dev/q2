@@ -545,11 +545,11 @@ fn attach_ast_payloads(ast: &mut Pandoc, decls: &[ComponentDecl]) {
             let text = ast_script(&json[0]);
             span.content.insert(
                 0,
-                Inline::RawInline(quarto_pandoc_types::inline::RawInline {
+                Inline::RawInline(Box::new(quarto_pandoc_types::inline::RawInline {
                     format: "html".to_string(),
                     text,
                     source_info: span.source_info.clone(),
-                }),
+                })),
             );
         }
     });
@@ -745,12 +745,12 @@ mod tests {
 
     fn span_para(id: &str, classes: &[&str]) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: attr(id, classes),
                 content: vec![],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: SourceInfo::for_test(),
         })
     }

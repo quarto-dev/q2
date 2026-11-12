@@ -9,6 +9,15 @@ use crate::custom::CustomNode;
 use crate::shortcode::Shortcode;
 use serde::{Deserialize, Serialize};
 
+/// An inline element.
+///
+/// **Layout.** Every element of every `Vec<Inline>` occupies
+/// `size_of::<Inline>()` bytes, whichever variant it holds, and most
+/// inlines are `Str` and `Space`. So the variants whose payload is larger
+/// than `Str`'s are boxed: they are rare, and unboxed they set the size of
+/// every word and space in a document (`Link` alone made this enum 360
+/// bytes). The assertion below keeps it that way; see
+/// `claude-notes/plans/2026-11-12-ast-string-storage-study.md`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Inline {
     Str(Str),
@@ -19,39 +28,43 @@ pub enum Inline {
     Superscript(Superscript),
     Subscript(Subscript),
     SmallCaps(SmallCaps),
-    Quoted(Quoted),
-    Cite(Cite),
-    Code(Code),
+    Quoted(Box<Quoted>),
+    Cite(Box<Cite>),
+    Code(Box<Code>),
     Space(Space),
     SoftBreak(SoftBreak),
     LineBreak(LineBreak),
-    Math(Math),
-    RawInline(RawInline),
-    Link(Link),
-    Image(Image),
+    Math(Box<Math>),
+    RawInline(Box<RawInline>),
+    Link(Box<Link>),
+    Image(Box<Image>),
     Note(Note),
-    Span(Span),
+    Span(Box<Span>),
 
     // quarto extensions
     // after desugaring, these nodes should not appear in a document
-    Shortcode(Shortcode),
+    Shortcode(Box<Shortcode>),
     NoteReference(NoteReference),
     // this is used to represent commonmark attributes in the document in places
     // where they are not directly attached to a block, like in headings and tables
-    Attr(InlineAttr),
+    Attr(Box<InlineAttr>),
 
     // CriticMarkup-like extensions
-    Insert(Insert),
-    Delete(Delete),
-    Highlight(Highlight),
-    EditComment(EditComment),
+    Insert(Box<Insert>),
+    Delete(Box<Delete>),
+    Highlight(Box<Highlight>),
+    EditComment(Box<EditComment>),
 
     /// Custom node for Quarto inline extensions
     ///
     /// Parsed from Spans with special class names. When serialized to Pandoc JSON,
     /// these are converted to wrapper Spans with `__quarto_custom_node` class.
-    Custom(CustomNode),
+    Custom(Box<CustomNode>),
 }
+
+// 64 bytes on 64-bit targets, 32 on wasm32. If this fails, a variant's
+// payload has outgrown `Str`'s: box it rather than raise the bound.
+const _: () = assert!(std::mem::size_of::<Inline>() <= 8 * std::mem::size_of::<usize>());
 
 impl Inline {
     pub fn source_info(&self) -> &quarto_source_map::SourceInfo {
@@ -399,7 +412,7 @@ macro_rules! impl_as_inline {
         $(
             impl AsInline for $type {
                 fn as_inline(self) -> Inline {
-                    Inline::$type(self)
+                    Inline::$type(self.into())
                 }
             }
         )*
@@ -443,7 +456,7 @@ impl_as_inline!(
 
 impl AsInline for InlineAttr {
     fn as_inline(self) -> Inline {
-        Inline::Attr(self)
+        Inline::Attr(Box::new(self))
     }
 }
 
@@ -461,14 +474,14 @@ pub fn make_span_inline(
 ) -> Inline {
     // non-empty targets are never Underline or SmallCaps
     if !is_empty_target(&target) {
-        return Inline::Link(Link {
+        return Inline::Link(Box::new(Link {
             attr,
             content,
             target,
             source_info,
             attr_source,
             target_source,
-        });
+        }));
     }
     if attr.1.contains(&"smallcaps".to_string()) {
         let mut new_attr = attr.clone();
@@ -535,12 +548,12 @@ pub fn make_span_inline(
         });
     }
 
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr,
         content,
         source_info,
         attr_source,
-    })
+    }))
 }
 
 pub fn make_cite_inline(
@@ -592,7 +605,7 @@ pub fn make_cite_inline(
             for inline in inlines {
                 if cite.is_none() {
                     if let Inline::Cite(c) = inline {
-                        cite = Some(c);
+                        cite = Some(*c);
                     } else {
                         prefix.push(inline);
                     }
@@ -642,11 +655,11 @@ pub fn make_cite_inline(
             }
         })
         .collect();
-    Inline::Cite(Cite {
+    Inline::Cite(Box::new(Cite {
         citations,
         content: vec![],
         source_info,
-    })
+    }))
 }
 
 /// Split a string into Inlines, matching Pandoc's `B.text` from pandoc-types Builder.hs.
@@ -771,7 +784,7 @@ mod tests {
         // in unsupported contexts (e.g., grid tables)
 
         // Create a Cite with two citations already in it
-        let multi_cite = Inline::Cite(Cite {
+        let multi_cite = Inline::Cite(Box::new(Cite {
             citations: vec![
                 make_citation(
                     "knuth1984",
@@ -786,7 +799,7 @@ mod tests {
             ],
             content: vec![],
             source_info: dummy_source_info(),
-        });
+        }));
 
         // Now call make_cite_inline with content that includes this multi-citation Cite
         // along with a prefix "see"
@@ -826,11 +839,11 @@ mod tests {
     #[test]
     fn test_make_cite_inline_with_single_citation_still_works() {
         // Test that the normal case (single citation) still works
-        let single_cite = Inline::Cite(Cite {
+        let single_cite = Inline::Cite(Box::new(Cite {
             citations: vec![make_citation("knuth1984", vec![], vec![])],
             content: vec![],
             source_info: dummy_source_info(),
-        });
+        }));
 
         let content = vec![
             make_str("see"),
@@ -1118,16 +1131,16 @@ mod tests {
     #[test]
     fn test_make_cite_inline_with_semicolon_separator() {
         // Test multiple citations separated by semicolons
-        let cite1 = Inline::Cite(Cite {
+        let cite1 = Inline::Cite(Box::new(Cite {
             citations: vec![make_citation("ref1", vec![], vec![])],
             content: vec![],
             source_info: dummy_source_info(),
-        });
-        let cite2 = Inline::Cite(Cite {
+        }));
+        let cite2 = Inline::Cite(Box::new(Cite {
             citations: vec![make_citation("ref2", vec![], vec![])],
             content: vec![],
             source_info: dummy_source_info(),
-        });
+        }));
 
         let content = vec![cite1, make_str(";"), cite2];
 
@@ -1162,11 +1175,11 @@ mod tests {
             hash: 0,
             id_source: None,
         };
-        let cite = Inline::Cite(Cite {
+        let cite = Inline::Cite(Box::new(Cite {
             citations: vec![citation],
             content: vec![],
             source_info: dummy_source_info(),
-        });
+        }));
 
         let content = vec![cite];
 
@@ -1550,13 +1563,13 @@ mod tests {
     #[test]
     fn source_info_shortcode() {
         let si = test_si(1, 10, 30);
-        let inline = Inline::Shortcode(crate::shortcode::Shortcode {
+        let inline = Inline::Shortcode(Box::new(crate::shortcode::Shortcode {
             is_escaped: false,
             name: "include".into(),
             positional_args: vec![],
             keyword_args: hashlink::LinkedHashMap::new(),
             source_info: si.clone(),
-        });
+        }));
         assert_eq!(inline.source_info(), &si);
     }
 
@@ -1569,10 +1582,10 @@ mod tests {
             classes: vec![],
             attributes: vec![],
         };
-        let inline = Inline::Attr(InlineAttr::new_from_attr_source(
+        let inline = Inline::Attr(Box::new(InlineAttr::new_from_attr_source(
             ("myid".into(), vec![], LinkedHashMap::new()),
             attr_source,
-        ));
+        )));
         assert_eq!(inline.source_info(), &id_si);
     }
 
@@ -1586,10 +1599,10 @@ mod tests {
             classes: vec![Some(class_si)],
             attributes: vec![],
         };
-        let inline = Inline::Attr(InlineAttr::new_from_attr_source(
+        let inline = Inline::Attr(Box::new(InlineAttr::new_from_attr_source(
             ("myid".into(), vec!["myclass".into()], LinkedHashMap::new()),
             attr_source,
-        ));
+        )));
         // The combined source_info should be a Concat with 2 pieces
         match inline.source_info() {
             quarto_source_map::SourceInfo::Concat { pieces } => {
@@ -1602,14 +1615,14 @@ mod tests {
     #[test]
     fn source_info_link() {
         let si = test_si(4, 0, 30);
-        let inline = Inline::Link(Link {
+        let inline = Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             target: ("url".into(), String::new()),
             source_info: si.clone(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         assert_eq!(inline.source_info(), &si);
     }
 

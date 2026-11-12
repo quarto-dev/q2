@@ -51,7 +51,7 @@ fn code_block_with(class: &str, text: &str) -> Block {
 
 fn para_with_inline_code(class: &str, text: &str) -> Block {
     Block::Paragraph(Paragraph {
-        content: vec![Inline::Code(Code {
+        content: vec![Inline::Code(Box::new(Code {
             attr: (
                 String::new(),
                 vec![class.to_string()],
@@ -60,7 +60,7 @@ fn para_with_inline_code(class: &str, text: &str) -> Block {
             text: text.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })],
+        }))],
         source_info: si(),
     })
 }

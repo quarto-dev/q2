@@ -959,7 +959,7 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
         let mut title_div = None;
         match title {
             Some(title) if !title.is_empty() => {
-                let span = Inline::Span(Span {
+                let span = Inline::Span(Box::new(Span {
                     attr: (
                         String::new(),
                         Vec::new(),
@@ -971,7 +971,7 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                     content: title,
                     source_info: generated(),
                     attr_source: AttrSourceInfo::empty(),
-                });
+                }));
                 title_div = Some(div(
                     (
                         String::new(),

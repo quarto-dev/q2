@@ -77,7 +77,7 @@ pub fn crossref_target_view(block: &Block) -> Option<CrossrefTargetView<'_>> {
 /// Inline-level counterpart to [`crossref_target_view`].
 ///
 /// Inline crossref targets exist too — labelled display equations are
-/// `Inline::Custom("Equation")` with the standard plain_data triple. A
+/// `Inline::Custom(Box::new("Equation"))` with the standard plain_data triple. A
 /// walker that wants a uniform outline of all crossref targets (as the
 /// LSP outline does) must recognize both shapes.
 pub fn crossref_target_view_inline(inline: &Inline) -> Option<CrossrefTargetView<'_>> {

@@ -98,11 +98,11 @@ pub fn process_quoted(
         }
     }
 
-    let quoted_inline = Inline::Quoted(Quoted {
+    let quoted_inline = Inline::Quoted(Box::new(Quoted {
         quote_type,
         content: content_inlines,
         source_info: tight_source_info_for_node(node, context),
-    });
+    }));
 
     // Build result with injected Space nodes as needed
     let mut result = Vec::new();

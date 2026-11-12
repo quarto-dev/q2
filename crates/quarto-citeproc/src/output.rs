@@ -1398,12 +1398,12 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                         // Create attr with nocase class: (id, classes, attrs)
                         let mut attr = empty_attr();
                         attr.1.push("nocase".to_string());
-                        vec![Inline::Span(Span {
+                        vec![Inline::Span(Box::new(Span {
                             attr,
                             content: inner,
                             source_info: empty_source_info(),
                             attr_source: empty_attr_source(),
-                        })]
+                        }))]
                     }
                 }
                 Tag::NoDecoration => {
@@ -1413,12 +1413,12 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                     } else {
                         let mut attr = empty_attr();
                         attr.1.push("nodecoration".to_string());
-                        vec![Inline::Span(Span {
+                        vec![Inline::Span(Box::new(Span {
                             attr,
                             content: inner,
                             source_info: empty_source_info(),
                             attr_source: empty_attr_source(),
-                        })]
+                        }))]
                     }
                 }
                 _ => inner,
@@ -1429,14 +1429,14 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
             if content.is_empty() {
                 vec![]
             } else {
-                vec![Inline::Link(Link {
+                vec![Inline::Link(Box::new(Link {
                     attr: empty_attr(),
                     content,
                     target: (url.clone(), String::new()),
                     source_info: empty_source_info(),
                     attr_source: empty_attr_source(),
                     target_source: empty_target_source(),
-                })]
+                }))]
             }
         }
         Output::InNote(child) => {
@@ -1580,11 +1580,11 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
 
             // 8. Apply quotes
             if formatting.quotes {
-                inner = vec![Inline::Quoted(Quoted {
+                inner = vec![Inline::Quoted(Box::new(Quoted {
                     quote_type: QuoteType::DoubleQuote,
                     content: inner,
                     source_info: empty_source_info(),
-                })];
+                }))];
             }
 
             // 9. Apply prefix/suffix OUTSIDE formatting (for regular elements)

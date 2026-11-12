@@ -182,7 +182,7 @@ pub fn process_uri_autolink(
     let mut attr = (String::new(), vec![], LinkedHashMap::new());
     attr.1.push(class.to_string());
 
-    result.push(Inline::Link(Link {
+    result.push(Inline::Link(Box::new(Link {
         content: vec![Inline::Str(Str {
             text: display_text.to_string(),
             source_info: crate::pandoc::location::range_to_source_info_with_context(
@@ -204,7 +204,7 @@ pub fn process_uri_autolink(
             attributes: Vec::new(),
         },
         target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-    }));
+    })));
 
     // Add trailing space if present
     if let Some(space_range) = trailing_space_range {
@@ -254,11 +254,11 @@ fn raw_html_fallback(
         }));
     }
 
-    result.push(Inline::RawInline(RawInline {
+    result.push(Inline::RawInline(Box::new(RawInline {
         format: "html".to_string(),
         text: autolink_text.to_string(),
         source_info: trimmed_source_info,
-    }));
+    })));
 
     if let Some(space_range) = trailing_space_range {
         result.push(Inline::Space(Space {

@@ -221,7 +221,7 @@ fn parse_yaml_string_as_markdown_to_config(
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
             };
-            ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
+            ConfigValueKind::PandocInlines(vec![Inline::Span(Box::new(span))])
         }
     }
 }
@@ -403,7 +403,7 @@ fn yaml_to_config_value_at(
                             source_info: source_info.clone(),
                             attr_source: AttrSourceInfo::empty(),
                         };
-                        ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
+                        ConfigValueKind::PandocInlines(vec![Inline::Span(Box::new(span))])
                     } else if let Some(annotated) =
                         super::meta_annotations::annotated_interpretation(path)
                     {

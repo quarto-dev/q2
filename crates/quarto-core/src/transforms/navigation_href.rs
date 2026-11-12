@@ -955,27 +955,27 @@ mod tests {
     fn test_image(url: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Image, Inline};
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![],
             target: (url.to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn test_link(url: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Inline, Link};
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Default::default(),
             content: vec![],
             target: (url.to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn plain(
