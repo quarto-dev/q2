@@ -51,17 +51,18 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 .body pre { background:#f8f9fa; border:1px solid var(--line); padding:.6rem .8rem; border-radius:4px; font:14px/1.5 ui-monospace, Menlo, monospace; margin:0 0 1rem; white-space:pre-wrap; }
 .body .hint::before { content:attr(data-hint); color:var(--ph); position:absolute; pointer-events:none; }
 
-/* Option: placeholder title (collapsed when untitled, unless empty doc / hover / focus) */
-.opt-persist .title-block.untitled h1.title { height:1rem; overflow:hidden; margin:0; }
-.opt-persist .title-block.untitled h1.title:empty::before { color:transparent; }
-.opt-persist .title-block.untitled h1.title:hover,
-.opt-persist .title-block.untitled h1.title:focus,
-.opt-persist.doc-empty .title-block.untitled h1.title { height:auto; margin:0 0 .5rem; }
-.opt-persist .title-block.untitled h1.title:hover:empty::before { color:var(--ph-faint); }
-.opt-persist .title-block.untitled h1.title:focus:empty::before,
-.opt-persist.doc-empty .title-block.untitled h1.title:empty::before { color:var(--ph); }
-.opt-persist .title-block.untitled { margin-bottom:.75rem; }
-.opt-persist.doc-empty .title-block.untitled, .opt-persist .title-block.untitled:focus-within { margin-bottom:1.75rem; }
+/* Option: placeholder title. An untitled doc that opens with a body starts
+   with the title collapsed (hover or focus shows it). Once the title slot
+   has been shown (`open`) it keeps its space, so nothing shifts while you type. */
+.opt-persist .title-block.untitled:not(.open) h1.title { height:1rem; overflow:hidden; margin:0; }
+.opt-persist .title-block.untitled:not(.open) h1.title:empty::before { color:transparent; }
+.opt-persist .title-block.untitled:not(.open) h1.title:hover,
+.opt-persist .title-block.untitled:not(.open) h1.title:focus { height:auto; margin:0 0 .5rem; }
+.opt-persist .title-block.untitled:not(.open) { margin-bottom:.75rem; }
+.opt-persist .title-block.untitled:not(.open):focus-within { margin-bottom:1.75rem; }
+.opt-persist .title-block h1.title:empty::before { color:var(--ph-faint); }
+.opt-persist .title-block h1.title:empty:focus::before,
+.opt-persist.doc-empty .title-block h1.title:empty::before { color:var(--ph); }
 
 /* Option: inline widget */
 .widget { display:flex; flex-wrap:wrap; gap:2px; min-height:30px; align-items:center; opacity:0; transition:opacity .12s; margin:0 0 6px -8px; }
@@ -207,6 +208,8 @@ function build() {
   const top = el('div', 'top');
   if (f.widget) { widget = el('div', 'widget'); widget.setAttribute('role', 'toolbar'); top.append(widget); }
   const header = el('header', 'title-block'); top.append(header);
+  // Once the title slot has been shown, it keeps its space (see the CSS).
+  header.addEventListener('focusin', () => header.classList.add('open'));
   const body = el('div', 'body'); body.contentEditable = 'true';
   const menu = el('div', 'menu'); menu.hidden = true;
   page.append(top, body, menu);
@@ -214,6 +217,7 @@ function build() {
 
   for (const [tag, text] of sc.body) { const b = el(tag); b.textContent = text; body.append(b); }
   const startsEmpty = !sc.body.length && !Object.keys(meta).length;
+  if (startsEmpty || meta.title) header.classList.add('open');
   if (f.today && startsEmpty) body.contentEditable = 'false';
   else if (!body.firstElementChild) body.innerHTML = '<p><br></p>';
 
@@ -466,12 +470,14 @@ function build() {
 
   // -- derived UI --
   function hints() {
-    const empty = page.classList.contains('doc-empty');
+    // The body's placeholder depends on the body alone, so adding a title
+    // doesn't take it away.
+    const bodyEmpty = body.children.length === 1 && blank(body.firstElementChild);
     const focused = document.activeElement === body ? currentBlock() : null;
-    [...body.children].forEach((b, i) => {
+    [...body.children].forEach((b) => {
       let h = null;
       if (body.isContentEditable && blank(b) && b.tagName === 'P') {
-        if (empty && i === 0 && body.children.length === 1) h = f.slash ? 'Start writing, or type / for commands' : 'Start writing…';
+        if (bodyEmpty) h = f.slash ? 'Start writing, or type / for commands' : 'Start writing…';
         else if (f.slash && b === focused) h = 'Type / for commands';
       }
       if (b.tagName === 'H2' || b.tagName === 'H1') if (blank(b)) h = 'Heading';
