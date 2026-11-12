@@ -28,6 +28,11 @@ export interface Caret {
   x: number | null
 }
 
+export interface Position {
+  field: Field
+  offset: number
+}
+
 export class Editor {
   constructor(
     readonly page: Page,
@@ -56,26 +61,54 @@ export class Editor {
     await this.page.mouse.click(box.x + 5, box.y + box.height + 40)
   }
 
-  /** Where the caret is, as text offsets within its field. */
+  /**
+   * Where the caret is, as text offsets within its field. `field` is null
+   * when the editor doesn't have focus.
+   */
   caret(): Promise<Caret> {
     return this.frame.evaluate((selectors) => {
-      const active = document.activeElement
-      const field =
-        (Object.entries(selectors).find(([, s]) => active?.matches(s))?.[0] as Field | undefined) ?? null
+      const fieldOf = (node: Node | null) => {
+        const el = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement
+        const field = el?.closest('.qe-field')
+        const name = Object.entries(selectors).find(([, s]) => field?.matches(s))?.[0] as Field | undefined
+        return field && name ? { el: field, name } : null
+      }
       const selection = document.getSelection()!
-      if (!field || selection.rangeCount === 0) return { field, start: 0, end: 0, x: null }
-      const range = selection.getRangeAt(0)
+      const focused = (document.activeElement as HTMLElement | null)?.isContentEditable === true
+      const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+      const field = focused && range ? fieldOf(range.startContainer) : null
+      if (!field || !range) return { field: null, start: 0, end: 0, x: null }
       const prefix = document.createRange()
-      prefix.selectNodeContents(active!)
+      prefix.selectNodeContents(field.el)
       prefix.setEnd(range.startContainer, range.startOffset)
       const start = prefix.toString().length
       const rects = range.getClientRects()
       return {
-        field,
+        field: field.name,
         start,
         end: start + range.toString().length,
         x: rects.length > 0 ? rects[0].left : null,
       }
+    }, SELECTORS)
+  }
+
+  /** The selection's ends, as text offsets within their fields. */
+  selection(): Promise<{ anchor: Position; focus: Position } | null> {
+    return this.frame.evaluate((selectors) => {
+      const at = (node: Node | null, offset: number): Position | null => {
+        const el = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement
+        const field = el?.closest('.qe-field')
+        const name = Object.entries(selectors).find(([, s]) => field?.matches(s))?.[0] as Field | undefined
+        if (!field || !name || !node) return null
+        const prefix = document.createRange()
+        prefix.selectNodeContents(field)
+        prefix.setEnd(node, offset)
+        return { field: name, offset: prefix.toString().length }
+      }
+      const s = document.getSelection()!
+      const anchor = at(s.anchorNode, s.anchorOffset)
+      const focus = at(s.focusNode, s.focusOffset)
+      return anchor && focus ? { anchor, focus } : null
     }, SELECTORS)
   }
 
@@ -97,7 +130,7 @@ export class Editor {
     })
   }
 
-  /** Paste plain text into the focused field. */
+  /** Paste plain text at the caret. */
   paste(text: string) {
     return this.frame.evaluate((text) => {
       const data = new DataTransfer()

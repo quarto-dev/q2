@@ -10,7 +10,7 @@ import {
   initWasmFromBytes,
   parseQmdContent,
 } from '../quarto-synced-file/wasm.ts'
-import { setMetaText } from './meta.ts'
+import { metaText, setMetaText } from './meta.ts'
 
 type MetaValue = { t: string; c: unknown }
 
@@ -58,5 +58,14 @@ describe('setMetaText', () => {
     const before = JSON.stringify(original)
     setMetaText(original, 'title', 'x')
     expect(JSON.stringify(original)).toBe(before)
+  })
+})
+
+describe('metaText', () => {
+  it('flattens inline markup the way the title block shows it', () => {
+    const doc = parseQmdContent('---\ntitle: "*Big* `x` [news](u)"\nsubtitle: plain\n---\n')!
+    expect(metaText(doc.meta.title)).toBe('Big x news')
+    expect(metaText(doc.meta.subtitle)).toBe('plain')
+    expect(metaText(doc.meta.author)).toBeUndefined()
   })
 })

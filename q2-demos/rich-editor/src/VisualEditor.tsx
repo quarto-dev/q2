@@ -7,40 +7,24 @@
  * `PreviewTitleBlock`, from metadata derived on demand by
  * `deriveTitleBlockMeta` instead of a full render.
  *
- * Editing is local for now: edits change a local copy of the metadata,
- * with its own undo history, and never reach the source text. A change to
- * the source text (from the source pane or a collaborator) replaces the
- * local copy and clears the history.
+ * Editing is local for now: edits change a local copy of the title-block
+ * fields, with their own undo history, and never reach the source text. A
+ * change to the source text (from the source pane or a collaborator)
+ * replaces the local copy and clears the history. The editing itself is
+ * the generic engine in `engine/`.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { RustQmdJson } from '@quarto/pandoc-types'
 import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-renderer/title-block'
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
-import { EditableText, type ArrowDirection } from './editing/EditableText.tsx'
-import {
-  createHistory,
-  endGroup,
-  record,
-  redo,
-  replacePresent,
-  undo,
-  type History,
-} from './editing/history.ts'
-import { placeCaretOnLine } from './editing/lines.ts'
-import { setMetaText, type Meta } from './editing/meta.ts'
-import { undoGroup } from './editing/undoGroup.ts'
-import { setTextRange, type TextRange } from './editing/textRange.ts'
+import { Field, useFieldEditor } from './engine/react.tsx'
+import type { Fields, Schema } from './engine/model.ts'
+import { metaText, setMetaText, type Meta } from './editing/meta.ts'
 
 interface VisualEditorProps {
   ast: RustQmdJson | null
-}
-
-/** One undoable state: the metadata, and where the caret was. */
-interface EditState {
-  meta: Meta
-  caret: { field: TitleBlockField; range: TextRange } | null
 }
 
 // The page structure `q2 render` emits for an article without a TOC.
@@ -52,12 +36,14 @@ const SRCDOC = `<!doctype html>
 </div>
 </body></html>`
 
-// Editable fields render exactly like the text they replace: no focus
-// ring, no hover state. `min-height` keeps an emptied field one line tall;
-// the placeholder is positioned out of the flow so the caret sits at the
-// start of the line, not after the placeholder text.
+// The editing root and its fields render exactly like the text they
+// replace: no focus ring, no hover state. `pre-wrap` keeps a trailing
+// space a caret position, as in the source text. `min-height` keeps an
+// emptied field one line tall; the placeholder is positioned out of the flow so
+// the caret sits at the start of the line, not after the placeholder text.
 const EDITING_CSS = `
-.qe-field { display: block; position: relative; min-height: 1lh; outline: none; }
+#title-block-header[contenteditable] { outline: none; }
+.qe-field { display: block; position: relative; min-height: 1lh; outline: none; white-space: pre-wrap; }
 .qe-field:empty::before {
   content: attr(data-placeholder);
   position: absolute;
@@ -65,15 +51,16 @@ const EDITING_CSS = `
   color: #adb5bd;
 }`
 
-/** The editable fields in reading order: Enter and the arrows move along it. */
-const FIELD_ORDER: TitleBlockField[] = ['title', 'subtitle']
+/**
+ * The title block's editable fields, in reading order: Enter, Backspace at
+ * a field's start, and selections across fields follow it.
+ */
+const SCHEMA: Schema = { order: ['title', 'subtitle'] satisfies TitleBlockField[] }
 
 const PLACEHOLDERS: Record<TitleBlockField, string> = {
   title: 'Title',
   subtitle: 'Subtitle',
 }
-
-const START = { start: 0, end: 0 }
 
 const noop = () => {}
 
@@ -103,115 +90,28 @@ export function VisualEditor({ ast }: VisualEditorProps) {
     return () => style.remove()
   }, [frameDoc])
 
-  const { history, edit, leave, step, addEmpty } = useEditHistory(ast)
-  const fields = useRef(new Map<TitleBlockField, HTMLElement>())
-
-  // After an undo or redo, put the caret back where it was.
-  const pendingCaret = useRef<EditState['caret']>(null)
+  // The whole title block is one editing surface; the engine keeps the
+  // caret inside the fields.
+  const [root, setRoot] = useState<HTMLElement | null>(null)
   useLayoutEffect(() => {
-    const caret = pendingCaret.current
-    pendingCaret.current = null
-    const el = caret && fields.current.get(caret.field)
-    if (!caret || !el) return
-    el.focus()
-    setTextRange(el, caret.range)
-  }, [history])
-
-  const doUndo = useCallback(() => {
-    pendingCaret.current = step('undo')
-  }, [step])
-  const doRedo = useCallback(() => {
-    pendingCaret.current = step('redo')
-  }, [step])
-
-  /**
-   * Enter: move the caret to the start of the next field, never splitting
-   * the text. A missing subtitle is added as an empty line, which goes away
-   * again if it's left empty.
-   */
-  const enter = useCallback(
-    (field: TitleBlockField) => {
-      const next = FIELD_ORDER[FIELD_ORDER.indexOf(field) + 1]
-      if (!next) return
-      const el = fields.current.get(next)
-      if (el) {
-        el.focus()
-        setTextRange(el, START)
-      } else if (next === 'subtitle') {
-        pendingCaret.current = { field: next, range: START }
-        addEmpty(next)
-      }
-    },
-    [addEmpty],
-  )
-
-  /**
-   * Arrows past a field's edge go to the nearest field that way: Up / Down
-   * keep the caret's horizontal position, Left lands at the end of the
-   * previous field and Right at the start of the next, as between
-   * paragraphs in a word processor.
-   */
-  const arrowOut = useCallback((field: TitleBlockField, direction: ArrowDirection, x: number) => {
-    const i = FIELD_ORDER.indexOf(field)
-    const forward = direction === 'down' || direction === 'right'
-    const order = forward ? FIELD_ORDER.slice(i + 1) : FIELD_ORDER.slice(0, i).reverse()
-    const target = order.map((f) => fields.current.get(f)).find((el) => el !== undefined)
-    if (!target) return false
-    if (direction === 'up' || direction === 'down') {
-      placeCaretOnLine(target, x, forward ? 'first' : 'last')
-    } else {
-      target.focus()
-      const at = forward ? 0 : (target.textContent ?? '').length
-      setTextRange(target, { start: at, end: at })
-    }
-    return true
-  }, [])
-
-  // Undo and redo with the caret outside any field.
-  useEffect(() => {
-    if (!frameDoc) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as Element | null)?.closest?.('.qe-field')) return
-      const key = e.key.toLowerCase()
-      if ((e.metaKey || e.ctrlKey) && key === 'z') {
-        e.preventDefault()
-        if (e.shiftKey) doRedo()
-        else doUndo()
-      } else if (e.ctrlKey && !e.metaKey && key === 'y') {
-        e.preventDefault()
-        doRedo()
-      }
-    }
-    frameDoc.addEventListener('keydown', onKeyDown)
-    return () => frameDoc.removeEventListener('keydown', onKeyDown)
-  }, [frameDoc, doUndo, doRedo])
+    const header = mount?.querySelector<HTMLElement>('#title-block-header') ?? null
+    if (header !== root) setRoot(header)
+  })
+  const { state, editor } = useFieldEditor(root, SCHEMA, () => fieldsFromMeta(ast?.meta), ast)
 
   const derived = useMemo(() => {
-    if (!ast || !history) return null
+    if (!ast) return null
     const start = performance.now()
-    const { meta, issues } = deriveTitleBlockMeta({ ...ast, meta: history.present.meta })
+    const { meta, issues } = deriveTitleBlockMeta({ ...ast, meta: metaWithFields(ast.meta, state.fields) })
     return { ast: { ...ast, meta }, issues, ms: performance.now() - start }
-  }, [ast, history])
+  }, [ast, state.fields])
 
   const renderField = useCallback(
-    (field: TitleBlockField, text: string | undefined) =>
-      text === undefined ? null : (
-        <EditableText
-          value={text}
-          placeholder={PLACEHOLDERS[field]}
-          onEdit={(next, inputType, before, after) => edit(field, next, inputType, before, after)}
-          onUndo={doUndo}
-          onRedo={doRedo}
-          onEnter={() => enter(field)}
-          onArrowOut={(direction, x) => arrowOut(field, direction, x)}
-          onLeave={() => leave(field)}
-          elementRef={(el) => {
-            if (el) fields.current.set(field, el)
-            else fields.current.delete(field)
-          }}
-        />
+    (field: TitleBlockField) =>
+      state.fields[field] === undefined ? null : (
+        <Field name={field} text={state.fields[field]} placeholder={PLACEHOLDERS[field]} className="qe-field" />
       ),
-    [edit, leave, enter, arrowOut, doUndo, doRedo],
+    [state.fields],
   )
 
   return (
@@ -229,7 +129,7 @@ export function VisualEditor({ ast }: VisualEditorProps) {
       <p className="status">
         {themeCss === null ? 'Compiling theme CSS… ' : ''}
         {derived && `Title block derived in ${derived.ms.toFixed(2)} ms. `}
-        {history && history.past.length > 0 && 'Local edits only; not saved to the source. '}
+        {editor.past.length > 0 && 'Local edits only; not saved to the source. '}
         {derived && derived.issues.length > 0 && ` Issues: ${derived.issues.join('; ')}`}
       </p>
       {mount && derived &&
@@ -243,82 +143,13 @@ export function VisualEditor({ ast }: VisualEditorProps) {
   )
 }
 
-/**
- * The local edit history, seeded from the source AST's metadata and reset
- * whenever the source AST changes.
- */
-function useEditHistory(ast: RustQmdJson | null) {
-  const [source, setSource] = useState(ast)
-  const [history, setHistory] = useState<History<EditState> | null>(() =>
-    ast ? createHistory({ meta: ast.meta, caret: null }) : null,
-  )
-  if (ast !== source) {
-    setSource(ast)
-    setHistory(ast ? createHistory({ meta: ast.meta, caret: null }) : null)
-  }
+function fieldsFromMeta(meta: Meta | undefined): Fields {
+  return Object.fromEntries(SCHEMA.order.map((f) => [f, metaText(meta?.[f])]))
+}
 
-  // Read by `step`, which must report the caret it moved to synchronously.
-  const latest = useRef(history)
-  latest.current = history
-
-  const edit = useCallback(
-    (
-      field: TitleBlockField,
-      text: string,
-      inputType: string,
-      before: TextRange | null,
-      after: TextRange | null,
-    ) => {
-      setHistory((h) => {
-        if (!h) return h
-        const caretAt = (range: TextRange | null) => (range ? { field, range } : null)
-        const last = h.present.caret
-        const lastAfter = last?.field === field ? last.range : null
-        return record(
-          h,
-          { meta: setMetaText(h.present.meta, field, text), caret: caretAt(after) },
-          {
-            group: undoGroup(field, inputType, before, lastAfter),
-            before: { ...h.present, caret: caretAt(before) },
-          },
-        )
-      })
-    },
-    [],
-  )
-
-  /**
-   * End the field's undo step. An emptied field is removed, without an undo
-   * step of its own: undo brings back the text that was deleted.
-   */
-  const leave = useCallback((field: TitleBlockField) => {
-    setHistory((h) => {
-      if (!h) return h
-      const value = h.present.meta[field] as { t: string; c: unknown } | undefined
-      if (value?.t === 'MetaString' && value.c === '') {
-        h = replacePresent(h, { ...h.present, meta: setMetaText(h.present.meta, field, undefined) })
-      }
-      return endGroup(h)
-    })
-  }, [])
-
-  /** Add an empty field, without an undo step (it's removed if left empty). */
-  const addEmpty = useCallback((field: TitleBlockField) => {
-    setHistory((h) => h && replacePresent(h, { ...h.present, meta: setMetaText(h.present.meta, field, '') }))
-  }, [])
-
-  /** Undo or redo; returns the caret position of the state moved to. */
-  const step = useCallback((direction: 'undo' | 'redo'): EditState['caret'] => {
-    const h = latest.current
-    if (!h) return null
-    const next = direction === 'undo' ? undo(h) : redo(h)
-    if (next === h) return null
-    latest.current = next
-    setHistory(next)
-    return next.present.caret
-  }, [])
-
-  return { history, edit, leave, step, addEmpty }
+/** The source metadata with the edited fields written over it. */
+function metaWithFields(meta: Meta, fields: Fields): Meta {
+  return SCHEMA.order.reduce((m, f) => setMetaText(m, f, fields[f]), meta)
 }
 
 /** The default theme's CSS, compiled once per page load. */
