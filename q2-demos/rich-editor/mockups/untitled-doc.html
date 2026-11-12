@@ -100,11 +100,6 @@ const LABEL = { title: 'Title', subtitle: 'Subtitle', author: 'Author', date: 'D
 const PH = { title: 'Title', subtitle: 'Subtitle', author: 'Name', date: 'e.g. 2026-11-12', abstract: 'Summarize the document' };
 
 const OPTIONS = {
-  today: {
-    name: 'Today', desc: "What the prototype does now: absent fields aren't shown and only a subtitle can be added.",
-    tips: 'Try the <b>Empty file</b> scenario: nothing to click or type into. In <b>Body, no front matter</b> there is no way to add a title.',
-    flags: { today: true, enterAddsSubtitle: true },
-  },
   persist: {
     name: 'Placeholder title', desc: 'The title slot always exists. Its placeholder shows only in an empty doc, on hover, or with the caret in it.',
     tips: '<kbd>↑</kbd> on the body’s first line enters the hidden title. Hover just above the body to see it. <kbd>Enter</kbd> in the title goes to the body (there’s no way to add a subtitle in this option).',
@@ -245,8 +240,7 @@ function build() {
   for (const [tag, text] of sc.body) { const b = el(tag); b.textContent = text; body.append(b); }
   const startsEmpty = !sc.body.length && !Object.keys(meta).length;
   if (startsEmpty || meta.title) header.classList.add('open');
-  if (f.today && startsEmpty) body.contentEditable = 'false';
-  else if (!body.firstElementChild) body.innerHTML = '<p><br></p>';
+  if (!body.firstElementChild) body.innerHTML = '<p><br></p>';
 
   const isPersistent = (k) => f.persistentTitle && k === 'title';
   const present = () => FIELDS.filter((k) => meta[k] !== undefined || isPersistent(k));
@@ -318,7 +312,6 @@ function build() {
     e.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') {
         ev.preventDefault();
-        if (f.enterAddsSubtitle && k === 'title' && meta.subtitle === undefined && e.textContent) { addField('subtitle'); return; }
         move(e, 1);
       } else if (ev.key === 'ArrowDown' && onEdgeLine(e, true)) { ev.preventDefault(); move(e, 1, caretRect().left); }
       else if (ev.key === 'ArrowUp' && onEdgeLine(e, false)) { ev.preventDefault(); move(e, -1, caretRect().left); }
@@ -552,7 +545,7 @@ function build() {
   }
 
   renderHeader();
-  if (startsEmpty && !f.today) {
+  if (startsEmpty) {
     if (f.persistentTitle) focusField('title'); else focusBlock(body.firstElementChild, false);
   }
 }
