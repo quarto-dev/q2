@@ -1,10 +1,11 @@
 /**
  * The clipboard, and drag and drop. Copy takes the text of what's
  * selected, cut takes it and deletes it as any deletion would, and paste
- * puts plain text in. Nothing can be dragged from one place to another.
+ * puts plain text in. Nothing can be dragged from one place to another,
+ * or dropped in from outside.
  */
 
-import { expect, fixture, openEditor, test, type Editor } from './helpers.ts'
+import { createDocument, expect, fixture, openEditor, test, type Editor } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 const basic = fixture('basic')
@@ -142,6 +143,24 @@ test.describe('paste', () => {
     expect(await editor.field('title').innerHTML()).toBe('Quarterly report in bold')
     await editor.document.expectSource(basic.replace('Quarterly report', 'Quarterly report in bold'))
   })
+
+  // Today the selection is deleted, as if an empty text had been pasted.
+  test.fixme('of something with no text (an image) changes nothing', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.select('title', 0, 9)
+
+    await editor.frame.evaluate(() => {
+      const data = new DataTransfer()
+      data.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'picture.png', { type: 'image/png' }))
+      const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: data })
+      document.activeElement!.dispatchEvent(event)
+    })
+    await page.waitForTimeout(300)
+
+    expect(await editor.text('title')).toBe('Quarterly report')
+    expect(editor.document.source()).toBe(basic)
+  })
 })
 
 test.describe('drag and drop', () => {
@@ -174,5 +193,52 @@ test.describe('drag and drop', () => {
     expect(await editor.text('title')).toBe('Quarterly report')
     expect(await editor.text('subtitle')).toBe('Third quarter')
     expect(editor.document.source()).toBe(basic)
+  })
+
+  test('text dragged in from outside the editor puts nothing in', async ({ page }) => {
+    const doc = await createDocument(basic)
+    await doc.open(page)
+    // With the source pane, which is outside the editor, beside it.
+    const url = new URL(page.url())
+    url.searchParams.delete('view')
+    await page.goto(url.toString())
+    const frame = page.frameLocator('iframe.visual-frame')
+    const title = frame.locator('h1.title .qe-field')
+    await expect(title).toHaveText('Quarterly report')
+    const visual = (await (await page.locator('iframe.visual-frame').elementHandle())!.contentFrame())!
+    await visual.evaluate(() => {
+      const w = window as unknown as { __dropped: number }
+      w.__dropped = 0
+      document.addEventListener('drop', () => w.__dropped++, true)
+    })
+    const source = page.locator('textarea')
+    await source.evaluate((el: HTMLTextAreaElement) => {
+      el.focus()
+      el.setSelectionRange(el.value.indexOf('Third'), el.value.indexOf('Third') + 5)
+    })
+
+    const from = (await source.boundingBox())!
+    const word = await source.evaluate((el: HTMLTextAreaElement) => {
+      // Where "Third" is: on the line of the subtitle, a few characters in.
+      const line = el.value.slice(0, el.value.indexOf('Third')).split('\n').length - 1
+      const lineHeight = parseFloat(getComputedStyle(el).lineHeight)
+      const padding = parseFloat(getComputedStyle(el).paddingTop)
+      return { y: padding + lineHeight * (line + 0.5) }
+    })
+    const startX = from.x + 12 + 8.4 * 'subtitle: '.length + 10
+    const to = (await title.boundingBox())!
+    await page.mouse.move(startX, from.y + word.y)
+    await page.mouse.down()
+    await page.waitForTimeout(700)
+    await page.mouse.move(startX + 6, from.y + word.y + 3, { steps: 3 })
+    await page.mouse.move(to.x + 40, to.y + to.height / 2, { steps: 10 })
+    await page.waitForTimeout(100)
+    await page.mouse.up()
+    await page.waitForTimeout(300)
+
+    // It was dropped on the title, and nothing came of it.
+    expect(await visual.evaluate(() => (window as unknown as { __dropped: number }).__dropped)).toBe(1)
+    await expect(title).toHaveText('Quarterly report')
+    expect(doc.source()).toBe(basic)
   })
 })

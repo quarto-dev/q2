@@ -82,6 +82,59 @@ describe('createMetaFieldSource', () => {
     expect(source.get()).not.toBe(before)
   })
 
+  describe('keys that stay when empty (keepEmpty)', () => {
+    function openKept(text = DOC) {
+      const file = createLocalFile(text)
+      const source = createMetaFieldSource(file, {
+        keys: ['title', 'subtitle', 'abstract'],
+        multiline: ['abstract'],
+        keepEmpty: ['title', 'subtitle', 'abstract'],
+      })
+      return { file, source, text: () => file.getSnapshot().text }
+    }
+
+    it('reads one that is empty as empty, not absent', () => {
+      const { source } = openKept(DOC.replace('title: Old', 'title: ""'))
+      expect(source.get()).toEqual({ title: '', abstract: 'One.\nTwo.' })
+    })
+
+    it('writes an emptied one as an empty value, on its line', () => {
+      const { source, text } = openKept()
+      source.set({ title: ' ' })
+      expect(text()).toBe(DOC.replace('title: Old', 'title: ""'))
+      expect(source.get().title).toBe('')
+    })
+
+    it('adds one, empty', () => {
+      const { source, text } = openKept()
+      source.set({ subtitle: '' })
+      expect(text()).toContain('\nsubtitle: ""\n')
+      expect(source.get().subtitle).toBe('')
+    })
+
+    it('removes one written as undefined', () => {
+      const { source, text } = openKept(DOC.replace('title: Old', 'title: ""'))
+      source.set({ title: undefined })
+      expect(text()).toBe(DOC.replace('title: Old\n', ''))
+      expect(source.get().title).toBeUndefined()
+    })
+
+    it('gives a document with no front matter one', () => {
+      const { source, text } = openKept('Body.\n')
+      source.set({ title: '' })
+      expect(text()).toBe('---\ntitle: ""\n---\n\nBody.\n')
+      source.set({ title: 'Notes' })
+      expect(text()).toBe('---\ntitle: Notes\n---\n\nBody.\n')
+    })
+
+    it('gives an empty document a title', () => {
+      const { source, text } = openKept('')
+      source.set({ title: 'Notes' })
+      expect(text()).toContain('title: Notes\n')
+      expect(source.get()).toEqual({ title: 'Notes' })
+    })
+  })
+
   it('is not writable, and keeps the last fields, while the front matter is not valid YAML', () => {
     const { file, source, text } = open()
     const listener = { calls: 0 }

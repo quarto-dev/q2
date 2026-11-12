@@ -120,19 +120,20 @@ test.describe('selecting across fields', () => {
 
     await page.keyboard.press('Backspace')
 
-    // The caret is in the first field, which stays, empty, while it's there.
+    // Every title-block field stays, empty (only Backspace in one removes
+    // it), with the caret in the first.
     expect(await editor.text('title')).toBe('')
     await editor.expectCaret('title', 0)
-    expect(await editor.text('subtitle')).toBeNull()
-    expect(await editor.text('abstract')).toBeNull()
+    expect(await editor.text('subtitle')).toBe('')
+    expect(await editor.text('abstract')).toBe('')
     expect(await editor.blocks()).toEqual([])
     // What isn't a field (the author, the date) is still there.
     await expect(editor.frame.locator('#title-block-header')).toContainText('Ana Silva')
     await editor.document.expectSource(
       source
-        .replace('title: Quarterly report\n', '')
-        .replace('subtitle: Third quarter\n', '')
-        .replace(/abstract: \|\n.*\n/, '')
+        .replace('title: Quarterly report\n', 'title: ""\n')
+        .replace('subtitle: Third quarter\n', 'subtitle: ""\n')
+        .replace(/abstract: \|\n.*\n/, 'abstract: ""\n')
         .replace('Body text.\n', ''),
     )
 
@@ -162,9 +163,9 @@ test.describe('Backspace at a field edge', () => {
   })
 
   test('in an empty subtitle removes it', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.clickAt('title', 60)
-    await page.keyboard.press('Enter')
+    const editor = await openEditor(page)
+    await editor.select('subtitle', 0, 13)
+    await page.keyboard.press('Backspace')
 
     await page.keyboard.press('Backspace')
 
@@ -518,7 +519,9 @@ test.describe('the authors', () => {
     const { start } = await editor.caret()
     await page.keyboard.type('X')
     expect(await editor.text('title')).toBe('Quarterly report'.slice(0, start) + 'X')
-    expect(await editor.text('subtitle')).toBeNull()
+    // The subtitle, all selected, is emptied, and stays (only Backspace in
+    // it removes it).
+    expect(await editor.text('subtitle')).toBe('')
     expect(await editor.frame.getByText('Ana Silva').textContent()).toBe('Ana Silva')
     expect(await editor.text('abstract')).toMatch(/^We summarise/)
   })

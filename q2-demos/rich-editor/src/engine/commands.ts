@@ -8,8 +8,11 @@
  * - Enter inserts a line break in a multi-line field. Elsewhere it moves to
  *   the start of the next field, adding it if it's absent and addable.
  * - Backspace at the start of a field moves to the end of the previous one
- *   without deleting (and Delete at the end moves to the next one).
- * - An empty field disappears once the selection leaves it.
+ *   without deleting (and Delete at the end moves to the next one). Held
+ *   down (repeating), it stops there instead.
+ * - An empty field disappears once the selection leaves it, unless it's
+ *   one that stays when empty (`Schema.keepEmpty`). Backspace in an empty
+ *   field removes it.
  * - A line that can't be edited (`ATOM`) stays as it is, on a line of its
  *   own: a deletion that covers it keeps it, and one that would join it
  *   to another line does nothing.
@@ -26,6 +29,7 @@ import {
   caret,
   isCollapsed,
   isPrefix,
+  keepsEmpty,
   lineStartOf,
   linePrefix,
   pastPrefixes,
@@ -47,13 +51,36 @@ export function insertText(schema: Schema, state: State, text: string): State {
   return replace(schema, state, from, to, text)
 }
 
+export interface DeleteOptions {
+  /**
+   * The key is held down, and this is one of its repeats: it deletes, but
+   * stops at the field's edge rather than moving on or removing the field.
+   */
+  repeat?: boolean
+}
+
 /**
  * Backspace. Deletes the selection, or else `target` (the range the
  * browser would delete, clipped to the caret's field), or else the
- * grapheme before the caret.
+ * grapheme before the caret. In an empty field, removes the field: the
+ * caret goes to the end of the field before, or, when there's none (a
+ * first field that stays when empty), nowhere.
  */
-export function deleteBackward(schema: Schema, state: State, target?: { from: Position; to: Position }): State {
-  return deleteDirection(schema, state, 'backward', target)
+export function deleteBackward(
+  schema: Schema,
+  state: State,
+  target?: { from: Position; to: Position },
+  options: DeleteOptions = {},
+): State {
+  return deleteDirection(schema, state, 'backward', target, options)
+}
+
+/**
+ * Add `field`, empty, if it's absent, and put the caret at its start.
+ */
+export function addField(schema: Schema, state: State, field: string): State {
+  const fields = state.fields[field] === undefined ? { ...state.fields, [field]: '' } : state.fields
+  return select(schema, { fields, selection: state.selection }, caret(field, 0))
 }
 
 /** Delete (forward). See `deleteBackward`. */
@@ -172,6 +199,7 @@ function deleteDirection(
   state: State,
   direction: 'backward' | 'forward',
   target?: { from: Position; to: Position },
+  { repeat = false }: DeleteOptions = {},
 ): State {
   const { selection, fields } = state
   if (!selection) return state
@@ -181,11 +209,19 @@ function deleteDirection(
   const text = fields[at.field] ?? ''
   const backward = direction === 'backward'
   if (backward ? at.offset === 0 : at.offset === text.length) {
+    if (repeat) return state
     // At the field's edge: move to the neighbouring field, never joining.
     const present = presentFields(schema, fields)
     const neighbour = present[present.indexOf(at.field) + (backward ? -1 : 1)]
+    const neighbourEnd = (f: string) => caret(f, backward ? (fields[f] ?? '').length : 0)
+    if (backward && text === '' && keepsEmpty(schema, at.field)) {
+      // Backspace in an empty field that stays when empty: remove it.
+      const rest = { ...fields }
+      delete rest[at.field]
+      return select(schema, { fields: rest, selection }, neighbour === undefined ? null : neighbourEnd(neighbour))
+    }
     if (neighbour === undefined) return state
-    return select(schema, state, caret(neighbour, backward ? (fields[neighbour] ?? '').length : 0))
+    return select(schema, state, neighbourEnd(neighbour))
   }
 
   // What to delete: the range the browser would, within the caret's line,
@@ -270,10 +306,10 @@ function atomsApart(text: string, offset: number): { text: string; offset: numbe
   return { text: out, offset: at }
 }
 
-/** Remove the empty fields that don't hold an end of `selection`. */
+/** Remove the empty fields that don't hold an end of `selection` (and don't stay when empty). */
 function removeEmpty(schema: Schema, fields: Fields, selection: Selection | null): Fields {
   const keep = new Set(selection ? [selection.anchor.field, selection.focus.field] : [])
-  const empty = schema.order.filter((f) => fields[f] === '' && !keep.has(f))
+  const empty = schema.order.filter((f) => fields[f] === '' && !keep.has(f) && !keepsEmpty(schema, f))
   if (empty.length === 0) return fields
   const next = { ...fields }
   for (const f of empty) delete next[f]

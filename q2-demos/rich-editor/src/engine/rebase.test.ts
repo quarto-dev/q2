@@ -155,6 +155,30 @@ describe('rebaseState', () => {
     const next = rebaseState(schema, state('Report', null), { title: 'Report' }, { title: 'Report', subtitle: 'New' })
     expect(next.fields.subtitle).toBe('New')
   })
+
+  describe('fields that stay when empty (keepEmpty)', () => {
+    const kept: Schema = { ...schema, keepEmpty: ['title', 'subtitle'] }
+
+    it('adds one the change added empty', () => {
+      const next = rebaseState(kept, state('Report', null), { title: 'Report' }, { title: 'Report', subtitle: '' })
+      expect(next.fields).toEqual({ title: 'Report', subtitle: '' })
+    })
+
+    it('removes one, empty, that the change removed', () => {
+      const next = rebaseState(kept, state('Report', caret('title', 2), ''), { title: 'Report', subtitle: '' }, {
+        title: 'Report',
+      })
+      expect('subtitle' in next.fields).toBe(false)
+    })
+
+    it('keeps one the change emptied, whether or not the caret is in it', () => {
+      const next = rebaseState(kept, state('Report', caret('title', 2), 'Sub'), { title: 'Report', subtitle: 'Sub' }, {
+        title: 'Report',
+        subtitle: '',
+      })
+      expect(next.fields.subtitle).toBe('')
+    })
+  })
 })
 
 describe('rebaseHistory', () => {

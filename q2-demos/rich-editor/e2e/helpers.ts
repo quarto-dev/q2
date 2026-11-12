@@ -39,6 +39,9 @@ const PARAGRAPH = '#quarto-document-content > p.qe-field'
 /** The body's editable lines: paragraphs and headings. */
 const LINE = '#quarto-document-content > .qe-field'
 
+/** The row of "+" items that add the title-block fields a document doesn't have. */
+const WIDGET = '.qe-widget'
+
 const FILE = 'index.qmd'
 
 // The sync client's connection progress isn't the tests' output.
@@ -223,7 +226,10 @@ export class Editor {
     await this.field(field).click({ position: { x, y: Math.min(box.height, lineHeight) / 2 } })
   }
 
-  /** Click the page below the document, outside every field. */
+  /**
+   * Click the page below the document, outside every field. (With a body,
+   * typing then goes to the end of its last paragraph: see `body.spec.ts`.)
+   */
   async clickAway() {
     const frame = (await this.page.locator('iframe.visual-frame').boundingBox())!
     await this.page.mouse.click(frame.x + frame.width / 2, frame.y + frame.height - 10)
@@ -381,6 +387,85 @@ export class Editor {
         return `${el.tagName}.${el.className} ${r.x},${r.y},${r.width},${r.height}`
       }),
     )
+  }
+
+  /** The row of "+" items above the title block. */
+  widget() {
+    return this.frame.locator(WIDGET)
+  }
+
+  /** The "+" item that adds `field`. */
+  widgetItem(field: Field) {
+    return this.widget().getByRole('button', { name: `+ ${field[0].toUpperCase()}${field.slice(1)}` })
+  }
+
+  /** The "+" items' labels, in order. */
+  async widgetItems(): Promise<string[]> {
+    await this.widget().waitFor({ state: 'attached' })
+    return this.widget().getByRole('button').allTextContents()
+  }
+
+  /** Whether the "+" row is showing (it is always there, but invisible when not). */
+  widgetShown(): Promise<boolean> {
+    return this.widget().evaluate((el) => getComputedStyle(el).opacity === '1')
+  }
+
+  /** Wait until the "+" row is showing, or not. */
+  async expectWidgetShown(shown: boolean) {
+    await expect.poll(() => this.widgetShown()).toBe(shown)
+  }
+
+  /** The label of the "+" item with the focus, or null when none has it. */
+  focusedWidgetItem(): Promise<string | null> {
+    return this.frame.evaluate((selector) => {
+      const el = document.activeElement
+      return el?.closest(selector) ? (el.textContent ?? '') : null
+    }, WIDGET)
+  }
+
+  /** Wait until the "+" item labelled `label` has the focus (null: none has it). */
+  async expectFocusedWidgetItem(label: string | null) {
+    await expect.poll(() => this.focusedWidgetItem()).toBe(label)
+  }
+
+  /** Add a field with a click on its "+" item, showing the row first as a person would, by pointing at it. */
+  async addField(field: Field) {
+    await this.hoverTitleBlock()
+    await this.widgetItem(field).click()
+  }
+
+  /** Point at the top of the page, where the title block is (or would be). */
+  async hoverTitleBlock() {
+    const box = (await this.frame.locator('#quarto-document-content').boundingBox())!
+    await this.page.mouse.move(box.x + 20, box.y + 4)
+  }
+
+  /** Move the pointer off the document. */
+  async pointAway() {
+    const frame = (await this.page.locator('iframe.visual-frame').boundingBox())!
+    await this.page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height - 10)
+  }
+
+  /** The top of the body's first block, to detect layout shifts. */
+  bodyTop(): Promise<number | null> {
+    return this.frame.evaluate(
+      () => document.querySelector('#quarto-document-content > :not(header)')?.getBoundingClientRect().top ?? null,
+    )
+  }
+
+  /** Whether a caret in `field` would be drawn: the field is editable, and its caret isn't transparent. */
+  caretVisible(field: Field): Promise<boolean> {
+    return this.field(field).evaluate(
+      (el) => (el as HTMLElement).isContentEditable && getComputedStyle(el).caretColor !== 'rgba(0, 0, 0, 0)',
+    )
+  }
+
+  /** Whether a field's placeholder is showing. */
+  placeholderShown(field: Field): Promise<boolean> {
+    return this.field(field).evaluate((el) => {
+      const content = getComputedStyle(el, '::before').content
+      return el.textContent === '' && content !== 'none' && content !== ''
+    })
   }
 
   /** The number of visual lines a field occupies. */

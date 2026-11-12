@@ -216,8 +216,7 @@ test.describe('what I have typed, while someone else edits', () => {
   test('a new, still empty subtitle stays, with my caret in it', async ({ page }) => {
     const ana = await openEditor(page, 'no-subtitle')
     const ben = await ana.join()
-    await ana.placeCaret('title', 16)
-    await ana.page.keyboard.press('Enter')
+    await ana.addField('subtitle')
     await ben.placeCaret('title', 0)
 
     await ben.page.keyboard.type('The ')
@@ -225,8 +224,8 @@ test.describe('what I have typed, while someone else edits', () => {
     await ana.expectText('title', 'The Quarterly report')
     expect(await ana.text('subtitle')).toBe('')
     await ana.expectCaret('subtitle', 0)
-    // They never see the empty subtitle.
-    expect(await ben.text('subtitle')).toBeNull()
+    // They see it too: it's in the source, empty.
+    await ben.expectText('subtitle', '')
   })
 })
 

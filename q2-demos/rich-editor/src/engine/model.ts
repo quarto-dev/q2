@@ -86,6 +86,18 @@ export interface Schema {
   readonly inputRule?: (field: string, line: string) => string | null
   /** A line prefix as text, for the clipboard (none unless given). */
   readonly prefixText?: (prefix: string) => string
+  /**
+   * Fields that stay when they're empty, rather than disappearing once the
+   * selection leaves them: being there, empty, means something (a title
+   * block's field the author added and hasn't filled in yet). Backspace in
+   * one that's empty removes it. Adding or removing one is an edit.
+   */
+  readonly keepEmpty?: readonly string[]
+}
+
+/** Whether `field` stays when it's empty (see `Schema.keepEmpty`). */
+export function keepsEmpty(schema: Schema, field: string): boolean {
+  return schema.keepEmpty?.includes(field) ?? false
 }
 
 export function caret(field: string, offset: number): Selection {
@@ -150,6 +162,14 @@ export function presentFields(schema: Schema, fields: Fields): string[] {
 export function contentChanged(a: Fields, b: Fields): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)])
   return [...keys].some((k) => (a[k] ?? '') !== (b[k] ?? ''))
+}
+
+/**
+ * Whether the document changed: a field's text, or whether a field that
+ * stays when empty is there at all.
+ */
+export function documentChanged(schema: Schema, a: Fields, b: Fields): boolean {
+  return contentChanged(a, b) || (schema.keepEmpty ?? []).some((k) => (a[k] === undefined) !== (b[k] === undefined))
 }
 
 /**

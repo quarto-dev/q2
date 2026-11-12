@@ -103,6 +103,48 @@ describe('fieldChanges', () => {
   })
 })
 
+describe('fields that stay when empty (keepEmpty)', () => {
+  const kept: Schema = { order: ['title', 'subtitle'], keepEmpty: ['title', 'subtitle'] }
+
+  it('an emptied one is written empty, and a removed one as removed', () => {
+    expect(fieldChanges(kept, { title: 'A', subtitle: 'B' }, { title: '', subtitle: undefined })).toEqual({
+      title: '',
+      subtitle: undefined,
+    })
+  })
+
+  it('adding or removing one, empty, is a change to write', () => {
+    expect(fieldChanges(kept, { title: 'A' }, { title: 'A', subtitle: '' })).toEqual({ subtitle: '' })
+    expect(fieldChanges(kept, { title: 'A', subtitle: '' }, { title: 'A' })).toEqual({ subtitle: undefined })
+  })
+
+  it('adding one, empty, is an undo step', () => {
+    let e = createEditor({ title: 'Report' })
+    e = apply(e, { fields: { title: 'Report', subtitle: '' }, selection: caret('subtitle', 0) }, { schema: kept })
+    expect(e.past.length).toBe(1)
+    expect(undo(e).present.fields).toEqual({ title: 'Report' })
+  })
+
+  it('removing one is a step of its own, even right after deleting its text', () => {
+    let e = apply(createEditor({ title: 'Report', subtitle: 'Q3' }), select(kept, createEditor({ title: 'Report', subtitle: 'Q3' }).present, caret('subtitle', 2)), { schema: kept })
+    for (let i = 0; i < 3; i++) {
+      const next = deleteBackward(kept, e.present)
+      e = apply(e, next, { inputType: 'deleteContentBackward', before: e.present.selection, now: i * 50, schema: kept })
+    }
+    expect(e.present.fields).toEqual({ title: 'Report' })
+    e = undo(e)
+    expect(e.present.fields).toEqual({ title: 'Report', subtitle: '' })
+    e = undo(e)
+    expect(e.present.fields).toEqual({ title: 'Report', subtitle: 'Q3' })
+  })
+
+  it('settles to the document: one it holds empty stays, one it removed goes', () => {
+    const editor = createEditor({ title: 'A', subtitle: '' })
+    expect(settle(kept, editor, { title: 'A', subtitle: '' })).toBe(editor)
+    expect(settle(kept, editor, { title: 'A' }).present.fields).toEqual({ title: 'A' })
+  })
+})
+
 describe('settle', () => {
   it('shows the document\'s text in the fields the selection is not in', () => {
     const editor = createEditor({ title: 'A ', subtitle: 'B ' })

@@ -9,7 +9,10 @@
  *
  * The title, subtitle and abstract are edited in place, and so are the
  * body's paragraphs and headings of plain text; the rest of the body
- * (formatted text, lists, code) is shown and can't be edited yet. Every edit is
+ * (formatted text, lists, code) is shown and can't be edited yet. A
+ * document has only the title-block fields its author adds, with the "+"
+ * row above the title block (`TitleBlockWidget`); an added field stays,
+ * empty, until Backspace in it removes it. Every edit is
  * written to the file's source text as it's made, and a change to the
  * source from elsewhere (the source pane or a collaborator) shows up here
  * without disturbing the caret, the selection or the undo history. The
@@ -22,7 +25,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExte
 import { createPortal } from 'react-dom'
 import { PreviewTitleBlock, type TitleBlockField } from '@quarto/preview-renderer/title-block'
 import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-file/index.ts'
-import { Field, Lines, useFieldEditor } from './engine/react.tsx'
+import { Field, Lines, useFieldEditor, type LeaveStart } from './engine/react.tsx'
 import type { Fields, Schema } from './engine/model.ts'
 import {
   blocksOfLines,
@@ -36,6 +39,7 @@ import {
 import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
 import { ReadOnlyBlock } from './ReadOnlyBlock.tsx'
+import { TitleBlockWidget, type WidgetFocus } from './TitleBlockWidget.tsx'
 
 interface VisualEditorProps {
   file: QmdFile
@@ -54,12 +58,13 @@ const SRCDOC = `<!doctype html>
 // replace: no focus ring, no hover state. `pre-wrap` keeps a trailing
 // space a caret position, as in the source text. `min-height` keeps an
 // emptied field one line tall; the placeholder is positioned out of the flow so
-// the caret sits at the start of the line, not after the placeholder text.
+// the caret sits at the start of the line, not after the placeholder text. (An
+// empty field holds a <br>, so it's marked `data-empty` rather than `:empty`.)
 const EDITING_CSS = `
 #quarto-document-content[contenteditable] { outline: none; }
 .qe-unknown { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px dashed #ced4da; color: #6c757d; font-size: 0.875em; }
 .qe-field { display: block; position: relative; min-height: 1lh; outline: none; white-space: pre-wrap; }
-.qe-field:empty::before {
+.qe-field[data-empty][data-placeholder]::before {
   content: attr(data-placeholder);
   position: absolute;
   pointer-events: none;
@@ -71,19 +76,21 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
 
 /**
  * The editable fields, in reading order: Enter, Backspace at a field's
- * start, and selections across fields follow it. Enter in the title adds
- * a missing subtitle, and Enter in the last one-line field of the title
- * block goes to the body, starting one if there's none. The abstract and
- * the body take line breaks (one per paragraph). In the body, `## ` at
- * the start of a paragraph makes it a heading, and a heading is copied
- * with its `#`s.
+ * start, and selections across fields follow it. Enter goes to the next
+ * field there is, and from the last one-line field of the title block to
+ * the body, starting one if there's none; it never adds a title-block
+ * field (the "+" row does). The abstract and the body take line breaks
+ * (one per paragraph). The title-block fields stay when empty.
+ * In the body, `## ` at the start of a paragraph makes it a heading, and
+ * a heading is copied with its `#`s.
  */
 const SCHEMA: Schema = {
   order: [...TITLE_BLOCK, 'body'],
-  addable: ['subtitle', 'body'],
+  addable: ['body'],
   multiline: ['abstract', 'body'],
   inputRule: (field, line) => (field === 'body' ? bodyInputRule(line) : null),
   prefixText: prefixMarkdown,
+  keepEmpty: TITLE_BLOCK,
 }
 
 const PLACEHOLDERS: Record<TitleBlockField, string> = {
@@ -92,12 +99,16 @@ const PLACEHOLDERS: Record<TitleBlockField, string> = {
   abstract: 'Abstract',
 }
 
+/** The fields the "+" row adds, in reading order. */
+const ADDABLE = TITLE_BLOCK.map((name) => ({ name, label: PLACEHOLDERS[name] }))
+
 const noop = () => {}
 
 export function VisualEditor({ file }: VisualEditorProps) {
   const { ast, parseError } = useSyncExternalStore(file.subscribe, file.getSnapshot)
   const source = useMemo(
-    () => createMetaFieldSource(file, { keys: TITLE_BLOCK, multiline: ['abstract'], body: 'body' }),
+    () =>
+      createMetaFieldSource(file, { keys: TITLE_BLOCK, multiline: ['abstract'], body: 'body', keepEmpty: TITLE_BLOCK }),
     [file],
   )
   const [mount, setMount] = useState<HTMLElement | null>(null)
@@ -132,7 +143,13 @@ export function VisualEditor({ file }: VisualEditorProps) {
     const ready = mount?.querySelector('[data-field]') ? mount : null
     if (ready !== root) setRoot(ready)
   })
-  const { state, writable } = useFieldEditor(root, SCHEMA, source, { autoFocus: true })
+  // Where the focus goes in the "+" row when the caret leaves the fields for it.
+  const [widgetFocus, setWidgetFocus] = useState<WidgetFocus | null>(null)
+  const onLeaveStart = useCallback((how: LeaveStart) => setWidgetFocus({ field: how.removed, x: how.x }), [])
+  const { state, writable, add, focusStart } = useFieldEditor(root, SCHEMA, source, { autoFocus: true, onLeaveStart })
+  const present = useMemo(() => new Set(TITLE_BLOCK.filter((f) => state.fields[f] !== undefined)), [state.fields])
+  const caretInTitleBlock = TITLE_BLOCK.some((f) => state.selection?.focus.field === f)
+  const empty = present.size === 0 && !state.fields.body
 
   const derived = useMemo(() => {
     if (!ast) return null
@@ -190,6 +207,20 @@ export function VisualEditor({ file }: VisualEditorProps) {
           : !writable && 'Read-only: not connected. '}
         {derived && derived.issues.length > 0 && ` Issues: ${derived.issues.join('; ')}`}
       </p>
+      {mount && frameDoc && writable && (
+        <TitleBlockWidget
+          doc={frameDoc}
+          content={mount}
+          fields={ADDABLE}
+          present={present}
+          caretInTitleBlock={caretInTitleBlock}
+          empty={empty}
+          focus={widgetFocus}
+          onFocused={() => setWidgetFocus(null)}
+          onAdd={add}
+          onExit={focusStart}
+        />
+      )}
       {mount && derived &&
         createPortal(
           <>

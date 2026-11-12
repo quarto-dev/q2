@@ -402,7 +402,20 @@ fn emit_metadata_prefix(
         return Ok(true);
     }
 
-    // No metadata prefix
+    // No metadata prefix: the document starts with its first block. New
+    // metadata goes before it as a front matter of its own, with a blank
+    // line before the body (whose text stays as it was).
+    if !metadata_content_eq(&original_ast.meta, &new_ast.meta) {
+        let meta_str = write_metadata_to_string(&new_ast.meta)?;
+        if !meta_str.is_empty() {
+            result.push_str(&meta_str);
+            if !meta_str.ends_with('\n') {
+                result.push('\n');
+            }
+            result.push('\n');
+            return Ok(true);
+        }
+    }
     Ok(false)
 }
 

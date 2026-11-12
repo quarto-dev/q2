@@ -225,53 +225,8 @@ test.describe('Enter', () => {
     await editor.document.expectSource(fixture('basic'))
   })
 
-  test('Enter in the title adds an empty subtitle with a placeholder', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    expect(await editor.text('subtitle')).toBeNull()
-    await editor.clickAt('title', 60)
-
-    await page.keyboard.press('Enter')
-
-    expect(await editor.text('subtitle')).toBe('')
-    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
-    const placeholder = await editor
-      .field('subtitle')
-      .evaluate((el) => getComputedStyle(el, '::before').content)
-    expect(placeholder).toBe('"Subtitle"')
-  })
-
-  test('a new subtitle left empty goes away', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.clickAt('title', 60)
-    await page.keyboard.press('Enter')
-
-    await page.keyboard.press('ArrowUp')
-
-    expect(await editor.text('subtitle')).toBeNull()
-    expect((await editor.caret()).field).toBe('title')
-  })
-
-  test('a new subtitle left empty goes away when the editor loses the focus, too', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.clickAt('title', 60)
-    await page.keyboard.press('Enter')
-    expect(await editor.text('subtitle')).toBe('')
-
-    await editor.clickAway()
-
-    await editor.expectText('subtitle', null)
-    expect((await editor.caret()).field).toBeNull()
-  })
-
-  test('typing into a new subtitle keeps it', async ({ page }) => {
-    const editor = await openEditor(page, 'no-subtitle')
-    await editor.clickAt('title', 60)
-    await page.keyboard.press('Enter')
-    await page.keyboard.type('Fourth quarter')
-    await editor.clickAway()
-
-    expect(await editor.text('subtitle')).toBe('Fourth quarter')
-  })
+  // Enter never adds a field: see `title-block-widget.spec.ts`, which adds
+  // them with the "+" row.
 })
 
 test.describe('arrow keys between fields', () => {
@@ -335,14 +290,16 @@ test.describe('arrow keys between fields', () => {
     await editor.expectParagraphCaret(0, 10)
   })
 
-  test('Left and Backspace at the start of the document stay put, and delete nothing', async ({ page }) => {
+  test('Backspace at the start of the document stays put, and Left goes to the "+" row; neither deletes', async ({
+    page,
+  }) => {
     const editor = await openEditor(page)
     await editor.placeCaret('title', 0)
 
-    await page.keyboard.press('ArrowLeft')
-    await editor.expectCaret('title', 0)
     await page.keyboard.press('Backspace')
     await editor.expectCaret('title', 0)
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectFocusedWidgetItem('+ Abstract')
 
     expect(await editor.text('title')).toBe('Quarterly report')
     expect(editor.document.source()).toBe(basic)
@@ -478,8 +435,9 @@ test.describe('undo', () => {
   })
 })
 
-test.describe('removing fields', () => {
-  test('a field emptied and left goes away, and undo brings its text back', async ({ page }) => {
+test.describe('emptying fields', () => {
+  // Removing an empty field is in `title-block-widget.spec.ts`.
+  test('a field emptied and left stays, empty, and undo brings its text back', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('subtitle', 30)
     await page.keyboard.press(`${mod}+a`)
@@ -487,7 +445,7 @@ test.describe('removing fields', () => {
     expect(await editor.text('subtitle')).toBe('')
 
     await editor.clickAt('title', 60)
-    expect(await editor.text('subtitle')).toBeNull()
+    expect(await editor.text('subtitle')).toBe('')
 
     await page.keyboard.press(`${mod}+z`)
     expect(await editor.text('subtitle')).toBe('Third quarter')
@@ -507,6 +465,8 @@ test.describe('removing fields', () => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
     await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.press('Backspace')
+    // Emptied, it stays; Backspace in it, empty, removes it.
     await page.keyboard.press('Backspace')
 
     await editor.clickAt('subtitle', 30)
@@ -612,18 +572,26 @@ test.describe('titles written other ways', () => {
 })
 
 test.describe('a subtitle without a title', () => {
-  for (const [name, front] of [
-    ['no title', 'subtitle: Only a subtitle'],
-    ['an empty title', 'title: ""\nsubtitle: Only a subtitle'],
-  ]) {
-    test(`with ${name}, the subtitle is shown, and the caret starts in it`, async ({ page }) => {
-      const editor = await (await createDocument(`---\n${front}\n---\n\nBody.\n`)).open(page)
+  test('with no title, the subtitle is shown, and the caret starts in it', async ({ page }) => {
+    const editor = await (await createDocument('---\nsubtitle: Only a subtitle\n---\n\nBody.\n')).open(page)
 
-      expect(await editor.text('title')).toBeNull()
-      expect(await editor.text('subtitle')).toBe('Only a subtitle')
-      await expect.poll(() => editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
-    })
-  }
+    expect(await editor.text('title')).toBeNull()
+    expect(await editor.text('subtitle')).toBe('Only a subtitle')
+    await expect.poll(() => editor.caret()).toMatchObject({ field: 'subtitle', start: 0, end: 0 })
+  })
+
+  test('with an empty title, the title is there, empty, with its placeholder, and the caret starts in it', async ({
+    page,
+  }) => {
+    // An empty title is a title the author added and hasn't filled in
+    // (see `title-block-widget.spec.ts`).
+    const editor = await (await createDocument('---\ntitle: ""\nsubtitle: Only a subtitle\n---\n\nBody.\n')).open(page)
+
+    expect(await editor.text('title')).toBe('')
+    expect(await editor.placeholderShown('title')).toBe(true)
+    expect(await editor.text('subtitle')).toBe('Only a subtitle')
+    await expect.poll(() => editor.caret()).toMatchObject({ field: 'title', start: 0, end: 0 })
+  })
 })
 
 test.describe('the rest of the title block', () => {
