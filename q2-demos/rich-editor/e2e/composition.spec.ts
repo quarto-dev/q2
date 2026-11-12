@@ -78,6 +78,46 @@ test.describe('composing text', () => {
   })
 })
 
+test.describe('where the composition starts', () => {
+  test('composing over a selection replaces it', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.select('title', 0, 9)
+
+    await editor.compose('に')
+    await editor.endComposition('日本')
+
+    expect(await editor.text('title')).toBe('日本 report')
+    await editor.expectCaret('title', 2)
+    await editor.document.expectSource(basic.replace('Quarterly report', '日本 report'))
+  })
+
+  test('a composition that ends with nothing composed changes nothing, and is no undo step', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 16)
+    await page.keyboard.type('!')
+
+    await editor.compose(' に')
+    await editor.endComposition('')
+
+    expect(await editor.text('title')).toBe('Quarterly report!')
+    await editor.expectCaret('title', 17)
+    await page.keyboard.press(`${mod}+z`)
+    expect(await editor.text('title')).toBe('Quarterly report')
+  })
+
+  test('text composed on a new, empty paragraph is that paragraph\'s text', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    await editor.placeCaretInParagraph(0, 16)
+    await page.keyboard.press('Enter')
+
+    await editor.compose('に')
+    await editor.endComposition('日本')
+
+    await expect.poll(() => editor.paragraphs()).toEqual(['First paragraph.', '日本', 'Second paragraph.', 'Last paragraph.'])
+    await editor.document.expectSource(body.replace('First paragraph.\n', 'First paragraph.\n\n日本\n'))
+  })
+})
+
 test.describe('while someone else edits', () => {
   test('their edit to another field shows when the composition ends', async ({ page }) => {
     const editor = await openEditor(page)
