@@ -75,10 +75,11 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 /* Option: inline widget */
 .widget { display:flex; flex-wrap:wrap; gap:2px; min-height:30px; align-items:center; opacity:0; transition:opacity .12s; margin:0 0 6px -8px; }
 .widget.none { display:none; }
-/* In an empty doc it shows until a field is added. Adding one makes it quiet
-   (hidden even under the pointer) until the pointer leaves the top of the
-   page, so it doesn't hover over the field you're about to type in. */
-.top:hover .widget, .widget:focus-within, .doc-empty .top:not(.has-blank) .widget { opacity:1; }
+/* Shows while the caret is anywhere in the title block, on hover, and in an
+   empty doc until a field is added. Adding one makes it quiet (hidden even
+   under the pointer) while you fill that field in: until the caret moves to
+   another field or out of the title block. */
+.top:hover .widget, .top:focus-within .widget, .doc-empty .top:not(.has-blank) .widget { opacity:1; }
 .top.quiet .widget:not(:focus-within) { opacity:0; }
 .widget button { font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:4px 8px; border-radius:4px; cursor:pointer; }
 .widget button:hover, .widget button:focus { background:#eef0f3; color:var(--ink); outline:none; }
@@ -240,11 +241,15 @@ function build() {
   let toolbar = null, widget = null;
   if (f.toolbar) { toolbar = el('div', 'toolbar'); center.append(toolbar); }
   const top = el('div', 'top');
-  top.addEventListener('mouseleave', () => top.classList.remove('quiet'));
+  top.addEventListener('focusout', (ev) => { if (!top.contains(ev.relatedTarget)) top.classList.remove('quiet'); });
   if (f.widget) { widget = el('div', 'widget'); widget.setAttribute('role', 'toolbar'); top.append(widget); }
   const header = el('header', 'title-block'); top.append(header);
   // Once the title slot has been shown, it keeps its space (see the CSS).
-  header.addEventListener('focusin', () => header.classList.add('open'));
+  header.addEventListener('focusin', (ev) => {
+    header.classList.add('open');
+    if (ev.target.dataset.field !== quietFor) top.classList.remove('quiet');
+  });
+  let quietFor = null; // the field just added from the widget
   const body = el('div', 'body'); body.contentEditable = 'true';
   const menu = el('div', 'menu'); menu.hidden = true;
   page.append(top, body, menu);
@@ -330,6 +335,7 @@ function build() {
   function addField(k) {
     if (meta[k] === undefined) meta[k] = '';
     top.classList.add('quiet');
+    quietFor = k;
     freezeWidget();
     renderHeader(k);
   }
@@ -408,7 +414,7 @@ function build() {
       if (bs[i + 1]) bs[i + 1].focus();
       else { const first = order()[0]; if (first) { first.focus(); placeIn(first, false); } else focusBlock(body.firstElementChild, false); }
     }
-    else if (ev.key === 'ArrowLeft') { ev.preventDefault(); (bs[i - 1] || bs[bs.length - 1]).focus(); }
+    else if (ev.key === 'ArrowLeft') { ev.preventDefault(); if (bs[i - 1]) bs[i - 1].focus(); } // stops at the first item
     else if (ev.key === 'ArrowDown' || ev.key === 'Escape') {
       ev.preventDefault();
       const first = order()[0];
