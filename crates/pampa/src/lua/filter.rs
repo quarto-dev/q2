@@ -1574,28 +1574,28 @@ mod unit_tests {
             "SmallCaps"
         );
         assert_eq!(
-            inline_tag(&Inline::Quoted(Quoted {
+            inline_tag(&Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![],
                 source_info: source_info.clone()
-            })),
+            }))),
             "Quoted"
         );
         assert_eq!(
-            inline_tag(&Inline::Cite(Cite {
+            inline_tag(&Inline::Cite(Box::new(Cite {
                 citations: vec![],
                 content: vec![],
                 source_info: source_info.clone()
-            })),
+            }))),
             "Cite"
         );
         assert_eq!(
-            inline_tag(&Inline::Code(Code {
+            inline_tag(&Inline::Code(Box::new(Code {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 text: String::new(),
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
-            })),
+            }))),
             "Code"
         );
         assert_eq!(
@@ -1617,42 +1617,42 @@ mod unit_tests {
             "LineBreak"
         );
         assert_eq!(
-            inline_tag(&Inline::Math(Math {
+            inline_tag(&Inline::Math(Box::new(Math {
                 math_type: MathType::InlineMath,
                 text: String::new(),
                 source_info: source_info.clone(),
                 text_source: None,
-            })),
+            }))),
             "Math"
         );
         assert_eq!(
-            inline_tag(&Inline::RawInline(RawInline {
+            inline_tag(&Inline::RawInline(Box::new(RawInline {
                 format: String::new(),
                 text: String::new(),
                 source_info: source_info.clone()
-            })),
+            }))),
             "RawInline"
         );
         assert_eq!(
-            inline_tag(&Inline::Link(Link {
+            inline_tag(&Inline::Link(Box::new(Link {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![],
                 target: (String::new(), String::new()),
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty()
-            })),
+            }))),
             "Link"
         );
         assert_eq!(
-            inline_tag(&Inline::Image(Image {
+            inline_tag(&Inline::Image(Box::new(Image {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![],
                 target: (String::new(), String::new()),
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty()
-            })),
+            }))),
             "Image"
         );
         assert_eq!(
@@ -1663,16 +1663,16 @@ mod unit_tests {
             "Note"
         );
         assert_eq!(
-            inline_tag(&Inline::Span(Span {
+            inline_tag(&Inline::Span(Box::new(Span {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
-            })),
+            }))),
             "Span"
         );
         assert_eq!(
-            inline_tag(&Inline::Shortcode(
+            inline_tag(&Inline::Shortcode(Box::new(
                 quarto_pandoc_types::shortcode::Shortcode {
                     is_escaped: false,
                     name: String::new(),
@@ -1680,7 +1680,7 @@ mod unit_tests {
                     keyword_args: LinkedHashMap::new(),
                     source_info: source_info.clone()
                 }
-            )),
+            ))),
             "Shortcode"
         );
         assert_eq!(
@@ -1691,57 +1691,57 @@ mod unit_tests {
             "NoteReference"
         );
         assert_eq!(
-            inline_tag(&Inline::Attr(InlineAttr::new(
+            inline_tag(&Inline::Attr(Box::new(InlineAttr::new(
                 (String::new(), vec![], LinkedHashMap::new()),
                 AttrSourceInfo::empty(),
                 quarto_source_map::SourceInfo::for_test(),
-            ))),
+            )))),
             "Attr"
         );
         assert_eq!(
-            inline_tag(&Inline::Insert(Insert {
+            inline_tag(&Inline::Insert(Box::new(Insert {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
-            })),
+            }))),
             "Insert"
         );
         assert_eq!(
-            inline_tag(&Inline::Delete(Delete {
+            inline_tag(&Inline::Delete(Box::new(Delete {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
-            })),
+            }))),
             "Delete"
         );
         assert_eq!(
-            inline_tag(&Inline::Highlight(Highlight {
+            inline_tag(&Inline::Highlight(Box::new(Highlight {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
-            })),
+            }))),
             "Highlight"
         );
         assert_eq!(
-            inline_tag(&Inline::EditComment(EditComment {
+            inline_tag(&Inline::EditComment(Box::new(EditComment {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
-            })),
+            }))),
             "EditComment"
         );
         assert_eq!(
-            inline_tag(&Inline::Custom(CustomNode {
+            inline_tag(&Inline::Custom(Box::new(CustomNode {
                 type_name: String::new(),
                 slots: LinkedHashMap::new(),
                 plain_data: serde_json::Value::Null,
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: source_info.clone()
-            })),
+            }))),
             "Custom"
         );
     }

@@ -348,14 +348,14 @@ mod tests {
 
     #[test]
     fn footer_slot_renders_inline_links() {
-        let link = Inline::Link(Link {
+        let link = Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![str_inline("Quarto")],
             target: ("https://quarto.org".to_string(), String::new()),
             source_info: si(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-        });
+        }));
         let m = meta_with_footer_center(inlines(vec![str_inline("© "), link]));
         let html = footer_slot_html(&m).expect("footer slot");
         assert!(

@@ -111,7 +111,7 @@ fn leaves_existing_annotation_alone() {
 #[test]
 fn annotates_inline_code() {
     use hashlink::LinkedHashMap;
-    let inline = Inline::Code(Code {
+    let inline = Inline::Code(Box::new(Code {
         attr: (
             String::new(),
             vec!["python".to_string()],
@@ -120,7 +120,7 @@ fn annotates_inline_code() {
         text: "print(42)".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    });
+    }));
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
         content: Inlines::from(vec![inline]),
@@ -258,12 +258,12 @@ fn does_not_mark_inline_code_without_grammar() {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
-        content: Inlines::from(vec![Inline::Code(Code {
+        content: Inlines::from(vec![Inline::Code(Box::new(Code {
             attr: (String::new(), vec!["ini".to_string()], LinkedHashMap::new()),
             text: "a = 1".to_string(),
             source_info: empty_source_info(),
             attr_source: empty_attr_source(),
-        })]),
+        }))]),
         source_info: empty_source_info(),
     }));
     annotate_pandoc(&mut doc, None).expect("annotate must not error");

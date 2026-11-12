@@ -28,7 +28,7 @@
 //!
 //! This stage manipulates only the publicly-described AST:
 //!
-//! - It reads `Inline::Math(MathType, String)` and the
+//! - It reads `Inline::Math(Box::new(MathType, String))` and the
 //!   `CustomNode("Equation")` wrapper that
 //!   [`crate::transforms::EquationLabelTransform`] produces from
 //!   `$$…$$ {#eq-…}` syntax.
@@ -557,21 +557,21 @@ mod tests {
     }
 
     fn inline_math(text: &str) -> Inline {
-        Inline::Math(Math {
+        Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
             text_source: None,
-        })
+        }))
     }
 
     fn display_math(text: &str) -> Inline {
-        Inline::Math(Math {
+        Inline::Math(Box::new(Math {
             math_type: MathType::DisplayMath,
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
             text_source: None,
-        })
+        }))
     }
 
     fn str_inline(s: &str) -> Inline {
@@ -833,7 +833,7 @@ mod tests {
 
         let math = run_and_get_math(
             vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Custom(node)],
+                content: vec![Inline::Custom(Box::new(node))],
                 source_info: SourceInfo::for_test(),
             })],
             empty_meta(),

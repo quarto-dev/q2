@@ -3476,11 +3476,11 @@ impl LuaCitation {
     /// the comparison).
     fn structurally_eq(&self, other: &LuaCitation) -> bool {
         let wrap = |c: &LuaCitation| {
-            Inline::Cite(crate::pandoc::Cite {
+            Inline::Cite(Box::new(crate::pandoc::Cite {
                 citations: vec![c.cell.borrow().clone()],
                 content: vec![],
                 source_info: SourceInfo::generated(By::unknown()),
-            })
+            }))
         };
         inline_structurally_eq(&wrap(self), &wrap(other))
     }
@@ -3786,32 +3786,32 @@ mod tests {
 
     #[test]
     fn test_lua_inline_tag_name_quoted() {
-        let inline = Inline::Quoted(Quoted {
+        let inline = Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::SingleQuote,
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Quoted");
     }
 
     #[test]
     fn test_lua_inline_tag_name_cite() {
-        let inline = Inline::Cite(Cite {
+        let inline = Inline::Cite(Box::new(Cite {
             citations: vec![],
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Cite");
     }
 
     #[test]
     fn test_lua_inline_tag_name_code() {
-        let inline = Inline::Code(Code {
+        let inline = Inline::Code(Box::new(Code {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             text: "code".into(),
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Code");
     }
 
@@ -3835,48 +3835,48 @@ mod tests {
 
     #[test]
     fn test_lua_inline_tag_name_math() {
-        let inline = Inline::Math(Math {
+        let inline = Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x^2".into(),
             source_info: si(),
             text_source: None,
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Math");
     }
 
     #[test]
     fn test_lua_inline_tag_name_raw_inline() {
-        let inline = Inline::RawInline(RawInline {
+        let inline = Inline::RawInline(Box::new(RawInline {
             format: "html".into(),
             text: "<b>".into(),
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "RawInline");
     }
 
     #[test]
     fn test_lua_inline_tag_name_link() {
-        let inline = Inline::Link(Link {
+        let inline = Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             target: ("url".into(), "title".into()),
             target_source: target_si(),
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Link");
     }
 
     #[test]
     fn test_lua_inline_tag_name_image() {
-        let inline = Inline::Image(Image {
+        let inline = Inline::Image(Box::new(Image {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             target: ("src".into(), "alt".into()),
             target_source: target_si(),
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Image");
     }
 
@@ -3891,24 +3891,24 @@ mod tests {
 
     #[test]
     fn test_lua_inline_tag_name_span() {
-        let inline = Inline::Span(Span {
+        let inline = Inline::Span(Box::new(Span {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Span");
     }
 
     #[test]
     fn test_lua_inline_tag_name_shortcode() {
-        let inline = Inline::Shortcode(Shortcode {
+        let inline = Inline::Shortcode(Box::new(Shortcode {
             is_escaped: false,
             name: "test".into(),
             positional_args: vec![],
             keyword_args: hashlink::LinkedHashMap::new(),
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Shortcode");
     }
 
@@ -3923,65 +3923,65 @@ mod tests {
 
     #[test]
     fn test_lua_inline_tag_name_attr() {
-        let inline = Inline::Attr(crate::pandoc::inline::InlineAttr::new(
+        let inline = Inline::Attr(Box::new(crate::pandoc::inline::InlineAttr::new(
             (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_si(),
             quarto_source_map::SourceInfo::for_test(),
-        ));
+        )));
         assert_eq!(LuaInline::new(inline).tag_name(), "Attr");
     }
 
     #[test]
     fn test_lua_inline_tag_name_insert() {
-        let inline = Inline::Insert(Insert {
+        let inline = Inline::Insert(Box::new(Insert {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Insert");
     }
 
     #[test]
     fn test_lua_inline_tag_name_delete() {
-        let inline = Inline::Delete(Delete {
+        let inline = Inline::Delete(Box::new(Delete {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Delete");
     }
 
     #[test]
     fn test_lua_inline_tag_name_highlight() {
-        let inline = Inline::Highlight(Highlight {
+        let inline = Inline::Highlight(Box::new(Highlight {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "Highlight");
     }
 
     #[test]
     fn test_lua_inline_tag_name_edit_comment() {
-        let inline = Inline::EditComment(EditComment {
+        let inline = Inline::EditComment(Box::new(EditComment {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(LuaInline::new(inline).tag_name(), "EditComment");
     }
 
     #[test]
     fn test_lua_inline_tag_name_custom() {
-        let inline = Inline::Custom(crate::pandoc::custom::CustomNode::new(
+        let inline = Inline::Custom(Box::new(crate::pandoc::custom::CustomNode::new(
             "test-type",
             (String::new(), vec![], hashlink::LinkedHashMap::new()),
             si(),
-        ));
+        )));
         assert_eq!(LuaInline::new(inline).tag_name(), "Custom");
     }
 
@@ -4013,11 +4013,11 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_quoted() {
-        let inline = Inline::Quoted(Quoted {
+        let inline = Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::DoubleQuote,
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &["tag", "quotetype", "content", "clone", "walk"]
@@ -4026,11 +4026,11 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_cite() {
-        let inline = Inline::Cite(Cite {
+        let inline = Inline::Cite(Box::new(Cite {
             citations: vec![],
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &["tag", "content", "citations", "clone", "walk"]
@@ -4039,12 +4039,12 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_code() {
-        let inline = Inline::Code(Code {
+        let inline = Inline::Code(Box::new(Code {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             text: "code".into(),
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &[
@@ -4071,12 +4071,12 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_math() {
-        let inline = Inline::Math(Math {
+        let inline = Inline::Math(Box::new(Math {
             math_type: MathType::DisplayMath,
             text: "E=mc^2".into(),
             source_info: si(),
             text_source: None,
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &["tag", "mathtype", "text", "clone", "walk"]
@@ -4085,11 +4085,11 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_raw_inline() {
-        let inline = Inline::RawInline(RawInline {
+        let inline = Inline::RawInline(Box::new(RawInline {
             format: "latex".into(),
             text: "\\alpha".into(),
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &["tag", "format", "text", "clone", "walk"]
@@ -4098,14 +4098,14 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_link() {
-        let inline = Inline::Link(Link {
+        let inline = Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             target: ("url".into(), "title".into()),
             target_source: target_si(),
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &[
@@ -4125,14 +4125,14 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_image() {
-        let inline = Inline::Image(Image {
+        let inline = Inline::Image(Box::new(Image {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             target: ("src".into(), "alt".into()),
             target_source: target_si(),
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &[
@@ -4165,12 +4165,12 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_span() {
-        let inline = Inline::Span(Span {
+        let inline = Inline::Span(Box::new(Span {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &[
@@ -4200,12 +4200,12 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_insert() {
-        let inline = Inline::Insert(Insert {
+        let inline = Inline::Insert(Box::new(Insert {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             attr_source: attr_si(),
             content: vec![],
             source_info: si(),
-        });
+        }));
         assert_eq!(
             LuaInline::new(inline).field_names(),
             &[
@@ -4223,11 +4223,11 @@ mod tests {
 
     #[test]
     fn test_lua_inline_field_names_custom() {
-        let inline = Inline::Custom(crate::pandoc::custom::CustomNode::new(
+        let inline = Inline::Custom(Box::new(crate::pandoc::custom::CustomNode::new(
             "test-type",
             (String::new(), vec![], hashlink::LinkedHashMap::new()),
             si(),
-        ));
+        )));
         assert_eq!(LuaInline::new(inline).field_names(), &["tag", "clone"]);
     }
 

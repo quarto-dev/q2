@@ -285,7 +285,7 @@ fn is_localhost(rest: &str) -> bool {
 fn icon_span(name: &str, link: &Link) -> Inline {
     let mut kv = hashlink::LinkedHashMap::new();
     kv.insert("aria-hidden".to_string(), "true".to_string());
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec![
@@ -298,7 +298,7 @@ fn icon_span(name: &str, link: &Link) -> Inline {
         content: Vec::new(),
         source_info: link.source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn invalid_filter_warning(
@@ -359,7 +359,7 @@ mod tests {
     }
 
     fn link(href: &str, classes: &[&str], kv: &[(&str, &str)]) -> Inline {
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: (
                 String::new(),
                 classes.iter().map(|c| c.to_string()).collect(),
@@ -375,7 +375,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(content: Vec<Inline>) -> Vec<Block> {

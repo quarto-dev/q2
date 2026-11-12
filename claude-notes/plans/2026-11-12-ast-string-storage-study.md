@@ -2,7 +2,7 @@
 title: "Study: arena / borrowed string storage for the Pandoc AST"
 strand: bd-akgst1fi
 related: [bd-is4q72tt]
-status: "Assessment written and discussed (2026-11-12); direction agreed: no lifetimes, node-layout work first, text runs deferred. No implementation yet."
+status: "Direction agreed (no lifetimes; node layout first; text runs deferred). Step 1 (box cold Inline variants) done: AST heap 88x -> 26x of source. Steps 2-5 open under epic bd-4x6kih4c."
 date: 2026-11-12
 ---
 
@@ -425,6 +425,41 @@ runs, deferred).
 5. **D**, as a quarto-source-map minor release.
 6. Re-measure bd-is4q72tt's 1.1 MB document end to end. Decide then whether
    F is worth a design.
+
+## Progress
+
+### Step 1: box cold `Inline` variants (bd-xrfun6mn) — measured
+
+Boxed the payloads of `Quoted`, `Cite`, `Code`, `Math`, `RawInline`, `Link`,
+`Image`, `Span`, `Shortcode`, `Attr`, `Insert`, `Delete`, `Highlight`,
+`EditComment` and `Custom`. A compile-time assertion in `inline.rs` holds
+`Inline` at 8 words (64 bytes native, 32 on wasm32).
+
+Same corpus, same tool:
+
+| | Before | After | Estimate |
+|---|---|---|---|
+| `size_of::<Inline>()` | 360 | 64 | 64 |
+| `Vec<Inline>` buffers | 2,058 MiB | 366 MiB | ~366 MiB |
+| AST heap | 2,304 MiB (87.7×) | 678 MiB (25.8×) | — |
+| AST heap blocks | 4.06 M | 4.36 M | ~4.35 M |
+| Peak RSS of the run | 2.75 GiB | 0.87 GiB | — |
+| Wall time | 7.7 s | 6.5 s | — |
+
+The central estimate held, so the remaining steps proceed as planned. The
+297 K extra heap blocks are almost all boxed `Code` nodes (277 K, 240 bytes
+each); step 2's `Attr` slimming shrinks those.
+
+Notes for the next steps, from doing this one:
+
+- Construction sites (`Inline::Link(Link { .. })`) and box/unbox
+  mismatches are mechanical: a bracket-matching codemod plus rustc's own
+  `Box::new` / unboxing suggestions handled about 650 sites.
+- Patterns that destructure a boxed payload cannot stay as written. Most
+  code binds the payload and uses field access, which auto-derefs and
+  needed no change; only about 30 sites destructured.
+- Or-patterns that mix boxed and unboxed variants must be split into one
+  arm per boxed variant.
 
 ## Decisions (2026-11-12)
 

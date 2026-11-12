@@ -2368,45 +2368,45 @@ mod tests {
 
     #[test]
     fn test_inlines_to_text_quoted() {
-        let inlines = vec![Inline::Quoted(Quoted {
+        let inlines = vec![Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::DoubleQuote,
             content: vec![Inline::Str(Str {
                 text: "quoted".to_string(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "\"quoted\"");
     }
 
     #[test]
     fn test_inlines_to_text_code() {
-        let inlines = vec![Inline::Code(Code {
+        let inlines = vec![Inline::Code(Box::new(Code {
             attr: quarto_pandoc_types::attr::Attr::default(),
             text: "code()".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "code()");
     }
 
     #[test]
     fn test_inlines_to_text_math() {
-        let inlines = vec![Inline::Math(Math {
+        let inlines = vec![Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source_info(),
             text_source: None,
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "x^2");
     }
 
     #[test]
     fn test_inlines_to_text_link() {
-        let inlines = vec![Inline::Link(Link {
+        let inlines = vec![Inline::Link(Box::new(Link {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
                 text: "link text".to_string(),
@@ -2416,14 +2416,14 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "link text");
     }
 
     #[test]
     fn test_inlines_to_text_span() {
-        let inlines = vec![Inline::Span(Span {
+        let inlines = vec![Inline::Span(Box::new(Span {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
                 text: "span content".to_string(),
@@ -2431,7 +2431,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "span content");
     }
@@ -4284,12 +4284,12 @@ mod tests {
 
     /// A `Code` inline `\`text\``.
     fn code_inline(text: &str) -> Inline {
-        Inline::Code(Code {
+        Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn str_inline(text: &str) -> Inline {

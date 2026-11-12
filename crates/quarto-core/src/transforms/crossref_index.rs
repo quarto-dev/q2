@@ -1388,21 +1388,21 @@ mod tests {
     fn eq_para(id: &str, math_text: &str) -> Block {
         use quarto_pandoc_types::inline::{Math, MathType, Span};
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: (
                     id.to_string(),
                     vec!["quarto-math-with-attribute".to_string()],
                     LinkedHashMap::new(),
                 ),
-                content: vec![Inline::Math(Math {
+                content: vec![Inline::Math(Box::new(Math {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),
                     source_info: si(),
                     text_source: None,
-                })],
+                }))],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
         })
     }

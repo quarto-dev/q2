@@ -1509,7 +1509,7 @@ pub fn postprocess(
                 let mut kv = LinkedHashMap::new();
                 kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
-                    vec![Inline::Span(Span {
+                    vec![Inline::Span(Box::new(Span {
                         attr: (String::new(), vec!["quarto-note-reference".to_string()], kv),
                         content: vec![],
                         source_info: note_ref.source_info,
@@ -1520,7 +1520,7 @@ pub fn postprocess(
                             classes: vec![None],
                             attributes: vec![(None, None)],
                         },
-                    })],
+                    }))],
                     false,
                 )
             })
@@ -1529,12 +1529,12 @@ pub fn postprocess(
                 let mut classes = vec!["quarto-insert".to_string()];
                 classes.extend(insert.attr.1);
                 FilterResult(
-                    vec![Inline::Span(Span {
+                    vec![Inline::Span(Box::new(Span {
                         attr: (insert.attr.0, classes, insert.attr.2),
                         content,
                         source_info: insert.source_info,
                         attr_source: with_synthesized_leading_class(insert.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
@@ -1543,12 +1543,12 @@ pub fn postprocess(
                 let mut classes = vec!["quarto-delete".to_string()];
                 classes.extend(delete.attr.1);
                 FilterResult(
-                    vec![Inline::Span(Span {
+                    vec![Inline::Span(Box::new(Span {
                         attr: (delete.attr.0, classes, delete.attr.2),
                         content,
                         source_info: delete.source_info,
                         attr_source: with_synthesized_leading_class(delete.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
@@ -1557,12 +1557,12 @@ pub fn postprocess(
                 let mut classes = vec!["quarto-highlight".to_string()];
                 classes.extend(highlight.attr.1);
                 FilterResult(
-                    vec![Inline::Span(Span {
+                    vec![Inline::Span(Box::new(Span {
                         attr: (highlight.attr.0, classes, highlight.attr.2),
                         content,
                         source_info: highlight.source_info,
                         attr_source: with_synthesized_leading_class(highlight.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
@@ -1571,12 +1571,12 @@ pub fn postprocess(
                 let mut classes = vec!["quarto-edit-comment".to_string()];
                 classes.extend(edit_comment.attr.1);
                 FilterResult(
-                    vec![Inline::Span(Span {
+                    vec![Inline::Span(Box::new(Span {
                         attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
                         content,
                         source_info: edit_comment.source_info,
                         attr_source: with_synthesized_leading_class(edit_comment.attr_source),
-                    })],
+                    }))],
                     true,
                 )
             })
@@ -1635,7 +1635,7 @@ pub fn postprocess(
                             let mut classes = vec!["quarto-math-with-attribute".to_string()];
                             classes.extend(inline_attr.attr.1.clone());
 
-                            math_processed.push(Inline::Span(Span {
+                            math_processed.push(Inline::Span(Box::new(Span {
                                 attr: (
                                     inline_attr.attr.0.clone(),
                                     classes,
@@ -1650,7 +1650,7 @@ pub fn postprocess(
                                 attr_source: with_synthesized_leading_class(
                                     inline_attr.attr_source.clone(),
                                 ),
-                            }));
+                            })));
 
                             // Skip the Math, optional Space, and Attr
                             i = attr_idx + 1;
@@ -1687,7 +1687,7 @@ pub fn postprocess(
                                 {
                                     // Valid cite - transition to state 1
                                     state = 1;
-                                    pending_cite = Some(cite.clone());
+                                    pending_cite = Some(*cite.clone());
                                 } else {
                                     // Not a simple cite, just add it
                                     result.push(inline);
@@ -1705,7 +1705,7 @@ pub fn postprocess(
                             } else {
                                 // Not a space, emit pending cite and reset
                                 if let Some(cite) = pending_cite.take() {
-                                    result.push(Inline::Cite(cite));
+                                    result.push(Inline::Cite(Box::new(cite)));
                                 }
                                 result.push(inline);
                                 state = 0;
@@ -1789,13 +1789,13 @@ pub fn postprocess(
                                         // range which is outside the original cite range.
                                         cite.source_info =
                                             hull_source_infos(&cite.source_info, &span.source_info);
-                                        result.push(Inline::Cite(cite));
+                                        result.push(Inline::Cite(Box::new(cite)));
                                     }
                                     state = 0;
                                 } else {
                                     // Invalid span, emit pending cite, space, and span
                                     if let Some(cite) = pending_cite.take() {
-                                        result.push(Inline::Cite(cite));
+                                        result.push(Inline::Cite(Box::new(cite)));
                                     }
                                     if let Some(space) = pending_space.take() {
                                         result.push(Inline::Space(space));
@@ -1806,7 +1806,7 @@ pub fn postprocess(
                             } else {
                                 // Not a span, emit pending cite, space, and current inline
                                 if let Some(cite) = pending_cite.take() {
-                                    result.push(Inline::Cite(cite));
+                                    result.push(Inline::Cite(Box::new(cite)));
                                 }
                                 if let Some(space) = pending_space.take() {
                                     result.push(Inline::Space(space));
@@ -1821,7 +1821,7 @@ pub fn postprocess(
 
                 // Handle any pending cite at the end
                 if let Some(cite) = pending_cite {
-                    result.push(Inline::Cite(cite));
+                    result.push(Inline::Cite(Box::new(cite)));
                     if state == 2
                         && let Some(space) = pending_space
                     {

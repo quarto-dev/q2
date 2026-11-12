@@ -36,8 +36,8 @@ use quarto_pandoc_types::block::{
 };
 use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
 use quarto_pandoc_types::inline::{
-    Cite, Delete, EditComment, Emph, Highlight, Image, Inline, Insert, Link, Note, Quoted,
-    SmallCaps, Span, Str, Strikeout, Strong, Subscript, Superscript, Underline,
+    Emph, Image, Inline, Inlines, Link, Note, SmallCaps, Span, Str, Strikeout, Strong, Subscript,
+    Superscript, Underline,
 };
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::shortcode::{Shortcode, ShortcodeArg};
@@ -926,6 +926,13 @@ fn stamp_shortcode_anchors(
     }
 }
 
+/// [`stamp_inline`] over a list.
+fn stamp_inlines(inlines: &mut Inlines, name: &str, token_arc: &Arc<SourceInfo>) {
+    for child in inlines.iter_mut() {
+        stamp_inline(child, name, token_arc);
+    }
+}
+
 /// Stamp the Invocation anchor on a single inline and recurse into its children.
 fn stamp_inline(inline: &mut Inline, name: &str, token_arc: &Arc<SourceInfo>) {
     let new_si = enrich_or_create(inline.source_info(), name, token_arc);
@@ -937,20 +944,16 @@ fn stamp_inline(inline: &mut Inline, name: &str, token_arc: &Arc<SourceInfo>) {
         | Inline::Strikeout(Strikeout { content, .. })
         | Inline::Superscript(Superscript { content, .. })
         | Inline::Subscript(Subscript { content, .. })
-        | Inline::SmallCaps(SmallCaps { content, .. })
-        | Inline::Insert(Insert { content, .. })
-        | Inline::Delete(Delete { content, .. })
-        | Inline::Highlight(Highlight { content, .. })
-        | Inline::Quoted(Quoted { content, .. })
-        | Inline::Cite(Cite { content, .. })
-        | Inline::Link(Link { content, .. })
-        | Inline::Image(Image { content, .. })
-        | Inline::Span(Span { content, .. })
-        | Inline::EditComment(EditComment { content, .. }) => {
-            for child in content.iter_mut() {
-                stamp_inline(child, name, token_arc);
-            }
-        }
+        | Inline::SmallCaps(SmallCaps { content, .. }) => stamp_inlines(content, name, token_arc),
+        Inline::Insert(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::Delete(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::Highlight(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::Quoted(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::Cite(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::Link(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::Image(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::Span(n) => stamp_inlines(&mut n.content, name, token_arc),
+        Inline::EditComment(n) => stamp_inlines(&mut n.content, name, token_arc),
         Inline::Note(Note { content, .. }) => {
             for child in content.iter_mut() {
                 stamp_block(child, name, token_arc);
@@ -2133,32 +2136,50 @@ fn recurse_inline<'a>(
             | Inline::Strikeout(Strikeout { content, .. })
             | Inline::Superscript(Superscript { content, .. })
             | Inline::Subscript(Subscript { content, .. })
-            | Inline::SmallCaps(SmallCaps { content, .. })
-            | Inline::Insert(Insert { content, .. })
-            | Inline::Delete(Delete { content, .. })
-            | Inline::Highlight(Highlight { content, .. }) => {
+            | Inline::SmallCaps(SmallCaps { content, .. }) => {
                 resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Inline::Quoted(Quoted { content, .. }) => {
-                resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
+            Inline::Insert(n) => {
+                resolve_inlines(&mut n.content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Inline::Cite(Cite { content, .. }) => {
-                resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
+            Inline::Delete(n) => {
+                resolve_inlines(&mut n.content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Inline::Link(Link {
-                attr,
-                content,
-                target,
-                source_info,
-                ..
-            })
-            | Inline::Image(Image {
-                attr,
-                content,
-                target,
-                source_info,
-                ..
-            }) => {
+            Inline::Highlight(n) => {
+                resolve_inlines(&mut n.content, transform, metadata, diagnostics, lua_engine).await;
+            }
+            Inline::Quoted(n) => {
+                resolve_inlines(&mut n.content, transform, metadata, diagnostics, lua_engine).await;
+            }
+            Inline::Cite(n) => {
+                resolve_inlines(&mut n.content, transform, metadata, diagnostics, lua_engine).await;
+            }
+            Inline::Link(_) | Inline::Image(_) => {
+                // `Link` and `Image` are boxed in `Inline`, so one or-pattern
+                // cannot destructure both; pick the fields apart here.
+                let (attr, content, target, source_info) = match inline {
+                    Inline::Link(link) => {
+                        let Link {
+                            attr,
+                            content,
+                            target,
+                            source_info,
+                            ..
+                        } = &mut **link;
+                        (attr, content, target, source_info)
+                    }
+                    Inline::Image(image) => {
+                        let Image {
+                            attr,
+                            content,
+                            target,
+                            source_info,
+                            ..
+                        } = &mut **image;
+                        (attr, content, target, source_info)
+                    }
+                    _ => unreachable!("outer arm matched Link or Image"),
+                };
                 expand_attr_value_shortcodes(
                     attr,
                     transform,
@@ -2184,12 +2205,13 @@ fn recurse_inline<'a>(
             Inline::Note(Note { content, .. }) => {
                 resolve_blocks(content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Inline::Span(Span {
-                attr,
-                content,
-                source_info,
-                ..
-            }) => {
+            Inline::Span(span) => {
+                let Span {
+                    attr,
+                    content,
+                    source_info,
+                    ..
+                } = &mut **span;
                 expand_attr_value_shortcodes(
                     attr,
                     transform,
@@ -2201,8 +2223,8 @@ fn recurse_inline<'a>(
                 .await;
                 resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Inline::EditComment(EditComment { content, .. }) => {
-                resolve_inlines(content, transform, metadata, diagnostics, lua_engine).await;
+            Inline::EditComment(n) => {
+                resolve_inlines(&mut n.content, transform, metadata, diagnostics, lua_engine).await;
             }
             Inline::Custom(custom) => {
                 // Resolve shortcodes in custom inline node slots
@@ -2829,7 +2851,7 @@ mod tests {
                         text: "Title: ".to_string(),
                         source_info: dummy_source_info(),
                     }),
-                    Inline::Shortcode(make_shortcode("meta", vec!["title"])),
+                    Inline::Shortcode(Box::new(make_shortcode("meta", vec!["title"]))),
                 ],
                 source_info: dummy_source_info(),
             })],
@@ -2873,7 +2895,10 @@ mod tests {
                 dummy_source_info(),
             ),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Shortcode(make_shortcode("meta", vec!["missing"]))],
+                content: vec![Inline::Shortcode(Box::new(make_shortcode(
+                    "meta",
+                    vec!["missing"],
+                )))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -2948,7 +2973,10 @@ mod tests {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Shortcode(make_shortcode("block-test", vec![]))],
+                content: vec![Inline::Shortcode(Box::new(make_shortcode(
+                    "block-test",
+                    vec![],
+                )))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -2990,7 +3018,7 @@ mod tests {
                         text: "Before: ".to_string(),
                         source_info: dummy_source_info(),
                     }),
-                    Inline::Shortcode(make_shortcode("block-test", vec![])),
+                    Inline::Shortcode(Box::new(make_shortcode("block-test", vec![]))),
                 ],
                 source_info: dummy_source_info(),
             })],
@@ -3060,7 +3088,7 @@ mod tests {
                         text: "Before: ".to_string(),
                         source_info: dummy_source_info(),
                     }),
-                    Inline::Shortcode(make_shortcode("always-block", vec![])),
+                    Inline::Shortcode(Box::new(make_shortcode("always-block", vec![]))),
                 ],
                 source_info: dummy_source_info(),
             })],
@@ -3102,13 +3130,13 @@ mod tests {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Shortcode(Shortcode {
+                content: vec![Inline::Shortcode(Box::new(Shortcode {
                     is_escaped: true,
                     name: "meta".to_string(),
                     positional_args: vec![ShortcodeArg::String("title".to_string())],
                     keyword_args: hashlink::LinkedHashMap::new(),
                     source_info: dummy_source_info(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -3165,7 +3193,7 @@ mod tests {
                         text: "Sub ".to_string(),
                         source_info: dummy_source_info(),
                     }),
-                    Inline::Shortcode(make_shortcode("meta", vec![key])),
+                    Inline::Shortcode(Box::new(make_shortcode("meta", vec![key]))),
                 ]),
                 source_info: dummy_source_info(),
                 merge_op: Default::default(),
@@ -3578,7 +3606,7 @@ mod tests {
             let mut ast = Pandoc {
                 meta: ConfigValue::default(),
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode("hello", vec![]))],
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode("hello", vec![])))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -3630,7 +3658,7 @@ mod tests {
             let mut ast = Pandoc {
                 meta: ConfigValue::default(),
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode("read", vec![]))],
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode("read", vec![])))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -3688,7 +3716,7 @@ mod tests {
             let mut ast = Pandoc {
                 meta: ConfigValue::default(),
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode("greet", vec![]))],
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode("greet", vec![])))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -3744,7 +3772,10 @@ mod tests {
             let mut ast = Pandoc {
                 meta,
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode("meta", vec!["title"]))],
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode(
+                        "meta",
+                        vec!["title"],
+                    )))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -3784,7 +3815,10 @@ mod tests {
             let mut ast = Pandoc {
                 meta: ConfigValue::default(),
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode("nonexistent", vec![]))],
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode(
+                        "nonexistent",
+                        vec![],
+                    )))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -3839,7 +3873,7 @@ mod tests {
             let mut ast = Pandoc {
                 meta: ConfigValue::default(),
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode("break", vec![]))],
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode("break", vec![])))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -3884,7 +3918,10 @@ mod tests {
             let mut ast = Pandoc {
                 meta: ConfigValue::default(),
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode("pagebreak", vec![]))],
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode(
+                        "pagebreak",
+                        vec![],
+                    )))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -3941,11 +3978,11 @@ mod tests {
             let mut ast = Pandoc {
                 meta: ConfigValue::default(),
                 blocks: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Shortcode(make_shortcode_with_si(
+                    content: vec![Inline::Shortcode(Box::new(make_shortcode_with_si(
                         "typed",
                         vec![],
                         tok.clone(),
-                    ))],
+                    )))],
                     source_info: dummy_source_info(),
                 })],
             };
@@ -4080,11 +4117,11 @@ mod tests {
                 dummy_source_info(),
             ),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Shortcode(make_shortcode_with_si(
+                content: vec![Inline::Shortcode(Box::new(make_shortcode_with_si(
                     "meta",
                     vec!["title"],
                     tok.clone(),
-                ))],
+                )))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -4126,11 +4163,11 @@ mod tests {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Shortcode(make_shortcode_with_si(
+                content: vec![Inline::Shortcode(Box::new(make_shortcode_with_si(
                     "multi",
                     vec![],
                     tok.clone(),
-                ))],
+                )))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -4185,10 +4222,10 @@ mod tests {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Shortcode(make_escaped_shortcode_with_si(
+                content: vec![Inline::Shortcode(Box::new(make_escaped_shortcode_with_si(
                     "meta",
                     tok.clone(),
-                ))],
+                )))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -4224,11 +4261,11 @@ mod tests {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Shortcode(make_shortcode_with_si(
+                content: vec![Inline::Shortcode(Box::new(make_shortcode_with_si(
                     "bogus",
                     vec![],
                     tok.clone(),
-                ))],
+                )))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -4276,12 +4313,12 @@ mod tests {
                 ),
                 blocks: vec![Block::Paragraph(Paragraph {
                     content: vec![
-                        Inline::Shortcode(make_shortcode_with_si(
+                        Inline::Shortcode(Box::new(make_shortcode_with_si(
                             "meta",
                             vec!["title"],
                             tok.clone(),
-                        )),
-                        Inline::Shortcode(make_shortcode_with_si("multi", vec![], tok)),
+                        ))),
+                        Inline::Shortcode(Box::new(make_shortcode_with_si("multi", vec![], tok))),
                     ],
                     source_info: dummy_source_info(),
                 })],
@@ -4322,8 +4359,16 @@ mod tests {
             ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![
-                    Inline::Shortcode(make_shortcode_with_si("meta", vec!["title"], tok.clone())),
-                    Inline::Shortcode(make_shortcode_with_si("multi", vec![], tok.clone())),
+                    Inline::Shortcode(Box::new(make_shortcode_with_si(
+                        "meta",
+                        vec!["title"],
+                        tok.clone(),
+                    ))),
+                    Inline::Shortcode(Box::new(make_shortcode_with_si(
+                        "multi",
+                        vec![],
+                        tok.clone(),
+                    ))),
                 ],
                 source_info: dummy_source_info(),
             })],

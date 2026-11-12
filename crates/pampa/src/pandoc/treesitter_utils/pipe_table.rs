@@ -125,7 +125,11 @@ pub fn process_pipe_table_cell(
                 plain_content.extend(inlines);
             }
             PandocNativeIntermediate::IntermediateAttr(attr, attr_source, attr_si) => {
-                plain_content.push(Inline::Attr(InlineAttr::new(attr, attr_source, attr_si)));
+                plain_content.push(Inline::Attr(Box::new(InlineAttr::new(
+                    attr,
+                    attr_source,
+                    attr_si,
+                ))));
             }
             _ => {
                 // Skip other intermediate types (e.g., markers)

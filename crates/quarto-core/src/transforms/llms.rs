@@ -551,26 +551,26 @@ fn synthesize_listing_list(
                 ItemTarget::None => title,
                 ItemTarget::Href(raw_href) => {
                     let href = retarget_href(raw_href, cx);
-                    vec![Inline::Link(quarto_pandoc_types::inline::Link {
+                    vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
                         attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                         content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-                    })]
+                    }))]
                 }
                 ItemTarget::Document { output_href, .. } => {
                     let based = relativize(&cx.cur_dir, output_href);
                     let href = retarget_href(&based, cx);
-                    vec![Inline::Link(quarto_pandoc_types::inline::Link {
+                    vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
                         attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                         content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
-                    })]
+                    }))]
                 }
             };
             let meta_bits: Vec<&str> = [item.date.as_deref(), item.author.as_deref()]
@@ -1450,7 +1450,7 @@ mod tests {
         for (k, v) in kv {
             map.insert(k.to_string(), v.to_string());
         }
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], map),
             content: vec![Inline::Str(Str {
                 text: "x".to_string(),
@@ -1460,7 +1460,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(content: Vec<Inline>) -> Block {
@@ -1481,7 +1481,7 @@ mod tests {
             if let Some(content) = content {
                 for i in content {
                     if let Inline::Link(l) = i {
-                        links.push(l);
+                        links.push(&**l);
                     }
                 }
             }

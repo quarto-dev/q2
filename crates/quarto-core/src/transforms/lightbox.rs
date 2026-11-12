@@ -681,7 +681,7 @@ impl Walker<'_> {
                     let Inline::Image(img) = std::mem::replace(inline, placeholder) else {
                         unreachable!("matched an Image above");
                     };
-                    *inline = Inline::Link(self.wrap(img));
+                    *inline = Inline::Link(Box::new(self.wrap(*img)));
                 }
             }
             // A footnote's body is not part of the figure (but an image
@@ -751,7 +751,7 @@ impl Walker<'_> {
         Link {
             attr: (String::new(), vec![LIGHTBOX.to_string()], kvs),
             target: (img.target.0.clone(), title.unwrap_or_default()),
-            content: vec![Inline::Image(img)],
+            content: vec![Inline::Image(Box::new(img))],
             source_info,
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
@@ -1176,7 +1176,7 @@ mod tests {
 
     fn image_para(src: &str, alt: &str) -> Block {
         Block::Plain(Plain {
-            content: vec![Inline::Image(Image {
+            content: vec![Inline::Image(Box::new(Image {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 content: vec![Inline::Str(Str {
                     text: alt.to_string(),
@@ -1186,7 +1186,7 @@ mod tests {
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })],
+            }))],
             source_info: SourceInfo::for_test(),
         })
     }

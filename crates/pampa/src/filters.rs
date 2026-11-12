@@ -191,6 +191,22 @@ define_filter_with_methods!(
 // Macro to generate repetitive match arms
 // Macro to reduce repetition in filter logic
 macro_rules! handle_inline_filter {
+    // For variants whose payload is boxed in `Inline` (see the layout note on
+    // `Inline`). `$value` is the `Box`; it is only unboxed on the path that
+    // hands the bare node to a type-specific filter function.
+    (boxed $variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr, $out:expr) => {
+        if let Some(f) = &mut $filter.$filter_field {
+            inlines_apply_and_maybe_recurse!(*$value, f, $filter, $ctx, $out)
+        } else if let Some(f) = &mut $filter.inline {
+            inlines_apply_and_maybe_recurse!(Inline::$variant($value), f, $filter, $ctx, $out)
+        } else {
+            $out.push(traverse_inline_structure(
+                Inline::$variant($value),
+                $filter,
+                $ctx,
+            ))
+        }
+    };
     ($variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr, $out:expr) => {
         if let Some(f) = &mut $filter.$filter_field {
             inlines_apply_and_maybe_recurse!($value, f, $filter, $ctx, $out)
@@ -231,7 +247,7 @@ macro_rules! impl_inline_filterable_terminal {
         $(
             impl InlineFilterableStructure for pandoc::$variant {
                 fn filter_structure(self, _: &mut Filter, _ctx: &mut FilterContext) -> Inline {
-                    Inline::$variant(self)
+                    Inline::$variant(self.into())
                 }
             }
         )*
@@ -256,7 +272,7 @@ impl InlineFilterableStructure for InlineAttr {
     fn filter_structure(self, _: &mut Filter, _ctx: &mut FilterContext) -> Inline {
         // Note: This should not be called in practice because Attr inlines
         // are stripped during postprocessing before filters run
-        Inline::Attr(self)
+        Inline::Attr(Box::new(self))
     }
 }
 
@@ -265,10 +281,13 @@ macro_rules! impl_inline_filterable_simple {
         $(
             impl InlineFilterableStructure for pandoc::$variant {
                 fn filter_structure(self, filter: &mut Filter, ctx: &mut FilterContext) -> Inline {
-                    Inline::$variant(pandoc::$variant {
-                        content: topdown_traverse_inlines(self.content, filter, ctx),
-                        ..self
-                    })
+                    Inline::$variant(
+                        pandoc::$variant {
+                            content: topdown_traverse_inlines(self.content, filter, ctx),
+                            ..self
+                        }
+                        .into(),
+                    )
                 }
             }
         )*
@@ -304,7 +323,7 @@ impl InlineFilterableStructure for pandoc::Note {
 
 impl InlineFilterableStructure for pandoc::Cite {
     fn filter_structure(self, filter: &mut Filter, ctx: &mut FilterContext) -> Inline {
-        Inline::Cite(pandoc::Cite {
+        Inline::Cite(Box::new(pandoc::Cite {
             citations: self
                 .citations
                 .into_iter()
@@ -320,7 +339,7 @@ impl InlineFilterableStructure for pandoc::Cite {
                 .collect(),
             content: topdown_traverse_inlines(self.content, filter, ctx),
             source_info: self.source_info,
-        })
+        }))
     }
 }
 
@@ -589,13 +608,13 @@ fn topdown_traverse_inline_into(
             handle_inline_filter!(SmallCaps, sc, small_caps, filter, ctx, out)
         }
         Inline::Quoted(q) => {
-            handle_inline_filter!(Quoted, q, quoted, filter, ctx, out)
+            handle_inline_filter!(boxed Quoted, q, quoted, filter, ctx, out)
         }
         Inline::Cite(c) => {
-            handle_inline_filter!(Cite, c, cite, filter, ctx, out)
+            handle_inline_filter!(boxed Cite, c, cite, filter, ctx, out)
         }
         Inline::Code(co) => {
-            handle_inline_filter!(Code, co, code, filter, ctx, out)
+            handle_inline_filter!(boxed Code, co, code, filter, ctx, out)
         }
         Inline::Space(sp) => {
             handle_inline_filter!(Space, sp, space, filter, ctx, out)
@@ -607,26 +626,26 @@ fn topdown_traverse_inline_into(
             handle_inline_filter!(LineBreak, lb, line_break, filter, ctx, out)
         }
         Inline::Math(m) => {
-            handle_inline_filter!(Math, m, math, filter, ctx, out)
+            handle_inline_filter!(boxed Math, m, math, filter, ctx, out)
         }
         Inline::RawInline(ri) => {
-            handle_inline_filter!(RawInline, ri, raw_inline, filter, ctx, out)
+            handle_inline_filter!(boxed RawInline, ri, raw_inline, filter, ctx, out)
         }
         Inline::Link(l) => {
-            handle_inline_filter!(Link, l, link, filter, ctx, out)
+            handle_inline_filter!(boxed Link, l, link, filter, ctx, out)
         }
         Inline::Image(i) => {
-            handle_inline_filter!(Image, i, image, filter, ctx, out)
+            handle_inline_filter!(boxed Image, i, image, filter, ctx, out)
         }
         Inline::Note(note) => {
             handle_inline_filter!(Note, note, note, filter, ctx, out)
         }
         Inline::Span(span) => {
-            handle_inline_filter!(Span, span, span, filter, ctx, out)
+            handle_inline_filter!(boxed Span, span, span, filter, ctx, out)
         }
         // quarto extensions
         Inline::Shortcode(shortcode) => {
-            handle_inline_filter!(Shortcode, shortcode, shortcode, filter, ctx, out)
+            handle_inline_filter!(boxed Shortcode, shortcode, shortcode, filter, ctx, out)
         }
         Inline::NoteReference(note_ref) => {
             handle_inline_filter!(NoteReference, note_ref, note_reference, filter, ctx, out)
@@ -649,16 +668,16 @@ fn topdown_traverse_inline_into(
             }
         }
         Inline::Insert(ins) => {
-            handle_inline_filter!(Insert, ins, insert, filter, ctx, out)
+            handle_inline_filter!(boxed Insert, ins, insert, filter, ctx, out)
         }
         Inline::Delete(del) => {
-            handle_inline_filter!(Delete, del, delete, filter, ctx, out)
+            handle_inline_filter!(boxed Delete, del, delete, filter, ctx, out)
         }
         Inline::Highlight(hl) => {
-            handle_inline_filter!(Highlight, hl, highlight, filter, ctx, out)
+            handle_inline_filter!(boxed Highlight, hl, highlight, filter, ctx, out)
         }
         Inline::EditComment(ec) => {
-            handle_inline_filter!(EditComment, ec, edit_comment, filter, ctx, out)
+            handle_inline_filter!(boxed EditComment, ec, edit_comment, filter, ctx, out)
         }
         Inline::Custom(custom) => {
             // Custom nodes: recursively filter the content in slots, then pass through
@@ -852,12 +871,12 @@ fn traverse_inline_nonterminal(
             content: topdown_traverse_inlines(sc.content, filter, ctx),
             source_info: sc.source_info,
         }),
-        Inline::Quoted(q) => Inline::Quoted(crate::pandoc::Quoted {
+        Inline::Quoted(q) => Inline::Quoted(Box::new(crate::pandoc::Quoted {
             quote_type: q.quote_type,
             content: topdown_traverse_inlines(q.content, filter, ctx),
             source_info: q.source_info,
-        }),
-        Inline::Cite(c) => Inline::Cite(crate::pandoc::Cite {
+        })),
+        Inline::Cite(c) => Inline::Cite(Box::new(crate::pandoc::Cite {
             citations: c
                 .citations
                 .into_iter()
@@ -873,49 +892,49 @@ fn traverse_inline_nonterminal(
                 .collect(),
             content: topdown_traverse_inlines(c.content, filter, ctx),
             source_info: c.source_info,
-        }),
-        Inline::Link(l) => Inline::Link(crate::pandoc::Link {
+        })),
+        Inline::Link(l) => Inline::Link(Box::new(crate::pandoc::Link {
             attr: l.attr,
             target: l.target,
             content: topdown_traverse_inlines(l.content, filter, ctx),
             source_info: l.source_info,
             attr_source: l.attr_source,
             target_source: l.target_source,
-        }),
-        Inline::Image(i) => Inline::Image(crate::pandoc::Image {
+        })),
+        Inline::Image(i) => Inline::Image(Box::new(crate::pandoc::Image {
             attr: i.attr,
             target: i.target,
             content: topdown_traverse_inlines(i.content, filter, ctx),
             source_info: i.source_info,
             attr_source: i.attr_source,
             target_source: i.target_source,
-        }),
+        })),
         Inline::Note(note) => Inline::Note(crate::pandoc::Note {
             content: topdown_traverse_blocks(note.content, filter, ctx),
             source_info: note.source_info,
         }),
-        Inline::Span(span) => Inline::Span(crate::pandoc::Span {
+        Inline::Span(span) => Inline::Span(Box::new(crate::pandoc::Span {
             attr: span.attr,
             content: topdown_traverse_inlines(span.content, filter, ctx),
             source_info: span.source_info,
             attr_source: span.attr_source,
-        }),
-        Inline::Insert(ins) => Inline::Insert(crate::pandoc::Insert {
+        })),
+        Inline::Insert(ins) => Inline::Insert(Box::new(crate::pandoc::Insert {
             content: topdown_traverse_inlines(ins.content, filter, ctx),
-            ..ins
-        }),
-        Inline::Delete(del) => Inline::Delete(crate::pandoc::Delete {
+            ..*ins
+        })),
+        Inline::Delete(del) => Inline::Delete(Box::new(crate::pandoc::Delete {
             content: topdown_traverse_inlines(del.content, filter, ctx),
-            ..del
-        }),
-        Inline::Highlight(hl) => Inline::Highlight(crate::pandoc::Highlight {
+            ..*del
+        })),
+        Inline::Highlight(hl) => Inline::Highlight(Box::new(crate::pandoc::Highlight {
             content: topdown_traverse_inlines(hl.content, filter, ctx),
-            ..hl
-        }),
-        Inline::EditComment(ec) => Inline::EditComment(crate::pandoc::EditComment {
+            ..*hl
+        })),
+        Inline::EditComment(ec) => Inline::EditComment(Box::new(crate::pandoc::EditComment {
             content: topdown_traverse_inlines(ec.content, filter, ctx),
-            ..ec
-        }),
+            ..*ec
+        })),
         _ => panic!("Unsupported inline type: {:?}", inline),
     }
 }
@@ -1398,12 +1417,12 @@ mod tests {
     fn test_traverse_code() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Code(Code {
+        let inline = Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: "code".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         match &result[0] {
@@ -1416,12 +1435,12 @@ mod tests {
     fn test_traverse_math() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Math(Math {
+        let inline = Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: si(),
             text_source: None,
-        });
+        }));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         match &result[0] {
@@ -1434,11 +1453,11 @@ mod tests {
     fn test_traverse_raw_inline() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::RawInline(RawInline {
+        let inline = Inline::RawInline(Box::new(RawInline {
             format: "html".to_string(),
             text: "<b>bold</b>".to_string(),
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         match &result[0] {
@@ -1451,13 +1470,13 @@ mod tests {
     fn test_traverse_shortcode() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Shortcode(Shortcode {
+        let inline = Inline::Shortcode(Box::new(Shortcode {
             is_escaped: false,
             name: "test".to_string(),
             positional_args: vec![],
             keyword_args: hashlink::LinkedHashMap::new(),
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Shortcode(_)));
@@ -1499,14 +1518,14 @@ mod tests {
     fn test_traverse_link() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Link(Link {
+        let inline = Inline::Link(Box::new(Link {
             attr: empty_attr(),
             content: vec![str_inline("link text")],
             target: ("https://example.com".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         match &result[0] {
@@ -1519,14 +1538,14 @@ mod tests {
     fn test_traverse_image() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Image(Image {
+        let inline = Inline::Image(Box::new(Image {
             attr: empty_attr(),
             content: vec![str_inline("alt")],
             target: ("image.png".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Image(_)));
@@ -1536,12 +1555,12 @@ mod tests {
     fn test_traverse_span() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Span(Span {
+        let inline = Inline::Span(Box::new(Span {
             attr: empty_attr(),
             content: vec![str_inline("span")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Span(_)));
@@ -1563,30 +1582,30 @@ mod tests {
             )
         };
         let marks = vec![
-            Inline::Insert(Insert {
+            Inline::Insert(Box::new(Insert {
                 attr: empty_attr(),
                 content: vec![str_inline("ins")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
-            Inline::Delete(Delete {
+            })),
+            Inline::Delete(Box::new(Delete {
                 attr: empty_attr(),
                 content: vec![str_inline("del")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
-            Inline::Highlight(Highlight {
+            })),
+            Inline::Highlight(Box::new(Highlight {
                 attr: empty_attr(),
                 content: vec![str_inline("hl")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
-            Inline::EditComment(EditComment {
+            })),
+            Inline::EditComment(Box::new(EditComment {
                 attr: empty_attr(),
                 content: vec![str_inline("com")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ];
         for mark in marks {
             let mut filter = Filter::new().with_str(upper);
@@ -1611,7 +1630,7 @@ mod tests {
     fn test_traverse_custom_inline() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Custom(CustomNode::new("test", empty_attr(), si()));
+        let inline = Inline::Custom(Box::new(CustomNode::new("test", empty_attr(), si())));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Custom(_)));
@@ -1623,11 +1642,11 @@ mod tests {
         let mut filter =
             Filter::new().with_inlines(|inlines, _ctx| FilterReturn::Unchanged(inlines));
         let mut ctx = FilterContext::new();
-        let inline = Inline::Attr(InlineAttr::new(
+        let inline = Inline::Attr(Box::new(InlineAttr::new(
             empty_attr(),
             AttrSourceInfo::empty(),
             quarto_source_map::SourceInfo::for_test(),
-        ));
+        )));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Attr(_)));
@@ -1637,11 +1656,11 @@ mod tests {
     fn test_traverse_attr_without_filter() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let inline = Inline::Attr(InlineAttr::new(
+        let inline = Inline::Attr(Box::new(InlineAttr::new(
             empty_attr(),
             AttrSourceInfo::empty(),
             quarto_source_map::SourceInfo::for_test(),
-        ));
+        )));
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Attr(_)));

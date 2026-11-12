@@ -140,7 +140,7 @@ pub fn chapter_label_prefix(item: &BookRenderItem) -> Option<String> {
 /// verbatim (design doc §4).
 pub fn decorated_chapter_text(prefix: &str, title: &str) -> ConfigValue {
     let span = |class: &str, text: &str| {
-        Inline::Span(Span {
+        Inline::Span(Box::new(Span {
             attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -148,7 +148,7 @@ pub fn decorated_chapter_text(prefix: &str, title: &str) -> ConfigValue {
             })],
             source_info: gen_si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     };
     let inlines: Inlines = vec![
         span("chapter-number", prefix),

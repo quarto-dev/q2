@@ -223,7 +223,7 @@ fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &Floa
         return;
     };
     let source_info = h.source_info.clone();
-    let number_span = Inline::Span(Span {
+    let number_span = Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec!["header-section-number".to_string()],
@@ -235,7 +235,7 @@ fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &Floa
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
     let mut prefix = if h.level == 1 && fs.chapter_seed.as_ref().is_some_and(|s| s.is_appendix) {
         let title = terms
             .and_then(|t| t.crossref_prefix("apx"))
@@ -1060,7 +1060,7 @@ fn theorem_label_inlines(
         content: strong_content,
         source_info: source_info.clone(),
     });
-    let span = Inline::Span(Span {
+    let span = Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec!["theorem-title".to_string()],
@@ -1069,7 +1069,7 @@ fn theorem_label_inlines(
         content: vec![strong],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     vec![
         span,
@@ -1220,12 +1220,12 @@ fn render_equation(node: CustomNode, fs: &FloatState) -> Inline {
         _ => vec![],
     };
 
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr,
         content,
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Convert a CrossrefResolvedRef custom node into a `Link` inline.
@@ -1339,14 +1339,14 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
         classes.push("quarto-unresolved-ref".to_string());
     }
 
-    Inline::Link(Link {
+    Inline::Link(Box::new(Link {
         attr: (String::new(), classes, hashlink::LinkedHashMap::new()),
         content,
         target,
         source_info,
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Build the link text for a resolved `sec` ref: "Section 1.2" by default,
@@ -1610,7 +1610,7 @@ mod tests {
     }
 
     fn cite(id: &str) -> Inline {
-        Inline::Cite(Cite {
+        Inline::Cite(Box::new(Cite {
             citations: vec![Citation {
                 id: id.to_string(),
                 prefix: vec![],
@@ -1622,7 +1622,7 @@ mod tests {
             }],
             content: vec![str_inline(&format!("@{}", id))],
             source_info: si(),
-        })
+        }))
     }
 
     fn header(level: usize, id: &str, text: &str) -> Block {
@@ -1891,14 +1891,14 @@ mod tests {
         // Q1 reads `fig-align` from the contained Image and strips it.
         let mut img_attr: LinkedHashMap<String, String> = LinkedHashMap::new();
         img_attr.insert("fig-align".to_string(), "left".to_string());
-        let img = Inline::Image(quarto_pandoc_types::inline::Image {
+        let img = Inline::Image(Box::new(quarto_pandoc_types::inline::Image {
             attr: (String::new(), Vec::new(), img_attr),
             content: vec![],
             target: ("img.png".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let blocks = vec![Block::Div(Div {
             attr: attr_id("fig-a"),
             content: vec![
@@ -2153,14 +2153,14 @@ mod tests {
         // a native Figure with no id — is wrapped in
         // `Div(.quarto-figure .quarto-figure-<align>)`, with the figure's id
         // (when present) moving to the wrapper, Q1's `renderHtmlFigure`.
-        let img = Inline::Image(quarto_pandoc_types::inline::Image {
+        let img = Inline::Image(Box::new(quarto_pandoc_types::inline::Image {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             content: vec![],
             target: ("img.png".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let figure = Block::Figure(Figure {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
@@ -2403,7 +2403,7 @@ mod tests {
             "resolved": false,
             "label_upper": false,
         });
-        Inline::Custom(node)
+        Inline::Custom(Box::new(node))
     }
 
     /// The real P5 unit path for one cross-chapter ref: aggregate the
@@ -2467,7 +2467,7 @@ mod tests {
         let Inline::Link(link) = &p.content[0] else {
             panic!("expected Link, got {:?}", p.content[0]);
         };
-        link.clone()
+        *link.clone()
     }
 
     #[tokio::test]
@@ -3065,14 +3065,14 @@ mod tests {
     /// A native `Figure` with a crossref id and a `[Plain[...]]` caption —
     /// what `![cap](img){#fig-x}` parses to.
     fn native_figure_with_plain_caption(id: &str, cap: &str) -> Block {
-        let img = Inline::Image(quarto_pandoc_types::inline::Image {
+        let img = Inline::Image(Box::new(quarto_pandoc_types::inline::Image {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             content: vec![],
             target: ("img.png".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         Block::Figure(Figure {
             attr: attr_id(id),
             caption: Caption {
@@ -3438,21 +3438,21 @@ mod tests {
 
     fn eq_para(id: &str, math_text: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: (
                     id.to_string(),
                     vec!["quarto-math-with-attribute".to_string()],
                     LinkedHashMap::new(),
                 ),
-                content: vec![Inline::Math(Math {
+                content: vec![Inline::Math(Box::new(Math {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),
                     source_info: si(),
                     text_source: None,
-                })],
+                }))],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
         })
     }
@@ -3493,12 +3493,12 @@ mod tests {
         let mut slots = LinkedHashMap::new();
         slots.insert(
             "content".to_string(),
-            Slot::Inlines(vec![Inline::Math(Math {
+            Slot::Inlines(vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: "x".to_string(),
                 source_info: si(),
                 text_source: None,
-            })]),
+            }))]),
         );
         let node = CustomNode {
             type_name: EQUATION.to_string(),
@@ -3529,21 +3529,21 @@ mod tests {
         let node = SourceInfo::original(FileId(0), 0, 12);
         let text = SourceInfo::original(FileId(0), 2, 10);
         let block = Block::Paragraph(Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: (
                     "eq-einstein".to_string(),
                     vec!["quarto-math-with-attribute".to_string()],
                     LinkedHashMap::new(),
                 ),
-                content: vec![Inline::Math(Math {
+                content: vec![Inline::Math(Box::new(Math {
                     math_type: MathType::DisplayMath,
                     text: "e = mc^2".to_string(),
                     source_info: node.clone(),
                     text_source: Some(text.clone()),
-                })],
+                }))],
                 source_info: node.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: node,
         });
         let ast = run_full(vec![block]).await;

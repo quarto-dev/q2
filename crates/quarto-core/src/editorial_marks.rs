@@ -80,12 +80,12 @@ pub fn new_span(
     attrs: LinkedHashMap<String, String>,
     content: Inlines,
 ) -> Inline {
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr: (String::new(), classes, attrs),
         content,
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -255,17 +255,17 @@ fn block_to_inlines(block: &Block) -> Inlines {
             }
             out
         }
-        Block::CodeBlock(cb) => vec![Inline::Code(Code {
+        Block::CodeBlock(cb) => vec![Inline::Code(Box::new(Code {
             attr: cb.attr.clone(),
             text: cb.text.clone(),
             source_info: generated(),
             attr_source: AttrSourceInfo::empty(),
-        })],
-        Block::RawBlock(rb) => vec![Inline::RawInline(RawInline {
+        }))],
+        Block::RawBlock(rb) => vec![Inline::RawInline(Box::new(RawInline {
             format: rb.format.clone(),
             text: rb.text.clone(),
             source_info: generated(),
-        })],
+        }))],
         Block::Div(d) => blocks_to_inlines(&d.content),
         Block::BlockQuote(bq) => blocks_to_inlines(&bq.content),
         Block::Figure(f) => blocks_to_inlines(&f.content),
@@ -352,7 +352,7 @@ mod tests {
 
     fn plain_span(content: Inlines) -> Span {
         match new_span(Vec::new(), LinkedHashMap::new(), content) {
-            Inline::Span(s) => s,
+            Inline::Span(s) => *s,
             _ => unreachable!(),
         }
     }

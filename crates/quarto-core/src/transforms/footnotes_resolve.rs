@@ -410,7 +410,7 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
 
     // The link inside the superscript
     // Target is a tuple: (url, title)
-    let link = Inline::Link(Link {
+    let link = Inline::Link(Box::new(Link {
         attr: (
             String::new(),
             vec!["footnote-ref".to_string()],
@@ -424,7 +424,7 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
         target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-    });
+    }));
 
     // Build the class list for the outer span
     let classes = if is_margin {
@@ -436,7 +436,7 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
     // Wrap in a Span with the fnref ID, then in Superscript
     // Actually, Pandoc puts the ID on the superscript, but we don't have that field.
     // Let's use a Span wrapper.
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr: (fnref_id, classes, LinkedHashMap::new()),
         content: vec![Inline::Superscript(Superscript {
             content: vec![link],
@@ -444,7 +444,7 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Create the footnotes section block.
@@ -502,7 +502,7 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
 
     // Create the backlink
     // Target is a tuple: (url, title)
-    let backlink = Inline::Link(Link {
+    let backlink = Inline::Link(Box::new(Link {
         attr: (
             String::new(),
             vec!["footnote-back".to_string()],
@@ -516,7 +516,7 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
         target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-    });
+    }));
 
     // Convert content to blocks and append backlink to last paragraph
     let mut content_blocks = footnote.content.clone();

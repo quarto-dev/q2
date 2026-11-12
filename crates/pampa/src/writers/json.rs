@@ -576,7 +576,7 @@ fn build_path_inlines(path: &str, source_info: &SourceInfo) -> Inlines {
 fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
     let mut attributes = LinkedHashMap::new();
     attributes.insert("tag".to_string(), "glob".to_string());
-    vec![crate::pandoc::Inline::Span(crate::pandoc::Span {
+    vec![crate::pandoc::Inline::Span(Box::new(crate::pandoc::Span {
         attr: (
             String::new(),
             vec!["yaml-tagged-string".to_string()],
@@ -590,7 +590,7 @@ fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
         // so attribution points at the YAML.
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 /// Build Inlines for an Expr ConfigValue variant.
@@ -599,7 +599,7 @@ fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
 fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
     let mut attributes = LinkedHashMap::new();
     attributes.insert("tag".to_string(), "expr".to_string());
-    vec![crate::pandoc::Inline::Span(crate::pandoc::Span {
+    vec![crate::pandoc::Inline::Span(Box::new(crate::pandoc::Span {
         attr: (
             String::new(),
             vec!["yaml-tagged-string".to_string()],
@@ -613,7 +613,7 @@ fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
         // glob branch above.
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 /// Helper to build a node JSON object with type, optional content, and source info.
@@ -917,7 +917,7 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
         ),
         Inline::Shortcode(shortcode) => {
             // Convert shortcode to span representation for JSON format output
-            let span = shortcode_to_span(shortcode.clone());
+            let span = shortcode_to_span(*shortcode.clone());
             let attr = (span.attr.0.clone(), span.attr.1.clone(), span.attr.2.clone());
             node_with_source(
                 "Span",
@@ -3031,7 +3031,7 @@ fn stream_write_inline<W: io::Write>(
                     },
                 );
             }
-            let span = shortcode_to_span(shortcode.clone());
+            let span = shortcode_to_span(*shortcode.clone());
             let attr = (
                 span.attr.0.clone(),
                 span.attr.1.clone(),
@@ -4984,7 +4984,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
         };
 
-        let inline = Inline::Custom(custom);
+        let inline = Inline::Custom(Box::new(custom));
 
         // Create a minimal Pandoc document with this inline in a paragraph
         let pandoc = crate::pandoc::Pandoc {
@@ -5101,11 +5101,11 @@ mod tests {
                 Inline::Space(Space {
                     source_info: SourceInfo::for_test(),
                 }),
-                Inline::Attr(InlineAttr::new(
+                Inline::Attr(Box::new(InlineAttr::new(
                     attr,
                     AttrSourceInfo::empty(),
                     SourceInfo::for_test(),
-                )),
+                ))),
             ],
             source_info: SourceInfo::for_test(),
         };
@@ -5155,11 +5155,11 @@ mod tests {
                 Inline::Space(Space {
                     source_info: SourceInfo::for_test(),
                 }),
-                Inline::Attr(InlineAttr::new(
+                Inline::Attr(Box::new(InlineAttr::new(
                     attr,
                     AttrSourceInfo::empty(),
                     SourceInfo::for_test(),
-                )),
+                ))),
             ],
             source_info: SourceInfo::for_test(),
         };
@@ -5204,11 +5204,11 @@ mod tests {
             content.push(Inline::Space(Space {
                 source_info: SourceInfo::for_test(),
             }));
-            content.push(Inline::Attr(InlineAttr::new(
+            content.push(Inline::Attr(Box::new(InlineAttr::new(
                 attr,
                 AttrSourceInfo::empty(),
                 SourceInfo::for_test(),
-            )));
+            ))));
         }
         Block::Plain(Plain {
             content,

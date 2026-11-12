@@ -191,7 +191,7 @@ fn displayed_block_cell(code: &str, source_info: &SourceInfo) -> Block {
 /// The displayed form of a failed inline cell: a plain `lmd` code span
 /// holding its desugared expression.
 fn displayed_inline_cell(expr: &str, source_info: &SourceInfo) -> Inline {
-    Inline::Code(Code {
+    Inline::Code(Box::new(Code {
         attr: (
             String::new(),
             vec![LMD_LANG.to_string()],
@@ -200,7 +200,7 @@ fn displayed_inline_cell(expr: &str, source_info: &SourceInfo) -> Inline {
         text: expr.to_string(),
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn cell_error(
@@ -1552,7 +1552,7 @@ mod tests {
             .content
             .iter()
             .filter_map(|i| match i {
-                Inline::Code(c) => Some(c),
+                Inline::Code(c) => Some(&**c),
                 _ => None,
             })
             .collect();

@@ -588,7 +588,7 @@ mod tests {
     }
 
     fn link_inline(url: &str, text: &str) -> Inline {
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -598,14 +598,14 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Like `link_inline`, but stamps `target_source.url` with a real
     /// `SourceInfo` so tests can assert that diagnostics receive the
     /// link URL's source location.
     fn link_inline_with_url_source(url: &str, text: &str, url_source: SourceInfo) -> Inline {
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -618,11 +618,11 @@ mod tests {
                 url: Some(url_source),
                 title: None,
             },
-        })
+        }))
     }
 
     fn image_inline(url: &str, alt: &str) -> Inline {
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
                 text: alt.to_string(),
@@ -632,7 +632,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(content: Vec<Inline>) -> Block {
@@ -1254,7 +1254,7 @@ mod tests {
         for (k, v) in kv {
             map.insert(k.to_string(), v.to_string());
         }
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], map),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -1264,7 +1264,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Like [`run`], but with control over the llms view: when

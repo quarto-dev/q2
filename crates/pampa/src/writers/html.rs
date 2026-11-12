@@ -1379,14 +1379,14 @@ fn task_item_checked(item: &[Block]) -> Option<bool> {
 fn rewrite_task_item(item: &[Block]) -> Option<Vec<Block>> {
     let checked = task_item_checked(item)?;
     let raw = |text: &str| {
-        Inline::RawInline(crate::pandoc::RawInline {
+        Inline::RawInline(Box::new(crate::pandoc::RawInline {
             format: "html".to_string(),
             text: text.to_string(),
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By {
                 kind: "task-list-checkbox".to_string(),
                 data: serde_json::Value::Null,
             }),
-        })
+        }))
     };
     let checkbox = if checked {
         "<label><input type=\"checkbox\" checked=\"\" disabled=\"\" />"
@@ -2231,7 +2231,7 @@ mod tests {
             source_info: dummy_source_info(),
         };
         let para = Block::Paragraph(Paragraph {
-            content: vec![Inline::Shortcode(sc)],
+            content: vec![Inline::Shortcode(Box::new(sc))],
             source_info: dummy_source_info(),
         });
         let pandoc = Pandoc {
@@ -2759,12 +2759,12 @@ mod tests {
             "data-hl-spans".to_string(),
             r#"[[0,3,"keyword"]]"#.to_string(),
         );
-        let code = Inline::Code(Code {
+        let code = Inline::Code(Box::new(Code {
             attr: (String::new(), vec!["python".to_string()], kvs),
             text: "def".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(Block::Paragraph(Paragraph {
             content: vec![code],
             source_info: dummy_source_info(),
@@ -2797,11 +2797,11 @@ mod tests {
                 Inline::Space(Space {
                     source_info: dummy_source_info(),
                 }),
-                Inline::Attr(InlineAttr::new(
+                Inline::Attr(Box::new(InlineAttr::new(
                     attr,
                     AttrSourceInfo::empty(),
                     dummy_source_info(),
-                )),
+                ))),
             ],
             source_info: dummy_source_info(),
         });
@@ -2851,11 +2851,11 @@ mod tests {
             classes.iter().map(|s| s.to_string()).collect(),
             m,
         );
-        Inline::Attr(InlineAttr::new(
+        Inline::Attr(Box::new(InlineAttr::new(
             attr,
             AttrSourceInfo::empty(),
             dummy_source_info(),
-        ))
+        )))
     }
 
     fn li_plain(inlines: Vec<Inline>) -> Block {

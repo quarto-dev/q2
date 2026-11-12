@@ -352,12 +352,12 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
             1,
             safe_word()
                 .prop_map(|text| {
-                    Inline::Code(Code {
+                    Inline::Code(Box::new(Code {
                         text,
                         attr: empty_attr(),
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
-                    })
+                    }))
                 })
                 .boxed(),
         ));
@@ -403,14 +403,14 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
                 gen_title(),
             )
                 .prop_map(|(content, url, title)| {
-                    Inline::Link(Link {
+                    Inline::Link(Box::new(Link {
                         content,
                         target: (url, title),
                         attr: empty_attr(),
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: TargetSourceInfo::empty(),
-                    })
+                    }))
                 })
                 .boxed(),
         ));
@@ -426,14 +426,14 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
                 gen_title(),
             )
                 .prop_map(|(alt, url, title)| {
-                    Inline::Image(Image {
+                    Inline::Image(Box::new(Image {
                         content: alt,
                         target: (url, title),
                         attr: empty_attr(),
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: TargetSourceInfo::empty(),
-                    })
+                    }))
                 })
                 .boxed(),
         ));
@@ -444,7 +444,7 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
             1,
             gen_url()
                 .prop_map(|url| {
-                    Inline::Link(Link {
+                    Inline::Link(Box::new(Link {
                         content: vec![Inline::Str(Str {
                             text: url.clone(),
                             source_info: empty_source_info(),
@@ -454,7 +454,7 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: TargetSourceInfo::empty(),
-                    })
+                    }))
                 })
                 .boxed(),
         ));

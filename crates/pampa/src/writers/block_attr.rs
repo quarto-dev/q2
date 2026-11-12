@@ -162,7 +162,11 @@ mod tests {
             classes.iter().map(|s| s.to_string()).collect(),
             m,
         );
-        Inline::Attr(InlineAttr::new(attr, AttrSourceInfo::empty(), si()))
+        Inline::Attr(Box::new(InlineAttr::new(
+            attr,
+            AttrSourceInfo::empty(),
+            si(),
+        )))
     }
 
     fn texts(inlines: &[Inline]) -> Vec<String> {

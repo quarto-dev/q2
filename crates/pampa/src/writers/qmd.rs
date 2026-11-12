@@ -769,11 +769,11 @@ fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
         None => format!("{ascii} "),
         Some(_) => return None,
     };
-    let marker = crate::pandoc::Inline::RawInline(crate::pandoc::RawInline {
+    let marker = crate::pandoc::Inline::RawInline(Box::new(crate::pandoc::RawInline {
         format: "markdown".to_string(),
         text,
         source_info: s.source_info.clone(),
-    });
+    }));
     let mut rewritten: Vec<Block> = item.to_vec();
     match &mut rewritten[0] {
         Block::Plain(p) => p.content[0] = marker,
@@ -3365,7 +3365,7 @@ pub fn write_paragraph(
     if let [Inline::Image(image)] = para.content.as_slice()
         && !image.content.is_empty()
     {
-        let respelled = Inline::Image(respell_alt_as_fig_alt(image, &Vec::new()));
+        let respelled = Inline::Image(Box::new(respell_alt_as_fig_alt(image, &Vec::new())));
         write_prose_inlines(std::slice::from_ref(&respelled), buf, ctx)?;
         writeln!(buf)?;
         return Ok(());

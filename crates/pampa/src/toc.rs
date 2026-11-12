@@ -1005,20 +1005,20 @@ mod tests {
                 text: "Using a ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
                     text: "raw".to_string(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
-            }),
-            Inline::Code(Code {
+            })),
+            Inline::Code(Box::new(Code {
                 text: "volume".to_string(),
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ];
 
         let original = TocEntry {
@@ -1129,14 +1129,14 @@ mod tests {
                 text: "Using a ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
                     text: "raw".to_string(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
-            }),
+            })),
         ];
 
         let blocks = vec![Block::Header(Header {

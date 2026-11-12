@@ -543,35 +543,35 @@ fn gen_line_break() -> impl Strategy<Value = Inline> {
 /// Generate a Code inline.
 fn gen_code_inline() -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_code_text()).prop_map(|(attr, text)| {
-        Inline::Code(Code {
+        Inline::Code(Box::new(Code {
             attr,
             text,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Math inline.
 fn gen_math() -> impl Strategy<Value = Inline> {
     (gen_math_type(), gen_code_text()).prop_map(|(math_type, text)| {
-        Inline::Math(Math {
+        Inline::Math(Box::new(Math {
             math_type,
             text,
             source_info: dummy_source(),
             text_source: None,
-        })
+        }))
     })
 }
 
 /// Generate a RawInline.
 fn gen_raw_inline() -> impl Strategy<Value = Inline> {
     (gen_format(), gen_code_text()).prop_map(|(format, text)| {
-        Inline::RawInline(RawInline {
+        Inline::RawInline(Box::new(RawInline {
             format,
             text,
             source_info: dummy_source(),
-        })
+        }))
     })
 }
 
@@ -640,7 +640,7 @@ fn gen_shortcode_inner(depth: usize) -> impl Strategy<Value = Shortcode> {
 /// recursive args (ShortcodeArg can contain nested Shortcodes).
 fn gen_shortcode() -> impl Strategy<Value = Inline> {
     // Use depth 2 to allow some nesting in args
-    gen_shortcode_inner(2).prop_map(Inline::Shortcode)
+    gen_shortcode_inner(2).prop_map(|s| Inline::Shortcode(Box::new(s)))
 }
 
 // =============================================================================
@@ -720,51 +720,51 @@ fn gen_smallcaps(config: GenConfig) -> impl Strategy<Value = Inline> {
 /// Generate a Quoted inline containing other inlines.
 fn gen_quoted(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_quote_type(), gen_inlines_inner(config)).prop_map(|(quote_type, content)| {
-        Inline::Quoted(Quoted {
+        Inline::Quoted(Box::new(Quoted {
             quote_type,
             content,
             source_info: dummy_source(),
-        })
+        }))
     })
 }
 
 /// Generate a Span inline containing other inlines.
 fn gen_span(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Span(Span {
+        Inline::Span(Box::new(Span {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Link inline containing other inlines.
 fn gen_link(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config), gen_target()).prop_map(|(attr, content, target)| {
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr,
             content,
             target,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate an Image inline containing other inlines (for alt text).
 fn gen_image(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config), gen_target()).prop_map(|(attr, content, target)| {
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr,
             content,
             target,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -776,11 +776,11 @@ fn gen_cite(config: GenConfig) -> impl Strategy<Value = Inline> {
         gen_inlines_inner(config),
     )
         .prop_map(|(citations, content)| {
-            Inline::Cite(Cite {
+            Inline::Cite(Box::new(Cite {
                 citations,
                 content,
                 source_info: dummy_source(),
-            })
+            }))
         })
 }
 
@@ -802,48 +802,48 @@ fn gen_note(config: GenConfig) -> impl Strategy<Value = Inline> {
 /// Generate an Insert inline (CriticMarkup addition).
 fn gen_insert(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Insert(Insert {
+        Inline::Insert(Box::new(Insert {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Delete inline (CriticMarkup deletion).
 fn gen_delete(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Delete(Delete {
+        Inline::Delete(Box::new(Delete {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate a Highlight inline (CriticMarkup highlight).
 fn gen_highlight(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::Highlight(Highlight {
+        Inline::Highlight(Box::new(Highlight {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
 /// Generate an EditComment inline (CriticMarkup comment).
 fn gen_edit_comment(config: GenConfig) -> impl Strategy<Value = Inline> {
     (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
-        Inline::EditComment(EditComment {
+        Inline::EditComment(Box::new(EditComment {
             attr,
             content,
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -1275,7 +1275,7 @@ fn gen_custom_block(config: GenConfig) -> impl Strategy<Value = Block> {
 
 /// Generate an Inline::Custom.
 fn gen_custom_inline(config: GenConfig) -> impl Strategy<Value = Inline> {
-    gen_custom_node(config).prop_map(Inline::Custom)
+    gen_custom_node(config).prop_map(|c| Inline::Custom(Box::new(c)))
 }
 
 // =============================================================================

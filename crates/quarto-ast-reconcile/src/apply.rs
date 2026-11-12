@@ -421,9 +421,9 @@ fn apply_custom_node_inline_reconciliation(
     slot_plan: &CustomNodeSlotPlan,
 ) -> Inline {
     match (orig_inline, exec_inline) {
-        (Inline::Custom(orig), Inline::Custom(exec)) => {
-            Inline::Custom(apply_custom_node_reconciliation(orig, exec, slot_plan))
-        }
+        (Inline::Custom(orig), Inline::Custom(exec)) => Inline::Custom(Box::new(
+            apply_custom_node_reconciliation(*orig, *exec, slot_plan),
+        )),
         // Fallback: shouldn't happen, return original
         (orig, _) => orig,
     }

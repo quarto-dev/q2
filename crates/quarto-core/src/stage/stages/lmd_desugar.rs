@@ -316,7 +316,7 @@ mod tests {
             .content
             .iter()
             .filter_map(|i| match i {
-                Inline::Code(c) => Some(c),
+                Inline::Code(c) => Some(&**c),
                 _ => None,
             })
             .collect();

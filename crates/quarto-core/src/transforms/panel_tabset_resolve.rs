@@ -178,11 +178,11 @@ fn tabset_source() -> SourceInfo {
 }
 
 fn raw_html(text: String) -> Inline {
-    Inline::RawInline(RawInline {
+    Inline::RawInline(Box::new(RawInline {
         format: "html".to_string(),
         text,
         source_info: tabset_source(),
-    })
+    }))
 }
 
 /// Resolve one Tabset CustomNode to the Bootstrap Div structure,

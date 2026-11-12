@@ -1160,11 +1160,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 }
             };
             let inlines = peek_inlines_fuzzy(lua, content)?;
-            lua.create_userdata(LuaInline::new(Inline::Quoted(Quoted {
+            lua.create_userdata(LuaInline::new(Inline::Quoted(Box::new(Quoted {
                 quote_type: qt,
                 content: inlines,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1173,12 +1173,14 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Code",
         lua.create_function(|lua, (text, attr): (String, Option<Value>)| {
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaInline::new(Inline::Code(crate::pandoc::Code {
-                text,
-                attr,
-                source_info: filter_source_info(lua),
-                attr_source: AttrSourceInfo::empty(),
-            })))
+            lua.create_userdata(LuaInline::new(Inline::Code(Box::new(
+                crate::pandoc::Code {
+                    text,
+                    attr,
+                    source_info: filter_source_info(lua),
+                    attr_source: AttrSourceInfo::empty(),
+                },
+            ))))
         })?,
     )?;
 
@@ -1197,12 +1199,12 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                     ));
                 }
             };
-            lua.create_userdata(LuaInline::new(Inline::Math(Math {
+            lua.create_userdata(LuaInline::new(Inline::Math(Box::new(Math {
                 math_type: mt,
                 text,
                 source_info: filter_source_info(lua),
                 text_source: None,
-            })))
+            }))))
         })?,
     )?;
 
@@ -1210,11 +1212,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
     pandoc.set(
         "RawInline",
         lua.create_function(|lua, (format, text): (String, String)| {
-            lua.create_userdata(LuaInline::new(Inline::RawInline(RawInline {
+            lua.create_userdata(LuaInline::new(Inline::RawInline(Box::new(RawInline {
                 format,
                 text,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1226,14 +1228,14 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaInline::new(Inline::Link(Link {
+                lua.create_userdata(LuaInline::new(Inline::Link(Box::new(Link {
                     content: inlines,
                     target: (target, title),
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;
@@ -1246,14 +1248,14 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 let inlines = peek_inlines_fuzzy(lua, content)?;
                 let title = title.unwrap_or_default();
                 let attr = parse_attr(lua, attr)?;
-                lua.create_userdata(LuaInline::new(Inline::Image(Image {
+                lua.create_userdata(LuaInline::new(Inline::Image(Box::new(Image {
                     content: inlines,
                     target: (src, title),
                     attr,
                     source_info: filter_source_info(lua),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-                })))
+                }))))
             },
         )?,
     )?;
@@ -1264,12 +1266,12 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, attr): (Value, Option<Value>)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let attr = parse_attr(lua, attr)?;
-            lua.create_userdata(LuaInline::new(Inline::Span(Span {
+            lua.create_userdata(LuaInline::new(Inline::Span(Box::new(Span {
                 content: inlines,
                 attr,
                 source_info: filter_source_info(lua),
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
 
@@ -1294,11 +1296,11 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         lua.create_function(|lua, (content, citations): (Value, Value)| {
             let inlines = peek_inlines_fuzzy(lua, content)?;
             let citations = super::types::lua_table_to_citations(lua, citations)?;
-            lua.create_userdata(LuaInline::new(Inline::Cite(Cite {
+            lua.create_userdata(LuaInline::new(Inline::Cite(Box::new(Cite {
                 citations,
                 content: inlines,
                 source_info: filter_source_info(lua),
-            })))
+            }))))
         })?,
     )?;
 

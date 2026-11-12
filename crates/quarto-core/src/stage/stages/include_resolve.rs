@@ -1005,11 +1005,11 @@ mod tests {
 
     fn para_of_raw_html(text: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: text.to_string(),
                 source_info: SourceInfo::for_test(),
-            })],
+            }))],
             source_info: SourceInfo::for_test(),
         })
     }
@@ -1278,32 +1278,32 @@ mod tests {
         // (RawInline + Str + Quoted + Str + RawInline).
         let si = SourceInfo::for_test();
         let inlines = vec![
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "<script>".to_string(),
                 source_info: si.clone(),
-            }),
+            })),
             Inline::Str(Str {
                 text: "console.log(".to_string(),
                 source_info: si.clone(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::SingleQuote,
                 content: vec![Inline::Str(Str {
                     text: "AFTER".to_string(),
                     source_info: si.clone(),
                 })],
                 source_info: si.clone(),
-            }),
+            })),
             Inline::Str(Str {
                 text: ");".to_string(),
                 source_info: si.clone(),
             }),
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "</script>".to_string(),
                 source_info: si.clone(),
-            }),
+            })),
         ];
         let parsed_value = ConfigValue {
             value: ConfigValueKind::PandocInlines(inlines),

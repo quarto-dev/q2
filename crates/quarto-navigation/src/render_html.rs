@@ -1723,14 +1723,14 @@ mod tests {
         use quarto_pandoc_types::config_value::ConfigValueKind;
         use quarto_pandoc_types::inline::Image;
 
-        let image = Inline::Image(Image {
+        let image = Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![str_inline("cap")],
             target: ("images/logo.svg".to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let cv = ConfigValue {
             value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Figure {
                 attr: Default::default(),
@@ -1781,14 +1781,14 @@ mod tests {
     ) -> Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::Link;
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr,
             content: vec![str_inline(text)],
             target: (url.to_string(), target_title.to_string()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A link's id/class/kv attributes reach the emitted `<a>`
@@ -1834,20 +1834,20 @@ mod tests {
     fn attributed_span_keeps_wrapper_attrless_span_unwrapped() {
         use quarto_pandoc_types::attr::AttrSourceInfo;
         use quarto_pandoc_types::inline::Span;
-        let attributed = inlines_to_html(&[Inline::Span(Span {
+        let attributed = inlines_to_html(&[Inline::Span(Box::new(Span {
             attr: test_attr("spid", &["scls"], &[]),
             content: vec![str_inline("sp")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })]);
+        }))]);
         assert_eq!(attributed, "<span id=\"spid\" class=\"scls\">sp</span>");
 
-        let attrless = inlines_to_html(&[Inline::Span(Span {
+        let attrless = inlines_to_html(&[Inline::Span(Box::new(Span {
             attr: Default::default(),
             content: vec![str_inline("plain")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })]);
+        }))]);
         assert_eq!(attrless, "plain");
     }
 
@@ -1857,12 +1857,12 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
         use quarto_pandoc_types::inline::Code;
         let code = |attr| {
-            Inline::Code(Code {
+            Inline::Code(Box::new(Code {
                 attr,
                 text: "x".to_string(),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         };
         assert_eq!(
             inlines_to_html(&[code(test_attr("", &["numberLines"], &[]))]),
@@ -2767,11 +2767,11 @@ mod tests {
     fn footer_item_with_own_anchor_does_not_nest_anchors() {
         use quarto_pandoc_types::inline::RawInline;
         let raw = |t: &str| {
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: t.to_string(),
                 source_info: SourceInfo::for_test(),
-            })
+            }))
         };
         let text = ConfigValue::new_inlines(
             vec![
@@ -2830,23 +2830,23 @@ mod tests {
     fn inlines_to_html_link_and_code() {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         let inlines = vec![
-            Inline::Link(quarto_pandoc_types::inline::Link {
+            Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
                 attr: (String::new(), vec![], Default::default()),
                 content: vec![str_inline("site")],
                 target: ("https://example.com".to_string(), String::new()),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            }),
+            })),
             Inline::Space(quarto_pandoc_types::inline::Space {
                 source_info: SourceInfo::for_test(),
             }),
-            Inline::Code(quarto_pandoc_types::inline::Code {
+            Inline::Code(Box::new(quarto_pandoc_types::inline::Code {
                 attr: (String::new(), vec![], Default::default()),
                 text: "x & y".to_string(),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ];
         let out = inlines_to_html(&inlines);
         assert!(out.contains("<a href=\"https://example.com\">site</a>"));
@@ -2867,14 +2867,16 @@ mod tests {
         attr.0 = "brand-img".to_string();
         attr.1.push("footer-logo".to_string());
         attr.2.insert("width".to_string(), "32".to_string());
-        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
-            attr,
-            content: vec![str_inline("Posit logo")],
-            target: ("../../images/logo.svg".to_string(), "The title".to_string()),
-            source_info: SourceInfo::for_test(),
-            attr_source: AttrSourceInfo::empty(),
-            target_source: TargetSourceInfo::empty(),
-        })];
+        let inlines = vec![Inline::Image(Box::new(
+            quarto_pandoc_types::inline::Image {
+                attr,
+                content: vec![str_inline("Posit logo")],
+                target: ("../../images/logo.svg".to_string(), "The title".to_string()),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            },
+        ))];
         let out = inlines_to_html(&inlines);
         assert_eq!(
             out,
@@ -2889,14 +2891,16 @@ mod tests {
     #[test]
     fn inlines_to_html_image_minimal_and_escaped() {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
-        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
-            attr: Default::default(),
-            content: vec![str_inline("a & b")],
-            target: ("x\"y.svg".to_string(), String::new()),
-            source_info: SourceInfo::for_test(),
-            attr_source: AttrSourceInfo::empty(),
-            target_source: TargetSourceInfo::empty(),
-        })];
+        let inlines = vec![Inline::Image(Box::new(
+            quarto_pandoc_types::inline::Image {
+                attr: Default::default(),
+                content: vec![str_inline("a & b")],
+                target: ("x\"y.svg".to_string(), String::new()),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            },
+        ))];
         let out = inlines_to_html(&inlines);
         assert_eq!(out, "<img src=\"x&quot;y.svg\" alt=\"a &amp; b\">");
     }

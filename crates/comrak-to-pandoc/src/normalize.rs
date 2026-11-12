@@ -241,14 +241,14 @@ mod tests {
         let ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Link(Link {
+                content: vec![Inline::Link(Box::new(Link {
                     content: vec![],
                     target: ("http://example.com".to_string(), String::new()),
                     attr: (String::new(), vec!["uri".to_string()], LinkedHashMap::new()),
                     source_info: empty_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: empty_source_info(),
             })],
         };
@@ -457,14 +457,14 @@ mod tests {
         let ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Image(Image {
+                content: vec![Inline::Image(Box::new(Image {
                     content: vec![],
                     target: ("img.png".to_string(), String::new()),
                     attr: (String::new(), vec![], LinkedHashMap::new()),
                     source_info: empty_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: empty_source_info(),
             })],
         };
@@ -483,7 +483,7 @@ mod tests {
         let ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Span(Span {
+                content: vec![Inline::Span(Box::new(Span {
                     content: vec![Inline::Str(Str {
                         text: "hello".to_string(),
                         source_info: empty_source_info(),
@@ -491,7 +491,7 @@ mod tests {
                     attr: (String::new(), vec![], LinkedHashMap::new()),
                     source_info: empty_source_info(),
                     attr_source: AttrSourceInfo::empty(),
-                })],
+                }))],
                 source_info: empty_source_info(),
             })],
         };
@@ -555,14 +555,14 @@ mod tests {
             meta: ConfigValue::default(),
             blocks: vec![Block::Figure(Figure {
                 content: vec![Block::Plain(Plain {
-                    content: vec![Inline::Image(Image {
+                    content: vec![Inline::Image(Box::new(Image {
                         content: vec![],
                         target: ("img.png".to_string(), String::new()),
                         attr: (String::new(), vec![], LinkedHashMap::new()),
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: TargetSourceInfo::empty(),
-                    })],
+                    }))],
                     source_info: empty_source_info(),
                 })],
                 caption: Caption {
@@ -589,14 +589,14 @@ mod tests {
             meta: ConfigValue::default(),
             blocks: vec![Block::Figure(Figure {
                 content: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Image(Image {
+                    content: vec![Inline::Image(Box::new(Image {
                         content: vec![],
                         target: ("img.png".to_string(), String::new()),
                         attr: (String::new(), vec![], LinkedHashMap::new()),
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: TargetSourceInfo::empty(),
-                    })],
+                    }))],
                     source_info: empty_source_info(),
                 })],
                 caption: Caption {
@@ -673,14 +673,14 @@ mod tests {
         use quarto_pandoc_types::{Image, Str};
 
         // Single image
-        let single_image = vec![Inline::Image(Image {
+        let single_image = vec![Inline::Image(Box::new(Image {
             content: vec![],
             target: ("img.png".to_string(), String::new()),
             attr: (String::new(), vec![], LinkedHashMap::new()),
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })];
+        }))];
         assert!(is_single_image(&single_image));
 
         // Multiple inlines
@@ -689,14 +689,14 @@ mod tests {
                 text: "hello".to_string(),
                 source_info: empty_source_info(),
             }),
-            Inline::Image(Image {
+            Inline::Image(Box::new(Image {
                 content: vec![],
                 target: ("img.png".to_string(), String::new()),
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            }),
+            })),
         ];
         assert!(!is_single_image(&multiple));
 

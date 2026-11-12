@@ -158,7 +158,7 @@ mod tests {
                         text: "anchor".to_string(),
                         source_info: source.clone(),
                     }),
-                    quarto_pandoc_types::Inline::Cite(Cite {
+                    quarto_pandoc_types::Inline::Cite(Box::new(Cite {
                         citations: vec![Citation {
                             id: id.to_string(),
                             prefix: vec![quarto_pandoc_types::Inline::Str(Str {
@@ -176,7 +176,7 @@ mod tests {
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
-                    }),
+                    })),
                 ],
                 source_info: source,
             })
@@ -213,7 +213,7 @@ mod tests {
                         text: "anchor".to_string(),
                         source_info: source.clone(),
                     }),
-                    quarto_pandoc_types::Inline::Cite(Cite {
+                    quarto_pandoc_types::Inline::Cite(Box::new(Cite {
                         citations: vec![Citation {
                             id: "key".to_string(),
                             prefix: vec![],
@@ -228,7 +228,7 @@ mod tests {
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
-                    }),
+                    })),
                 ],
                 source_info: source,
             })
@@ -332,7 +332,7 @@ mod tests {
         }
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Quoted(Quoted {
+                quarto_pandoc_types::Inline::Quoted(Box::new(Quoted {
                     quote_type: if changed {
                         QuoteType::SingleQuote
                     } else {
@@ -340,51 +340,51 @@ mod tests {
                     },
                     content: content(&source),
                     source_info: source,
-                })
+                }))
             },
             "Quoted(quote_type)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Insert(Insert {
+                quarto_pandoc_types::Inline::Insert(Box::new(Insert {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "Insert(attr)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Delete(Delete {
+                quarto_pandoc_types::Inline::Delete(Box::new(Delete {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "Delete(attr)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Highlight(Highlight {
+                quarto_pandoc_types::Inline::Highlight(Box::new(Highlight {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "Highlight(attr)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::EditComment(EditComment {
+                quarto_pandoc_types::Inline::EditComment(Box::new(EditComment {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "EditComment(attr)",
         );
@@ -572,12 +572,12 @@ mod tests {
                     text: "Value: ".to_string(),
                     source_info: source_original(),
                 }),
-                quarto_pandoc_types::Inline::Code(quarto_pandoc_types::Code {
+                quarto_pandoc_types::Inline::Code(Box::new(quarto_pandoc_types::Code {
                     attr: (String::new(), vec![], LinkedHashMap::new()),
                     text: "r 23 * 37".to_string(),
                     source_info: source_original(),
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                }),
+                })),
             ],
             source_info: source_original(),
         });
@@ -1097,13 +1097,13 @@ mod tests {
                 })]),
             );
 
-            quarto_pandoc_types::Inline::Custom(CustomNode {
+            quarto_pandoc_types::Inline::Custom(Box::new(CustomNode {
                 type_name: "Shortcode".to_string(),
                 slots,
                 plain_data: serde_json::json!({"name": "video"}),
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: source,
-            })
+            }))
         }
 
         let original = Pandoc {
@@ -1935,7 +1935,7 @@ mod list_length_tests {
             source: SourceInfo,
         ) -> quarto_pandoc_types::Block {
             quarto_pandoc_types::Block::Paragraph(Paragraph {
-                content: vec![quarto_pandoc_types::Inline::Insert(Insert {
+                content: vec![quarto_pandoc_types::Inline::Insert(Box::new(Insert {
                     attr: (
                         String::new(),
                         vec![attr_class.to_string()],
@@ -1947,7 +1947,7 @@ mod list_length_tests {
                     })],
                     source_info: source.clone(),
                     attr_source: AttrSourceInfo::empty(),
-                })],
+                }))],
                 source_info: source,
             })
         }

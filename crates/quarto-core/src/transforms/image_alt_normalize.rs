@@ -213,7 +213,7 @@ mod tests {
                 long: Some(vec![plain(text(caption))]),
                 source_info: si(),
             },
-            content: vec![plain(vec![Inline::Image(image(caption, kvs))])],
+            content: vec![plain(vec![Inline::Image(Box::new(image(caption, kvs)))])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         })
@@ -258,10 +258,10 @@ mod tests {
 
     #[test]
     fn fig_alt_on_a_bare_image_becomes_its_alt_text() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("fig-alt", "Alt A"), ("width", "50%")],
-        ))])]);
+        )))])]);
         assert_eq!(
             images(&mut out),
             vec![("Alt A".into(), vec![("width".into(), "50%".into())])]
@@ -270,10 +270,10 @@ mod tests {
 
     #[test]
     fn alt_text_is_tokenized_like_pandoc() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("fig-alt", "Two words")],
-        ))])]);
+        )))])]);
         let Block::Paragraph(p) = &mut out[0] else {
             panic!()
         };
@@ -302,19 +302,19 @@ mod tests {
 
     #[test]
     fn alt_key_value_is_folded_like_pandoc() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("alt", "KV A")],
-        ))])]);
+        )))])]);
         assert_eq!(images(&mut out), vec![("KV A".into(), vec![])]);
     }
 
     #[test]
     fn fig_alt_beats_alt_and_both_are_removed() {
-        let mut out = run(vec![para(vec![Inline::Image(image(
+        let mut out = run(vec![para(vec![Inline::Image(Box::new(image(
             "",
             &[("alt", "loses"), ("fig-alt", "wins")],
-        ))])]);
+        )))])]);
         assert_eq!(images(&mut out), vec![("wins".into(), vec![])]);
     }
 
@@ -368,10 +368,10 @@ mod tests {
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
-            content: vec![plain(vec![Inline::Image(image(
+            content: vec![plain(vec![Inline::Image(Box::new(image(
                 "",
                 &[("fig-alt", "In cell")],
-            ))])],
+            )))])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
@@ -412,10 +412,10 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         });
         let note = para(vec![Inline::Note(Note {
-            content: vec![para(vec![Inline::Image(image(
+            content: vec![para(vec![Inline::Image(Box::new(image(
                 "",
                 &[("fig-alt", "In note")],
-            ))])],
+            )))])],
             source_info: si(),
         })]);
         let mut out = run(vec![table, note]);
@@ -430,7 +430,7 @@ mod tests {
         let mut out = run(vec![float(
             "fig",
             &[("fig-alt", "Div alt")],
-            vec![plain(vec![Inline::Image(image("", &[]))])],
+            vec![plain(vec![Inline::Image(Box::new(image("", &[])))])],
             "Div caption",
         )]);
         let Block::Custom(node) = &out[0] else {
@@ -446,8 +446,8 @@ mod tests {
             "fig",
             &[("fig-alt", "Float")],
             vec![plain(vec![
-                Inline::Image(image("", &[("fig-alt", "Own")])),
-                Inline::Image(image("", &[])),
+                Inline::Image(Box::new(image("", &[("fig-alt", "Own")]))),
+                Inline::Image(Box::new(image("", &[]))),
             ])],
             "cap",
         )]);
@@ -462,7 +462,7 @@ mod tests {
         let sub = float(
             "fig",
             &[],
-            vec![plain(vec![Inline::Image(image("", &[]))])],
+            vec![plain(vec![Inline::Image(Box::new(image("", &[])))])],
             "(a)",
         );
         let mut out = run(vec![float(
@@ -482,7 +482,10 @@ mod tests {
         };
         n.set_slot(
             "caption_long",
-            Slot::Blocks(vec![plain(vec![Inline::Image(image("icon", &[]))])]),
+            Slot::Blocks(vec![plain(vec![Inline::Image(Box::new(image(
+                "icon",
+                &[],
+            )))])]),
         );
         let mut out = run(vec![node]);
         assert_eq!(images(&mut out), vec![("icon".into(), vec![])]);
@@ -493,7 +496,7 @@ mod tests {
         let mut out = run(vec![float(
             "tbl",
             &[("fig-alt", "Not mine")],
-            vec![plain(vec![Inline::Image(image("", &[]))])],
+            vec![plain(vec![Inline::Image(Box::new(image("", &[])))])],
             "cap",
         )]);
         let Block::Custom(node) = &out[0] else {

@@ -75,12 +75,12 @@ macro_rules! process_editorial_mark {
 
                 // Create the editorial mark inline element with adjusted source info
                 let adjusted_source_info = crate::pandoc::location::range_to_source_info_with_context(&space_info.adjusted_range, context);
-                let inline = Inline::$struct_name($struct_name {
+                let inline = Inline::$struct_name(Box::new($struct_name {
                     attr,
                     content,
                     source_info: adjusted_source_info,
                     attr_source,
-                });
+                }));
 
                 // Wrap with Space nodes as needed (returns IntermediateInlines)
                 wrap_inline_with_delimiter_spaces(inline, &space_info, context)
