@@ -395,6 +395,14 @@ export function useFieldEditor(
         selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
         return true
       }
+      if (granularity === 'character' && !e.shiftKey && !selection.isCollapsed) {
+        // Left and Right put the caret at that end of a selection.
+        // (Firefox's `modify` would move it a character from the focus.)
+        const range = selection.getRangeAt(0)
+        if (key.forward) selection.collapse(range.endContainer, range.endOffset)
+        else selection.collapse(range.startContainer, range.startOffset)
+        return true
+      }
       const x = caretX(doc, saved.focus.node, saved.focus.offset) ?? origin.getBoundingClientRect().left
       selection.modify(e.shiftKey ? 'extend' : 'move', key.direction, granularity)
       if (fieldOf(root, selection.focusNode)) return true
