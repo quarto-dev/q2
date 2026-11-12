@@ -17,8 +17,9 @@ parsed source.
 The title, subtitle and abstract are editable in place, and so are the body's
 paragraphs and headings of plain text: Enter splits a paragraph, and
 Backspace at its start joins it to the one before. Typing one to six `#` and
-a space at the start of a paragraph makes it a heading, and Backspace at the
-start of a heading's text makes it a paragraph again. The rest of the body
+a space at the start of a paragraph makes it a heading (Backspace or undo
+right after gives back the `#`s as text), and Backspace at the start of a
+heading's text makes it a paragraph again. The rest of the body
 (paragraphs and headings with formatting, lists, code) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
 changes its source. The document is one

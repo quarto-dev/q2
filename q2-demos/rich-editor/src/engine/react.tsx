@@ -200,6 +200,9 @@ export function useFieldEditor(
   // composing text (IME) in a field.
   const writing = useRef(false)
   const composing = useRef(false)
+  // The editor's state just after an input rule applied, until anything
+  // else happens: Backspace then undoes the rule.
+  const ruled = useRef<Editor | null>(null)
 
   /**
    * Make `next` the editor's state. A change to the fields' text is
@@ -309,15 +312,23 @@ export function useFieldEditor(
       e.preventDefault()
       const type = e.inputType
       const target = () => targetRange(root, e)
-      if (type === 'historyUndo') history(undo)
+      // Backspace right after an input rule takes back what the rule did,
+      // leaving what was typed.
+      const afterRule = ruled.current !== null && ruled.current === latest.current
+      ruled.current = null
+      if (type === 'deleteContentBackward' && afterRule) history(undo)
+      else if (type === 'historyUndo') history(undo)
       else if (type === 'historyRedo') history(redo)
       else if (type === 'insertText') {
         edit((s) => insertText(schema, s, e.data ?? ''), { inputType: type })
         // What the typing turns into, as an undo step of its own, so undo
         // gives back what was typed.
         const h = latest.current
-        const ruled = applyInputRule(schema, h.present)
-        if (ruled !== h.present && source.writable()) commit(apply(h, ruled, { inputType: 'formatBlock' }), true)
+        const next = applyInputRule(schema, h.present)
+        if (next !== h.present && source.writable()) {
+          commit(apply(h, next, { inputType: 'formatBlock' }), true)
+          ruled.current = latest.current
+        }
       }
       else if (type === 'insertReplacementText') {
         // Autocorrect or a spelling suggestion: replace the target range.

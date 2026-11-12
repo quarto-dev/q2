@@ -192,6 +192,46 @@ test.describe('making a heading', () => {
 
     expect((await editor.lines())[2]).toBe('p: ## Middle.')
     await editor.expectLineCaret(2, 3)
+    await editor.document.expectSource(headings.replace('Middle.', '\\#\\# Middle.'))
+  })
+
+  test('Backspace right after gives back the typed #s, as text', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(2, 0)
+    await page.keyboard.type('## ')
+    expect((await editor.lines())[2]).toBe('h2: Middle.')
+
+    await page.keyboard.press('Backspace')
+
+    expect((await editor.lines())[2]).toBe('p: ## Middle.')
+    await editor.expectLineCaret(2, 3)
+    await editor.document.expectSource(headings.replace('Middle.', '\\#\\# Middle.'))
+  })
+
+  test('Backspace after the caret has moved makes the heading a paragraph as usual', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(2, 0)
+    await page.keyboard.type('## ')
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('ArrowLeft')
+
+    await page.keyboard.press('Backspace')
+
+    expect((await editor.lines())[2]).toBe('p: Middle.')
+    await editor.document.expectSource(headings)
+  })
+
+  test('Backspace after typing in the new heading deletes what was typed', async ({ page }) => {
+    const editor = await openEditor(page, 'headings')
+    await editor.placeCaretInLine(4, 4)
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('## X')
+
+    await page.keyboard.press('Backspace')
+
+    expect((await editor.lines())[5]).toBe('h2: ')
+    await page.keyboard.type('Y')
+    await editor.document.expectSource(headings.replace('End.\n', 'End.\n\n## Y\n'))
   })
 
   test('seven #s, or #s that aren\'t at the start, are text', async ({ page }) => {

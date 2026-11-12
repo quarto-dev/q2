@@ -176,6 +176,14 @@ section wrappers (see Parity below).
       text when the text or offset changed, not when React swapped the
       element for one of another type. Fixed in `engine/react.tsx`.
 
+### Phase 6: Backspace takes back the heading `#` made
+
+- [x] Backspace as the very next action after `## ` made a heading undoes
+      the conversion, leaving `## ` as text (`\\#\\# ` in the source), as
+      undo already did. After anything else (a caret move, more typing) it
+      behaves as usual. `react.tsx` remembers the editor state the input rule
+      left and undoes on Backspace only while that is still the state.
+
 ### Phase 4: clipboard, parity, docs
 
 - [x] `Schema.prefixText`: a selection that takes in a heading's start
