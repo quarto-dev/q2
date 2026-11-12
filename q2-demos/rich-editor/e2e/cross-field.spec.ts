@@ -4,14 +4,14 @@
  * history for the whole block.
  */
 
-import { expect, openEditor, test, type Editor } from './helpers.ts'
+import { expect, openEditor, test, type Editor, lineStart, lineEnd } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 
 /** Select from "Quarterly |report" to "Third| quarter" with the keyboard. */
 async function selectAcross(editor: Editor) {
   await editor.clickAt('title', 60)
-  await editor.page.keyboard.press('Home')
+  await editor.page.keyboard.press(lineStart)
   for (let i = 0; i < 10; i++) await editor.page.keyboard.press('ArrowRight')
   // 6 to the end of the title, 1 across to the subtitle, 5 into it.
   for (let i = 0; i < 12; i++) await editor.page.keyboard.press('Shift+ArrowRight')
@@ -101,7 +101,7 @@ test.describe('Backspace at a field edge', () => {
   test('at the start of the subtitle moves to the end of the title without deleting', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('subtitle', 30)
-    await page.keyboard.press('Home')
+    await page.keyboard.press(lineStart)
 
     await page.keyboard.press('Backspace')
 
@@ -126,10 +126,10 @@ test.describe('one history', () => {
   test('undo undoes the latest edit wherever the caret is', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type('!')
     await editor.clickAt('subtitle', 30)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type('?')
     await editor.clickAt('title', 60)
 
@@ -157,10 +157,17 @@ async function watchSelection(editor: Editor) {
       if (!el?.closest('.qe-field')) w.leftFields = true
     })
   })
-  return async () => {
+  const leftFields = async () => {
     await editor.page.waitForTimeout(50)
     return editor.frame.evaluate(() => (window as unknown as { leftFields: boolean }).leftFields)
   }
+  /** Start over, after a move that is meant to leave the fields. */
+  leftFields.reset = () =>
+    editor.frame.evaluate(async () => {
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+      ;(window as unknown as { leftFields: boolean }).leftFields = false
+    })
+  return leftFields
 }
 
 /** The page's selected text and whether its focus is inside a field. */
@@ -176,7 +183,7 @@ test.describe('arrow keys past the author grid', () => {
   test('Right at the end of the subtitle goes straight to the abstract', async ({ page }) => {
     const editor = await openEditor(page, 'abstract')
     await editor.clickAt('subtitle', 30)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     const leftFields = await watchSelection(editor)
 
     await page.keyboard.press('ArrowRight')
@@ -305,8 +312,10 @@ test.describe('the authors', () => {
 
     await page.keyboard.press('ArrowRight')
     expect(await editor.caret()).toMatchObject({ field: 'abstract', start: 0, end: 0 })
+    expect(await leftFields()).toBe(false)
 
     await author.click()
+    await leftFields.reset()
     await page.keyboard.press('ArrowUp')
     expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 13, end: 13 })
     expect(await leftFields()).toBe(false)
@@ -326,6 +335,7 @@ test.describe('the authors', () => {
 
   test('dragging from the title through the authors keeps the selection, and typing edits only the fields', async ({
     page,
+    browserName,
   }) => {
     const editor = await openEditor(page, 'abstract')
     const title = (await editor.field('title').boundingBox())!
@@ -339,7 +349,9 @@ test.describe('the authors', () => {
     // Still dragging: the browser's selection is left alone.
     const during = await pageSelection(editor)
     expect(during.rangeCount).toBe(1)
-    expect(during.focusInField).toBe(false)
+    // (WebKit itself keeps the end of a selection that started in a field
+    // out of the authors.)
+    if (browserName !== 'webkit') expect(during.focusInField).toBe(false)
     expect(during.text).toContain('Third quarter')
 
     await page.mouse.up()
@@ -365,7 +377,11 @@ test.describe('on load', () => {
 test.describe('macOS shortcuts', () => {
   test.skip(process.platform !== 'darwin', 'macOS key bindings')
 
-  test('Ctrl+A goes to the start of the line, and Ctrl+E to the end', async ({ page }) => {
+  test('Ctrl+A goes to the start of the line, and Ctrl+E to the end', async ({ page, browserName }) => {
+    // The system's key bindings, which the editor leaves to the browser.
+    // Firefox doesn't act on them when Playwright presses the keys; not
+    // checked by hand in Firefox.
+    test.skip(browserName === 'firefox', "Playwright's Firefox ignores macOS key bindings")
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
 

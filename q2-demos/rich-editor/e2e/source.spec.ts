@@ -6,7 +6,7 @@
  * tests marked `fixme` say what we want and don't have yet.
  */
 
-import { expect, fixture, openEditor, test } from './helpers.ts'
+import { expect, fixture, openEditor, test, lineEnd } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 const formatted = fixture('formatted')
@@ -18,7 +18,7 @@ test.describe('what an edit changes', () => {
     await editor.clickAt('title', 60)
     await page.keyboard.press('ArrowDown')
     await page.keyboard.press(`${mod}+a`)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await editor.clickAway()
 
     expect(editor.document.source()).toBe(formatted)

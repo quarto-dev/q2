@@ -424,6 +424,10 @@ export function useFieldEditor(
         history(redo)
       } else if (doc.activeElement !== root || composing.current) {
         return
+      } else if (e.key === 'Enter' && e.shiftKey) {
+        // A line break within a line: there are none. (WebKit would
+        // report it as a new paragraph.)
+        e.preventDefault()
       } else if (primary && key === 'a') {
         e.preventDefault()
         edit((s) => selectAllStep(schema, s))

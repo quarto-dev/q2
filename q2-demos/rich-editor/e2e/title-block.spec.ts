@@ -4,7 +4,7 @@
  * to the source text is in `source.spec.ts`.
  */
 
-import { expect, fixture, openEditor, test } from './helpers.ts'
+import { expect, fixture, openEditor, test, lineStart, lineEnd } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 
@@ -38,7 +38,7 @@ test.describe('typing', () => {
   test('typing updates the field as you type', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type(' (draft)')
 
     expect(await editor.text('title')).toBe('Quarterly report (draft)')
@@ -69,7 +69,7 @@ test.describe('typing', () => {
   test('pasting flattens line breaks into spaces', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await editor.paste(' one\ntwo\r\n three')
 
     expect(await editor.text('title')).toBe('Quarterly report one two three')
@@ -173,7 +173,7 @@ test.describe('arrow keys between fields', () => {
   test('Right at the end of the title goes to the start of the subtitle', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
 
     await page.keyboard.press('ArrowRight')
 
@@ -183,7 +183,7 @@ test.describe('arrow keys between fields', () => {
   test('Left at the start of the subtitle goes to the end of the title', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('subtitle', 30)
-    await page.keyboard.press('Home')
+    await page.keyboard.press(lineStart)
 
     await page.keyboard.press('ArrowLeft')
 
@@ -204,7 +204,7 @@ test.describe('undo', () => {
   test('typing and then deleting are separate steps', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type(' mmmm')
     for (let i = 0; i < 5; i++) await page.keyboard.press('Backspace')
     expect(await editor.text('title')).toBe('Quarterly report')
@@ -219,7 +219,7 @@ test.describe('undo', () => {
   test('redo reapplies an undone step', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type('!')
     await page.keyboard.press(`${mod}+z`)
 
@@ -232,9 +232,9 @@ test.describe('undo', () => {
   test('typing in two places is two steps', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type('X')
-    await page.keyboard.press('Home')
+    await page.keyboard.press(lineStart)
     await page.keyboard.type('Y')
 
     await page.keyboard.press(`${mod}+z`)
@@ -245,7 +245,7 @@ test.describe('undo', () => {
   test('a paste is its own step', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type(' a')
     await editor.paste('b')
     expect(await editor.text('title')).toBe('Quarterly report ab')
@@ -258,7 +258,7 @@ test.describe('undo', () => {
   test('undo with no field focused restores the text and puts the caret back', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type(' (draft)')
     await editor.clickAway()
     expect((await editor.caret()).field).toBeNull()
@@ -272,7 +272,7 @@ test.describe('undo', () => {
   test('undo in one field can undo an edit in another', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.clickAt('title', 60)
-    await page.keyboard.press('End')
+    await page.keyboard.press(lineEnd)
     await page.keyboard.type('!')
     await editor.clickAt('subtitle', 30)
 

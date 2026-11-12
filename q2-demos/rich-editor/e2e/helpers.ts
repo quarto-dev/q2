@@ -15,6 +15,13 @@ import { startTestHub, type TestHub } from '../../../ts-packages/quarto-sync-cli
 
 export { expect }
 
+/**
+ * The keys that take the caret to the start and end of its line. On a Mac,
+ * Home and End scroll the page and leave the caret where it is.
+ */
+export const lineStart = process.platform === 'darwin' ? 'Meta+ArrowLeft' : 'Home'
+export const lineEnd = process.platform === 'darwin' ? 'Meta+ArrowRight' : 'End'
+
 export type Field = 'title' | 'subtitle' | 'abstract'
 
 const SELECTORS: Record<Field, string> = {
@@ -156,7 +163,7 @@ export class Editor {
   /** Put the caret in a one-line field, `offset` characters in. */
   async placeCaret(field: Field, offset: number) {
     await this.clickAt(field, 5)
-    await this.page.keyboard.press('Home')
+    await this.page.keyboard.press(lineStart)
     for (let i = 0; i < offset; i++) await this.page.keyboard.press('ArrowRight')
   }
 
@@ -230,7 +237,7 @@ export class Editor {
   /** Put the caret in the body's `index`th editable paragraph (of one line), `offset` characters in. */
   async placeCaretInParagraph(index: number, offset: number) {
     await this.frame.locator(PARAGRAPH).nth(index).click({ position: { x: 5, y: 5 } })
-    await this.page.keyboard.press('Home')
+    await this.page.keyboard.press(lineStart)
     for (let i = 0; i < offset; i++) await this.page.keyboard.press('ArrowRight')
   }
 
@@ -350,9 +357,11 @@ export class Editor {
     return this.frame.evaluate((text) => {
       const data = new DataTransfer()
       data.setData('text/plain', text)
-      document.activeElement!.dispatchEvent(
-        new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
-      )
+      // Set on the event, not given to its constructor: Firefox gives a
+      // constructed paste event an empty clipboard of its own.
+      const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: data })
+      document.activeElement!.dispatchEvent(event)
     }, text)
   }
 }

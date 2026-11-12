@@ -98,12 +98,23 @@ besides an optional React hook, so it could become its own package.
 ```bash
 npm run test:unit   # editing logic, in Node
 npm run test:wasm   # needs the WASM build from step 1
-npm run test:e2e    # the app in Chromium, on a test hub; needs the WASM build
+npm run test:e2e    # the app in Chromium, Firefox and WebKit, on a test hub; needs the WASM build
 ```
 
-The e2e tests are the specification of the editing experience, written
-against what a person sees and what the source text holds, not against
-this implementation: `title-block.spec.ts`, `cross-field.spec.ts` and
+The e2e tests are the most valuable part of this prototype. They are the
+specification of the editing experience, written against what a person
+sees and what the source text holds, not against this implementation, and
+they are meant to be complete: someone with only the specs should be able
+to build this editor again. Behaviour that no spec describes is a gap in
+the specs; add the spec with (or before) the behaviour.
+
+Every spec runs in Chromium, Firefox and WebKit (`npx playwright install`
+fetches them; `--project=firefox` runs one). The engines differ most
+where an editor lives: the caret, selections and `contenteditable`. A
+spec that can't hold in one engine says so where it's skipped, with the
+reason.
+
+The specs are: `title-block.spec.ts`, `cross-field.spec.ts` and
 `body.spec.ts` (editing), `source.spec.ts` (what an edit does to the source
 text) and
 `collaboration.spec.ts` (more than one person in a document). Tests marked
