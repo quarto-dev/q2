@@ -15,7 +15,16 @@ import {
   replacePresent,
   type History,
 } from './history.ts'
-import { contentChanged, sameSelection, type Fields, type Schema, type Selection, type State } from './model.ts'
+import {
+  contentChanged,
+  sameSelection,
+  type Fields,
+  type Position,
+  type Schema,
+  type Selection,
+  type State,
+} from './model.ts'
+import { diffs } from './rebase.ts'
 import type { FieldChanges } from './source.ts'
 import { undoGroup } from './undoGroup.ts'
 
@@ -71,20 +80,68 @@ export function fieldChanges(schema: Schema, before: Fields, after: Fields): Fie
 }
 
 /**
- * Show the document's text (`base`) in every field the selection isn't
- * in. While the caret is in a field, the field shows what was typed, even
- * where the document reads it differently (a trailing space it drops);
- * once the caret leaves, the field shows what the document says.
+ * Show the document's text (`base`) wherever the selection isn't: in every
+ * field it isn't in, and in every line it isn't on of a multi-line field
+ * it is in. While the caret is in a field (or on a line), the field shows
+ * what was typed, even where the document reads it differently (a
+ * trailing space it drops, an empty line); once the caret leaves, it
+ * shows what the document says.
  */
 export function settle(schema: Schema, editor: Editor, base: Fields): Editor {
-  const { fields, selection } = editor.present
+  const { fields } = editor.present
+  let selection = editor.present.selection
   let next: Record<string, string | undefined> | null = null
   for (const field of schema.order) {
-    if (selection && (selection.anchor.field === field || selection.focus.field === field)) continue
-    if ((fields[field] ?? '') === (base[field] ?? '')) continue
-    next ??= { ...fields }
-    if (base[field]) next[field] = base[field]
-    else delete next[field]
+    const was = fields[field] ?? ''
+    if (was === (base[field] ?? '')) continue
+    const ends = selection ? [selection.anchor, selection.focus].filter((p) => p.field === field) : []
+    if (ends.length === 0) {
+      next ??= { ...fields }
+      if (base[field]) next[field] = base[field]
+      else delete next[field]
+    } else if (schema.multiline?.includes(field)) {
+      const settled = settleLines(was, base[field] ?? '', ends.map((p) => p.offset))
+      if (settled.text === was) continue
+      next ??= { ...fields }
+      next[field] = settled.text
+      const moved = (p: Position): Position =>
+        p.field === field ? { field, offset: settled.offsets[ends.indexOf(p)] } : p
+      selection = selection && { anchor: moved(selection.anchor), focus: moved(selection.focus) }
+    }
   }
   return next ? replacePresent(editor, { fields: next, selection }) : editor
+}
+
+/**
+ * `variant` with the document's text (`base`) on every line that none of
+ * `offsets` is on, and where each of the offsets is in it.
+ */
+function settleLines(variant: string, base: string, offsets: number[]): { text: string; offsets: number[] } {
+  const lines = offsets.map((offset) => {
+    const end = variant.indexOf('\n', offset)
+    return { start: variant.lastIndexOf('\n', offset - 1) + 1, end: end < 0 ? variant.length : end }
+  })
+  // Each difference of `variant` from `base`, and where it starts in `variant`.
+  let shift = 0
+  const own = diffs(base, variant).map((d) => {
+    const start = d.start + shift
+    shift += d.inserted.length - d.removed
+    return { ...d, at: start }
+  })
+  let text = base
+  const moved = [...offsets]
+  // Last first, so the offsets of the earlier differences still hold.
+  for (const d of own.reverse()) {
+    const end = d.at + d.inserted.length
+    // A line break that ends a difference belongs to the line before it,
+    // unless it's what makes the empty line the caret is on.
+    const held = lines.some(
+      (line) =>
+        d.at <= line.end &&
+        (end > line.start || (end === line.start && (!d.inserted.endsWith('\n') || line.start === line.end))),
+    )
+    if (held) text = text.slice(0, d.start) + d.inserted + text.slice(d.start + d.removed)
+    else offsets.forEach((offset, i) => offset >= end && (moved[i] -= d.inserted.length - d.removed))
+  }
+  return { text, offsets: moved }
 }

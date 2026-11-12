@@ -110,6 +110,28 @@ describe('settle', () => {
     const settled = settle(schema, held, { title: 'A', subtitle: 'B' })
     expect(settled.present.fields).toEqual({ title: 'A ', subtitle: 'B' })
   })
+  it('shows the document\'s text in the lines of a multi-line field the selection is not on', () => {
+    const lines: Schema = { order: ['body'], multiline: ['body'] }
+    // A trailing space on the first line, the caret on an empty third
+    // line, and an empty last line: the document keeps none of them.
+    const editor = createEditor({ body: 'One \nTwo\n\nThree\n' })
+    const held = apply(editor, { fields: editor.present.fields, selection: caret('body', 9) })
+    const settled = settle(lines, held, { body: 'One\nTwo\nThree' })
+    expect(settled.present.fields.body).toBe('One\nTwo\n\nThree')
+    expect(settled.present.selection).toEqual(caret('body', 8))
+  })
+  it('keeps the empty last line the caret is on', () => {
+    const lines: Schema = { order: ['body'], multiline: ['body'] }
+    const editor = createEditor({ body: 'One\n' })
+    const held = apply(editor, { fields: editor.present.fields, selection: caret('body', 4) })
+    expect(settle(lines, held, { body: 'One' })).toBe(held)
+  })
+  it('keeps a space typed at the end of the line the caret is on', () => {
+    const lines: Schema = { order: ['body'], multiline: ['body'] }
+    const editor = createEditor({ body: 'One \nTwo' })
+    const held = apply(editor, { fields: editor.present.fields, selection: caret('body', 4) })
+    expect(settle(lines, held, { body: 'One\nTwo' })).toBe(held)
+  })
   it('returns the same editor when nothing differs', () => {
     const editor = createEditor({ title: 'A' })
     expect(settle(schema, editor, { title: 'A' })).toBe(editor)
