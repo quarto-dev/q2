@@ -1,7 +1,8 @@
 /**
  * Moving and deleting by more than a character: a word at a time and, on
- * a Mac, to the start of the line. And what Left and Right do with a
- * selection.
+ * a Mac, to the start of the line. What Left and Right do with a
+ * selection, what Page Up and Page Down do, and the other macOS key
+ * bindings for editing text.
  *
  * The word modifier is Option on a Mac and Ctrl elsewhere (`wordKey`).
  */
@@ -190,5 +191,73 @@ test.describe('Left and Right with a selection', () => {
     for (let i = 0; i < 12; i++) await page.keyboard.press('Shift+ArrowRight')
     await page.keyboard.press('ArrowRight')
     await editor.expectCaret('subtitle', 5)
+  })
+})
+
+test.describe('Page Up and Page Down', () => {
+  test.skip(process.platform !== 'darwin', 'On a Mac they scroll; elsewhere they move the caret a page')
+
+  test('scroll, and leave the caret where it is', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 4)
+
+    await page.keyboard.press('PageDown')
+    await editor.expectCaret('title', 4)
+    await page.keyboard.press('PageUp')
+    await editor.expectCaret('title', 4)
+
+    await page.keyboard.type('x')
+    expect(await editor.text('title')).toBe('Quarxterly report')
+  })
+})
+
+test.describe('macOS key bindings', () => {
+  test.skip(process.platform !== 'darwin', 'macOS key bindings')
+
+  test('Option+Up and Option+Down go to the start and the end of the field', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', "Playwright's Firefox ignores macOS key bindings")
+    const editor = await openEditor(page)
+    await editor.placeCaret('subtitle', 4)
+
+    await page.keyboard.press('Alt+ArrowDown')
+    await editor.expectCaret('subtitle', 13)
+    await page.keyboard.press('Alt+ArrowUp')
+    await editor.expectCaret('subtitle', 0)
+  })
+
+  test('Ctrl+K deletes to the end of the line', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', "Playwright's Firefox ignores macOS key bindings")
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 4)
+
+    await page.keyboard.press('Control+k')
+
+    expect(await editor.text('title')).toBe('Quar')
+    await editor.document.expectSource(basic.replace('Quarterly report', 'Quar'))
+  })
+
+  test('Ctrl+D deletes the character after the caret, and Ctrl+H the one before', async ({ page, browserName }) => {
+    test.skip(browserName === 'firefox', "Playwright's Firefox ignores macOS key bindings")
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 4)
+
+    await page.keyboard.press('Control+d')
+    expect(await editor.text('title')).toBe('Quarerly report')
+    await editor.expectCaret('title', 4)
+
+    await page.keyboard.press('Control+h')
+    expect(await editor.text('title')).toBe('Quaerly report')
+    await editor.expectCaret('title', 3)
+  })
+
+  // Today it does nothing.
+  test.fixme('Ctrl+T swaps the characters on either side of the caret', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 4)
+
+    await page.keyboard.press('Control+t')
+
+    expect(await editor.text('title')).toBe('Quatrerly report')
+    await editor.document.expectSource(basic.replace('Quarterly report', 'Quatrerly report'))
   })
 })
