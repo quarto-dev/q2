@@ -331,6 +331,21 @@ test.describe('an empty field', () => {
     await editor.expectParagraphCaret(0, 3)
   })
 
+  test('Up and Down stop on a field just added, still empty', async ({ page }) => {
+    const editor = await openEditor(page, 'no-subtitle')
+    await editor.addField('subtitle')
+    await page.keyboard.press('ArrowUp')
+    await editor.expectCaret('title', 0)
+
+    await page.keyboard.press('ArrowDown')
+    await editor.expectCaret('subtitle', 0)
+    await page.keyboard.press('ArrowDown')
+    await editor.expectParagraphCaret(0, 0)
+
+    await page.keyboard.press('ArrowUp')
+    await editor.expectCaret('subtitle', 0)
+  })
+
   test('a field removed and added again shows its caret', async ({ page }) => {
     // The title block keeps the author when the title goes, so it's there,
     // with nothing to edit in it, until the title comes back.

@@ -80,15 +80,17 @@ export interface FieldProps {
  * Text ending in a line break gets a trailing `<br>`: without one, the
  * browser draws no empty last line, so the caret can't sit on it until
  * something is typed. A `<br>` adds no text, so offsets are unchanged.
- * An empty line of a multi-line field gets one too: Firefox's arrow keys
- * skip a block with nothing in it.
+ * An empty field, or an empty line of a multi-line field, gets one too:
+ * Firefox's arrow keys skip a block with nothing in it (an empty subtitle
+ * between the title and the body, say). So an empty field isn't `:empty`;
+ * it has `data-empty`, for styling its placeholder.
  */
 export function Field({ name, text, placeholder, className, as = 'span', start }: FieldProps) {
   const ref = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     const el = ref.current
     if (!el || text === undefined) return
-    const wantsBreak = text.endsWith('\n') || (start !== undefined && text === '')
+    const wantsBreak = text.endsWith('\n') || text === ''
     const hasBreak = el.lastChild?.nodeName === 'BR'
     if (el.textContent === text && hasBreak === wantsBreak) return
     el.replaceChildren(...(text === '' ? [] : [text]))
@@ -101,6 +103,7 @@ export function Field({ name, text, placeholder, className, as = 'span', start }
     'data-field': name,
     'data-start': start,
     'data-placeholder': placeholder,
+    'data-empty': text === '' ? '' : undefined,
   })
 }
 

@@ -50,12 +50,13 @@ const SRCDOC = `<!doctype html>
 // replace: no focus ring, no hover state. `pre-wrap` keeps a trailing
 // space a caret position, as in the source text. `min-height` keeps an
 // emptied field one line tall; the placeholder is positioned out of the flow so
-// the caret sits at the start of the line, not after the placeholder text.
+// the caret sits at the start of the line, not after the placeholder text. (An
+// empty field holds a <br>, so it's marked `data-empty` rather than `:empty`.)
 const EDITING_CSS = `
 #quarto-document-content[contenteditable] { outline: none; }
 .qe-unknown { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px dashed #ced4da; color: #6c757d; font-size: 0.875em; }
 .qe-field { display: block; position: relative; min-height: 1lh; outline: none; white-space: pre-wrap; }
-.qe-field:empty::before {
+.qe-field[data-empty]::before {
   content: attr(data-placeholder);
   position: absolute;
   pointer-events: none;
