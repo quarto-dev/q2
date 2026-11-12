@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createHistory, record, undo } from './history.ts'
 import { caret, range, type Schema, type State } from './model.ts'
-import { diff, mapOffset, rebaseHistory, rebaseState, rebaseText } from './rebase.ts'
+import { diff, diffs, mapOffset, matchLines, rebaseHistory, rebaseState, rebaseText } from './rebase.ts'
 
 const schema: Schema = { order: ['title', 'subtitle'] }
 
@@ -10,6 +10,38 @@ describe('diff', () => {
     expect(diff('Hello world', 'Hello big world')).toEqual({ start: 6, removed: 0, inserted: 'big ' })
     expect(diff('Hello world', 'Help')).toEqual({ start: 3, removed: 8, inserted: 'p' })
     expect(diff('same', 'same')).toBeNull()
+  })
+})
+
+describe('diffs', () => {
+  it('is one range for text on one line', () => {
+    expect(diffs('Hello world', 'Hello big world')).toEqual([{ start: 6, removed: 0, inserted: 'big ' }])
+    expect(diffs('same', 'same')).toEqual([])
+  })
+  it('finds a range for each changed line', () => {
+    expect(diffs('one\ntwo\nthree', 'one!\ntwo\nthree?')).toEqual([
+      { start: 3, removed: 0, inserted: '!' },
+      { start: 13, removed: 0, inserted: '?' },
+    ])
+  })
+  it('finds lines added on both sides of a line', () => {
+    expect(diffs('one\ntwo', 'one\n\ntwo\n')).toEqual([
+      { start: 4, removed: 0, inserted: '\n' },
+      { start: 7, removed: 0, inserted: '\n' },
+    ])
+  })
+  it('finds added and removed lines', () => {
+    expect(diffs('one\nthree', 'one\ntwo\nthree')).toEqual([{ start: 4, removed: 0, inserted: 'two\n' }])
+    expect(diffs('one\ntwo\nthree', 'one\nthree')).toEqual([{ start: 4, removed: 4, inserted: '' }])
+    expect(diffs('one\ntwo', 'one')).toEqual([{ start: 3, removed: 4, inserted: '' }])
+  })
+})
+
+describe('matchLines', () => {
+  it('pairs the lines the two texts share, in order', () => {
+    expect(matchLines(['a', 'b', 'c'], ['a', 'x', 'c'])).toEqual([0, -1, 2])
+    expect(matchLines(['a', 'b'], ['new', 'a', 'b'])).toEqual([-1, 0, 1])
+    expect(matchLines(['a', 'b', 'c'], ['c', 'a'])).toHaveLength(2)
   })
 })
 
@@ -31,21 +63,36 @@ describe('mapOffset', () => {
 
 describe('rebaseText', () => {
   it('makes the change as it is when the variant is the base', () => {
-    expect(rebaseText('Report', 'Report', { start: 0, removed: 0, inserted: 'The ' }).text).toBe('The Report')
+    expect(rebaseText('Report', 'Report', [{ start: 0, removed: 0, inserted: 'The ' }]).text).toBe('The Report')
   })
   it('keeps what the variant added: a trailing space the document dropped', () => {
-    expect(rebaseText('Report ', 'Report', { start: 0, removed: 0, inserted: 'The ' }).text).toBe('The Report ')
+    expect(rebaseText('Report ', 'Report', [{ start: 0, removed: 0, inserted: 'The ' }]).text).toBe('The Report ')
   })
   it('makes a change after the variant\'s own change in the right place', () => {
     // The variant put "Big " at the start; the change appends "!".
-    expect(rebaseText('Big Report', 'Report', { start: 6, removed: 0, inserted: '!' }).text).toBe('Big Report!')
+    expect(rebaseText('Big Report', 'Report', [{ start: 6, removed: 0, inserted: '!' }]).text).toBe('Big Report!')
   })
   it('puts text inserted into what the variant replaced after the replacement', () => {
     // An older state in the undo history: before " world" was typed.
-    expect(rebaseText('Hello', 'Hello world', { start: 9, removed: 0, inserted: '!' }).text).toBe('Hello!')
+    expect(rebaseText('Hello', 'Hello world', [{ start: 9, removed: 0, inserted: '!' }]).text).toBe('Hello!')
   })
   it('ignores a deletion inside what the variant replaced', () => {
-    expect(rebaseText('Hello', 'Hello world', { start: 7, removed: 2, inserted: '' }).text).toBe('Hello')
+    expect(rebaseText('Hello', 'Hello world', [{ start: 7, removed: 2, inserted: '' }]).text).toBe('Hello')
+  })
+})
+
+describe('rebaseText over lines', () => {
+  it('makes a change between two of the variant\'s own changes in its place', () => {
+    // The variant keeps a trailing space on the first line and an empty
+    // last line that the document dropped; the change is on the second.
+    const base = 'one\ntwo\nthree'
+    const variant = 'one \ntwo\nthree\n'
+    const [change] = diffs(base, 'one\ntwo!\nthree')
+    expect(rebaseText(variant, base, [change]).text).toBe('one \ntwo!\nthree\n')
+  })
+  it('makes several changes at once', () => {
+    const base = 'one\ntwo\nthree'
+    expect(rebaseText('one\ntwo \nthree', base, diffs(base, '1\ntwo\n3')).text).toBe('1\ntwo \n3')
   })
 })
 
@@ -94,6 +141,14 @@ describe('rebaseState', () => {
     expect(held.selection).toEqual(caret('subtitle', 0))
     const free = rebaseState(schema, state('Report', caret('title', 2), 'Sub'), base, source)
     expect('subtitle' in free.fields).toBe(false)
+  })
+
+  it('keeps the caret on its text when lines change above and below it', () => {
+    const fields = { title: 'one\ntwo\nthree' }
+    const s: State = { fields, selection: caret('title', 5) }
+    const next = rebaseState(schema, s, fields, { title: 'zero\none\ntwo\nthree!' })
+    expect(next.fields.title).toBe('zero\none\ntwo\nthree!')
+    expect(next.selection).toEqual(caret('title', 10))
   })
 
   it('adds a field the change added', () => {

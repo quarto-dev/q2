@@ -9,8 +9,10 @@
  * is made to every variant, so the present keeps what was typed around it,
  * and undo and redo still change only what this editor changed.
  *
- * A change is one replaced range (`diff`), found by trimming the common
- * prefix and suffix. Positions inside text that a variant replaced move to
+ * A change is a list of replaced ranges (`diffs`): one for text on a
+ * single line, and one per run of changed lines otherwise, so that a
+ * change to one paragraph of a long text doesn't disturb what a variant
+ * has in another. Positions inside text that a variant replaced move to
  * the end of the variant's replacement.
  */
 
@@ -39,29 +41,123 @@ export function diff(before: string, after: string): Splice | null {
   }
 }
 
+/**
+ * The replaced ranges that turn `before` into `after`, in order, with
+ * their offsets in `before`: one range per run of changed lines.
+ */
+export function diffs(before: string, after: string): Splice[] {
+  if (before === after) return []
+  if (!before.includes('\n') && !after.includes('\n')) return [diff(before, after)!]
+  // Each line with its line break, so the pieces add up to the text.
+  const a = before.split(/(?<=\n)/)
+  const b = after.split(/(?<=\n)/)
+  const match = matchLines(a, b)
+  const splices: Splice[] = []
+  let i = 0
+  let offset = 0
+  let removed = ''
+  let inserted = ''
+  const flush = () => {
+    const start = offset - removed.length
+    const inside = removed === '' ? -1 : inserted.indexOf(removed)
+    const around = inserted === '' ? -1 : removed.indexOf(inserted)
+    if (inside > 0 && inside + removed.length < inserted.length) {
+      // Text added on both sides of what was there.
+      splices.push({ start, removed: 0, inserted: inserted.slice(0, inside) })
+      splices.push({ start: offset, removed: 0, inserted: inserted.slice(inside + removed.length) })
+    } else if (around > 0 && around + inserted.length < removed.length) {
+      // Text removed on both sides of what's left.
+      splices.push({ start, removed: around, inserted: '' })
+      splices.push({ start: start + around + inserted.length, removed: removed.length - around - inserted.length, inserted: '' })
+    } else {
+      const d = diff(removed, inserted)
+      if (d) splices.push({ ...d, start: start + d.start })
+    }
+    removed = inserted = ''
+  }
+  for (let j = 0; j <= b.length; j++) {
+    const upTo = j === b.length ? a.length : match[j]
+    if (upTo < 0) {
+      inserted += b[j]
+      continue
+    }
+    for (; i < upTo; i++) {
+      removed += a[i]
+      offset += a[i].length
+    }
+    flush()
+    if (j < b.length) offset += a[i++].length
+  }
+  return splices
+}
+
+/**
+ * For each line of `b`, the index of the line of `a` it is, or -1 when
+ * it's new: the longest run of lines the two share, in order.
+ */
+export function matchLines(a: readonly string[], b: readonly string[]): number[] {
+  const match = new Array<number>(b.length).fill(-1)
+  let start = 0
+  while (start < a.length && start < b.length && a[start] === b[start]) {
+    match[start] = start
+    start++
+  }
+  let endA = a.length
+  let endB = b.length
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) match[--endB] = --endA
+  const n = endA - start
+  const m = endB - start
+  // Too much changed to compare line by line: treat it all as replaced.
+  if (n === 0 || m === 0 || n * m > 4_000_000) return match
+  // lengths[i * (m + 1) + j]: the longest shared run of a[start + i..] and b[start + j..].
+  const lengths = new Uint32Array((n + 1) * (m + 1))
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lengths[i * (m + 1) + j] =
+        a[start + i] === b[start + j]
+          ? lengths[(i + 1) * (m + 1) + j + 1] + 1
+          : Math.max(lengths[(i + 1) * (m + 1) + j], lengths[i * (m + 1) + j + 1])
+    }
+  }
+  for (let i = 0, j = 0; i < n && j < m; ) {
+    if (a[start + i] === b[start + j]) match[start + j++] = start + i++
+    else if (lengths[(i + 1) * (m + 1) + j] >= lengths[i * (m + 1) + j + 1]) i++
+    else j++
+  }
+  return match
+}
+
 function applySplice(text: string, splice: Splice): string {
   return text.slice(0, splice.start) + splice.inserted + text.slice(splice.start + splice.removed)
 }
 
 /**
- * Make `change`, a change to `base`, to `variant` instead. Returns the new
- * text and the change as made, in `variant`'s offsets.
+ * Make `changes`, changes to `base`, to `variant` instead. Returns the new
+ * text and the changes as made, in `variant`'s offsets.
  */
-export function rebaseText(variant: string, base: string, change: Splice): { text: string; splice: Splice } {
-  const own = diff(base, variant)
-  let splice = change
-  if (own) {
-    const shift = own.inserted.length - own.removed
-    const map = (offset: number) =>
-      offset <= own.start
-        ? offset
-        : offset >= own.start + own.removed
-          ? offset + shift
-          : own.start + own.inserted.length
-    const start = map(change.start)
-    splice = { start, removed: map(change.start + change.removed) - start, inserted: change.inserted }
+export function rebaseText(
+  variant: string,
+  base: string,
+  changes: readonly Splice[],
+): { text: string; splices: Splice[] } {
+  const own = diffs(base, variant)
+  /** Where an offset in `base` is in `variant`. */
+  const map = (offset: number): number => {
+    let shift = 0
+    for (const o of own) {
+      if (offset <= o.start) break
+      if (offset < o.start + o.removed) return o.start + shift + o.inserted.length
+      shift += o.inserted.length - o.removed
+    }
+    return offset + shift
   }
-  return { text: applySplice(variant, splice), splice }
+  const splices = changes.map((change) => {
+    const start = map(change.start)
+    return { start, removed: Math.max(0, map(change.start + change.removed) - start), inserted: change.inserted }
+  })
+  // Last first, so the offsets of the earlier ones still hold.
+  const text = splices.reduceRight(applySplice, variant)
+  return { text, splices }
 }
 
 /**
@@ -87,10 +183,10 @@ export function rebaseState(schema: Schema, state: State, base: Fields, source: 
   let fields: Record<string, string | undefined> | null = null
   let selection = state.selection
   for (const field of schema.order) {
-    const change = diff(base[field] ?? '', source[field] ?? '')
-    if (!change) continue
-    const { text, splice } = rebaseText(state.fields[field] ?? '', base[field] ?? '', change)
-    selection = selection && mapSelection(schema, selection, field, splice)
+    const changes = diffs(base[field] ?? '', source[field] ?? '')
+    if (changes.length === 0) continue
+    const { text, splices } = rebaseText(state.fields[field] ?? '', base[field] ?? '', changes)
+    selection = selection && mapSelection(schema, selection, field, splices)
     const held = selection !== null && (selection.anchor.field === field || selection.focus.field === field)
     fields ??= { ...state.fields }
     if (text !== '' || held) fields[field] = text
@@ -115,13 +211,14 @@ export function rebaseHistory(schema: Schema, history: History<State>, base: Fie
  * A caret stays before text inserted at it. A selection doesn't grow to
  * take in text inserted at either of its ends.
  */
-function mapSelection(schema: Schema, selection: Selection, field: string, splice: Splice): Selection {
+function mapSelection(schema: Schema, selection: Selection, field: string, splices: readonly Splice[]): Selection {
   const { from, to } = ordered(schema, selection)
   const collapsed = from.field === to.field && from.offset === to.offset
   const map = (p: Position): Position => {
     if (p.field !== field) return p
     const stick = !collapsed && p === from ? 'after' : 'before'
-    const offset = mapOffset(p.offset, splice, stick)
+    // Last first, so each splice's offsets still hold when it's applied.
+    const offset = splices.reduceRight((at, splice) => mapOffset(at, splice, stick), p.offset)
     return offset === p.offset ? p : { field, offset }
   }
   const anchor = map(selection.anchor)
