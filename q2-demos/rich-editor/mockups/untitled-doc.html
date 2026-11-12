@@ -60,9 +60,8 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 .opt-persist .title-block.untitled:not(.open) h1.title:focus { height:auto; margin:0 0 .5rem; }
 .opt-persist .title-block.untitled:not(.open) { margin-bottom:.75rem; }
 .opt-persist .title-block.untitled:not(.open):focus-within { margin-bottom:1.75rem; }
-.opt-persist .title-block h1.title:empty::before { color:var(--ph-faint); }
-.opt-persist .title-block h1.title:empty:focus::before,
-.opt-persist.doc-empty .title-block h1.title:empty::before { color:var(--ph); }
+.opt-persist .title-block h1.title:empty::before { color:var(--ph); }
+.opt-persist .title-block.untitled:not(.open) h1.title:hover:empty::before { color:var(--ph-faint); }
 /* "+ Subtitle": under the title, in the title block's bottom margin so it
    moves nothing when it appears; only while the title block is hovered or
    has the caret. */
