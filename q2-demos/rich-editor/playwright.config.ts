@@ -6,7 +6,9 @@ import { defineConfig, devices } from '@playwright/test'
  * the app, served by the Vite dev server that Playwright starts. Build
  * the WASM module first (`npm run build:wasm`).
  */
-const PORT = 5192
+// Another checkout's tests may be running at the same time, with a dev
+// server of their own: `E2E_PORT` gives this run a different port.
+const PORT = Number(process.env.E2E_PORT ?? 5192)
 
 export default defineConfig({
   testDir: './e2e',

@@ -44,6 +44,17 @@ test.describe('while the source does not parse', () => {
     expect(await editor.copy()).toBe('report')
   })
 
+  test.fixme('select all still selects', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('title', 3)
+    await breakSource(editor)
+
+    // Today the keys do nothing.
+    await page.keyboard.press(`${mod}+a`)
+
+    expect(await editor.selectedText()).toBe('Quarterly report')
+  })
+
   test('cut takes the text and deletes nothing', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.select('title', 0, 9)
@@ -95,6 +106,34 @@ test.describe('while the source does not parse', () => {
 
     expect(await editor.text('title')).toBe('Quarterly report')
     expect(editor.document.source()).toBe(basic.replace('title: Quarterly report', 'title: "Quarterly report"'))
+  })
+})
+
+test.describe('an empty document', () => {
+  // What it should offer instead (a title to type, a first paragraph) is
+  // being designed: see `mockups/untitled-doc.html`.
+  test('is an empty page, and takes no typing', async ({ page }) => {
+    const document = await createDocument('')
+    const editor = await document.open(page, { shows: 'nothing' })
+
+    await editor.frame.locator('body').click()
+    await page.keyboard.type('Hello')
+    await page.keyboard.press('Enter')
+
+    expect(await editor.frame.locator('#quarto-document-content').innerText()).toBe('')
+    expect(document.source()).toBe('')
+  })
+
+  test('shows what a collaborator writes, and it can be edited then', async ({ page }) => {
+    const document = await createDocument('\n')
+    const editor = await document.open(page, { shows: 'nothing' })
+
+    document.replace('\n', '---\ntitle: Notes\n---\n')
+    await editor.expectText('title', 'Notes')
+    await editor.placeCaret('title', 5)
+    await page.keyboard.type('!')
+
+    await document.expectSource('---\ntitle: Notes!\n---\n')
   })
 })
 

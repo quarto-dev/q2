@@ -33,6 +33,10 @@ test.describe('paragraphs', () => {
     // Someone else sees the same paragraph, still editable.
     const other = await editor.join()
     expect((await other.paragraphs())[0]).toBe('Some Plain text, with “quotes” and an author’s apostrophe.')
+    // The edited paragraph is written with the quotes it showed.
+    await expect
+      .poll(() => editor.document.source())
+      .toContain('\n\nSome Plain text, with “quotes” and an author\'s apostrophe.\n\n')
   })
 
   test('a paragraph with any formatting is shown with it', async ({ page }) => {
@@ -55,6 +59,21 @@ test.describe('paragraphs', () => {
     await expect(p.locator('span.mark')).toHaveText('a span')
     await expect(p.locator('span.smallcaps')).toHaveText('small caps')
     await expect(p.locator('u')).toHaveText('underline')
+  })
+
+  test('quotes and an image in a paragraph with formatting are shown, and a citation and a note are not', async ({ page }) => {
+    const editor = await (
+      await createDocument(
+        '---\ntitle: Notes\n---\n\nAn *emphasised* "quote" and \'another\', see [@smith2020], ![a picture](picture.png){.wide} and a note.^[Hidden.]\n',
+      )
+    ).open(page)
+    const p = shown(editor, 'p')
+
+    // Quotes are curly; a citation and a note aren't shown.
+    await expect(p).toHaveText('An emphasised “quote” and ‘another’, see ,  and a note.')
+    await expect(p.locator('img.wide')).toHaveAttribute('src', 'picture.png')
+    await expect(p.locator('img.wide')).toHaveAttribute('alt', 'a picture')
+    expect(await editor.paragraphs()).toEqual([])
   })
 
   test('a line break within a paragraph is shown, and the paragraph can\'t be edited', async ({ page }) => {
@@ -120,5 +139,89 @@ test.describe('other blocks', () => {
     expect((await editor.blocks()).map((block) => block.split(':')[0])).toEqual([
       'p', 'p', 'h1', 'h6', 'pre', 'blockquote', 'ul', 'ol', 'div', 'hr', 'div', 'div', 'p',
     ])
+  })
+})
+
+test.describe('what blocks hold', () => {
+  const source = [
+    '---',
+    'title: Notes',
+    '---',
+    '',
+    '* One',
+    '  * Nested',
+    '* Two',
+    '',
+    '# A *formatted* heading',
+    '',
+    '```{r}',
+    '1 + 1',
+    '```',
+    '',
+    '$$',
+    'x^2',
+    '$$',
+    '',
+    '<div class="x">raw</div>',
+    '',
+    '{{< pagebreak >}}',
+    '',
+    'Text with <b>raw</b> HTML and a {{< kbd X >}} shortcode.',
+    '',
+  ].join('\n')
+
+  test('a list in a list item is shown in it', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    await expect(shown(editor, 'ul > li')).toHaveText(['OneNested', 'Two'])
+    await expect(shown(editor, 'ul > li > ul > li')).toHaveText('Nested')
+  })
+
+  test('a list with blank lines between its items holds the same items as one without', async ({ page }) => {
+    const editor = await (await createDocument('---\ntitle: Notes\n---\n\n* One\n\n* Two\n')).open(page)
+
+    await expect(shown(editor, 'ul > li')).toHaveText(['One', 'Two'])
+  })
+
+  test('a heading is shown with its formatting', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    await expect(shown(editor, 'h1')).toHaveText('A formatted heading')
+    await expect(shown(editor, 'h1 em')).toHaveText('formatted')
+  })
+
+  test('a code cell is its code', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    await expect(shown(editor, 'pre > code')).toHaveText('1 + 1')
+  })
+
+  test('display math is shown as its source, in a paragraph', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    await expect(shown(editor, 'p > span.math')).toHaveText(/^\s*x\^2\s*$/)
+  })
+
+  test('raw HTML is a box, as a block the editor doesn\'t know is', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    const boxes = shown(editor, '.qe-unknown')
+    await expect(boxes.first()).toHaveText('RawBlock')
+    expect(new Set(await boxes.allTextContents())).toEqual(new Set(['RawBlock']))
+    await expect(editor.frame.locator('div.x')).toHaveCount(0)
+  })
+
+  test('a shortcode and raw inline HTML are not shown, and their paragraph can\'t be edited', async ({ page }) => {
+    const editor = await (await createDocument(source)).open(page)
+
+    expect(await editor.blocks()).toContain('p: Text with raw HTML and a  shortcode.')
+    expect(await editor.paragraphs()).toEqual([])
+  })
+
+  test('a paragraph whose text has the character that stands for an object can\'t be edited', async ({ page }) => {
+    const editor = await (await createDocument('---\ntitle: Notes\n---\n\nAn ￼ here.\n\nPlain.\n')).open(page)
+
+    expect(await editor.blocks()).toEqual(['p: An ￼ here.', 'p: Plain.'])
+    expect(await editor.paragraphs()).toEqual(['Plain.'])
   })
 })

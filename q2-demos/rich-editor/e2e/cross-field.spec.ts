@@ -4,7 +4,7 @@
  * history for the whole block.
  */
 
-import { expect, openEditor, test, type Editor, lineStart, lineEnd } from './helpers.ts'
+import { createDocument, expect, fixture, openEditor, test, type Editor, lineStart, lineEnd } from './helpers.ts'
 
 const mod = 'ControlOrMeta'
 
@@ -93,6 +93,57 @@ test.describe('selecting across fields', () => {
     const selected = await editor.selectedText()
     expect(selected.startsWith('Quarterly report')).toBe(true)
     expect(selected).toContain('Third quarter')
+    expect(selected.endsWith('Body text.')).toBe(true)
+  })
+
+  test('a selection from the title block into the body trims both, and joins nothing', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.placeCaret('subtitle', 5)
+    await editor.shiftClickParagraph(0, 4)
+
+    await page.keyboard.press('Backspace')
+
+    expect(await editor.text('subtitle')).toBe('Third')
+    await editor.expectCaret('subtitle', 5)
+    await editor.document.expectSource(
+      fixture('basic').replace('Third quarter', 'Third').replace('Body text.', 'text.'),
+    )
+    await expect.poll(() => editor.paragraphs()).toEqual(['text.'])
+  })
+
+  test('deleting the whole document empties every field, and undo brings it all back', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    const source = fixture('abstract')
+    await editor.clickAt('subtitle', 30)
+    await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.press(`${mod}+a`)
+
+    await page.keyboard.press('Backspace')
+
+    // The caret is in the first field, which stays, empty, while it's there.
+    expect(await editor.text('title')).toBe('')
+    await editor.expectCaret('title', 0)
+    expect(await editor.text('subtitle')).toBeNull()
+    expect(await editor.text('abstract')).toBeNull()
+    expect(await editor.blocks()).toEqual([])
+    // What isn't a field (the author, the date) is still there.
+    await expect(editor.frame.locator('#title-block-header')).toContainText('Ana Silva')
+    await editor.document.expectSource(
+      source
+        .replace('title: Quarterly report\n', '')
+        .replace('subtitle: Third quarter\n', '')
+        .replace(/abstract: \|\n.*\n/, '')
+        .replace('Body text.\n', ''),
+    )
+
+    // (Where undo puts the fields in the source is in `source.spec.ts`.)
+    await page.keyboard.press(`${mod}+z`)
+    expect(await editor.text('title')).toBe('Quarterly report')
+    expect(await editor.text('subtitle')).toBe('Third quarter')
+    expect(await editor.text('abstract')).toMatch(/^We summarise .* the next one\.$/)
+    expect(await editor.paragraphs()).toEqual(['Body text.'])
+    const selected = await editor.selectedText()
+    expect(selected.startsWith('Quarterly report')).toBe(true)
     expect(selected.endsWith('Body text.')).toBe(true)
   })
 })
@@ -310,6 +361,65 @@ test.describe('the abstract', () => {
     expect(await editor.copy()).toBe(
       'We summarise the third quarter’s results and what they mean for the next one.',
     )
+  })
+
+  test('each paragraph of the abstract in the source is a line of it', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract-paragraphs')
+
+    expect(await editor.text('abstract')).toBe('We summarise the third quarter’s results.\nThen we look ahead.')
+  })
+
+  test('an empty line goes away when the caret leaves the abstract', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.placeCaretAtEnd('abstract')
+    await page.keyboard.press('Enter')
+    expect(await editor.text('abstract')).toMatch(/next one\.\n$/)
+
+    await editor.clickAt('title', 60)
+
+    await editor.expectText(
+      'abstract',
+      'We summarise the third quarter’s results and what they mean for the next one.',
+    )
+  })
+
+  test('an abstract on one line of the source stays on it until it has a second paragraph', async ({ page }) => {
+    const source = '---\ntitle: Notes\nabstract: One line.\n---\n\nBody text.\n'
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    await editor.placeCaretAtEnd('abstract')
+
+    await page.keyboard.type(' More.')
+    await document.expectSource(source.replace('One line.', 'One line. More.'))
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('Second.')
+    await document.expectSource(
+      source.replace('abstract: One line.\n', 'abstract: |\n  One line. More.\n\n  Second.\n'),
+    )
+  })
+
+  test.describe('with more than plain paragraphs in it', () => {
+    const source =
+      '---\ntitle: Notes\nabstract: |\n  Some *emphasised* text.\n\n  - one\n  - two\n\n  The end.\n---\n\nBody text.\n'
+
+    test('shows the text of its paragraphs, and nothing else', async ({ page }) => {
+      const editor = await (await createDocument(source)).open(page)
+
+      expect(await editor.text('abstract')).toBe('Some emphasised text.\nThe end.')
+      expect(await editor.field('abstract').innerHTML()).toBe('Some emphasised text.\nThe end.')
+    })
+
+    test.fixme('keeps its formatting and its list when it is edited', async ({ page }) => {
+      const document = await createDocument(source)
+      const editor = await document.open(page)
+      await editor.placeCaretAtEnd('abstract')
+      await page.keyboard.type(' Really.')
+
+      // Today the abstract is written as the lines it showed: the emphasis
+      // and the list are gone from the source.
+      await document.expectSource(source.replace('The end.', 'The end. Really.'))
+    })
   })
 
   test('Enter at the end of the subtitle moves to the abstract', async ({ page }) => {
