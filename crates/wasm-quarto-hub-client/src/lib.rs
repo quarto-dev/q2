@@ -4073,6 +4073,76 @@ pub fn parse_qmd_content(content: &str) -> String {
     }
 }
 
+/// Response for [`title_block_meta`].
+#[derive(Serialize)]
+struct TitleBlockMetaResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ast: Option<String>,
+    issues: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+/// Derive the title-block metadata from a raw (untransformed) AST,
+/// without running the render pipeline.
+///
+/// Runs only the pipeline's `authors-normalize` step
+/// ([`quarto_core::transforms::normalize_authors_meta`]) on the AST's
+/// metadata, which writes the keys the title block reads: `by-author`,
+/// `by-affiliation`, `funding`, `labels`, `rendered.has-title-block`, and
+/// `quarto-template-params.title-block-categories`. Lets an editor update
+/// its title block on every keystroke instead of waiting for a render.
+///
+/// Sees only the metadata in `ast_json`, so values a project or directory
+/// layer would contribute are not included.
+///
+/// # Returns
+/// JSON: `{ "success": true, "ast": "<ast-json>", "issues": [...] }`, where
+/// `issues` are normalization problems such as an undefined affiliation
+/// `ref`, or `{ "success": false, "error": "...", "issues": [] }`.
+#[wasm_bindgen]
+pub fn title_block_meta(ast_json: &str) -> String {
+    use pampa::readers::json::read as json_read;
+    use pampa::writers::json::{JsonConfig, write_with_config};
+    use quarto_core::transforms::normalize_authors_meta;
+
+    let error = |message: String| {
+        serde_json::to_string(&TitleBlockMetaResponse {
+            success: false,
+            ast: None,
+            issues: Vec::new(),
+            error: Some(message),
+        })
+        .unwrap()
+    };
+
+    let mut cursor = std::io::Cursor::new(ast_json.as_bytes());
+    let (mut pandoc, context) = match json_read(&mut cursor) {
+        Ok(result) => result,
+        Err(e) => return error(format!("Failed to read AST JSON: {}", e)),
+    };
+
+    let issues = normalize_authors_meta(&mut pandoc.meta);
+
+    let mut buf = Vec::new();
+    let config = JsonConfig {
+        include_inline_locations: false,
+        ..JsonConfig::default()
+    };
+    if write_with_config(&pandoc, &context, &mut buf, &config).is_err() {
+        return error("Failed to serialize AST to JSON".to_string());
+    }
+
+    serde_json::to_string(&TitleBlockMetaResponse {
+        success: true,
+        ast: Some(String::from_utf8(buf).unwrap_or_default()),
+        issues,
+        error: None,
+    })
+    .unwrap()
+}
+
 /// Convert a Pandoc JSON AST back to QMD source text.
 ///
 /// This is the WASM equivalent of `pampa -f json -t qmd`.

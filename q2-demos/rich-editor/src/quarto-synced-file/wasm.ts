@@ -1,12 +1,12 @@
 /**
  * WASM module wrapper for QMD parsing.
  *
- * Provides initWasm() and parseQmdContent() for use with quarto-sync-client's
- * ASTOptions.
+ * Provides initWasm(), parseQmdContent(), the qmd writers, and derivations
+ * (deriveTitleBlockMeta) that run single render-pipeline steps on demand.
  */
 
 import type { RustQmdJson } from '@quarto/pandoc-types'
-import type { AstResponse } from 'wasm-quarto-hub-client'
+import type { AstResponse, TitleBlockMetaResponse } from 'wasm-quarto-hub-client'
 
 let wasmModule: typeof import('wasm-quarto-hub-client') | null = null
 let initPromise: Promise<void> | null = null
@@ -25,6 +25,17 @@ export async function initWasm(): Promise<void> {
   })()
 
   return initPromise
+}
+
+/**
+ * Initialize the WASM module from its bytes (for Node, where the default
+ * fetch-based loader doesn't work).
+ */
+export async function initWasmFromBytes(bytes: BufferSource): Promise<void> {
+  if (wasmModule) return
+  const wasm = await import('wasm-quarto-hub-client')
+  await wasm.default({ module_or_path: bytes })
+  wasmModule = wasm
 }
 
 /**
@@ -90,4 +101,74 @@ export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): s
   }
 
   return response.qmd
+}
+
+export interface TitleBlockMeta {
+  /** The input metadata plus the derived title-block keys. */
+  meta: RustQmdJson['meta']
+  /** Normalization problems, e.g. an undefined affiliation `ref`. */
+  issues: string[]
+}
+
+/**
+ * Derive the metadata keys the title block reads (`by-author`,
+ * `by-affiliation`, `labels`, `rendered.has-title-block`, ...) from a raw
+ * parse, using the render pipeline's own `authors-normalize` logic.
+ * Reads only `ast.meta`, so it costs the same at any document size.
+ *
+ * Must call initWasm() before first use.
+ */
+export function deriveTitleBlockMeta(ast: RustQmdJson): TitleBlockMeta {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+
+  // Only the metadata matters; send the source pool so positions survive.
+  const metaOnly = { ...ast, blocks: [] }
+  const response: TitleBlockMetaResponse = JSON.parse(
+    wasmModule.title_block_meta(JSON.stringify(metaOnly)),
+  )
+
+  if (!response.success || !response.ast) {
+    throw new Error(`Title block derivation failed: ${response.error}`)
+  }
+
+  return { meta: (JSON.parse(response.ast) as RustQmdJson).meta, issues: response.issues ?? [] }
+}
+
+/**
+ * Compile the default Bootstrap + Quarto theme CSS, the stylesheet a
+ * document with no `theme:` renders with. Takes about half a second the
+ * first time (dart-sass is loaded on demand), so call it once and reuse
+ * the result.
+ *
+ * Must call initWasm() before first use.
+ */
+export async function compileDefaultThemeCss(): Promise<string> {
+  if (!wasmModule) {
+    throw new Error('WASM not initialized. Call initWasm() first.')
+  }
+  const wasm = wasmModule
+
+  // The sass importer reads Bootstrap's SCSS from the WASM's virtual file
+  // system through these callbacks (as preview-runtime's initWasm does).
+  const sass = await import('/src/wasm-js-bridge/sass.js')
+  const read = (path: string): string | null => {
+    const r = JSON.parse(wasm.vfs_read_file(path)) as { success: boolean; content?: string }
+    return r.success && r.content !== undefined ? r.content : null
+  }
+  sass.setVfsCallbacks(read, (path: string) => read(path) !== null, () => {
+    const r = JSON.parse(wasm.vfs_list_files()) as { success: boolean; files?: string[] }
+    return r.success && r.files ? r.files : []
+  })
+
+  const response = JSON.parse(await wasm.compile_default_bootstrap_css(true)) as {
+    success: boolean
+    css?: string
+    error?: string
+  }
+  if (!response.success || response.css === undefined) {
+    throw new Error(`Theme CSS compilation failed: ${response.error}`)
+  }
+  return response.css
 }

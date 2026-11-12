@@ -7,8 +7,9 @@
  */
 
 import { useMemo, type ReactNode } from 'react'
-import { useSyncedFile } from './useSyncedFile.ts'
+import { useSyncedFile } from './quarto-synced-file/index.ts'
 import { Editor } from './Editor.tsx'
+import { VisualEditor } from './VisualEditor.tsx'
 
 const DEFAULT_SERVER = 'ws://127.0.0.1:8080/ws'
 
@@ -37,7 +38,12 @@ export function App() {
   if (!connected) return <Status>Disconnected.</Status>
   if (text === null) return <Status>Waiting for {params.filePath}…</Status>
 
-  return <Editor text={text} ast={ast} parseError={parseError} onEdit={applyEdits} />
+  return (
+    <div className="panes">
+      <Editor text={text} ast={ast} parseError={parseError} onEdit={applyEdits} />
+      <VisualEditor ast={ast} />
+    </div>
+  )
 }
 
 function Status({ children, error }: { children: ReactNode; error?: boolean }) {

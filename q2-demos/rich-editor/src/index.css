@@ -32,3 +32,55 @@ body {
   font: 14px/1.5 ui-monospace, monospace;
   resize: vertical;
 }
+
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  height: calc(100vh - 32px);
+}
+
+.panes .editor {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panes .editor-source {
+  flex: 1;
+  min-height: 0;
+}
+
+.visual-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.visual-frame {
+  flex: 1;
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.panes .status {
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .visual-frame {
+    min-height: 60vh;
+  }
+}
