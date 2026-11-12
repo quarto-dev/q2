@@ -33,7 +33,7 @@ pub struct ProjectFiles {
     /// All text files discovered inside `_extensions/` directories (paths relative to project root)
     pub extension_files: Vec<PathBuf>,
 
-    /// Other text source files (currently `.tsx`, paths relative to project root)
+    /// Other text source files (currently `.tsx` and `.scss`, paths relative to project root)
     pub source_files: Vec<PathBuf>,
 
     /// Resources-scoped `.html` files — e.g. embedded example decks
@@ -139,10 +139,10 @@ impl ProjectFiles {
                     continue;
                 }
 
-                // Check for .tsx source files
-                if ext == Some("tsx") {
+                // Check for .tsx and .scss source files
+                if ext == Some("tsx") || ext == Some("scss") {
                     if let Ok(relative) = path.strip_prefix(project_root) {
-                        debug!(?relative, "Discovered .tsx source file");
+                        debug!(?relative, "Discovered text source file");
                         files.source_files.push(relative.to_path_buf());
                     }
                     continue;
@@ -676,6 +676,25 @@ mod tests {
 
         // .ts is silently dropped (only .tsx is included)
         assert!(!files.source_files.contains(&PathBuf::from("util.ts")));
+    }
+
+    /// A project-level `theme:` `.scss` file (and the partials it imports)
+    /// must reach the preview VFS, or the browser render fails with Q-14-4
+    /// "Theme file not found".
+    #[test]
+    fn test_discover_scss_files() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::write(temp.path().join("custom.scss"), "$body-bg: #abcdef;\n").unwrap();
+        fs::create_dir(temp.path().join("styles")).unwrap();
+        fs::write(temp.path().join("styles/_vars.scss"), "$x: 1;\n").unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        let text: Vec<_> = files.text_files().collect();
+        assert!(text.contains(&&PathBuf::from("custom.scss")));
+        assert!(text.contains(&&PathBuf::from("styles/_vars.scss")));
     }
 
     /// bd-tnm3k: `q2 preview` on a single `.qmd` file with no
