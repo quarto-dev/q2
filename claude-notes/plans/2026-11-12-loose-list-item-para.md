@@ -2,7 +2,7 @@
 title: 'HTML writer drops `<p>` in loose list items (bd-nnvvomg6)'
 date: 2026-11-12
 description: 'The pampa HTML writer collapses a single-Para list item to bare inlines; key the `<p>` on Plain vs Para, as Pandoc does.'
-status: active
+status: done
 braid:
   strand: bd-nnvvomg6
 ---
