@@ -49,10 +49,6 @@ summary. The [execution options](#execution-options) control what appears,
 and a value can also be computed inside a sentence with an
 [inline expression](computations.qmd#inline-expressions).
 
-This page covers rendering, installation, how Quarto chooses knitr, cell
-options, caching, and the chunks whose output Quarto keeps exactly as knitr
-wrote it.
-
 ### Rendering
 
 Render the document from a shell:
@@ -83,8 +79,8 @@ holds the `Rscript` binary, or to the binary itself.
 
 ## How Quarto picks knitr
 
-Quarto gives a cell to knitr when the cell's language is `r`. Nothing else is
-needed: neither an `engine:` key nor a `knitr:` key. A document with both `{r}`
+Quarto sends any cell whose language is `r` to knitr. You don't need an
+`engine:` or `knitr:` key to select it. A document with both `{r}`
 and `{python}` cells runs the Python cells through
 [reticulate](https://rstudio.github.io/reticulate/), because knitr takes
 Python only when it is already running for the R cells.
@@ -118,9 +114,9 @@ ggplot(airquality, aes(Temp, Ozone)) +
 ```
 ````
 
-This keeps long options such as `fig-cap`, `fig-subcap` and `fig-alt`
-readable, and it lets a structured editor change an option without parsing
-the first line of the cell.
+Putting each option on its own line keeps long values such as `fig-cap`,
+`fig-subcap` and `fig-alt` readable, and lets editors change an option without
+parsing the cell header.
 
 ::: {.callout-note}
 ## Migrating from Quarto 1
@@ -258,9 +254,9 @@ insert the value, and
 
 ## Caching
 
-The knitr cache works on individual cells, not on the whole document. That is
-convenient, and it also means you manage the dependencies between cells
-yourself.
+The knitr cache works per cell rather than per document, so you are
+responsible for tracking dependencies between cells (for example, with
+`dependson`).
 
 Enable the cache for a document or a project with the `execute` option:
 
@@ -304,15 +300,16 @@ you have not changed.
 
 When Quarto runs a document it can keep what the code produced as an
 [execution record](execution-records.qmd), so that `q2 preview` and hub can
-present the page again without running R. For most cells the record holds the
-pieces knitr produced: the code, the printed text, the messages and the plots.
+redisplay the page without rerunning R. For most cells, the record stores each
+output knitr produced separately: source code, printed text, messages and
+plots.
 
-Some cells give Quarto no pieces to keep. For these, Quarto keeps the
-finished markdown that knitr wrote, and the record holds that block of text
-for the cell. **The page is the same as the one knitr produces.** Nothing needs
-fixing, but a tool that reads the record sees a block of markdown where it
-would otherwise see separate outputs. Positron, for example, does not show
-these cells' output or fill them from its own cache.
+For some cells, there are no structured outputs for Quarto to save. In that
+case it stores the rendered markdown from knitr as a single block in the
+notebook. The rendered page comes out identical, but tools that read the
+notebook directly, such as Positron, see one markdown blob instead of
+individual outputs, so they won't display those outputs or populate them from
+their own cache.
 
 These cells keep knitr's markdown:
 
@@ -326,12 +323,12 @@ These cells keep knitr's markdown:
   cannot know what the new hook does. The cell that replaces the hook and every
   cell after it keep knitr's markdown, and Quarto reports
   [`Q-18-13`](../../errors/engine/Q-18-13.qmd). Cell options such as
-  `class.output`, `attr.source` and `collapse` do the same job for most uses,
-  and cells that use them stay out of this list.
-- **Every cell, when the output format is one the record cannot present yet.**
-  The record presents HTML, Reveal.js, EPUB, Typst, Word (`docx`),
+  `class.output`, `attr.source` and `collapse` can replace a custom hook for
+  most purposes, and they don't cause this fallback.
+- **Every cell, when the output format isn't yet supported by execution
+  records.** Supported formats are HTML, Reveal.js, EPUB, Typst, Word (`docx`),
   PowerPoint (`pptx`) and GitHub Flavored Markdown (`gfm`). Other formats,
   such as PDF, keep knitr's markdown for every cell.
-- **A cell that asks for `cache: 1` or `cache: 2`.** Its output is part of the
-  page, and it is not part of the record at all. A cell that asks for
+- **A cell that asks for `cache: 1` or `cache: 2`.** Its output appears on the
+  rendered page but is not stored in the record. A cell that asks for
   `cache: true` is recorded.
