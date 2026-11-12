@@ -40,7 +40,7 @@ export function App() {
 
   return (
     <div className="panes">
-      <Editor text={text} ast={ast} parseError={parseError} onEdit={applyEdits} />
+      <Editor text={text} parseError={parseError} onEdit={applyEdits} />
       <VisualEditor ast={ast} />
     </div>
   )
