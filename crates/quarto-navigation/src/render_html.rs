@@ -1705,7 +1705,7 @@ mod tests {
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::for_test(),
         })
     }
@@ -3960,7 +3960,7 @@ mod secondary_nav_tests {
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::for_test(),
         })
     }
@@ -4290,7 +4290,7 @@ mod announcement_tests {
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::for_test(),
         })
     }

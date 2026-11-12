@@ -31,7 +31,7 @@ fn empty_meta() -> ConfigValue {
 /// pointers for the two inlines (used as attribution_by_node keys).
 fn two_str_ast() -> (Pandoc, usize, usize) {
     let s_hello = Inline::Str(Str {
-        text: "hello".to_string(),
+        text: "hello".into(),
         source_info: SourceInfo::Original {
             file_id: quarto_source_map::FileId(0),
             start_offset: 0,
@@ -39,7 +39,7 @@ fn two_str_ast() -> (Pandoc, usize, usize) {
         },
     });
     let s_world = Inline::Str(Str {
-        text: "world".to_string(),
+        text: "world".into(),
         source_info: SourceInfo::Original {
             file_id: quarto_source_map::FileId(0),
             start_offset: 6,

@@ -640,7 +640,7 @@ fn register_shortcode_api(lua: &Lua) -> Result<()> {
                 let make_strong_inline = |text: String| -> Inline {
                     Inline::Strong(crate::pandoc::Strong {
                         content: vec![Inline::Str(crate::pandoc::Str {
-                            text,
+                            text: text.into(),
                             source_info: SourceInfo::generated(By::unknown()),
                         })],
                         source_info: SourceInfo::generated(By::unknown()),

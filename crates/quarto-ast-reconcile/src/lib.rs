@@ -92,7 +92,7 @@ mod tests {
     fn make_para(text: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
         quarto_pandoc_types::Block::Paragraph(Paragraph {
             content: vec![quarto_pandoc_types::Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: source.clone(),
             })],
             source_info: source,
@@ -104,7 +104,7 @@ mod tests {
             level,
             attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![quarto_pandoc_types::Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: source.clone(),
             })],
             source_info: source,
@@ -156,14 +156,14 @@ mod tests {
             quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![
                     quarto_pandoc_types::Inline::Str(Str {
-                        text: "anchor".to_string(),
+                        text: "anchor".into(),
                         source_info: source.clone(),
                     }),
                     quarto_pandoc_types::Inline::Cite(Box::new(Cite {
                         citations: vec![Citation {
                             id: id.to_string(),
                             prefix: vec![quarto_pandoc_types::Inline::Str(Str {
-                                text: prefix_text.to_string(),
+                                text: prefix_text.into(),
                                 source_info: source.clone(),
                             })],
                             suffix: vec![],
@@ -173,7 +173,7 @@ mod tests {
                             id_source: None,
                         }],
                         content: vec![quarto_pandoc_types::Inline::Str(Str {
-                            text: "shared".to_string(),
+                            text: "shared".into(),
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
@@ -211,7 +211,7 @@ mod tests {
             quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![
                     quarto_pandoc_types::Inline::Str(Str {
-                        text: "anchor".to_string(),
+                        text: "anchor".into(),
                         source_info: source.clone(),
                     }),
                     quarto_pandoc_types::Inline::Cite(Box::new(Cite {
@@ -225,7 +225,7 @@ mod tests {
                             id_source: None,
                         }],
                         content: vec![quarto_pandoc_types::Inline::Str(Str {
-                            text: content_text.to_string(),
+                            text: content_text.into(),
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
@@ -281,7 +281,7 @@ mod tests {
             quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![
                     quarto_pandoc_types::Inline::Str(Str {
-                        text: "anchor".to_string(),
+                        text: "anchor".into(),
                         source_info: source.clone(),
                     }),
                     inline,
@@ -327,7 +327,7 @@ mod tests {
         }
         fn content(source: &SourceInfo) -> Vec<quarto_pandoc_types::Inline> {
             vec![quarto_pandoc_types::Inline::Str(Str {
-                text: "inner".to_string(),
+                text: "inner".into(),
                 source_info: source.clone(),
             })]
         }
@@ -570,7 +570,7 @@ mod tests {
         let original_para = quarto_pandoc_types::Block::Paragraph(Paragraph {
             content: vec![
                 quarto_pandoc_types::Inline::Str(Str {
-                    text: "Value: ".to_string(),
+                    text: "Value: ".into(),
                     source_info: source_original(),
                 }),
                 quarto_pandoc_types::Inline::Code(Box::new(quarto_pandoc_types::Code {
@@ -587,11 +587,11 @@ mod tests {
         let executed_para = quarto_pandoc_types::Block::Paragraph(Paragraph {
             content: vec![
                 quarto_pandoc_types::Inline::Str(Str {
-                    text: "Value: ".to_string(),
+                    text: "Value: ".into(),
                     source_info: source_executed(),
                 }),
                 quarto_pandoc_types::Inline::Str(Str {
-                    text: "851".to_string(),
+                    text: "851".into(),
                     source_info: source_executed(),
                 }),
             ],
@@ -744,7 +744,7 @@ mod tests {
         slots.insert(
             "title".to_string(),
             Slot::Inlines(vec![quarto_pandoc_types::Inline::Str(Str {
-                text: title_text.to_string(),
+                text: title_text.into(),
                 source_info: source.clone(),
             })]),
         );
@@ -754,7 +754,7 @@ mod tests {
             "content".to_string(),
             Slot::Blocks(vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![quarto_pandoc_types::Inline::Str(Str {
-                    text: content_text.to_string(),
+                    text: content_text.into(),
                     source_info: source.clone(),
                 })],
                 source_info: source.clone(),
@@ -990,7 +990,7 @@ mod tests {
             slots.insert(
                 "title".to_string(),
                 Slot::Inlines(vec![quarto_pandoc_types::Inline::Str(Str {
-                    text: title.to_string(),
+                    text: title.into(),
                     source_info: source.clone(),
                 })]),
             );
@@ -1000,14 +1000,14 @@ mod tests {
                 Slot::Blocks(vec![
                     quarto_pandoc_types::Block::Paragraph(Paragraph {
                         content: vec![quarto_pandoc_types::Inline::Str(Str {
-                            text: body1.to_string(),
+                            text: body1.into(),
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
                     }),
                     quarto_pandoc_types::Block::Paragraph(Paragraph {
                         content: vec![quarto_pandoc_types::Inline::Str(Str {
-                            text: body2.to_string(),
+                            text: body2.into(),
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
@@ -1089,7 +1089,7 @@ mod tests {
             slots.insert(
                 "content".to_string(),
                 Slot::Inlines(vec![quarto_pandoc_types::Inline::Str(Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: source.clone(),
                 })]),
             );
@@ -1108,12 +1108,12 @@ mod tests {
             blocks: vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![
                     quarto_pandoc_types::Inline::Str(Str {
-                        text: "Text before ".to_string(),
+                        text: "Text before ".into(),
                         source_info: source_original(),
                     }),
                     make_inline_custom("unchanged", source_original()),
                     quarto_pandoc_types::Inline::Str(Str {
-                        text: " text after".to_string(),
+                        text: " text after".into(),
                         source_info: source_original(),
                     }),
                 ],
@@ -1126,12 +1126,12 @@ mod tests {
             blocks: vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![
                     quarto_pandoc_types::Inline::Str(Str {
-                        text: "Text before ".to_string(),
+                        text: "Text before ".into(),
                         source_info: source_executed(),
                     }),
                     make_inline_custom("unchanged", source_executed()),
                     quarto_pandoc_types::Inline::Str(Str {
-                        text: " text after".to_string(),
+                        text: " text after".into(),
                         source_info: source_executed(),
                     }),
                 ],
@@ -1306,7 +1306,7 @@ mod tests {
 
     fn make_str(text: &str, source: SourceInfo) -> quarto_pandoc_types::Inline {
         quarto_pandoc_types::Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: source,
         })
     }
@@ -1689,7 +1689,7 @@ mod list_length_tests {
     fn make_list_item(text: &str, source: SourceInfo) -> Vec<quarto_pandoc_types::Block> {
         vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
             content: vec![quarto_pandoc_types::Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: source.clone(),
             })],
             source_info: source,
@@ -1940,7 +1940,7 @@ mod list_length_tests {
                     )
                         .into(),
                     content: vec![quarto_pandoc_types::Inline::Str(Str {
-                        text: text.to_string(),
+                        text: text.into(),
                         source_info: source.clone(),
                     })],
                     source_info: source.clone(),

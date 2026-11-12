@@ -1024,7 +1024,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
         "Str",
         lua.create_function(|lua, text: String| {
             lua.create_userdata(LuaInline::new(Inline::Str(Str {
-                text,
+                text: text.into(),
                 source_info: filter_source_info(lua),
             })))
         })?,

@@ -630,7 +630,7 @@ mod tests {
             level,
             attr: attr_id(id),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: si(),
             })],
             source_info: si(),
@@ -648,7 +648,7 @@ mod tests {
             )
                 .into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: si(),
             })],
             source_info: si(),

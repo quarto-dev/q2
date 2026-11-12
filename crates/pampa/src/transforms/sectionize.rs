@@ -283,7 +283,7 @@ mod tests {
             )
                 .into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -311,7 +311,7 @@ mod tests {
             )
                 .into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -322,7 +322,7 @@ mod tests {
     fn make_para(text: &str) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),

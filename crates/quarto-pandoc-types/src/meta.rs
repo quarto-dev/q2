@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn test_meta_value_inlines() {
         let inlines = vec![crate::inline::Inline::Str(Str {
-            text: "test".to_string(),
+            text: "test".into(),
             source_info: dummy_source_info(),
         })];
         let mv = MetaValue::MetaInlines(inlines);

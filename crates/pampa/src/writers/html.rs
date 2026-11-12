@@ -2260,7 +2260,7 @@ mod tests {
         let ctx = ASTContext::anonymous();
         let para = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "Hello".to_string(),
+                text: "Hello".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2307,7 +2307,7 @@ mod tests {
 
         let para = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "Hello".to_string(),
+                text: "Hello".into(),
                 source_info: source.clone(),
             })],
             source_info: source,
@@ -2463,7 +2463,7 @@ mod tests {
         let ctx = ASTContext::anonymous();
         let para = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "Hello".to_string(),
+                text: "Hello".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2508,7 +2508,7 @@ mod tests {
 
         let para = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "Hello".to_string(),
+                text: "Hello".into(),
                 source_info: source.clone(),
             })],
             source_info: source,
@@ -2553,7 +2553,7 @@ mod tests {
                 .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -2618,7 +2618,7 @@ mod tests {
                 .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -2797,7 +2797,7 @@ mod tests {
         let para = Block::Paragraph(Paragraph {
             content: vec![
                 Inline::Str(Str {
-                    text: "This is a caption.".to_string(),
+                    text: "This is a caption.".into(),
                     source_info: dummy_source_info(),
                 }),
                 Inline::Space(Space {
@@ -2833,7 +2833,7 @@ mod tests {
 
     fn li_str(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }
@@ -3210,7 +3210,7 @@ mod tests {
             col_span: 1,
             content: vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -3333,7 +3333,7 @@ mod tests {
             col_span: 1,
             content: vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),

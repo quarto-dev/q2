@@ -29,7 +29,7 @@ fn simple_doc() -> Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "x".to_string(),
+                text: "x".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),

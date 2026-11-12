@@ -107,7 +107,7 @@ fn test_manybullets_json_specifically() {
 fn roundtrip_str_source_info(str_source_info: SourceInfo) -> SourceInfo {
     let mut pandoc = Pandoc::default();
     let inner = Inline::Str(Str {
-        text: "hi".to_string(),
+        text: "hi".into(),
         source_info: str_source_info,
     });
     let plain = Plain {
@@ -270,7 +270,7 @@ fn json_with_missing_str_source_info() -> Vec<u8> {
     let mut pandoc = Pandoc::default();
     pandoc.blocks.push(Block::Plain(Plain {
         content: vec![Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: SourceInfo::original(FileId(0), 0, 5),
         })],
         source_info: SourceInfo::original(FileId(0), 0, 5),

@@ -120,7 +120,7 @@ pub fn config_value_to_inlines(cv: &ConfigValue) -> Option<Inlines> {
     // Any other scalar shape: take its plain text and wrap it literally.
     let text = cv.as_plain_text()?;
     Some(vec![Inline::Str(Str {
-        text,
+        text: text.into(),
         source_info: cv.source_info.clone(),
     })])
 }
@@ -130,7 +130,7 @@ pub fn config_value_to_inlines(cv: &ConfigValue) -> Option<Inlines> {
 /// For values that are genuinely plain text and must stay literal — a
 /// localized term from the language catalog, a built-in English default
 /// — rather than markdown that happens not to contain markup.
-pub fn plain_inlines(text: impl Into<String>) -> Inlines {
+pub fn plain_inlines(text: impl Into<quarto_pandoc_types::Text>) -> Inlines {
     vec![Inline::Str(Str {
         text: text.into(),
         source_info: SourceInfo::generated(By::programmatic_config()),
@@ -562,7 +562,7 @@ mod tests {
     /// care about the surrounding structure rather than the markup.
     fn plain(text: &str) -> Inlines {
         vec![Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })]
     }
@@ -577,7 +577,7 @@ mod tests {
             )
                 .into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -604,7 +604,7 @@ mod tests {
             )
                 .into(),
             content: vec![Inline::Str(Str {
-                text: header_text.to_string(),
+                text: header_text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -625,7 +625,7 @@ mod tests {
     fn make_para(text: &str) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -1005,13 +1005,13 @@ mod tests {
 
         let title = vec![
             Inline::Str(Str {
-                text: "Using a ".to_string(),
+                text: "Using a ".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "raw".to_string(),
+                    text: "raw".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -1074,7 +1074,7 @@ mod tests {
         assert_eq!(
             entry.title,
             vec![Inline::Str(Str {
-                text: "A **literal** title".to_string(),
+                text: "A **literal** title".into(),
                 source_info: dummy_source_info(),
             })],
             "a project-config string is literal: one Str, asterisks intact, no Strong"
@@ -1089,7 +1089,7 @@ mod tests {
 
         let inlines = vec![Inline::Strong(Strong {
             content: vec![Inline::Str(Str {
-                text: "bold".to_string(),
+                text: "bold".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -1129,13 +1129,13 @@ mod tests {
 
         let header_content = vec![
             Inline::Str(Str {
-                text: "Using a ".to_string(),
+                text: "Using a ".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "raw".to_string(),
+                    text: "raw".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),

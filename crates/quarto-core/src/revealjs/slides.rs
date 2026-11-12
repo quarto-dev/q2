@@ -181,7 +181,7 @@ mod tests {
             level,
             attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::generated(By::revealjs()),
             })],
             source_info: SourceInfo::generated(By::revealjs()),
@@ -199,7 +199,7 @@ mod tests {
             )
                 .into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::generated(By::revealjs()),
             })],
             source_info: SourceInfo::generated(By::revealjs()),
@@ -210,7 +210,7 @@ mod tests {
     fn para(text: &str) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::generated(By::revealjs()),
             })],
             source_info: SourceInfo::generated(By::revealjs()),

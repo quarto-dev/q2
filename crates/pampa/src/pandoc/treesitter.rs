@@ -312,7 +312,7 @@ fn process_list_item(
             context,
         );
         let marker_str = Inline::Str(Str {
-            text: if checked { "☒" } else { "☐" }.to_string(),
+            text: if checked { "☒" } else { "☐" }.into(),
             source_info: marker_source_info.clone(),
         });
         let marker_space = Inline::Space(Space {
@@ -687,7 +687,7 @@ fn process_native_inline<T: Write>(
                 })
             } else {
                 Inline::Str(Str {
-                    text: apply_smart_typography(text),
+                    text: apply_smart_typography(text).into(),
                     source_info: crate::pandoc::location::range_to_source_info_with_context(
                         &range, context,
                     ),
@@ -904,7 +904,7 @@ fn native_visitor<T: Write>(
             if leading_ws == 0 {
                 let text = process_backslash_escapes(raw_text.to_string());
                 PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
-                    text: apply_smart_typography(text),
+                    text: apply_smart_typography(text).into(),
                     source_info: node_source_info_with_context(node, context),
                 }))
             } else {
@@ -938,7 +938,7 @@ fn native_visitor<T: Write>(
                         end: node_range.end,
                     };
                     result.push(Inline::Str(Str {
-                        text: apply_smart_typography(text),
+                        text: apply_smart_typography(text).into(),
                         source_info: crate::pandoc::location::range_to_source_info_with_context(
                             &str_range, context,
                         ),
@@ -1753,7 +1753,7 @@ fn native_visitor<T: Write>(
                     )
                         .into(),
                     content: vec![Inline::Str(Str {
-                        text: anchor_id.to_string(),
+                        text: anchor_id.into(),
                         source_info: source_info.clone(),
                     })],
                     target: (format!("#{}", anchor_id), String::new()),

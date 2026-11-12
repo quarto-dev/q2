@@ -661,7 +661,7 @@ fn inline_shape_text(block: &Block) -> String {
     content
         .iter()
         .map(|i| match i {
-            pampa::pandoc::Inline::Str(s) => s.text.clone(),
+            pampa::pandoc::Inline::Str(s) => s.text.to_string(),
             pampa::pandoc::Inline::Space(_) => " ".to_string(),
             _ => String::new(),
         })
@@ -922,7 +922,7 @@ fn unrelated_blocks_are_not_merged_by_the_writer() {
     let plain = |text: &str| {
         Block::Plain(Plain {
             content: vec![pampa::pandoc::Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: span(),
             })],
             source_info: span(),

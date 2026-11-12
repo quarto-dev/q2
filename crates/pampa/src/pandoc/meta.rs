@@ -216,7 +216,7 @@ fn parse_yaml_string_as_markdown_to_config(
                 )
                     .into(),
                 content: vec![Inline::Str(Str {
-                    text: value.to_string(),
+                    text: value.into(),
                     source_info: source_info.clone(),
                 })],
                 source_info: source_info.clone(),
@@ -396,7 +396,7 @@ fn yaml_to_config_value_at(
                             )
                                 .into(),
                             content: vec![Inline::Str(Str {
-                                text: s,
+                                text: s.into(),
                                 source_info: source_info.clone(),
                             })],
                             // Wrapper around the tagged scalar — reuse

@@ -269,7 +269,7 @@ mod tests {
 
     fn show_inline(i: &Inline) -> String {
         match i {
-            Inline::Str(s) => s.text.clone(),
+            Inline::Str(s) => s.text.to_string(),
             Inline::Space(_) => "_".into(),
             Inline::SoftBreak(_) => "~".into(),
             Inline::Emph(e) => format!("Emph[{}]", show_inlines(&e.content)),

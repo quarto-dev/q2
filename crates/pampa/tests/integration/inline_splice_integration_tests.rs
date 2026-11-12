@@ -45,7 +45,7 @@ fn modify_str_text(ast: &Pandoc, block_idx: usize, inline_idx: usize, new_text: 
     let mut new_ast = ast.clone();
     let inlines = block_inlines_mut(&mut new_ast.blocks[block_idx]);
     if let Some(Inline::Str(s)) = inlines.get_mut(inline_idx) {
-        s.text = new_text.to_string();
+        s.text = new_text.into();
         s.source_info = SourceInfo::for_test();
     } else {
         panic!(
@@ -216,7 +216,7 @@ fn splice_str_change_in_blockquote() {
     let mut new_ast = parse_qmd(original_qmd);
     let inlines = blockquote_first_inlines_mut(&mut new_ast.blocks[0]);
     if let Inline::Str(ref mut s) = inlines[0] {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -231,7 +231,7 @@ fn splice_str_change_in_multiline_blockquote() {
     let mut new_ast = parse_qmd(original_qmd);
     let inlines = blockquote_first_inlines_mut(&mut new_ast.blocks[0]);
     if let Inline::Str(ref mut s) = inlines[0] {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -256,7 +256,7 @@ fn splice_str_change_in_bulletlist() {
     let mut new_ast = parse_qmd(original_qmd);
     let inlines = bulletlist_first_item_inlines_mut(&mut new_ast.blocks[0]);
     if let Inline::Str(ref mut s) = inlines[0] {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -270,7 +270,7 @@ fn splice_str_change_in_multiline_bulletlist() {
     let mut new_ast = parse_qmd(original_qmd);
     let inlines = bulletlist_first_item_inlines_mut(&mut new_ast.blocks[0]);
     if let Inline::Str(ref mut s) = inlines[0] {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -356,7 +356,7 @@ fn splice_str_change_inside_emphasis() {
         && let Inline::Emph(ref mut emph) = p.content[0]
         && let Inline::Str(ref mut s) = emph.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -380,7 +380,7 @@ fn splice_str_change_inside_strong() {
         && let Inline::Strong(ref mut strong) = p.content[0]
         && let Inline::Str(ref mut s) = strong.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 

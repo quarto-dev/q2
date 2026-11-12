@@ -1479,7 +1479,7 @@ mod tests {
         use quarto_pandoc_types::inline::{Emph, Inline, Str};
         let str_inline = |text: &str| {
             Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })
         };

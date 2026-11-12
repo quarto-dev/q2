@@ -189,7 +189,7 @@ pub fn encode_number(span: &mut Span, number: &str, encoding: NumberEncoding) ->
                     )
                         .into(),
                     content: vec![Inline::Str(Str {
-                        text: format!("({number})"),
+                        text: format!("({number})").into(),
                         source_info: source_info.clone(),
                     })],
                     source_info,
@@ -327,7 +327,7 @@ mod tests {
             vec![
                 math(MathType::DisplayMath, "x"),
                 Inline::Str(Str {
-                    text: "trailing".to_string(),
+                    text: "trailing".into(),
                     source_info: si(),
                 }),
             ],
@@ -434,7 +434,7 @@ mod tests {
         for content in [
             vec![math(MathType::InlineMath, "x")],
             vec![Inline::Str(Str {
-                text: "replaced".to_string(),
+                text: "replaced".into(),
                 source_info: si(),
             })],
             vec![],

@@ -2832,7 +2832,7 @@ mod smart_typography_writer_tests {
 
     fn s(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::for_test(),
         })
     }

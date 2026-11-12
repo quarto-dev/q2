@@ -358,7 +358,7 @@ pub fn check_citation_keys(
                 None => {}
                 Some(Inline::Cite(_)) => {}
                 Some(_) => out.push(Inline::Str(crate::pandoc::Str {
-                    text: ";".to_string(),
+                    text: ";".into(),
                     source_info: source_info.clone(),
                 })),
             }
@@ -385,7 +385,7 @@ fn unknown_key_marker(id: &str) -> Inline {
     let source_info = quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc());
     Inline::Strong(crate::pandoc::Strong {
         content: vec![Inline::Str(crate::pandoc::Str {
-            text: format!("{id}?"),
+            text: format!("{id}?").into(),
             source_info: source_info.clone(),
         })],
         source_info,
@@ -1228,7 +1228,7 @@ fn localize_quotes(inlines: &mut Inlines, quotes: &QuoteConfig, depth: usize) {
 
 fn quote_str(text: &str) -> Inline {
     Inline::Str(crate::pandoc::Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::citeproc()),
     })
 }
@@ -2038,7 +2038,7 @@ mod tests {
     // Helper to create a Str inline
     fn str_inline(text: &str) -> Inline {
         Inline::Str(crate::pandoc::Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: si(),
         })
     }
@@ -4059,7 +4059,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) => " ".to_string(),
                 Inline::Cite(c) => plain(&c.content),
                 Inline::Link(l) => plain(&l.content),

@@ -42,7 +42,7 @@ fn test_plain_block() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Str(Str {
-                text: "Hello world".to_string(),
+                text: "Hello world".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -60,7 +60,7 @@ fn test_paragraph_block() {
         meta: Default::default(),
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "Paragraph content".to_string(),
+                text: "Paragraph content".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -78,14 +78,14 @@ fn test_consecutive_plain_blocks() {
         blocks: vec![
             Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: "First".to_string(),
+                    text: "First".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
             }),
             Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: "Second".to_string(),
+                    text: "Second".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -105,14 +105,14 @@ fn test_paragraph_spacing() {
         blocks: vec![
             Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Para 1".to_string(),
+                    text: "Para 1".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
             }),
             Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Para 2".to_string(),
+                    text: "Para 2".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -137,7 +137,7 @@ fn test_header_level_1() {
             level: 1,
             attr: empty_attr().into(),
             content: vec![Inline::Str(Str {
-                text: "Title".to_string(),
+                text: "Title".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -157,7 +157,7 @@ fn test_header_level_2() {
             level: 2,
             attr: empty_attr().into(),
             content: vec![Inline::Str(Str {
-                text: "Section".to_string(),
+                text: "Section".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -178,7 +178,7 @@ fn test_header_level_3_to_6() {
                 level,
                 attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
-                    text: format!("Header {}", level),
+                    text: format!("Header {}", level).into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -221,14 +221,14 @@ fn test_bullet_list() {
             content: vec![
                 vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: "Item 1".to_string(),
+                        text: "Item 1".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
                 })],
                 vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: "Item 2".to_string(),
+                        text: "Item 2".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
@@ -256,14 +256,14 @@ fn test_ordered_list() {
             content: vec![
                 vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: "First".to_string(),
+                        text: "First".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
                 })],
                 vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: "Second".to_string(),
+                        text: "Second".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
@@ -285,12 +285,12 @@ fn test_definition_list() {
         blocks: vec![Block::DefinitionList(DefinitionList {
             content: vec![(
                 vec![Inline::Str(Str {
-                    text: "Term".to_string(),
+                    text: "Term".into(),
                     source_info: empty_source(),
                 })],
                 vec![vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: "Definition".to_string(),
+                        text: "Definition".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
@@ -316,7 +316,7 @@ fn test_blockquote() {
         blocks: vec![Block::BlockQuote(BlockQuote {
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Quoted text".to_string(),
+                    text: "Quoted text".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -343,7 +343,7 @@ fn test_div() {
             attr: empty_attr().into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Div content".to_string(),
+                    text: "Div content".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -369,7 +369,7 @@ fn test_div_with_color() {
             attr: attr.into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Colored".to_string(),
+                    text: "Colored".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -428,7 +428,7 @@ fn test_inline_str() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Str(Str {
-                text: "Simple text".to_string(),
+                text: "Simple text".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -446,14 +446,14 @@ fn test_inline_space() {
         blocks: vec![Block::Plain(Plain {
             content: vec![
                 Inline::Str(Str {
-                    text: "Word1".to_string(),
+                    text: "Word1".into(),
                     source_info: empty_source(),
                 }),
                 Inline::Space(Space {
                     source_info: empty_source(),
                 }),
                 Inline::Str(Str {
-                    text: "Word2".to_string(),
+                    text: "Word2".into(),
                     source_info: empty_source(),
                 }),
             ],
@@ -472,14 +472,14 @@ fn test_inline_softbreak() {
         blocks: vec![Block::Plain(Plain {
             content: vec![
                 Inline::Str(Str {
-                    text: "Line1".to_string(),
+                    text: "Line1".into(),
                     source_info: empty_source(),
                 }),
                 Inline::SoftBreak(SoftBreak {
                     source_info: empty_source(),
                 }),
                 Inline::Str(Str {
-                    text: "Line2".to_string(),
+                    text: "Line2".into(),
                     source_info: empty_source(),
                 }),
             ],
@@ -499,14 +499,14 @@ fn test_inline_linebreak() {
         blocks: vec![Block::Plain(Plain {
             content: vec![
                 Inline::Str(Str {
-                    text: "Before".to_string(),
+                    text: "Before".into(),
                     source_info: empty_source(),
                 }),
                 Inline::LineBreak(LineBreak {
                     source_info: empty_source(),
                 }),
                 Inline::Str(Str {
-                    text: "After".to_string(),
+                    text: "After".into(),
                     source_info: empty_source(),
                 }),
             ],
@@ -526,7 +526,7 @@ fn test_inline_emph() {
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Emph(Emph {
                 content: vec![Inline::Str(Str {
-                    text: "Emphasis".to_string(),
+                    text: "Emphasis".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -546,7 +546,7 @@ fn test_inline_strong() {
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Strong(Strong {
                 content: vec![Inline::Str(Str {
-                    text: "Bold".to_string(),
+                    text: "Bold".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -566,7 +566,7 @@ fn test_inline_underline() {
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Underline(Underline {
                 content: vec![Inline::Str(Str {
-                    text: "Underlined".to_string(),
+                    text: "Underlined".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -586,7 +586,7 @@ fn test_inline_strikeout() {
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Strikeout(Strikeout {
                 content: vec![Inline::Str(Str {
-                    text: "Struck".to_string(),
+                    text: "Struck".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -606,7 +606,7 @@ fn test_inline_superscript() {
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Superscript(Superscript {
                 content: vec![Inline::Str(Str {
-                    text: "2".to_string(),
+                    text: "2".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -627,7 +627,7 @@ fn test_inline_subscript() {
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Subscript(Subscript {
                 content: vec![Inline::Str(Str {
-                    text: "2".to_string(),
+                    text: "2".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -648,7 +648,7 @@ fn test_inline_smallcaps() {
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::SmallCaps(SmallCaps {
                 content: vec![Inline::Str(Str {
-                    text: "SmallCaps".to_string(),
+                    text: "SmallCaps".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -669,7 +669,7 @@ fn test_inline_quoted_double() {
             content: vec![Inline::Quoted(Box::new(Quoted {
                 quote_type: pampa::pandoc::QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -690,7 +690,7 @@ fn test_inline_quoted_single() {
             content: vec![Inline::Quoted(Box::new(Quoted {
                 quote_type: pampa::pandoc::QuoteType::SingleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -786,7 +786,7 @@ fn test_inline_link() {
             content: vec![Inline::Link(Box::new(Link {
                 attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
-                    text: "Click me".to_string(),
+                    text: "Click me".into(),
                     source_info: empty_source(),
                 })],
                 target: ("https://example.com".to_string(), String::new()),
@@ -810,7 +810,7 @@ fn test_inline_image() {
             content: vec![Inline::Image(Box::new(Image {
                 attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
-                    text: "Alt text".to_string(),
+                    text: "Alt text".into(),
                     source_info: empty_source(),
                 })],
                 target: ("image.png".to_string(), String::new()),
@@ -834,7 +834,7 @@ fn test_inline_note() {
             content: vec![Inline::Note(Note {
                 content: vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: "Note content".to_string(),
+                        text: "Note content".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
@@ -858,7 +858,7 @@ fn test_inline_span() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
-                    text: "Span text".to_string(),
+                    text: "Span text".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -884,7 +884,7 @@ fn test_inline_span_with_color() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr.into(),
                 content: vec![Inline::Str(Str {
-                    text: "Blue text".to_string(),
+                    text: "Blue text".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -912,7 +912,7 @@ fn test_inline_span_with_background_color() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr.into(),
                 content: vec![Inline::Str(Str {
-                    text: "Highlighted".to_string(),
+                    text: "Highlighted".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -947,7 +947,7 @@ fn test_color_parsing_basic_colors() {
                 content: vec![Inline::Span(Box::new(Span {
                     attr: attr.into(),
                     content: vec![Inline::Str(Str {
-                        text: format!("Color {}", color),
+                        text: format!("Color {}", color).into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
@@ -992,7 +992,7 @@ fn test_color_parsing_dark_colors() {
                 content: vec![Inline::Span(Box::new(Span {
                     attr: attr.into(),
                     content: vec![Inline::Str(Str {
-                        text: "Text".to_string(),
+                        text: "Text".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
@@ -1020,7 +1020,7 @@ fn test_color_parsing_hex() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr.into(),
                 content: vec![Inline::Str(Str {
-                    text: "Hex color".to_string(),
+                    text: "Hex color".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -1047,7 +1047,7 @@ fn test_color_parsing_hex_short() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr.into(),
                 content: vec![Inline::Str(Str {
-                    text: "Short hex".to_string(),
+                    text: "Short hex".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -1073,7 +1073,7 @@ fn test_color_parsing_rgb_function() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr.into(),
                 content: vec![Inline::Str(Str {
-                    text: "RGB func".to_string(),
+                    text: "RGB func".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -1099,7 +1099,7 @@ fn test_color_parsing_ansi_palette() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr.into(),
                 content: vec![Inline::Str(Str {
-                    text: "ANSI palette".to_string(),
+                    text: "ANSI palette".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -1125,7 +1125,7 @@ fn test_color_parsing_ansi_dash() {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr.into(),
                 content: vec![Inline::Str(Str {
-                    text: "ANSI dash".to_string(),
+                    text: "ANSI dash".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -1179,7 +1179,7 @@ fn test_mixed_blocks_and_inlines() {
                 level: 1,
                 attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
-                    text: "Title".to_string(),
+                    text: "Title".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -1188,7 +1188,7 @@ fn test_mixed_blocks_and_inlines() {
             Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {
-                        text: "This is".to_string(),
+                        text: "This is".into(),
                         source_info: empty_source(),
                     }),
                     Inline::Space(Space {
@@ -1196,7 +1196,7 @@ fn test_mixed_blocks_and_inlines() {
                     }),
                     Inline::Strong(Strong {
                         content: vec![Inline::Str(Str {
-                            text: "important".to_string(),
+                            text: "important".into(),
                             source_info: empty_source(),
                         })],
                         source_info: empty_source(),
@@ -1205,7 +1205,7 @@ fn test_mixed_blocks_and_inlines() {
                         source_info: empty_source(),
                     }),
                     Inline::Str(Str {
-                        text: "text.".to_string(),
+                        text: "text.".into(),
                         source_info: empty_source(),
                     }),
                 ],
@@ -1215,14 +1215,14 @@ fn test_mixed_blocks_and_inlines() {
                 content: vec![
                     vec![Block::Plain(Plain {
                         content: vec![Inline::Str(Str {
-                            text: "Item one".to_string(),
+                            text: "Item one".into(),
                             source_info: empty_source(),
                         })],
                         source_info: empty_source(),
                     })],
                     vec![Block::Plain(Plain {
                         content: vec![Inline::Str(Str {
-                            text: "Item two".to_string(),
+                            text: "Item two".into(),
                             source_info: empty_source(),
                         })],
                         source_info: empty_source(),
@@ -1248,12 +1248,12 @@ fn test_nested_formatting() {
             content: vec![Inline::Strong(Strong {
                 content: vec![
                     Inline::Str(Str {
-                        text: "Bold with ".to_string(),
+                        text: "Bold with ".into(),
                         source_info: empty_source(),
                     }),
                     Inline::Emph(Emph {
                         content: vec![Inline::Str(Str {
-                            text: "italic".to_string(),
+                            text: "italic".into(),
                             source_info: empty_source(),
                         })],
                         source_info: empty_source(),

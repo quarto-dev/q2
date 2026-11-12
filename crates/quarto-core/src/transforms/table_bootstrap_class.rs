@@ -347,7 +347,7 @@ mod tests {
                         col_span: 1,
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Str(Str {
-                                text: "x".to_string(),
+                                text: "x".into(),
                                 source_info: dummy_source_info(),
                             })],
                             source_info: dummy_source_info(),

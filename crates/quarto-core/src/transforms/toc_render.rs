@@ -446,7 +446,7 @@ mod tests {
     /// build their own inlines.
     fn plain_title(text: &str) -> Inlines {
         vec![Inline::Str(quarto_pandoc_types::inline::Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })]
     }
@@ -741,19 +741,19 @@ mod tests {
 
         let title = vec![
             Inline::Str(Str {
-                text: "Using a ".to_string(),
+                text: "Using a ".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "raw".to_string(),
+                    text: "raw".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
             })),
             Inline::Str(Str {
-                text: " ".to_string(),
+                text: " ".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Code(Box::new(Code {
@@ -780,13 +780,13 @@ mod tests {
 
         let title = vec![
             Inline::Str(Str {
-                text: "See ".to_string(),
+                text: "See ".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Link(Box::new(Link {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: "the docs".to_string(),
+                    text: "the docs".into(),
                     source_info: dummy_source_info(),
                 })],
                 target: ("https://example.com".to_string(), String::new()),
@@ -897,7 +897,7 @@ mod tests {
     fn yaml_string_value(s: &str) -> ConfigValue {
         ConfigValue::new_inlines(
             vec![Inline::Str(Str {
-                text: s.to_string(),
+                text: s.into(),
                 source_info: SourceInfo::for_test(),
             })],
             SourceInfo::for_test(),
@@ -915,7 +915,7 @@ mod tests {
                 }));
             }
             inlines.push(Inline::Str(Str {
-                text: word.to_string(),
+                text: word.to_string().into(),
                 source_info: SourceInfo::for_test(),
             }));
         }

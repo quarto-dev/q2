@@ -69,7 +69,7 @@ fn find_top_level_str_locations(ast: &Pandoc) -> Vec<StrLocation> {
                     block_idx,
                     inline_idx,
                     container_path: vec![],
-                    current_text: s.text.clone(),
+                    current_text: s.text.to_string(),
                 });
             }
         }
@@ -99,7 +99,7 @@ fn find_contained_str_locations(ast: &Pandoc) -> Vec<StrLocation> {
                         block_idx,
                         inline_idx,
                         container_path: vec![child_idx],
-                        current_text: s.text.clone(),
+                        current_text: s.text.to_string(),
                     });
                 }
             }
@@ -124,7 +124,7 @@ fn modify_str_at(ast: &Pandoc, loc: &StrLocation, new_text: &str) -> Pandoc {
     if loc.container_path.is_empty() {
         // Top-level Str
         if let Inline::Str(ref mut s) = inlines[loc.inline_idx] {
-            s.text = new_text.to_string();
+            s.text = new_text.into();
             s.source_info = SourceInfo::for_test();
         }
     } else {
@@ -139,7 +139,7 @@ fn modify_str_at(ast: &Pandoc, loc: &StrLocation, new_text: &str) -> Pandoc {
         };
         let child_idx = loc.container_path[0];
         if let Inline::Str(ref mut s) = children[child_idx] {
-            s.text = new_text.to_string();
+            s.text = new_text.into();
             s.source_info = SourceInfo::for_test();
         }
     }
@@ -150,7 +150,7 @@ fn modify_str_at(ast: &Pandoc, loc: &StrLocation, new_text: &str) -> Pandoc {
             .content
             .iter()
             .filter_map(|i| match i {
-                Inline::Str(s) => Some(s.text.to_lowercase()),
+                Inline::Str(s) => Some(s.text.as_str().to_lowercase()),
                 Inline::Space(_) => Some("-".to_string()),
                 _ => None,
             })
@@ -371,7 +371,7 @@ fn prop6_roundtrip_str_change_in_blockquote() {
         && let Block::Paragraph(ref mut p) = bq.content[0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
     assert_inline_roundtrip(qmd, &new_ast);
@@ -386,7 +386,7 @@ fn prop6_roundtrip_str_change_in_bullet_list() {
         && let Block::Plain(ref mut p) = bl.content[0][0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Modified".to_string();
+        s.text = "Modified".into();
         s.source_info = SourceInfo::for_test();
     }
     assert_inline_roundtrip(qmd, &new_ast);
@@ -424,10 +424,10 @@ fn prop6_roundtrip_multiple_str_changes_in_one_block() {
         for inline in p.content.iter_mut() {
             if let Inline::Str(s) = inline {
                 if s.text == "quick" {
-                    s.text = "slow".to_string();
+                    s.text = "slow".into();
                     s.source_info = SourceInfo::for_test();
                 } else if s.text.starts_with("fox") {
-                    s.text = "cat.".to_string();
+                    s.text = "cat.".into();
                     s.source_info = SourceInfo::for_test();
                 }
             }
@@ -445,7 +445,7 @@ fn prop6_roundtrip_in_multiline_blockquote() {
         && let Block::Paragraph(ref mut p) = bq.content[0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
     assert_inline_roundtrip(qmd, &new_ast);
@@ -460,7 +460,7 @@ fn prop6_roundtrip_in_multiline_bullet_list() {
         && let Block::Plain(ref mut p) = bl.content[0][0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
     assert_inline_roundtrip(qmd, &new_ast);
@@ -699,7 +699,7 @@ fn prop9_no_newlines_in_blockquote_splice() {
         && let Block::Paragraph(ref mut p) = bq.content[0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -723,7 +723,7 @@ fn prop9_no_newlines_in_multiline_blockquote_splice() {
         && let Block::Paragraph(ref mut p) = bq.content[0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -780,7 +780,7 @@ fn prop10_splice_equiv_blockquote() {
         && let Block::Paragraph(ref mut p) = bq.content[0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
     assert_splice_equivalent_to_full_writer(qmd, &new_ast);
@@ -859,7 +859,7 @@ fn stress_deeply_nested_blockquote_list() {
         && let Block::Plain(ref mut p) = bl.content[0][0]
         && let Inline::Str(ref mut s) = p.content[0]
     {
-        s.text = "Goodbye".to_string();
+        s.text = "Goodbye".into();
         s.source_info = SourceInfo::for_test();
     }
     assert_inline_roundtrip(qmd, &new_ast);
@@ -925,7 +925,7 @@ fn stress_many_blocks_first_and_last_change() {
             _ => panic!("Expected inline block"),
         };
         if let Inline::Str(ref mut s) = inlines[block_last_locs[0].inline_idx] {
-            s.text = "Last".to_string();
+            s.text = "Last".into();
             s.source_info = SourceInfo::for_test();
         }
 

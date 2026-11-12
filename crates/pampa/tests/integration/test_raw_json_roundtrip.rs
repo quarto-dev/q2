@@ -35,7 +35,7 @@ fn si(start: usize, end: usize) -> SourceInfo {
 
 fn str_inline(text: &str, start: usize, end: usize) -> Inline {
     Inline::Str(Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info: si(start, end),
     })
 }
@@ -531,19 +531,19 @@ fn test_raw_json_preserves_shared_substring_parents() {
         blocks: vec![para(
             vec![
                 Inline::Str(Str {
-                    text: "one".to_string(),
+                    text: "one".into(),
                     source_info: shared_a,
                 }),
                 Inline::Str(Str {
-                    text: "two".to_string(),
+                    text: "two".into(),
                     source_info: shared_b,
                 }),
                 Inline::Str(Str {
-                    text: "cat".to_string(),
+                    text: "cat".into(),
                     source_info: concat,
                 }),
                 Inline::Str(Str {
-                    text: "gen".to_string(),
+                    text: "gen".into(),
                     source_info: generated,
                 }),
             ],
@@ -666,7 +666,7 @@ fn test_raw_json_ast_stable_across_generations() {
         blocks: vec![para(
             vec![
                 Inline::Str(Str {
-                    text: "a".to_string(),
+                    text: "a".into(),
                     source_info: SourceInfo::Substring {
                         parent: parent.clone(),
                         start_offset: 0,
@@ -674,7 +674,7 @@ fn test_raw_json_ast_stable_across_generations() {
                     },
                 }),
                 Inline::Str(Str {
-                    text: "b".to_string(),
+                    text: "b".into(),
                     source_info: SourceInfo::Substring {
                         parent: parent.clone(),
                         start_offset: 1,

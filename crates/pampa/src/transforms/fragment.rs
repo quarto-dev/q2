@@ -230,7 +230,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) | Inline::SoftBreak(_) => " ".to_string(),
                 Inline::Emph(e) => format!("*{}*", text_of_inlines(&e.content)),
                 Inline::Note(_) => "[note]".to_string(),

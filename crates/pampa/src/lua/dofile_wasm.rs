@@ -113,7 +113,7 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),

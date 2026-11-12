@@ -351,7 +351,7 @@ mod tests {
         Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
-                text: alt.to_string(),
+                text: alt.into(),
                 source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
@@ -367,7 +367,7 @@ mod tests {
         Inline::Link(Box::new(Link {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),

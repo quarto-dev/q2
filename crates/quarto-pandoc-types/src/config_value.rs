@@ -1253,7 +1253,7 @@ mod tests {
         use crate::inline::{Inline, Str};
         ConfigValue::new_inlines(
             vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })],
             SourceInfo::for_test(),
@@ -1469,7 +1469,7 @@ mod tests {
         use crate::inline::{Inline, Str};
 
         let str_node = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: SourceInfo::for_test(),
         });
         let value = ConfigValue::new_inlines(vec![str_node], SourceInfo::for_test());
@@ -1483,11 +1483,11 @@ mod tests {
         use crate::inline::{Inline, Str};
 
         let str1 = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: SourceInfo::for_test(),
         });
         let str2 = Inline::Str(Str {
-            text: " world".to_string(),
+            text: " world".into(),
             source_info: SourceInfo::for_test(),
         });
         let value = ConfigValue::new_inlines(vec![str1, str2], SourceInfo::for_test());

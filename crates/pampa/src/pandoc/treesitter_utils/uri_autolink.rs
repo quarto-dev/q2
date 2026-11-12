@@ -184,7 +184,7 @@ pub fn process_uri_autolink(
 
     result.push(Inline::Link(Box::new(Link {
         content: vec![Inline::Str(Str {
-            text: display_text.to_string(),
+            text: display_text.into(),
             source_info: crate::pandoc::location::range_to_source_info_with_context(
                 &autolink_range,
                 context,

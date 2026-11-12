@@ -153,9 +153,19 @@ pub enum MathType {
     DisplayMath,
 }
 
+/// The string type for short AST text.
+///
+/// An [`ecow::EcoString`]: up to 15 bytes are stored inline with no heap
+/// allocation, which covers 99% of `Str` texts (a word is rarely longer);
+/// longer text is reference-counted, so cloning never copies it. It
+/// dereferences to `str`, converts from and into `String` with `.into()`,
+/// and serializes as a plain string. See
+/// `claude-notes/plans/2026-11-12-ast-string-storage-study.md`.
+pub type Text = ecow::EcoString;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Str {
-    pub text: String,
+    pub text: Text,
     pub source_info: quarto_source_map::SourceInfo,
 }
 
@@ -718,7 +728,7 @@ pub fn split_string_to_inlines(s: &str) -> Vec<Inline> {
                 chars.next();
             }
             result.push(Inline::Str(Str {
-                text: word,
+                text: word.into(),
                 source_info: quarto_source_map::SourceInfo::generated(
                     quarto_source_map::By::unknown(),
                 ),
@@ -754,7 +764,7 @@ mod tests {
 
     fn make_str(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }
@@ -1206,7 +1216,7 @@ mod tests {
     #[test]
     fn test_as_inline_str() {
         let s = Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: dummy_source_info(),
         };
         let inline = s.as_inline();
@@ -1473,7 +1483,7 @@ mod tests {
     #[test]
     fn test_inline_str_serialize() {
         let s = Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: dummy_source_info(),
         };
         let inline = Inline::Str(s);
@@ -1485,7 +1495,7 @@ mod tests {
     fn test_inline_roundtrip() {
         // Test serialize then deserialize
         let s = Str {
-            text: "world".to_string(),
+            text: "world".into(),
             source_info: dummy_source_info(),
         };
         let inline = Inline::Str(s);

@@ -41,7 +41,8 @@ pub use inline::{
     AsInline, Citation, CitationMode, Cite, Code, Delete, EditComment, Emph, Highlight, Image,
     Inline, InlineAttr, Inlines, Insert, LineBreak, Link, Math, MathType, Note, NoteReference,
     QuoteType, Quoted, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong,
-    Subscript, Superscript, Target, Underline, is_empty_target, make_cite_inline, make_span_inline,
+    Subscript, Superscript, Target, Text, Underline, is_empty_target, make_cite_inline,
+    make_span_inline,
 };
 pub use list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 pub use meta::{Meta, MetaValue};

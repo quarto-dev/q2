@@ -24,7 +24,7 @@ fn si() -> SourceInfo {
 
 fn str_inline(s: &str) -> Inline {
     Inline::Str(Str {
-        text: s.to_string(),
+        text: s.into(),
         source_info: si(),
     })
 }

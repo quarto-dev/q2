@@ -84,7 +84,7 @@ fn slide_level_from_meta(meta: &quarto_pandoc_types::ConfigValue) -> usize {
 /// A plain-text inline run.
 fn str_inline(text: String) -> Inline {
     Inline::Str(Str {
-        text,
+        text: text.into(),
         source_info: SourceInfo::generated(By::revealjs()),
     })
 }

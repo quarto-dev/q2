@@ -408,7 +408,7 @@ fn title_inlines(title: &str, source: &SourceInfo) -> Inlines {
             crate::editorial_marks::blocks_to_inlines(&blocks)
         }
         _ => vec![Inline::Str(Str {
-            text: title.to_string(),
+            text: title.into(),
             source_info: source.clone(),
         })],
     }
@@ -820,7 +820,7 @@ fn plain(inlines: Inlines) -> Block {
 
 fn text_inlines(text: &str) -> Inlines {
     vec![Inline::Str(Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info: generated(),
     })]
 }

@@ -1703,7 +1703,7 @@ fn titleblock_field_to_block_html(value: &ConfigValue) -> Option<String> {
             let text = value.as_str()?;
             let para = Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: value.source_info.clone(),
                 })],
                 source_info: value.source_info.clone(),
@@ -2057,14 +2057,14 @@ mod tests {
         let meta = ConfigValue::new_inlines(
             vec![
                 Inline::Str(Str {
-                    text: "Hello".to_string(),
+                    text: "Hello".into(),
                     source_info: dummy_source_info(),
                 }),
                 Inline::Space(Space {
                     source_info: dummy_source_info(),
                 }),
                 Inline::Str(Str {
-                    text: "World".to_string(),
+                    text: "World".into(),
                     source_info: dummy_source_info(),
                 }),
             ],
@@ -2079,7 +2079,7 @@ mod tests {
         let meta = ConfigValue::new_blocks(
             vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Test paragraph".to_string(),
+                    text: "Test paragraph".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -2168,7 +2168,7 @@ mod tests {
                 key_source: dummy_source_info(),
                 value: ConfigValue::new_inlines(
                     vec![Inline::Str(Str {
-                        text: "inline.css".to_string(),
+                        text: "inline.css".into(),
                         source_info: dummy_source_info(),
                     })],
                     dummy_source_info(),
@@ -2241,14 +2241,14 @@ mod tests {
     fn test_inlines_to_text_soft_break() {
         let inlines = vec![
             Inline::Str(Str {
-                text: "Line1".to_string(),
+                text: "Line1".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::SoftBreak(SoftBreak {
                 source_info: dummy_source_info(),
             }),
             Inline::Str(Str {
-                text: "Line2".to_string(),
+                text: "Line2".into(),
                 source_info: dummy_source_info(),
             }),
         ];
@@ -2260,14 +2260,14 @@ mod tests {
     fn test_inlines_to_text_line_break() {
         let inlines = vec![
             Inline::Str(Str {
-                text: "Line1".to_string(),
+                text: "Line1".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::LineBreak(LineBreak {
                 source_info: dummy_source_info(),
             }),
             Inline::Str(Str {
-                text: "Line2".to_string(),
+                text: "Line2".into(),
                 source_info: dummy_source_info(),
             }),
         ];
@@ -2279,7 +2279,7 @@ mod tests {
     fn test_inlines_to_text_emph() {
         let inlines = vec![Inline::Emph(Emph {
             content: vec![Inline::Str(Str {
-                text: "emphasized".to_string(),
+                text: "emphasized".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2292,7 +2292,7 @@ mod tests {
     fn test_inlines_to_text_strong() {
         let inlines = vec![Inline::Strong(Strong {
             content: vec![Inline::Str(Str {
-                text: "bold".to_string(),
+                text: "bold".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2305,7 +2305,7 @@ mod tests {
     fn test_inlines_to_text_underline() {
         let inlines = vec![Inline::Underline(Underline {
             content: vec![Inline::Str(Str {
-                text: "underlined".to_string(),
+                text: "underlined".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2318,7 +2318,7 @@ mod tests {
     fn test_inlines_to_text_strikeout() {
         let inlines = vec![Inline::Strikeout(Strikeout {
             content: vec![Inline::Str(Str {
-                text: "struck".to_string(),
+                text: "struck".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2331,7 +2331,7 @@ mod tests {
     fn test_inlines_to_text_superscript() {
         let inlines = vec![Inline::Superscript(Superscript {
             content: vec![Inline::Str(Str {
-                text: "2".to_string(),
+                text: "2".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2344,7 +2344,7 @@ mod tests {
     fn test_inlines_to_text_subscript() {
         let inlines = vec![Inline::Subscript(Subscript {
             content: vec![Inline::Str(Str {
-                text: "i".to_string(),
+                text: "i".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2357,7 +2357,7 @@ mod tests {
     fn test_inlines_to_text_smallcaps() {
         let inlines = vec![Inline::SmallCaps(SmallCaps {
             content: vec![Inline::Str(Str {
-                text: "smallcaps".to_string(),
+                text: "smallcaps".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2371,7 +2371,7 @@ mod tests {
         let inlines = vec![Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::DoubleQuote,
             content: vec![Inline::Str(Str {
-                text: "quoted".to_string(),
+                text: "quoted".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2409,7 +2409,7 @@ mod tests {
         let inlines = vec![Inline::Link(Box::new(Link {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
-                text: "link text".to_string(),
+                text: "link text".into(),
                 source_info: dummy_source_info(),
             })],
             target: ("https://example.com".to_string(), String::new()),
@@ -2426,7 +2426,7 @@ mod tests {
         let inlines = vec![Inline::Span(Box::new(Span {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
-                text: "span content".to_string(),
+                text: "span content".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2442,7 +2442,7 @@ mod tests {
     fn test_blocks_to_text_plain() {
         let blocks = vec![Block::Plain(Plain {
             content: vec![Inline::Str(Str {
-                text: "plain text".to_string(),
+                text: "plain text".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2455,7 +2455,7 @@ mod tests {
     fn test_blocks_to_text_paragraph() {
         let blocks = vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "paragraph".to_string(),
+                text: "paragraph".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2470,7 +2470,7 @@ mod tests {
             level: 1,
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
-                text: "Heading".to_string(),
+                text: "Heading".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -2497,7 +2497,7 @@ mod tests {
         let blocks = vec![Block::BlockQuote(BlockQuote {
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -2514,7 +2514,7 @@ mod tests {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "div content".to_string(),
+                    text: "div content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -2531,11 +2531,11 @@ mod tests {
         let blocks = vec![Block::LineBlock(LineBlock {
             content: vec![
                 vec![Inline::Str(Str {
-                    text: "Line 1".to_string(),
+                    text: "Line 1".into(),
                     source_info: dummy_source_info(),
                 })],
                 vec![Inline::Str(Str {
-                    text: "Line 2".to_string(),
+                    text: "Line 2".into(),
                     source_info: dummy_source_info(),
                 })],
             ],
@@ -2552,7 +2552,7 @@ mod tests {
             attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
             content: vec![vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: "Item 1".to_string(),
+                    text: "Item 1".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -2568,7 +2568,7 @@ mod tests {
         let blocks = vec![Block::BulletList(BulletList {
             content: vec![vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: "Bullet".to_string(),
+                    text: "Bullet".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -2584,14 +2584,14 @@ mod tests {
         let blocks = vec![
             Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Para 1".to_string(),
+                    text: "Para 1".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
             }),
             Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Para 2".to_string(),
+                    text: "Para 2".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -4294,7 +4294,7 @@ mod tests {
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }

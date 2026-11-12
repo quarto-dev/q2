@@ -203,7 +203,7 @@ fn resolve_inlines(
                         // Convert to plain text
                         if let Some(text) = value.as_plain_text() {
                             vec![Inline::Str(Str {
-                                text,
+                                text: text.into(),
                                 source_info: source_info.clone(),
                             })]
                         } else {
@@ -219,7 +219,7 @@ fn resolve_inlines(
 
                             vec![Inline::Strong(Strong {
                                 content: vec![Inline::Str(Str {
-                                    text: format!("?meta:{}", key),
+                                    text: format!("?meta:{}", key).into(),
                                     source_info: source_info.clone(),
                                 })],
                                 source_info: source_info.clone(),
@@ -236,7 +236,7 @@ fn resolve_inlines(
 
                         vec![Inline::Strong(Strong {
                             content: vec![Inline::Str(Str {
-                                text: format!("?meta:{}", key),
+                                text: format!("?meta:{}", key).into(),
                                 source_info: source_info.clone(),
                             })],
                             source_info: source_info.clone(),
@@ -253,7 +253,7 @@ fn resolve_inlines(
 
                     vec![Inline::Strong(Strong {
                         content: vec![Inline::Str(Str {
-                            text: "?meta".to_string(),
+                            text: "?meta".into(),
                             source_info: source_info.clone(),
                         })],
                         source_info: source_info.clone(),
@@ -498,7 +498,7 @@ mod tests {
                 attr: Default::default(),
                 content: vec![
                     Inline::Str(Str {
-                        text: "Written by ".to_string(),
+                        text: "Written by ".into(),
                         source_info: SourceInfo::for_test(),
                     }),
                     make_meta_shortcode("author"),

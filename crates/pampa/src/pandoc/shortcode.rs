@@ -591,7 +591,7 @@ mod tests {
     fn test_get_span_data_value_with_non_span() {
         // Test that get_span_data_value returns None for non-Span inlines
         let str_inline = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: si(),
         });
         assert_eq!(get_span_data_value(&str_inline), None);
@@ -604,7 +604,7 @@ mod tests {
     fn test_get_span_data_key_with_non_span() {
         // Test that get_span_data_key returns None for non-Span inlines
         let str_inline = Inline::Str(Str {
-            text: "world".to_string(),
+            text: "world".into(),
             source_info: si(),
         });
         assert_eq!(get_span_data_key(&str_inline), None);

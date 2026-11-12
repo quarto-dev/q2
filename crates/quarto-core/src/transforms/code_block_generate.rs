@@ -449,7 +449,7 @@ mod tests {
     fn yaml_inlines(s: &str) -> quarto_pandoc_types::ConfigValueKind {
         use quarto_pandoc_types::inline::{Inline, Str};
         quarto_pandoc_types::ConfigValueKind::PandocInlines(vec![Inline::Str(Str {
-            text: s.to_string(),
+            text: s.into(),
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::revealjs()),
         })])
     }

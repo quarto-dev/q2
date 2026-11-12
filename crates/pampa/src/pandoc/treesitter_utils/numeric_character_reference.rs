@@ -34,7 +34,7 @@ pub fn process_numeric_character_reference(
     };
 
     PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
-        text: result_text,
+        text: result_text.into(),
         source_info: node_source_info_with_context(node, context),
     }))
 }

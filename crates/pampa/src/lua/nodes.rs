@@ -199,12 +199,15 @@ pub fn build_nodes(lua: &Lua, value: Value) -> Result<LuaNodes> {
                 let item = item?;
                 match &item {
                     Value::String(s) => inlines.push(Inline::Str(Str {
-                        text: s.to_str()?.to_string(),
+                        text: s.to_str()?.to_string().into(),
                         source_info: filter_source_info(lua),
                     })),
                     Value::Integer(_) | Value::Number(_) | Value::Boolean(_) => {
                         inlines.push(Inline::Str(Str {
-                            text: text_scalar_to_string(lua, &item)?.to_str()?.to_string(),
+                            text: text_scalar_to_string(lua, &item)?
+                                .to_str()?
+                                .to_string()
+                                .into(),
                             source_info: filter_source_info(lua),
                         }))
                     }
@@ -309,7 +312,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) => " ".to_string(),
                 Inline::Emph(_) => "<Emph>".to_string(),
                 other => format!("<{other:?}>"),

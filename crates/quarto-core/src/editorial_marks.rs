@@ -361,7 +361,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                Inline::Str(x) => x.text.clone(),
+                Inline::Str(x) => x.text.to_string(),
                 Inline::Space(_) => "_".into(),
                 Inline::LineBreak(_) => "LB".into(),
                 Inline::Code(c) => format!("Code({})", c.text),

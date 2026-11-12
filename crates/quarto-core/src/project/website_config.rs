@@ -253,7 +253,7 @@ mod tests {
 
     fn pandoc_inlines(text: &str) -> ConfigValue {
         let inlines = vec![Inline::Str(quarto_pandoc_types::inline::Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::for_test(),
         })];
         ConfigValue::new_inlines(inlines, SourceInfo::for_test())

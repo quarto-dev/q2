@@ -143,7 +143,7 @@ pub fn decorated_chapter_text(prefix: &str, title: &str) -> ConfigValue {
         Inline::Span(Box::new(Span {
             attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: gen_si(),
             })],
             source_info: gen_si(),
@@ -153,7 +153,7 @@ pub fn decorated_chapter_text(prefix: &str, title: &str) -> ConfigValue {
     let inlines: Inlines = vec![
         span("chapter-number", prefix),
         Inline::Str(Str {
-            text: "\u{00A0}".to_string(),
+            text: "\u{00A0}".into(),
             source_info: gen_si(),
         }),
         Inline::Space(Space {
@@ -624,7 +624,7 @@ mod tests {
                     .content
                     .iter()
                     .find_map(|i| match i {
-                        Inline::Str(s) => Some(s.text.clone()),
+                        Inline::Str(s) => Some(s.text.to_string()),
                         _ => None,
                     })
                     .unwrap_or_default();

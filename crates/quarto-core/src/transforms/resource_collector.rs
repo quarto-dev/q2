@@ -669,7 +669,7 @@ mod tests {
                 content: vec![Inline::Image(Box::new(Image {
                     attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
-                        text: "alt text".to_string(),
+                        text: "alt text".into(),
                         source_info: dummy_source_info(),
                     })],
                     target: ("images/photo.png".to_string(), String::new()),

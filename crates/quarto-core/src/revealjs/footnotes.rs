@@ -381,7 +381,7 @@ fn renumber_refs_inlines(
                 let si = span.source_info.clone();
                 *inline = Inline::Superscript(Superscript {
                     content: vec![Inline::Str(Str {
-                        text: n.to_string(),
+                        text: n.to_string().into(),
                         source_info: si.clone(),
                     })],
                     source_info: si,

@@ -252,7 +252,7 @@ mod tests {
     fn inlines(text: &str) -> Inlines {
         vec![quarto_pandoc_types::inline::Inline::Str(
             quarto_pandoc_types::inline::Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::original(FileId(0), 0, 0),
             },
         )]

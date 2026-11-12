@@ -863,7 +863,7 @@ mod tests {
         // through to the renderer.
         use quarto_pandoc_types::inline::Inline;
         let inlines = vec![Inline::Str(quarto_pandoc_types::inline::Str {
-            text: "Site".to_string(),
+            text: "Site".into(),
             source_info: SourceInfo::for_test(),
         })];
         let title_cv = ConfigValue::new_inlines(inlines, SourceInfo::for_test());

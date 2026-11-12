@@ -100,7 +100,7 @@ mod tests {
                     level: 2,
                     attr: ("sec-a".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
-                        text: "Section A".to_string(),
+                        text: "Section A".into(),
                         source_info: dummy_source_info(),
                     })],
                     source_info: dummy_source_info(),
@@ -108,7 +108,7 @@ mod tests {
                 })),
                 Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
-                        text: "Content.".to_string(),
+                        text: "Content.".into(),
                         source_info: dummy_source_info(),
                     })],
                     source_info: dummy_source_info(),

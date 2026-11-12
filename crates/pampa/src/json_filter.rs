@@ -348,7 +348,7 @@ sys.exit(1)
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-                    text: "Hello".to_string(),
+                    text: "Hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -380,7 +380,7 @@ sys.exit(1)
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-                    text: "hello world".to_string(),
+                    text: "hello world".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -435,7 +435,7 @@ sys.exit(1)
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -667,7 +667,7 @@ printf '\xff\xfe'  # Invalid UTF-8 bytes
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),

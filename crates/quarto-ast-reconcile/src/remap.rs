@@ -554,7 +554,7 @@ mod tests {
 
     fn make_str(file: usize) -> Inline {
         Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: src(file),
         })
     }

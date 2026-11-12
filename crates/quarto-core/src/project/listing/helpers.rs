@@ -432,7 +432,7 @@ pub(crate) fn truncate_inlines_at_space(inlines: &[Inline], max: usize) -> Inlin
     let mut budget = keep;
     let mut out = take_plain_prefix(inlines, &mut budget);
     out.push(Inline::Str(Str {
-        text: "…".to_string(),
+        text: "…".into(),
         source_info: SourceInfo::generated(By::unknown()),
     }));
     out
@@ -484,7 +484,7 @@ fn take_plain_prefix(inlines: &[Inline], budget: &mut usize) -> Inlines {
         }
         match inline {
             Inline::Str(s) => out.push(Inline::Str(Str {
-                text: cut(&s.text, budget),
+                text: cut(&s.text, budget).into(),
                 ..s.clone()
             })),
             Inline::Code(c) => out.push(Inline::Code(Box::new(Code {

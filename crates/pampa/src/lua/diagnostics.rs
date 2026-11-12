@@ -590,7 +590,7 @@ mod tests {
         };
 
         let str_inline = Inline::Str(Str {
-            text: "TODO".to_string(),
+            text: "TODO".into(),
             source_info: original_source_info.clone(),
         });
 
@@ -656,7 +656,7 @@ mod tests {
         let substring_source_info = SourceInfo::substring(parent, 20, 40);
 
         let str_inline = Inline::Str(Str {
-            text: "substring text".to_string(),
+            text: "substring text".into(),
             source_info: substring_source_info,
         });
 
@@ -723,7 +723,7 @@ mod tests {
         let concat_source_info = SourceInfo::concat(vec![(piece1, 10), (piece2, 15)]);
 
         let str_inline = Inline::Str(Str {
-            text: "concatenated text".to_string(),
+            text: "concatenated text".into(),
             source_info: concat_source_info,
         });
 

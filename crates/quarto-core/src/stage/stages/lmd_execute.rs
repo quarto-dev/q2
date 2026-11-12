@@ -1126,7 +1126,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) => " ".to_string(),
                 Inline::Strong(s) => format!("**{}**", inlines_text(&s.content)),
                 Inline::Emph(e) => format!("*{}*", inlines_text(&e.content)),

@@ -79,7 +79,7 @@ where
             id_source: citation_id_source,
         }],
         content: vec![Inline::Str(Str {
-            text: trimmed_text,
+            text: trimmed_text.into(),
             source_info: tight_si.clone(),
         })],
         source_info: tight_si.clone(),

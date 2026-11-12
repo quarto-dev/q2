@@ -96,7 +96,7 @@ mod tests {
 
     fn word(s: &str) -> Inline {
         Inline::Str(Str {
-            text: s.to_string(),
+            text: s.into(),
             source_info: si(),
         })
     }

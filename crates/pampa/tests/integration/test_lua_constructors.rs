@@ -140,7 +140,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -182,7 +182,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -217,7 +217,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -253,7 +253,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -290,7 +290,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -332,7 +332,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -372,7 +372,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -397,7 +397,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -422,7 +422,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -447,7 +447,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -472,7 +472,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -517,7 +517,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -554,7 +554,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -588,7 +588,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -604,7 +604,7 @@ end
 
 fn simpletable_doc() -> Pandoc {
     create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })])
 }
@@ -706,7 +706,7 @@ end
 "#
         );
         let doc = create_test_doc(vec![Inline::Str(Str {
-            text: "hi".to_string(),
+            text: "hi".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         })]);
         let diags = run_filter_diagnostics(&filter_code, doc).await;
@@ -753,7 +753,7 @@ async fn test_pandoc_constructor_rejects_non_table_meta() {
     let err = run_filter_expect_error(
         "pandoc.Pandoc({}, 5)\n",
         create_test_doc(vec![Inline::Str(Str {
-            text: "hi".to_string(),
+            text: "hi".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         })]),
     )
@@ -771,7 +771,7 @@ async fn test_meta_constructor_rejects_non_table() {
     let err = run_filter_expect_error(
         "pandoc.Meta('not a table')\n",
         create_test_doc(vec![Inline::Str(Str {
-            text: "hi".to_string(),
+            text: "hi".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         })]),
     )
@@ -787,7 +787,7 @@ async fn test_metabool_rejects_non_boolean() {
     let err = run_filter_expect_error(
         "pandoc.MetaBool('x')\n",
         create_test_doc(vec![Inline::Str(Str {
-            text: "hi".to_string(),
+            text: "hi".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         })]),
     )
@@ -828,7 +828,7 @@ assert(a ~= pandoc.Pandoc({pandoc.Para('different')}), 'different docs unequal')
 assert(a:clone() == a, 'clone equal')
 "#,
         create_test_doc(vec![Inline::Str(Str {
-            text: "hi".to_string(),
+            text: "hi".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         })]),
     )

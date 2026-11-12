@@ -1284,19 +1284,19 @@ mod tests {
                 source_info: si.clone(),
             })),
             Inline::Str(Str {
-                text: "console.log(".to_string(),
+                text: "console.log(".into(),
                 source_info: si.clone(),
             }),
             Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::SingleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "AFTER".to_string(),
+                    text: "AFTER".into(),
                     source_info: si.clone(),
                 })],
                 source_info: si.clone(),
             })),
             Inline::Str(Str {
-                text: ");".to_string(),
+                text: ");".into(),
                 source_info: si.clone(),
             }),
             Inline::RawInline(Box::new(RawInline {

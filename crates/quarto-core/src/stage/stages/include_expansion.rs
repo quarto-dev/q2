@@ -1015,7 +1015,7 @@ mod tests {
         let block = Block::Paragraph(Paragraph {
             content: vec![
                 Inline::Str(Str {
-                    text: "some text ".to_string(),
+                    text: "some text ".into(),
                     source_info: SourceInfo::for_test(),
                 }),
                 Inline::Shortcode(Box::new(Shortcode {
@@ -1925,7 +1925,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) => " ".to_string(),
                 _ => String::new(),
             })

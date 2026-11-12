@@ -1381,7 +1381,7 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                 vec![]
             } else {
                 vec![Inline::Str(Str {
-                    text: s.clone(),
+                    text: s.clone().into(),
                     source_info: empty_source_info(),
                 })]
             }
@@ -1486,7 +1486,7 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                         let first_char = get_leading_char(&child_inlines);
                         if !matches!(first_char, Some(',' | ';' | '.')) {
                             result.push(vec![Inline::Str(Str {
-                                text: delim.clone(),
+                                text: delim.clone().into(),
                                 source_info: empty_source_info(),
                             })]);
                         }
@@ -1896,7 +1896,8 @@ fn apply_title_case_to_inlines_with_last(
             Inline::Str(s) => {
                 let is_last_word_segment = last_word_index == Some(*current_index);
                 s.text =
-                    title_case_with_state_and_last(&s.text, seen_first_word, is_last_word_segment);
+                    title_case_with_state_and_last(&s.text, seen_first_word, is_last_word_segment)
+                        .into();
                 *current_index += 1;
             }
             Inline::Emph(e) => {
@@ -1982,10 +1983,10 @@ fn apply_text_case_to_inlines_simple(
                 s.text = match text_case {
                     TextCase::Lowercase => s.text.to_lowercase(),
                     TextCase::Uppercase => s.text.to_uppercase(),
-                    TextCase::CapitalizeFirst => capitalize_first(&s.text),
-                    TextCase::CapitalizeAll => capitalize_all(&s.text),
+                    TextCase::CapitalizeFirst => capitalize_first(&s.text).into(),
+                    TextCase::CapitalizeAll => capitalize_all(&s.text).into(),
                     TextCase::Title => unreachable!(), // Handled separately
-                    TextCase::Sentence => sentence_case(&s.text),
+                    TextCase::Sentence => sentence_case(&s.text).into(),
                 };
             }
             Inline::Emph(e) => apply_text_case_to_inlines_simple(&mut e.content, text_case),
@@ -2055,7 +2056,7 @@ fn apply_strip_periods_to_inlines(inlines: &mut quarto_pandoc_types::Inlines) {
     for inline in inlines.iter_mut() {
         match inline {
             Inline::Str(s) => {
-                s.text = s.text.replace('.', "");
+                s.text = s.text.replace(".", "");
             }
             Inline::Emph(e) => apply_strip_periods_to_inlines(&mut e.content),
             Inline::Strong(s) => apply_strip_periods_to_inlines(&mut s.content),
@@ -2827,7 +2828,7 @@ fn trim_trailing_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
                 if new_text.is_empty() {
                     inlines.remove(i);
                 } else {
-                    s.text = new_text;
+                    s.text = new_text.into();
                 }
                 return;
             }
@@ -2886,7 +2887,7 @@ fn trim_leading_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
                 if new_text.is_empty() {
                     inlines.remove(i);
                 } else {
-                    s.text = new_text;
+                    s.text = new_text.into();
                 }
                 return;
             }
@@ -2967,7 +2968,7 @@ fn apply_affixes(
             }
             if !actual_prefix.is_empty() {
                 let mut result = vec![Inline::Str(Str {
-                    text: actual_prefix,
+                    text: actual_prefix.into(),
                     source_info: empty_source_info(),
                 })];
                 result.append(inner);
@@ -2976,7 +2977,7 @@ fn apply_affixes(
         } else {
             // No collision possible, just prepend
             let mut result = vec![Inline::Str(Str {
-                text: prefix.clone(),
+                text: prefix.clone().into(),
                 source_info: empty_source_info(),
             })];
             result.append(inner);
@@ -2997,7 +2998,7 @@ fn apply_affixes(
             }
             if keep_y_start {
                 inner.push(Inline::Str(Str {
-                    text: suffix.clone(),
+                    text: suffix.clone().into(),
                     source_info: empty_source_info(),
                 }));
             } else {
@@ -3005,14 +3006,14 @@ fn apply_affixes(
                 let trimmed_suffix: String = suffix.chars().skip(1).collect();
                 if !trimmed_suffix.is_empty() {
                     inner.push(Inline::Str(Str {
-                        text: trimmed_suffix,
+                        text: trimmed_suffix.into(),
                         source_info: empty_source_info(),
                     }));
                 }
             }
         } else {
             inner.push(Inline::Str(Str {
-                text: suffix.clone(),
+                text: suffix.clone().into(),
                 source_info: empty_source_info(),
             }));
         }
@@ -4963,7 +4964,7 @@ fn render_inline_to_csl_html_with_ctx(
 
             // Convert straight apostrophes to curly (typographic) apostrophes
             // and escape HTML special characters
-            let text = s.text.replace('\'', "\u{2019}"); // ' -> '
+            let text = s.text.replace("'", "\u{2019}"); // ' -> '
             output.push_str(&html_escape(&text));
         }
         Inline::Space(_) => {

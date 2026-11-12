@@ -220,14 +220,14 @@ line two
                         content: vec![
                             vec![Block::Plain(Plain {
                                 content: vec![Inline::Str(Str {
-                                    text: "Aa".to_string(),
+                                    text: "Aa".into(),
                                     source_info: empty_source_info(),
                                 })],
                                 source_info: empty_source_info(),
                             })],
                             vec![Block::Plain(Plain {
                                 content: vec![Inline::Str(Str {
-                                    text: "Aa".to_string(),
+                                    text: "Aa".into(),
                                     source_info: empty_source_info(),
                                 })],
                                 source_info: empty_source_info(),
@@ -239,14 +239,14 @@ line two
                         content: vec![
                             vec![Block::Plain(Plain {
                                 content: vec![Inline::Str(Str {
-                                    text: "Aa".to_string(),
+                                    text: "Aa".into(),
                                     source_info: empty_source_info(),
                                 })],
                                 source_info: empty_source_info(),
                             })],
                             vec![Block::Plain(Plain {
                                 content: vec![Inline::Str(Str {
-                                    text: "Aa".to_string(),
+                                    text: "Aa".into(),
                                     source_info: empty_source_info(),
                                 })],
                                 source_info: empty_source_info(),

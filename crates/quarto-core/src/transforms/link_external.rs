@@ -370,7 +370,7 @@ mod tests {
             )
                 .into(),
             content: vec![Inline::Str(Str {
-                text: "text".to_string(),
+                text: "text".into(),
                 source_info: si(),
             })],
             target: (href.to_string(), String::new()),

@@ -364,7 +364,7 @@ fn convert_codeblock(
 /// Fallback caption inlines: the caption text, verbatim.
 fn literal_caption_inlines(text: &str, source_info: &quarto_source_map::SourceInfo) -> Inlines {
     vec![Inline::Str(Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info: source_info.clone(),
     })]
 }
@@ -819,7 +819,7 @@ mod tests {
 
     fn str_inline(s: &str) -> Inline {
         Inline::Str(Str {
-            text: s.to_string(),
+            text: s.into(),
             source_info: si(),
         })
     }
@@ -1384,7 +1384,7 @@ mod tests {
             .content
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) => " ".to_string(),
                 _ => String::new(),
             })

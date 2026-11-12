@@ -62,7 +62,7 @@ end
                     .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -125,7 +125,7 @@ end
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -174,7 +174,7 @@ async fn test_uppercase_filter() {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "hello world".to_string(),
+                text: "hello world".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -214,7 +214,7 @@ async fn test_identity_filter() {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -267,21 +267,21 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "keep".to_string(),
+                    text: "keep".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "delete".to_string(),
+                    text: "delete".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "also_keep".to_string(),
+                    text: "also_keep".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
@@ -340,7 +340,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "expand".to_string(),
+                text: "expand".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -406,7 +406,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -479,14 +479,14 @@ end
             level: 1,
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "world".to_string(),
+                    text: "world".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
@@ -550,7 +550,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "test".to_string(),
+                text: "test".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -604,7 +604,7 @@ end
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
-                        text: "emphasized".to_string(),
+                        text: "emphasized".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Space(crate::pandoc::Space {
@@ -612,7 +612,7 @@ end
                     }),
                     Inline::Strong(crate::pandoc::Strong {
                         content: vec![Inline::Str(crate::pandoc::Str {
-                            text: "bold".to_string(),
+                            text: "bold".into(),
                             source_info: quarto_source_map::SourceInfo::for_test(),
                         })],
                         source_info: quarto_source_map::SourceInfo::for_test(),
@@ -701,7 +701,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "should_not_see_this".to_string(),
+                    text: "should_not_see_this".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -758,7 +758,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "original".to_string(),
+                text: "original".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -843,14 +843,14 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "world".to_string(),
+                    text: "world".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
@@ -904,7 +904,7 @@ end
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
-                        text: "emphasized".to_string(),
+                        text: "emphasized".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Space(crate::pandoc::Space {
@@ -912,7 +912,7 @@ end
                     }),
                     Inline::Strong(crate::pandoc::Strong {
                         content: vec![Inline::Str(crate::pandoc::Str {
-                            text: "bold".to_string(),
+                            text: "bold".into(),
                             source_info: quarto_source_map::SourceInfo::for_test(),
                         })],
                         source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1002,14 +1002,14 @@ end
         blocks: vec![
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "a".to_string(),
+                    text: "a".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }),
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "b".to_string(),
+                    text: "b".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1074,7 +1074,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1132,7 +1132,7 @@ end
         blocks: vec![
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "a".to_string(),
+                    text: "a".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1200,7 +1200,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
@@ -1270,14 +1270,14 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "a".to_string(),
+                    text: "a".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "b".to_string(),
+                    text: "b".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
@@ -1357,7 +1357,7 @@ end
             Block::Div(Box::new(crate::pandoc::Div {
                 content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "inside".to_string(),
+                        text: "inside".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1368,7 +1368,7 @@ end
             })),
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "outside".to_string(),
+                    text: "outside".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1438,14 +1438,14 @@ end
         blocks: vec![
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "a".to_string(),
+                    text: "a".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }),
             Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "b".to_string(),
+                    text: "b".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1531,14 +1531,14 @@ end
             content: vec![
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "a".to_string(),
+                        text: "a".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "b".to_string(),
+                        text: "b".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1618,7 +1618,7 @@ end
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1700,14 +1700,14 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "a".to_string(),
+                    text: "a".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Space(crate::pandoc::Space {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "b".to_string(),
+                    text: "b".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
@@ -1764,7 +1764,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1839,7 +1839,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "test".to_string(),
+                text: "test".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1894,7 +1894,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "test".to_string(),
+                text: "test".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1963,7 +1963,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "test".to_string(),
+                text: "test".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2045,7 +2045,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Strong(crate::pandoc::Strong {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "bold".to_string(),
+                    text: "bold".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2079,7 +2079,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Underline(crate::pandoc::Underline {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "underlined".to_string(),
+                    text: "underlined".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2112,7 +2112,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Strikeout(crate::pandoc::Strikeout {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "crossed".to_string(),
+                    text: "crossed".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2145,7 +2145,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Superscript(crate::pandoc::Superscript {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "2".to_string(),
+                    text: "2".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2178,7 +2178,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Subscript(crate::pandoc::Subscript {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "n".to_string(),
+                    text: "n".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2211,7 +2211,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::SmallCaps(crate::pandoc::SmallCaps {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "small".to_string(),
+                    text: "small".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2263,7 +2263,7 @@ end
             content: vec![Inline::Quoted(Box::new(crate::pandoc::Quoted {
                 quote_type: crate::pandoc::QuoteType::SingleQuote,
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2298,7 +2298,7 @@ end
             content: vec![Inline::Quoted(Box::new(crate::pandoc::Quoted {
                 quote_type: crate::pandoc::QuoteType::DoubleQuote,
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "double".to_string(),
+                    text: "double".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2545,7 +2545,7 @@ end
                     .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "Click here".to_string(),
+                    text: "Click here".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("https://example.com".to_string(), "Example".to_string()),
@@ -2607,7 +2607,7 @@ end
                 attr: ("img-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "Alt text".to_string(),
+                    text: "Alt text".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("image.png".to_string(), "Title".to_string()),
@@ -2665,7 +2665,7 @@ end
             content: vec![Inline::Note(crate::pandoc::Note {
                 content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "footnote content".to_string(),
+                        text: "footnote content".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2730,7 +2730,7 @@ end
                     id_source: None,
                 }],
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "[@smith2020]".to_string(),
+                    text: "[@smith2020]".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2800,7 +2800,7 @@ end
                 attr: ("ins-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "added".to_string(),
+                    text: "added".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2835,7 +2835,7 @@ end
                 attr: ("del-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "removed".to_string(),
+                    text: "removed".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2870,7 +2870,7 @@ end
                 attr: ("hl-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "important".to_string(),
+                    text: "important".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2969,7 +2969,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "original".to_string(),
+                text: "original".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3044,7 +3044,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3080,7 +3080,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Strong(crate::pandoc::Strong {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3116,7 +3116,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Underline(crate::pandoc::Underline {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3152,7 +3152,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Strikeout(crate::pandoc::Strikeout {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3205,7 +3205,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
@@ -3266,7 +3266,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Link(Box::new(crate::pandoc::Link {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "old text".to_string(),
+                    text: "old text".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("http://old.url".to_string(), "old title".to_string()),
@@ -3331,7 +3331,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Image(Box::new(crate::pandoc::Image {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "old_alt".to_string(),
+                    text: "old_alt".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("old_image.png".to_string(), "old title".to_string()),
@@ -3549,7 +3549,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Quoted(Box::new(crate::pandoc::Quoted {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "old_quote".to_string(),
+                    text: "old_quote".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 quote_type: crate::pandoc::QuoteType::DoubleQuote,
@@ -3604,7 +3604,7 @@ end
             content: vec![Inline::Note(crate::pandoc::Note {
                 content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "old_note".to_string(),
+                        text: "old_note".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3673,7 +3673,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Insert(Box::new(crate::pandoc::Insert {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
@@ -3711,7 +3711,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Delete(Box::new(crate::pandoc::Delete {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
@@ -3749,7 +3749,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Highlight(Box::new(crate::pandoc::Highlight {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "original".to_string(),
+                    text: "original".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
@@ -3853,7 +3853,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
@@ -3925,7 +3925,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Plain(crate::pandoc::Plain {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "test".to_string(),
+                text: "test".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3955,7 +3955,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4005,7 +4005,7 @@ end
         blocks: vec![Block::Header(Box::new(crate::pandoc::Header {
             level: 2,
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "Title".to_string(),
+                text: "Title".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: (
@@ -4163,7 +4163,7 @@ end
         blocks: vec![Block::BlockQuote(crate::pandoc::BlockQuote {
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4214,7 +4214,7 @@ end
         blocks: vec![Block::Div(Box::new(crate::pandoc::Div {
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "inside".to_string(),
+                    text: "inside".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4272,14 +4272,14 @@ end
             content: vec![
                 vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "item1".to_string(),
+                        text: "item1".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "item2".to_string(),
+                        text: "item2".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4331,7 +4331,7 @@ end
         blocks: vec![Block::OrderedList(Box::new(crate::pandoc::OrderedList {
             content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "first".to_string(),
+                    text: "first".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4396,7 +4396,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Plain(crate::pandoc::Plain {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "original".to_string(),
+                text: "original".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4426,7 +4426,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "original".to_string(),
+                text: "original".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4475,7 +4475,7 @@ end
         blocks: vec![Block::Header(Box::new(crate::pandoc::Header {
             level: 1,
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "Old Title".to_string(),
+                text: "Old Title".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
@@ -4629,7 +4629,7 @@ end
         blocks: vec![Block::BlockQuote(crate::pandoc::BlockQuote {
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "old_quote".to_string(),
+                    text: "old_quote".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4683,7 +4683,7 @@ end
         blocks: vec![Block::Div(Box::new(crate::pandoc::Div {
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "old_content".to_string(),
+                    text: "old_content".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -4756,7 +4756,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
@@ -4818,7 +4818,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
@@ -4878,7 +4878,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
@@ -4943,7 +4943,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
@@ -5007,7 +5007,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
@@ -5079,7 +5079,7 @@ end
                     id_source: None,
                 }],
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "Smith (2021)".to_string(),
+                    text: "Smith (2021)".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5139,7 +5139,7 @@ end
         blocks: vec![Block::Figure(Box::new(crate::pandoc::Figure {
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "figure content".to_string(),
+                    text: "figure content".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5148,7 +5148,7 @@ end
                 short: None,
                 long: Some(vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "My Caption".to_string(),
+                        text: "My Caption".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5205,7 +5205,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
@@ -5338,11 +5338,11 @@ end
         blocks: vec![Block::LineBlock(crate::pandoc::LineBlock {
             content: vec![
                 vec![Inline::Str(crate::pandoc::Str {
-                    text: "Line one".to_string(),
+                    text: "Line one".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 vec![Inline::Str(crate::pandoc::Str {
-                    text: "Line two".to_string(),
+                    text: "Line two".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
             ],
@@ -5398,13 +5398,13 @@ end
             content: vec![(
                 // Term: list of inlines
                 vec![Inline::Str(crate::pandoc::Str {
-                    text: "Term1".to_string(),
+                    text: "Term1".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 // Definitions: list of list of blocks
                 vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "Definition1".to_string(),
+                        text: "Definition1".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5458,7 +5458,7 @@ end
         blocks: vec![Block::OrderedList(Box::new(crate::pandoc::OrderedList {
             content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "item".to_string(),
+                    text: "item".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5523,7 +5523,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 attr: (
@@ -5589,7 +5589,7 @@ end
         blocks: vec![Block::Header(Box::new(crate::pandoc::Header {
             level: 1,
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "Heading".to_string(),
+                text: "Heading".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             attr: ("hdr-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
@@ -5651,14 +5651,14 @@ end
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
-                        text: "one".to_string(),
+                        text: "one".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Space(crate::pandoc::Space {
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                     Inline::Str(crate::pandoc::Str {
-                        text: "two".to_string(),
+                        text: "two".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                 ],
@@ -5720,14 +5720,14 @@ end
             content: vec![
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "para1".to_string(),
+                        text: "para1".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "para2".to_string(),
+                        text: "para2".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5784,21 +5784,21 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "a".to_string(),
+                    text: "a".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::SoftBreak(crate::pandoc::SoftBreak {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "b".to_string(),
+                    text: "b".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::LineBreak(crate::pandoc::LineBreak {
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "c".to_string(),
+                    text: "c".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
@@ -5910,7 +5910,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Plain(crate::pandoc::Plain {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5967,7 +5967,7 @@ end
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "title".to_string(),
+                text: "title".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6022,7 +6022,7 @@ end
         blocks: vec![Block::BlockQuote(crate::pandoc::BlockQuote {
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6082,7 +6082,7 @@ end
         blocks: vec![Block::BulletList(crate::pandoc::BulletList {
             content: vec![vec![Block::Plain(crate::pandoc::Plain {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "item".to_string(),
+                    text: "item".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6147,7 +6147,7 @@ end
             ),
             content: vec![vec![Block::Plain(crate::pandoc::Plain {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "numbered".to_string(),
+                    text: "numbered".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6211,7 +6211,7 @@ end
                 short: None,
                 long: Some(vec![Block::Plain(crate::pandoc::Plain {
                     content: vec![Inline::Str(crate::pandoc::Str {
-                        text: "caption".to_string(),
+                        text: "caption".into(),
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6220,7 +6220,7 @@ end
             },
             content: vec![Block::Plain(crate::pandoc::Plain {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "figure".to_string(),
+                    text: "figure".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6279,7 +6279,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::LineBlock(crate::pandoc::LineBlock {
             content: vec![vec![Inline::Str(crate::pandoc::Str {
-                text: "line".to_string(),
+                text: "line".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })]],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6336,7 +6336,7 @@ end
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "inside".to_string(),
+                    text: "inside".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6393,7 +6393,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "x".to_string(),
+                text: "x".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6451,7 +6451,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "original".to_string(),
+                text: "original".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6506,7 +6506,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Emph(crate::pandoc::Emph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "test".to_string(),
+                    text: "test".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6573,7 +6573,7 @@ end
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "inner".to_string(),
+                    text: "inner".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6629,7 +6629,7 @@ end
         meta: Default::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "input".to_string(),
+                text: "input".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6676,7 +6676,7 @@ end
         meta: Default::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "input".to_string(),
+                text: "input".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -6736,7 +6736,7 @@ end
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "hi".to_string(),
+                    text: "hi".into(),
                     source_info: quarto_source_map::SourceInfo::original(
                         quarto_source_map::FileId(0),
                         5,
@@ -6796,7 +6796,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "orig".to_string(),
+                text: "orig".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::original(
@@ -7027,7 +7027,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: "original".to_string(),
+                text: "original".into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -7268,7 +7268,7 @@ fn meta_si(offset: usize) -> quarto_source_map::SourceInfo {
 fn meta_test_doc() -> Pandoc {
     use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
     let title_inlines = vec![Inline::Str(crate::pandoc::Str {
-        text: "Original".to_string(),
+        text: "Original".into(),
         source_info: meta_si(10),
     })];
     let meta = ConfigValue {
@@ -7300,11 +7300,11 @@ fn meta_test_doc() -> Pandoc {
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![
                 Inline::Str(crate::pandoc::Str {
-                    text: "one".to_string(),
+                    text: "one".into(),
                     source_info: meta_si(20),
                 }),
                 Inline::Str(crate::pandoc::Str {
-                    text: "two".to_string(),
+                    text: "two".into(),
                     source_info: meta_si(21),
                 }),
             ],
@@ -7917,7 +7917,7 @@ fn str_doc(text: &str) -> Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Str(crate::pandoc::Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
             source_info: quarto_source_map::SourceInfo::for_test(),
@@ -7929,7 +7929,7 @@ fn str_doc(text: &str) -> Pandoc {
 fn first_str(doc: &Pandoc) -> String {
     match &doc.blocks[0] {
         Block::Paragraph(p) => match &p.content[0] {
-            Inline::Str(s) => s.text.clone(),
+            Inline::Str(s) => s.text.to_string(),
             other => panic!("expected Str, got {other:?}"),
         },
         other => panic!("expected Paragraph, got {other:?}"),
@@ -8050,7 +8050,7 @@ async fn test_returned_table_dispatches_name_outside_globals_whitelist() {
             quarto_pandoc_types::NoteDefinitionPara {
                 id: "1".to_string(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "note".to_string(),
+                    text: "note".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -8257,7 +8257,7 @@ async fn test_globals_dispatch_name_outside_old_whitelist() {
             quarto_pandoc_types::NoteDefinitionPara {
                 id: "1".to_string(),
                 content: vec![Inline::Str(crate::pandoc::Str {
-                    text: "note".to_string(),
+                    text: "note".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),

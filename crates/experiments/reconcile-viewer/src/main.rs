@@ -635,7 +635,7 @@ mod tests {
             .prop_filter("non-empty", |s: &String| !s.is_empty())
             .prop_map(|text| {
                 Inline::Str(Str {
-                    text,
+                    text: text.into(),
                     source_info: dummy_source(),
                 })
             })

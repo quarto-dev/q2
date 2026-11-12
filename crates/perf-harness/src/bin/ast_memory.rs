@@ -204,8 +204,19 @@ impl Census {
             self.string("attr.value", v);
         }
     }
-    fn str_node(&mut self, text: &String, si: &SourceInfo, src: &[u8]) {
-        self.string("Str.text", text);
+    fn str_node(&mut self, text: &quarto_pandoc_types::Text, si: &SourceInfo, src: &[u8]) {
+        // `Text` (an `EcoString`) keeps up to 15 bytes inline. Longer text
+        // lives in a shared heap buffer behind a 16-byte header; its
+        // pointer is interior, so `malloc_size` cannot be asked. Estimate
+        // with macOS's 16-byte size classes.
+        let b = self.text.entry("Str.text").or_default();
+        b.count += 1;
+        b.len += text.len();
+        if text.len() > ecow::EcoString::INLINE_LIMIT {
+            b.heap_blocks += 1;
+            b.cap += text.len();
+            b.heap += (text.len() + 16).next_multiple_of(16);
+        }
         let i = match text.len() {
             0..=7 => 0,
             8..=15 => 1,

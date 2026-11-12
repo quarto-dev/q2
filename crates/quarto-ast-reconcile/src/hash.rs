@@ -1086,7 +1086,7 @@ mod tests {
 
     fn make_str(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source(),
         })
     }
@@ -1097,7 +1097,7 @@ mod tests {
     fn test_same_content_same_hash() {
         let block1 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
@@ -1105,7 +1105,7 @@ mod tests {
 
         let block2 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: other_source(), // Different source location
             })],
             source_info: other_source(), // Different source location
@@ -1121,7 +1121,7 @@ mod tests {
     fn test_different_content_different_hash() {
         let block1 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
@@ -1129,7 +1129,7 @@ mod tests {
 
         let block2 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "world".to_string(),
+                text: "world".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
@@ -1163,7 +1163,7 @@ mod tests {
     fn test_cache_returns_same_hash() {
         let block = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
@@ -1703,7 +1703,7 @@ mod tests {
     #[test]
     fn test_inline_cache_returns_same_hash() {
         let inline = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: dummy_source(),
         });
 
@@ -1726,7 +1726,7 @@ mod tests {
     fn test_structural_eq_ignores_source() {
         let block1 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
@@ -1734,7 +1734,7 @@ mod tests {
 
         let block2 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: other_source(),
             })],
             source_info: other_source(),
@@ -1747,7 +1747,7 @@ mod tests {
     fn test_structural_eq_different_content() {
         let block1 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
@@ -1755,7 +1755,7 @@ mod tests {
 
         let block2 = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "world".to_string(),
+                text: "world".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
@@ -2023,12 +2023,12 @@ mod tests {
     #[test]
     fn test_structural_eq_inline_str() {
         let s1 = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: dummy_source(),
         });
 
         let s2 = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: other_source(),
         });
 
@@ -2187,11 +2187,11 @@ mod tests {
         let inlines1 = vec![make_str("hello"), make_str("world")];
         let inlines2 = vec![
             Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: other_source(),
             }),
             Inline::Str(Str {
-                text: "world".to_string(),
+                text: "world".into(),
                 source_info: other_source(),
             }),
         ];
@@ -2333,11 +2333,11 @@ mod tests {
         let slot1 = Slot::Inlines(vec![make_str("hello"), make_str("world")]);
         let slot2 = Slot::Inlines(vec![
             Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: other_source(),
             }),
             Inline::Str(Str {
-                text: "world".to_string(),
+                text: "world".into(),
                 source_info: other_source(),
             }),
         ]);

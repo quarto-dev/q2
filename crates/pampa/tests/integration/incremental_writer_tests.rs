@@ -256,7 +256,7 @@ A paragraph.
     // Change the paragraph text
     if let pampa::pandoc::Block::Paragraph(ref mut p) = new_ast.blocks[0] {
         p.content = vec![pampa::pandoc::Inline::Str(pampa::pandoc::Str {
-            text: "Modified paragraph.".to_string(),
+            text: "Modified paragraph.".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         })];
     }
@@ -1770,7 +1770,7 @@ fn inline_splice_concat_led_paragraph_does_not_panic() {
     if let Some(Block::Paragraph(p)) = new.blocks.get_mut(1)
         && let Some(Inline::Str(s)) = p.content.last_mut()
     {
-        s.text = "works.".to_string();
+        s.text = "works.".into();
         s.source_info = SourceInfo::for_test();
     }
 
@@ -1806,7 +1806,7 @@ fn incremental_write_never_panics_on_pampa_corpus() {
             };
             for inl in content.iter_mut() {
                 if let Inline::Str(s) = inl {
-                    s.text = format!("{}X", s.text);
+                    s.text = format!("{}X", s.text).into();
                     s.source_info = SourceInfo::for_test();
                     return Some(new);
                 }
@@ -2018,7 +2018,7 @@ fn edit_first_str_incremental(original_qmd: &str) -> String {
     if let Some(Block::Paragraph(p)) = new.blocks.get_mut(0)
         && let Some(Inline::Str(s)) = p.content.get_mut(0)
     {
-        s.text = format!("{}Z", s.text);
+        s.text = format!("{}Z", s.text).into();
         s.source_info = SourceInfo::for_test();
     }
     let plan = compute_reconciliation(&orig, &new);

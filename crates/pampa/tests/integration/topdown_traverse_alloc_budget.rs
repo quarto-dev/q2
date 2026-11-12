@@ -25,7 +25,7 @@ fn doc() -> Pandoc {
             let mut content = Vec::new();
             for w in 0..WORDS_PER_PARAGRAPH {
                 content.push(Inline::Str(Str {
-                    text: format!("w{w}"),
+                    text: format!("w{w}").into(),
                     source_info: SourceInfo::for_test(),
                 }));
                 content.push(Inline::Space(Space {

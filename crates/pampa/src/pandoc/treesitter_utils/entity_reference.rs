@@ -52,7 +52,7 @@ pub fn process_entity_reference(
         None => text.to_string(),
     };
     PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
-        text: result_text,
+        text: result_text.into(),
         source_info: node_source_info_with_context(node, context),
     }))
 }

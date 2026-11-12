@@ -830,7 +830,10 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                     JsonReadError::InvalidType("Str content must be string".to_string())
                 })?
                 .to_string();
-            Ok(Inline::Str(Str { text, source_info }))
+            Ok(Inline::Str(Str {
+                text: text.into(),
+                source_info,
+            }))
         }
         "Space" => Ok(Inline::Space(Space { source_info })),
         "LineBreak" => Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {

@@ -677,7 +677,7 @@ mod tests {
     fn plain(text: &str) -> Block {
         Block::Plain(quarto_pandoc_types::block::Plain {
             content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::generated(By::unknown()),
             })],
             source_info: SourceInfo::generated(By::unknown()),
@@ -689,7 +689,7 @@ mod tests {
             attr: attr(classes, kvs),
             content: vec![Block::Plain(quarto_pandoc_types::block::Plain {
                 content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: SourceInfo::generated(By::unknown()),
                 })],
                 source_info: SourceInfo::generated(By::unknown()),
@@ -1260,7 +1260,7 @@ mod tests {
             content: vec![Inline::Span(Box::new(Span {
                 attr: attr(&["content-visible"], &[("when-format", "docx")]),
                 content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
-                    text: "VISIBLE-SPAN".to_string(),
+                    text: "VISIBLE-SPAN".into(),
                     source_info: quarto_source_map::SourceInfo::generated(
                         quarto_source_map::By::unknown(),
                     ),
@@ -1375,7 +1375,7 @@ mod tests {
         Inline::Span(Box::new(Span {
             attr: attr(classes, kvs),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::generated(By::unknown()),
             })],
             source_info: SourceInfo::generated(By::unknown()),
@@ -1385,7 +1385,7 @@ mod tests {
 
     fn inline_str(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::generated(By::unknown()),
         })
     }

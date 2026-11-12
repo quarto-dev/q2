@@ -633,7 +633,7 @@ mod tests {
 
     fn make_str(text: &str) -> Inline {
         Inline::Str(quarto_pandoc_types::inline::Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }

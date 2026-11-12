@@ -304,7 +304,7 @@ pub fn gen_lang() -> impl Strategy<Value = Option<String>> {
 fn gen_str() -> impl Strategy<Value = Inline> {
     safe_word().prop_map(|text| {
         Inline::Str(Str {
-            text,
+            text: text.into(),
             source_info: empty_source_info(),
         })
     })
@@ -446,7 +446,7 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
                 .prop_map(|url| {
                     Inline::Link(Box::new(Link {
                         content: vec![Inline::Str(Str {
-                            text: url.clone(),
+                            text: url.clone().into(),
                             source_info: empty_source_info(),
                         })],
                         target: (url, String::new()),
@@ -592,7 +592,7 @@ fn remove_consecutive_lists(blocks: Vec<Block>) -> Vec<Block> {
     if result.is_empty() {
         result.push(Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "placeholder".to_string(),
+                text: "placeholder".into(),
                 source_info: empty_source_info(),
             })],
             source_info: empty_source_info(),

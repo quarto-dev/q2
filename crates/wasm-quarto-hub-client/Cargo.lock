@@ -4542,6 +4542,7 @@ dependencies = [
 name = "quarto-pandoc-types"
 version = "0.0.0"
 dependencies = [
+ "ecow",
  "hashlink",
  "indexmap 2.14.0",
  "quarto-source-map",

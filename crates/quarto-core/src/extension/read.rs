@@ -2885,7 +2885,7 @@ contributes:
         fn inline_str(s: &str) -> ConfigValue {
             ConfigValue::new_inlines(
                 vec![Inline::Str(Str {
-                    text: s.to_string(),
+                    text: s.into(),
                     source_info: SourceInfo::for_test(),
                 })],
                 SourceInfo::for_test(),

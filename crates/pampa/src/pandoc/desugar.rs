@@ -200,7 +200,7 @@ mod tests {
     fn plain(text: &str) -> Block {
         Block::Plain(Plain {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: empty_source_info(),
             })],
             source_info: empty_source_info(),
@@ -246,7 +246,7 @@ mod tests {
                     vec![]
                 } else {
                     vec![Inline::Str(Str {
-                        text: alt.to_string(),
+                        text: alt.into(),
                         source_info: empty_source_info(),
                     })]
                 },

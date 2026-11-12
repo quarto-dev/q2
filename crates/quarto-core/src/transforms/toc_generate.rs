@@ -284,7 +284,7 @@ mod tests {
             level,
             attr: (id.to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -295,7 +295,7 @@ mod tests {
     fn make_para(text: &str) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -583,12 +583,12 @@ mod tests {
         let styled = ConfigValue::new_inlines(
             vec![
                 Inline::Str(Str {
-                    text: "On ".to_string(),
+                    text: "On ".into(),
                     source_info: dummy_source_info(),
                 }),
                 Inline::Strong(Strong {
                     content: vec![Inline::Str(Str {
-                        text: "this".to_string(),
+                        text: "this".into(),
                         source_info: dummy_source_info(),
                     })],
                     source_info: dummy_source_info(),
@@ -702,7 +702,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) => " ".to_string(),
                 other => panic!("unexpected inline in a plain-text title: {other:?}"),
             })

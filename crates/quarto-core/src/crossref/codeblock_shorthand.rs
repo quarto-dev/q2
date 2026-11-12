@@ -968,7 +968,7 @@ fn caption_inlines(caption: &OptionValue, diagnostics: &mut Vec<DiagnosticMessag
 /// Fallback caption inlines: the option's text, verbatim.
 fn literal_caption(text: &str, source_info: &SourceInfo) -> Inlines {
     vec![Inline::Str(Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info: source_info.clone(),
     })]
 }

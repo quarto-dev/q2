@@ -680,7 +680,7 @@ mod tests {
         use quarto_pandoc_types::{ConfigMapEntry, Inline, Str};
         let si = quarto_source_map::SourceInfo::for_test();
         let inlines: quarto_pandoc_types::Inlines = vec![Inline::Str(Str {
-            text: template_path.to_string(),
+            text: template_path.into(),
             source_info: si.clone(),
         })];
         quarto_pandoc_types::ConfigValue::new_map(

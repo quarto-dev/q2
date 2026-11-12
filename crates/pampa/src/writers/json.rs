@@ -565,7 +565,7 @@ fn resolve_location(source_info: &SourceInfo, context: &ASTContext) -> Option<Va
 /// Path values are serialized as a simple Str inline containing the path string.
 fn build_path_inlines(path: &str, source_info: &SourceInfo) -> Inlines {
     vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-        text: path.to_string(),
+        text: path.into(),
         source_info: source_info.clone(),
     })]
 }
@@ -584,7 +584,7 @@ fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
         )
             .into(),
         content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-            text: glob.to_string(),
+            text: glob.into(),
             source_info: source_info.clone(),
         })],
         // Wrapper around the glob scalar — reuse the value's range
@@ -608,7 +608,7 @@ fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
         )
             .into(),
         content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-            text: expr.to_string(),
+            text: expr.into(),
             source_info: source_info.clone(),
         })],
         // Wrapper around the expr scalar — same reasoning as the
@@ -4822,7 +4822,7 @@ mod tests {
                 slots.insert(
                     "title".to_string(),
                     Slot::Inlines(vec![crate::pandoc::Inline::Str(Str {
-                        text: "Warning".to_string(),
+                        text: "Warning".into(),
                         source_info: SourceInfo::for_test(),
                     })]),
                 );
@@ -4830,7 +4830,7 @@ mod tests {
                     "content".to_string(),
                     Slot::Blocks(vec![Block::Paragraph(Paragraph {
                         content: vec![crate::pandoc::Inline::Str(Str {
-                            text: "Be careful!".to_string(),
+                            text: "Be careful!".into(),
                             source_info: SourceInfo::for_test(),
                         })],
                         source_info: SourceInfo::for_test(),
@@ -4978,7 +4978,7 @@ mod tests {
                 slots.insert(
                     "text".to_string(),
                     Slot::Inlines(vec![Inline::Str(Str {
-                        text: "hover me".to_string(),
+                        text: "hover me".into(),
                         source_info: SourceInfo::for_test(),
                     })]),
                 );
@@ -5101,7 +5101,7 @@ mod tests {
         let para = Paragraph {
             content: vec![
                 Inline::Str(Str {
-                    text: "This is a caption.".to_string(),
+                    text: "This is a caption.".into(),
                     source_info: SourceInfo::for_test(),
                 }),
                 Inline::Space(Space {
@@ -5156,7 +5156,7 @@ mod tests {
         let para = Paragraph {
             content: vec![
                 Inline::Str(Str {
-                    text: "Cap".to_string(),
+                    text: "Cap".into(),
                     source_info: SourceInfo::for_test(),
                 }),
                 Inline::Space(Space {
@@ -5204,7 +5204,7 @@ mod tests {
         use crate::pandoc::inline::InlineAttr;
         use crate::pandoc::{Inline, Plain, Space, Str};
         let mut content = vec![Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::for_test(),
         })];
         if let Some(attr) = attr {

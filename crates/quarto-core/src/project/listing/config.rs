@@ -1635,7 +1635,7 @@ listing:
         // `posts/*.qmd`. `as_plain_text` flattens this back to the
         // raw string regardless of any wrapping spans/classes.
         let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
-            text: "posts/*.qmd".to_string(),
+            text: "posts/*.qmd".into(),
             source_info: SourceInfo::for_test(),
         })];
         let contents_val = ConfigValue::new_inlines(inlines, SourceInfo::for_test());
@@ -1659,7 +1659,7 @@ listing:
         use quarto_pandoc_types::inline::{Inline, Str};
         let make_inlines = |t: &str| -> ConfigValue {
             let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
-                text: t.to_string(),
+                text: t.into(),
                 source_info: SourceInfo::for_test(),
             })];
             ConfigValue::new_inlines(inlines, SourceInfo::for_test())
@@ -1722,7 +1722,7 @@ listing:
     fn sort_pandoc_inlines_scalar_parses() {
         use quarto_pandoc_types::inline::{Inline, Str};
         let inlines: quarto_pandoc_types::inline::Inlines = vec![Inline::Str(Str {
-            text: "date desc".to_string(),
+            text: "date desc".into(),
             source_info: SourceInfo::for_test(),
         })];
         let sort_val = ConfigValue::new_inlines(inlines, SourceInfo::for_test());

@@ -144,7 +144,7 @@ fn value_to_inlines(meta: &ConfigValue) -> Option<Vec<Inline>> {
     // by `create_title_header`.)
     if let Some(s) = meta.as_str() {
         return Some(vec![Inline::Str(Str {
-            text: s.to_string(),
+            text: s.into(),
             source_info: meta.source_info.clone(),
         })]);
     }
@@ -299,7 +299,7 @@ mod tests {
             ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -339,7 +339,7 @@ mod tests {
         // title: Branding with `_brand.yml`
         let title_inlines = vec![
             Inline::Str(Str {
-                text: "Branding with ".to_string(),
+                text: "Branding with ".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Code(Box::new(Code {
@@ -362,7 +362,7 @@ mod tests {
             ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -424,7 +424,7 @@ mod tests {
                     level: 1,
                     attr: empty_attr(),
                     content: vec![Inline::Str(Str {
-                        text: "Existing Title".to_string(),
+                        text: "Existing Title".into(),
                         source_info: dummy_source_info(),
                     })],
                     source_info: dummy_source_info(),
@@ -432,7 +432,7 @@ mod tests {
                 })),
                 Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
-                        text: "Content".to_string(),
+                        text: "Content".into(),
                         source_info: dummy_source_info(),
                     })],
                     source_info: dummy_source_info(),
@@ -474,7 +474,7 @@ mod tests {
             ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -508,7 +508,7 @@ mod tests {
             ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -554,7 +554,7 @@ mod tests {
             ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -592,7 +592,7 @@ mod tests {
             ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Content".to_string(),
+                    text: "Content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -624,7 +624,7 @@ mod tests {
         // Plan 6: the synthesized h1 + inner Str both carry
         // Generated { by: title_block(), from: [] }.
         let block = create_title_header(vec![Inline::Str(Str {
-            text: "My Title".to_string(),
+            text: "My Title".into(),
             source_info: dummy_source_info(),
         })]);
         let Block::Header(header) = &block else {

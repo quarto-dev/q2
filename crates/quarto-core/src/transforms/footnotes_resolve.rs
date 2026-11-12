@@ -418,7 +418,7 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
         )
             .into(),
         content: vec![Inline::Str(Str {
-            text: number.to_string(),
+            text: number.to_string().into(),
             source_info: source_info.clone(),
         })],
         target: (format!("#{}", fn_id), String::new()),
@@ -512,7 +512,7 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
         )
             .into(),
         content: vec![Inline::Str(Str {
-            text: "↩︎".to_string(),
+            text: "↩︎".into(),
             source_info: source_info.clone(),
         })],
         target: (format!("#{}", fnref_id), String::new()),
@@ -588,7 +588,7 @@ mod tests {
 
     fn make_str(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }

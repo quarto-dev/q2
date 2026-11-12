@@ -231,7 +231,7 @@ fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &Floa
         )
             .into(),
         content: vec![Inline::Str(Str {
-            text: number,
+            text: number.into(),
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),
@@ -243,7 +243,7 @@ fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &Floa
             .map_or_else(|| "Appendix".to_string(), str::to_string);
         vec![
             Inline::Str(Str {
-                text: title,
+                text: title.into(),
                 source_info: source_info.clone(),
             }),
             Inline::Space(Space {
@@ -251,7 +251,7 @@ fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &Floa
             }),
             number_span,
             Inline::Str(Str {
-                text: " —".to_string(),
+                text: " —".into(),
                 source_info: source_info.clone(),
             }),
             Inline::Space(Space { source_info }),
@@ -767,7 +767,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
             };
             vec![Block::Plain(quarto_pandoc_types::block::Plain {
                 content: vec![Inline::Str(Str {
-                    text: label,
+                    text: label.into(),
                     source_info: source_info.clone(),
                 })],
                 source_info: source_info.clone(),
@@ -996,7 +996,7 @@ fn ensure_leading_paragraph_nbsp(mut content: Blocks, source_info: SourceInfo) -
     }
     let nbsp_para = Block::Paragraph(quarto_pandoc_types::block::Paragraph {
         content: vec![Inline::Str(Str {
-            text: "\u{a0}".to_string(),
+            text: "\u{a0}".into(),
             source_info: source_info.clone(),
         })],
         source_info,
@@ -1041,19 +1041,19 @@ fn theorem_label_inlines(
     let mut strong_content: Inlines = Vec::new();
     if !head_text.is_empty() {
         strong_content.push(Inline::Str(Str {
-            text: head_text,
+            text: head_text.into(),
             source_info: source_info.clone(),
         }));
     }
     if let Some(title_inlines) = title {
         // "Theorem 1 (Title)": space + "(" + title + ")".
         strong_content.push(Inline::Str(Str {
-            text: " (".to_string(),
+            text: " (".into(),
             source_info: source_info.clone(),
         }));
         strong_content.extend(title_inlines.iter().cloned());
         strong_content.push(Inline::Str(Str {
-            text: ")".to_string(),
+            text: ")".into(),
             source_info: source_info.clone(),
         }));
     }
@@ -1077,7 +1077,7 @@ fn theorem_label_inlines(
     vec![
         span,
         Inline::Str(Str {
-            text: " ".to_string(),
+            text: " ".into(),
             source_info,
         }),
     ]
@@ -1140,7 +1140,7 @@ fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
         Some(t) => {
             let mut inlines = t;
             inlines.push(Inline::Str(Str {
-                text: ".".to_string(),
+                text: ".".into(),
                 source_info: source_info.clone(),
             }));
             inlines
@@ -1152,7 +1152,7 @@ fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
                 .and_then(|t| t.get("environment-proof-title"))
                 .unwrap_or("Proof");
             vec![Inline::Str(Str {
-                text: format!("{proof_title}."),
+                text: format!("{proof_title}.").into(),
                 source_info: source_info.clone(),
             })]
         }
@@ -1164,7 +1164,7 @@ fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
             source_info: source_info.clone(),
         }),
         Inline::Str(Str {
-            text: " ".to_string(),
+            text: " ".into(),
             source_info: source_info.clone(),
         }),
     ];
@@ -1323,7 +1323,7 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
     };
 
     let content: Inlines = vec![Inline::Str(Str {
-        text,
+        text: text.into(),
         source_info: source_info.clone(),
     })];
     let target = (
@@ -1453,7 +1453,7 @@ fn prefix_caption(caption: Blocks, kind: &str, number: Option<String>) -> Blocks
     // to synthesize Space inlines.
     let prefix_into = |content: &mut Inlines, src: SourceInfo| {
         let mut new_content: Inlines = vec![Inline::Str(Str {
-            text: prefix_text.clone(),
+            text: prefix_text.clone().into(),
             source_info: src,
         })];
         new_content.append(content);
@@ -1474,7 +1474,7 @@ fn prefix_caption(caption: Blocks, kind: &str, number: Option<String>) -> Blocks
                 0,
                 Block::Plain(quarto_pandoc_types::block::Plain {
                     content: vec![Inline::Str(Str {
-                        text: prefix_text,
+                        text: prefix_text.into(),
                         source_info: src.clone(),
                     })],
                     source_info: src,
@@ -1528,7 +1528,7 @@ mod tests {
 
     fn str_inline(s: &str) -> Inline {
         Inline::Str(Str {
-            text: s.to_string(),
+            text: s.into(),
             source_info: si(),
         })
     }
@@ -1726,7 +1726,7 @@ mod tests {
         let Inline::Str(s) = &link.content[0] else {
             panic!("expected Str link text, got {:?}", link.content[0]);
         };
-        s.text.clone()
+        s.text.to_string()
     }
 
     #[tokio::test]
@@ -2846,7 +2846,7 @@ mod tests {
             .content
             .iter()
             .map(|i| match i {
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 Inline::Space(_) => " ".to_string(),
                 _ => String::new(),
             })
@@ -3302,7 +3302,7 @@ mod tests {
             .content
             .iter()
             .map(|i| match i {
-                Inline::Str(st) => st.text.clone(),
+                Inline::Str(st) => st.text.to_string(),
                 _ => "?".into(),
             })
             .collect();
@@ -3325,7 +3325,7 @@ mod tests {
             let Inline::Str(st) = &strong.content[0] else {
                 return String::new();
             };
-            st.text.clone()
+            st.text.to_string()
         };
         assert_eq!(strong_text(&ast.blocks[0]), "Theorem\u{a0}1");
         assert_eq!(strong_text(&ast.blocks[1]), "Theorem\u{a0}2");
@@ -3429,7 +3429,7 @@ mod tests {
             .content
             .iter()
             .map(|i| match i {
-                Inline::Str(st) => st.text.clone(),
+                Inline::Str(st) => st.text.to_string(),
                 _ => "?".into(),
             })
             .collect();

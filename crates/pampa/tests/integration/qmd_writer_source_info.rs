@@ -16,7 +16,7 @@ fn si(file: usize, start: usize, end: usize) -> SourceInfo {
 
 fn str_inline(text: &str, source_info: SourceInfo) -> Inline {
     Inline::Str(Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info,
     })
 }

@@ -21,7 +21,7 @@ use tempfile::NamedTempFile;
 
 fn str_inline(text: &str) -> Inline {
     Inline::Str(Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })
 }

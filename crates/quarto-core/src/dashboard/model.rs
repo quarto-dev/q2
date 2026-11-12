@@ -407,7 +407,7 @@ mod tests {
     fn para(text: &str) -> Block {
         Block::Plain(Plain {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: generated(),
             })],
             source_info: generated(),

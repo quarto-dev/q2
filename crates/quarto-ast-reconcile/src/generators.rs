@@ -514,7 +514,7 @@ fn gen_caption(config: GenConfig) -> impl Strategy<Value = Caption> {
 fn gen_str() -> impl Strategy<Value = Inline> {
     gen_safe_text().prop_map(|text| {
         Inline::Str(Str {
-            text,
+            text: text.into(),
             source_info: dummy_source(),
         })
     })

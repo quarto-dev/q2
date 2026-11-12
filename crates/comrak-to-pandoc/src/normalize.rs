@@ -324,7 +324,7 @@ mod tests {
             meta: ConfigValue::default(),
             blocks: vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: empty_source_info(),
                 })],
                 source_info: empty_source_info(),
@@ -412,7 +412,7 @@ mod tests {
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Emph(Emph {
                     content: vec![Inline::Str(Str {
-                        text: "hello".to_string(),
+                        text: "hello".into(),
                         source_info: empty_source_info(),
                     })],
                     source_info: empty_source_info(),
@@ -436,7 +436,7 @@ mod tests {
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Strong(Strong {
                     content: vec![Inline::Str(Str {
-                        text: "hello".to_string(),
+                        text: "hello".into(),
                         source_info: empty_source_info(),
                     })],
                     source_info: empty_source_info(),
@@ -486,7 +486,7 @@ mod tests {
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Span(Box::new(Span {
                     content: vec![Inline::Str(Str {
-                        text: "hello".to_string(),
+                        text: "hello".into(),
                         source_info: empty_source_info(),
                     })],
                     attr: (String::new(), vec![], LinkedHashMap::new()).into(),
@@ -535,7 +535,7 @@ mod tests {
                 source_info: empty_source_info(),
             }),
             Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: empty_source_info(),
             }),
             Inline::Space(Space {
@@ -625,7 +625,7 @@ mod tests {
                 content: vec![
                     Block::Paragraph(Paragraph {
                         content: vec![Inline::Str(Str {
-                            text: "hello".to_string(),
+                            text: "hello".into(),
                             source_info: empty_source_info(),
                         })],
                         source_info: empty_source_info(),
@@ -689,7 +689,7 @@ mod tests {
         // Multiple inlines
         let multiple = vec![
             Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: empty_source_info(),
             }),
             Inline::Image(Box::new(Image {
@@ -705,7 +705,7 @@ mod tests {
 
         // Not an image
         let not_image = vec![Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: empty_source_info(),
         })];
         assert!(!is_single_image(&not_image));

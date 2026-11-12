@@ -20,7 +20,7 @@ fn test_json_roundtrip_simple_paragraph() {
         meta: ConfigValue::default(),
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "Hello, world!".to_string(),
+                text: "Hello, world!".into(),
                 source_info: SourceInfo::from_range(
                     FileId(0),
                     Range {
@@ -108,7 +108,7 @@ fn test_json_roundtrip_complex_document() {
             Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {
-                        text: "This is ".to_string(),
+                        text: "This is ".into(),
                         source_info: SourceInfo::from_range(
                             FileId(0),
                             Range {
@@ -127,7 +127,7 @@ fn test_json_roundtrip_complex_document() {
                     }),
                     Inline::Strong(pampa::pandoc::Strong {
                         content: vec![Inline::Str(Str {
-                            text: "bold text".to_string(),
+                            text: "bold text".into(),
                             source_info: SourceInfo::from_range(
                                 FileId(0),
                                 Range {
@@ -161,7 +161,7 @@ fn test_json_roundtrip_complex_document() {
                         ),
                     }),
                     Inline::Str(Str {
-                        text: ".".to_string(),
+                        text: ".".into(),
                         source_info: SourceInfo::from_range(
                             FileId(0),
                             Range {
@@ -278,7 +278,7 @@ fn test_json_write_then_read_matches_original_structure() {
         blocks: vec![
             Block::Plain(pampa::pandoc::Plain {
                 content: vec![Inline::Str(Str {
-                    text: "Plain text".to_string(),
+                    text: "Plain text".into(),
                     source_info: SourceInfo::from_range(
                         FileId(0),
                         Range {

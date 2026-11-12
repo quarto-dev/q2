@@ -312,7 +312,7 @@ fn attach(card: &mut Card, kind: Kind, marker: Block) {
                     // Q1 puts the toolbar's title first in the header, ahead
                     // of the card's own title text.
                     let mut inlines = vec![Inline::Str(quarto_pandoc_types::inline::Str {
-                        text: title.clone(),
+                        text: title.clone().into(),
                         source_info: d.source_info.clone(),
                     })];
                     if let Some(existing) = card.title.take() {

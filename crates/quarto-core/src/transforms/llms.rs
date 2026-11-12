@@ -522,7 +522,7 @@ fn synthesize_listing_list(
     let gen_si = || quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
     let str_inline = |text: String| {
         Inline::Str(quarto_pandoc_types::inline::Str {
-            text,
+            text: text.into(),
             source_info: gen_si(),
         })
     };
@@ -669,7 +669,7 @@ fn rebuild_callout(div: quarto_pandoc_types::block::Div, cx: &ViewContext) -> Ve
         if !is_default && !title.trim().is_empty() {
             content.push(crate::transforms::title_block::create_title_header(vec![
                 Inline::Str(quarto_pandoc_types::inline::Str {
-                    text: title.trim().to_string(),
+                    text: title.trim().into(),
                     source_info: quarto_source_map::SourceInfo::generated(
                         quarto_source_map::By::unknown(),
                     ),
@@ -1453,7 +1453,7 @@ mod tests {
         Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], map).into(),
             content: vec![Inline::Str(Str {
-                text: "x".to_string(),
+                text: "x".into(),
                 source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),

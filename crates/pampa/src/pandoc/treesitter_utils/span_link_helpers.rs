@@ -210,11 +210,11 @@ pub fn process_pandoc_span(
                         // Split "suffix;" into "suffix" and ";"
                         let text_without_semicolon = s.text[..s.text.len() - 1].to_string();
                         preprocessed_inlines.push(Inline::Str(crate::pandoc::inline::Str {
-                            text: text_without_semicolon,
+                            text: text_without_semicolon.into(),
                             source_info: s.source_info.clone(),
                         }));
                         preprocessed_inlines.push(Inline::Str(crate::pandoc::inline::Str {
-                            text: ";".to_string(),
+                            text: ";".into(),
                             source_info: s.source_info.clone(),
                         }));
                     }

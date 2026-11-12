@@ -25,6 +25,7 @@ path = "src/bin/ast_memory.rs"
 pampa = { path = "../pampa" }
 quarto-pandoc-types = { workspace = true }
 quarto-source-map = { workspace = true }
+ecow = "0.2.6"
 quarto-core = { path = "../quarto-core" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }
 pollster = { workspace = true }

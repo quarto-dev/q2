@@ -591,7 +591,7 @@ mod tests {
         Inline::Link(Box::new(Link {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
@@ -608,7 +608,7 @@ mod tests {
         Inline::Link(Box::new(Link {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
@@ -625,7 +625,7 @@ mod tests {
         Inline::Image(Box::new(Image {
             attr: Attr::default(),
             content: vec![Inline::Str(Str {
-                text: alt.to_string(),
+                text: alt.into(),
                 source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
@@ -1257,7 +1257,7 @@ mod tests {
         Inline::Link(Box::new(Link {
             attr: (String::new(), vec![], map).into(),
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })],
             target: (url.to_string(), String::new()),
@@ -1474,7 +1474,7 @@ mod tests {
         };
         let blocks = vec![para(vec![
             Inline::Str(Str {
-                text: "before".to_string(),
+                text: "before".into(),
                 source_info: SourceInfo::for_test(),
             }),
             link_with_kv("hidden.qmd", "Hidden", &[]),

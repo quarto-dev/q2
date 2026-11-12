@@ -137,11 +137,11 @@ mod tests {
     #[test]
     fn test_str_eq_ignores_source() {
         let a = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: dummy_source(),
         });
         let b = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: other_source(),
         });
         assert!(inline_eq(&a, &b));
@@ -150,11 +150,11 @@ mod tests {
     #[test]
     fn test_str_neq_different_text() {
         let a = Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: dummy_source(),
         });
         let b = Inline::Str(Str {
-            text: "world".to_string(),
+            text: "world".into(),
             source_info: dummy_source(),
         });
         assert!(!inline_eq(&a, &b));
@@ -164,14 +164,14 @@ mod tests {
     fn test_emph_eq() {
         let a = Inline::Emph(Emph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
         });
         let b = Inline::Emph(Emph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: other_source(),
             })],
             source_info: other_source(),
@@ -183,14 +183,14 @@ mod tests {
     fn test_paragraph_eq() {
         let a = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
         });
         let b = Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: other_source(),
             })],
             source_info: other_source(),
@@ -290,14 +290,14 @@ mod tests {
     fn test_strong_eq() {
         let a = Inline::Strong(quarto_pandoc_types::Strong {
             content: vec![Inline::Str(Str {
-                text: "bold".to_string(),
+                text: "bold".into(),
                 source_info: dummy_source(),
             })],
             source_info: dummy_source(),
         });
         let b = Inline::Strong(quarto_pandoc_types::Strong {
             content: vec![Inline::Str(Str {
-                text: "bold".to_string(),
+                text: "bold".into(),
                 source_info: other_source(),
             })],
             source_info: other_source(),
@@ -478,7 +478,7 @@ mod tests {
             source_info: dummy_source(),
         });
         let b = Inline::Str(Str {
-            text: "x".to_string(),
+            text: "x".into(),
             source_info: dummy_source(),
         });
         assert!(!inline_eq(&a, &b));
@@ -610,7 +610,7 @@ mod tests {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: dummy_source(),
                 })],
                 source_info: dummy_source(),
@@ -620,7 +620,7 @@ mod tests {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: other_source(),
                 })],
                 source_info: other_source(),
@@ -663,7 +663,7 @@ mod tests {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: dummy_source(),
                 })],
                 source_info: dummy_source(),
@@ -673,7 +673,7 @@ mod tests {
             meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "world".to_string(),
+                    text: "world".into(),
                     source_info: dummy_source(),
                 })],
                 source_info: dummy_source(),

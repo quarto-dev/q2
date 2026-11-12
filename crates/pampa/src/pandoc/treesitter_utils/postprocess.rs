@@ -704,7 +704,7 @@ pub fn convert_trailing_linebreak_to_str(inlines: &mut Inlines) -> bool {
         let source_info = lb.source_info.clone();
         inlines.pop();
         inlines.push(Inline::Str(Str {
-            text: "\\".to_string(),
+            text: "\\".into(),
             source_info,
         }));
         true
@@ -1462,7 +1462,7 @@ pub fn postprocess(
                         .strip_prefix(':')
                         .unwrap_or(&first_str.text)
                         .trim_start()
-                        .to_string();
+                        .into();
 
                     // If the string is now empty, remove it
                     if first_str.text.is_empty() {
@@ -1753,7 +1753,7 @@ pub fn postprocess(
                                                     }
                                                     if !word.is_empty() {
                                                         bracketed_content.push(Inline::Str(Str {
-                                                            text: (*word).to_string(),
+                                                            text: (*word).into(),
                                                             source_info: s.source_info.clone(),
                                                         }));
                                                     }
@@ -1769,14 +1769,14 @@ pub fn postprocess(
                                             if let Some(Inline::Str(first_str)) =
                                                 bracketed_content.first_mut()
                                             {
-                                                first_str.text = format!("[{}", first_str.text);
+                                                first_str.text = format!("[{}", first_str.text).into();
                                             }
                                             // Append "]" to the last Str element (search from the end)
                                             for i in (0..bracketed_content.len()).rev() {
                                                 if let Inline::Str(last_str) =
                                                     &mut bracketed_content[i]
                                                 {
-                                                    last_str.text = format!("{}]", last_str.text);
+                                                    last_str.text = format!("{}]", last_str.text).into();
                                                     break;
                                                 }
                                             }
@@ -1886,7 +1886,7 @@ pub fn postprocess(
                             let source_info = caption_block.source_info.clone();
                             let fallback_content = || {
                                 let mut content = vec![Inline::Str(Str {
-                                    text: ":".to_string(),
+                                    text: ":".into(),
                                     source_info: source_info.clone(),
                                 })];
                                 content.extend(caption_block.content.clone());
@@ -1923,7 +1923,7 @@ pub fn postprocess(
                             let has_list_definition_body =
                                 caption_has_list_definition_body(&line_text);
                             let literal = Inline::Str(Str {
-                                text: line_text,
+                                text: line_text.into(),
                                 source_info: source_info.clone(),
                             });
                             if previous_was_definition_term {
@@ -1972,7 +1972,7 @@ pub fn postprocess(
                                 if let Some(text) = list_text {
                                     result.push(Block::Paragraph(Paragraph {
                                         content: vec![Inline::Str(Str {
-                                            text,
+                                            text: text.into(),
                                             source_info: list_source.clone(),
                                         })],
                                         source_info: list_source,
@@ -2014,7 +2014,7 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
     topdown_traverse(
         pandoc,
         &mut Filter::new().with_inlines(|inlines, _ctx| {
-            let mut current_str: Option<String> = None;
+            let mut current_str: Option<quarto_pandoc_types::Text> = None;
             let mut current_source_info: Option<quarto_source_map::SourceInfo> = None;
             let mut result: Inlines = Vec::with_capacity(inlines.len());
             let mut did_merge = false;
@@ -2155,7 +2155,7 @@ mod did_coalesce_tests {
 
     fn s(text: &str, start: usize, end: usize) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::original(FileId(0), start, end),
         })
     }

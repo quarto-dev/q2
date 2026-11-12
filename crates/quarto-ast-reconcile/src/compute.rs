@@ -852,7 +852,7 @@ mod tests {
 
     fn make_str(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source(),
         })
     }

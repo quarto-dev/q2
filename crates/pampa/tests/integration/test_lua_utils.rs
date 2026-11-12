@@ -68,14 +68,14 @@ end
 
     let doc = create_test_doc(vec![
         Inline::Str(Str {
-            text: "hello".to_string(),
+            text: "hello".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
         Inline::Space(pampa::pandoc::Space {
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
         Inline::Str(Str {
-            text: "world".to_string(),
+            text: "world".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
     ]);
@@ -107,7 +107,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -136,7 +136,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -166,7 +166,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -195,7 +195,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -233,7 +233,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -261,7 +261,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -293,7 +293,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -319,7 +319,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -341,7 +341,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -368,7 +368,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -390,7 +390,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -412,7 +412,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -434,7 +434,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -456,7 +456,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -478,7 +478,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -500,7 +500,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -521,7 +521,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -565,7 +565,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -594,7 +594,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -619,7 +619,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -649,7 +649,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -680,7 +680,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -705,7 +705,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -726,7 +726,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -765,7 +765,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -811,7 +811,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -842,7 +842,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -882,7 +882,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 

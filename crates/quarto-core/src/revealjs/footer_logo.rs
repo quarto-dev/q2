@@ -322,7 +322,7 @@ mod tests {
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: si(),
         })
     }

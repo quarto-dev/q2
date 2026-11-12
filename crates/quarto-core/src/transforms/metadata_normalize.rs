@@ -358,7 +358,7 @@ mod tests {
                     key_source: dummy_source_info(),
                     value: ConfigValue::new_inlines(
                         vec![Inline::Str(Str {
-                            text: "Inline Title".to_string(),
+                            text: "Inline Title".into(),
                             source_info: dummy_source_info(),
                         })],
                         dummy_source_info(),
@@ -442,7 +442,7 @@ mod tests {
                 value: ConfigValue::new_inlines(
                     vec![
                         Inline::Str(Str {
-                            text: "A".to_string(),
+                            text: "A".into(),
                             source_info: dummy_source_info(),
                         }),
                         Inline::Space(quarto_pandoc_types::inline::Space {
@@ -450,7 +450,7 @@ mod tests {
                         }),
                         Inline::Emph(Emph {
                             content: vec![Inline::Str(Str {
-                                text: "fine".to_string(),
+                                text: "fine".into(),
                                 source_info: dummy_source_info(),
                             })],
                             source_info: dummy_source_info(),
@@ -459,7 +459,7 @@ mod tests {
                             source_info: dummy_source_info(),
                         }),
                         Inline::Str(Str {
-                            text: "doc".to_string(),
+                            text: "doc".into(),
                             source_info: dummy_source_info(),
                         }),
                     ],
@@ -501,14 +501,14 @@ mod tests {
     async fn test_inlines_to_plain_text() {
         let inlines = vec![
             Inline::Str(Str {
-                text: "Hello".to_string(),
+                text: "Hello".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Space(quarto_pandoc_types::inline::Space {
                 source_info: dummy_source_info(),
             }),
             Inline::Str(Str {
-                text: "World".to_string(),
+                text: "World".into(),
                 source_info: dummy_source_info(),
             }),
         ];
@@ -531,14 +531,14 @@ mod tests {
     async fn test_inlines_soft_break() {
         let inlines = vec![
             Inline::Str(Str {
-                text: "Hello".to_string(),
+                text: "Hello".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::SoftBreak(quarto_pandoc_types::inline::SoftBreak {
                 source_info: dummy_source_info(),
             }),
             Inline::Str(Str {
-                text: "World".to_string(),
+                text: "World".into(),
                 source_info: dummy_source_info(),
             }),
         ];
@@ -550,14 +550,14 @@ mod tests {
     async fn test_inlines_line_break() {
         let inlines = vec![
             Inline::Str(Str {
-                text: "Line1".to_string(),
+                text: "Line1".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::LineBreak(quarto_pandoc_types::inline::LineBreak {
                 source_info: dummy_source_info(),
             }),
             Inline::Str(Str {
-                text: "Line2".to_string(),
+                text: "Line2".into(),
                 source_info: dummy_source_info(),
             }),
         ];
@@ -569,7 +569,7 @@ mod tests {
     async fn test_inlines_emph() {
         let inlines = vec![Inline::Emph(quarto_pandoc_types::inline::Emph {
             content: vec![Inline::Str(Str {
-                text: "emphasized".to_string(),
+                text: "emphasized".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -582,7 +582,7 @@ mod tests {
     async fn test_inlines_underline() {
         let inlines = vec![Inline::Underline(quarto_pandoc_types::inline::Underline {
             content: vec![Inline::Str(Str {
-                text: "underlined".to_string(),
+                text: "underlined".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -595,7 +595,7 @@ mod tests {
     async fn test_inlines_strong() {
         let inlines = vec![Inline::Strong(quarto_pandoc_types::inline::Strong {
             content: vec![Inline::Str(Str {
-                text: "bold".to_string(),
+                text: "bold".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -608,7 +608,7 @@ mod tests {
     async fn test_inlines_strikeout() {
         let inlines = vec![Inline::Strikeout(quarto_pandoc_types::inline::Strikeout {
             content: vec![Inline::Str(Str {
-                text: "strikeout".to_string(),
+                text: "strikeout".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -622,7 +622,7 @@ mod tests {
         let inlines = vec![Inline::Superscript(
             quarto_pandoc_types::inline::Superscript {
                 content: vec![Inline::Str(Str {
-                    text: "sup".to_string(),
+                    text: "sup".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -636,7 +636,7 @@ mod tests {
     async fn test_inlines_subscript() {
         let inlines = vec![Inline::Subscript(quarto_pandoc_types::inline::Subscript {
             content: vec![Inline::Str(Str {
-                text: "sub".to_string(),
+                text: "sub".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -649,7 +649,7 @@ mod tests {
     async fn test_inlines_smallcaps() {
         let inlines = vec![Inline::SmallCaps(quarto_pandoc_types::inline::SmallCaps {
             content: vec![Inline::Str(Str {
-                text: "smallcaps".to_string(),
+                text: "smallcaps".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -664,7 +664,7 @@ mod tests {
             quarto_pandoc_types::inline::Quoted {
                 quote_type: quarto_pandoc_types::inline::QuoteType::SingleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -680,7 +680,7 @@ mod tests {
             quarto_pandoc_types::inline::Quoted {
                 quote_type: quarto_pandoc_types::inline::QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
-                    text: "quoted".to_string(),
+                    text: "quoted".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -695,7 +695,7 @@ mod tests {
         let inlines = vec![Inline::Cite(Box::new(quarto_pandoc_types::inline::Cite {
             citations: vec![],
             content: vec![Inline::Str(Str {
-                text: "citation".to_string(),
+                text: "citation".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -746,7 +746,7 @@ mod tests {
         let inlines = vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
-                text: "link text".to_string(),
+                text: "link text".into(),
                 source_info: dummy_source_info(),
             })],
             target: ("http://example.com".to_string(), String::new()),
@@ -764,7 +764,7 @@ mod tests {
             quarto_pandoc_types::inline::Image {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: "alt text".to_string(),
+                    text: "alt text".into(),
                     source_info: dummy_source_info(),
                 })],
                 target: ("image.png".to_string(), String::new()),
@@ -782,7 +782,7 @@ mod tests {
         let inlines = vec![Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
-                text: "span content".to_string(),
+                text: "span content".into(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
@@ -798,7 +798,7 @@ mod tests {
             quarto_pandoc_types::inline::Insert {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: "inserted".to_string(),
+                    text: "inserted".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -815,7 +815,7 @@ mod tests {
             quarto_pandoc_types::inline::Delete {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: "deleted".to_string(),
+                    text: "deleted".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -832,7 +832,7 @@ mod tests {
             quarto_pandoc_types::inline::Highlight {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: "highlighted".to_string(),
+                    text: "highlighted".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -849,7 +849,7 @@ mod tests {
             quarto_pandoc_types::inline::EditComment {
                 attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: "comment".to_string(),
+                    text: "comment".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -866,7 +866,7 @@ mod tests {
         let inlines = vec![Inline::Note(quarto_pandoc_types::inline::Note {
             content: vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: "note content".to_string(),
+                    text: "note content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -881,7 +881,7 @@ mod tests {
     async fn test_inlines_shortcode_skipped() {
         let inlines = vec![
             Inline::Str(Str {
-                text: "before".to_string(),
+                text: "before".into(),
                 source_info: dummy_source_info(),
             }),
             Inline::Shortcode(Box::new(quarto_pandoc_types::shortcode::Shortcode {
@@ -892,7 +892,7 @@ mod tests {
                 source_info: dummy_source_info(),
             })),
             Inline::Str(Str {
-                text: "after".to_string(),
+                text: "after".into(),
                 source_info: dummy_source_info(),
             }),
         ];
@@ -906,7 +906,7 @@ mod tests {
 
     fn make_str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }

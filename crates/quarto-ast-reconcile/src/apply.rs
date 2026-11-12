@@ -749,7 +749,7 @@ mod tests {
 
     fn make_str(text: &str, source: SourceInfo) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: source,
         })
     }
@@ -757,7 +757,7 @@ mod tests {
     fn make_para_with_source(text: &str, source: SourceInfo) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: source.clone(),
             })],
             source_info: source,

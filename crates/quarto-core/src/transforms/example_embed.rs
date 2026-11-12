@@ -443,14 +443,14 @@ fn with_number_label(
         content: vec![Inline::Str(Str {
             // Non-breaking space between kind and number, matching crossref
             // reference text ("Figure\u{a0}1").
-            text: format!("{kind}\u{a0}{order}"),
+            text: format!("{kind}\u{a0}{order}").into(),
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     }));
     let sep = Inline::Str(Str {
-        text: ": ".to_string(),
+        text: ": ".into(),
         source_info: source_info.clone(),
     });
 
@@ -633,7 +633,7 @@ mod tests {
             content: vec![Inline::Link(Box::new(Link {
                 attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: dummy_source_info(),
                 })],
                 target: (href.to_string(), String::new()),

@@ -203,7 +203,7 @@ fn try_convert_equation(span: &mut Span) -> Option<CustomNode> {
     let math_inline = std::mem::replace(
         &mut span.content[0],
         Inline::Str(quarto_pandoc_types::inline::Str {
-            text: String::new(),
+            text: String::new().into(),
             source_info: span.source_info.clone(),
         }),
     );
@@ -358,7 +358,7 @@ mod tests {
         let mut block = Block::Paragraph(Paragraph {
             content: vec![
                 Inline::Str(Str {
-                    text: "before".to_string(),
+                    text: "before".into(),
                     source_info: si(),
                 }),
                 display_math_span("eq-test", "a + b"),

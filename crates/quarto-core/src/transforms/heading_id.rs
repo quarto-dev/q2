@@ -121,7 +121,7 @@ mod tests {
             panic!("block {index} is not a header");
         };
         h.content = vec![Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::generated(By::unknown()),
         })];
     }
@@ -153,7 +153,7 @@ mod tests {
             level: 2,
             attr: (String::new(), vec![], Default::default()).into(),
             content: vec![Inline::Str(Str {
-                text: "Built".to_string(),
+                text: "Built".into(),
                 source_info: SourceInfo::generated(By::unknown()),
             })],
             source_info: SourceInfo::generated(By::unknown()),
@@ -180,7 +180,7 @@ mod tests {
             level: 2,
             attr: ("intro".to_string(), vec![], Default::default()).into(),
             content: vec![Inline::Str(Str {
-                text: "x".to_string(),
+                text: "x".into(),
                 source_info: SourceInfo::generated(By::unknown()),
             })],
             source_info: SourceInfo::generated(By::unknown()),

@@ -2063,7 +2063,7 @@ mod tests {
         use quarto_pandoc_types::inline::{Inline, Str};
         let theme = ConfigValue::new_inlines(
             vec![Inline::Str(Str {
-                text: "none".to_string(),
+                text: "none".into(),
                 source_info: si(),
             })],
             si(),

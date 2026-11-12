@@ -675,7 +675,7 @@ impl Walker<'_> {
                 let opted_out = img.attr.1.iter().any(|c| c == NO_LIGHTBOX);
                 if explicit || (self.auto && auto_eligible && !opted_out) {
                     let placeholder = Inline::Str(Str {
-                        text: String::new(),
+                        text: String::new().into(),
                         source_info: img.source_info.clone(),
                     });
                     let Inline::Image(img) = std::mem::replace(inline, placeholder) else {
@@ -775,7 +775,7 @@ impl Walker<'_> {
             ConfigValueKind::PandocBlocks(blocks) => blocks,
             ConfigValueKind::PandocInlines(inlines) => vec![para(inlines)],
             _ => vec![para(vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: source_info.clone(),
             })])],
         }
@@ -1180,7 +1180,7 @@ mod tests {
             content: vec![Inline::Image(Box::new(Image {
                 attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: alt.to_string(),
+                    text: alt.into(),
                     source_info: SourceInfo::for_test(),
                 })],
                 target: (src.to_string(), String::new()),
@@ -1208,7 +1208,7 @@ mod tests {
                 "caption_long",
                 Slot::Blocks(vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: text.to_string(),
+                        text: text.into(),
                         source_info: SourceInfo::for_test(),
                     })],
                     source_info: SourceInfo::for_test(),

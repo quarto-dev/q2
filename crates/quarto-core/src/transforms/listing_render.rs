@@ -2213,7 +2213,7 @@ mod tests {
             attr: (slug(text), vec![], LinkedHashMap::new()).into(),
             content: vec![quarto_pandoc_types::inline::Inline::Str(
                 quarto_pandoc_types::inline::Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: SourceInfo::for_test(),
                 },
             )],
@@ -2230,7 +2230,7 @@ mod tests {
         Block::Paragraph(quarto_pandoc_types::block::Paragraph {
             content: vec![quarto_pandoc_types::inline::Inline::Str(
                 quarto_pandoc_types::inline::Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: SourceInfo::for_test(),
                 },
             )],

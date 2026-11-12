@@ -289,7 +289,7 @@ mod tests {
         Block::Paragraph(Paragraph {
             content: vec![quarto_pandoc_types::inline::Inline::Str(
                 quarto_pandoc_types::inline::Str {
-                    text: text.to_string(),
+                    text: text.into(),
                     source_info: si(),
                 },
             )],

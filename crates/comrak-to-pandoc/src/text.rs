@@ -35,7 +35,7 @@ pub fn tokenize_text(text: &str) -> Inlines {
             // Emit accumulated word
             if !current_word.is_empty() {
                 result.push(Inline::Str(Str {
-                    text: std::mem::take(&mut current_word),
+                    text: std::mem::take(&mut current_word).into(),
                     source_info: empty_source_info(),
                 }));
             }
@@ -59,7 +59,7 @@ pub fn tokenize_text(text: &str) -> Inlines {
     // Emit final word
     if !current_word.is_empty() {
         result.push(Inline::Str(Str {
-            text: current_word,
+            text: current_word.into(),
             source_info: empty_source_info(),
         }));
     }
@@ -507,7 +507,7 @@ pub fn tokenize_text_with_source(
             if !current_word.is_empty() {
                 let start = current_word_start.unwrap();
                 result.push(Inline::Str(Str {
-                    text: std::mem::take(&mut current_word),
+                    text: std::mem::take(&mut current_word).into(),
                     source_info: span(start, byte_idx),
                 }));
                 current_word_start = None;
@@ -539,7 +539,7 @@ pub fn tokenize_text_with_source(
     if !current_word.is_empty() {
         let start = current_word_start.unwrap();
         result.push(Inline::Str(Str {
-            text: current_word,
+            text: current_word.into(),
             source_info: span(start, content_end),
         }));
     } else if let Some(ws_start) = whitespace_start {

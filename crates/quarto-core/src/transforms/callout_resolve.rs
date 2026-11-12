@@ -283,7 +283,7 @@ fn resolve_callout(
     // the screen-reader-only type span.
     let generated_str = |text: String| {
         Inline::Str(Str {
-            text,
+            text: text.into(),
             source_info: SourceInfo::generated(By::callout()),
         })
     };
@@ -324,7 +324,7 @@ fn resolve_callout(
                 Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
                     attr: make_attr(&["screen-reader-only"]),
                     content: vec![Inline::Str(Str {
-                        text: callout_display_name(&callout_type, terms),
+                        text: callout_display_name(&callout_type, terms).into(),
                         source_info: SourceInfo::generated(By::callout()),
                     })],
                     source_info: SourceInfo::generated(By::callout()),
@@ -735,7 +735,7 @@ mod tests {
             "content",
             Slot::Blocks(vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Warning content".to_string(),
+                    text: "Warning content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -797,7 +797,7 @@ mod tests {
         custom.set_slot(
             "title",
             Slot::Inlines(vec![Inline::Str(Str {
-                text: "Pro Tip".to_string(),
+                text: "Pro Tip".into(),
                 source_info: dummy_source_info(),
             })]),
         );
@@ -805,7 +805,7 @@ mod tests {
             "content",
             Slot::Blocks(vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "Tip content".to_string(),
+                    text: "Tip content".into(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
@@ -966,7 +966,7 @@ mod tests {
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }

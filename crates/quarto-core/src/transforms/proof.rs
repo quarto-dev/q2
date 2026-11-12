@@ -195,7 +195,7 @@ fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<In
     }
     Some(vec![quarto_pandoc_types::inline::Inline::Str(
         quarto_pandoc_types::inline::Str {
-            text: name,
+            text: name.into(),
             source_info: value_source
                 .unwrap_or_else(|| SourceInfo::generated(By::programmatic_config())),
         },

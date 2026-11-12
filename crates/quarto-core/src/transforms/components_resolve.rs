@@ -737,7 +737,7 @@ mod tests {
     fn para(text: &str) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })],
             source_info: SourceInfo::for_test(),

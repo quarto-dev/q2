@@ -1519,7 +1519,7 @@ mod unit_tests {
 
         assert_eq!(
             inline_tag(&Inline::Str(Str {
-                text: String::new(),
+                text: String::new().into(),
                 source_info: source_info.clone()
             })),
             "Str"
@@ -1758,7 +1758,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         let result = handle_inline_return(&lua, Value::Nil, &original, "Str").unwrap();
@@ -1778,7 +1778,7 @@ mod unit_tests {
         let lua = Lua::new();
         let empty_table = lua.create_table().unwrap();
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         let result =
@@ -1794,7 +1794,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         // D-numtext (bd-q4gnd5os): a number reads as its `tostring` text,
@@ -1821,7 +1821,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         // D-numtext: a boolean reads as `true` / `false`.
@@ -1838,7 +1838,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         // Bare string return is word-split like peekInlinesFuzzy.
@@ -1858,7 +1858,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         // Strings inside a returned table become single Strs (element-wise
@@ -1886,7 +1886,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
         crate::pandoc::Block::Paragraph(Paragraph {
             content: vec![crate::pandoc::Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: SourceInfo::for_test(),
             })],
             source_info: SourceInfo::for_test(),
@@ -1903,7 +1903,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
         let lua = Lua::new();
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         // blocks shape, one paragraph → its inlines
@@ -1921,7 +1921,7 @@ mod unit_tests {
         let ret = nodes_value(
             &lua,
             NodesShape::Inlines(vec![Inline::Str(Str {
-                text: "i".to_string(),
+                text: "i".into(),
                 source_info: SourceInfo::for_test(),
             })]),
         );
@@ -1956,7 +1956,7 @@ mod unit_tests {
         let ret = nodes_value(
             &lua,
             NodesShape::Inlines(vec![Inline::Str(Str {
-                text: "i".to_string(),
+                text: "i".into(),
                 source_info: SourceInfo::for_test(),
             })]),
         );
@@ -2096,7 +2096,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         let (elements, control) =
@@ -2113,7 +2113,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         let mut values = MultiValue::new();
@@ -2133,7 +2133,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         let mut values = MultiValue::new();
@@ -2228,7 +2228,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = vec![Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         })];
         let (elements, control) =
@@ -2246,7 +2246,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = vec![Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();
@@ -2266,7 +2266,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = vec![Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         })];
         // D-numtext: a number is text; a function is not coercible.
@@ -2317,7 +2317,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         });
         let mut values = MultiValue::new();
@@ -2338,7 +2338,7 @@ mod unit_tests {
         use quarto_source_map::SourceInfo;
 
         let original = vec![Inline::Str(Str {
-            text: "original".to_string(),
+            text: "original".into(),
             source_info: SourceInfo::for_test(),
         })];
         let mut values = MultiValue::new();

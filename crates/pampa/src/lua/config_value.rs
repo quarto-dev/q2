@@ -825,7 +825,7 @@ mod tests {
 
     fn str_inline(text: &str, source: SourceInfo) -> quarto_pandoc_types::Inline {
         quarto_pandoc_types::Inline::Str(quarto_pandoc_types::Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: source,
         })
     }

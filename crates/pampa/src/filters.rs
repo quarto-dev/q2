@@ -1260,7 +1260,7 @@ mod tests {
     // Helper to create a Str inline
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: si(),
         })
     }
@@ -2389,7 +2389,7 @@ mod tests {
         let mut filter = Filter::new().with_str(|s, _ctx| {
             FilterReturn::FilterResult(
                 vec![Inline::Str(Str {
-                    text: format!("modified: {}", s.text),
+                    text: format!("modified: {}", s.text).into(),
                     source_info: s.source_info,
                 })],
                 false,
@@ -2435,7 +2435,7 @@ mod tests {
                 FilterReturn::FilterResult(
                     vec![Inline::Emph(Emph {
                         content: vec![Inline::Str(Str {
-                            text: "nested".to_string(),
+                            text: "nested".into(),
                             source_info: si(),
                         })],
                         source_info: si(),

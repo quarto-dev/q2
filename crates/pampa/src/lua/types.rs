@@ -605,7 +605,7 @@ impl LuaInline {
         match (&mut *inner, key) {
             // Str
             (Inline::Str(s), "text") => {
-                s.text = String::from_lua(val, lua)?;
+                s.text = String::from_lua(val, lua)?.into();
                 Ok(())
             }
 
@@ -2090,7 +2090,7 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
         Value::String(s) => {
             let text = s.to_str()?.to_string();
             Ok(Inline::Str(Str {
-                text,
+                text: text.into(),
                 source_info: filter_source_info(lua),
             }))
         }
@@ -2098,7 +2098,7 @@ pub fn peek_inline_fuzzy(lua: &Lua, val: Value) -> Result<Inline> {
         Value::Integer(_) | Value::Number(_) | Value::Boolean(_) => {
             let text = text_scalar_to_string(lua, &val)?.to_str()?.to_string();
             Ok(Inline::Str(Str {
-                text,
+                text: text.into(),
                 source_info: filter_source_info(lua),
             }))
         }

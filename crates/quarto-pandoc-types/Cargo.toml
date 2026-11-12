@@ -18,6 +18,9 @@ serde_json = { workspace = true }
 hashlink = { version = "0.11.0", features = ["serde_impl"] }
 yaml-rust2 = { workspace = true }
 indexmap = "2.13"
+# Small-string type for AST text (15 bytes inline, 16-byte handle on every
+# target). See claude-notes/plans/2026-11-12-ast-string-storage-study.md.
+ecow = { version = "0.2.6", features = ["serde"] }
 
 [lints]
 workspace = true

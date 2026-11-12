@@ -275,14 +275,14 @@ mod tests {
         let blocks = vec![Block::Paragraph(Paragraph {
             content: vec![
                 Inline::Str(Str {
-                    text: "Hello".to_string(),
+                    text: "Hello".into(),
                     source_info: dummy_source_info(),
                 }),
                 Inline::Space(Space {
                     source_info: dummy_source_info(),
                 }),
                 Inline::Str(Str {
-                    text: "World".to_string(),
+                    text: "World".into(),
                     source_info: dummy_source_info(),
                 }),
             ],

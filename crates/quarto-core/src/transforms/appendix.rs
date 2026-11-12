@@ -273,7 +273,7 @@ fn title_inlines(title: &str, source_info: &SourceInfo) -> Vec<Inline> {
             }));
         }
         inlines.push(Inline::Str(Str {
-            text: word.to_string(),
+            text: word.into(),
             source_info: source_info.clone(),
         }));
     }
@@ -404,7 +404,7 @@ fn create_license_section(meta: &ConfigValue) -> Option<Block> {
 
     let content = Block::Paragraph(Paragraph {
         content: vec![Inline::Str(Str {
-            text: license_text,
+            text: license_text.into(),
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),
@@ -447,7 +447,7 @@ fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
 
     let content = Block::Paragraph(Paragraph {
         content: vec![Inline::Str(Str {
-            text: copyright_text,
+            text: copyright_text.into(),
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),
@@ -485,13 +485,13 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
     let content_inlines = if let Some(url) = citation_url {
         vec![
             Inline::Str(Str {
-                text: "For attribution, please cite this work as: ".to_string(),
+                text: "For attribution, please cite this work as: ".into(),
                 source_info: source_info.clone(),
             }),
             Inline::Link(Box::new(Link {
                 attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
-                    text: url.clone(),
+                    text: url.clone().into(),
                     source_info: source_info.clone(),
                 })],
                 target: (url.clone(), String::new()),
@@ -503,7 +503,7 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
     } else {
         // If no URL, just note that citation info is available
         vec![Inline::Str(Str {
-            text: "Please cite this work appropriately.".to_string(),
+            text: "Please cite this work appropriately.".into(),
             source_info: source_info.clone(),
         })]
     };
@@ -569,7 +569,7 @@ mod tests {
 
     fn make_str(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: dummy_source_info(),
         })
     }

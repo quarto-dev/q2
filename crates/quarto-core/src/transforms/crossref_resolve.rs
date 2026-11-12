@@ -481,7 +481,7 @@ mod tests {
                 id_source: None,
             }],
             content: vec![Inline::Str(Str {
-                text: format!("@{}", id),
+                text: format!("@{}", id).into(),
                 source_info: si(),
             })],
             source_info: si(),

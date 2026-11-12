@@ -246,7 +246,7 @@ impl ShortcodeHandler for EnvShortcodeHandler {
 
         match value {
             Some(text) => ShortcodeResult::Inlines(vec![Inline::Str(Str {
-                text,
+                text: text.into(),
                 source_info: ctx.source_info.clone(),
             })]),
             None => {
@@ -351,21 +351,21 @@ fn config_value_to_inlines(value: &ConfigValue) -> Vec<Inline> {
     // Use helper methods on ConfigValue for scalar types
     if let Some(s) = value.as_str() {
         return vec![Inline::Str(Str {
-            text: s.to_string(),
+            text: s.into(),
             source_info: value.source_info.clone(),
         })];
     }
 
     if let Some(b) = value.as_bool() {
         return vec![Inline::Str(Str {
-            text: b.to_string(),
+            text: b.to_string().into(),
             source_info: value.source_info.clone(),
         })];
     }
 
     if let Some(n) = value.as_int() {
         return vec![Inline::Str(Str {
-            text: n.to_string(),
+            text: n.to_string().into(),
             source_info: value.source_info.clone(),
         })];
     }
@@ -382,26 +382,26 @@ fn config_value_to_inlines(value: &ConfigValue) -> Vec<Inline> {
         ConfigValueKind::Scalar { .. } => {
             if let Some(plain) = value.as_plain_text() {
                 vec![Inline::Str(Str {
-                    text: plain,
+                    text: plain.into(),
                     source_info: value.source_info.clone(),
                 })]
             } else {
                 vec![Inline::Str(Str {
-                    text: String::new(),
+                    text: String::new().into(),
                     source_info: value.source_info.clone(),
                 })]
             }
         }
         // Arrays and maps - not suitable for inline context
         ConfigValueKind::Array(_) | ConfigValueKind::Map(_) => vec![Inline::Str(Str {
-            text: "?invalid meta type".to_string(),
+            text: "?invalid meta type".into(),
             source_info: value.source_info.clone(),
         })],
         // Path, Glob, Expr were handled by as_str() above
         ConfigValueKind::Path(_) | ConfigValueKind::Glob(_) | ConfigValueKind::Expr(_) => {
             // This shouldn't be reached since as_str() handles these
             vec![Inline::Str(Str {
-                text: "?invalid meta type".to_string(),
+                text: "?invalid meta type".into(),
                 source_info: value.source_info.clone(),
             })]
         }
@@ -724,7 +724,7 @@ impl ShortcodeResolveTransform {
         let inner = inner.clone();
         if inner.is_escaped {
             if let Inline::Str(s) = shortcode_to_literal(&inner) {
-                *arg = ShortcodeArg::String(s.text);
+                *arg = ShortcodeArg::String(s.text.into());
             }
             return;
         }
@@ -756,7 +756,7 @@ impl ShortcodeResolveTransform {
             }
             ShortcodeResult::Preserve => {
                 if let Inline::Str(s) = shortcode_to_literal(&inner) {
-                    s.text
+                    s.text.into()
                 } else {
                     String::new()
                 }
@@ -877,7 +877,7 @@ fn lua_result_to_shortcode_result(
             // Reuse the shortcode token's range; the stamper pass that
             // wraps this result then attaches the `Invocation` anchor.
             ShortcodeResult::Inlines(vec![Inline::Str(Str {
-                text,
+                text: text.into(),
                 source_info: source_info.clone(),
             })])
         }
@@ -2335,7 +2335,7 @@ fn recurse_inline<'a>(
 fn make_error_inline(key: &str, token_source_info: &SourceInfo) -> Inline {
     Inline::Strong(Strong {
         content: vec![Inline::Str(Str {
-            text: format!("?{}", key),
+            text: format!("?{}", key).into(),
             source_info: token_source_info.clone(),
         })],
         source_info: token_source_info.clone(),
@@ -2413,7 +2413,7 @@ fn shortcode_to_literal(shortcode: &Shortcode) -> Inline {
     text.push_str(" >}}");
 
     Inline::Str(Str {
-        text,
+        text: text.into(),
         source_info: shortcode.source_info.clone(),
     })
 }
@@ -2537,7 +2537,7 @@ mod tests {
                 let Inline::Str(s) = &inlines[0] else {
                     panic!("expected Str");
                 };
-                s.text.clone()
+                s.text.to_string()
             }
             other => panic!("Expected Inlines, got {:?}", std::mem::discriminant(&other)),
         }
@@ -2863,7 +2863,7 @@ mod tests {
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {
-                        text: "Title: ".to_string(),
+                        text: "Title: ".into(),
                         source_info: dummy_source_info(),
                     }),
                     Inline::Shortcode(Box::new(make_shortcode("meta", vec!["title"]))),
@@ -2966,7 +2966,7 @@ mod tests {
                 )]),
                 ResolutionContext::Inline | ResolutionContext::Text => {
                     ShortcodeResult::Inlines(vec![Inline::Str(Str {
-                        text: "inline-fallback".to_string(),
+                        text: "inline-fallback".into(),
                         source_info: SourceInfo::for_test(),
                     })])
                 }
@@ -3030,7 +3030,7 @@ mod tests {
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {
-                        text: "Before: ".to_string(),
+                        text: "Before: ".into(),
                         source_info: dummy_source_info(),
                     }),
                     Inline::Shortcode(Box::new(make_shortcode("block-test", vec![]))),
@@ -3075,7 +3075,7 @@ mod tests {
         ) -> ShortcodeResult {
             ShortcodeResult::Blocks(vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "from-block".to_string(),
+                    text: "from-block".into(),
                     source_info: SourceInfo::for_test(),
                 })],
                 source_info: SourceInfo::for_test(),
@@ -3100,7 +3100,7 @@ mod tests {
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {
-                        text: "Before: ".to_string(),
+                        text: "Before: ".into(),
                         source_info: dummy_source_info(),
                     }),
                     Inline::Shortcode(Box::new(make_shortcode("always-block", vec![]))),
@@ -3205,7 +3205,7 @@ mod tests {
             let subtitle = ConfigValue {
                 value: ConfigValueKind::PandocInlines(vec![
                     Inline::Str(Str {
-                        text: "Sub ".to_string(),
+                        text: "Sub ".into(),
                         source_info: dummy_source_info(),
                     }),
                     Inline::Shortcode(Box::new(make_shortcode("meta", vec![key]))),

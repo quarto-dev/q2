@@ -294,7 +294,7 @@ mod tests {
 
     fn str_inline(text: &str) -> Inline {
         Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: si(),
         })
     }
@@ -338,7 +338,7 @@ mod tests {
             .iter()
             .map(|i| match i {
                 Inline::RawInline(r) => r.text.clone(),
-                Inline::Str(s) => s.text.clone(),
+                Inline::Str(s) => s.text.to_string(),
                 _ => String::new(),
             })
             .collect()

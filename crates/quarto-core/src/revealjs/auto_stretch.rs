@@ -547,7 +547,7 @@ mod tests {
             level: 2,
             attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
-                text: "Slide".to_string(),
+                text: "Slide".into(),
                 source_info: si(),
             })],
             source_info: si(),
@@ -601,7 +601,7 @@ mod tests {
 
     fn caption_inlines() -> Vec<Inline> {
         vec![Inline::Str(Str {
-            text: "Cap".to_string(),
+            text: "Cap".into(),
             source_info: si(),
         })]
     }
@@ -833,7 +833,7 @@ mod tests {
             vec![
                 header(),
                 para(vec![Inline::Str(Str {
-                    text: "Here is our architecture:".to_string(),
+                    text: "Here is our architecture:".into(),
                     source_info: si(),
                 })]),
                 para(vec![image(&[], &[])]),
@@ -867,7 +867,7 @@ mod tests {
             )
                 .into(),
             content: vec![para(vec![Inline::Str(Str {
-                text: "note".to_string(),
+                text: "note".into(),
                 source_info: si(),
             })])],
             source_info: si(),
@@ -907,7 +907,7 @@ mod tests {
                 header(),
                 para(vec![
                     Inline::Str(Str {
-                        text: "Here".to_string(),
+                        text: "Here".into(),
                         source_info: si(),
                     }),
                     image(&[], &[]),

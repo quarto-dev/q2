@@ -198,7 +198,7 @@ mod tests {
         })));
 
         let inline_slot = Slot::Inline(Box::new(Inline::Str(Str {
-            text: "test".to_string(),
+            text: "test".into(),
             source_info: dummy_source_info(),
         })));
 

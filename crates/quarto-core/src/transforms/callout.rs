@@ -841,7 +841,7 @@ mod tests {
                 attr: callout_attr("warning"),
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
-                        text: "Warning content".to_string(),
+                        text: "Warning content".into(),
                         source_info: dummy_source_info(),
                     })],
                     source_info: dummy_source_info(),
@@ -883,7 +883,7 @@ mod tests {
                         level: 2,
                         attr: empty_attr(),
                         content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
-                            text: "Pro Tip".to_string(),
+                            text: "Pro Tip".into(),
                             source_info: dummy_source_info(),
                         })],
                         source_info: dummy_source_info(),
@@ -891,7 +891,7 @@ mod tests {
                     })),
                     Block::Paragraph(Paragraph {
                         content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
-                            text: "Tip content".to_string(),
+                            text: "Tip content".into(),
                             source_info: dummy_source_info(),
                         })],
                         source_info: dummy_source_info(),
@@ -946,7 +946,7 @@ mod tests {
                     attr: callout_attr("note"),
                     content: vec![Block::Paragraph(Paragraph {
                         content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
-                            text: "Nested note".to_string(),
+                            text: "Nested note".into(),
                             source_info: dummy_source_info(),
                         })],
                         source_info: dummy_source_info(),

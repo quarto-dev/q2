@@ -58,7 +58,7 @@ macro_rules! process_editorial_mark {
                                 }))
                             } else {
                                 content.push(Inline::Str(Str {
-                                    text: apply_smart_typography(text),
+                                    text: apply_smart_typography(text).into(),
                                     source_info: crate::pandoc::location::range_to_source_info_with_context(&range, context),
                                 }))
                             }

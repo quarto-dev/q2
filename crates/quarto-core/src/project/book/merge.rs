@@ -209,7 +209,7 @@ fn build_divider_heading(title: &str) -> Block {
         level: 1,
         attr: quarto_pandoc_types::empty_attr(),
         content: vec![quarto_pandoc_types::Inline::Str(Str {
-            text: title.to_string(),
+            text: title.into(),
             source_info: generated_source_info(),
         })],
         source_info: generated_source_info(),
@@ -486,7 +486,7 @@ mod tests {
         inlines
             .iter()
             .map(|i| match i {
-                quarto_pandoc_types::Inline::Str(s) => s.text.clone(),
+                quarto_pandoc_types::Inline::Str(s) => s.text.to_string(),
                 quarto_pandoc_types::Inline::Space(_) => " ".to_string(),
                 other => panic!("unexpected inline in heading text: {other:?}"),
             })

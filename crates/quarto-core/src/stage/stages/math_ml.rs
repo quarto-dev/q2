@@ -270,7 +270,7 @@ mod tests {
         let mut blocks = vec![para(vec![
             math(MathType::InlineMath, "x^2"),
             Inline::Str(Str {
-                text: "and".to_string(),
+                text: "and".into(),
                 source_info: si(),
             }),
             math(MathType::DisplayMath, "\\frac{a}{b}"),

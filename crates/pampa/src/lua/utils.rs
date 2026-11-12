@@ -855,7 +855,7 @@ fn stringify_config_value(lua: &Lua, node: &ConfigValue) -> Result<String> {
 /// Convert a single inline element to plain text
 fn stringify_inline(inline: &Inline) -> String {
     match inline {
-        Inline::Str(s) => s.text.clone(),
+        Inline::Str(s) => s.text.to_string(),
         // Pandoc parity: both breaks read as a space (GH #1014).
         Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => " ".to_string(),
         Inline::Emph(e) => stringify_inlines(&e.content),

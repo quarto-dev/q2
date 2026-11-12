@@ -1694,7 +1694,7 @@ mod tests {
 
         // Simulate pampa parsing `theme: cosmo` as PandocInlines
         let str_node = Inline::Str(Str {
-            text: "cosmo".to_string(),
+            text: "cosmo".into(),
             source_info: SourceInfo::for_test(),
         });
         let theme_value = ConfigValue::new_inlines(vec![str_node], SourceInfo::for_test());
@@ -2366,7 +2366,7 @@ mod tests {
         // extraction as the light half.
         use quarto_pandoc_types::inline::{Inline, Str};
         let str_node = Inline::Str(Str {
-            text: "darkly".to_string(),
+            text: "darkly".into(),
             source_info: SourceInfo::for_test(),
         });
         let dark_value = ConfigValue::new_inlines(vec![str_node], SourceInfo::for_test());
@@ -3016,7 +3016,7 @@ mod tests {
         // through the same text extraction as top-level themes.
         use quarto_pandoc_types::inline::{Inline, Str};
         let str_node = Inline::Str(Str {
-            text: "cosmo".to_string(),
+            text: "cosmo".into(),
             source_info: SourceInfo::for_test(),
         });
         let light_value = ConfigValue::new_inlines(vec![str_node], SourceInfo::for_test());
@@ -3043,14 +3043,14 @@ mod tests {
         let name_value = ConfigValue::new_inlines(
             vec![
                 Inline::Str(Str {
-                    text: "Acme".to_string(),
+                    text: "Acme".into(),
                     source_info: SourceInfo::for_test(),
                 }),
                 Inline::Space(Space {
                     source_info: SourceInfo::for_test(),
                 }),
                 Inline::Str(Str {
-                    text: "Corp".to_string(),
+                    text: "Corp".into(),
                     source_info: SourceInfo::for_test(),
                 }),
             ],

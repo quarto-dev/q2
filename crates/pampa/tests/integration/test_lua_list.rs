@@ -80,7 +80,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "Hello".to_string(),
+        text: "Hello".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -158,14 +158,14 @@ end
 
     let doc = create_test_doc(vec![
         Inline::Str(Str {
-            text: "Hello".to_string(),
+            text: "Hello".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
         Inline::Space(Space {
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
         Inline::Str(Str {
-            text: "world".to_string(),
+            text: "world".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
     ]);
@@ -191,7 +191,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -223,7 +223,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "hello".to_string(),
+        text: "hello".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -265,7 +265,7 @@ end
         blocks: vec![Block::BlockQuote(pampa::pandoc::BlockQuote {
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
-                    text: "hello".to_string(),
+                    text: "hello".into(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -318,14 +318,14 @@ end
 
     let doc = create_test_doc(vec![
         Inline::Str(Str {
-            text: "one".to_string(),
+            text: "one".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
         Inline::Space(Space {
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
         Inline::Str(Str {
-            text: "two".to_string(),
+            text: "two".into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }),
     ]);
@@ -352,7 +352,7 @@ end
 "#;
 
     let doc = create_test_doc(vec![Inline::Str(Str {
-        text: "test".to_string(),
+        text: "test".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })]);
 
@@ -407,7 +407,7 @@ end
         vec!["foo", "bar"],
         vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -444,7 +444,7 @@ end
         vec!["foo", "bar"],
         vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -470,7 +470,7 @@ end
         vec!["foo", "bar"],
         vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
-                text: "hello".to_string(),
+                text: "hello".into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -502,7 +502,7 @@ end
     let make_item = |text: &str| -> Vec<Block> {
         vec![Block::Plain(Plain {
             content: vec![Inline::Str(Str {
-                text: text.to_string(),
+                text: text.into(),
                 source_info: empty_source(),
             })],
             source_info: empty_source(),
@@ -537,7 +537,7 @@ end
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
-                    text: "first".to_string(),
+                    text: "first".into(),
                     source_info: empty_source(),
                 })],
                 source_info: empty_source(),
@@ -564,11 +564,11 @@ end
         blocks: vec![Block::LineBlock(LineBlock {
             content: vec![
                 vec![Inline::Str(Str {
-                    text: "line1".to_string(),
+                    text: "line1".into(),
                     source_info: empty_source(),
                 })],
                 vec![Inline::Str(Str {
-                    text: "line2".to_string(),
+                    text: "line2".into(),
                     source_info: empty_source(),
                 })],
             ],
@@ -594,12 +594,12 @@ end
         blocks: vec![Block::DefinitionList(DefinitionList {
             content: vec![(
                 vec![Inline::Str(Str {
-                    text: "term".to_string(),
+                    text: "term".into(),
                     source_info: empty_source(),
                 })],
                 vec![vec![Block::Plain(Plain {
                     content: vec![Inline::Str(Str {
-                        text: "definition".to_string(),
+                        text: "definition".into(),
                         source_info: empty_source(),
                     })],
                     source_info: empty_source(),
@@ -620,7 +620,7 @@ end
 
 fn simple_doc() -> Pandoc {
     create_test_doc(vec![Inline::Str(Str {
-        text: "x".to_string(),
+        text: "x".into(),
         source_info: quarto_source_map::SourceInfo::for_test(),
     })])
 }

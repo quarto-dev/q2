@@ -311,7 +311,7 @@ mod tests {
 
     fn plain(text: &str) -> Inlines {
         vec![Inline::Str(Str {
-            text: text.to_string(),
+            text: text.into(),
             source_info: SourceInfo::for_test(),
         })]
     }

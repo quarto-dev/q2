@@ -43,7 +43,7 @@ fn empty_meta() -> ConfigValue {
 
 fn make_str(text: &str, start: usize, end: usize) -> Inline {
     Inline::Str(Str {
-        text: text.to_string(),
+        text: text.into(),
         source_info: si(start, end),
     })
 }

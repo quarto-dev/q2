@@ -454,7 +454,7 @@ mod list_walk_tests {
             let text: Vec<String> = list
                 .iter()
                 .map(|i| match i {
-                    Inline::Str(s) => s.text.clone(),
+                    Inline::Str(s) => s.text.to_string(),
                     _ => "<x>".into(),
                 })
                 .collect();
