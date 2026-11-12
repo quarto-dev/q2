@@ -401,7 +401,13 @@ function build() {
   }
   if (widget) widget.addEventListener('keydown', (ev) => {
     const bs = [...widget.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
-    if (ev.key === 'ArrowRight') { ev.preventDefault(); (bs[i + 1] || bs[0]).focus(); }
+    if (ev.key === 'ArrowRight') {
+      ev.preventDefault();
+      // → past the last item goes to the start of the first field (or the
+      // body), mirroring ← from there.
+      if (bs[i + 1]) bs[i + 1].focus();
+      else { const first = order()[0]; if (first) { first.focus(); placeIn(first, false); } else focusBlock(body.firstElementChild, false); }
+    }
     else if (ev.key === 'ArrowLeft') { ev.preventDefault(); (bs[i - 1] || bs[bs.length - 1]).focus(); }
     else if (ev.key === 'ArrowDown' || ev.key === 'Escape') {
       ev.preventDefault();
