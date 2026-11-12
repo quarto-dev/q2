@@ -4,7 +4,11 @@
  * inside it.
  *
  * The browser moves the caret and selection (arrows, Shift-select,
- * dragging, the goal column across lines). Every edit is intercepted
+ * dragging, the goal column across lines), except that an arrow key never
+ * takes the caret out of the fields: one that would goes to the next field
+ * that way, or nowhere. Mouse selections that reach outside the fields
+ * (into the author grid, say) are left as they are; edits apply to the
+ * parts of the fields they cover, and to nothing when they cover none. Every edit is intercepted
  * before the browser makes it (`beforeinput`, paste, cut, drop), turned
  * into a model edit, and rendered back, with the selection restored from
  * the model. The one exception is IME composition, which can't be
@@ -14,10 +18,21 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { deleteBackward, deleteForward, enter, insertText, select, selectAllStep } from './commands.ts'
-import { markIslands, readSelection, selectionInFields, targetRange, writeSelection } from './dom.ts'
+import { deleteBackward, deleteForward, enter, insertText, paste, select, selectAllStep } from './commands.ts'
+import {
+  edge,
+  fieldElements,
+  fieldOf,
+  markIslands,
+  pointOnLine,
+  readMouseSelection,
+  readSelection,
+  selectionOutside,
+  targetRange,
+  writeSelection,
+} from './dom.ts'
 import { apply, createEditor, redo, undo, type ApplyOptions, type Editor } from './editor.ts'
-import { selectedText, type Fields, type Schema, type State } from './model.ts'
+import { caret, presentFields, selectedText, type Fields, type Schema, type State } from './model.ts'
 
 export interface FieldProps {
   name: string
@@ -51,6 +66,11 @@ export interface FieldEditor {
   editor: Editor
 }
 
+export interface FieldEditorOptions {
+  /** Put the caret at the start of the first field once `root` appears. */
+  autoFocus?: boolean
+}
+
 /**
  * Edit `schema`'s fields inside `root`, starting from `initial`. A new
  * `resetKey` starts over from `initial`, clearing the history.
@@ -60,6 +80,7 @@ export function useFieldEditor(
   schema: Schema,
   initial: () => Fields,
   resetKey: unknown,
+  { autoFocus = false }: FieldEditorOptions = {},
 ): FieldEditor {
   const [key, setKey] = useState(resetKey)
   const [editor, setEditor] = useState(() => createEditor(initial()))
@@ -80,6 +101,16 @@ export function useFieldEditor(
     if (restoreSelection) restore.current = true
     setEditor(next)
   }, [])
+
+  // Once per mount, not per reset: a source change mustn't steal focus.
+  const autoFocused = useRef(false)
+  useEffect(() => {
+    if (!root || !autoFocus || autoFocused.current) return
+    autoFocused.current = true
+    const h = latest.current
+    const [first] = presentFields(schema, h.present.fields)
+    if (first !== undefined) commit(apply(h, select(schema, h.present, caret(first, 0))), true)
+  }, [root, autoFocus, schema, commit])
 
   useLayoutEffect(() => {
     if (!root) return
@@ -106,11 +137,21 @@ export function useFieldEditor(
     if (!root) return
     const doc = root.ownerDocument
     let composing = false
+    // Whether the mouse button is down, and whether the page's selection
+    // was last set by the mouse (rather than the keyboard).
+    let dragging = false
+    let byMouse = false
+
+    /** The page's selection in model terms, snapped the way it was made. */
+    const currentSelection = () =>
+      byMouse ? readMouseSelection(root) : readSelection(root, latest.current.present.selection)
 
     /** Apply a command to the state with the page's current selection. */
     const edit = (command: (state: State) => State, options: Omit<ApplyOptions, 'before'> = {}) => {
+      // Nothing to edit with the selection outside the fields.
+      if (selectionOutside(root) === 'all') return
       const h = latest.current
-      const before = readSelection(root) ?? h.present.selection
+      const before = currentSelection() ?? h.present.selection
       const at = select(schema, h.present, before)
       commit(apply(h, command(at), { ...options, before }), true)
     }
@@ -161,38 +202,83 @@ export function useFieldEditor(
 
     const onPaste = (e: ClipboardEvent) => {
       e.preventDefault()
-      const text = (e.clipboardData?.getData('text/plain') ?? '').replace(/\s*[\r\n]+\s*/g, ' ')
-      edit((s) => insertText(schema, s, text), { inputType: 'insertFromPaste' })
+      const text = e.clipboardData?.getData('text/plain') ?? ''
+      edit((s) => paste(schema, s, text), { inputType: 'insertFromPaste' })
     }
 
+    /**
+     * Put the selected text on the clipboard: the fields' text, one line
+     * per field, or what the page shows selected when the selection reaches
+     * outside the fields.
+     */
     const copySelection = (e: ClipboardEvent) => {
-      const { present } = latest.current
-      const selection = readSelection(root) ?? present.selection
-      if (!selection) return false
       e.preventDefault()
-      e.clipboardData?.setData('text/plain', selectedText(schema, present.fields, selection))
-      return true
+      const { present } = latest.current
+      const selection = selectionOutside(root) === 'none' ? currentSelection() : null
+      const text = selection ? selectedText(schema, present.fields, selection) : String(doc.getSelection() ?? '')
+      e.clipboardData?.setData('text/plain', text)
     }
-    const onCopy = (e: ClipboardEvent) => {
-      copySelection(e)
-    }
+    const onCopy = (e: ClipboardEvent) => copySelection(e)
     const onCut = (e: ClipboardEvent) => {
-      if (copySelection(e)) edit((s) => insertText(schema, s, ''), { inputType: 'deleteByCut' })
+      copySelection(e)
+      edit((s) => insertText(schema, s, ''), { inputType: 'deleteByCut' })
     }
     const onDrop = (e: DragEvent) => e.preventDefault()
 
+    /**
+     * Move the caret for an arrow key, the way the browser would, except
+     * that it never leaves the fields: a move that would goes to the next
+     * field that way (on the nearest line, at the same x, for Up / Down),
+     * or doesn't happen. Returns false to leave the key to the browser.
+     */
+    const arrow = (e: KeyboardEvent): boolean => {
+      const key = ARROW_KEYS[e.key]
+      const selection = doc.getSelection()
+      if (!key || !selection?.anchorNode || !selection.focusNode) return false
+      const origin = fieldOf(root, selection.focusNode)
+      const granularity = arrowGranularity(e, key.vertical)
+      if (!origin || !granularity) return false
+      e.preventDefault()
+
+      const saved = {
+        anchor: { node: selection.anchorNode, offset: selection.anchorOffset },
+        focus: { node: selection.focusNode, offset: selection.focusOffset },
+      }
+      const x = caretX(doc, saved.focus.node, saved.focus.offset) ?? origin.getBoundingClientRect().left
+      selection.modify(e.shiftKey ? 'extend' : 'move', key.direction, granularity)
+      if (fieldOf(root, selection.focusNode)) return true
+
+      const fields = fieldElements(root)
+      const target = fields[fields.indexOf(origin) + (key.forward ? 1 : -1)]
+      let to = saved.focus
+      if (target) {
+        to =
+          key.vertical && granularity === 'line'
+            ? pointOnLine(target, x, key.forward ? 'first' : 'last')
+            : edge(target, key.forward ? 'start' : 'end')
+      }
+      const from = e.shiftKey || !target ? saved.anchor : to
+      selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset)
+      return true
+    }
+
     const onKeyDown = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey
       const key = e.key.toLowerCase()
-      if (mod && key === 'z') {
+      const primary = IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
+      if (NAVIGATION_KEYS.has(e.key)) byMouse = false
+      if (primary && key === 'z') {
         e.preventDefault()
         commit(e.shiftKey ? redo(latest.current) : undo(latest.current), true)
-      } else if (e.ctrlKey && !e.metaKey && key === 'y') {
+      } else if (primary && !IS_MAC && key === 'y') {
         e.preventDefault()
         commit(redo(latest.current), true)
-      } else if (mod && key === 'a' && doc.activeElement === root) {
+      } else if (doc.activeElement !== root || composing) {
+        return
+      } else if (primary && key === 'a') {
         e.preventDefault()
         edit((s) => selectAllStep(schema, s))
+      } else if (arrow(e)) {
+        syncSelection()
       }
     }
 
@@ -202,14 +288,23 @@ export function useFieldEditor(
     const syncSelection = () => {
       if (composing || doc.activeElement !== root) return
       const h = latest.current
-      const selection = readSelection(root, h.present.selection)
-      if (!selection) return
+      const selection = currentSelection()
       // Rendered at once, like an edit: an empty field the caret just left
       // disappears in the same frame.
       flushSync(() => commit(apply(h, select(schema, h.present, selection)), false))
-      // The browser put the caret outside the fields (past the last one,
-      // say); put it where the model has it.
-      if (!selectionInFields(root)) writeSelection(root, selection)
+      // A keyboard move the arrow handling didn't cover (Home, Page Down)
+      // put the caret outside the fields: put it where the model has it. A
+      // mouse selection there is the user's, and is left alone.
+      if (selection && !byMouse && selectionOutside(root) !== 'none') writeSelection(root, selection)
+    }
+    const onMouseDown = () => {
+      dragging = true
+      byMouse = true
+    }
+    const onMouseUp = () => {
+      if (!dragging) return
+      dragging = false
+      syncSelection()
     }
     const onBlur = () => {
       const h = latest.current
@@ -225,7 +320,8 @@ export function useFieldEditor(
     root.addEventListener('drop', onDrop)
     root.addEventListener('blur', onBlur)
     root.addEventListener('keyup', syncSelection)
-    root.addEventListener('mouseup', syncSelection)
+    root.addEventListener('mousedown', onMouseDown)
+    doc.addEventListener('mouseup', onMouseUp)
     doc.addEventListener('keydown', onKeyDown)
     doc.addEventListener('selectionchange', syncSelection)
     return () => {
@@ -238,11 +334,53 @@ export function useFieldEditor(
       root.removeEventListener('drop', onDrop)
       root.removeEventListener('blur', onBlur)
       root.removeEventListener('keyup', syncSelection)
-      root.removeEventListener('mouseup', syncSelection)
+      root.removeEventListener('mousedown', onMouseDown)
+      doc.removeEventListener('mouseup', onMouseUp)
       doc.removeEventListener('keydown', onKeyDown)
       doc.removeEventListener('selectionchange', syncSelection)
     }
   }, [root, schema, commit])
 
   return { state: editor.present, editor }
+}
+
+/** Keys that move the selection: after one, it is no longer the mouse's. */
+const NAVIGATION_KEYS = new Set([
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+])
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+
+const ARROW_KEYS: Record<
+  string,
+  { direction: 'left' | 'right' | 'backward' | 'forward'; forward: boolean; vertical: boolean }
+> = {
+  ArrowLeft: { direction: 'left', forward: false, vertical: false },
+  ArrowRight: { direction: 'right', forward: true, vertical: false },
+  ArrowUp: { direction: 'backward', forward: false, vertical: true },
+  ArrowDown: { direction: 'forward', forward: true, vertical: true },
+}
+
+/** How far an arrow key moves with its modifiers, or null to leave it to the browser. */
+function arrowGranularity(e: KeyboardEvent, vertical: boolean): string | null {
+  const word = IS_MAC ? e.altKey && !e.metaKey && !e.ctrlKey : e.ctrlKey && !e.altKey && !e.metaKey
+  const boundary = IS_MAC && e.metaKey && !e.altKey && !e.ctrlKey
+  const plain = !e.altKey && !e.metaKey && !e.ctrlKey
+  if (vertical) return plain ? 'line' : boundary ? 'documentboundary' : null
+  return plain ? 'character' : word ? 'word' : boundary ? 'lineboundary' : null
+}
+
+/** The horizontal position of a caret at a DOM point. */
+function caretX(doc: Document, node: Node, offset: number): number | null {
+  const range = doc.createRange()
+  range.setStart(node, offset)
+  const rects = range.getClientRects()
+  return rects.length > 0 ? rects[0].left : null
 }

@@ -142,16 +142,184 @@ test.describe('one history', () => {
   })
 })
 
-test.describe('the rest of the title block', () => {
-  test('clicking the author puts the caret in the nearest field, and the author never changes', async ({
-    page,
-  }) => {
+/** Record, in the page, whether every selection change kept the caret in a field. */
+async function watchSelection(editor: Editor) {
+  await editor.frame.evaluate(() => {
+    const w = window as unknown as { leftFields: boolean }
+    w.leftFields = false
+    document.addEventListener('selectionchange', () => {
+      const n = document.getSelection()?.focusNode
+      const el = n?.nodeType === Node.ELEMENT_NODE ? (n as Element) : n?.parentElement
+      if (!el?.closest('.qe-field')) w.leftFields = true
+    })
+  })
+  return async () => {
+    await editor.page.waitForTimeout(50)
+    return editor.frame.evaluate(() => (window as unknown as { leftFields: boolean }).leftFields)
+  }
+}
+
+/** The page's selected text and whether its focus is inside a field. */
+const pageSelection = (editor: Editor) =>
+  editor.frame.evaluate(() => {
+    const s = document.getSelection()!
+    const inField = (n: Node | null) =>
+      !!(n?.nodeType === Node.ELEMENT_NODE ? (n as Element) : n?.parentElement)?.closest('.qe-field')
+    return { text: s.toString(), rangeCount: s.rangeCount, focusInField: inField(s.focusNode) }
+  })
+
+test.describe('arrow keys past the author grid', () => {
+  test('Right at the end of the subtitle goes straight to the abstract', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.clickAt('subtitle', 30)
+    await page.keyboard.press('End')
+    const leftFields = await watchSelection(editor)
+
+    await page.keyboard.press('ArrowRight')
+
+    expect(await editor.caret()).toMatchObject({ field: 'abstract', start: 0, end: 0 })
+    expect(await leftFields()).toBe(false)
+  })
+
+  test('Down from the subtitle goes straight to the abstract, and Up comes back', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.clickAt('subtitle', 30)
+    const leftFields = await watchSelection(editor)
+
+    await page.keyboard.press('ArrowDown')
+    expect((await editor.caret()).field).toBe('abstract')
+    await page.keyboard.press('ArrowUp')
+    expect((await editor.caret()).field).toBe('subtitle')
+    expect(await leftFields()).toBe(false)
+  })
+
+  test('Right and Down at the end of the last field never move the caret', async ({ page }) => {
     const editor = await openEditor(page)
-    const author = editor.frame.getByText('Ana Silva')
-    await author.click()
+    await editor.clickAt('subtitle', 30)
+    await page.keyboard.press('End')
+    const leftFields = await watchSelection(editor)
+
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('ArrowDown')
 
     expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 13, end: 13 })
+    expect(await leftFields()).toBe(false)
+  })
+
+  test('Shift+Down extends the selection into the abstract', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.clickAt('subtitle', 30)
+    await page.keyboard.press('Shift+ArrowDown')
+
+    const selection = (await editor.selection())!
+    expect(selection.anchor.field).toBe('subtitle')
+    expect(selection.focus.field).toBe('abstract')
+  })
+})
+
+test.describe('the abstract', () => {
+  test('is editable, and Enter starts a new line in it', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.frame.getByText('We summarise').click()
+    await page.waitForTimeout(100)
+    expect((await editor.caret()).field).toBe('abstract')
+
+    await page.keyboard.press(`${'ControlOrMeta'}+ArrowDown`)
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('More.')
+
+    expect(await editor.text('abstract')).toBe(
+      "We summarise the third quarter’s results and what they mean for the next one.\nMore.",
+    )
+    expect(await editor.caret()).toMatchObject({ field: 'abstract' })
+  })
+
+  test('Enter at the end of the subtitle moves to the abstract', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.clickAt('subtitle', 30)
+
+    await page.keyboard.press('Enter')
+
+    expect(await editor.caret()).toMatchObject({ field: 'abstract', start: 0, end: 0 })
+  })
+})
+
+test.describe('the authors', () => {
+  test('clicking an author leaves the caret there, and typing changes nothing', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    const author = editor.frame.getByText('Ana Silva')
+    await author.click()
+    await page.waitForTimeout(100)
+
+    expect((await editor.caret()).field).toBeNull()
+    expect((await pageSelection(editor)).focusInField).toBe(false)
     await page.keyboard.type('x')
     expect(await author.textContent()).toBe('Ana Silva')
+    expect(await editor.text('subtitle')).toBe('Third quarter')
+  })
+
+  // (Not by double-click: Chrome doesn't select words in non-editable
+  // content inside an editable region.)
+  test("an author's text can be selected by dragging", async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    const box = (await editor.frame.getByText('Example University').boundingBox())!
+    await page.mouse.move(box.x + 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 5 })
+    await page.mouse.up()
+    await page.waitForTimeout(100)
+
+    expect((await pageSelection(editor)).text).toBe('Example University')
+  })
+
+  test('dragging from the title through the authors keeps the selection, and typing edits only the fields', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, 'abstract')
+    const title = (await editor.field('title').boundingBox())!
+    const author = (await editor.frame.getByText('Ana Silva').boundingBox())!
+    await page.mouse.move(title.x + 60, title.y + title.height / 2)
+    await page.mouse.down()
+    for (let i = 1; i <= 5; i++) {
+      await page.mouse.move(author.x + 20, title.y + ((author.y + author.height / 2 - title.y) * i) / 5)
+      await page.waitForTimeout(50)
+    }
+    // Still dragging: the browser's selection is left alone.
+    const during = await pageSelection(editor)
+    expect(during.rangeCount).toBe(1)
+    expect(during.focusInField).toBe(false)
+    expect(during.text).toContain('Third quarter')
+
+    await page.mouse.up()
+    await page.waitForTimeout(100)
+    expect(await pageSelection(editor)).toEqual(during)
+
+    const { start } = await editor.caret()
+    await page.keyboard.type('X')
+    expect(await editor.text('title')).toBe('Quarterly report'.slice(0, start) + 'X')
+    expect(await editor.text('subtitle')).toBeNull()
+    expect(await editor.frame.getByText('Ana Silva').textContent()).toBe('Ana Silva')
+    expect(await editor.text('abstract')).toMatch(/^We summarise/)
+  })
+})
+
+test.describe('on load', () => {
+  test('the caret starts at the start of the title', async ({ page }) => {
+    const editor = await openEditor(page)
+    await expect.poll(() => editor.caret()).toMatchObject({ field: 'title', start: 0, end: 0 })
+  })
+})
+
+test.describe('macOS shortcuts', () => {
+  test.skip(process.platform !== 'darwin', 'macOS key bindings')
+
+  test('Ctrl+A goes to the start of the line, and Ctrl+E to the end', async ({ page }) => {
+    const editor = await openEditor(page)
+    await editor.clickAt('title', 60)
+
+    await page.keyboard.press('Control+a')
+    expect(await editor.caret()).toMatchObject({ field: 'title', start: 0, end: 0 })
+    await page.keyboard.press('Control+e')
+    expect(await editor.caret()).toMatchObject({ field: 'title', start: 16, end: 16 })
   })
 })

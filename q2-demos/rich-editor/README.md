@@ -12,7 +12,7 @@ theme CSS, fed by `deriveTitleBlockMeta`, a WASM call that runs the render
 pipeline's author normalization on the document's metadata in well under a
 millisecond instead of waiting for a full render.
 
-The title and subtitle are editable in place. The title block is one
+The title, subtitle and abstract are editable in place. The title block is one
 `contenteditable` surface run by a small editing engine in `src/engine/`:
 the browser moves the caret and selection (so selections can span fields),
 and the engine intercepts every edit, applies it to a model of plain-text

@@ -1,10 +1,11 @@
 import { expect, type Frame, type Page } from '@playwright/test'
 
-export type Field = 'title' | 'subtitle'
+export type Field = 'title' | 'subtitle' | 'abstract'
 
 const SELECTORS: Record<Field, string> = {
   title: 'h1.title .qe-field',
   subtitle: 'p.subtitle .qe-field',
+  abstract: '.abstract .qe-field',
 }
 
 /** Open the visual editor on `e2e/fixtures/<fixture>.qmd`, themed and ready. */

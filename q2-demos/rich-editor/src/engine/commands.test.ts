@@ -4,12 +4,13 @@ import {
   deleteForward,
   enter,
   insertText,
+  paste,
   select,
   selectAllStep,
 } from './commands.ts'
 import { caret, range, type Fields, type Schema, type State } from './model.ts'
 
-const schema: Schema = { order: ['title', 'subtitle'] }
+const schema: Schema = { order: ['title', 'subtitle'], addable: ['subtitle'] }
 
 const state = (fields: Fields, selection: State['selection']): State => ({ fields, selection })
 const both = { title: 'Quarterly report', subtitle: 'Third quarter' }
@@ -137,5 +138,31 @@ describe('selectAllStep', () => {
     expect(s.selection).toEqual(range('subtitle', 0, 'subtitle', 13))
     s = selectAllStep(schema, s)
     expect(s.selection).toEqual(range('title', 0, 'subtitle', 13))
+  })
+})
+
+describe('multi-line fields', () => {
+  const withAbstract: Schema = { order: ['title', 'subtitle', 'abstract'], addable: ['subtitle'], multiline: ['abstract'] }
+  const fields = { title: 'T', subtitle: 'S', abstract: 'One.' }
+
+  it('Enter in a multi-line field inserts a line break', () => {
+    const next = enter(withAbstract, state(fields, caret('abstract', 4)))
+    expect(next.fields.abstract).toBe('One.\n')
+    expect(next.selection).toEqual(caret('abstract', 5))
+  })
+
+  it('Enter moves on to the next present field, skipping absent ones that are not addable', () => {
+    const next = enter(withAbstract, state({ title: 'T', abstract: 'A' }, caret('title', 1)))
+    expect(next.fields).toEqual({ title: 'T', subtitle: '', abstract: 'A' })
+    expect(enter(withAbstract, state(fields, caret('subtitle', 1))).selection).toEqual(caret('abstract', 0))
+    const last = state({ title: 'T', subtitle: 'S' }, caret('subtitle', 1))
+    expect(enter(withAbstract, last)).toBe(last)
+  })
+
+  it('pasting keeps line breaks in a multi-line field and flattens them elsewhere', () => {
+    expect(paste(withAbstract, state(fields, caret('abstract', 4)), ' Two\r\nThree').fields.abstract).toBe(
+      'One. Two\nThree',
+    )
+    expect(paste(withAbstract, state(fields, caret('title', 1)), ' a\nb ').fields.title).toBe('T a b ')
   })
 })

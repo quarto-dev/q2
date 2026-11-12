@@ -23,12 +23,20 @@ type Node = { t: string; c?: unknown }
 
 /**
  * A text field's plain text, as the title block shows it, or undefined
- * when the field is absent or isn't text.
+ * when the field is absent or isn't text. Paragraphs (in an abstract) are
+ * separated by `\n`.
  */
 export function metaText(value: unknown): string | undefined {
   const m = value as Node | undefined
   if (m?.t === 'MetaString' && typeof m.c === 'string') return m.c
   if (m?.t === 'MetaInlines' && Array.isArray(m.c)) return inlinesText(m.c as Node[])
+  if (m?.t === 'MetaBlocks' && Array.isArray(m.c)) {
+    return (m.c as Node[])
+      .filter((b) => (b.t === 'Para' || b.t === 'Plain') && Array.isArray(b.c))
+      .map((b) => inlinesText(b.c as Node[]))
+      .filter((text) => text.length > 0)
+      .join('\n')
+  }
   return undefined
 }
 

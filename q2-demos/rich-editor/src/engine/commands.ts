@@ -5,7 +5,8 @@
  * The rules, which hold however an edit crosses fields:
  * - Fields are never joined or split. Deleting or typing over a selection
  *   that spans fields trims each one; typed text goes into the first.
- * - Enter moves to the start of the next field, adding it if it's absent.
+ * - Enter inserts a line break in a multi-line field. Elsewhere it moves to
+ *   the start of the next field, adding it if it's absent and addable.
  * - Backspace at the start of a field moves to the end of the previous one
  *   without deleting (and Delete at the end moves to the next one).
  * - An empty field disappears once the selection leaves it.
@@ -45,11 +46,30 @@ export function deleteForward(schema: Schema, state: State, target?: { from: Pos
   return deleteDirection(schema, state, 'forward', target)
 }
 
-/** Enter: delete the selection, then move to the start of the next field. */
+/**
+ * Paste: replace the selection with `text`, with its line breaks kept in a
+ * multi-line field and flattened to single spaces elsewhere.
+ */
+export function paste(schema: Schema, state: State, text: string): State {
+  if (!state.selection) return state
+  const field = ordered(schema, state.selection).from.field
+  const pasted = schema.multiline?.includes(field)
+    ? text.replace(/\r\n?/g, '\n')
+    : text.replace(/\s*[\r\n]+\s*/g, ' ')
+  return insertText(schema, state, pasted)
+}
+
+/**
+ * Enter: a line break in a multi-line field. Elsewhere, delete the
+ * selection and move to the start of the next field.
+ */
 export function enter(schema: Schema, state: State): State {
   if (!state.selection) return state
   const field = ordered(schema, state.selection).from.field
-  const next = schema.order[schema.order.indexOf(field) + 1]
+  if (schema.multiline?.includes(field)) return insertText(schema, state, '\n')
+  const next = schema.order
+    .slice(schema.order.indexOf(field) + 1)
+    .find((f) => state.fields[f] !== undefined || schema.addable?.includes(f))
   if (next === undefined) return state
   const cleared = insertText(schema, state, '')
   const fields = cleared.fields[next] === undefined ? { ...cleared.fields, [next]: '' } : cleared.fields

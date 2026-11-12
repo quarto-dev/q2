@@ -53,13 +53,14 @@ export function positionAt(
  * The page's selection in model terms, or null when `root` isn't focused.
  * `previous`, the selection before it moved, says which way an end outside
  * the fields snaps: an end that moved backward snaps backward, so the caret
- * keeps going the way it was going.
+ * keeps going the way it was going. (A mouse selection snaps differently;
+ * see `readMouseSelection`.)
  */
 export function readSelection(root: HTMLElement, previous?: Selection | null): Selection | null {
   const doc = root.ownerDocument
   const selection = doc.getSelection()
   if (doc.activeElement !== root || !selection || !selection.anchorNode || !selection.focusNode) return null
-  const bias = (node: Node, offset: number, was: Position | undefined) => {
+  const bias = (node: Node, offset: number, was: Position | undefined): 'forward' | 'backward' => {
     const at = was && locate(root, was)
     if (!at) return 'forward'
     const point = doc.createRange()
@@ -72,15 +73,46 @@ export function readSelection(root: HTMLElement, previous?: Selection | null): S
   return anchor && focus ? { anchor, focus } : null
 }
 
-/** Whether both ends of the page's selection are inside fields in `root`. */
-export function selectionInFields(root: HTMLElement): boolean {
+/** The field element `node` is in, if any. */
+export function fieldOf(root: HTMLElement, node: Node | null): HTMLElement | null {
+  const el = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement
+  const field = el?.closest<HTMLElement>(FIELD) ?? null
+  return field && root.contains(field) ? field : null
+}
+
+/** The fields in `root`, in document order. */
+export function fieldElements(root: HTMLElement): HTMLElement[] {
+  return fieldsIn(root)
+}
+
+/** How many ends of the page's selection lie outside the fields. */
+export function selectionOutside(root: HTMLElement): 'none' | 'some' | 'all' {
   const selection = root.ownerDocument.getSelection()
-  const inField = (node: Node | null) => {
-    const el = node?.nodeType === Node.ELEMENT_NODE ? (node as Element) : node?.parentElement
-    const field = el?.closest(FIELD)
-    return !!field && root.contains(field)
+  if (!selection || !selection.anchorNode) return 'all'
+  const outside = [selection.anchorNode, selection.focusNode].filter((n) => !fieldOf(root, n)).length
+  return outside === 0 ? 'none' : outside === 2 ? 'all' : 'some'
+}
+
+/** A DOM point in `field` on its first or last line, as close to `x` as possible. */
+export function pointOnLine(field: HTMLElement, x: number, line: 'first' | 'last'): { node: Node; offset: number } {
+  const doc = field.ownerDocument
+  const box = field.getBoundingClientRect()
+  const style = getComputedStyle(field)
+  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2
+  const y = line === 'first' ? box.top + lineHeight / 2 : box.bottom - lineHeight / 2
+  const clampedX = Math.min(Math.max(x, box.left), box.right - 1)
+  const position = doc.caretPositionFromPoint?.(clampedX, y)
+  if (position && field.contains(position.offsetNode)) {
+    return { node: position.offsetNode, offset: position.offset }
   }
-  return !!selection && inField(selection.anchorNode) && inField(selection.focusNode)
+  // Empty field, or the point missed the text: an edge of the field.
+  return edge(field, line === 'first' ? 'start' : 'end')
+}
+
+/** The DOM point at the start or end of `field`'s text. */
+export function edge(field: HTMLElement, which: 'start' | 'end'): { node: Node; offset: number } {
+  const text = field.textContent ?? ''
+  return locateIn(field, which === 'start' ? 0 : text.length)
 }
 
 /** Focus `root` and select `selection` in it. */
@@ -90,6 +122,26 @@ export function writeSelection(root: HTMLElement, selection: Selection): void {
   if (!anchor || !focus) return
   if (root.ownerDocument.activeElement !== root) root.focus({ preventScroll: true })
   root.ownerDocument.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset)
+}
+
+/**
+ * The page's selection after a mouse gesture, in model terms: an end
+ * outside the fields snaps toward the other end, so a drag from the title
+ * into the author grid selects to the end of the last field it crossed.
+ * Null when `root` isn't focused or both ends are outside the fields.
+ */
+export function readMouseSelection(root: HTMLElement): Selection | null {
+  const doc = root.ownerDocument
+  const selection = doc.getSelection()
+  if (doc.activeElement !== root || !selection || !selection.anchorNode || !selection.focusNode) return null
+  if (selectionOutside(root) === 'all') return null
+  const { anchorNode, anchorOffset, focusNode, focusOffset } = selection
+  const point = doc.createRange()
+  point.setStart(anchorNode, anchorOffset)
+  const focusAfter = point.comparePoint(focusNode, focusOffset) > 0
+  const anchor = positionAt(root, anchorNode, anchorOffset, focusAfter ? 'forward' : 'backward')
+  const focus = positionAt(root, focusNode, focusOffset, focusAfter ? 'backward' : 'forward')
+  return anchor && focus ? { anchor, focus } : null
 }
 
 /** The range an `InputEvent` targets, in model terms. */
@@ -106,8 +158,10 @@ export function targetRange(root: HTMLElement, e: InputEvent): { from: Position;
  * non-editable (labels, the author and date grid).
  */
 export function markIslands(root: HTMLElement): void {
-  for (const child of root.children) {
-    if (!(child instanceof HTMLElement) || child.matches(FIELD)) continue
+  // Not `instanceof HTMLElement`: the root may be in another frame, whose
+  // elements are instances of that frame's own classes.
+  for (const child of root.children as HTMLCollectionOf<HTMLElement>) {
+    if (child.matches(FIELD)) continue
     if (child.querySelector(FIELD)) markIslands(child)
     else if (child.contentEditable !== 'false') child.contentEditable = 'false'
   }
@@ -115,9 +169,12 @@ export function markIslands(root: HTMLElement): void {
 
 function locate(root: HTMLElement, position: Position): { node: Node; offset: number } | null {
   const field = fieldsIn(root).find((f) => f.dataset.field === position.field)
-  if (!field) return null
-  const walker = root.ownerDocument.createTreeWalker(field, NodeFilter.SHOW_TEXT)
-  let remaining = Math.max(0, position.offset)
+  return field ? locateIn(field, position.offset) : null
+}
+
+function locateIn(field: HTMLElement, offset: number): { node: Node; offset: number } {
+  const walker = field.ownerDocument.createTreeWalker(field, NodeFilter.SHOW_TEXT)
+  let remaining = Math.max(0, offset)
   let last: Text | null = null
   for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
     if (remaining <= node.length) return { node, offset: remaining }

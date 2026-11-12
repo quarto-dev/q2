@@ -68,4 +68,9 @@ describe('metaText', () => {
     expect(metaText(doc.meta.subtitle)).toBe('plain')
     expect(metaText(doc.meta.author)).toBeUndefined()
   })
+
+  it('puts each paragraph of a block field on its own line', () => {
+    const doc = parseQmdContent('---\nabstract: |\n  One *two*.\n\n  Three.\n---\n')!
+    expect(metaText(doc.meta.abstract)).toBe('One two.\nThree.')
+  })
 })

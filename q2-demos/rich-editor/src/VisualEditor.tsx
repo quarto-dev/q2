@@ -53,13 +53,20 @@ const EDITING_CSS = `
 
 /**
  * The title block's editable fields, in reading order: Enter, Backspace at
- * a field's start, and selections across fields follow it.
+ * a field's start, and selections across fields follow it. Enter in the
+ * title adds a missing subtitle; the abstract takes line breaks (one per
+ * paragraph).
  */
-const SCHEMA: Schema = { order: ['title', 'subtitle'] satisfies TitleBlockField[] }
+const SCHEMA: Schema = {
+  order: ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[],
+  addable: ['subtitle'],
+  multiline: ['abstract'],
+}
 
 const PLACEHOLDERS: Record<TitleBlockField, string> = {
   title: 'Title',
   subtitle: 'Subtitle',
+  abstract: 'Abstract',
 }
 
 const noop = () => {}
@@ -97,7 +104,9 @@ export function VisualEditor({ ast }: VisualEditorProps) {
     const header = mount?.querySelector<HTMLElement>('#title-block-header') ?? null
     if (header !== root) setRoot(header)
   })
-  const { state, editor } = useFieldEditor(root, SCHEMA, () => fieldsFromMeta(ast?.meta), ast)
+  const { state, editor } = useFieldEditor(root, SCHEMA, () => fieldsFromMeta(ast?.meta), ast, {
+    autoFocus: true,
+  })
 
   const derived = useMemo(() => {
     if (!ast) return null

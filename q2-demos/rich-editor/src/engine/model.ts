@@ -29,6 +29,14 @@ export interface State {
 export interface Schema {
   /** Every field the editor can show, in reading order. */
   readonly order: readonly string[]
+  /** Absent fields that Enter in the field before adds (empty). */
+  readonly addable?: readonly string[]
+  /**
+   * Fields whose text can hold line breaks (`\n`): Enter inserts one, and
+   * pasted line breaks are kept. In other fields Enter moves to the next
+   * field, and pasted line breaks become spaces.
+   */
+  readonly multiline?: readonly string[]
 }
 
 export function caret(field: string, offset: number): Selection {
