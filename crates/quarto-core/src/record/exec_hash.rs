@@ -274,7 +274,8 @@ fn optional_json(value: Option<&Value>) -> String {
 /// `document_keys`, the `execute:` map minus the excluded presentation keys, and the unit
 /// hashes, for every engine whatever its granularity. Unknown keys count: the exclusion lists
 /// are the only way a key stops counting. Core always excludes `record` (the opt-in of epic
-/// decision 24), so toggling it never changes a hash.
+/// decision 24) at the top level and inside the `execute:` map (its documented spelling),
+/// so toggling it never changes a hash.
 pub fn hash_document(
     def: &HashDefinition,
     metadata: &BTreeMap<String, Value>,
@@ -300,7 +301,9 @@ pub fn hash_document(
     let execute: serde_json::Map<String, Value> = match metadata.get("execute") {
         Some(Value::Object(map)) => map
             .iter()
-            .filter(|(k, _)| !excluded.contains(*k))
+            // `record` is the opt-in (epic decision 24), never an input: the engine's own
+            // exclusion list may not name it, so core drops it here as it does at top level.
+            .filter(|(k, _)| k.as_str() != "record" && !excluded.contains(*k))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect(),
         _ => serde_json::Map::new(),
@@ -863,6 +866,37 @@ mod tests {
         let on = hash_document(&d, &meta(json!({"record": true})), &units).unwrap();
         assert_eq!(off, on);
         assert_eq!(off, hash_document(&d, &meta(json!({})), &units).unwrap());
+    }
+
+    /// `execute: {record: true}` is the decision-24 spelling of the opt-in; the doc comment on
+    /// `hash_document` promises core never counts it. Neither a Jupyter-style declaration (which
+    /// lists `record-sources` but not `record`) nor the conservative one (which counts every
+    /// `execute:` key) may let it move a hash.
+    #[test]
+    fn execute_record_changes_no_hash() {
+        let units = [UnitHashRef {
+            hash: "u1",
+            profile: None,
+        }];
+        for d in [doc_def(), def()] {
+            let none = hash_document(&d, &meta(json!({})), &units).unwrap();
+            let off =
+                hash_document(&d, &meta(json!({"execute": {"record": false}})), &units).unwrap();
+            let on =
+                hash_document(&d, &meta(json!({"execute": {"record": true}})), &units).unwrap();
+            assert_eq!(none, off);
+            assert_eq!(none, on);
+            // A sibling key under `execute:` still counts for the conservative definition.
+            let with_sibling = hash_document(
+                &d,
+                &meta(json!({"execute": {"record": true, "cache": true}})),
+                &units,
+            )
+            .unwrap();
+            let sibling_only =
+                hash_document(&d, &meta(json!({"execute": {"cache": true}})), &units).unwrap();
+            assert_eq!(with_sibling, sibling_only);
+        }
     }
 
     #[test]
