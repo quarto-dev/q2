@@ -10,9 +10,13 @@
  * - Backspace at the start of a field moves to the end of the previous one
  *   without deleting (and Delete at the end moves to the next one).
  * - An empty field disappears once the selection leaves it.
+ * - A line that can't be edited (`ATOM`) stays as it is, on a line of its
+ *   own: a deletion that covers it keeps it, and one that would join it
+ *   to another line does nothing.
  */
 
 import {
+  ATOM,
   caret,
   isCollapsed,
   ordered,
@@ -128,11 +132,18 @@ function deleteDirection(
     return select(schema, state, caret(neighbour, backward ? (fields[neighbour] ?? '').length : 0))
   }
 
-  let start: number
-  let end: number
+  // What to delete: the range the browser would, within the caret's line,
+  // or else the grapheme (or line break) next to the caret.
+  const lineStart = text.lastIndexOf('\n', at.offset - 1) + 1
+  const lineEnd = text.indexOf('\n', at.offset) < 0 ? text.length : text.indexOf('\n', at.offset)
+  let start = 0
+  let end = 0
   if (target) {
-    start = target.from.field === at.field ? target.from.offset : 0
-    end = target.to.field === at.field ? target.to.offset : text.length
+    start = Math.max(lineStart, target.from.field === at.field ? target.from.offset : 0)
+    end = Math.min(lineEnd, target.to.field === at.field ? target.to.offset : text.length)
+  }
+  if (start < end) {
+    // The browser's range.
   } else if (backward) {
     start = at.offset - graphemeBefore(text, at.offset)
     end = at.offset
@@ -149,19 +160,49 @@ function deleteDirection(
  * every field: the first keeps what precedes `from`, plus `text`; the last
  * keeps what follows `to`; fields in between are emptied.
  */
-function replace(schema: Schema, state: State, from: Position, to: Position, text: string): State {
+function replace(schema: Schema, state: State, from: Position, to: Position, typed: string): State {
+  const text = typed.replaceAll(ATOM, '')
   const fields: Record<string, string | undefined> = { ...state.fields }
   const first = schema.order.indexOf(from.field)
   const last = schema.order.indexOf(to.field)
+  let offset = from.offset + text.length
   for (let i = first; i <= last; i++) {
     const field = schema.order[i]
     const value = fields[field]
     if (value === undefined) continue
-    const keepBefore = i === first ? value.slice(0, from.offset) + text : ''
-    const keepAfter = i === last ? value.slice(to.offset) : ''
-    fields[field] = i === first && i === last ? keepBefore + keepAfter : i === first ? keepBefore : keepAfter
+    const start = i === first ? from.offset : 0
+    const end = i === last ? to.offset : value.length
+    const atoms = ATOM.repeat(value.slice(start, end).split(ATOM).length - 1)
+    const next = value.slice(0, start) + (i === first ? text : '') + atoms + value.slice(end)
+    if (!next.includes(ATOM)) fields[field] = next
+    else {
+      const apart = atomsApart(next, i === first ? offset : 0)
+      fields[field] = apart.text
+      if (i === first) offset = apart.offset
+    }
   }
-  return select(schema, { fields, selection: state.selection }, caret(from.field, from.offset + text.length))
+  return select(schema, { fields, selection: state.selection }, caret(from.field, offset))
+}
+
+/**
+ * `text` with every atom on a line of its own, and where `offset` is in
+ * it. Text before an atom stays before the line break added there, and
+ * text after one goes after it.
+ */
+function atomsApart(text: string, offset: number): { text: string; offset: number } {
+  let out = ''
+  let at = offset
+  for (let i = 0; i < text.length; i++) {
+    const isAtom = text[i] === ATOM
+    const needsBreak = out !== '' && !out.endsWith('\n') && (isAtom || out.endsWith(ATOM)) && text[i] !== '\n'
+    if (needsBreak) {
+      // A caret between text and the atom after it stays with the text.
+      if (isAtom ? i < offset : i <= offset) at++
+      out += '\n'
+    }
+    out += text[i]
+  }
+  return { text: out, offset: at }
 }
 
 /** Remove the empty fields that don't hold an end of `selection`. */

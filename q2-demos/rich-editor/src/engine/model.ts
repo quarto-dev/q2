@@ -5,6 +5,14 @@
  * Offsets count UTF-16 code units, like the DOM's.
  */
 
+/**
+ * A line of a multi-line field that holds only this character stands for
+ * something the editor shows and can't edit (a heading or a table among
+ * the paragraphs of a body). No edit removes it, joins it to another line
+ * or puts text on its line, and it can't be typed.
+ */
+export const ATOM = '\uFFFC'
+
 /** Each field's text, or undefined when the field is absent. */
 export type Fields = Readonly<Record<string, string | undefined>>
 

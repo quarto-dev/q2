@@ -8,7 +8,7 @@ import {
   select,
   selectAllStep,
 } from './commands.ts'
-import { caret, range, type Fields, type Schema, type State } from './model.ts'
+import { ATOM, caret, range, type Fields, type Schema, type State } from './model.ts'
 
 const schema: Schema = { order: ['title', 'subtitle'], addable: ['subtitle'] }
 
@@ -164,5 +164,54 @@ describe('multi-line fields', () => {
       'One. Two\nThree',
     )
     expect(paste(withAbstract, state(fields, caret('title', 1)), ' a\nb ').fields.title).toBe('T a b ')
+  })
+})
+
+describe('lines that can\'t be edited', () => {
+  const lines: Schema = { order: ['title', 'body'], multiline: ['body'] }
+  const text = `First\n${ATOM}\nSecond`
+  const body = (selection: State['selection'], value = text): State => state({ title: 'T', body: value }, selection)
+
+  it('Enter splits a line and Backspace at a line\'s start joins it to the one before', () => {
+    const split = enter(lines, body(caret('body', 2), 'First'))
+    expect(split.fields.body).toBe('Fi\nrst')
+    expect(split.selection).toEqual(caret('body', 3))
+    const joined = deleteBackward(lines, split)
+    expect(joined.fields.body).toBe('First')
+    expect(joined.selection).toEqual(caret('body', 2))
+  })
+
+  it('Backspace at the start of the line after one changes nothing', () => {
+    const next = deleteBackward(lines, body(caret('body', 8)))
+    expect(next.fields.body).toBe(text)
+    expect(next.selection).toEqual(caret('body', 8))
+  })
+
+  it('Delete at the end of the line before one changes nothing', () => {
+    const next = deleteForward(lines, body(caret('body', 5)))
+    expect(next.fields.body).toBe(text)
+    expect(next.selection).toEqual(caret('body', 5))
+  })
+
+  it('deleting a selection across one keeps it, on a line of its own', () => {
+    const next = deleteBackward(lines, body(range('body', 2, 'body', 11)))
+    expect(next.fields.body).toBe(`Fi\n${ATOM}\nond`)
+    expect(next.selection).toEqual(caret('body', 2))
+  })
+
+  it('typing over a selection across one puts the text before it', () => {
+    const next = insertText(lines, body(range('body', 2, 'body', 11)), 'X')
+    expect(next.fields.body).toBe(`FiX\n${ATOM}\nond`)
+    expect(next.selection).toEqual(caret('body', 3))
+  })
+
+  it('keeps them when a selection from another field covers them', () => {
+    const next = deleteBackward(lines, body(range('title', 0, 'body', 11)))
+    expect(next.fields).toEqual({ title: '', body: `${ATOM}\nond` })
+  })
+
+  it('can\'t be typed or pasted', () => {
+    const next = paste(lines, body(caret('body', 5)), `a${ATOM}b`)
+    expect(next.fields.body).toBe(`Firstab\n${ATOM}\nSecond`)
   })
 })
