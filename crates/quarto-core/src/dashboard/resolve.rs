@@ -504,7 +504,8 @@ fn sidebar_layout(
             ("data-bslib-sidebar-open".to_string(), "desktop".to_string()),
             ("data-bslib-sidebar-init".to_string(), "true".to_string()),
         ]),
-    );
+    )
+        .into();
     if at_end {
         add_class(&mut attr, "sidebar-right");
     }
@@ -519,7 +520,8 @@ fn sidebar_layout(
             String::new(),
             vec!["main".to_string(), "html-fill-container".to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         main,
     );
     let mut layout = div(attr, vec![main]);
@@ -550,7 +552,7 @@ fn lower_panel(p: Panel, cx: &mut Lower) -> Block {
     let content = lower_all(p.content, cx);
     cx.parent = parent;
     let panel_div = div(
-        (String::new(), Vec::new(), LinkedHashMap::new()),
+        (String::new(), Vec::new(), LinkedHashMap::new()).into(),
         lower_all(p.panel, cx),
     );
     match p.data.kind {
@@ -562,7 +564,8 @@ fn lower_panel(p: Panel, cx: &mut Lower) -> Block {
                     String::new(),
                     vec!["sidebar-content".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content,
             )];
             sidebar_layout(
@@ -591,7 +594,8 @@ fn lower_panel(p: Panel, cx: &mut Lower) -> Block {
                     String::new(),
                     vec!["toolbar-content".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content,
             );
             let mut container = div(
@@ -602,7 +606,8 @@ fn lower_panel(p: Panel, cx: &mut Lower) -> Block {
                         "html-fill-container".to_string(),
                     ],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 vec![Block::Div(toolbar), toolbar_content],
             );
             apply_fill(&mut container, true);
@@ -619,7 +624,8 @@ fn lower_container(c: Container, cx: &mut Lower) -> Block {
         c.data.id.clone(),
         vec!["bslib-grid".to_string()],
         LinkedHashMap::new(),
-    );
+    )
+        .into();
     for class in &c.data.classes {
         add_class(&mut attr, class);
     }
@@ -695,7 +701,8 @@ fn lower_page(p: Page, cx: &mut Lower) -> Block {
         p.data.id.clone(),
         vec!["dashboard-page".to_string(), "tab-pane".to_string()],
         LinkedHashMap::new(),
-    );
+    )
+        .into();
     if p.data.index == 1 {
         add_class(&mut attr, "show");
         add_class(&mut attr, "active");
@@ -919,7 +926,7 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
         .then(|| format!("card-tabset-{}", cx.cards));
     let data = card.data;
     let is_valuebox = data.classes.iter().any(|c| c == "valuebox");
-    let mut attr: Attr = (String::new(), data.classes.clone(), LinkedHashMap::new());
+    let mut attr: Attr = (String::new(), data.classes.clone(), LinkedHashMap::new()).into();
     add_class(&mut attr, "bslib-card");
     add_class(&mut attr, "html-fill-container");
     attr.2
@@ -954,7 +961,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
             String::new(),
             vec!["card-header".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let mut header_content = lower_all(header, cx);
         let mut title_div = None;
         match title {
@@ -967,7 +975,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                             "style".to_string(),
                             "display: inline".to_string(),
                         )]),
-                    ),
+                    )
+                        .into(),
                     content: title,
                     source_info: generated(),
                     attr_source: AttrSourceInfo::empty(),
@@ -977,7 +986,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                         String::new(),
                         vec!["card-title".to_string()],
                         LinkedHashMap::new(),
-                    ),
+                    )
+                        .into(),
                     vec![Block::Plain(Plain {
                         content: vec![span],
                         source_info: generated(),
@@ -1013,7 +1023,10 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
         let block = if panel.len() == 1 {
             panel.remove(0)
         } else {
-            div((String::new(), Vec::new(), LinkedHashMap::new()), panel)
+            div(
+                (String::new(), Vec::new(), LinkedHashMap::new()).into(),
+                panel,
+            )
         };
         (sb, block)
     });
@@ -1024,7 +1037,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
             body_data.id.clone(),
             body_data.classes.clone(),
             body_data.attributes.iter().cloned().collect(),
-        );
+        )
+            .into();
         add_class(&mut body_attr, "card-body");
         if body_data.flow {
             add_class(&mut body_attr, FLOW_PENDING);
@@ -1051,7 +1065,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                     format!("{id}-{}", index + 1),
                     vec!["tab-pane".to_string()],
                     LinkedHashMap::from_iter([("role".to_string(), "tabpanel".to_string())]),
-                );
+                )
+                    .into();
                 if index == 0 {
                     add_class(&mut pane_attr, "active");
                     add_class(&mut pane_attr, "show");
@@ -1073,7 +1088,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                 String::new(),
                 vec!["tab-content".to_string()],
                 LinkedHashMap::from_iter([("data-tabset-id".to_string(), id.clone())]),
-            ),
+            )
+                .into(),
             panes,
         );
         apply_fill_recursive(&mut tab_content);
@@ -1105,7 +1121,8 @@ fn lower_card(card: Card, cx: &mut Lower) -> Block {
                 String::new(),
                 vec!["card-footer".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             lower_all(card.footer, cx),
         ));
     }

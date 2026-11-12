@@ -473,7 +473,7 @@ mod tests {
         let mut classes = Vec::new();
         classes.push(format!("{{{lang}}}"));
         Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), classes, LinkedHashMap::new()),
+            attr: (String::new(), classes, LinkedHashMap::new()).into(),
             text: body.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
@@ -500,7 +500,8 @@ mod tests {
                 String::new(),
                 vec!["cell".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![prose(marker)],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
@@ -727,7 +728,7 @@ mod tests {
     /// from a braced engine cell.
     fn echo_source(lang: &str, body: &str) -> Block {
         Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![lang.to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec![lang.to_string()], LinkedHashMap::new()).into(),
             text: body.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
@@ -958,7 +959,7 @@ mod tests {
     /// carrying `#| label: fig-*`.
     fn fig_div(id: &str, content: Vec<Block>) -> Block {
         Block::Div(Box::new(Div {
-            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()),
+            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()).into(),
             content,
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
@@ -1031,7 +1032,7 @@ mod tests {
         // engine_cell_lang returns None.
         let attr = (String::new(), vec!["r".to_string()], LinkedHashMap::new());
         let block = Block::CodeBlock(Box::new(CodeBlock {
-            attr,
+            attr: attr.into(),
             text: "x <- 1".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
@@ -1051,7 +1052,7 @@ mod tests {
             LinkedHashMap::new(),
         );
         let block = Block::CodeBlock(Box::new(CodeBlock {
-            attr,
+            attr: attr.into(),
             text: "import matplotlib.pyplot as plt".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),

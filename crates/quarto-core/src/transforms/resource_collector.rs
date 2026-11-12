@@ -579,7 +579,7 @@ mod tests {
     /// Build an `Image` inline with the given target URL.
     fn image(url: &str) -> Inline {
         Inline::Image(Box::new(Image {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![],
             target: (url.to_string(), String::new()),
             source_info: dummy_source_info(),
@@ -667,7 +667,7 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Box::new(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
                         text: "alt text".to_string(),
                         source_info: dummy_source_info(),
@@ -714,7 +714,7 @@ mod tests {
     async fn test_dedupes_repeated_urls() {
         let image = |url: &str| {
             Inline::Image(Box::new(Image {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![],
                 target: (url.to_string(), String::new()),
                 source_info: dummy_source_info(),
@@ -798,7 +798,7 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Box::new(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![],
                     target: ("https://example.com/image.png".to_string(), String::new()),
                     source_info: dummy_source_info(),
@@ -829,7 +829,7 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Box::new(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![],
                     target: ("data:image/png;base64,abc123".to_string(), String::new()),
                     source_info: dummy_source_info(),

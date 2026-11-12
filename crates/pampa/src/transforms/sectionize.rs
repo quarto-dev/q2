@@ -88,14 +88,14 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
         let block = sectionize_div(block);
         if let Block::Header(ref header) = block {
             let level = header.level;
-            let (id, classes, attrs) = &header.attr;
+            let (id, classes, attrs) = &*header.attr;
 
             // Close all sections at level >= this header's level
             while let Some((stack_level, _, _)) = section_stack.last() {
                 if *stack_level >= level {
                     let (_, section_attr, section_content) = section_stack.pop().unwrap();
                     let section_div = Block::Div(Box::new(Div {
-                        attr: section_attr,
+                        attr: section_attr.into(),
                         content: section_content,
                         source_info: SourceInfo::generated(By::sectionize()),
                         attr_source: AttrSourceInfo::empty(),
@@ -126,7 +126,7 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
             // Create header with ID removed but classes and attributes preserved
             let header_without_id = Block::Header(Box::new(Header {
                 level,
-                attr: (String::new(), classes.clone(), attrs.clone()), // Empty ID, keep classes and attrs
+                attr: (String::new(), classes.clone(), attrs.clone()).into(), // Empty ID, keep classes and attrs
                 content: header.content.clone(),
                 source_info: header.source_info.clone(),
                 attr_source: header.attr_source.clone(),
@@ -147,7 +147,7 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
     // Close all remaining open sections (innermost first)
     while let Some((_, section_attr, section_content)) = section_stack.pop() {
         let section_div = Block::Div(Box::new(Div {
-            attr: section_attr,
+            attr: section_attr.into(),
             content: section_content,
             source_info: SourceInfo::generated(By::sectionize()),
             attr_source: AttrSourceInfo::empty(),
@@ -244,12 +244,13 @@ pub fn absorb_section_wrapper(div: Div) -> Block {
     // key-values. `attr_source` for the merged-in pieces is dropped:
     // the section Div is `By::sectionize()`-generated anyway, and a
     // stale offset would be worse than none.
-    for class in attr.1 {
+    let (_id, classes, kvs) = attr.into_tuple();
+    for class in classes {
         if !section.attr.1.contains(&class) {
             section.attr.1.push(class);
         }
     }
-    for (k, v) in attr.2 {
+    for (k, v) in kvs {
         section.attr.2.entry(k).or_insert(v);
     }
     section.attr_source = AttrSourceInfo::empty();
@@ -279,7 +280,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: dummy_source_info(),
@@ -306,7 +308,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 attr_map,
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: dummy_source_info(),
@@ -336,7 +339,7 @@ mod tests {
         let Block::Div(div) = block else {
             panic!("Expected Div, got {:?}", block);
         };
-        let (id, classes, _) = &div.attr;
+        let (id, classes, _) = &*div.attr;
 
         assert_eq!(id, expected_id, "Section ID mismatch");
         assert!(
@@ -698,7 +701,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 attr_map,
-            ),
+            )
+                .into(),
             content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -915,7 +919,7 @@ mod tests {
         use quarto_pandoc_types::custom::{CustomNode, Slot};
         let mut node = CustomNode::new(
             "Callout",
-            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), vec![], LinkedHashMap::new()).into(),
             dummy_source_info(),
         );
         node.set_slot(
@@ -949,7 +953,8 @@ mod tests {
                 id.to_string(),
                 vec!["wrap".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),

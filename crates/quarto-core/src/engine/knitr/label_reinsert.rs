@@ -273,9 +273,9 @@ mod tests {
 
     fn cell(id: &str, body: &str) -> Block {
         Block::Div(Box::new(Div {
-            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()),
+            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()).into(),
             content: vec![Block::CodeBlock(Box::new(CodeBlock {
-                attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
+                attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()).into(),
                 text: format!("{body}\n"),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -303,7 +303,8 @@ mod tests {
                 String::new(),
                 vec!["callout".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

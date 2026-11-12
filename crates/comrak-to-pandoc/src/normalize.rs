@@ -49,7 +49,7 @@ fn normalize_block(block: Block) -> Block {
             } else {
                 vec![cb.attr.1[0].clone()]
             };
-            cb.attr = (String::new(), lang_class, Default::default());
+            *cb.attr = (String::new(), lang_class, Default::default());
             // Strip trailing newline from code block text
             // (comrak includes trailing newline, pampa doesn't)
             cb.text = cb.text.trim_end_matches('\n').to_string();
@@ -223,7 +223,7 @@ mod tests {
             blocks: vec![Block::Header(Box::new(Header {
                 level: 1,
                 content: vec![],
-                attr: ("my-id".to_string(), vec![], LinkedHashMap::new()),
+                attr: ("my-id".to_string(), vec![], LinkedHashMap::new()).into(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             }))],
@@ -244,7 +244,7 @@ mod tests {
                 content: vec![Inline::Link(Box::new(Link {
                     content: vec![],
                     target: ("http://example.com".to_string(), String::new()),
-                    attr: (String::new(), vec!["uri".to_string()], LinkedHashMap::new()),
+                    attr: (String::new(), vec!["uri".to_string()], LinkedHashMap::new()).into(),
                     source_info: empty_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
@@ -273,7 +273,8 @@ mod tests {
                     "id".to_string(),
                     vec!["python".to_string(), "extra".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 text: "code\n".to_string(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
@@ -300,7 +301,7 @@ mod tests {
         let ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::CodeBlock(Box::new(CodeBlock {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 text: "code".to_string(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
@@ -460,7 +461,7 @@ mod tests {
                 content: vec![Inline::Image(Box::new(Image {
                     content: vec![],
                     target: ("img.png".to_string(), String::new()),
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     source_info: empty_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
@@ -488,7 +489,7 @@ mod tests {
                         text: "hello".to_string(),
                         source_info: empty_source_info(),
                     })],
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     source_info: empty_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                 }))],
@@ -558,7 +559,7 @@ mod tests {
                     content: vec![Inline::Image(Box::new(Image {
                         content: vec![],
                         target: ("img.png".to_string(), String::new()),
-                        attr: (String::new(), vec![], LinkedHashMap::new()),
+                        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: TargetSourceInfo::empty(),
@@ -570,7 +571,7 @@ mod tests {
                     long: None,
                     source_info: empty_source_info(),
                 },
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             }))],
@@ -592,7 +593,7 @@ mod tests {
                     content: vec![Inline::Image(Box::new(Image {
                         content: vec![],
                         target: ("img.png".to_string(), String::new()),
-                        attr: (String::new(), vec![], LinkedHashMap::new()),
+                        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                         source_info: empty_source_info(),
                         attr_source: AttrSourceInfo::empty(),
                         target_source: TargetSourceInfo::empty(),
@@ -604,7 +605,7 @@ mod tests {
                     long: None,
                     source_info: empty_source_info(),
                 },
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             }))],
@@ -639,7 +640,7 @@ mod tests {
                     long: None,
                     source_info: empty_source_info(),
                 },
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             }))],
@@ -652,11 +653,12 @@ mod tests {
     #[test]
     fn test_is_empty_attr() {
         // Empty attr
-        let empty = (String::new(), vec![], LinkedHashMap::new());
+        let empty = quarto_pandoc_types::Attr::from((String::new(), vec![], LinkedHashMap::new()));
         assert!(is_empty_attr(&empty));
 
         // Non-empty id
-        let with_id: quarto_pandoc_types::Attr = ("id".to_string(), vec![], LinkedHashMap::new());
+        let with_id: quarto_pandoc_types::Attr =
+            ("id".to_string(), vec![], LinkedHashMap::new()).into();
         assert!(!is_empty_attr(&with_id));
 
         // Non-empty class
@@ -664,7 +666,8 @@ mod tests {
             String::new(),
             vec!["class".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         assert!(!is_empty_attr(&with_class));
     }
 
@@ -676,7 +679,7 @@ mod tests {
         let single_image = vec![Inline::Image(Box::new(Image {
             content: vec![],
             target: ("img.png".to_string(), String::new()),
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
@@ -692,7 +695,7 @@ mod tests {
             Inline::Image(Box::new(Image {
                 content: vec![],
                 target: ("img.png".to_string(), String::new()),
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),

@@ -375,7 +375,8 @@ pub fn merge_book_chapters(
                     String::new(),
                     vec!["quarto-book-part".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content,
                 source_info: generated_source_info(),
                 attr_source: AttrSourceInfo::empty(),

@@ -1943,7 +1943,7 @@ fn apply_title_case_to_inlines_with_last(
                 );
             }
             Inline::Span(s) => {
-                let (_, classes, _) = &s.attr;
+                let (_, classes, _) = &*s.attr;
                 // nocase and nodecoration spans are protected from text-case transformations
                 // per CSL-JSON spec and Pandoc citeproc behavior
                 if classes.iter().any(|c| c == "nocase" || c == "nodecoration") {
@@ -1997,7 +1997,7 @@ fn apply_text_case_to_inlines_simple(
             Inline::Quoted(q) => apply_text_case_to_inlines_simple(&mut q.content, text_case),
             Inline::Link(l) => apply_text_case_to_inlines_simple(&mut l.content, text_case),
             Inline::Span(s) => {
-                let (_, classes, _) = &s.attr;
+                let (_, classes, _) = &*s.attr;
                 // nocase and nodecoration spans are protected from text-case transformations
                 // per CSL-JSON spec and Pandoc citeproc behavior
                 if !classes.iter().any(|c| c == "nocase" || c == "nodecoration") {
@@ -4920,7 +4920,7 @@ fn render_block_to_csl_html(
             }
         }
         Block::Div(d) => {
-            let (_, classes, _) = &d.attr;
+            let (_, classes, _) = &*d.attr;
             // Get the first class as the div class
             if let Some(class) = classes.first() {
                 output.push_str("<div class=\"");
@@ -5120,7 +5120,7 @@ fn render_inline_to_csl_html_with_ctx(
             }
         }
         Inline::Span(s) => {
-            let (_, classes, _) = &s.attr;
+            let (_, classes, _) = &*s.attr;
             if classes.iter().any(|c| c == "nodecoration") {
                 // NoDecoration: reset all currently active formatting to normal
                 // Build a style string with normal values for all active formats

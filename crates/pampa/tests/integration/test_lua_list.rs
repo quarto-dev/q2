@@ -375,7 +375,8 @@ fn create_div_doc(classes: Vec<&str>, content: Vec<Block>) -> Pandoc {
                 String::new(),
                 classes.into_iter().map(|s| s.to_string()).collect(),
                 Default::default(),
-            ),
+            )
+                .into(),
             content,
             source_info: empty_source(),
             attr_source: AttrSourceInfo::empty(),

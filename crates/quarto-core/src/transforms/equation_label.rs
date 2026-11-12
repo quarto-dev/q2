@@ -247,7 +247,8 @@ mod tests {
                 id.to_string(),
                 vec![MATH_WITH_ATTR_CLASS.to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: text.to_string(),
@@ -292,7 +293,8 @@ mod tests {
                 "fig-plot".to_string(),
                 vec![MATH_WITH_ATTR_CLASS.to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: "x^2".to_string(),
@@ -314,7 +316,8 @@ mod tests {
                 "eq-inline".to_string(),
                 vec![MATH_WITH_ATTR_CLASS.to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::InlineMath,
                 text: "x^2".to_string(),
@@ -335,7 +338,8 @@ mod tests {
                 "eq-foo".to_string(),
                 vec!["other-class".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text: "x".to_string(),

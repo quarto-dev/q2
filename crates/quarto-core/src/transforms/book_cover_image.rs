@@ -185,7 +185,8 @@ impl AstTransform for BookCoverImageTransform {
                 String::new(),
                 vec!["quarto-cover-image".to_string(), "nolightbox".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             target: (target, title),
             source_info: SourceInfo::generated(By::programmatic_config()),

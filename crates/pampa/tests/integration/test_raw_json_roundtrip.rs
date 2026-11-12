@@ -48,7 +48,7 @@ fn para(content: Vec<Inline>, start: usize, end: usize) -> Block {
 }
 
 fn empty_attr() -> quarto_pandoc_types::Attr {
-    (String::new(), vec![], LinkedHashMap::new())
+    (String::new(), vec![], LinkedHashMap::new()).into()
 }
 
 /// Write `doc` as raw-json, read it back, and return the parsed document
@@ -123,7 +123,7 @@ fn test_raw_json_roundtrip_standalone_attr() {
             vec![
                 str_inline("Hello.", 0, 6),
                 Inline::Attr(Box::new(InlineAttr::new(
-                    attr,
+                    attr.into(),
                     AttrSourceInfo::empty(),
                     si(8, 32),
                 ))),
@@ -179,7 +179,7 @@ fn test_raw_json_roundtrip_critic_markup() {
         blocks: vec![para(
             vec![
                 Inline::Insert(Box::new(Insert {
-                    attr: attr.clone(),
+                    attr: attr.clone().into(),
                     content: vec![str_inline("added", 3, 8)],
                     source_info: si(0, 11),
                     attr_source: AttrSourceInfo::empty(),
@@ -833,7 +833,7 @@ fn test_raw_json_roundtrip_standard_constructs() {
                 11,
             ),
             Block::Div(Box::new(Div {
-                attr: ("d1".to_string(), vec!["note".to_string()], kvs),
+                attr: ("d1".to_string(), vec!["note".to_string()], kvs).into(),
                 content: vec![para(vec![str_inline("inner", 12, 17)], 12, 17)],
                 source_info: si(11, 18),
                 attr_source: AttrSourceInfo::empty(),
@@ -843,7 +843,8 @@ fn test_raw_json_roundtrip_standard_constructs() {
                     "cb".to_string(),
                     vec!["rust".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 text: "fn main() {}".to_string(),
                 source_info: si(19, 31),
                 attr_source: AttrSourceInfo::empty(),

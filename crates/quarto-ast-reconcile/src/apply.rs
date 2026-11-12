@@ -766,7 +766,7 @@ mod tests {
 
     fn make_div_with_source(blocks: Vec<Block>, source: SourceInfo) -> Block {
         Block::Div(Box::new(Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: blocks,
             source_info: source,
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -956,7 +956,7 @@ mod tests {
             meta: Default::default(),
             blocks: vec![Block::Header(Box::new(Header {
                 level: 1,
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![make_str("Title", source_a())],
                 source_info: source_a(),
                 attr_source: AttrSourceInfo::empty(),
@@ -966,7 +966,7 @@ mod tests {
             meta: Default::default(),
             blocks: vec![Block::Header(Box::new(Header {
                 level: 1,
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![make_str("Title", source_b())],
                 source_info: source_b(),
                 attr_source: AttrSourceInfo::empty(),

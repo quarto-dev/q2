@@ -806,7 +806,7 @@ mod tests {
         let content = vec![make_str("see"), make_space(), multi_cite];
 
         let result = make_cite_inline(
-            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), vec![], LinkedHashMap::new()).into(),
             (String::new(), String::new()),
             content,
             dummy_source_info(),
@@ -855,7 +855,7 @@ mod tests {
         ];
 
         let result = make_cite_inline(
-            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), vec![], LinkedHashMap::new()).into(),
             (String::new(), String::new()),
             content,
             dummy_source_info(),
@@ -911,7 +911,7 @@ mod tests {
         let content = vec![make_str("click here")];
 
         let result = make_span_inline(
-            attr,
+            attr.into(),
             target,
             content,
             dummy_source_info(),
@@ -940,7 +940,7 @@ mod tests {
         let content = vec![make_str("text")];
 
         let result = make_span_inline(
-            attr,
+            attr.into(),
             target,
             content,
             dummy_source_info(),
@@ -971,7 +971,7 @@ mod tests {
         let content = vec![make_str("text")];
 
         let result = make_span_inline(
-            attr,
+            attr.into(),
             target,
             content,
             dummy_source_info(),
@@ -1001,7 +1001,7 @@ mod tests {
         let content = vec![make_str("underlined")];
 
         let result = make_span_inline(
-            attr,
+            attr.into(),
             target,
             content,
             dummy_source_info(),
@@ -1028,7 +1028,7 @@ mod tests {
         let content = vec![make_str("underlined")];
 
         let result = make_span_inline(
-            attr,
+            attr.into(),
             target,
             content,
             dummy_source_info(),
@@ -1055,7 +1055,7 @@ mod tests {
         let content = vec![make_str("text")];
 
         let result = make_span_inline(
-            attr,
+            attr.into(),
             target,
             content,
             dummy_source_info(),
@@ -1089,7 +1089,7 @@ mod tests {
         let content = vec![make_str("text")];
 
         let result = make_span_inline(
-            attr,
+            attr.into(),
             target,
             content,
             dummy_source_info(),
@@ -1114,7 +1114,7 @@ mod tests {
         let content = vec![make_str("just text")];
 
         let result = make_cite_inline(
-            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), vec![], LinkedHashMap::new()).into(),
             (String::new(), String::new()),
             content,
             dummy_source_info(),
@@ -1145,7 +1145,7 @@ mod tests {
         let content = vec![cite1, make_str(";"), cite2];
 
         let result = make_cite_inline(
-            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), vec![], LinkedHashMap::new()).into(),
             (String::new(), String::new()),
             content,
             dummy_source_info(),
@@ -1184,7 +1184,7 @@ mod tests {
         let content = vec![cite];
 
         let result = make_cite_inline(
-            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), vec![], LinkedHashMap::new()).into(),
             (String::new(), String::new()),
             content,
             dummy_source_info(),
@@ -1340,7 +1340,8 @@ mod tests {
                 "id".to_string(),
                 vec!["rust".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "fn main() {}".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -1395,7 +1396,7 @@ mod tests {
     #[test]
     fn test_image_construction() {
         let img = Image {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str("alt text")],
             target: ("image.png".to_string(), "Image title".to_string()),
             source_info: dummy_source_info(),
@@ -1409,7 +1410,7 @@ mod tests {
     #[test]
     fn test_insert_construction() {
         let insert = Insert {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str("added")],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -1420,7 +1421,7 @@ mod tests {
     #[test]
     fn test_delete_construction() {
         let delete = Delete {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str("removed")],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -1431,7 +1432,7 @@ mod tests {
     #[test]
     fn test_highlight_construction() {
         let highlight = Highlight {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str("highlighted")],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -1442,7 +1443,7 @@ mod tests {
     #[test]
     fn test_edit_comment_construction() {
         let comment = EditComment {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str("comment")],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -1501,7 +1502,7 @@ mod tests {
     #[test]
     fn test_link_clone() {
         let link = Link {
-            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str("link text")],
             target: ("url".to_string(), "title".to_string()),
             source_info: dummy_source_info(),
@@ -1577,13 +1578,9 @@ mod tests {
     fn source_info_attr_with_id() {
         // AttrSourceInfo with an id → precomputed source_info matches the id's SourceInfo
         let id_si = test_si(2, 10, 15);
-        let attr_source = AttrSourceInfo {
-            id: Some(id_si.clone()),
-            classes: vec![],
-            attributes: vec![],
-        };
+        let attr_source = AttrSourceInfo::new(Some(id_si.clone()), vec![], vec![]);
         let inline = Inline::Attr(Box::new(InlineAttr::new_from_attr_source(
-            ("myid".into(), vec![], LinkedHashMap::new()),
+            ("myid".into(), vec![], LinkedHashMap::new()).into(),
             attr_source,
         )));
         assert_eq!(inline.source_info(), &id_si);
@@ -1594,13 +1591,9 @@ mod tests {
         // AttrSourceInfo with id + class → precomputed source_info is a Concat
         let id_si = test_si(3, 10, 15);
         let class_si = test_si(3, 16, 25);
-        let attr_source = AttrSourceInfo {
-            id: Some(id_si),
-            classes: vec![Some(class_si)],
-            attributes: vec![],
-        };
+        let attr_source = AttrSourceInfo::new(Some(id_si), vec![Some(class_si)], vec![]);
         let inline = Inline::Attr(Box::new(InlineAttr::new_from_attr_source(
-            ("myid".into(), vec!["myclass".into()], LinkedHashMap::new()),
+            ("myid".into(), vec!["myclass".into()], LinkedHashMap::new()).into(),
             attr_source,
         )));
         // The combined source_info should be a Concat with 2 pieces
@@ -1616,7 +1609,7 @@ mod tests {
     fn source_info_link() {
         let si = test_si(4, 0, 30);
         let inline = Inline::Link(Box::new(Link {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             target: ("url".into(), String::new()),
             source_info: si.clone(),

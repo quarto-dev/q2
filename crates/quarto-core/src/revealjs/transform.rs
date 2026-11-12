@@ -97,7 +97,7 @@ fn classed_para(class: &str, text: String) -> Block {
         source_info: SourceInfo::generated(By::revealjs()),
     });
     Block::Div(Box::new(Div {
-        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
         content: vec![para],
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
@@ -139,7 +139,8 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
                 String::new(),
                 vec!["title".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![str_inline(title)],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
@@ -169,7 +170,8 @@ fn build_title_slide(meta: &quarto_pandoc_types::ConfigValue) -> Option<Block> {
                 "center".to_string(),
             ],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),

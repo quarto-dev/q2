@@ -224,7 +224,7 @@ fn convert_code_block(code_block: &NodeCodeBlock, source_info: SourceInfo) -> Bl
     };
 
     Block::CodeBlock(Box::new(CodeBlock {
-        attr: (String::new(), classes, LinkedHashMap::new()),
+        attr: (String::new(), classes, LinkedHashMap::new()).into(),
         text: code_block.literal.clone(),
         source_info,
         attr_source: AttrSourceInfo::empty(),

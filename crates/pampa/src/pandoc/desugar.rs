@@ -117,20 +117,16 @@ pub(crate) fn implicit_figure(para: &Paragraph) -> Option<Figure> {
         return None;
     }
 
-    let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new());
-    let image_attr: Attr = (String::new(), image.attr.1.clone(), image.attr.2.clone());
+    let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new()).into();
+    let image_attr: Attr = (String::new(), image.attr.1.clone(), image.attr.2.clone()).into();
 
     // Split attr_source between figure and image the same way.
-    let figure_attr_source = AttrSourceInfo {
-        id: image.attr_source.id.clone(),
-        classes: vec![],
-        attributes: vec![],
-    };
-    let image_attr_source = AttrSourceInfo {
-        id: None,
-        classes: image.attr_source.classes.clone(),
-        attributes: image.attr_source.attributes.clone(),
-    };
+    let figure_attr_source = AttrSourceInfo::new(image.attr_source.id.clone(), vec![], vec![]);
+    let image_attr_source = AttrSourceInfo::new(
+        None,
+        image.attr_source.classes.clone(),
+        image.attr_source.attributes.clone(),
+    );
 
     let mut new_image = image.clone();
     new_image.attr = image_attr;
@@ -220,7 +216,7 @@ mod tests {
 
     fn div(class: &str, content: Blocks) -> Block {
         Block::Div(Box::new(Div {
-            attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
             content,
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -244,7 +240,8 @@ mod tests {
                     id.to_string(),
                     vec!["cls".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: if alt.is_empty() {
                     vec![]
                 } else {

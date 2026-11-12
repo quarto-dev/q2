@@ -371,7 +371,7 @@ fn literal_caption_inlines(text: &str, source_info: &quarto_source_map::SourceIn
 
 fn empty_attr() -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 /// Desugar the `: caption {#tbl-…}` pipe-table syntax into the canonical float
@@ -814,7 +814,7 @@ mod tests {
     }
 
     fn attr_id(id: &str) -> Attr {
-        (id.to_string(), Vec::new(), LinkedHashMap::new())
+        (id.to_string(), Vec::new(), LinkedHashMap::new()).into()
     }
 
     fn str_inline(s: &str) -> Inline {
@@ -842,7 +842,8 @@ mod tests {
                     String::new(),
                     classes.into_iter().map(String::from).collect(),
                     attrs,
-                ),
+                )
+                    .into(),
                 content: vec![str_inline("cap")],
                 target: ("img.svg".to_string(), String::new()),
                 source_info: si(),
@@ -855,7 +856,7 @@ mod tests {
 
     fn code(lang: &str, body: &str) -> Block {
         Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![lang.into()], LinkedHashMap::new()),
+            attr: (String::new(), vec![lang.into()], LinkedHashMap::new()).into(),
             text: body.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -924,7 +925,8 @@ mod tests {
                 "sec-x".to_string(),
                 vec!["section".to_string(), "level1".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -947,7 +949,8 @@ mod tests {
                 "sec-x".to_string(),
                 vec!["section".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Div(Box::new(Div {
                 attr: attr_id("fig-inner"),
                 content: vec![code("python", "1+1"), para("Inner cap")],
@@ -1009,7 +1012,7 @@ mod tests {
         use quarto_pandoc_types::table::{Table, TableFoot, TableHead};
         let reg = RefTypeRegistry::builtin();
         let table = Block::Table(Box::new(Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![para("Numbers")]),
@@ -1017,14 +1020,14 @@ mod tests {
             },
             colspec: vec![],
             head: TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![],
             foot: TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -1145,7 +1148,7 @@ mod tests {
     fn div_over_table_clears_the_tables_own_caption() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
         let table = Block::Table(Box::new(Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![para("My Caption")]),
@@ -1153,13 +1156,13 @@ mod tests {
             },
             colspec: vec![],
             head: TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![],
@@ -1167,7 +1170,7 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -1216,7 +1219,7 @@ mod tests {
     fn div_over_figure_flattens_to_single_target() {
         let reg = RefTypeRegistry::builtin();
         let inner_fig = Block::Figure(Box::new(Figure {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![para("inner cap")]),
@@ -1288,7 +1291,8 @@ mod tests {
                 String::new(),
                 vec!["callout-note".into()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![inner],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -1330,7 +1334,7 @@ mod tests {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("lst-cap".to_string(), "Hello World in Python".to_string());
         let cb = Block::CodeBlock(Box::new(CodeBlock {
-            attr: ("lst-hello".to_string(), vec!["python".to_string()], kvs),
+            attr: ("lst-hello".to_string(), vec!["python".to_string()], kvs).into(),
             text: "def hello():\n    print(\"Hello, World!\")\n".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -1419,7 +1423,7 @@ mod tests {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("fig-cap".to_string(), "Not a float".to_string());
         let cb = Block::CodeBlock(Box::new(CodeBlock {
-            attr: ("fig-cb".to_string(), vec!["python".to_string()], kvs),
+            attr: ("fig-cb".to_string(), vec!["python".to_string()], kvs).into(),
             text: "1\n".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

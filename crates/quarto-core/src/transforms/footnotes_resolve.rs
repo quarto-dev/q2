@@ -415,7 +415,8 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
             String::new(),
             vec!["footnote-ref".to_string()],
             LinkedHashMap::from_iter([("role".to_string(), "doc-noteref".to_string())]),
-        ),
+        )
+            .into(),
         content: vec![Inline::Str(Str {
             text: number.to_string(),
             source_info: source_info.clone(),
@@ -437,7 +438,7 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
     // Actually, Pandoc puts the ID on the superscript, but we don't have that field.
     // Let's use a Span wrapper.
     Inline::Span(Box::new(Span {
-        attr: (fnref_id, classes, LinkedHashMap::new()),
+        attr: (fnref_id, classes, LinkedHashMap::new()).into(),
         content: vec![Inline::Superscript(Superscript {
             content: vec![link],
             source_info: source_info.clone(),
@@ -482,7 +483,8 @@ fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
             "footnotes".to_string(),
             vec!["footnotes".to_string(), "section".to_string()],
             LinkedHashMap::from_iter([("role".to_string(), "doc-endnotes".to_string())]),
-        ),
+        )
+            .into(),
         content: vec![
             Block::HorizontalRule(quarto_pandoc_types::block::HorizontalRule {
                 source_info: source_info.clone(),
@@ -507,7 +509,8 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
             String::new(),
             vec!["footnote-back".to_string()],
             LinkedHashMap::from_iter([("role".to_string(), "doc-backlink".to_string())]),
-        ),
+        )
+            .into(),
         content: vec![Inline::Str(Str {
             text: "↩︎".to_string(),
             source_info: source_info.clone(),
@@ -552,7 +555,7 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
     // Actually, looking at Pandoc output more carefully, the ID is on the <li>.
     // Our OrderedList doesn't support per-item IDs, so we'll wrap in a Div.
     vec![Block::Div(Box::new(Div {
-        attr: (fn_id, Vec::new(), LinkedHashMap::new()),
+        attr: (fn_id, Vec::new(), LinkedHashMap::new()).into(),
         content: content_blocks,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),

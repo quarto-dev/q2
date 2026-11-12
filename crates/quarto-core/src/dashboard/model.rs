@@ -290,7 +290,7 @@ fn generated() -> SourceInfo {
 }
 
 fn empty_attr() -> Attr {
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 fn data_of<T: for<'de> Deserialize<'de>>(node: &CustomNode) -> Option<T> {

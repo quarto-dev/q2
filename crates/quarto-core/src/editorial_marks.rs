@@ -81,7 +81,7 @@ pub fn new_span(
     content: Inlines,
 ) -> Inline {
     Inline::Span(Box::new(Span {
-        attr: (String::new(), classes, attrs),
+        attr: (String::new(), classes, attrs).into(),
         content,
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
@@ -158,7 +158,7 @@ fn is_gap(inline: &Inline) -> bool {
 /// content **ends in** a run of one or more `quarto-edit-comment` spans. A span with
 /// attributes, or whose comment isn't trailing, isn't one.
 pub fn commented_range(span: &Span) -> Option<CommentedRange> {
-    let (id, classes, attrs) = &span.attr;
+    let (id, classes, attrs) = &*span.attr;
     if !id.is_empty() || !classes.is_empty() || !attrs.is_empty() {
         return None;
     }

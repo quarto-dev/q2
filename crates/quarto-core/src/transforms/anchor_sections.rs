@@ -227,7 +227,7 @@ fn mark_block(block: &mut Block) {
 /// heading first, so only the leading block is considered.
 fn anchor_section_heading(block: &mut Block) {
     let Block::Div(div) = block else { return };
-    let (id, classes, _) = &div.attr;
+    let (id, classes, _) = &*div.attr;
     if id.is_empty() || !classes.iter().any(|c| c == "section") {
         return;
     }
@@ -290,7 +290,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|c| c.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
@@ -303,7 +304,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|c| c.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),

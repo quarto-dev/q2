@@ -1081,7 +1081,7 @@ mod tests {
     }
 
     fn empty_attr() -> Attr {
-        (String::new(), vec![], LinkedHashMap::new())
+        (String::new(), vec![], LinkedHashMap::new()).into()
     }
 
     fn make_str(text: &str) -> Inline {
@@ -1185,7 +1185,8 @@ mod tests {
                 "id".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print('hello')".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
@@ -1196,7 +1197,8 @@ mod tests {
                 "id".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print('hello')".to_string(),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
@@ -1207,7 +1209,8 @@ mod tests {
                 "id".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print('world')".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
@@ -1392,7 +1395,8 @@ mod tests {
                 "my-div".to_string(),
                 vec!["note".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("content")],
                 source_info: dummy_source(),
@@ -1406,7 +1410,8 @@ mod tests {
                 "my-div".to_string(),
                 vec!["note".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("different")],
                 source_info: dummy_source(),
@@ -1682,7 +1687,8 @@ mod tests {
                 "id".to_string(),
                 vec!["class".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![make_str("spanned")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
@@ -1780,7 +1786,8 @@ mod tests {
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
@@ -1791,14 +1798,15 @@ mod tests {
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "code".to_string(),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
         }));
 
         let cb3 = Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()).into(),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
@@ -1973,7 +1981,7 @@ mod tests {
     #[test]
     fn test_structural_eq_div() {
         let div1 = Block::Div(Box::new(Div {
-            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("text")],
                 source_info: dummy_source(),
@@ -1983,7 +1991,7 @@ mod tests {
         }));
 
         let div2 = Block::Div(Box::new(Div {
-            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("text")],
                 source_info: other_source(),
@@ -2197,17 +2205,20 @@ mod tests {
             "id".to_string(),
             vec!["class".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let a2: Attr = (
             "id".to_string(),
             vec!["class".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
         let a3: Attr = (
             "other".to_string(),
             vec!["class".to_string()],
             LinkedHashMap::new(),
-        );
+        )
+            .into();
 
         assert!(attr_eq(&a1, &a2));
         assert!(!attr_eq(&a1, &a3));

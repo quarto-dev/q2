@@ -197,7 +197,7 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>, fs: &mut Float
             let Block::Figure(f) = std::mem::replace(
                 block,
                 Block::Div(Box::new(Div {
-                    attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+                    attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()).into(),
                     content: Vec::new(),
                     source_info: SourceInfo::generated(quarto_source_map::By::unknown()),
                     attr_source: AttrSourceInfo::empty(),
@@ -228,7 +228,8 @@ fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &Floa
             String::new(),
             vec!["header-section-number".to_string()],
             hashlink::LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: vec![Inline::Str(Str {
             text: number,
             source_info: source_info.clone(),
@@ -291,7 +292,7 @@ fn wrap_standalone_figure(mut f: Figure) -> Block {
     }
     let source_info = f.source_info.clone();
     Block::Div(Box::new(Div {
-        attr: (id, classes, kvs),
+        attr: (id, classes, kvs).into(),
         content: vec![Block::Figure(Box::new(f))],
         source_info,
         attr_source: AttrSourceInfo::empty(),
@@ -307,7 +308,7 @@ fn take_custom_node(node: &mut CustomNode) -> CustomNode {
         node,
         CustomNode::new(
             "_placeholder",
-            (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+            (String::new(), Vec::new(), hashlink::LinkedHashMap::new()).into(),
             node.source_info.clone(),
         ),
     )
@@ -738,7 +739,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
         // Caption location: attr-level `cap-location` / `<ref>-cap-location`,
         // else Q1's per-category default (metadata-level configuration lands
         // with the cap-location feature).
-        let (_id0, mut user_classes, mut user_kvs) = node.attr;
+        let (_id0, mut user_classes, mut user_kvs) = node.attr.into_tuple();
         let caption_location = user_kvs
             .remove("cap-location")
             .or_else(|| user_kvs.remove(&format!("{ref_type}-cap-location")))
@@ -780,7 +781,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
             hashlink::LinkedHashMap::new();
         wrapper_kvs.insert("aria-describedby".to_string(), caption_id.clone());
         let content_wrapper = Block::Div(Box::new(Div {
-            attr: (String::new(), Vec::new(), wrapper_kvs),
+            attr: (String::new(), Vec::new(), wrapper_kvs).into(),
             content,
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
@@ -806,7 +807,8 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
                     format!("quarto-float-{ref_type}"),
                 ],
                 fig_kvs,
-            ),
+            )
+                .into(),
             caption: Caption {
                 short: caption_short,
                 long: Some(final_caption),
@@ -832,7 +834,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
             user_kvs.insert("style".to_string(), style);
         }
         return Block::Div(Box::new(Div {
-            attr: (identifier, user_classes, user_kvs),
+            attr: (identifier, user_classes, user_kvs).into(),
             content: vec![figure],
             source_info,
             attr_source: AttrSourceInfo::empty(),
@@ -1065,7 +1067,8 @@ fn theorem_label_inlines(
             String::new(),
             vec!["theorem-title".to_string()],
             hashlink::LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: vec![strong],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
@@ -1340,7 +1343,7 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
     }
 
     Inline::Link(Box::new(Link {
-        attr: (String::new(), classes, hashlink::LinkedHashMap::new()),
+        attr: (String::new(), classes, hashlink::LinkedHashMap::new()).into(),
         content,
         target,
         source_info,
@@ -1508,7 +1511,7 @@ mod tests {
     }
 
     fn attr_id(id: &str) -> Attr {
-        (id.to_string(), Vec::new(), LinkedHashMap::new())
+        (id.to_string(), Vec::new(), LinkedHashMap::new()).into()
     }
 
     /// A default `FloatState` for direct unit tests of the walk's leaf
@@ -1542,7 +1545,7 @@ mod tests {
             attr: attr_id(id),
             content: vec![
                 Block::CodeBlock(Box::new(CodeBlock {
-                    attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
+                    attr: (String::new(), vec!["python".into()], LinkedHashMap::new()).into(),
                     text: "x=1".into(),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
@@ -1753,7 +1756,7 @@ mod tests {
     async fn table_target_renders_to_div_with_prefixed_caption() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
         let table = Block::Table(Box::new(Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -1761,13 +1764,13 @@ mod tests {
             },
             colspec: vec![],
             head: TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![],
@@ -1775,7 +1778,7 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -1892,7 +1895,7 @@ mod tests {
         let mut img_attr: LinkedHashMap<String, String> = LinkedHashMap::new();
         img_attr.insert("fig-align".to_string(), "left".to_string());
         let img = Inline::Image(Box::new(quarto_pandoc_types::inline::Image {
-            attr: (String::new(), Vec::new(), img_attr),
+            attr: (String::new(), Vec::new(), img_attr).into(),
             content: vec![],
             target: ("img.png".to_string(), String::new()),
             source_info: si(),
@@ -1955,7 +1958,7 @@ mod tests {
             attr: attr_id("fig-d"),
             content: vec![
                 Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
-                    attr: (String::new(), vec!["mermaid".to_string()], cb_attr),
+                    attr: (String::new(), vec!["mermaid".to_string()], cb_attr).into(),
                     text: "flowchart LR".to_string(),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
@@ -1990,7 +1993,7 @@ mod tests {
     async fn table_target_renders_q1_float_shape() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
         let table = Block::Table(Box::new(Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -1998,13 +2001,13 @@ mod tests {
             },
             colspec: vec![],
             head: TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![],
@@ -2012,7 +2015,7 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -2086,7 +2089,7 @@ mod tests {
     async fn table_float_clears_the_tables_own_caption() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
         let table = Block::Table(Box::new(Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![para("Cap")]),
@@ -2094,13 +2097,13 @@ mod tests {
             },
             colspec: vec![],
             head: TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![],
@@ -2108,7 +2111,7 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -2154,7 +2157,7 @@ mod tests {
         // `Div(.quarto-figure .quarto-figure-<align>)`, with the figure's id
         // (when present) moving to the wrapper, Q1's `renderHtmlFigure`.
         let img = Inline::Image(Box::new(quarto_pandoc_types::inline::Image {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             content: vec![],
             target: ("img.png".to_string(), String::new()),
             source_info: si(),
@@ -2162,7 +2165,7 @@ mod tests {
             target_source: TargetSourceInfo::empty(),
         }));
         let figure = Block::Figure(Box::new(Figure {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![para("A caption")]),
@@ -2219,7 +2222,8 @@ mod tests {
                 "sec-x".to_string(),
                 vec!["section".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![para("Section body text")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -2281,7 +2285,7 @@ mod tests {
         let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("fig-bare"),
             content: vec![Block::CodeBlock(Box::new(CodeBlock {
-                attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
+                attr: (String::new(), vec!["python".into()], LinkedHashMap::new()).into(),
                 text: "x=1".into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -2964,7 +2968,7 @@ mod tests {
         let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("fig-bare"),
             content: vec![Block::CodeBlock(Box::new(CodeBlock {
-                attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
+                attr: (String::new(), vec!["python".into()], LinkedHashMap::new()).into(),
                 text: "x=1".into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -3044,7 +3048,7 @@ mod tests {
         // (e.g. a CodeBlock) must not silently lose its prefix. Insert a
         // label-only Plain in front, mirroring `prepend_theorem_label`.
         let cap = vec![Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             text: "x".into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -3066,7 +3070,7 @@ mod tests {
     /// what `![cap](img){#fig-x}` parses to.
     fn native_figure_with_plain_caption(id: &str, cap: &str) -> Block {
         let img = Inline::Image(Box::new(quarto_pandoc_types::inline::Image {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             content: vec![],
             target: ("img.png".to_string(), String::new()),
             source_info: si(),
@@ -3131,7 +3135,7 @@ mod tests {
         // is `[Plain[...]]` (Pandoc's convention, and what the
         // `: cap {#tbl-x}` form desugars to).
         let table = Block::Table(Box::new(quarto_pandoc_types::table::Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![Block::Plain(quarto_pandoc_types::block::Plain {
@@ -3142,14 +3146,14 @@ mod tests {
             },
             colspec: vec![],
             head: quarto_pandoc_types::table::TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![],
             foot: quarto_pandoc_types::table::TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -3184,7 +3188,7 @@ mod tests {
         // untouched (it's not one of our two types).
         let mut callout = CustomNode::new(
             "Callout",
-            (String::new(), Vec::new(), LinkedHashMap::new()),
+            (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             si(),
         );
         callout
@@ -3206,7 +3210,7 @@ mod tests {
             kvs.insert("name".into(), t.to_string());
         }
         Block::Div(Box::new(Div {
-            attr: (id.into(), vec!["theorem".into()], kvs),
+            attr: (id.into(), vec!["theorem".into()], kvs).into(),
             content: vec![para(body)],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -3310,7 +3314,7 @@ mod tests {
         let t1 = theorem_div("thm-a", None, "a");
         let t2 = theorem_div("thm-b", None, "b");
         let lemma_div = Block::Div(Box::new(Div {
-            attr: ("lem-c".into(), vec!["lemma".into()], LinkedHashMap::new()),
+            attr: ("lem-c".into(), vec!["lemma".into()], LinkedHashMap::new()).into(),
             content: vec![para("c")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -3337,7 +3341,7 @@ mod tests {
     #[tokio::test]
     async fn unnumbered_theorem_renders_without_number() {
         let div = Block::Div(Box::new(Div {
-            attr: (String::new(), vec!["theorem".into()], LinkedHashMap::new()),
+            attr: (String::new(), vec!["theorem".into()], LinkedHashMap::new()).into(),
             content: vec![para("unnumbered")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -3381,7 +3385,7 @@ mod tests {
             kvs.insert("name".into(), t.to_string());
         }
         Block::Div(Box::new(Div {
-            attr: (String::new(), vec!["proof".into()], kvs),
+            attr: (String::new(), vec!["proof".into()], kvs).into(),
             content: vec![para(body)],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -3443,7 +3447,8 @@ mod tests {
                     id.to_string(),
                     vec!["quarto-math-with-attribute".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![Inline::Math(Box::new(Math {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),
@@ -3508,7 +3513,8 @@ mod tests {
                 "eq-plain".to_string(),
                 vec!["quarto-math-with-attribute".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             source_info: si(),
         };
         let Inline::Span(span) = render_equation(node, &float_state_for_tests()) else {
@@ -3534,7 +3540,8 @@ mod tests {
                     "eq-einstein".to_string(),
                     vec!["quarto-math-with-attribute".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![Inline::Math(Box::new(Math {
                     math_type: MathType::DisplayMath,
                     text: "e = mc^2".to_string(),

@@ -324,7 +324,8 @@ fn caption_paragraph(mut content: Vec<Inline>) -> Block {
         String::new(),
         vec!["caption".to_string()],
         LinkedHashMap::new(),
-    );
+    )
+        .into();
     content.push(Inline::Attr(Box::new(InlineAttr::new(
         caption_attr,
         AttrSourceInfo::empty(),
@@ -524,7 +525,8 @@ mod tests {
                 String::new(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 m,
-            ),
+            )
+                .into(),
             content: vec![],
             target: ("pic.png".to_string(), String::new()),
             source_info: si(),
@@ -543,7 +545,7 @@ mod tests {
     fn header() -> Block {
         Block::Header(Box::new(Header {
             level: 2,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
                 text: "Slide".to_string(),
                 source_info: si(),
@@ -557,7 +559,7 @@ mod tests {
         let mut cls = vec!["section".to_string()];
         cls.extend(classes.iter().map(|s| s.to_string()));
         Block::Div(Box::new(Div {
-            attr: (String::new(), cls, LinkedHashMap::new()),
+            attr: (String::new(), cls, LinkedHashMap::new()).into(),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -566,7 +568,7 @@ mod tests {
 
     fn figure(blocks: Vec<Block>) -> Block {
         Block::Figure(Box::new(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -582,7 +584,7 @@ mod tests {
     /// mirroring what `![caption](x)` parses to.
     fn figure_with_caption(blocks: Vec<Block>, caption: Vec<Inline>, id: &str) -> Block {
         Block::Figure(Box::new(Figure {
-            attr: (id.to_string(), vec![], LinkedHashMap::new()),
+            attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![Block::Plain(Plain {
@@ -862,7 +864,8 @@ mod tests {
                 String::new(),
                 vec!["aside".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![para(vec![Inline::Str(Str {
                 text: "note".to_string(),
                 source_info: si(),
@@ -886,7 +889,8 @@ mod tests {
                 String::new(),
                 vec!["column".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![para(vec![image(&[], &[])])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

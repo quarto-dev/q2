@@ -196,7 +196,8 @@ fn wrap_with_filename(
             String::new(),
             vec!["code-with-filename".to_string()],
             hashlink::LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: vec![make_filename_header(filename, source_info.clone()), inner],
         source_info,
         attr_source: AttrSourceInfo::empty(),
@@ -213,7 +214,8 @@ fn wrap_with_copy_scaffold(inner: Block, source_info: quarto_source_map::SourceI
             String::new(),
             vec!["code-copy-outer-scaffold".to_string()],
             hashlink::LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: vec![inner, make_copy_button(source_info.clone())],
         source_info,
         attr_source: AttrSourceInfo::empty(),
@@ -306,7 +308,7 @@ mod tests {
             kv_map.insert(k.to_string(), v.to_string());
         }
         Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec!["python".to_string()], kv_map),
+            attr: (String::new(), vec!["python".to_string()], kv_map).into(),
             text: text.to_string(),
             source_info: source_info_at(0, 0, text.len()),
             attr_source: AttrSourceInfo::empty(),

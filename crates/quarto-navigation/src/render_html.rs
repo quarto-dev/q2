@@ -1462,7 +1462,7 @@ fn push_attr_html(
     attr: &quarto_pandoc_types::attr::Attr,
     suppress_title_kv: bool,
 ) {
-    let (id, classes, kvs) = attr;
+    let (id, classes, kvs) = &**attr;
     if !id.is_empty() {
         out.push_str(" id=\"");
         out.push_str(&escape_attr(id));
@@ -1771,6 +1771,7 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
         )
+            .into()
     }
 
     fn link_inline(
@@ -2831,7 +2832,7 @@ mod tests {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         let inlines = vec![
             Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
-                attr: (String::new(), vec![], Default::default()),
+                attr: (String::new(), vec![], Default::default()).into(),
                 content: vec![str_inline("site")],
                 target: ("https://example.com".to_string(), String::new()),
                 source_info: SourceInfo::for_test(),
@@ -2842,7 +2843,7 @@ mod tests {
                 source_info: SourceInfo::for_test(),
             }),
             Inline::Code(Box::new(quarto_pandoc_types::inline::Code {
-                attr: (String::new(), vec![], Default::default()),
+                attr: (String::new(), vec![], Default::default()).into(),
                 text: "x & y".to_string(),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),

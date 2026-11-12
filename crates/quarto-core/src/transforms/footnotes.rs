@@ -910,7 +910,8 @@ mod tests {
                                 String::new(),
                                 vec!["quarto-note-reference".to_string()],
                                 reference_kv,
-                            ),
+                            )
+                                .into(),
                             content: vec![],
                             source_info: dummy_source_info(),
                             attr_source: AttrSourceInfo::empty(),
@@ -1298,7 +1299,7 @@ mod tests {
         };
         let mut callout = CustomNode::new(
             "Callout",
-            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             dummy_source_info(),
         );
         callout.set_slot(

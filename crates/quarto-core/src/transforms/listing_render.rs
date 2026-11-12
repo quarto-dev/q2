@@ -342,7 +342,7 @@ fn render_one(
     // reported that, is no longer emitted — bd-nbv80e33.)
     if try_replace_explicit_slot(ast, &r.listing, &parsed_blocks) == SlotOutcome::NotFound {
         let mut div = Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: parsed_blocks,
             source_info: SourceInfo::generated(By::programmatic_config()),
             attr_source: AttrSourceInfo::empty(),
@@ -857,7 +857,7 @@ mod tests {
         Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![Block::Div(Box::new(Div {
-                attr: (id.to_string(), vec![], LinkedHashMap::new()),
+                attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
@@ -2210,7 +2210,7 @@ mod tests {
     fn header(level: usize, text: &str) -> Block {
         Block::Header(Box::new(quarto_pandoc_types::block::Header {
             level,
-            attr: (slug(text), vec![], LinkedHashMap::new()),
+            attr: (slug(text), vec![], LinkedHashMap::new()).into(),
             content: vec![quarto_pandoc_types::inline::Inline::Str(
                 quarto_pandoc_types::inline::Str {
                     text: text.to_string(),
@@ -2240,7 +2240,7 @@ mod tests {
 
     fn slot(id: &str) -> Block {
         Block::Div(Box::new(Div {
-            attr: (id.to_string(), vec![], LinkedHashMap::new()),
+            attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),

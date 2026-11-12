@@ -294,7 +294,8 @@ fn icon_span(name: &str, link: &Link) -> Inline {
                 EXT_ICON_CLASS.to_string(),
             ],
             kv,
-        ),
+        )
+            .into(),
         content: Vec::new(),
         source_info: link.source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
@@ -366,7 +367,8 @@ mod tests {
                 kv.iter()
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: "text".to_string(),
                 source_info: si(),

@@ -141,7 +141,7 @@ pub fn chapter_label_prefix(item: &BookRenderItem) -> Option<String> {
 pub fn decorated_chapter_text(prefix: &str, title: &str) -> ConfigValue {
     let span = |class: &str, text: &str| {
         Inline::Span(Box::new(Span {
-            attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: gen_si(),

@@ -356,7 +356,8 @@ mod tests {
                 String::new(),
                 classes.iter().map(|c| c.to_string()).collect(),
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
@@ -834,7 +835,8 @@ mod tests {
                     String::new(),
                     vec!["section".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![inner],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),

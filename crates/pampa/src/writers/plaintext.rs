@@ -488,7 +488,7 @@ mod tests {
     #[test]
     fn test_code_with_backticks() {
         let inlines = vec![Inline::Code(Box::new(Code {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             text: "code".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -549,7 +549,7 @@ mod tests {
     #[test]
     fn test_code_block_fenced() {
         let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             text: "let x = 1;".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -582,7 +582,7 @@ mod tests {
     #[test]
     fn test_table_dropped_with_warning() {
         let blocks = vec![Block::Table(Box::new(Table {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             caption: crate::pandoc::caption::Caption {
                 short: None,
                 long: None,
@@ -590,14 +590,14 @@ mod tests {
             },
             colspec: vec![],
             head: crate::pandoc::table::TableHead {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             },
             bodies: vec![],
             foot: crate::pandoc::table::TableFoot {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn test_span_stripped() {
         let inlines = vec![Inline::Span(Box::new(Span {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("span content")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     fn test_link_content_only() {
         let inlines = vec![Inline::Link(Box::new(Link {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("link text")],
             target: ("https://example.com".to_string(), String::new()),
             source_info: dummy_source_info(),
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn test_image_content_only() {
         let inlines = vec![Inline::Image(Box::new(Image {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("alt text")],
             target: ("image.png".to_string(), String::new()),
             source_info: dummy_source_info(),
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn test_insert_stripped() {
         let inlines = vec![Inline::Insert(Box::new(Insert {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("inserted")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -825,7 +825,7 @@ mod tests {
     #[test]
     fn test_delete_stripped() {
         let inlines = vec![Inline::Delete(Box::new(Delete {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("deleted")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -838,7 +838,7 @@ mod tests {
     #[test]
     fn test_highlight_stripped() {
         let inlines = vec![Inline::Highlight(Box::new(Highlight {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("highlighted")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -851,7 +851,7 @@ mod tests {
     #[test]
     fn test_edit_comment_stripped() {
         let inlines = vec![Inline::EditComment(Box::new(EditComment {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("comment")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -903,7 +903,8 @@ mod tests {
                     "id".to_string(),
                     vec!["class".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 crate::pandoc::attr::AttrSourceInfo::empty(),
                 quarto_source_map::SourceInfo::for_test(),
             ))),
@@ -922,7 +923,7 @@ mod tests {
             type_name: "TestCustom".to_string(),
             slots: hashlink::LinkedHashMap::new(),
             plain_data: serde_json::Value::Null,
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             source_info: dummy_source_info(),
         }))];
         let (result, diags) = inlines_to_string(&inlines);
@@ -951,7 +952,7 @@ mod tests {
     fn test_header_block() {
         let blocks = vec![Block::Header(Box::new(Header {
             level: 2,
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str("Heading")],
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -1075,7 +1076,8 @@ mod tests {
                 "myid".to_string(),
                 vec!["myclass".to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("Div content")],
                 source_info: dummy_source_info(),
@@ -1092,7 +1094,7 @@ mod tests {
     #[test]
     fn test_figure_contents_only() {
         let blocks = vec![Block::Figure(Box::new(Figure {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             caption: crate::pandoc::caption::Caption {
                 short: None,
                 long: None,
@@ -1219,7 +1221,7 @@ mod tests {
             type_name: "TestCallout".to_string(),
             slots: hashlink::LinkedHashMap::new(),
             plain_data: serde_json::Value::Null,
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             source_info: dummy_source_info(),
         }))];
         let (result, diags) = blocks_to_string(&blocks);
@@ -1261,7 +1263,7 @@ mod tests {
     #[test]
     fn test_code_block_with_trailing_newline() {
         let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             text: "let x = 1;\n".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),

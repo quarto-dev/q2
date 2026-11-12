@@ -241,7 +241,7 @@ fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32) -> Div {
         let mut attrs = hashlink::LinkedHashMap::new();
         attrs.insert("role".to_string(), "tabpanel".to_string());
         attrs.insert("aria-labelledby".to_string(), format!("{tabid}-tab"));
-        let pane_attr: Attr = (tabid, classes, attrs);
+        let pane_attr: Attr = (tabid, classes, attrs).into();
         let content = match custom.slots.remove(&format!("content-{i}")) {
             Some(Slot::Blocks(blocks)) => blocks,
             _ => Vec::new(),
@@ -258,7 +258,8 @@ fn resolve_tabset(custom: &mut CustomNode, counter: &mut u32) -> Div {
             String::new(),
             vec!["tab-content".to_string()],
             hashlink::LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: panes,
         source_info: tabset_source(),
         attr_source: AttrSourceInfo::empty(),
@@ -313,7 +314,8 @@ mod tests {
                 String::new(),
                 vec!["panel-tabset".to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             si(),
         );
         custom.plain_data = json!({

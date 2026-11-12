@@ -672,7 +672,7 @@ fn read_attr(value: &Value) -> Result<Attr> {
         .collect::<Result<Vec<_>>>()?;
 
     let kvs_map = kvs.into_iter().collect();
-    Ok((id, classes, kvs_map))
+    Ok((id, classes, kvs_map).into())
 }
 
 /// Read AttrSourceInfo from JSON, returning empty if not present or null.
@@ -755,11 +755,7 @@ fn read_attr_source(
         .transpose()?
         .unwrap_or_default();
 
-    Ok(AttrSourceInfo {
-        id,
-        classes,
-        attributes,
-    })
+    Ok(AttrSourceInfo::new(id, classes, attributes))
 }
 
 /// Read an optional source-info ref: absent or `null` → `None`, a pool
@@ -3061,7 +3057,7 @@ fn read_custom_block_from_div(
         type_name,
         slots,
         plain_data,
-        attr,
+        attr: attr.into(),
         source_info,
     })))
 }
@@ -3178,7 +3174,7 @@ fn read_custom_inline_from_span(
         type_name,
         slots,
         plain_data,
-        attr,
+        attr: attr.into(),
         source_info,
     })))
 }

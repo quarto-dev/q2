@@ -102,7 +102,7 @@ mod tests {
     fn make_header(level: usize, text: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
         quarto_pandoc_types::Block::Header(Box::new(Header {
             level,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![quarto_pandoc_types::Inline::Str(Str {
                 text: text.to_string(),
                 source_info: source.clone(),
@@ -114,7 +114,7 @@ mod tests {
 
     fn make_code_block(code: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
         quarto_pandoc_types::Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec!["{r}".to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec!["{r}".to_string()], LinkedHashMap::new()).into(),
             text: code.to_string(),
             source_info: source,
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -130,7 +130,8 @@ mod tests {
                 String::new(),
                 vec!["cell".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: blocks,
             source_info: source,
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -322,7 +323,7 @@ mod tests {
         use quarto_pandoc_types::{Delete, EditComment, Highlight, Insert, QuoteType, Quoted};
         fn attr_for(changed: bool) -> quarto_pandoc_types::Attr {
             let class = if changed { "new" } else { "old" };
-            (String::new(), vec![class.to_string()], LinkedHashMap::new())
+            (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
         }
         fn content(source: &SourceInfo) -> Vec<quarto_pandoc_types::Inline> {
             vec![quarto_pandoc_types::Inline::Str(Str {
@@ -573,7 +574,7 @@ mod tests {
                     source_info: source_original(),
                 }),
                 quarto_pandoc_types::Inline::Code(Box::new(quarto_pandoc_types::Code {
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     text: "r 23 * 37".to_string(),
                     source_info: source_original(),
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -764,7 +765,7 @@ mod tests {
             type_name: type_name.to_string(),
             slots,
             plain_data: serde_json::json!({"type": "note"}),
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: source,
         }
     }
@@ -1018,7 +1019,7 @@ mod tests {
                 type_name: "Callout".to_string(),
                 slots,
                 plain_data: serde_json::json!({}),
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: source,
             }
         }
@@ -1097,7 +1098,7 @@ mod tests {
                 type_name: "Shortcode".to_string(),
                 slots,
                 plain_data: serde_json::json!({"name": "video"}),
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: source,
             }))
         }
@@ -1164,7 +1165,7 @@ mod tests {
     // Slot::Blocks, custom-node Slot::Inlines.
 
     fn empty_attr() -> quarto_pandoc_types::Attr {
-        (String::new(), vec![], LinkedHashMap::new())
+        (String::new(), vec![], LinkedHashMap::new()).into()
     }
 
     /// One-column table with an optional caption and a single body cell.
@@ -1936,7 +1937,8 @@ mod list_length_tests {
                         String::new(),
                         vec![attr_class.to_string()],
                         LinkedHashMap::new(),
-                    ),
+                    )
+                        .into(),
                     content: vec![quarto_pandoc_types::Inline::Str(Str {
                         text: text.to_string(),
                         source_info: source.clone(),

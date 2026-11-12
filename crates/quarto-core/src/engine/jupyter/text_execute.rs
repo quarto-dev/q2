@@ -1296,7 +1296,8 @@ mod tests {
                     String::new(),
                     vec![format!("{{{lang}}}")],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 text: format!("-- {lang} code"),
                 source_info: si.clone(),
                 attr_source: AttrSourceInfo::empty(),

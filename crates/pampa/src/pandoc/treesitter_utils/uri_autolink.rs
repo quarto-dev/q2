@@ -190,7 +190,7 @@ pub fn process_uri_autolink(
                 context,
             ),
         })],
-        attr,
+        attr: attr.into(),
         target: (target, String::new()),
         source_info: crate::pandoc::location::range_to_source_info_with_context(
             &autolink_range,
@@ -198,11 +198,7 @@ pub fn process_uri_autolink(
         ),
         // The `uri`/`email` class is synthesized; a `None` placeholder keeps
         // the sidecar aligned with attr.1 (bd-nq3ed2im).
-        attr_source: crate::pandoc::attr::AttrSourceInfo {
-            id: None,
-            classes: vec![None],
-            attributes: Vec::new(),
-        },
+        attr_source: crate::pandoc::attr::AttrSourceInfo::new(None, vec![None], Vec::new()),
         target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
     })));
 

@@ -672,11 +672,7 @@ fn process_native_inline<T: Write>(
                 use crate::pandoc::attr::{AttrSourceInfo, empty_attr};
                 Inline::Span(Box::new(crate::pandoc::inline::Span {
                     attr: empty_attr(),
-                    attr_source: AttrSourceInfo {
-                        id: None,
-                        classes: Vec::new(),
-                        attributes: Vec::new(),
-                    },
+                    attr_source: AttrSourceInfo::new(None, Vec::new(), Vec::new()),
                     content: inlines,
                     source_info: node_source_info_fn(),
                 }))
@@ -1394,7 +1390,7 @@ fn native_visitor<T: Write>(
             let mut attr_source = AttrSourceInfo::empty();
             attr_source.classes.push(Some(span.clone()));
 
-            PandocNativeIntermediate::IntermediateAttr(attr, attr_source, span)
+            PandocNativeIntermediate::IntermediateAttr(attr.into(), attr_source, span)
         }
         "attribute_specifier" => {
             // Filter out delimiter nodes and pass through the relevant child result
@@ -1414,7 +1410,7 @@ fn native_visitor<T: Write>(
             // If no commonmark_specifier or raw_specifier found, return empty attr
             use hashlink::LinkedHashMap;
             PandocNativeIntermediate::IntermediateAttr(
-                (String::new(), vec![], LinkedHashMap::new()),
+                (String::new(), vec![], LinkedHashMap::new()).into(),
                 AttrSourceInfo::empty(),
                 node_source_info_with_context(node, context),
             )
@@ -1507,7 +1503,7 @@ fn native_visitor<T: Write>(
             // Pandoc class form {.r echo=FALSE} is intentionally still valid
             // and is excluded by the literal-braces check on classes[0].
             if let PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(ref cb)) = result {
-                let (ref _id, ref classes, ref attrs) = cb.attr;
+                let (ref _id, ref classes, ref attrs) = *cb.attr;
 
                 let has_only_braced_language =
                     classes.len() == 1 && classes[0].starts_with('{') && classes[0].ends_with('}');
@@ -1754,7 +1750,8 @@ fn native_visitor<T: Write>(
                         String::new(),
                         vec!["anchor".to_string()],
                         LinkedHashMap::new(),
-                    ),
+                    )
+                        .into(),
                     content: vec![Inline::Str(Str {
                         text: anchor_id.to_string(),
                         source_info: source_info.clone(),
@@ -1763,11 +1760,7 @@ fn native_visitor<T: Write>(
                     source_info,
                     // The `anchor` class is synthesized; a `None` placeholder
                     // keeps the sidecar aligned with attr.1 (bd-nq3ed2im).
-                    attr_source: AttrSourceInfo {
-                        id: None,
-                        classes: vec![None],
-                        attributes: Vec::new(),
-                    },
+                    attr_source: AttrSourceInfo::new(None, vec![None], Vec::new()),
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
                 })));
 

@@ -146,7 +146,7 @@ fn extract_footnotes_section(blocks: &mut Vec<Block>) -> HashMap<String, Blocks>
                     if let Block::Div(d) = b {
                         let mut content = d.content;
                         strip_backlinks(&mut content);
-                        defs.insert(d.attr.0, content);
+                        defs.insert(d.attr.into_tuple().0, content);
                     }
                 }
             }
@@ -231,7 +231,7 @@ fn coalesce_one_slide(slide: &mut Div, defs: &HashMap<String, Blocks>) {
 /// A `<div>` with no attributes wrapping `content`.
 fn plain_div(content: Blocks) -> Block {
     Block::Div(Box::new(Div {
-        attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+        attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
@@ -241,7 +241,7 @@ fn plain_div(content: Blocks) -> Block {
 /// A `<div class="{class}">` wrapping `content`.
 fn classed_div(class: &str, content: Blocks) -> Block {
     Block::Div(Box::new(Div {
-        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),

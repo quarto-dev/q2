@@ -412,7 +412,7 @@ fn header_to_symbol(header: &Header, ctx: &SourceContext) -> Option<Symbol> {
 }
 
 fn code_block_to_symbol(code_block: &CodeBlock, ctx: &SourceContext) -> Option<Symbol> {
-    let (id, classes, attrs) = &code_block.attr;
+    let (id, classes, attrs) = &*code_block.attr;
     let executable_languages = [
         "r", "python", "julia", "bash", "sh", "sql", "ojs", "dot", "mermaid",
     ];

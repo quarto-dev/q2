@@ -25,7 +25,7 @@ fn empty_source_info() -> SourceInfo {
 
 /// Create an empty attribute tuple.
 fn empty_attr() -> quarto_pandoc_types::Attr {
-    (String::new(), vec![], LinkedHashMap::new())
+    (String::new(), vec![], LinkedHashMap::new()).into()
 }
 
 // ============================================================================
@@ -532,7 +532,7 @@ fn gen_code_block() -> impl Strategy<Value = Block> {
         let classes = lang.map(|l| vec![l]).unwrap_or_default();
         Block::CodeBlock(Box::new(CodeBlock {
             text,
-            attr: (String::new(), classes, LinkedHashMap::new()),
+            attr: (String::new(), classes, LinkedHashMap::new()).into(),
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
         }))

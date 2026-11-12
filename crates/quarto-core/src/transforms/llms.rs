@@ -421,7 +421,7 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
                     .find(|l| l.listing.container_id() == div.attr.0)
             {
                 out.push(Block::Div(Box::new(quarto_pandoc_types::block::Div {
-                    attr: (div.attr.0.clone(), vec![], hashlink::LinkedHashMap::new()),
+                    attr: (div.attr.0.clone(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![synthesize_listing_list(listing, cx)],
                     source_info: div.source_info,
                     attr_source: AttrSourceInfo::empty(),
@@ -443,7 +443,7 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
                     out.extend(children);
                 } else {
                     out.push(Block::Div(Box::new(quarto_pandoc_types::block::Div {
-                        attr: (id, vec![], hashlink::LinkedHashMap::new()),
+                        attr: (id, vec![], hashlink::LinkedHashMap::new()).into(),
                         content: children,
                         source_info: div.source_info,
                         attr_source: AttrSourceInfo::empty(),
@@ -552,7 +552,7 @@ fn synthesize_listing_list(
                 ItemTarget::Href(raw_href) => {
                     let href = retarget_href(raw_href, cx);
                     vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
-                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                         content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
@@ -564,7 +564,7 @@ fn synthesize_listing_list(
                     let based = relativize(&cx.cur_dir, output_href);
                     let href = retarget_href(&based, cx);
                     vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
-                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                         content: title,
                         target: (href, String::new()),
                         source_info: gen_si(),
@@ -684,7 +684,7 @@ fn rebuild_callout(div: quarto_pandoc_types::block::Div, cx: &ViewContext) -> Ve
 
     let class = callout_type.map_or_else(|| "callout".to_string(), |t| format!("callout-{t}"));
     vec![Block::Div(Box::new(quarto_pandoc_types::block::Div {
-        attr: (String::new(), vec![class], hashlink::LinkedHashMap::new()),
+        attr: (String::new(), vec![class], hashlink::LinkedHashMap::new()).into(),
         content,
         source_info: div.source_info,
         attr_source: AttrSourceInfo::empty(),
@@ -1451,7 +1451,7 @@ mod tests {
             map.insert(k.to_string(), v.to_string());
         }
         Inline::Link(Box::new(Link {
-            attr: (String::new(), vec![], map),
+            attr: (String::new(), vec![], map).into(),
             content: vec![Inline::Str(Str {
                 text: "x".to_string(),
                 source_info: SourceInfo::for_test(),

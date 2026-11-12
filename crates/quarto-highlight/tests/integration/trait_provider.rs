@@ -52,7 +52,7 @@ impl UserGrammarProvider for MockProvider {
 
 fn attr_with_class(class: &str) -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), vec![class.to_string()], LinkedHashMap::new())
+    (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
 }
 
 fn empty_source_info() -> SourceInfo {

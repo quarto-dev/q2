@@ -196,7 +196,7 @@ fn test_json_roundtrip_complex_document() {
                 ),
             }),
             Block::CodeBlock(Box::new(pampa::pandoc::CodeBlock {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 text: "print('Hello, world!')".to_string(),
                 source_info: SourceInfo::from_range(
                     FileId(0),

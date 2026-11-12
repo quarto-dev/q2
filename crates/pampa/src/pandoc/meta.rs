@@ -213,7 +213,8 @@ fn parse_yaml_string_as_markdown_to_config(
                     String::new(),
                     vec!["yaml-markdown-syntax-error".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![Inline::Str(Str {
                     text: value.to_string(),
                     source_info: source_info.clone(),
@@ -392,7 +393,8 @@ fn yaml_to_config_value_at(
                                 String::new(),
                                 vec!["yaml-tagged-string".to_string()],
                                 attributes,
-                            ),
+                            )
+                                .into(),
                             content: vec![Inline::Str(Str {
                                 text: s,
                                 source_info: source_info.clone(),
