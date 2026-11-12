@@ -586,9 +586,7 @@ mod tests {
     }
 
     fn spawns(count_file: &Path) -> usize {
-        std::fs::read_to_string(count_file)
-            .map(|s| s.lines().count())
-            .unwrap_or(0)
+        std::fs::read_to_string(count_file).map_or(0, |s| s.lines().count())
     }
 
     /// bd-e87d5tmn: a kernel that loses a port it was handed (another socket
