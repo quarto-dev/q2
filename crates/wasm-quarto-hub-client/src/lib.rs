@@ -4095,7 +4095,8 @@ struct TitleBlockMetaResponse {
 /// its title block on every keystroke instead of waiting for a render.
 ///
 /// Sees only the metadata in `ast_json`, so values a project or directory
-/// layer would contribute are not included.
+/// layer would contribute are not included. Values without source info (`s`),
+/// such as an editor's edits, are accepted and marked as generated.
 ///
 /// # Returns
 /// JSON: `{ "success": true, "ast": "<ast-json>", "issues": [...] }`, where
@@ -4103,9 +4104,10 @@ struct TitleBlockMetaResponse {
 /// `ref`, or `{ "success": false, "error": "...", "issues": [] }`.
 #[wasm_bindgen]
 pub fn title_block_meta(ast_json: &str) -> String {
-    use pampa::readers::json::read as json_read;
+    use pampa::readers::json::read_completing_source_info;
     use pampa::writers::json::{JsonConfig, write_with_config};
     use quarto_core::transforms::normalize_authors_meta;
+    use quarto_source_map::By;
 
     let error = |message: String| {
         serde_json::to_string(&TitleBlockMetaResponse {
@@ -4118,7 +4120,7 @@ pub fn title_block_meta(ast_json: &str) -> String {
     };
 
     let mut cursor = std::io::Cursor::new(ast_json.as_bytes());
-    let (mut pandoc, context) = match json_read(&mut cursor) {
+    let (mut pandoc, context) = match read_completing_source_info(&mut cursor, By::unknown()) {
         Ok(result) => result,
         Err(e) => return error(format!("Failed to read AST JSON: {}", e)),
     };
