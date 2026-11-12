@@ -104,6 +104,7 @@ pub mod test_hard_soft_break;
 pub mod test_heading_auto_id;
 pub mod test_html_attr_handling;
 pub mod test_html_block_lift;
+pub mod test_html_list_item_para;
 pub mod test_indented_continuation;
 pub mod test_inline_locations;
 pub mod test_json_div_transforms;

@@ -270,3 +270,22 @@ fn qmd_round_trip_preserves_empty_task_item() {
         "empty task item must re-parse as a task item; qmd was {out:?}"
     );
 }
+
+#[test]
+fn html_loose_task_items_keep_their_paragraphs() {
+    // Pandoc renders a loose task item as `<li><p><label>…</label></p></li>`;
+    // the `<p>` must survive the checkbox rewrite (bd-nnvvomg6).
+    let html = to_html("- [ ] todo\n\n- [x] done\n");
+    assert!(
+        html.contains(
+            "<li class=\"task-list-item\"><p><label><input type=\"checkbox\" disabled=\"\" />todo</label></p>"
+        ),
+        "loose unchecked item: {html}"
+    );
+    assert!(
+        html.contains(
+            "<li class=\"task-list-item\"><p><label><input type=\"checkbox\" checked=\"\" disabled=\"\" />done</label></p>"
+        ),
+        "loose checked item: {html}"
+    );
+}

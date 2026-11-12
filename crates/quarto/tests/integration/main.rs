@@ -31,6 +31,7 @@ pub mod jupyter_document_isolation_e2e;
 pub mod jupyter_kernel_cleanup_e2e;
 pub mod jupyter_subcap_group_cli;
 pub mod lmd_snapshots;
+pub mod loose_list_render;
 pub mod lua_host_context_cli;
 pub mod lua_os_exit_cli;
 pub mod metadata_flag_cli_e2e;
