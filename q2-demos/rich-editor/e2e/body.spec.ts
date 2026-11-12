@@ -360,6 +360,31 @@ test.describe('moving through the document', () => {
     await editor.expectCaret('title', 0)
   })
 
+  test('the arrow keys stop on each empty paragraph', async ({ page }) => {
+    const editor = await openEditor(page, 'body')
+    editor.document.replace('First paragraph.', 'First paragraph.\n\n&nbsp;\n\n&nbsp;')
+    await expect.poll(async () => (await editor.paragraphs()).slice(0, 3)).toEqual(['First paragraph.', '', ''])
+    await editor.placeCaretInParagraph(3, 0)
+
+    await page.keyboard.press('ArrowUp')
+    await editor.expectParagraphCaret(2, 0)
+    await page.keyboard.press('ArrowUp')
+    await editor.expectParagraphCaret(1, 0)
+    await page.keyboard.press('ArrowUp')
+    await editor.expectParagraphCaret(0, 0)
+
+    await page.keyboard.press('ArrowDown')
+    await editor.expectParagraphCaret(1, 0)
+    await page.keyboard.press('ArrowDown')
+    await editor.expectParagraphCaret(2, 0)
+    await page.keyboard.press('ArrowRight')
+    await editor.expectParagraphCaret(3, 0)
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectParagraphCaret(2, 0)
+    await page.keyboard.press('ArrowLeft')
+    await editor.expectParagraphCaret(1, 0)
+  })
+
   test('Down and Up step over what can\'t be edited', async ({ page }) => {
     const editor = await openEditor(page, 'body')
     await editor.placeCaretInParagraph(1, 3)
