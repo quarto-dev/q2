@@ -128,13 +128,12 @@ try {
   console.log('\nSmoke test: parse_qmd_content (tree-sitter)');
   try {
     const qmd = '# Hello\n\nWorld\n';
-    const result = mod.parse_qmd_content(qmd);
-    const parsed = JSON.parse(result);
+    const parsed = mod.parse_qmd_content(qmd);
     if (parsed.success) {
       console.log('  PASS — QMD parsing works');
       passed++;
     } else {
-      console.log(`  FAIL — parse returned success=false: ${result.slice(0, 200)}`);
+      console.log(`  FAIL — parse returned success=false: ${JSON.stringify(parsed).slice(0, 200)}`);
       failed++;
     }
   } catch (e) {

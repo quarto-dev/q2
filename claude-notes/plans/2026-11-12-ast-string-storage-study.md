@@ -2,7 +2,7 @@
 title: "Study: arena / borrowed string storage for the Pandoc AST"
 strand: bd-akgst1fi
 related: [bd-is4q72tt]
-status: "Layout steps 1, 2a, 2b merged: native AST heap 88x -> 18.3x of source; hub WASM peak -24%. ecow step implemented but unmerged (neutral end to end). WASM measurement shows JSON serialization, not AST storage, now dominates hub memory."
+status: "Layout steps 1, 2a, 2b merged (native AST heap 88x -> 18.3x of source). Hub response now streams to JS: 57 -> 15.6 MiB over an editing session for a 188 KiB doc. Open: parse-error path (+40 MiB), duplicated locations on the wire, ecow (unmerged, neutral end to end)."
 date: 2026-11-12
 ---
 
@@ -572,7 +572,8 @@ Largest plan file, 188 KiB of source:
 | `feature/ast-node-layout` (steps 1, 2a, 2b) | 43.6 MiB | 237× |
 | + `ecow` | 43.1 MiB | 235× |
 
-The layout work cut hub peak memory by 24%. What remains is not AST
+The layout work cut hub peak memory by 24% for a single parse (but see
+"Hub response" below: not across an editing session). What remains is not AST
 storage: on wasm32 the AST of this document is now on the order of 2 MiB.
 The response `parse_qmd_to_ast` returns for it is **9.1 MiB of JSON** (48×
 the source), of which 7.3 MiB is the AST JSON carried as a string inside
@@ -585,6 +586,81 @@ Since hub/WASM memory is the first priority, the highest-value next step
 is no longer in the AST: it is the size and construction of the JSON wire
 format (source-info encoding per node, the double encoding, and whether
 the writer builds `serde_json::Value` trees before printing).
+
+### Hub response: profiling and the streaming fix (bd-fz5ls4vq)
+
+**What the response contained.** For the 188 KiB document,
+`parse_qmd_to_ast` returned 9.1 MiB of JSON. Inside its 7.7 MiB AST:
+
+| Part | Size | Share |
+|---|---|---|
+| `l`: resolved begin/end line, column, offset and file on every node | 4.8 MiB | 62% |
+| `astContext.p`: the source-info pool each node's `s` id points into | 1.9 MiB | 25% |
+| Everything else (types, text, attributes, structure) | 1.0 MiB | 13% |
+
+Locations are sent twice (`s` and `l`), and the AST JSON was carried as an
+escaped string inside a second JSON document. The writer on this path
+already streams; it builds no `serde_json::Value` tree.
+
+**Where the WASM peak went.** Measured with a temporary mode switch in the
+entry point, each mode in a fresh instance:
+
+| Stage | Peak growth |
+|---|---|
+| Parse and pipeline only | 15.4 MiB |
+| + write the AST JSON into a `Vec<u8>` | 27.6 MiB |
+| + wrap it in the response JSON (the old behavior) | 43.6 MiB |
+| old behavior without `l` | 23.5 MiB |
+| without the wrap | 27.6 MiB |
+| without both | 15.4 MiB |
+
+**The fix (approach 2, done).** `parse_qmd_to_ast`,
+`parse_qmd_to_ast_with_attribution` and `parse_qmd_content` now return a JS
+object instead of a JSON string. Its `ast` field is still the AST JSON as a
+string, so everything downstream of the wrapper is unchanged. The AST JSON
+is written through `JsStringSink`, an `io::Write` that flushes 64 KiB
+chunks to JS strings and joins them there, so the document never sits in
+WASM memory, neither as a doubling `Vec` nor as an escaped copy.
+
+A first version only removed the wrap and still built one `String`. It
+measured 27.6 MiB for a single parse but did not hold up over a session;
+the sink is what fixed that.
+
+Editing-session measurements (`wasm-mem.mjs`, same document):
+
+| Build | First parse | After 30 valid edits | After one failed parse |
+|---|---|---|---|
+| `main` | 57.1 MiB | 57.1 MiB | 57.1 MiB |
+| layout steps only | 43.6 MiB | 59.7 MiB | 59.7 MiB |
+| + streaming response | 15.4 MiB | 15.6 MiB | 55.9 MiB |
+
+Two things this table corrects in the earlier "WASM measurement" section:
+
+- The layout work's 24% single-parse gain did not survive an editing
+  session. The growing JSON buffers fragmented the heap back to the level
+  of `main`. It only pays off together with the streaming response.
+- With the JSON out of WASM memory, `l` no longer costs WASM memory at
+  all. Approach 1 (dropping the duplicated locations) is now about
+  JavaScript heap and parse time, not the WASM high-water mark.
+
+**New finding: the parse-error path.** One failed parse of this document
+grows memory by 40 MiB, permanently, and mid-typing states often fail to
+parse. On an error the reader parses a second time with tree-sitter
+logging on and keeps every log message for the whole document
+(`readers/qmd.rs`, `TreeSitterLogObserver`). This now sets the hub's
+real high-water mark. Filed as a strand under the epic.
+
+**Options not taken.**
+
+- *Flatter wire format* (text by reference to the source the client
+  already holds, text runs on the wire, node tables): still available, now
+  for JavaScript-side cost only.
+- *Incremental updates* (keep the previous AST in WASM, send only changed
+  blocks): **deferred indefinitely** (decision 2026-11-12). It would be
+  the most scalable change, but it makes the two subsystems share state
+  across calls, and that dependency would be hard to undo. Revisit only if
+  hub memory or latency becomes a critical problem that the stateless
+  options cannot solve.
 
 ## Decisions (2026-11-12)
 

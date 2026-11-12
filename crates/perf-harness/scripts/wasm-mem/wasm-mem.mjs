@@ -6,12 +6,15 @@
 //   node crates/perf-harness/scripts/wasm-mem/wasm-mem.mjs \
 //        crates/wasm-quarto-hub-client/pkg claude-notes/plans [count]
 //
-// It parses the <count> (default 40) largest `.md` files of the directory
-// with `parse_qmd_to_ast`, one after another, and prints one JSON line.
-// WASM linear memory never shrinks, so `growth_MiB` is the high-water mark
-// over the run: in practice, what the largest document needed. That
-// includes everything the entry point does (parse, pipeline, and the JSON
-// response it returns), not only AST storage.
+// It takes the <count> (default 40) largest `.md` files of the directory
+// and prints one JSON line with the module's linear-memory growth at four
+// points: after one `parse_qmd_to_ast` of the largest document, after 30
+// more parses of it as text is appended (an editing session), after one
+// version of it that fails to parse, and after parsing all <count>
+// documents. WASM linear memory never shrinks,
+// so each figure is a high-water mark. It covers everything the entry
+// point does (parse, pipeline, and the response it returns), not only AST
+// storage.
 //
 // To compare two commits, build the module in each (a second worktree
 // works) and run this script against both `pkg` directories.
@@ -62,29 +65,59 @@ const sized = await Promise.all(names.map(async (n) => [n, (await stat(join(docs
 sized.sort((a, b) => b[1] - a[1]);
 const files = sized.slice(0, count);
 
+const ok = (response) => (typeof response === 'string' ? JSON.parse(response) : response).success;
+// Older builds return the response as one JSON string; newer ones return
+// the object, with the AST JSON as a string field.
+const astLength = (response) =>
+  typeof response === 'string' ? response.length : (response.ast?.length ?? 0);
+const MiB = (bytes) => Number((bytes / 1048576).toFixed(1));
+
 const base = memory();
+const largestText = await readFile(join(docs, files[0][0]), 'utf8');
+const largest = files[0][1];
+
+// 1. One parse of the largest document.
+const first = await mod.parse_qmd_to_ast(largestText);
+const afterFirst = memory();
+
+// 2. An editing session: the same document re-parsed 30 times as text is
+//    typed at its end. Every version parses. Fragmentation would show here.
+const EDITS = 30;
+let editsParsed = 0;
+for (let k = 1; k <= EDITS; k++) {
+  const edited = largestText + '\n\n' + 'Another sentence of typing. '.repeat(k) + '\n';
+  if (ok(await mod.parse_qmd_to_ast(edited))) editsParsed += 1;
+}
+const afterEdits = memory();
+
+// 3. One version that does not parse (an unclosed code span, as happens
+//    mid-typing). The error path re-parses to build its message.
+const broken = await mod.parse_qmd_to_ast(largestText + '\n\n(`\n');
+const afterError = memory();
+
+// 4. The rest of the corpus, one document after another.
 let sourceBytes = 0;
 let parsed = 0;
-let largestResponse = 0;
 const start = performance.now();
 for (const [name, size] of files) {
-  const response = await mod.parse_qmd_to_ast(await readFile(join(docs, name), 'utf8'));
-  if (JSON.parse(response).success) parsed += 1;
+  if (ok(await mod.parse_qmd_to_ast(await readFile(join(docs, name), 'utf8')))) parsed += 1;
   sourceBytes += size;
-  largestResponse = Math.max(largestResponse, response.length);
 }
 const elapsed = performance.now() - start;
-const largest = files[0]?.[1] ?? 0;
-const MiB = (bytes) => Number((bytes / 1048576).toFixed(1));
+
 console.log(JSON.stringify({
+  largest_doc_KiB: Math.round(largest / 1024),
+  largest_ast_json_MiB: MiB(astLength(first)),
+  memory_base_MiB: MiB(base),
+  growth_first_parse_MiB: MiB(afterFirst - base),
+  growth_after_30_edits_MiB: MiB(afterEdits - base),
+  edits_parsed: editsParsed,
+  growth_after_parse_error_MiB: MiB(afterError - base),
+  parse_error_triggered: !ok(broken),
+  growth_after_corpus_MiB: MiB(memory() - base),
+  first_parse_over_source: Number(((afterFirst - base) / Math.max(largest, 1)).toFixed(1)),
   files: files.length,
   parsed,
   source_MiB: MiB(sourceBytes),
-  largest_doc_KiB: Math.round(largest / 1024),
-  largest_response_MiB: MiB(largestResponse),
-  memory_base_MiB: MiB(base),
-  memory_final_MiB: MiB(memory()),
-  growth_MiB: MiB(memory() - base),
-  growth_over_largest_doc: Number(((memory() - base) / Math.max(largest, 1)).toFixed(1)),
-  parse_ms: Math.round(elapsed),
+  corpus_parse_ms: Math.round(elapsed),
 }));

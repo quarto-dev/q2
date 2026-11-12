@@ -144,7 +144,7 @@ describe('apply_node_edit with compact source_info format', () => {
         const compactEntry = pool[para.s];
         const destSiJson = JSON.stringify(compactEntry);
 
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('Replaced text.\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('Replaced text.\n');
         expect(subtree.success).toBe(true);
 
         const editResult: AstResponse = JSON.parse(
@@ -175,7 +175,7 @@ describe('full edit round-trip', () => {
         const para0 = a_u.blocks.find((b: any) => b.t === 'Para');
         const destSiJson = JSON.stringify(pool[para0.s]);
 
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('Edited.\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('Edited.\n');
         const editResult: AstResponse = JSON.parse(
             wasm.apply_node_edit(content, result.untransformed_ast_json!, destSiJson, subtree.ast!),
         );
@@ -199,7 +199,7 @@ describe('full edit round-trip', () => {
         const destSiJson = JSON.stringify(pool[para.s]);
 
         // The replacement text uses inline markdown.
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('Hello *world*.\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('Hello *world*.\n');
         const editResult: AstResponse = JSON.parse(
             wasm.apply_node_edit(CONTENT, result.untransformed_ast_json!, destSiJson, subtree.ast!),
         );
@@ -217,8 +217,8 @@ describe('full edit round-trip', () => {
 describe('parseQmdContentSync no-trailing-newline', () => {
     it('parseQmdContentSync handles text without trailing newline', () => {
         // parse_qmd_content is the underlying WASM function; the TS wrapper
-        // (parseQmdContentSync in wasmRenderer.ts) is a thin JSON.parse layer.
-        const result: AstResponse = JSON.parse(wasm.parse_qmd_content('a *emph* word'));
+        // (parseQmdContentSync in wasmRenderer.ts) returns its result object as is.
+        const result: AstResponse = wasm.parse_qmd_content('a *emph* word');
         expect(result.success).toBe(true);
         expect(result.ast).toBeTruthy();
     });
@@ -304,7 +304,7 @@ describe('surrounding-verbatim round-trips', () => {
         // Edit the middle paragraph (index 1).
         const middlePara = paras[1];
         const destSiJson = JSON.stringify(pool[middlePara.s]);
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('Edited para.\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('Edited para.\n');
         expect(subtree.success).toBe(true);
 
         const editResult: AstResponse = JSON.parse(
@@ -338,7 +338,7 @@ describe('surrounding-verbatim round-trips', () => {
         // Edit the last paragraph (index 2).
         const lastPara = paras[2];
         const destSiJson = JSON.stringify(pool[lastPara.s]);
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('EOF edit.\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('EOF edit.\n');
         expect(subtree.success).toBe(true);
 
         const editResult: AstResponse = JSON.parse(
@@ -374,7 +374,7 @@ describe('inline markdown round-trip via apply_node_edit', () => {
         const destSiJson = JSON.stringify(pool[para.s]);
 
         // Replace with the same inline markdown.
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('a *emph* word\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('a *emph* word\n');
         expect(subtree.success).toBe(true);
 
         const editResult: AstResponse = JSON.parse(
@@ -409,7 +409,7 @@ describe('heading round-trip', () => {
         const destSiJson = JSON.stringify(pool[heading.s]);
 
         // Parse the heading text as new QMD.
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('## My Heading\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('## My Heading\n');
         expect(subtree.success).toBe(true);
 
         const editResult: AstResponse = JSON.parse(
@@ -443,7 +443,7 @@ describe('CodeBlock round-trip', () => {
         expect(codeBlock, 'untransformed AST must contain a CodeBlock').toBeTruthy();
         const destSiJson = JSON.stringify(pool[codeBlock.s]);
 
-        const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content('```python\nprint("hello world")\n```\n'));
+        const subtree: AstResponse = wasm.parse_qmd_content('```python\nprint("hello world")\n```\n');
         expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
 
         const editResult: AstResponse = JSON.parse(
@@ -477,9 +477,7 @@ describe('RawBlock round-trip', () => {
         expect(rawBlock, 'untransformed AST must contain a RawBlock').toBeTruthy();
         const destSiJson = JSON.stringify(pool[rawBlock.s]);
 
-        const subtree: AstResponse = JSON.parse(
-            wasm.parse_qmd_content('```{=html}\n<div>updated html</div>\n```\n'),
-        );
+        const subtree: AstResponse = wasm.parse_qmd_content('```{=html}\n<div>updated html</div>\n```\n');
         expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
 
         const editResult: AstResponse = JSON.parse(
@@ -526,7 +524,7 @@ async function editFirstBlock(
     expect(block, `untransformed AST must contain a ${blockType} block`).toBeTruthy();
     const destSiJson = JSON.stringify(pool[block.s]);
 
-    const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content(newQmd));
+    const subtree: AstResponse = wasm.parse_qmd_content(newQmd);
     expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
 
     const editResult: AstResponse = JSON.parse(
@@ -640,7 +638,7 @@ async function editFirstListItemLeaf(
     expect(leaf.t, 'a tight item leads with a Plain leaf').toBe('Plain');
     const destSiJson = JSON.stringify(pool[leaf.s]);
 
-    const subtree: AstResponse = JSON.parse(wasm.parse_qmd_content(newText));
+    const subtree: AstResponse = wasm.parse_qmd_content(newText);
     expect(subtree.success, `parse failed: ${subtree.error}`).toBe(true);
 
     const editResult: AstResponse = JSON.parse(
@@ -649,7 +647,7 @@ async function editFirstListItemLeaf(
     expect(editResult.success, `apply_node_edit failed: ${editResult.error}`).toBe(true);
 
     // Re-parse the output QMD and read the leading block type of each list item.
-    const reparsed: AstResponse = JSON.parse(wasm.parse_qmd_content(editResult.qmd!));
+    const reparsed: AstResponse = wasm.parse_qmd_content(editResult.qmd!);
     expect(reparsed.success, `re-parse failed: ${reparsed.error}`).toBe(true);
     const rlist = JSON.parse(reparsed.ast!).blocks.find((b: any) => b.t === listType);
     expect(rlist, `re-parsed output must still contain a ${listType}`).toBeTruthy();

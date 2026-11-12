@@ -18,7 +18,7 @@ interface WasmModule {
   vfs_add_file: (path: string, content: string) => string;
   vfs_clear: () => string;
   vfs_set_runtime_metadata: (yaml: string) => string;
-  parse_qmd_to_ast: (content: string) => Promise<string>;
+  parse_qmd_to_ast: (content: string) => Promise<AstResponse>;
   render_qmd: (path: string) => Promise<string>;
   render_qmd_content: (content: string, template: string) => Promise<string>;
 }
@@ -71,7 +71,7 @@ beforeEach(() => {
 describe('format detection via parse_qmd_to_ast', () => {
   it('detects format: q2-slides', async () => {
     const content = '---\nformat: q2-slides\ntitle: My Slides\n---\n\n# Slide 1\n';
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     expect(response.success).toBe(true);
     const ast = JSON.parse(response.ast!);
     expect(getMetaFormat(ast)).toBe('q2-slides');
@@ -79,7 +79,7 @@ describe('format detection via parse_qmd_to_ast', () => {
 
   it('detects format: html', async () => {
     const content = '---\nformat: html\ntitle: Doc\n---\n\n# Hello\n';
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     expect(response.success).toBe(true);
     const ast = JSON.parse(response.ast!);
     expect(getMetaFormat(ast)).toBe('html');
@@ -87,7 +87,7 @@ describe('format detection via parse_qmd_to_ast', () => {
 
   it('defaults to html when no format key', async () => {
     const content = '---\ntitle: No Format\n---\n\n# Hello\n';
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     expect(response.success).toBe(true);
     const ast = JSON.parse(response.ast!);
     expect(getMetaFormat(ast)).toBe('html');
@@ -95,7 +95,7 @@ describe('format detection via parse_qmd_to_ast', () => {
 
   it('detects format from map: format: { html: { toc: true } }', async () => {
     const content = '---\nformat:\n  html:\n    toc: true\n---\n\n# Hello\n';
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     expect(response.success).toBe(true);
     const ast = JSON.parse(response.ast!);
     expect(getMetaFormat(ast)).toBe('html');
@@ -103,7 +103,7 @@ describe('format detection via parse_qmd_to_ast', () => {
 
   it('defaults to html with no frontmatter', async () => {
     const content = '# Just Markdown\n\nNo frontmatter at all.\n';
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     expect(response.success).toBe(true);
     const ast = JSON.parse(response.ast!);
     expect(getMetaFormat(ast)).toBe('html');
@@ -111,7 +111,7 @@ describe('format detection via parse_qmd_to_ast', () => {
 
   it('defaults to html with malformed YAML', async () => {
     const content = '---\n{bad yaml\n---\n\n# Hello\n';
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     // Should fall back to html, not fail on format detection
     expect(response.success).toBe(true);
     const ast = JSON.parse(response.ast!);
@@ -120,7 +120,7 @@ describe('format detection via parse_qmd_to_ast', () => {
 
   it('returns error for unknown format', async () => {
     const content = '---\nformat: unknown-garbage\n---\n\n# Hello\n';
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     expect(response.success).toBe(false);
     expect(response.error).toContain('Unknown format');
   });
@@ -129,7 +129,7 @@ describe('format detection via parse_qmd_to_ast', () => {
     // F6: `parse_qmd_to_ast` reads the front matter through the same layer reader as the format
     // resolver, which does not see an empty `format: ''` as a key; it used to be "Unknown format".
     const content = "---\nformat: ''\n---\n\n# Hello\n";
-    const response: AstResponse = JSON.parse(await wasm.parse_qmd_to_ast(content));
+    const response: AstResponse = await wasm.parse_qmd_to_ast(content);
     expect(response.success).toBe(true);
     expect(getMetaFormat(JSON.parse(response.ast!))).toBe('html');
   });
