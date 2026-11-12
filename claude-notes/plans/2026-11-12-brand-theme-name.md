@@ -1,6 +1,7 @@
 ---
 title: "Brand layers name the theme `brand` (bd-gdrpbf9t, GH #1187)"
 date: 2026-11-12
+status: done  # Merged in PR #1189 (b3db66ffc), 2026-11-12
 description: "brand_to_layers emits a theme-name layer so a Bootswatch theme's theme-override-value entries stop overriding brand colours."
 ---
 
