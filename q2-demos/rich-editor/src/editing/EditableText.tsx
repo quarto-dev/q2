@@ -19,11 +19,14 @@ import { getTextRange, type TextRange } from './textRange.ts'
 
 export interface EditableTextProps {
   value: string
-  /** The new text, with the selection just before and just after the edit. */
-  onEdit: (text: string, before: TextRange | null, after: TextRange | null) => void
+  /**
+   * The new text, the edit's `InputEvent.inputType`, and the selection just
+   * before and just after the edit.
+   */
+  onEdit: (text: string, inputType: string, before: TextRange | null, after: TextRange | null) => void
   onUndo: () => void
   onRedo: () => void
-  /** Called when the field loses focus (click-away, Enter, or Escape). */
+  /** Called when the field loses focus (click-away or Enter). */
   onLeave?: () => void
   /** Receives the span, so the owner can restore the selection after an undo. */
   elementRef?: (el: HTMLElement | null) => void
@@ -31,7 +34,10 @@ export interface EditableTextProps {
 
 export function EditableText({ value, onEdit, onUndo, onRedo, onLeave, elementRef }: EditableTextProps) {
   const ref = useRef<HTMLSpanElement | null>(null)
-  const before = useRef<TextRange | null>(null)
+  // The edit in progress, from `beforeinput` until `input`.
+  const pending = useRef<{ inputType: string; before: TextRange | null } | null>(null)
+  // Set while a paste inserts its text, which reports as `insertText`.
+  const pasting = useRef(false)
 
   useLayoutEffect(() => {
     const el = ref.current
@@ -62,7 +68,10 @@ export function EditableText({ value, onEdit, onUndo, onRedo, onLeave, elementRe
           e.preventDefault()
           return
       }
-      before.current = getTextRange(el)
+      pending.current = {
+        inputType: pasting.current ? 'insertFromPaste' : e.inputType,
+        before: getTextRange(el),
+      }
     }
     el.addEventListener('beforeinput', onBeforeInput)
     return () => el.removeEventListener('beforeinput', onBeforeInput)
@@ -88,7 +97,7 @@ export function EditableText({ value, onEdit, onUndo, onRedo, onLeave, elementRe
         } else if (e.ctrlKey && !e.metaKey && key === 'y') {
           e.preventDefault()
           onRedo()
-        } else if (e.key === 'Enter' || e.key === 'Escape') {
+        } else if (e.key === 'Enter') {
           e.preventDefault()
           e.currentTarget.blur()
         }
@@ -98,13 +107,19 @@ export function EditableText({ value, onEdit, onUndo, onRedo, onLeave, elementRe
         const text = el.textContent ?? ''
         // An emptied contenteditable can keep a stray <br>.
         if (text === '' && el.firstChild) el.replaceChildren()
-        onEdit(text, before.current, getTextRange(el))
-        before.current = null
+        const { inputType, before } = pending.current ?? { inputType: '', before: null }
+        pending.current = null
+        onEdit(text, inputType, before, getTextRange(el))
       }}
       onPaste={(e) => {
         e.preventDefault()
         const text = e.clipboardData.getData('text/plain').replace(/\s*[\r\n]+\s*/g, ' ')
-        e.currentTarget.ownerDocument.execCommand('insertText', false, text)
+        pasting.current = true
+        try {
+          e.currentTarget.ownerDocument.execCommand('insertText', false, text)
+        } finally {
+          pasting.current = false
+        }
       }}
       onBlur={onLeave}
     />

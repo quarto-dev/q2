@@ -21,6 +21,7 @@ import { compileDefaultThemeCss, deriveTitleBlockMeta } from './quarto-synced-fi
 import { EditableText } from './editing/EditableText.tsx'
 import { createHistory, endGroup, record, redo, undo, type History } from './editing/history.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
+import { undoGroup } from './editing/undoGroup.ts'
 import { setTextRange, type TextRange } from './editing/textRange.ts'
 
 interface VisualEditorProps {
@@ -126,7 +127,7 @@ export function VisualEditor({ ast }: VisualEditorProps) {
       text === undefined ? null : (
         <EditableText
           value={text}
-          onEdit={(next, before, after) => edit(field, next, before, after)}
+          onEdit={(next, inputType, before, after) => edit(field, next, inputType, before, after)}
           onUndo={doUndo}
           onRedo={doRedo}
           onLeave={() => leave(field)}
@@ -187,14 +188,25 @@ function useEditHistory(ast: RustQmdJson | null) {
   latest.current = history
 
   const edit = useCallback(
-    (field: TitleBlockField, text: string, before: TextRange | null, after: TextRange | null) => {
+    (
+      field: TitleBlockField,
+      text: string,
+      inputType: string,
+      before: TextRange | null,
+      after: TextRange | null,
+    ) => {
       setHistory((h) => {
         if (!h) return h
         const caretAt = (range: TextRange | null) => (range ? { field, range } : null)
+        const last = h.present.caret
+        const lastAfter = last?.field === field ? last.range : null
         return record(
           h,
           { meta: setMetaText(h.present.meta, field, text), caret: caretAt(after) },
-          { group: field, before: { ...h.present, caret: caretAt(before) } },
+          {
+            group: undoGroup(field, inputType, before, lastAfter),
+            before: { ...h.present, caret: caretAt(before) },
+          },
         )
       })
     },

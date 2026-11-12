@@ -1,7 +1,7 @@
 /**
  * An immutable undo history of editor states.
  *
- * Consecutive edits in the same group (typing in one field) coalesce into
+ * Consecutive edits in the same group (see `undoGroup.ts`) coalesce into
  * one undo step until the group changes, `endGroup` is called (the field
  * loses focus), or typing pauses for `COALESCE_MS`.
  */
