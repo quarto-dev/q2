@@ -753,7 +753,7 @@ id = "subtree-julia-engine"
 title = "Julia engine extension (git subtree of the q2/node-port fork branch)"
 paths = ["resources/extension-subtrees/julia-engine"]
 policy = "track"
-version = "f6d75d172cd615b33eb516403bad3403cc3cac3d"
+version = "4937625361d77ac0890cd12da06246e4613b7ea9"
 version_sources = [{ kind = "subtree-split" }]
 upstream = { kind = "git", repo = "https://github.com/gordonwoodhull/quarto-julia-engine.git", track = { branch = "q2/node-port" } }
 procedure = "resources/extension-subtrees/README.md"
