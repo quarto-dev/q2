@@ -508,5 +508,11 @@
 # floating fallback toggle. The same branch's other SCSS edits are
 # comment-only: with them alone, the previous hash (d9a3a2de…) still
 # matched. doc.html hash unchanged.
+# Re-captured 2026-11-12 (bd-2ydvebkc, GH #892): doc_files/styles.css
+# changed because the task-list rules now hide the list marker per item
+# (`ul>li.task-list-item { list-style-type: none }`), hang the checkbox into
+# the marker gutter, and size `ul.task-list`'s indent to the hung checkbox
+# (1em -> 1.2em). doc.html hash unchanged: the fixture has no task list (the
+# CLI render of doc.qmd hashes the same on main and on this branch).
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css 3b565f1d55ac519cecbd032e63ca174fe7881176c8bcb9167052a9bb268f7ade
+doc_files/styles.css 9dffd398b4f2c4c90e0b59144fa6d2aff57b2f56b31e8e562ccc04c4e19865da

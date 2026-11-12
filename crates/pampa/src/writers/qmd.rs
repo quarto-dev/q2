@@ -741,8 +741,9 @@ fn write_div(
 }
 
 /// Pandoc's `taskListItemToAscii`: when a list item's first block is a
-/// `Plain`/`Paragraph` starting with `Str "☐"`/`Str "☒"` + `Space` (the
-/// task-list convention the reader produces), rewrite the ballot-box `Str`
+/// `Plain`/`Paragraph` starting with `Str "☐"`/`Str "☒"` + `Space`, or
+/// holding that `Str` alone (the task-list convention the reader produces),
+/// rewrite the ballot-box `Str`
 /// into `RawInline("markdown", "[ ]"/"[x]")` so the qmd writer round-trips
 /// the source syntax instead of emitting the Unicode character. The raw
 /// inline inherits the marker's source-info (the original bracket bytes).
@@ -760,12 +761,17 @@ fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
         "☒" => "[x]",
         _ => return None,
     };
-    if !matches!(content.get(1), Some(crate::pandoc::Inline::Space(_))) {
-        return None;
-    }
+    // An empty item is the lone marker `Str` (bd-2ydvebkc). The grammar's
+    // marker token requires the whitespace after `]`, so write it here —
+    // without it `- [ ]` reads back as an empty span, not a task item.
+    let text = match content.get(1) {
+        Some(crate::pandoc::Inline::Space(_)) => ascii.to_string(),
+        None => format!("{ascii} "),
+        Some(_) => return None,
+    };
     let marker = crate::pandoc::Inline::RawInline(crate::pandoc::RawInline {
         format: "markdown".to_string(),
-        text: ascii.to_string(),
+        text,
         source_info: s.source_info.clone(),
     });
     let mut rewritten: Vec<Block> = item.to_vec();

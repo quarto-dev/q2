@@ -3562,11 +3562,46 @@ body .nav-footer {
   padding-top: 0.5em;
 }
 
-// Task lists (bd-obkvhlam). The HTML writer renders `- [ ]`/`- [x]` items as
-// `<ul class="task-list"><li><label><input type="checkbox" …/>…</label></li>`.
-// ported from _quarto-rules.scss:338-340
+// Task lists (bd-obkvhlam, GH #892 / bd-2ydvebkc). The HTML writer renders a
+// `- [ ]`/`- [x]` item as
+// `<li class="task-list-item"><label><input type="checkbox" …/>…</label></li>`
+// (`<li …><p><label>…` when the list is loose), and puts `class="task-list"`
+// on a `<ul>` whose items are all tasks.
+//
+// The checkbox replaces the list marker, per item, as GitHub and most
+// renderers do: the marker is hidden on `li.task-list-item` (not on
+// `ul.task-list`, so a task item in a mixed list loses its bullet too while
+// its plain siblings keep theirs), and the checkbox hangs into the gutter the
+// marker occupied. The box plus the gap after it exactly fill the hang, so
+// task text starts where plain-item text does. Ordered task items keep their
+// number unless `$task-list-ordered-markers: false`; see
+// `_bootstrap-variables.scss`.
+$_task-checkbox-width: 0.8em;
+$_task-checkbox-gap: 0.4em;
+$_task-checkbox-hang: $_task-checkbox-width + $_task-checkbox-gap;
+
+// An all-task list only needs room for the hung checkbox, which then sits
+// flush with the surrounding text's left edge (Quarto 1's intent: its
+// `ul.task-list { padding-left: 1em }` + `-1em` checkbox margin, from
+// _quarto-rules.scss:338-340 and its patched pandoc styles.html, quarto-cli#4556).
 ul.task-list {
-  padding-left: 1em;
+  padding-left: $_task-checkbox-hang;
+}
+
+$_task-hidden-marker-lists: ul;
+@if not $task-list-ordered-markers {
+  $_task-hidden-marker-lists: ul, ol;
+}
+@each $list in $_task-hidden-marker-lists {
+  #{$list} > li.task-list-item {
+    list-style-type: none;
+  }
+  #{$list} > li.task-list-item > label > input[type="checkbox"],
+  #{$list} > li.task-list-item > p:first-child > label > input[type="checkbox"] {
+    width: $_task-checkbox-width;
+    margin: 0 $_task-checkbox-gap 0.2em (-$_task-checkbox-hang);
+    vertical-align: middle;
+  }
 }
 
 // Space checkboxes from the following item text.

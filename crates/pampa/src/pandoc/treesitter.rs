@@ -304,15 +304,16 @@ fn process_list_item(
             row: range.start.row,
             column: range.start.column + 3,
         };
+        let marker_source_info = crate::pandoc::location::range_to_source_info_with_context(
+            &quarto_source_map::Range {
+                start: range.start,
+                end: bracket_end,
+            },
+            context,
+        );
         let marker_str = Inline::Str(Str {
             text: if checked { "☒" } else { "☐" }.to_string(),
-            source_info: crate::pandoc::location::range_to_source_info_with_context(
-                &quarto_source_map::Range {
-                    start: range.start,
-                    end: bracket_end,
-                },
-                context,
-            ),
+            source_info: marker_source_info.clone(),
         });
         let marker_space = Inline::Space(Space {
             source_info: crate::pandoc::location::range_to_source_info_with_context(
@@ -329,6 +330,16 @@ fn process_list_item(
             }
             Some(Block::Plain(p)) => {
                 p.content.splice(0..0, [marker_str, marker_space]);
+            }
+            None => {
+                // Empty task item (`- [ ] ` with nothing after the marker,
+                // bd-2ydvebkc): Pandoc reads it as `Plain [Str "☐"]` — no
+                // Space, since nothing follows. The Plain spans the bracket
+                // bytes only, like the Str.
+                blocks.push(Block::Plain(crate::pandoc::Plain {
+                    content: vec![marker_str],
+                    source_info: marker_source_info,
+                }));
             }
             _ => {
                 // The grammar only produces the marker before a paragraph;

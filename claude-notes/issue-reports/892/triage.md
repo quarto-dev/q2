@@ -208,6 +208,51 @@ investigation alone.
    (`q2 preview --allow-edit` and hub-client, bd-tvtknbhx) render them
    enabled.
 
+## Implementation (bd-2ydvebkc, same branch)
+
+- [x] **Grammar.** In `tree-sitter-qmd/.../grammar.js`, everything after a
+  task marker is optional, so `- [ ] ` with nothing after it is a task item
+  instead of an ERROR. Two corpus tests were added in
+  `test/corpus/task_list.txt`. The pampa parse-error table
+  (`_autogen-table.json`) was regenerated with
+  `crates/pampa/scripts/build_error_table.ts`, because parser state numbers
+  shifted. `- [ ]` with *no* trailing space is still an ordinary item, as
+  in GFM.
+- [x] **Reader.** An empty task item is `Plain [Str "☐"]` (Pandoc's
+  shape), and the `Str` covers the bracket bytes.
+- [x] **HTML writer.** It emits `li.task-list-item` and a `disabled`
+  attribute, and accepts the lone-marker form. It also fixes a bug that
+  predates this change: a hoisted item attr (`- [ ] todo {.x}`) was
+  dropped on task items, because the attr is now split off *before* the
+  task rewrite.
+- [x] **qmd writer.** The empty item round-trips as `[ ] ` with the
+  trailing space the grammar requires.
+- [x] **q2-preview.** It renders the `task-list-item` class (through
+  `liItemAttrProps`) and the lone marker. The incremental (reveal) `<ol>`
+  path now renders task checkboxes, matching `<ul>`.
+- [x] **SCSS.**
+  - The marker is hidden per item, and the checkbox hangs by
+    `width + gap = 1.2em`. `ul.task-list` padding was raised from 1em to
+    1.2em so the checkbox sits flush with the surrounding text.
+  - `$task-list-ordered-markers` (default `true`) is honored by both the
+    Bootstrap and revealjs layers.
+- [x] **Docs.** Task lists are now described in
+  `guides/authoring/markdown-basics.qmd`, and the variable is in
+  `guides/formats/html/themes.qmd#task-lists`.
+
+End-to-end evidence (inspected):
+
+- `q2 render repro.qmd` emits
+  `<li class="task-list-item"><label><input type="checkbox" disabled="" />task</label></li>`
+  next to `<li>plain item</li>` in the mixed list. The compiled CSS has
+  `ul>li.task-list-item{list-style-type:none}` and
+  `...>input[type=checkbox]{width:.8em;margin:0 .4em .2em -1.2em;vertical-align:middle}`.
+- `hub-client/e2e/q2-preview-task-list.spec.ts` (Chromium, real q2-preview
+  iframe) passes. Every task `<li>` computes `list-style-type: none`, its
+  checkbox sits left of the `<li>` box, its text starts within 2px of the
+  `<li>` content edge, and the plain siblings in the mixed list keep their
+  bullets.
+
 ## Outcome / recommended next step
 
 - Filed **bd-2ydvebkc**. Fix scope: port the marker-hiding and hang
