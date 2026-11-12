@@ -1,0 +1,6 @@
+---
+title: A deliberately long title that wraps onto more than one line in the visual editor pane
+subtitle: Third quarter
+---
+
+Body text.

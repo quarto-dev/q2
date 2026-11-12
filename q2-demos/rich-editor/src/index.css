@@ -84,3 +84,7 @@ body {
     min-height: 60vh;
   }
 }
+
+.panes.panes-single {
+  grid-template-columns: minmax(0, 1fr);
+}

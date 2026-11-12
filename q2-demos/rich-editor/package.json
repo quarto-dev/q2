@@ -10,7 +10,9 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
-    "test:wasm": "vitest run --config vitest.wasm.config.ts"
+    "test:unit": "vitest run",
+    "test:wasm": "vitest run --config vitest.wasm.config.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@quarto/pandoc-types": "*",

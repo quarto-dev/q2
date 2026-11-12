@@ -45,5 +45,12 @@ besides an optional React hook, so it could become its own package.
 ## Tests
 
 ```bash
+npm run test:unit   # editing logic, in Node
 npm run test:wasm   # needs the WASM build from step 1
+npm run test:e2e    # the visual editor in Chromium; needs the WASM build
 ```
+
+The e2e tests run against `fixture.html`, which opens the visual editor on
+a document from `e2e/fixtures/` with no hub
+(`/fixture.html?fixture=<name>`, default `basic`). Playwright starts the
+dev server itself.
