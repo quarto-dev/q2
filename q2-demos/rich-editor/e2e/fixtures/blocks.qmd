@@ -1,0 +1,37 @@
+---
+title: Every kind of block
+---
+
+Plain text, with "quotes" and an author's apostrophe.
+
+Text with *emphasis*, **strong**, ~~strikeout~~, ^super^, ~sub~, `code`, $x^2$, [a link](https://example.com){.external}, [a span]{.mark}, [small caps]{.smallcaps} and [underline]{.underline}.
+
+# One {#first .unnumbered}
+
+###### Six
+
+```python
+print("hi")
+```
+
+> A quote.
+
+* Bullet one
+* Bullet two
+
+3. Three
+4. Four
+
+::: {#note .aside}
+Inside a div.
+:::
+
+---
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+![Alt text](image.png)
+
+Last words.

@@ -115,8 +115,11 @@ spec that can't hold in one engine says so where it's skipped, with the
 reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts` and
-`body.spec.ts` (editing), `source.spec.ts` (what an edit does to the source
-text),
+`body.spec.ts` (editing), `keys.spec.ts` (moving and deleting by word and
+by line), `clipboard.spec.ts` (copy, cut, paste, drag and drop),
+`composition.spec.ts` (input methods), `blocks.spec.ts` (how each kind of
+block is shown), `read-only.spec.ts` (when nothing can be edited),
+`source.spec.ts` (what an edit does to the source text),
 `collaboration.spec.ts` (more than one person in a document) and
 `render-parity.spec.ts` (the editor shows a document as `q2 render` would).
 Tests marked `fixme` describe behaviour we want and don't have yet.
