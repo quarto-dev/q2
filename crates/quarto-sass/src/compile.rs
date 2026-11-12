@@ -1574,6 +1574,36 @@ mod tests {
         }
     }
 
+    /// `theme: [cosmo, brand]` on a dashboard: the value boxes take the
+    /// brand's `success`, not cosmo's override from the
+    /// `theme-override-value` table (GH #1187). Like Quarto 1, the brand
+    /// layers name the theme `brand`, which has no table entry.
+    #[test]
+    fn test_dashboard_value_boxes_use_brand_colors_over_bootswatch() {
+        let brand = quarto_brand::UnifiedBrand::from_yaml_str(
+            "color:\n  palette:\n    green: \"#009e73\"\n  success: green\n",
+        )
+        .unwrap()
+        .split()
+        .light;
+        let runtime = NativeRuntime::new();
+        let context = ThemeContext::new(PathBuf::from("/doc"), &runtime).with_brand(&brand);
+        let themes = ["cosmo", "brand"]
+            .iter()
+            .map(|s| ThemeSpec::parse(s).unwrap())
+            .collect();
+        let mut config = ThemeConfig::new(themes, true);
+        config.dashboard_layer = true;
+        let css = compile_theme_css(&config, &context).unwrap().css;
+        let rule = ".card.valuebox.bslib-card.bg-success{background-color:";
+        let start = css.find(rule).expect("bg-success value box rule") + rule.len();
+        assert!(
+            css[start..].starts_with("#009e73"),
+            "value box uses the brand success colour: {}",
+            &css[start..start + 30]
+        );
+    }
+
     #[test]
     fn test_html_theme_after_brand_cannot_use_brand_variables() {
         let (themed, with_vars) = brand_then_custom(false);
