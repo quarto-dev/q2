@@ -262,6 +262,26 @@ fn front_matter_without_a_body() {
 }
 
 #[test]
+fn front_matter_added_to_a_document_without_one() {
+    // The body is kept byte for byte (the odd spacing included); the new
+    // front matter goes before it, with a blank line between.
+    let doc = "First   paragraph.\n\nSecond paragraph.\n";
+    assert_eq!(
+        edited(doc, |ast| set(ast, "title: Notes")),
+        format!("---\ntitle: Notes\n---\n\n{doc}")
+    );
+}
+
+#[test]
+fn empty_value_added_to_a_document_without_front_matter() {
+    let doc = "Body   text.\n";
+    assert_eq!(
+        edited(doc, |ast| set(ast, "title: \"\"")),
+        format!("---\ntitle: \"\"\n---\n\n{doc}")
+    );
+}
+
+#[test]
 fn body_edits_keep_the_front_matter() {
     let mut ast = parse_qmd(DOC);
     set(&mut ast, "date: 2026-12-01");
