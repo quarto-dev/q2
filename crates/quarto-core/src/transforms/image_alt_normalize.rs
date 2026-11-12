@@ -206,7 +206,7 @@ mod tests {
 
     /// The implicit figure the reader builds for `![caption](x.png){…}`.
     fn implicit_figure(caption: &str, kvs: &[(&str, &str)]) -> Block {
-        Block::Figure(Figure {
+        Block::Figure(Box::new(Figure {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -216,7 +216,7 @@ mod tests {
             content: vec![plain(vec![Inline::Image(Box::new(image(caption, kvs)))])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn float(ref_type: &str, kvs: &[(&str, &str)], content: Vec<Block>, caption: &str) -> Block {
@@ -232,7 +232,7 @@ mod tests {
         .with_data(json!({ "ref_type": ref_type, "kind": "Figure", "identifier": format!("{ref_type}-x") }))
         .with_slot("content", Slot::Blocks(content))
         .with_slot("caption_long", Slot::Blocks(vec![plain(text(caption))]));
-        Block::Custom(node)
+        Block::Custom(Box::new(node))
     }
 
     /// Every image in document order: (alt text, remaining key-values).
@@ -375,7 +375,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         };
-        let table = Block::Table(Table {
+        let table = Block::Table(Box::new(Table {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -410,7 +410,7 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let note = para(vec![Inline::Note(Note {
             content: vec![para(vec![Inline::Image(Box::new(image(
                 "",

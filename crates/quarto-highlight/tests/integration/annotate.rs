@@ -25,12 +25,12 @@ fn empty_attr_source() -> AttrSourceInfo {
 }
 
 fn make_code_block(class: &str, text: &str) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: attr_with_class(class),
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    })
+    }))
 }
 
 fn empty_pandoc() -> Pandoc {
@@ -144,12 +144,12 @@ fn annotates_inline_code() {
 fn code_block_with_no_class_is_skipped() {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
-    doc.blocks.push(Block::CodeBlock(CodeBlock {
+    doc.blocks.push(Block::CodeBlock(Box::new(CodeBlock {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         text: "foo bar".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    }));
+    })));
 
     annotate_pandoc(&mut doc, None).expect("annotate must not error");
 
@@ -195,7 +195,7 @@ fn builtin_lookup_api_is_case_insensitive() {
 fn annotate_block_with_classes(classes: &[&str], text: &str) -> Attr {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
-    doc.blocks.push(Block::CodeBlock(CodeBlock {
+    doc.blocks.push(Block::CodeBlock(Box::new(CodeBlock {
         attr: (
             String::new(),
             classes.iter().map(|c| c.to_string()).collect(),
@@ -204,7 +204,7 @@ fn annotate_block_with_classes(classes: &[&str], text: &str) -> Attr {
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    }));
+    })));
     annotate_pandoc(&mut doc, None).expect("annotate must not error");
     let Block::CodeBlock(cb) = doc.blocks.remove(0) else {
         unreachable!()

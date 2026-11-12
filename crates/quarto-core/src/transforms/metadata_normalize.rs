@@ -950,12 +950,12 @@ mod tests {
     #[tokio::test]
     async fn test_blocks_code_block() {
         use quarto_pandoc_types::block::CodeBlock;
-        let blocks = vec![Block::CodeBlock(CodeBlock {
+        let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "fn main() {}".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_plain_text(&blocks);
         assert_eq!(text, "fn main() {}");
     }
@@ -963,11 +963,11 @@ mod tests {
     #[tokio::test]
     async fn test_blocks_raw_block() {
         use quarto_pandoc_types::block::RawBlock;
-        let blocks = vec![Block::RawBlock(RawBlock {
+        let blocks = vec![Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>raw content</div>".to_string(),
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = blocks_to_plain_text(&blocks);
         assert_eq!(text, "<div>raw content</div>");
     }
@@ -990,7 +990,7 @@ mod tests {
     async fn test_blocks_ordered_list() {
         use quarto_pandoc_types::block::{OrderedList, Plain};
         use quarto_pandoc_types::list::{ListNumberDelim, ListNumberStyle};
-        let blocks = vec![Block::OrderedList(OrderedList {
+        let blocks = vec![Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![
                 vec![Block::Plain(Plain {
@@ -1003,7 +1003,7 @@ mod tests {
                 })],
             ],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = blocks_to_plain_text(&blocks);
         assert_eq!(text, "item1\nitem2\n");
     }
@@ -1048,13 +1048,13 @@ mod tests {
     #[tokio::test]
     async fn test_blocks_header() {
         use quarto_pandoc_types::block::Header;
-        let blocks = vec![Block::Header(Header {
+        let blocks = vec![Block::Header(Box::new(Header {
             level: 1,
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![make_str_inline("heading")],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_plain_text(&blocks);
         assert_eq!(text, "heading");
     }
@@ -1062,7 +1062,7 @@ mod tests {
     #[tokio::test]
     async fn test_blocks_div() {
         use quarto_pandoc_types::block::{Div, Plain};
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![Block::Plain(Plain {
                 content: vec![make_str_inline("div content")],
@@ -1070,7 +1070,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_plain_text(&blocks);
         assert_eq!(text, "div content");
     }
@@ -1081,7 +1081,7 @@ mod tests {
         use quarto_pandoc_types::table::{
             Alignment, ColWidth, Table, TableBody, TableFoot, TableHead,
         };
-        let blocks = vec![Block::Table(Table {
+        let blocks = vec![Block::Table(Box::new(Table {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             caption: Caption {
                 short: Some(vec![make_str_inline("table caption")]),
@@ -1111,7 +1111,7 @@ mod tests {
             },
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_plain_text(&blocks);
         assert_eq!(text, "table caption");
     }
@@ -1120,7 +1120,7 @@ mod tests {
     async fn test_blocks_figure_with_caption() {
         use quarto_pandoc_types::block::Figure;
         use quarto_pandoc_types::caption::Caption;
-        let blocks = vec![Block::Figure(Figure {
+        let blocks = vec![Block::Figure(Box::new(Figure {
             attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             caption: Caption {
                 short: Some(vec![make_str_inline("figure caption")]),
@@ -1130,7 +1130,7 @@ mod tests {
             content: vec![],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_plain_text(&blocks);
         assert_eq!(text, "figure caption");
     }

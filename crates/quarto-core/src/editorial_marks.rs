@@ -396,12 +396,12 @@ mod tests {
     #[test]
     fn blocks_to_inlines_matches_pandoc_utils() {
         // The verified case: Para, Para, CodeBlock, BulletList -> one LB two LB Code LB li.
-        let code = Block::CodeBlock(CodeBlock {
+        let code = Block::CodeBlock(Box::new(CodeBlock {
             attr: Default::default(),
             text: "x=1".into(),
             source_info: generated(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let list = Block::BulletList(BulletList {
             content: vec![vec![para(vec![s("li")])]],
             source_info: generated(),
@@ -419,12 +419,12 @@ mod tests {
             content: vec![vec![para(vec![s("a")])], vec![para(vec![s("b")])]],
             source_info: generated(),
         });
-        let div = Block::Div(quarto_pandoc_types::block::Div {
+        let div = Block::Div(Box::new(quarto_pandoc_types::block::Div {
             attr: Default::default(),
             content: vec![para(vec![s("x")]), para(vec![s("y")])],
             source_info: generated(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(describe(&blocks_to_inlines(&[list])), ["a", "b"]);
         assert_eq!(describe(&blocks_to_inlines(&[div])), ["x", "LB", "y"]);
         assert!(blocks_to_inlines(&[]).is_empty());

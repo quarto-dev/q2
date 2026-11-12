@@ -133,11 +133,11 @@ fn convert_block<'a>(
 
         // Raw HTML, as pandoc's commonmark reader (raw_html on) produces it.
         NodeValue::HtmlBlock(html) => {
-            vec![Block::RawBlock(RawBlock {
+            vec![Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
                 text: html.literal.clone(),
                 source_info,
-            })]
+            }))]
         }
 
         // Unsupported block types - panic as they're outside CommonMark.
@@ -197,13 +197,13 @@ fn convert_heading<'a>(
     let ast = node.data.borrow();
     let source_info = get_source_info(&ast, source_ctx);
     let inlines = convert_children_to_inlines_with_source(node, source_ctx);
-    Block::Header(Header {
+    Block::Header(Box::new(Header {
         level: heading.level as usize,
         attr: empty_attr(),
         content: inlines,
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn convert_code_block(code_block: &NodeCodeBlock, source_info: SourceInfo) -> Block {
@@ -223,12 +223,12 @@ fn convert_code_block(code_block: &NodeCodeBlock, source_info: SourceInfo) -> Bl
         ]
     };
 
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: (String::new(), classes, LinkedHashMap::new()),
         text: code_block.literal.clone(),
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn convert_list<'a>(
@@ -258,11 +258,11 @@ fn convert_list<'a>(
                     ListDelimType::Paren => ListNumberDelim::OneParen,
                 },
             );
-            Block::OrderedList(OrderedList {
+            Block::OrderedList(Box::new(OrderedList {
                 attr,
                 content: items,
                 source_info,
-            })
+            }))
         }
     }
 }

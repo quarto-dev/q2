@@ -595,12 +595,12 @@ mod tests {
             content: vec![make_str(0)],
             source_info: src(0),
         });
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![inner_para],
             source_info: src(0),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let mut pandoc = Pandoc {
             meta: ConfigValue::null(src(0)),
             blocks: vec![div],
@@ -629,13 +629,13 @@ mod tests {
             classes: vec![Some(src(0))],
             attributes: vec![(Some(src(0)), Some(src(0)))],
         };
-        let header = Block::Header(Header {
+        let header = Block::Header(Box::new(Header {
             level: 1,
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: src(0),
             attr_source: std::mem::replace(&mut attr_source, AttrSourceInfo::empty()),
-        });
+        }));
         let mut pandoc = Pandoc {
             meta: ConfigValue::null(src(0)),
             blocks: vec![header],
@@ -679,13 +679,13 @@ mod tests {
         let mut pandoc = Pandoc {
             meta: ConfigValue::null(src(0)),
             blocks: vec![
-                Block::Header(Header {
+                Block::Header(Box::new(Header {
                     level: 1,
                     attr: (String::new(), vec![], LinkedHashMap::new()),
                     content: vec![make_str(0)],
                     source_info: src(0),
                     attr_source,
-                }),
+                })),
                 Block::Paragraph(Paragraph {
                     content: vec![make_str(0)],
                     source_info: src(0),

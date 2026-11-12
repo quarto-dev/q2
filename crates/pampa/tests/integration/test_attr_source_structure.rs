@@ -554,13 +554,13 @@ fn test_block_enum_variants_with_source_fields() {
     // Verify that we can pattern match on Block variants and access
     // their source fields where applicable
 
-    let header_block = Block::Header(Header {
+    let header_block = Block::Header(Box::new(Header {
         level: 1,
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     match header_block {
         Block::Header(h) => {
@@ -569,12 +569,12 @@ fn test_block_enum_variants_with_source_fields() {
         _ => panic!("Expected Header"),
     }
 
-    let div_block = Block::Div(Div {
+    let div_block = Block::Div(Box::new(Div {
         attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         source_info: SourceInfo::for_test(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     match div_block {
         Block::Div(d) => {

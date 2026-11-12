@@ -39,7 +39,7 @@ fn normalize_block(block: Block) -> Block {
         }
 
         // Figure → Paragraph(Image) for standalone images
-        Block::Figure(fig) => normalize_figure(fig),
+        Block::Figure(fig) => normalize_figure(*fig),
 
         // Normalize code block attributes (keep only language class) and text
         Block::CodeBlock(mut cb) => {
@@ -124,13 +124,13 @@ fn normalize_figure(fig: Figure) -> Block {
     }
 
     // Not a simple standalone image figure, recurse normally
-    Block::Figure(Figure {
+    Block::Figure(Box::new(Figure {
         content: fig.content.into_iter().map(normalize_block).collect(),
         caption: fig.caption, // TODO: normalize caption if needed
         attr: fig.attr,
         source_info: fig.source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Check if inlines contain a single Image.
@@ -220,13 +220,13 @@ mod tests {
     fn test_normalize_strips_heading_id() {
         let ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::Header(Header {
+            blocks: vec![Block::Header(Box::new(Header {
                 level: 1,
                 content: vec![],
                 attr: ("my-id".to_string(), vec![], LinkedHashMap::new()),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let normalized = normalize(ast);
@@ -268,7 +268,7 @@ mod tests {
         use quarto_pandoc_types::CodeBlock;
         let ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::CodeBlock(CodeBlock {
+            blocks: vec![Block::CodeBlock(Box::new(CodeBlock {
                 attr: (
                     "id".to_string(),
                     vec!["python".to_string(), "extra".to_string()],
@@ -277,7 +277,7 @@ mod tests {
                 text: "code\n".to_string(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let normalized = normalize(ast);
@@ -299,12 +299,12 @@ mod tests {
         use quarto_pandoc_types::CodeBlock;
         let ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::CodeBlock(CodeBlock {
+            blocks: vec![Block::CodeBlock(Box::new(CodeBlock {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 text: "code".to_string(),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let normalized = normalize(ast);
@@ -375,14 +375,14 @@ mod tests {
         use quarto_pandoc_types::{ListNumberDelim, ListNumberStyle, OrderedList};
         let ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::OrderedList(OrderedList {
+            blocks: vec![Block::OrderedList(Box::new(OrderedList {
                 attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
                 content: vec![vec![Block::Paragraph(Paragraph {
                     content: vec![],
                     source_info: empty_source_info(),
                 })]],
                 source_info: empty_source_info(),
-            })],
+            }))],
         };
 
         let normalized = normalize(ast);
@@ -553,7 +553,7 @@ mod tests {
         // Figure containing Plain(Image) should become Paragraph(Image)
         let ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::Figure(Figure {
+            blocks: vec![Block::Figure(Box::new(Figure {
                 content: vec![Block::Plain(Plain {
                     content: vec![Inline::Image(Box::new(Image {
                         content: vec![],
@@ -573,7 +573,7 @@ mod tests {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let normalized = normalize(ast);
@@ -587,7 +587,7 @@ mod tests {
         // Figure containing Paragraph(Image) should stay Paragraph(Image)
         let ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::Figure(Figure {
+            blocks: vec![Block::Figure(Box::new(Figure {
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![Inline::Image(Box::new(Image {
                         content: vec![],
@@ -607,7 +607,7 @@ mod tests {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let normalized = normalize(ast);
@@ -620,7 +620,7 @@ mod tests {
         // Figure with multiple blocks should stay as Figure
         let ast = Pandoc {
             meta: ConfigValue::default(),
-            blocks: vec![Block::Figure(Figure {
+            blocks: vec![Block::Figure(Box::new(Figure {
                 content: vec![
                     Block::Paragraph(Paragraph {
                         content: vec![Inline::Str(Str {
@@ -642,7 +642,7 @@ mod tests {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 source_info: empty_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let normalized = normalize(ast);

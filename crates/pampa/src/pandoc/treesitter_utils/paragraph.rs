@@ -61,11 +61,13 @@ pub fn process_paragraph(
                 }
             }
 
-            return PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
-                format: "html".to_string(),
-                text,
-                source_info,
-            }));
+            return PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(Box::new(
+                RawBlock {
+                    format: "html".to_string(),
+                    text,
+                    source_info,
+                },
+            )));
         }
     }
 
@@ -262,11 +264,11 @@ fn split_html_block_runs(inlines: &[Inline], paragraph_si: &SourceInfo) -> Vec<B
             .collect::<Vec<_>>()
             .join("\n");
         let source_info = span_of(run.iter().map(|i| i.source_info()), fallback);
-        out.push(Block::RawBlock(RawBlock {
+        out.push(Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text,
             source_info,
-        }));
+        })));
         run.clear();
     }
 

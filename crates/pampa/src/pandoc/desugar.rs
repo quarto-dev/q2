@@ -93,13 +93,13 @@ pub(crate) fn desugar_div(div: Div, collector: &mut DiagnosticCollector) -> Bloc
                     .add_hint("Check the list-table documentation for the correct structure?")
                     .build(),
             );
-            Block::Div(div)
+            Block::Div(Box::new(div))
         }
         ListTableValidation::NotListTable => {
             if is_valid_definition_list_div(&div) {
                 transform_definition_list_div(div)
             } else {
-                Block::Div(div)
+                Block::Div(Box::new(div))
             }
         }
     }
@@ -162,11 +162,11 @@ fn desugar_filter<'a>(collector: &'a RefCell<&'a mut DiagnosticCollector>) -> Fi
     Filter::new()
         // See `desugar_div` for why this is `Unchanged`, not a re-visit.
         .with_block(move |block, _ctx| match block {
-            Block::Div(div) => Unchanged(desugar_div(div, &mut collector.borrow_mut())),
+            Block::Div(div) => Unchanged(desugar_div(*div, &mut collector.borrow_mut())),
             other => Unchanged(other),
         })
         .with_paragraph(|para, _ctx| match implicit_figure(&para) {
-            Some(figure) => FilterResult(vec![Block::Figure(figure)], true),
+            Some(figure) => FilterResult(vec![Block::Figure(Box::new(figure))], true),
             None => Unchanged(para),
         })
 }
@@ -219,12 +219,12 @@ mod tests {
     }
 
     fn div(class: &str, content: Blocks) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
             content,
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn list_table() -> Block {

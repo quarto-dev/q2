@@ -29,7 +29,7 @@ fn str_inline(text: &str) -> Inline {
 fn div_doc() -> Pandoc {
     Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::Div(Div {
+        blocks: vec![Block::Div(Box::new(Div {
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![str_inline("asdf")],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -37,7 +37,7 @@ fn div_doc() -> Pandoc {
             attr: (String::new(), vec!["a-div".to_string()], Default::default()),
             source_info: quarto_source_map::SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })],
+        }))],
     }
 }
 

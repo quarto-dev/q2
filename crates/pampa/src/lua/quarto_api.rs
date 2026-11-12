@@ -196,20 +196,20 @@ fn register_quarto_component(lua: &Lua, quarto: &Table) -> Result<()> {
                     attr_source: AttrSourceInfo::empty(),
                 }))));
             }
-            let mut blocks = vec![Block::RawBlock(RawBlock {
+            let mut blocks = vec![Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
                 text: script,
                 source_info: source_info.clone(),
-            })];
+            }))];
             if !matches!(content, Value::Nil) {
                 blocks.extend(peek_blocks_fuzzy(lua, content)?);
             }
-            lua.create_userdata(LuaBlock::new(Block::Div(Div {
+            lua.create_userdata(LuaBlock::new(Block::Div(Box::new(Div {
                 attr,
                 content: blocks,
                 source_info,
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
     Ok(())

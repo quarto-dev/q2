@@ -426,11 +426,11 @@ mod tests {
                 content: vec![para(vec![img()])],
                 source_info: si(),
             }),
-            Block::OrderedList(OrderedList {
+            Block::OrderedList(Box::new(OrderedList {
                 attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
                 content: vec![vec![para(vec![img()])]],
                 source_info: si(),
-            }),
+            })),
             Block::BulletList(BulletList {
                 content: vec![vec![para(vec![img()])]],
                 source_info: si(),
@@ -440,21 +440,21 @@ mod tests {
                 content: vec![(vec![img()], vec![vec![para(vec![img()])]])],
                 source_info: si(),
             }),
-            Block::Header(Header {
+            Block::Header(Box::new(Header {
                 level: 1,
                 attr: attr(&[], &[]),
                 content: vec![img()],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
-            Block::Div(Div {
+            })),
+            Block::Div(Box::new(Div {
                 attr: attr(&[], &[]),
                 content: vec![para(vec![img()])],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
             // Figure body plus both caption slots.
-            Block::Figure(Figure {
+            Block::Figure(Box::new(Figure {
                 attr: attr(&[], &[]),
                 caption: Caption {
                     short: Some(vec![img()]),
@@ -464,7 +464,7 @@ mod tests {
                 content: vec![para(vec![img()])],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
             Block::CaptionBlock(CaptionBlock {
                 content: vec![img()],
                 source_info: si(),
@@ -486,7 +486,7 @@ mod tests {
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
                 };
-                Block::Table(Table {
+                Block::Table(Box::new(Table {
                     attr: attr(&[], &[]),
                     caption: Caption {
                         short: None,
@@ -516,7 +516,7 @@ mod tests {
                     },
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
-                })
+                }))
             },
             // Inline containers, all in one paragraph.
             para(vec![
@@ -574,12 +574,12 @@ mod tests {
             content: vec![vec![para(vec![image(&[], &[])])]],
             source_info: si(),
         });
-        let mut blocks = vec![Block::Div(Div {
+        let mut blocks = vec![Block::Div(Box::new(Div {
             attr: attr(&[], &[]),
             content: vec![inner],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         visit_blocks(&mut blocks);
         assert_eq!(
             first_image_classes(&blocks),

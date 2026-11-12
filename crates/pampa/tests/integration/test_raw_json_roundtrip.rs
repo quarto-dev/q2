@@ -277,17 +277,17 @@ fn test_raw_json_roundtrip_note_definitions_and_block_metadata() {
     let doc = Pandoc {
         meta: ConfigValue::default(),
         blocks: vec![
-            Block::NoteDefinitionPara(NoteDefinitionPara {
+            Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                 id: "fn-1".to_string(),
                 content: vec![str_inline("a footnote", 0, 10)],
                 source_info: si(0, 10),
-            }),
-            Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock {
+            })),
+            Block::NoteDefinitionFencedBlock(Box::new(NoteDefinitionFencedBlock {
                 id: "fn-2".to_string(),
                 content: vec![para(vec![str_inline("fenced note", 11, 22)], 11, 22)],
                 source_info: si(11, 22),
-            }),
-            Block::BlockMetadata(MetaBlock {
+            })),
+            Block::BlockMetadata(Box::new(MetaBlock {
                 meta: ConfigValue {
                     value: ConfigValueKind::Map(vec![ConfigMapEntry {
                         key: "layout".to_string(),
@@ -304,7 +304,7 @@ fn test_raw_json_roundtrip_note_definitions_and_block_metadata() {
                     merge_op: MergeOp::default(),
                 },
                 source_info: si(23, 35),
-            }),
+            })),
         ],
     };
     assert_roundtrip_identity(&doc, &ASTContext::new());
@@ -326,7 +326,7 @@ fn test_raw_json_roundtrip_custom_nodes() {
     let doc = Pandoc {
         meta: ConfigValue::default(),
         blocks: vec![
-            Block::Custom(block_custom),
+            Block::Custom(Box::new(block_custom)),
             para(vec![Inline::Custom(Box::new(inline_custom))], 31, 40),
         ],
     };
@@ -832,13 +832,13 @@ fn test_raw_json_roundtrip_standard_constructs() {
                 0,
                 11,
             ),
-            Block::Div(Div {
+            Block::Div(Box::new(Div {
                 attr: ("d1".to_string(), vec!["note".to_string()], kvs),
                 content: vec![para(vec![str_inline("inner", 12, 17)], 12, 17)],
                 source_info: si(11, 18),
                 attr_source: AttrSourceInfo::empty(),
-            }),
-            Block::CodeBlock(pampa::pandoc::CodeBlock {
+            })),
+            Block::CodeBlock(Box::new(pampa::pandoc::CodeBlock {
                 attr: (
                     "cb".to_string(),
                     vec!["rust".to_string()],
@@ -847,7 +847,7 @@ fn test_raw_json_roundtrip_standard_constructs() {
                 text: "fn main() {}".to_string(),
                 source_info: si(19, 31),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ],
     };
     assert_roundtrip_identity(&doc, &ASTContext::new());

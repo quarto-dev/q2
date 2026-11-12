@@ -420,16 +420,16 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
                     .iter()
                     .find(|l| l.listing.container_id() == div.attr.0)
             {
-                out.push(Block::Div(quarto_pandoc_types::block::Div {
+                out.push(Block::Div(Box::new(quarto_pandoc_types::block::Div {
                     attr: (div.attr.0.clone(), vec![], hashlink::LinkedHashMap::new()),
                     content: vec![synthesize_listing_list(listing, cx)],
                     source_info: div.source_info,
                     attr_source: AttrSourceInfo::empty(),
-                }));
+                })));
                 return;
             }
             if has_class(&div.attr, "callout") {
-                out.extend(rebuild_callout(div, cx));
+                out.extend(rebuild_callout(*div, cx));
                 return;
             }
             if is_float_div(&div.attr) {
@@ -442,12 +442,12 @@ fn clean_block_into(mut block: Block, cx: &ViewContext, out: &mut Vec<Block>) {
                 if id.is_empty() {
                     out.extend(children);
                 } else {
-                    out.push(Block::Div(quarto_pandoc_types::block::Div {
+                    out.push(Block::Div(Box::new(quarto_pandoc_types::block::Div {
                         attr: (id, vec![], hashlink::LinkedHashMap::new()),
                         content: children,
                         source_info: div.source_info,
                         attr_source: AttrSourceInfo::empty(),
-                    }));
+                    })));
                 }
                 return;
             }
@@ -683,12 +683,12 @@ fn rebuild_callout(div: quarto_pandoc_types::block::Div, cx: &ViewContext) -> Ve
     content.extend(build_llms_view(body, cx));
 
     let class = callout_type.map_or_else(|| "callout".to_string(), |t| format!("callout-{t}"));
-    vec![Block::Div(quarto_pandoc_types::block::Div {
+    vec![Block::Div(Box::new(quarto_pandoc_types::block::Div {
         attr: (String::new(), vec![class], hashlink::LinkedHashMap::new()),
         content,
         source_info: div.source_info,
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 /// Flatten the plain text of a block list (for callout titles).

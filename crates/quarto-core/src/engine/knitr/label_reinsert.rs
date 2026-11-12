@@ -272,17 +272,17 @@ mod tests {
     }
 
     fn cell(id: &str, body: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (id.to_string(), Vec::new(), LinkedHashMap::new()),
-            content: vec![Block::CodeBlock(CodeBlock {
+            content: vec![Block::CodeBlock(Box::new(CodeBlock {
                 attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
                 text: format!("{body}\n"),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(text: &str) -> Block {
@@ -298,7 +298,7 @@ mod tests {
     }
 
     fn div(content: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["callout".to_string()],
@@ -307,7 +307,7 @@ mod tests {
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn bullet(items: Vec<Vec<Block>>) -> Block {
@@ -318,7 +318,7 @@ mod tests {
     }
 
     fn ordered(items: Vec<Vec<Block>>) -> Block {
-        Block::OrderedList(OrderedList {
+        Block::OrderedList(Box::new(OrderedList {
             attr: (
                 1,
                 quarto_pandoc_types::ListNumberStyle::Default,
@@ -326,7 +326,7 @@ mod tests {
             ),
             content: items,
             source_info: si(),
-        })
+        }))
     }
 
     fn quote(content: Vec<Block>) -> Block {

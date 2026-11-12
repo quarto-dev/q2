@@ -87,20 +87,20 @@ fn generated() -> SourceInfo {
 }
 
 fn raw_html(text: &str) -> Block {
-    Block::RawBlock(RawBlock {
+    Block::RawBlock(Box::new(RawBlock {
         format: "html".to_string(),
         text: text.to_string(),
         source_info: generated(),
-    })
+    }))
 }
 
 fn div(attr: Attr, content: Blocks) -> Block {
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr,
         content,
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn add_class(attr: &mut Attr, class: &str) {
@@ -445,7 +445,7 @@ fn lower_children(blocks: Blocks, cx: &mut Lower, parent: &mut Attr) -> Blocks {
 fn lower(block: Block, cx: &mut Lower) -> Block {
     let Block::Custom(node) = &block else {
         return match block {
-            Block::Div(d) if explicit_grid(&d.attr).is_some() => lower_explicit_grid(d, cx),
+            Block::Div(d) if explicit_grid(&d.attr).is_some() => lower_explicit_grid(*d, cx),
             Block::Div(mut d) => {
                 let parent = cx.parent.take();
                 d.content = lower_all(d.content, cx);

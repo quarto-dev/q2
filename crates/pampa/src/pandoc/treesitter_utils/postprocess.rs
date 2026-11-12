@@ -605,7 +605,7 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         attr_source: empty_attr_source(),
     };
 
-    Block::Table(Table {
+    Block::Table(Box::new(Table {
         attr: table_attr,
         caption,
         colspec,
@@ -614,7 +614,7 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         foot,
         source_info,
         attr_source: table_attr_source,
-    })
+    }))
 }
 
 /// Pop a trailing `Inline::Attr` off a table caption's inlines and merge it
@@ -1163,12 +1163,12 @@ pub fn postprocess(
                         attr.0 = final_id;
                         if !is_empty_attr(&attr) || trailing_lb_converted {
                             header.attr = attr;
-                            FilterResult(vec![Block::Header(header)], true)
+                            FilterResult(vec![Block::Header(Box::new(header))], true)
                         } else {
                             Unchanged(header)
                         }
                     } else if trailing_lb_converted {
-                        FilterResult(vec![Block::Header(header)], true)
+                        FilterResult(vec![Block::Header(Box::new(header))], true)
                     } else {
                         Unchanged(header)
                     }
@@ -1179,7 +1179,7 @@ pub fn postprocess(
                     header.attr = inline_attr.attr;
                     header.attr_source = inline_attr.attr_source;
                     header.content = trim_inlines(header.content).0;
-                    FilterResult(vec![Block::Header(header)], true)
+                    FilterResult(vec![Block::Header(Box::new(header))], true)
                 }
             })
             // attempt to desugar single-image paragraphs into figures
@@ -1192,7 +1192,7 @@ pub fn postprocess(
                 // Item 3 of the structural desugaring set (`pandoc::desugar`):
                 // a single-image paragraph with alt text is a figure.
                 if let Some(figure) = implicit_figure(&para) {
-                    return FilterResult(vec![Block::Figure(figure)], true);
+                    return FilterResult(vec![Block::Figure(Box::new(figure))], true);
                 }
 
                 // Not a figure conversion case, but may have converted trailing LineBreak
@@ -1220,7 +1220,7 @@ pub fn postprocess(
             // itself (see `desugar_div`).
             .with_block(|block, _ctx| match block {
                 Block::Div(div) => {
-                    Unchanged(desugar_div(div, &mut error_collector_ref.borrow_mut()))
+                    Unchanged(desugar_div(*div, &mut error_collector_ref.borrow_mut()))
                 }
                 other => Unchanged(other),
             })
@@ -1490,7 +1490,7 @@ pub fn postprocess(
                 };
 
                 // Return the transformed table
-                FilterResult(vec![Block::Table(table)], false)
+                FilterResult(vec![Block::Table(Box::new(table))], false)
             })
             // NOTE: We intentionally do NOT convert shortcodes to spans here.
             // Shortcodes remain as Inline::Shortcode so that ShortcodeResolveTransform

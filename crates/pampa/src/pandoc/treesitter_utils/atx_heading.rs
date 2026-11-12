@@ -80,11 +80,11 @@ pub fn process_atx_heading(
         .count();
     content.drain(..leading);
 
-    PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
+    PandocNativeIntermediate::IntermediateBlock(Block::Header(Box::new(Header {
         level,
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
         attr_source,
-    }))
+    })))
 }

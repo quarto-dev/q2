@@ -68,14 +68,14 @@ pub fn tab_nav(tabset_id: &str, titles: &[String]) -> Block {
         .enumerate()
         .map(|(i, t)| json!({ "id": format!("{tabset_id}-{}", i + 1), "title": t }))
         .collect();
-    Block::Custom(
+    Block::Custom(Box::new(
         node(
             TAB_NAV,
             (String::new(), Vec::new(), LinkedHashMap::new()),
             SourceInfo::generated(quarto_source_map::By::unknown()),
         )
         .with_data(json!({ "tabset_id": tabset_id, "tabs": tabs })),
-    )
+    ))
 }
 
 /// Rewrite the lowered document for the React preview (see the module
@@ -110,22 +110,22 @@ fn to_view(block: Block) -> Block {
         content,
         source_info,
         ..
-    } = d;
+    } = *d;
     if has_class(&attr, "dashboard-page") {
         let index = attr.0.clone();
-        return Block::Custom(
+        return Block::Custom(Box::new(
             node(PAGE_VIEW, attr, source_info)
                 .with_data(json!({ "id": index }))
                 .with_slot("content", Slot::Blocks(content)),
-        );
+        ));
     }
     if has_class(&attr, "tab-pane") && attr.2.get("role").is_some_and(|r| r == "tabpanel") {
         let id = attr.0.clone();
-        return Block::Custom(
+        return Block::Custom(Box::new(
             node(TAB_PANE, attr, source_info)
                 .with_data(json!({ "id": id }))
                 .with_slot("content", Slot::Blocks(content)),
-        );
+        ));
     }
     if has_class(&attr, "bslib-card") {
         let expandable = attr.2.contains_key("data-full-screen");
@@ -133,18 +133,18 @@ fn to_view(block: Block) -> Block {
             .into_iter()
             .filter(|b| !raw_text(b).is_some_and(is_card_chrome))
             .collect();
-        return Block::Custom(
+        return Block::Custom(Box::new(
             node(CARD_VIEW, attr, source_info)
                 .with_data(json!({ "expandable": expandable }))
                 .with_slot("content", Slot::Blocks(content)),
-        );
+        ));
     }
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr,
         content,
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// The card\'s bslib expand button and init script (React renders its own
@@ -183,12 +183,12 @@ fn sidebar_layout(d: &mut Div) -> Option<Block> {
         &mut d.attr,
         (String::new(), Vec::new(), LinkedHashMap::new()),
     );
-    Some(Block::Custom(
+    Some(Block::Custom(Box::new(
         node(SIDEBAR_LAYOUT, attr, d.source_info.clone())
             .with_data(json!({ "sidebar_id": sidebar_id }))
             .with_slot("main", Slot::Blocks(to_views(vec![main])))
             .with_slot("sidebar", Slot::Blocks(to_views(vec![sidebar]))),
-    ))
+    )))
 }
 
 /// `<p class="X">`, `Plain`, `</p>` (a value-box title or value,
@@ -208,14 +208,14 @@ fn join_value_box_paragraphs(blocks: Blocks) -> Blocks {
             let plain = it.next().expect("peeked");
             if it.peek().and_then(raw_text) == Some("</p>") {
                 it.next();
-                out.push(Block::Custom(
+                out.push(Block::Custom(Box::new(
                     node(
                         PARAGRAPH,
                         (String::new(), vec![class], LinkedHashMap::new()),
                         SourceInfo::generated(quarto_source_map::By::unknown()),
                     )
                     .with_slot("content", Slot::Blocks(vec![plain])),
-                ));
+                )));
                 continue;
             }
             out.push(b);

@@ -240,10 +240,10 @@ pub(crate) async fn walk_block_children<W: LuaWalker>(w: &W, block: Block) -> Re
             content: w.walk_blocks(b.content).await?,
             ..b
         }),
-        Block::OrderedList(l) => Block::OrderedList(pandoc::OrderedList {
+        Block::OrderedList(l) => Block::OrderedList(Box::new(pandoc::OrderedList {
             content: walk_blocks_vec(w, l.content).await?,
-            ..l
-        }),
+            ..*l
+        })),
         Block::BulletList(l) => Block::BulletList(pandoc::BulletList {
             content: walk_blocks_vec(w, l.content).await?,
             ..l
@@ -258,10 +258,10 @@ pub(crate) async fn walk_block_children<W: LuaWalker>(w: &W, block: Block) -> Re
             }
             Block::DefinitionList(pandoc::DefinitionList { content, ..l })
         }
-        Block::Header(h) => Block::Header(pandoc::Header {
+        Block::Header(h) => Block::Header(Box::new(pandoc::Header {
             content: w.walk_inlines(h.content).await?,
-            ..h
-        }),
+            ..*h
+        })),
         Block::Table(t) => {
             let caption = walk_caption(w, t.caption).await?;
             let head = pandoc::TableHead {
@@ -280,23 +280,23 @@ pub(crate) async fn walk_block_children<W: LuaWalker>(w: &W, block: Block) -> Re
                 rows: walk_rows(w, t.foot.rows).await?,
                 ..t.foot
             };
-            Block::Table(pandoc::Table {
+            Block::Table(Box::new(pandoc::Table {
                 caption,
                 head,
                 bodies,
                 foot,
-                ..t
-            })
+                ..*t
+            }))
         }
-        Block::Figure(f) => Block::Figure(pandoc::Figure {
+        Block::Figure(f) => Block::Figure(Box::new(pandoc::Figure {
             caption: walk_caption(w, f.caption).await?,
             content: w.walk_blocks(f.content).await?,
-            ..f
-        }),
-        Block::Div(d) => Block::Div(pandoc::Div {
+            ..*f
+        })),
+        Block::Div(d) => Block::Div(Box::new(pandoc::Div {
             content: w.walk_blocks(d.content).await?,
-            ..d
-        }),
+            ..*d
+        })),
         // Terminal blocks (no walkable children)
         Block::CodeBlock(_)
         | Block::RawBlock(_)

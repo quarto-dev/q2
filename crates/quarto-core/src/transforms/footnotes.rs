@@ -188,11 +188,11 @@ impl NoteContent {
 fn mark_with_ref_id(mut blocks: Blocks, ref_id: &str, source_info: &SourceInfo) -> Blocks {
     blocks.insert(
         0,
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format: FOOTNOTE_REF_ID_MARKER_FORMAT.to_string(),
             text: ref_id.to_string(),
             source_info: source_info.clone(),
-        }),
+        })),
     );
     blocks
 }
@@ -800,11 +800,11 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
                 // Note definition
-                Block::NoteDefinitionPara(NoteDefinitionPara {
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                     id: "myfoot".to_string(),
                     content: vec![make_str("Defined footnote content")],
                     source_info: dummy_source_info(),
-                }),
+                })),
                 // Paragraph with reference
                 Block::Paragraph(Paragraph {
                     content: vec![
@@ -844,11 +844,11 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
-                Block::NoteDefinitionPara(NoteDefinitionPara {
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                     id: "myfoot".to_string(),
                     content: vec![make_str("Defined footnote content")],
                     source_info: dummy_source_info(),
-                }),
+                })),
                 Block::Paragraph(Paragraph {
                     content: vec![
                         make_str("See note"),
@@ -919,14 +919,16 @@ mod tests {
                     source_info: dummy_source_info(),
                 }),
                 // Block definition `::: ^bk … :::`.
-                Block::NoteDefinitionFencedBlock(quarto_pandoc_types::NoteDefinitionFencedBlock {
-                    id: "bk".to_string(),
-                    content: vec![Block::Paragraph(Paragraph {
-                        content: vec![make_str("Note.")],
+                Block::NoteDefinitionFencedBlock(Box::new(
+                    quarto_pandoc_types::NoteDefinitionFencedBlock {
+                        id: "bk".to_string(),
+                        content: vec![Block::Paragraph(Paragraph {
+                            content: vec![make_str("Note.")],
+                            source_info: dummy_source_info(),
+                        })],
                         source_info: dummy_source_info(),
-                    })],
-                    source_info: dummy_source_info(),
-                }),
+                    },
+                )),
             ],
         };
 
@@ -1178,11 +1180,11 @@ mod tests {
                         ConfigValue::new_string(mode, dummy_source_info()),
                     )]),
                     blocks: vec![
-                        Block::NoteDefinitionPara(NoteDefinitionPara {
+                        Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                             id: "1".to_string(),
                             content: vec![make_str("note content")],
                             source_info: dummy_source_info(),
-                        }),
+                        })),
                         Block::Paragraph(Paragraph {
                             content: vec![
                                 make_str("Text"),
@@ -1321,22 +1323,22 @@ mod tests {
                     source_info: dummy_source_info(),
                 }),
                 // A definition inside the callout body is collected too.
-                Block::NoteDefinitionPara(NoteDefinitionPara {
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                     id: "b".to_string(),
                     content: vec![make_str("Note B")],
                     source_info: dummy_source_info(),
-                }),
+                })),
             ]),
         );
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
-                Block::Custom(callout),
-                Block::NoteDefinitionPara(NoteDefinitionPara {
+                Block::Custom(Box::new(callout)),
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                     id: "t".to_string(),
                     content: vec![make_str("Note T")],
                     source_info: dummy_source_info(),
-                }),
+                })),
             ],
         };
 

@@ -280,7 +280,7 @@ mod tests {
     }
 
     fn make_header(level: usize, id: &str, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (id.to_string(), vec![], hashlink::LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
@@ -289,7 +289,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_para(text: &str) -> Block {

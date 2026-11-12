@@ -12,33 +12,45 @@ use crate::list::ListAttributes;
 use crate::table::Table;
 use serde::{Deserialize, Serialize};
 
+/// A block element.
+///
+/// **Layout.** As with [`Inline`](crate::inline::Inline), every element of a
+/// `Vec<Block>` occupies `size_of::<Block>()` bytes whichever variant it
+/// holds, so the variants whose payload is larger than `Paragraph`'s are
+/// boxed (`Table` alone made this enum 824 bytes). The assertion below keeps
+/// it that way; see
+/// `claude-notes/plans/2026-11-12-ast-string-storage-study.md`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Block {
     Plain(Plain),
     Paragraph(Paragraph),
     LineBlock(LineBlock),
-    CodeBlock(CodeBlock),
-    RawBlock(RawBlock),
+    CodeBlock(Box<CodeBlock>),
+    RawBlock(Box<RawBlock>),
     BlockQuote(BlockQuote),
-    OrderedList(OrderedList),
+    OrderedList(Box<OrderedList>),
     BulletList(BulletList),
     DefinitionList(DefinitionList),
-    Header(Header),
+    Header(Box<Header>),
     HorizontalRule(HorizontalRule),
-    Table(Table),
-    Figure(Figure),
-    Div(Div),
+    Table(Box<Table>),
+    Figure(Box<Figure>),
+    Div(Box<Div>),
     // quarto extensions
-    BlockMetadata(MetaBlock),
-    NoteDefinitionPara(NoteDefinitionPara),
-    NoteDefinitionFencedBlock(NoteDefinitionFencedBlock),
+    BlockMetadata(Box<MetaBlock>),
+    NoteDefinitionPara(Box<NoteDefinitionPara>),
+    NoteDefinitionFencedBlock(Box<NoteDefinitionFencedBlock>),
     CaptionBlock(CaptionBlock),
     /// Custom node for Quarto extensions (callouts, tabsets, etc.)
     ///
     /// Parsed from Divs with special class names. When serialized to Pandoc JSON,
     /// these are converted to wrapper Divs with `__quarto_custom_node` class.
-    Custom(CustomNode),
+    Custom(Box<CustomNode>),
 }
+
+// 64 bytes on 64-bit targets, 32 on wasm32. If this fails, a variant's
+// payload has outgrown `Paragraph`'s: box it rather than raise the bound.
+const _: () = assert!(std::mem::size_of::<Block>() <= 8 * std::mem::size_of::<usize>());
 
 impl Block {
     pub fn source_info(&self) -> &quarto_source_map::SourceInfo {
@@ -242,37 +254,37 @@ mod tests {
     #[test]
     fn source_info_codeblock() {
         let si = test_si(2, 20, 30);
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: crate::attr::empty_attr(),
             text: String::new(),
             source_info: si.clone(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(block.source_info(), &si);
     }
 
     #[test]
     fn source_info_header() {
         let si = test_si(3, 30, 40);
-        let block = Block::Header(Header {
+        let block = Block::Header(Box::new(Header {
             level: 1,
             attr: crate::attr::empty_attr(),
             content: vec![],
             source_info: si.clone(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(block.source_info(), &si);
     }
 
     #[test]
     fn source_info_div() {
         let si = test_si(4, 40, 50);
-        let block = Block::Div(Div {
+        let block = Block::Div(Box::new(Div {
             attr: crate::attr::empty_attr(),
             content: vec![],
             source_info: si.clone(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(block.source_info(), &si);
     }
 

@@ -999,7 +999,7 @@ mod tests {
         use quarto_pandoc_types::block::{Block, Figure, Paragraph};
 
         let mut blocks = vec![
-            Block::Figure(Figure {
+            Block::Figure(Box::new(Figure {
                 attr: Default::default(),
                 caption: Caption {
                     short: None,
@@ -1009,7 +1009,7 @@ mod tests {
                 content: vec![plain(vec![test_image("/images/x.svg")])],
                 source_info: SourceInfo::for_test(),
                 attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-            }),
+            })),
             Block::Paragraph(Paragraph {
                 content: vec![test_image("images/y.svg")],
                 source_info: SourceInfo::for_test(),

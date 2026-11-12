@@ -202,7 +202,7 @@ fn resolve_block(block: &mut Block, counter: &mut u32, env: &ResolveEnv) {
             // Then check if this is a Callout that should be resolved
             if custom.type_name == "Callout" {
                 let resolved_div = resolve_callout(custom, counter, env.terms, env.chapter_seed);
-                *block = Block::Div(resolved_div);
+                *block = Block::Div(Box::new(resolved_div));
             }
         }
         // Other block types don't contain nested blocks
@@ -437,10 +437,10 @@ fn build_titled_content(
 
     // Always emit the icon container (Q1-parity, callouts.lua:254-262);
     // when icon=false the inner `<i>` carries `no-icon` so CSS can hide it.
-    header_content.push(Block::Div(icon_container_div(source_info, icon)));
+    header_content.push(Block::Div(Box::new(icon_container_div(source_info, icon))));
 
     // Title container.
-    header_content.push(Block::Div(Div {
+    header_content.push(Block::Div(Box::new(Div {
         attr: make_attr(&["callout-title-container", "flex-fill"]),
         content: vec![Block::Plain(Plain {
             content: title_inlines,
@@ -448,7 +448,7 @@ fn build_titled_content(
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    }));
+    })));
 
     // Header: classes + (when collapsible) Bootstrap toggle attrs.
     let mut header_classes: Vec<String> = vec![
@@ -490,12 +490,12 @@ fn build_titled_content(
             source_info: source_info.clone(),
         }));
     }
-    let header_div = Block::Div(Div {
+    let header_div = Block::Div(Box::new(Div {
         attr: (String::new(), header_classes, header_attrs),
         content: header_content,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     // Body. With collapse, wrap the body-container in a
     // `.callout-collapse.collapse[.show]` div; without collapse, the
@@ -516,7 +516,7 @@ fn build_titled_content(
         // titled+collapse output).
         let mut body_with_class = body_inner_div;
         body_with_class.attr.1.push("callout-body".to_string());
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             // Wrapper id is the clean `callout-N` (no -contents
             // suffix); aria-controls on the header points at this id.
             attr: (
@@ -527,7 +527,7 @@ fn build_titled_content(
             content: vec![absorb_section_wrapper(body_with_class)],
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     } else {
         let mut body_with_class = body_inner_div;
         body_with_class.attr.1.push("callout-body".to_string());
@@ -545,7 +545,7 @@ fn build_untitled_content(source_info: &SourceInfo, icon: bool, body_inner_div: 
     // Always emit the icon container (Q1-parity); icon=false adds
     // the `no-icon` co-class to the inner `<i>`.
     let body_content = vec![
-        Block::Div(icon_container_div(source_info, icon)),
+        Block::Div(Box::new(icon_container_div(source_info, icon))),
         absorb_section_wrapper(body_inner_div),
     ];
 
@@ -555,7 +555,7 @@ fn build_untitled_content(source_info: &SourceInfo, icon: bool, body_inner_div: 
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     };
-    vec![Block::Div(body_outer)]
+    vec![Block::Div(Box::new(body_outer))]
 }
 
 /// Build the icon container div. The container is ALWAYS emitted
@@ -742,7 +742,7 @@ mod tests {
 
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Custom(custom)],
+            blocks: vec![Block::Custom(Box::new(custom))],
         };
 
         let project = make_test_project();
@@ -812,7 +812,7 @@ mod tests {
 
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Custom(custom)],
+            blocks: vec![Block::Custom(Box::new(custom))],
         };
 
         let project = make_test_project();
@@ -915,7 +915,7 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
-                content: vec![Block::Custom(custom)],
+                content: vec![Block::Custom(Box::new(custom))],
                 source_info: dummy_source_info(),
             })],
         };

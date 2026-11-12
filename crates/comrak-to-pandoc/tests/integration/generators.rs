@@ -516,13 +516,13 @@ fn gen_header(inline_features: InlineFeatures) -> impl Strategy<Value = Block> {
         ..inline_features
     };
     (1..=6usize, gen_inlines(header_features)).prop_map(|(level, content)| {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             content,
             attr: empty_attr(),
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -530,12 +530,12 @@ fn gen_header(inline_features: InlineFeatures) -> impl Strategy<Value = Block> {
 fn gen_code_block() -> impl Strategy<Value = Block> {
     (safe_text(), gen_lang()).prop_map(|(text, lang)| {
         let classes = lang.map(|l| vec![l]).unwrap_or_default();
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             text,
             attr: (String::new(), classes, LinkedHashMap::new()),
             source_info: empty_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     })
 }
 
@@ -673,7 +673,7 @@ fn gen_single_block(
                 2..=4,
             )
             .prop_map(|content| {
-                Block::OrderedList(OrderedList {
+                Block::OrderedList(Box::new(OrderedList {
                     content,
                     attr: (
                         1, // start number
@@ -681,7 +681,7 @@ fn gen_single_block(
                         quarto_pandoc_types::ListNumberDelim::Period,
                     ),
                     source_info: empty_source_info(),
-                })
+                }))
             })
             .boxed(),
         ));

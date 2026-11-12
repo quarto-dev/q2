@@ -158,11 +158,11 @@ fn raw_inline(text: String) -> Inline {
 }
 
 fn raw_block(text: String) -> Block {
-    Block::RawBlock(RawBlock {
+    Block::RawBlock(Box::new(RawBlock {
         format: "typst".to_string(),
         text,
         source_info: generated(),
-    })
+    }))
 }
 
 struct Converter {
@@ -445,7 +445,7 @@ mod tests {
             .with_slot("title", Slot::Inlines(title))
             .with_slot("content", Slot::Blocks(vec![inline_para]))
             .with_slot("one", Slot::Block(Box::new(div)));
-        ast.blocks = vec![Block::Custom(node)];
+        ast.blocks = vec![Block::Custom(Box::new(node))];
         convert_document(&mut ast, None);
 
         assert_eq!(

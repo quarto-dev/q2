@@ -151,7 +151,7 @@ fn sugar_block(block: &mut Block, diags: &mut Vec<DiagnosticMessage>) {
     if let Block::Div(div) = block
         && div.attr.1.iter().any(|c| c == MATCH_CLASS)
     {
-        *block = Block::Custom(sugar_embed(div, diags));
+        *block = Block::Custom(Box::new(sugar_embed(div, diags)));
     }
 }
 
@@ -304,7 +304,7 @@ fn render_block(block: &mut Block, resolve: Resolve) {
     if let Block::Custom(node) = block
         && node.type_name == NODE_TYPE
     {
-        *block = Block::Div(render_embed(node, resolve));
+        *block = Block::Div(Box::new(render_embed(node, resolve)));
     }
 }
 
@@ -361,7 +361,7 @@ fn render_embed(node: &mut CustomNode, resolve: Resolve) -> Div {
         Some(n) => with_number_label(body, kind, n, &source_info),
         None => body,
     };
-    content.push(Block::Div(Div {
+    content.push(Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec![SOURCE_CLASS.to_string()],
@@ -370,7 +370,7 @@ fn render_embed(node: &mut CustomNode, resolve: Resolve) -> Div {
         content: caption_blocks,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    }));
+    })));
 
     // The container carries the id so `@demo-…` references jump to it.
     let mut classes = vec![CONTAINER_CLASS.to_string()];
@@ -416,11 +416,11 @@ fn iframe_block(
         title = title,
         style = attr_escape(&style),
     );
-    Block::RawBlock(RawBlock {
+    Block::RawBlock(Box::new(RawBlock {
         format: "html".to_string(),
         text: html,
         source_info: source_info.clone(),
-    })
+    }))
 }
 
 /// Prepend a `Demo N: ` label (a styled span) to the caption body. If the
@@ -650,17 +650,17 @@ mod tests {
         for (k, v) in kvs {
             map.insert((*k).to_string(), (*v).to_string());
         }
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map),
             content: vec![source_link("View source", "https://github.com/q/x")],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A markdown code-block, as the first child of a placeholder would parse.
     fn code_block(text: &str) -> Block {
-        Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+        Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
             attr: (
                 String::new(),
                 vec!["markdown".to_string()],
@@ -669,7 +669,7 @@ mod tests {
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A placeholder Div whose body is a leading code block followed by the
@@ -679,12 +679,12 @@ mod tests {
         for (k, v) in kvs {
             map.insert((*k).to_string(), (*v).to_string());
         }
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map),
             content: body,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// The ordered top-level block kinds inside the rendered container Div.

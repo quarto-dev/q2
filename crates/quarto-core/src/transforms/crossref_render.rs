@@ -196,16 +196,16 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>, fs: &mut Float
         if needs_wrap {
             let Block::Figure(f) = std::mem::replace(
                 block,
-                Block::Div(Div {
+                Block::Div(Box::new(Div {
                     attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
                     content: Vec::new(),
                     source_info: SourceInfo::generated(quarto_source_map::By::unknown()),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
             ) else {
                 unreachable!("guarded by needs_wrap");
             };
-            *block = wrap_standalone_figure(f);
+            *block = wrap_standalone_figure(*f);
         }
     }
 }
@@ -290,12 +290,12 @@ fn wrap_standalone_figure(mut f: Figure) -> Block {
         kvs.insert("style".to_string(), style);
     }
     let source_info = f.source_info.clone();
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (id, classes, kvs),
-        content: vec![Block::Figure(f)],
+        content: vec![Block::Figure(Box::new(f))],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Swap out a `CustomNode` in place with a placeholder, returning the
@@ -779,12 +779,12 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
         let mut wrapper_kvs: hashlink::LinkedHashMap<String, String> =
             hashlink::LinkedHashMap::new();
         wrapper_kvs.insert("aria-describedby".to_string(), caption_id.clone());
-        let content_wrapper = Block::Div(Div {
+        let content_wrapper = Block::Div(Box::new(Div {
             attr: (String::new(), Vec::new(), wrapper_kvs),
             content,
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Inner <figure>: quarto-float + quarto-float-<ref>, and the
         // data-qf-* kvs both writers use to synthesize the <figcaption>.
@@ -798,7 +798,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
         if is_uncaptioned {
             fig_kvs.insert("data-qf-uncaptioned".to_string(), "1".to_string());
         }
-        let figure = Block::Figure(Figure {
+        let figure = Block::Figure(Box::new(Figure {
             attr: (
                 String::new(),
                 vec![
@@ -815,7 +815,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
             content: vec![content_wrapper],
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Outer div: user classes + the Q1 taxonomy + forwarded classes.
         user_classes.extend([
@@ -831,18 +831,18 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
         if let Some(style) = style {
             user_kvs.insert("style".to_string(), style);
         }
-        return Block::Div(Div {
+        return Block::Div(Box::new(Div {
             attr: (identifier, user_classes, user_kvs),
             content: vec![figure],
             source_info,
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
     }
 
     if ref_type == "fig" {
         // Prefer Pandoc's native Figure so the HTML writer emits
         // `<figure><figcaption>...</figcaption></figure>` with the id.
-        Block::Figure(Figure {
+        Block::Figure(Box::new(Figure {
             attr: node.attr,
             caption: Caption {
                 short: caption_short,
@@ -852,7 +852,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
             content,
             source_info,
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     } else {
         // Div wrapper: content + numbered-caption paragraph.
         let mut body = content;
@@ -860,12 +860,12 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
             body.extend(numbered_caption);
         }
         let _ = identifier; // id is on node.attr already
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: node.attr,
             content: body,
             source_info,
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 }
 
@@ -953,12 +953,12 @@ fn render_theorem(node: CustomNode, fs: &FloatState) -> Block {
     let content = ensure_leading_paragraph_nbsp(content, source_info.clone());
     let body = prepend_theorem_label(content, label, source_info.clone());
 
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr,
         content: body,
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Map a theorem ref-type prefix to its Q1 env name (which doubles as
@@ -1168,12 +1168,12 @@ fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
 
     let body = prepend_theorem_label(content, label, source_info.clone());
 
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr,
         content: body,
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Convert an Equation custom node into a `Span(id=...)` containing the
@@ -1538,20 +1538,20 @@ mod tests {
     }
 
     fn fig_div(id: &str, cap: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: attr_id(id),
             content: vec![
-                Block::CodeBlock(CodeBlock {
+                Block::CodeBlock(Box::new(CodeBlock {
                     attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
                     text: "x=1".into(),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
                 para(cap),
             ],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     async fn run_full(blocks: Vec<Block>) -> Pandoc {
@@ -1626,13 +1626,13 @@ mod tests {
     }
 
     fn header(level: usize, id: &str, text: &str) -> Block {
-        Block::Header(quarto_pandoc_types::block::Header {
+        Block::Header(Box::new(quarto_pandoc_types::block::Header {
             level,
             attr: attr_id(id),
             content: vec![str_inline(text)],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// `crossref: {chapters: <v>}` document metadata.
@@ -1752,7 +1752,7 @@ mod tests {
     #[tokio::test]
     async fn table_target_renders_to_div_with_prefixed_caption() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
-        let table = Block::Table(Table {
+        let table = Block::Table(Box::new(Table {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -1782,13 +1782,13 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let blocks = vec![Block::Div(Div {
+        }));
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("tbl-one"),
             content: vec![table, para("Table caption")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         // bd-hcp8m3ve: table floats are figure-wrapped now; the table lives
         // in the aria wrapper and the caption is a real Figure caption with
@@ -1899,7 +1899,7 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
         }));
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("fig-a"),
             content: vec![
                 Block::Paragraph(Paragraph {
@@ -1910,7 +1910,7 @@ mod tests {
             ],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         let (outer, fig) = float_shape(&ast.blocks[0]);
         assert_classes(&outer.attr, &["quarto-figure-left"], "outer div");
@@ -1951,20 +1951,20 @@ mod tests {
         // image's.
         let mut cb_attr: LinkedHashMap<String, String> = LinkedHashMap::new();
         cb_attr.insert("fig-align".to_string(), "right".to_string());
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("fig-d"),
             content: vec![
-                Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+                Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
                     attr: (String::new(), vec!["mermaid".to_string()], cb_attr),
                     text: "flowchart LR".to_string(),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
                 para("Cap"),
             ],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         let (outer, fig) = float_shape(&ast.blocks[0]);
         assert_classes(&outer.attr, &["quarto-figure-right"], "outer div");
@@ -1989,7 +1989,7 @@ mod tests {
     #[tokio::test]
     async fn table_target_renders_q1_float_shape() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
-        let table = Block::Table(Table {
+        let table = Block::Table(Box::new(Table {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -2019,13 +2019,13 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let blocks = vec![Block::Div(Div {
+        }));
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("tbl-one"),
             content: vec![table, para("Table caption")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         let (outer, fig) = float_shape(&ast.blocks[0]);
         assert_eq!(outer.attr.0, "tbl-one");
@@ -2085,7 +2085,7 @@ mod tests {
     #[tokio::test]
     async fn table_float_clears_the_tables_own_caption() {
         use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
-        let table = Block::Table(Table {
+        let table = Block::Table(Box::new(Table {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -2115,13 +2115,13 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let blocks = vec![Block::Div(Div {
+        }));
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("tbl-one"),
             content: vec![table],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         let (_outer, fig) = float_shape(&ast.blocks[0]);
 
@@ -2161,7 +2161,7 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
         }));
-        let figure = Block::Figure(Figure {
+        let figure = Block::Figure(Box::new(Figure {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -2174,7 +2174,7 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let ast = run_full(vec![figure]).await;
         let Block::Div(outer) = &ast.blocks[0] else {
             panic!("expected wrapper Div, got {:?}", ast.blocks[0]);
@@ -2214,7 +2214,7 @@ mod tests {
         // pass-through, after the kitchen-sink fixture caught sections being
         // swallowed into `quarto-float-sec` figures. They now hold for the
         // stronger reason that the misclassification never happens.)
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: (
                 "sec-x".to_string(),
                 vec!["section".to_string()],
@@ -2223,7 +2223,7 @@ mod tests {
             content: vec![para("Section body text")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         let Block::Div(d) = &ast.blocks[0] else {
             panic!("expected section Div, got {:?}", ast.blocks[0]);
@@ -2249,12 +2249,12 @@ mod tests {
     async fn caption_id_collides_with_user_id_and_disambiguates() {
         // A user-authored element already owns "fig-1-caption": the generated
         // figcaption id must disambiguate (this replaces Q1's uuid suffix).
-        let user_div = Block::Div(Div {
+        let user_div = Block::Div(Box::new(Div {
             attr: attr_id("fig-1-caption"),
             content: vec![para("mine")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let ast = run_full(vec![fig_div("fig-1", "Cap"), user_div]).await;
         let (_outer, fig) = float_shape(&ast.blocks[0]);
         assert_eq!(
@@ -2278,17 +2278,17 @@ mod tests {
     async fn uncaptioned_float_gets_uncaptioned_kv_and_label_caption() {
         // Q1: an uncaptioned float's figcaption holds just the label and the
         // figcaption gains `quarto-uncaptioned` (via the kv here).
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("fig-bare"),
-            content: vec![Block::CodeBlock(CodeBlock {
+            content: vec![Block::CodeBlock(Box::new(CodeBlock {
                 attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
                 text: "x=1".into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         let (_outer, fig) = float_shape(&ast.blocks[0]);
         assert_eq!(
@@ -2961,17 +2961,17 @@ mod tests {
 
     #[tokio::test]
     async fn float_ref_target_with_no_caption_renders_figure_with_empty_caption() {
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: attr_id("fig-bare"),
-            content: vec![Block::CodeBlock(CodeBlock {
+            content: vec![Block::CodeBlock(Box::new(CodeBlock {
                 attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
                 text: "x=1".into(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let ast = run_full(blocks).await;
         // HTML float shape (bd-hcp8m3ve): outer div carries the id; the
         // uncaptioned float still gets a label-only caption + the
@@ -3043,12 +3043,12 @@ mod tests {
         // bd-n3sark9b: a caption whose first block carries no inlines
         // (e.g. a CodeBlock) must not silently lose its prefix. Insert a
         // label-only Plain in front, mirroring `prepend_theorem_label`.
-        let cap = vec![Block::CodeBlock(CodeBlock {
+        let cap = vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             text: "x".into(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })];
+        }))];
         let out = prefix_caption(cap, "Figure", Some("3".to_string()));
         assert_eq!(out.len(), 2);
         let Block::Plain(p) = &out[0] else {
@@ -3073,7 +3073,7 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
         }));
-        Block::Figure(Figure {
+        Block::Figure(Box::new(Figure {
             attr: attr_id(id),
             caption: Caption {
                 short: None,
@@ -3089,7 +3089,7 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// First caption block's inlines, whichever of Plain / Paragraph it is.
@@ -3130,7 +3130,7 @@ mod tests {
         // bd-n3sark9b: `Div(#tbl-x) > Table` where the Table's own caption
         // is `[Plain[...]]` (Pandoc's convention, and what the
         // `: cap {#tbl-x}` form desugars to).
-        let table = Block::Table(quarto_pandoc_types::table::Table {
+        let table = Block::Table(Box::new(quarto_pandoc_types::table::Table {
             attr: (String::new(), Vec::new(), LinkedHashMap::new()),
             caption: Caption {
                 short: None,
@@ -3156,13 +3156,13 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let div = Block::Div(Div {
+        }));
+        let div = Block::Div(Box::new(Div {
             attr: attr_id("tbl-nums"),
             content: vec![table],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let ast = run_full(vec![div]).await;
         let (outer, f) = float_shape(&ast.blocks[0]);
         assert_eq!(outer.attr.0, "tbl-nums");
@@ -3190,7 +3190,7 @@ mod tests {
         callout
             .slots
             .insert("content".into(), Slot::Blocks(vec![para("inside")]));
-        let mut block = Block::Custom(callout);
+        let mut block = Block::Custom(Box::new(callout));
         let mut fs = float_state_for_tests();
         render_block(&mut block, None, &mut fs);
         match block {
@@ -3205,12 +3205,12 @@ mod tests {
         if let Some(t) = title {
             kvs.insert("name".into(), t.to_string());
         }
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (id.into(), vec!["theorem".into()], kvs),
             content: vec![para(body)],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Pull the `Strong` out of the theorem-title `Span` at
@@ -3309,12 +3309,12 @@ mod tests {
     async fn theorem_counters_independent_from_lemmas() {
         let t1 = theorem_div("thm-a", None, "a");
         let t2 = theorem_div("thm-b", None, "b");
-        let lemma_div = Block::Div(Div {
+        let lemma_div = Block::Div(Box::new(Div {
             attr: ("lem-c".into(), vec!["lemma".into()], LinkedHashMap::new()),
             content: vec![para("c")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let ast = run_full(vec![t1, t2, lemma_div]).await;
         let strong_text = |block: &Block| -> String {
             let strong = theorem_label_strong(block);
@@ -3336,12 +3336,12 @@ mod tests {
 
     #[tokio::test]
     async fn unnumbered_theorem_renders_without_number() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (String::new(), vec!["theorem".into()], LinkedHashMap::new()),
             content: vec![para("unnumbered")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let ast = run_full(vec![div]).await;
         let strong = theorem_label_strong(&ast.blocks[0]);
         let Inline::Str(label) = &strong.content[0] else {
@@ -3380,12 +3380,12 @@ mod tests {
         if let Some(t) = title {
             kvs.insert("name".into(), t.to_string());
         }
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (String::new(), vec!["proof".into()], kvs),
             content: vec![para(body)],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[tokio::test]

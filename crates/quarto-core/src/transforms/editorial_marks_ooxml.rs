@@ -324,7 +324,7 @@ impl Converter {
         let mut out: Vec<Block> = Vec::with_capacity(list.len());
         for block in std::mem::take(list) {
             match block {
-                Block::Div(div) if self.is_live_mark(&div.attr.1) => self.mark_div(div, &mut out),
+                Block::Div(div) if self.is_live_mark(&div.attr.1) => self.mark_div(*div, &mut out),
                 Block::Paragraph(mut p) if wrap.is_some() => {
                     self.inline_list(&mut p.content);
                     p.content = wrap.expect("checked").wrap(p.content);
@@ -831,7 +831,7 @@ mod tests {
             .with_slot("title", Slot::Inlines(title))
             .with_slot("content", Slot::Blocks(vec![Block::Paragraph(inline_para)]))
             .with_slot("one", Slot::Block(Box::new(div)));
-        ast.blocks = vec![Block::Custom(node)];
+        ast.blocks = vec![Block::Custom(Box::new(node))];
         convert_document(&mut ast, Target::Docx, None);
 
         let shown = show_blocks(&ast.blocks);
@@ -855,7 +855,7 @@ mod tests {
         let div = ast.blocks[0].clone();
         let node = CustomNode::new("Callout", Default::default(), SourceInfo::for_test())
             .with_slot("one", Slot::Block(Box::new(div)));
-        ast.blocks = vec![Block::Custom(node)];
+        ast.blocks = vec![Block::Custom(Box::new(node))];
         convert_document(&mut ast, Target::Docx, None);
         assert_eq!(
             show_blocks(&ast.blocks),

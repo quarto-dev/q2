@@ -215,20 +215,20 @@ mod tests {
     fn test_header_eq() {
         use hashlink::LinkedHashMap;
 
-        let a = Block::Header(Header {
+        let a = Block::Header(Box::new(Header {
             level: 1,
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
-        let b = Block::Header(Header {
+        }));
+        let b = Block::Header(Box::new(Header {
             level: 1,
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
+        }));
         assert!(block_eq(&a, &b));
     }
 
@@ -236,20 +236,20 @@ mod tests {
     fn test_header_neq_different_level() {
         use hashlink::LinkedHashMap;
 
-        let a = Block::Header(Header {
+        let a = Block::Header(Box::new(Header {
             level: 1,
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
-        let b = Block::Header(Header {
+        }));
+        let b = Block::Header(Box::new(Header {
             level: 2,
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
+        }));
         assert!(!block_eq(&a, &b));
     }
 
@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn test_codeblock_eq() {
         use hashlink::LinkedHashMap;
-        let a = Block::CodeBlock(quarto_pandoc_types::CodeBlock {
+        let a = Block::CodeBlock(Box::new(quarto_pandoc_types::CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
@@ -496,8 +496,8 @@ mod tests {
             text: "print(1)".to_string(),
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
-        let b = Block::CodeBlock(quarto_pandoc_types::CodeBlock {
+        }));
+        let b = Block::CodeBlock(Box::new(quarto_pandoc_types::CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
@@ -506,7 +506,7 @@ mod tests {
             text: "print(1)".to_string(),
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
+        }));
         assert!(block_eq(&a, &b));
     }
 
@@ -538,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_orderedlist_eq() {
-        let a = Block::OrderedList(quarto_pandoc_types::OrderedList {
+        let a = Block::OrderedList(Box::new(quarto_pandoc_types::OrderedList {
             attr: (
                 1,
                 quarto_pandoc_types::ListNumberStyle::Decimal,
@@ -546,8 +546,8 @@ mod tests {
             ),
             content: vec![vec![]],
             source_info: dummy_source(),
-        });
-        let b = Block::OrderedList(quarto_pandoc_types::OrderedList {
+        }));
+        let b = Block::OrderedList(Box::new(quarto_pandoc_types::OrderedList {
             attr: (
                 1,
                 quarto_pandoc_types::ListNumberStyle::Decimal,
@@ -555,7 +555,7 @@ mod tests {
             ),
             content: vec![vec![]],
             source_info: other_source(),
-        });
+        }));
         assert!(block_eq(&a, &b));
     }
 
@@ -573,18 +573,18 @@ mod tests {
     #[test]
     fn test_div_eq() {
         use hashlink::LinkedHashMap;
-        let a = Block::Div(quarto_pandoc_types::Div {
+        let a = Block::Div(Box::new(quarto_pandoc_types::Div {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
-        let b = Block::Div(quarto_pandoc_types::Div {
+        }));
+        let b = Block::Div(Box::new(quarto_pandoc_types::Div {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        });
+        }));
         assert!(block_eq(&a, &b));
     }
 

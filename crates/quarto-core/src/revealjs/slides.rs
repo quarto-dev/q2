@@ -54,12 +54,12 @@ fn slide_attr() -> Attr {
 }
 
 fn make_section(attr: Attr, content: Vec<Block>) -> Block {
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr,
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Split a heading into (section attr, id-stripped header). The section gets
@@ -144,13 +144,13 @@ pub fn build_reveal_slides(blocks: Vec<Block>, slide_level: usize) -> Vec<Block>
                 b.flush_stack();
                 let (stack_attr, header) = section_attr_and_header(h);
                 b.stack = Some((stack_attr, Vec::new()));
-                b.slide = Some((slide_attr(), vec![Block::Header(header)]));
+                b.slide = Some((slide_attr(), vec![Block::Header(Box::new(header))]));
             }
             Block::Header(h) if h.level == slide_level => {
                 // A slide: vertical child of the open stack, else top-level.
                 b.flush_slide();
                 let (slide_attr, header) = section_attr_and_header(h);
-                b.slide = Some((slide_attr, vec![Block::Header(header)]));
+                b.slide = Some((slide_attr, vec![Block::Header(Box::new(header))]));
             }
             Block::Header(_) => {
                 // Level > slide_level → ordinary heading within the slide.
@@ -177,7 +177,7 @@ mod tests {
     use quarto_pandoc_types::inline::{Inline, Str};
 
     fn header(level: usize, id: &str, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (id.to_string(), vec![], LinkedHashMap::new()),
             content: vec![Inline::Str(Str {
@@ -186,11 +186,11 @@ mod tests {
             })],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn header_with(level: usize, id: &str, classes: &[&str], text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (
                 id.to_string(),
@@ -203,7 +203,7 @@ mod tests {
             })],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(text: &str) -> Block {

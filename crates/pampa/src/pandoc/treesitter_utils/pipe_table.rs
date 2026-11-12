@@ -302,7 +302,7 @@ pub fn process_pipe_table(
         node_source_info_with_context(node, context)
     };
 
-    PandocNativeIntermediate::IntermediateBlock(Block::Table(Table {
+    PandocNativeIntermediate::IntermediateBlock(Block::Table(Box::new(Table {
         attr,
         caption,
         colspec,
@@ -328,5 +328,5 @@ pub fn process_pipe_table(
         },
         source_info: table_source_info,
         attr_source,
-    }))
+    })))
 }

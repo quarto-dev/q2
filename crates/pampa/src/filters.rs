@@ -223,6 +223,21 @@ macro_rules! handle_inline_filter {
 }
 
 macro_rules! handle_block_filter {
+    // For variants whose payload is boxed in `Block`; see the `boxed` arm of
+    // `handle_inline_filter!`.
+    (boxed $variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr, $out:expr) => {
+        if let Some(f) = &mut $filter.$filter_field {
+            blocks_apply_and_maybe_recurse!(*$value, f, $filter, $ctx, $out)
+        } else if let Some(f) = &mut $filter.block {
+            blocks_apply_and_maybe_recurse!(Block::$variant($value), f, $filter, $ctx, $out)
+        } else {
+            $out.push(traverse_block_structure(
+                Block::$variant($value),
+                $filter,
+                $ctx,
+            ))
+        }
+    };
     ($variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr, $out:expr) => {
         if let Some(f) = &mut $filter.$filter_field {
             blocks_apply_and_maybe_recurse!($value, f, $filter, $ctx, $out)
@@ -357,7 +372,7 @@ macro_rules! impl_block_filterable_terminal {
         $(
             impl BlockFilterableStructure for pandoc::$variant {
                 fn filter_structure(self, _: &mut Filter, _ctx: &mut FilterContext) -> Block {
-                    Block::$variant(self)
+                    Block::$variant(self.into())
                 }
             }
         )*
@@ -370,10 +385,13 @@ macro_rules! impl_block_filterable_simple {
         $(
             impl BlockFilterableStructure for pandoc::$variant {
                 fn filter_structure(self, filter: &mut Filter, ctx: &mut FilterContext) -> Block {
-                    Block::$variant(pandoc::$variant {
-                        content: topdown_traverse_blocks(self.content, filter, ctx),
-                        ..self
-                    })
+                    Block::$variant(
+                        pandoc::$variant {
+                            content: topdown_traverse_blocks(self.content, filter, ctx),
+                            ..self
+                        }
+                        .into(),
+                    )
                 }
             }
         )*
@@ -414,14 +432,14 @@ impl BlockFilterableStructure for pandoc::LineBlock {
 
 impl BlockFilterableStructure for pandoc::OrderedList {
     fn filter_structure(self, filter: &mut Filter, ctx: &mut FilterContext) -> Block {
-        Block::OrderedList(pandoc::OrderedList {
+        Block::OrderedList(Box::new(pandoc::OrderedList {
             content: self
                 .content
                 .into_iter()
                 .map(|blocks| topdown_traverse_blocks(blocks, filter, ctx))
                 .collect(),
             ..self
-        })
+        }))
     }
 }
 
@@ -460,16 +478,16 @@ impl BlockFilterableStructure for pandoc::DefinitionList {
 
 impl BlockFilterableStructure for pandoc::Header {
     fn filter_structure(self, filter: &mut Filter, ctx: &mut FilterContext) -> Block {
-        Block::Header(pandoc::Header {
+        Block::Header(Box::new(pandoc::Header {
             content: topdown_traverse_inlines(self.content, filter, ctx),
             ..self
-        })
+        }))
     }
 }
 
 impl BlockFilterableStructure for pandoc::Table {
     fn filter_structure(self, filter: &mut Filter, ctx: &mut FilterContext) -> Block {
-        Block::Table(pandoc::Table {
+        Block::Table(Box::new(pandoc::Table {
             caption: traverse_caption(self.caption, filter, ctx),
             head: pandoc::TableHead {
                 rows: self
@@ -507,17 +525,17 @@ impl BlockFilterableStructure for pandoc::Table {
                 ..self.foot
             },
             ..self
-        })
+        }))
     }
 }
 
 impl BlockFilterableStructure for pandoc::Figure {
     fn filter_structure(self, filter: &mut Filter, ctx: &mut FilterContext) -> Block {
-        Block::Figure(pandoc::Figure {
+        Block::Figure(Box::new(pandoc::Figure {
             caption: traverse_caption(self.caption, filter, ctx),
             content: topdown_traverse_blocks(self.content, filter, ctx),
             ..self
-        })
+        }))
     }
 }
 
@@ -710,25 +728,25 @@ fn topdown_traverse_block_into(
             handle_block_filter!(Paragraph, para, paragraph, filter, ctx, out)
         }
         Block::CodeBlock(code) => {
-            handle_block_filter!(CodeBlock, code, code_block, filter, ctx, out)
+            handle_block_filter!(boxed CodeBlock, code, code_block, filter, ctx, out)
         }
         Block::RawBlock(raw) => {
-            handle_block_filter!(RawBlock, raw, raw_block, filter, ctx, out)
+            handle_block_filter!(boxed RawBlock, raw, raw_block, filter, ctx, out)
         }
         Block::BulletList(list) => {
             handle_block_filter!(BulletList, list, bullet_list, filter, ctx, out)
         }
         Block::OrderedList(list) => {
-            handle_block_filter!(OrderedList, list, ordered_list, filter, ctx, out)
+            handle_block_filter!(boxed OrderedList, list, ordered_list, filter, ctx, out)
         }
         Block::BlockQuote(quote) => {
             handle_block_filter!(BlockQuote, quote, block_quote, filter, ctx, out)
         }
         Block::Div(div) => {
-            handle_block_filter!(Div, div, div, filter, ctx, out)
+            handle_block_filter!(boxed Div, div, div, filter, ctx, out)
         }
         Block::Figure(figure) => {
-            handle_block_filter!(Figure, figure, figure, filter, ctx, out)
+            handle_block_filter!(boxed Figure, figure, figure, filter, ctx, out)
         }
         Block::Plain(plain) => {
             handle_block_filter!(Plain, plain, plain, filter, ctx, out)
@@ -740,10 +758,10 @@ fn topdown_traverse_block_into(
             handle_block_filter!(DefinitionList, def_list, definition_list, filter, ctx, out)
         }
         Block::Header(header) => {
-            handle_block_filter!(Header, header, header, filter, ctx, out)
+            handle_block_filter!(boxed Header, header, header, filter, ctx, out)
         }
         Block::Table(table) => {
-            handle_block_filter!(Table, table, table, filter, ctx, out)
+            handle_block_filter!(boxed Table, table, table, filter, ctx, out)
         }
         Block::HorizontalRule(hr) => {
             handle_block_filter!(HorizontalRule, hr, horizontal_rule, filter, ctx, out)
@@ -752,22 +770,24 @@ fn topdown_traverse_block_into(
         Block::BlockMetadata(meta) => {
             if let Some(f) = &mut filter.meta {
                 match f(meta.meta, ctx) {
-                    FilterReturn::Unchanged(m) => out.push(Block::BlockMetadata(MetaBlock {
-                        meta: m,
-                        source_info: meta.source_info,
-                    })),
+                    FilterReturn::Unchanged(m) => {
+                        out.push(Block::BlockMetadata(Box::new(MetaBlock {
+                            meta: m,
+                            source_info: meta.source_info,
+                        })))
+                    }
                     FilterReturn::FilterResult(new_meta, recurse) => {
                         if !recurse {
-                            out.push(Block::BlockMetadata(MetaBlock {
+                            out.push(Block::BlockMetadata(Box::new(MetaBlock {
                                 meta: new_meta,
                                 source_info: meta.source_info,
-                            }))
+                            })))
                         } else {
                             let traversed = topdown_traverse_config_value(new_meta, filter, ctx);
-                            out.push(Block::BlockMetadata(MetaBlock {
+                            out.push(Block::BlockMetadata(Box::new(MetaBlock {
                                 meta: traversed,
                                 source_info: meta.source_info,
-                            }))
+                            })))
                         }
                     }
                 };
@@ -778,24 +798,24 @@ fn topdown_traverse_block_into(
         Block::NoteDefinitionPara(refdef) => {
             // Process the inline content of the reference definition
             let content = topdown_traverse_inlines(refdef.content, filter, ctx);
-            out.push(Block::NoteDefinitionPara(
+            out.push(Block::NoteDefinitionPara(Box::new(
                 crate::pandoc::block::NoteDefinitionPara {
                     id: refdef.id,
                     content,
                     source_info: refdef.source_info,
                 },
-            ))
+            )))
         }
         Block::NoteDefinitionFencedBlock(refdef) => {
             // Process the block content of the fenced reference definition
             let content = topdown_traverse_blocks(refdef.content, filter, ctx);
-            out.push(Block::NoteDefinitionFencedBlock(
+            out.push(Block::NoteDefinitionFencedBlock(Box::new(
                 crate::pandoc::block::NoteDefinitionFencedBlock {
                     id: refdef.id,
                     content,
                     source_info: refdef.source_info,
                 },
-            ))
+            )))
         }
         Block::CaptionBlock(_) => {
             // CaptionBlock should have been removed by postprocessing
@@ -1038,10 +1058,10 @@ fn traverse_block_nonterminal(block: Block, filter: &mut Filter, ctx: &mut Filte
             content: topdown_traverse_blocks(quote.content, filter, ctx),
             ..quote
         }),
-        Block::OrderedList(list) => Block::OrderedList(crate::pandoc::OrderedList {
+        Block::OrderedList(list) => Block::OrderedList(Box::new(crate::pandoc::OrderedList {
             content: traverse_blocks_vec_nonterminal(list.content, filter, ctx),
-            ..list
-        }),
+            ..*list
+        })),
         Block::BulletList(list) => Block::BulletList(crate::pandoc::BulletList {
             content: traverse_blocks_vec_nonterminal(list.content, filter, ctx),
             ..list
@@ -1059,11 +1079,11 @@ fn traverse_block_nonterminal(block: Block, filter: &mut Filter, ctx: &mut Filte
                 .collect(),
             ..list
         }),
-        Block::Header(header) => Block::Header(crate::pandoc::Header {
+        Block::Header(header) => Block::Header(Box::new(crate::pandoc::Header {
             content: topdown_traverse_inlines(header.content, filter, ctx),
-            ..header
-        }),
-        Block::Table(table) => Block::Table(crate::pandoc::Table {
+            ..*header
+        })),
+        Block::Table(table) => Block::Table(Box::new(crate::pandoc::Table {
             caption: traverse_caption(table.caption, filter, ctx),
             head: crate::pandoc::TableHead {
                 rows: traverse_rows(table.head.rows, filter, ctx),
@@ -1082,17 +1102,17 @@ fn traverse_block_nonterminal(block: Block, filter: &mut Filter, ctx: &mut Filte
                 rows: traverse_rows(table.foot.rows, filter, ctx),
                 ..table.foot
             },
-            ..table
-        }),
-        Block::Figure(figure) => Block::Figure(crate::pandoc::Figure {
+            ..*table
+        })),
+        Block::Figure(figure) => Block::Figure(Box::new(crate::pandoc::Figure {
             caption: traverse_caption(figure.caption, filter, ctx),
             content: topdown_traverse_blocks(figure.content, filter, ctx),
-            ..figure
-        }),
-        Block::Div(div) => Block::Div(crate::pandoc::Div {
+            ..*figure
+        })),
+        Block::Div(div) => Block::Div(Box::new(crate::pandoc::Div {
             content: topdown_traverse_blocks(div.content, filter, ctx),
-            ..div
-        }),
+            ..*div
+        })),
         _ => {
             panic!("Unsupported block type: {:?}", block);
         }
@@ -1698,12 +1718,12 @@ mod tests {
     fn test_traverse_code_block() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: empty_attr(),
             text: "code".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::CodeBlock(_)));
@@ -1713,11 +1733,11 @@ mod tests {
     fn test_traverse_raw_block() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::RawBlock(RawBlock {
+        let block = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div></div>".to_string(),
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::RawBlock(_)));
@@ -1753,14 +1773,14 @@ mod tests {
     fn test_traverse_ordered_list() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::OrderedList(OrderedList {
+        let block = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
             content: vec![vec![Block::Plain(Plain {
                 content: vec![str_inline("item 1")],
                 source_info: si(),
             })]],
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         match &result[0] {
@@ -1830,7 +1850,7 @@ mod tests {
     fn test_traverse_div() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::Div(Div {
+        let block = Block::Div(Box::new(Div {
             attr: empty_attr(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![str_inline("div content")],
@@ -1838,7 +1858,7 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::Div(_)));
@@ -1848,13 +1868,13 @@ mod tests {
     fn test_traverse_header() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::Header(Header {
+        let block = Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![str_inline("heading")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         match &result[0] {
@@ -1867,7 +1887,7 @@ mod tests {
     fn test_traverse_figure() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::Figure(Figure {
+        let block = Block::Figure(Box::new(Figure {
             attr: empty_attr(),
             caption: Caption {
                 short: None,
@@ -1883,7 +1903,7 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::Figure(_)));
@@ -1893,7 +1913,7 @@ mod tests {
     fn test_traverse_table() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::Table(Table {
+        let block = Block::Table(Box::new(Table {
             attr: empty_attr(),
             caption: Caption {
                 short: None,
@@ -1939,7 +1959,7 @@ mod tests {
             },
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::Table(_)));
@@ -1949,10 +1969,10 @@ mod tests {
     fn test_traverse_block_metadata() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::BlockMetadata(MetaBlock {
+        let block = Block::BlockMetadata(Box::new(MetaBlock {
             meta: config_str("value"),
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::BlockMetadata(_)));
@@ -1962,10 +1982,10 @@ mod tests {
     fn test_traverse_block_metadata_with_meta_filter() {
         let mut filter = Filter::new().with_meta(|meta, _ctx| FilterReturn::Unchanged(meta));
         let mut ctx = FilterContext::new();
-        let block = Block::BlockMetadata(MetaBlock {
+        let block = Block::BlockMetadata(Box::new(MetaBlock {
             meta: config_str("value"),
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::BlockMetadata(_)));
@@ -1976,10 +1996,10 @@ mod tests {
         let mut filter = Filter::new()
             .with_meta(|_meta, _ctx| FilterReturn::FilterResult(config_str("transformed"), false));
         let mut ctx = FilterContext::new();
-        let block = Block::BlockMetadata(MetaBlock {
+        let block = Block::BlockMetadata(Box::new(MetaBlock {
             meta: config_str("value"),
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         match &result[0] {
@@ -1999,10 +2019,10 @@ mod tests {
         let mut filter =
             Filter::new().with_meta(|meta, _ctx| FilterReturn::FilterResult(meta, true));
         let mut ctx = FilterContext::new();
-        let block = Block::BlockMetadata(MetaBlock {
+        let block = Block::BlockMetadata(Box::new(MetaBlock {
             meta: config_map(vec![("key", config_str("value"))]),
             source_info: si(),
-        });
+        }));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::BlockMetadata(_)));
@@ -2012,7 +2032,7 @@ mod tests {
     fn test_traverse_custom_block() {
         let mut filter = Filter::new();
         let mut ctx = FilterContext::new();
-        let block = Block::Custom(CustomNode::new("test", empty_attr(), si()));
+        let block = Block::Custom(Box::new(CustomNode::new("test", empty_attr(), si())));
         let result = topdown_traverse_block(block, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Block::Custom(_)));

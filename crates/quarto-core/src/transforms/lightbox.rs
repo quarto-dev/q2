@@ -201,7 +201,7 @@ impl AstTransform for LightboxTransform {
         if !descriptions.is_empty() {
             let mut kvs = LinkedHashMap::new();
             kvs.insert("aria-hidden".to_string(), "true".to_string());
-            ast.blocks.push(Block::Div(Div {
+            ast.blocks.push(Block::Div(Box::new(Div {
                 attr: (String::new(), vec!["hidden".to_string()], kvs),
                 content: descriptions,
                 // The container is lightbox chrome; the descriptions inside
@@ -211,7 +211,7 @@ impl AstTransform for LightboxTransform {
                     data: serde_json::Value::Null,
                 }),
                 attr_source: AttrSourceInfo::empty(),
-            }));
+            })));
         }
 
         // The runtime is render-only: the preview has no
@@ -724,7 +724,7 @@ impl Walker<'_> {
         if let Some(description) = img.attr.2.remove(DESCRIPTION) {
             let desc_class = format!("lightbox-desc-{n}");
             let content = self.parse_description(&description, &img.source_info);
-            self.descriptions.push(Block::Div(Div {
+            self.descriptions.push(Block::Div(Box::new(Div {
                 attr: (
                     String::new(),
                     vec!["glightbox-desc".to_string(), desc_class.clone()],
@@ -733,7 +733,7 @@ impl Walker<'_> {
                 content,
                 source_info: img.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            }));
+            })));
             let mut config = format!("description: .{desc_class};");
             if let Some(title) = &title {
                 config.push_str(&format!("title:{title};"));
@@ -1214,7 +1214,7 @@ mod tests {
                 })]),
             );
         }
-        Block::Custom(node)
+        Block::Custom(Box::new(node))
     }
 
     fn auto_meta() -> ConfigValue {
@@ -1281,7 +1281,7 @@ mod tests {
         let caption_img = image_para("cap.png", "in caption");
         let mut ast = Pandoc {
             meta: auto_meta(),
-            blocks: vec![Block::Figure(Figure {
+            blocks: vec![Block::Figure(Box::new(Figure {
                 attr: (String::new(), vec![], LinkedHashMap::new()),
                 caption: Caption {
                     short: None,
@@ -1291,7 +1291,7 @@ mod tests {
                 content: vec![image_para("a.png", "a")],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
         run(&mut ast).await;
         let found = links(&mut ast.blocks);

@@ -1180,7 +1180,7 @@ mod tests {
 
     #[test]
     fn test_hash_code_block() {
-        let cb1 = Block::CodeBlock(CodeBlock {
+        let cb1 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "id".to_string(),
                 vec!["python".to_string()],
@@ -1189,9 +1189,9 @@ mod tests {
             text: "print('hello')".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb2 = Block::CodeBlock(CodeBlock {
+        let cb2 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "id".to_string(),
                 vec!["python".to_string()],
@@ -1200,9 +1200,9 @@ mod tests {
             text: "print('hello')".to_string(),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb3 = Block::CodeBlock(CodeBlock {
+        let cb3 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "id".to_string(),
                 vec!["python".to_string()],
@@ -1211,7 +1211,7 @@ mod tests {
             text: "print('world')".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Same content, different source -> same hash
         assert_eq!(
@@ -1228,17 +1228,17 @@ mod tests {
 
     #[test]
     fn test_hash_raw_block() {
-        let rb1 = Block::RawBlock(RawBlock {
+        let rb1 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>hello</div>".to_string(),
             source_info: dummy_source(),
-        });
+        }));
 
-        let rb2 = Block::RawBlock(RawBlock {
+        let rb2 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>world</div>".to_string(),
             source_info: dummy_source(),
-        });
+        }));
 
         assert_ne!(
             compute_block_hash_fresh(&rb1),
@@ -1273,23 +1273,23 @@ mod tests {
 
     #[test]
     fn test_hash_ordered_list() {
-        let ol1 = Block::OrderedList(OrderedList {
+        let ol1 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item 1")],
                 source_info: dummy_source(),
             })]],
             source_info: dummy_source(),
-        });
+        }));
 
-        let ol2 = Block::OrderedList(OrderedList {
+        let ol2 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item 1")],
                 source_info: other_source(),
             })]],
             source_info: other_source(),
-        });
+        }));
 
         assert_eq!(
             compute_block_hash_fresh(&ol1),
@@ -1348,21 +1348,21 @@ mod tests {
 
     #[test]
     fn test_hash_header() {
-        let h1 = Block::Header(Header {
+        let h1 = Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let h2 = Block::Header(Header {
+        let h2 = Block::Header(Box::new(Header {
             level: 2,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Different level -> different hash
         assert_ne!(compute_block_hash_fresh(&h1), compute_block_hash_fresh(&h2));
@@ -1387,7 +1387,7 @@ mod tests {
 
     #[test]
     fn test_hash_div() {
-        let div1 = Block::Div(Div {
+        let div1 = Block::Div(Box::new(Div {
             attr: (
                 "my-div".to_string(),
                 vec!["note".to_string()],
@@ -1399,9 +1399,9 @@ mod tests {
             })],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let div2 = Block::Div(Div {
+        let div2 = Block::Div(Box::new(Div {
             attr: (
                 "my-div".to_string(),
                 vec!["note".to_string()],
@@ -1413,7 +1413,7 @@ mod tests {
             })],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         // Different content -> different hash
         assert_ne!(
@@ -1775,7 +1775,7 @@ mod tests {
 
     #[test]
     fn test_structural_eq_code_block() {
-        let cb1 = Block::CodeBlock(CodeBlock {
+        let cb1 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
@@ -1784,9 +1784,9 @@ mod tests {
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb2 = Block::CodeBlock(CodeBlock {
+        let cb2 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
@@ -1795,14 +1795,14 @@ mod tests {
             text: "code".to_string(),
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let cb3 = Block::CodeBlock(CodeBlock {
+        let cb3 = Block::CodeBlock(Box::new(CodeBlock {
             attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_block(&cb1, &cb2));
         assert!(!structural_eq_block(&cb1, &cb3)); // Different class
@@ -1810,17 +1810,17 @@ mod tests {
 
     #[test]
     fn test_structural_eq_raw_block() {
-        let rb1 = Block::RawBlock(RawBlock {
+        let rb1 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>".to_string(),
             source_info: dummy_source(),
-        });
+        }));
 
-        let rb2 = Block::RawBlock(RawBlock {
+        let rb2 = Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: "<div>".to_string(),
             source_info: other_source(),
-        });
+        }));
 
         assert!(structural_eq_block(&rb1, &rb2));
     }
@@ -1848,32 +1848,32 @@ mod tests {
 
     #[test]
     fn test_structural_eq_ordered_list() {
-        let ol1 = Block::OrderedList(OrderedList {
+        let ol1 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item")],
                 source_info: dummy_source(),
             })]],
             source_info: dummy_source(),
-        });
+        }));
 
-        let ol2 = Block::OrderedList(OrderedList {
+        let ol2 = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item")],
                 source_info: other_source(),
             })]],
             source_info: other_source(),
-        });
+        }));
 
-        let ol3 = Block::OrderedList(OrderedList {
+        let ol3 = Block::OrderedList(Box::new(OrderedList {
             attr: (5, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: vec![vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("item")],
                 source_info: dummy_source(),
             })]],
             source_info: dummy_source(),
-        });
+        }));
 
         assert!(structural_eq_block(&ol1, &ol2));
         assert!(!structural_eq_block(&ol1, &ol3)); // Different start number
@@ -1929,29 +1929,29 @@ mod tests {
 
     #[test]
     fn test_structural_eq_header() {
-        let h1 = Block::Header(Header {
+        let h1 = Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let h2 = Block::Header(Header {
+        let h2 = Block::Header(Box::new(Header {
             level: 1,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let h3 = Block::Header(Header {
+        let h3 = Block::Header(Box::new(Header {
             level: 2,
             attr: empty_attr(),
             content: vec![make_str("Title")],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_block(&h1, &h2));
         assert!(!structural_eq_block(&h1, &h3)); // Different level
@@ -1972,7 +1972,7 @@ mod tests {
 
     #[test]
     fn test_structural_eq_div() {
-        let div1 = Block::Div(Div {
+        let div1 = Block::Div(Box::new(Div {
             attr: ("id".to_string(), vec![], LinkedHashMap::new()),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("text")],
@@ -1980,9 +1980,9 @@ mod tests {
             })],
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
-        let div2 = Block::Div(Div {
+        let div2 = Block::Div(Box::new(Div {
             attr: ("id".to_string(), vec![], LinkedHashMap::new()),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![make_str("text")],
@@ -1990,7 +1990,7 @@ mod tests {
             })],
             source_info: other_source(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
 
         assert!(structural_eq_block(&div1, &div2));
     }
@@ -2225,7 +2225,7 @@ mod tests {
             source_info: dummy_source(),
         };
 
-        let block = Block::Custom(cn);
+        let block = Block::Custom(Box::new(cn));
         let hash = compute_block_hash_fresh(&block);
         let _ = hash;
     }
@@ -2249,7 +2249,7 @@ mod tests {
             source_info: dummy_source(),
         };
 
-        let block = Block::Custom(cn);
+        let block = Block::Custom(Box::new(cn));
         let hash = compute_block_hash_fresh(&block);
         let _ = hash;
     }

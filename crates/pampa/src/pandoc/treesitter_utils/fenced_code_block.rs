@@ -72,17 +72,17 @@ pub fn process_fenced_code_block(
     }
 
     if let Some(format) = raw_format {
-        PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
+        PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(Box::new(RawBlock {
             format,
             text: content,
             source_info: location,
-        }))
+        })))
     } else {
-        PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
+        PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(Box::new(CodeBlock {
             attr,
             text: content,
             source_info: location,
             attr_source,
-        }))
+        })))
     }
 }

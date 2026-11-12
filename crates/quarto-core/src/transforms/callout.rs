@@ -141,7 +141,7 @@ fn transform_block(
             // Then check if this div is a callout and convert it
             if let Some(callout_type) = extract_callout_type(&div.attr) {
                 let custom = convert_div_to_callout(div, &callout_type, registry, diagnostics);
-                *block = Block::Custom(custom);
+                *block = Block::Custom(Box::new(custom));
             }
         }
         Block::Table(table) => {
@@ -836,7 +836,7 @@ mod tests {
     async fn test_convert_simple_callout() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Div(Div {
+            blocks: vec![Block::Div(Box::new(Div {
                 attr: callout_attr("warning"),
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
@@ -847,7 +847,7 @@ mod tests {
                 })],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let project = make_test_project();
@@ -875,10 +875,10 @@ mod tests {
     async fn test_convert_callout_with_title() {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Div(Div {
+            blocks: vec![Block::Div(Box::new(Div {
                 attr: callout_attr("tip"),
                 content: vec![
-                    Block::Header(Header {
+                    Block::Header(Box::new(Header {
                         level: 2,
                         attr: empty_attr(),
                         content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
@@ -887,7 +887,7 @@ mod tests {
                         })],
                         source_info: dummy_source_info(),
                         attr_source: AttrSourceInfo::empty(),
-                    }),
+                    })),
                     Block::Paragraph(Paragraph {
                         content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
                             text: "Tip content".to_string(),
@@ -898,7 +898,7 @@ mod tests {
                 ],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         let project = make_test_project();
@@ -941,7 +941,7 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
-                content: vec![Block::Div(Div {
+                content: vec![Block::Div(Box::new(Div {
                     attr: callout_attr("note"),
                     content: vec![Block::Paragraph(Paragraph {
                         content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
@@ -952,7 +952,7 @@ mod tests {
                     })],
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -996,7 +996,7 @@ mod tests {
 
         let mut ast = quarto_pandoc_types::pandoc::Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Div(Div {
+            blocks: vec![Block::Div(Box::new(Div {
                 attr: (
                     "nte-important".into(),
                     vec!["callout-note".into()],
@@ -1011,7 +1011,7 @@ mod tests {
                 })],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         CalloutTransform::new()
@@ -1042,7 +1042,7 @@ mod tests {
 
         let mut ast = quarto_pandoc_types::pandoc::Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Div(Div {
+            blocks: vec![Block::Div(Box::new(Div {
                 attr: callout_attr("note"),
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
@@ -1053,7 +1053,7 @@ mod tests {
                 })],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         CalloutTransform::new()
@@ -1080,7 +1080,7 @@ mod tests {
 
         let mut ast = quarto_pandoc_types::pandoc::Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Div(Div {
+            blocks: vec![Block::Div(Box::new(Div {
                 attr: (
                     "my-callout".into(),
                     vec!["callout-warning".into()],
@@ -1095,7 +1095,7 @@ mod tests {
                 })],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         };
 
         CalloutTransform::new()

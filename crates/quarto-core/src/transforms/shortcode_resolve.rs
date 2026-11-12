@@ -1012,7 +1012,8 @@ fn stamp_block(block: &mut Block, name: &str, token_arc: &Arc<SourceInfo>) {
                 }
             }
         }
-        Block::Header(Header { content, .. }) => {
+        Block::Header(header) => {
+            let Header { content, .. } = &mut **header;
             for child in content.iter_mut() {
                 stamp_inline(child, name, token_arc);
             }
@@ -1022,8 +1023,14 @@ fn stamp_block(block: &mut Block, name: &str, token_arc: &Arc<SourceInfo>) {
                 stamp_block(child, name, token_arc);
             }
         }
-        Block::OrderedList(OrderedList { content, .. })
-        | Block::BulletList(BulletList { content, .. }) => {
+        Block::OrderedList(_) | Block::BulletList(_) => {
+            // `OrderedList` is boxed in `Block` and `BulletList` is not, so
+            // one or-pattern cannot bind `content` for both.
+            let content = match block {
+                Block::OrderedList(list) => &mut list.content,
+                Block::BulletList(list) => &mut list.content,
+                _ => unreachable!("outer arm matched a list"),
+            };
             for item in content.iter_mut() {
                 for child in item.iter_mut() {
                     stamp_block(child, name, token_arc);
@@ -1042,9 +1049,10 @@ fn stamp_block(block: &mut Block, name: &str, token_arc: &Arc<SourceInfo>) {
                 }
             }
         }
-        Block::Figure(Figure {
-            content, caption, ..
-        }) => {
+        Block::Figure(figure) => {
+            let Figure {
+                content, caption, ..
+            } = &mut **figure;
             for child in content.iter_mut() {
                 stamp_block(child, name, token_arc);
             }
@@ -1059,18 +1067,20 @@ fn stamp_block(block: &mut Block, name: &str, token_arc: &Arc<SourceInfo>) {
                 }
             }
         }
-        Block::Div(Div { content, .. }) => {
+        Block::Div(div) => {
+            let Div { content, .. } = &mut **div;
             for child in content.iter_mut() {
                 stamp_block(child, name, token_arc);
             }
         }
-        Block::Table(Table {
-            caption,
-            head,
-            bodies,
-            foot,
-            ..
-        }) => {
+        Block::Table(table) => {
+            let Table {
+                caption,
+                head,
+                bodies,
+                foot,
+                ..
+            } = &mut **table;
             if let Some(short) = caption.short.as_mut() {
                 for child in short.iter_mut() {
                     stamp_inline(child, name, token_arc);
@@ -1787,12 +1797,13 @@ fn resolve_block<'a>(
                     resolve_inlines(line, transform, metadata, diagnostics, lua_engine).await;
                 }
             }
-            Block::Header(Header {
-                attr,
-                content,
-                source_info,
-                ..
-            }) => {
+            Block::Header(header) => {
+                let Header {
+                    attr,
+                    content,
+                    source_info,
+                    ..
+                } = &mut **header;
                 expand_attr_value_shortcodes(
                     attr,
                     transform,
@@ -1807,7 +1818,8 @@ fn resolve_block<'a>(
             Block::BlockQuote(BlockQuote { content, .. }) => {
                 resolve_blocks(content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Block::OrderedList(OrderedList { content, .. }) => {
+            Block::OrderedList(ordered_list) => {
+                let OrderedList { content, .. } = &mut **ordered_list;
                 for item in content {
                     resolve_blocks(item, transform, metadata, diagnostics, lua_engine).await;
                 }
@@ -1825,9 +1837,10 @@ fn resolve_block<'a>(
                     }
                 }
             }
-            Block::Figure(Figure {
-                content, caption, ..
-            }) => {
+            Block::Figure(figure) => {
+                let Figure {
+                    content, caption, ..
+                } = &mut **figure;
                 resolve_blocks(content, transform, metadata, diagnostics, lua_engine).await;
                 if let Some(short) = &mut caption.short {
                     resolve_inlines(short, transform, metadata, diagnostics, lua_engine).await;
@@ -1836,12 +1849,13 @@ fn resolve_block<'a>(
                     resolve_blocks(long, transform, metadata, diagnostics, lua_engine).await;
                 }
             }
-            Block::Div(Div {
-                attr,
-                content,
-                source_info,
-                ..
-            }) => {
+            Block::Div(div) => {
+                let Div {
+                    attr,
+                    content,
+                    source_info,
+                    ..
+                } = &mut **div;
                 expand_attr_value_shortcodes(
                     attr,
                     transform,
@@ -1853,13 +1867,14 @@ fn resolve_block<'a>(
                 .await;
                 resolve_blocks(content, transform, metadata, diagnostics, lua_engine).await;
             }
-            Block::Table(Table {
-                caption,
-                head,
-                bodies,
-                foot,
-                ..
-            }) => {
+            Block::Table(table) => {
+                let Table {
+                    caption,
+                    head,
+                    bodies,
+                    foot,
+                    ..
+                } = &mut **table;
                 // Table caption
                 if let Some(short) = &mut caption.short {
                     resolve_inlines(short, transform, metadata, diagnostics, lua_engine).await;
@@ -3350,7 +3365,7 @@ mod tests {
             for (k, v) in attributes {
                 kvs.insert(k.to_string(), v.to_string());
             }
-            Block::CodeBlock(CodeBlock {
+            Block::CodeBlock(Box::new(CodeBlock {
                 attr: (
                     String::new(),
                     classes.into_iter().map(String::from).collect(),
@@ -3359,7 +3374,7 @@ mod tests {
                 text: text.to_string(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         }
 
         fn code_text(block: &Block) -> &str {
@@ -3442,7 +3457,7 @@ mod tests {
             );
             let mut ast = Pandoc {
                 meta: meta_with_version(),
-                blocks: vec![Block::Div(Div {
+                blocks: vec![Block::Div(Box::new(Div {
                     attr: (
                         "{{< meta version >}}".to_string(),
                         vec!["{{< meta version >}}".to_string()],
@@ -3451,7 +3466,7 @@ mod tests {
                     content: vec![],
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
-                })],
+                }))],
             };
             let diags = run_transform(&mut ast).await;
             let Block::Div(div) = &ast.blocks[0] else {
