@@ -4,12 +4,13 @@
 //! output is one or more `SassLayer`s in the order Q1 produces them:
 //!
 //! 1. `defaults.bootstrap` layer (if `defaults.bootstrap` is set)
-//! 2. Color layer (if `color` is set)
-//! 3. Typography layer (if `typography` is set)
+//! 2. Theme-name layer (`$theme: "brand" !default;`, always)
+//! 3. Color layer (if `color` is set)
+//! 4. Typography layer (if `typography` is set)
 //!
 //! The order matches Q1's `brandBootstrapSassLayers` (which `unshift`s
-//! the bootstrap-defaults layer onto the front of the color/typography
-//! layers produced by `brandSassLayers`).
+//! the bootstrap-defaults layer onto the front of the theme-name /
+//! color / typography layers produced by `brandSassLayers`).
 //!
 //! Two intentional deviations from Q1:
 //! - Q1's `quarto-scss-analysis-annotation` comments are omitted; we
@@ -60,8 +61,9 @@ const DEFAULT_COLOR_NAME_MAP: &[(&str, &str)] = &[
 /// lives, which is what lets one compiled theme serve every page of a
 /// site (bd-ve916wr8).
 ///
-/// Returns an empty vector if the brand has no color, typography, or
-/// `defaults.bootstrap` content.
+/// Every brand yields at least the theme-name layer, which sets
+/// `$theme: "brand"` so a Bootswatch theme listed before `brand` no
+/// longer selects its own entries in `theme-override-value` (GH #1187).
 pub fn brand_to_layers(brand: &Brand) -> Result<Vec<SassLayer>, SassError> {
     let mut layers = Vec::new();
 
@@ -79,14 +81,24 @@ pub fn brand_to_layers(brand: &Brand) -> Result<Vec<SassLayer>, SassError> {
         layers.push(bs);
     }
 
-    // 2. color layer
+    // 2. theme-name layer. Bootswatch themes set `$theme: "<name>"
+    //    !default;` and `theme-override-value` keys per-theme tweaks
+    //    (e.g. cosmo's dashboard value-box colours) on it. Defaults
+    //    merge in reverse, so this later layer's `$theme` wins and the
+    //    brand's colours apply, as in Q1's `brandSassLayers`.
+    layers.push(SassLayer {
+        defaults: "$theme: \"brand\" !default;".to_string(),
+        ..SassLayer::default()
+    });
+
+    // 3. color layer
     if brand.color.is_some()
         && let Some(color) = color_layer(brand)?
     {
         layers.push(color);
     }
 
-    // 3. typography layer
+    // 4. typography layer
     if brand.typography.is_some()
         && let Some(typography) = typography_layer(brand)?
     {

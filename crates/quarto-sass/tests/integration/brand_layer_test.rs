@@ -32,8 +32,8 @@ fn color_layer_emits_brand_palette_sass_vars() {
          \x20   black: \"#002040\"\n",
     );
     let layers = brand_to_layers(&b).unwrap();
-    // The color layer is always the first non-empty layer.
-    let color = &layers[0];
+    // Without defaults.bootstrap the layers are [theme-name, color].
+    let color = &layers[1];
     assert!(
         color.defaults.contains("$brand-red: #FF0000 !default;"),
         "missing $brand-red in defaults:\n{}",
@@ -54,7 +54,7 @@ fn color_layer_emits_brand_palette_css_custom_props() {
          \x20   red: \"#FF0000\"\n",
     );
     let layers = brand_to_layers(&b).unwrap();
-    let color = &layers[0];
+    let color = &layers[1];
     assert!(
         color.rules.contains(":root {"),
         "missing :root block in rules:\n{}",
@@ -78,7 +78,7 @@ fn color_layer_emits_named_theme_color_sass_vars_with_resolution() {
          \x20 foreground: \"#21f\"\n",
     );
     let layers = brand_to_layers(&b).unwrap();
-    let color = &layers[0];
+    let color = &layers[1];
     assert!(
         color.defaults.contains("$primary: #FF0000 !default;"),
         "missing $primary resolved through palette:\n{}",
@@ -101,7 +101,7 @@ fn color_layer_applies_default_color_name_map() {
          \x20 background: \"#e6f8ff\"\n",
     );
     let layers = brand_to_layers(&b).unwrap();
-    let color = &layers[0];
+    let color = &layers[1];
     // foreground maps to body-color and pre-color and body-color.
     assert!(
         color.defaults.contains("$body-color: #21f !default;"),
@@ -129,7 +129,7 @@ fn color_layer_palette_key_sanitization() {
          \x20   \"my color\": \"#abc\"\n",
     );
     let layers = brand_to_layers(&b).unwrap();
-    let color = &layers[0];
+    let color = &layers[1];
     assert!(
         color.defaults.contains("$brand-my-color: #abc !default;"),
         "expected sanitized $brand-my-color:\n{}",
@@ -138,14 +138,32 @@ fn color_layer_palette_key_sanitization() {
 }
 
 #[test]
-fn empty_brand_produces_no_layers() {
+fn empty_brand_produces_only_the_theme_name_layer() {
+    // Q1's `brandSassLayers` pushes `$theme: "brand"` for any brand, so
+    // a Bootswatch theme's `theme-override-value` entries stop applying
+    // (GH #1187).
     let b = brand("");
     let layers = brand_to_layers(&b).unwrap();
-    assert!(
-        layers.is_empty(),
-        "empty brand should produce no layers, got {} layer(s)",
-        layers.len()
+    assert_eq!(layers.len(), 1, "got {layers:?}");
+    assert_eq!(layers[0].defaults, "$theme: \"brand\" !default;");
+    assert!(layers[0].rules.is_empty());
+}
+
+#[test]
+fn theme_name_layer_follows_bootstrap_defaults() {
+    // Q1 `unshift`s the bootstrap-defaults layer in front of the
+    // theme-name layer, so `$theme: "brand"` wins over a `$theme` set
+    // in `defaults.bootstrap` (later layers' defaults come first).
+    let b = brand(
+        "defaults:\n\
+         \x20 bootstrap:\n\
+         \x20   defaults:\n\
+         \x20     font-size-base: \"1.1rem\"\n",
     );
+    let layers = brand_to_layers(&b).unwrap();
+    assert_eq!(layers.len(), 2, "got {layers:?}");
+    assert!(layers[0].defaults.contains("$font-size-base"));
+    assert_eq!(layers[1].defaults, "$theme: \"brand\" !default;");
 }
 
 // ── bootstrap-defaults layer ────────────────────────────────────────
@@ -169,7 +187,7 @@ fn bootstrap_defaults_layer_emits_bootstrap_colors_from_palette() {
     let layers = brand_to_layers(&b).unwrap();
     // Per Q1's `brandBootstrapSassLayers`, bootstrap-defaults is
     // `unshift`-ed to the front of the user layers — so the order is
-    // [bootstrap_defaults, color, typography?].
+    // [bootstrap_defaults, theme_name, color, typography?].
     let bs = &layers[0];
     assert!(
         bs.defaults.contains("$blue: #0000ff !default;"),
@@ -218,13 +236,13 @@ fn bootstrap_defaults_layer_emits_passthrough_sections() {
 #[test]
 fn no_bootstrap_defaults_no_bootstrap_layer() {
     // Brand with color only — no bootstrap defaults — should produce
-    // exactly one layer (the color layer).
+    // the theme-name layer and the color layer.
     let b = brand("color:\n  primary: \"#abc\"\n");
     let layers = brand_to_layers(&b).unwrap();
     assert_eq!(
         layers.len(),
-        1,
-        "expected just color layer, got {:?}",
+        2,
+        "expected theme-name + color layers, got {:?}",
         layers
     );
 }
