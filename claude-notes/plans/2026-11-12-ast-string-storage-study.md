@@ -418,8 +418,10 @@ runs, deferred).
    and re-examine.
 2. **A for `Block`, then B.**
 3. **Reader fast paths** (typography/escape no-op path, `Concat` hull).
-4. **C**, choosing the string type by benchmark on this corpus and on a
-   Lua-filter-heavy render.
+4. **C**, starting with `ecow`, benchmarked on this corpus and on a
+   Lua-heavy render. For the Lua-heavy case, convert the listing of the
+   `claude-notes/plans` website to an lmd-based setup that builds (say) a
+   bullet list of the entries, instead of the listing we have now.
 5. **D**, as a quarto-source-map minor release.
 6. Re-measure bd-is4q72tt's 1.1 MB document end to end. Decide then whether
    F is worth a design.
@@ -430,13 +432,16 @@ runs, deferred).
 - **quarto-source-map:** a breaking release with `u32` offsets is acceptable.
 - **`ast_memory.rs`:** committed to `perf-harness` as the regression tool.
 - **Text runs (F):** deferred to after the layout work; needs a flag design.
+- **Small-string type:** try `ecow` first (16 bytes on both targets, 15
+  inline). Typst uses it and has substantial WASM exposure. Fall back to
+  comparing `compact_str` / `hipstr` only if it disappoints.
+- **wasm32 tracking:** a work item, not a question (bd-r17a0k7v). WASM
+  targets build here; the tool is the implementer's choice. `ast-memory`
+  measures a native build only, so the primary goal needs its own number.
 
 ## Open questions
 
-- The harness measures a native build. A wasm32 measurement (or at least a
-  size-of table checked in CI) is needed to track the primary goal.
-- Which small-string type: `compact_str` is pointer-sized ×3 (12 bytes on
-  wasm32), `ecow` is 16 bytes on both targets.
+None blocking. The text-run flag design is deferred (see F).
 
 ## Sources
 
