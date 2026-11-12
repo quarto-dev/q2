@@ -264,7 +264,7 @@ fn registry_classify<'r>(
 
 fn empty_attr() -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 /// Convert a Div we've already matched to the theorem-like set into a
@@ -323,7 +323,7 @@ fn convert_div(mut div: Div, ref_type: &str, kind: &str) -> CustomNode {
 /// `SourceInfo`; falls back to `None` if alignment fails (bd-3aolj
 /// / bd-1e6a5) so production never panics.
 fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<Inlines> {
-    let (_id, _classes, kvs) = attr;
+    let (_id, _classes, kvs) = &mut **attr;
 
     // Find the positional index of "name" before removing it so we can
     // index into attr_source.attributes (which is parallel to kvs in
@@ -428,6 +428,7 @@ mod tests {
             classes.iter().map(|s| s.to_string()).collect(),
             LinkedHashMap::new(),
         )
+            .into()
     }
 
     fn para(text: &str) -> Block {
@@ -526,7 +527,7 @@ mod tests {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("name".into(), "Pythagorean Theorem".into());
         let div = Block::Div(Box::new(Div {
-            attr: ("thm-pyth".into(), vec!["theorem".into()], kvs),
+            attr: ("thm-pyth".into(), vec!["theorem".into()], kvs).into(),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -555,7 +556,7 @@ mod tests {
             content: vec![
                 Block::Header(Box::new(Header {
                     level: 3,
-                    attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                    attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
                         text: "Header title".into(),
                         source_info: si(),

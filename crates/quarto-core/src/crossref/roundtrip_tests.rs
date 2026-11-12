@@ -38,11 +38,11 @@ fn empty_attr_source() -> AttrSourceInfo {
 }
 
 fn attr_with_id(id: &str) -> Attr {
-    (id.to_string(), Vec::new(), LinkedHashMap::new())
+    (id.to_string(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 fn attr_with_class(class: &str) -> Attr {
-    (String::new(), vec![class.to_string()], LinkedHashMap::new())
+    (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
 }
 
 /// Build a synthetic `Div(#<ident>) > CodeBlock(class=<lang>, text=<body>)`.

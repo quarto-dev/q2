@@ -98,7 +98,7 @@ mod tests {
             blocks: vec![
                 Block::Header(Box::new(Header {
                     level: 2,
-                    attr: ("sec-a".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                    attr: ("sec-a".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
                         text: "Section A".to_string(),
                         source_info: dummy_source_info(),

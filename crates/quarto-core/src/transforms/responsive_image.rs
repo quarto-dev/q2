@@ -273,6 +273,7 @@ mod tests {
             classes.iter().map(|c| c.to_string()).collect(),
             map,
         )
+            .into()
     }
 
     fn image(classes: &[&str], kvs: &[(&str, &str)]) -> Inline {

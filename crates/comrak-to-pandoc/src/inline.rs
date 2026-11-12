@@ -176,7 +176,7 @@ fn convert_link(link: &NodeLink, children: Inlines, source_info: SourceInfo) -> 
 
     let attr = if is_autolink {
         // pampa adds "uri" class to autolinks
-        (String::new(), vec!["uri".to_string()], LinkedHashMap::new())
+        (String::new(), vec!["uri".to_string()], LinkedHashMap::new()).into()
     } else {
         empty_attr()
     };

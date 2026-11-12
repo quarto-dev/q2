@@ -77,7 +77,8 @@ mod tests {
                 kvs.iter()
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect::<LinkedHashMap<_, _>>(),
-            ),
+            )
+                .into(),
             content: split_string_to_inlines(alt),
             target: ("x.png".to_string(), String::new()),
             source_info: si(),
@@ -124,7 +125,7 @@ mod tests {
     #[test]
     fn standalone_linked_image_alt_moves_to_fig_alt() {
         let link = Inline::Link(Box::new(Link {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![image("Alt L", &[])],
             target: ("https://example.com".into(), String::new()),
             source_info: si(),
@@ -148,7 +149,7 @@ mod tests {
     #[test]
     fn inline_and_figure_images_keep_their_alt_inlines() {
         let figure = Block::Figure(Box::new(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![Block::Plain(Plain {

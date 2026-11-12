@@ -336,7 +336,8 @@ mod tests {
                 String::new(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: si(),
@@ -362,7 +363,8 @@ mod tests {
                 String::new(),
                 vec![TABSET_CLASS.to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -520,7 +522,7 @@ mod tests {
         let mut attrs = hashlink::LinkedHashMap::new();
         attrs.insert("group".to_string(), "language".to_string());
         let div = Block::Div(Box::new(Div {
-            attr: (String::new(), vec![TABSET_CLASS.to_string()], attrs),
+            attr: (String::new(), vec![TABSET_CLASS.to_string()], attrs).into(),
             content: vec![header(2, "Python", &[]), para("py")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

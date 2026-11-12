@@ -26,7 +26,9 @@ pub mod table;
 
 // Re-export commonly used types at the crate root
 pub use atomic_custom_nodes::{ATOMIC_CUSTOM_NODES, is_atomic_custom_node};
-pub use attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr, is_empty_attr};
+pub use attr::{
+    Attr, AttrSourceInfo, AttrSourceParts, AttrTuple, TargetSourceInfo, empty_attr, is_empty_attr,
+};
 pub use block::{
     Block, BlockQuote, Blocks, BulletList, CaptionBlock, CodeBlock, DefinitionList, Div, Figure,
     Header, HorizontalRule, LineBlock, MetaBlock, NoteDefinitionFencedBlock, NoteDefinitionPara,

@@ -758,7 +758,7 @@ mod tests {
             }),
             Inline::Code(Box::new(Code {
                 text: "volume".to_string(),
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             })),
@@ -784,7 +784,7 @@ mod tests {
                 source_info: dummy_source_info(),
             }),
             Inline::Link(Box::new(Link {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: "the docs".to_string(),
                     source_info: dummy_source_info(),

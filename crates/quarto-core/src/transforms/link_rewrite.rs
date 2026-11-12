@@ -1255,7 +1255,7 @@ mod tests {
             map.insert(k.to_string(), v.to_string());
         }
         Inline::Link(Box::new(Link {
-            attr: (String::new(), vec![], map),
+            attr: (String::new(), vec![], map).into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: SourceInfo::for_test(),

@@ -100,6 +100,7 @@ pub fn process_section(
 
                         // Merge attr_source if present
                         if let Some(attr_source) = caption_attr_source {
+                            let attr_source = attr_source.into_parts();
                             for (key_source, value_source) in attr_source.attributes {
                                 table
                                     .attr_source

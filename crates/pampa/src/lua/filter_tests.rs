@@ -58,7 +58,8 @@ end
                     "old-id".to_string(),
                     vec!["old-class".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
@@ -121,7 +122,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
@@ -489,7 +490,7 @@ end
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
         }))],
@@ -1137,7 +1138,7 @@ end
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }),
             Block::CodeBlock(Box::new(crate::pandoc::CodeBlock {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 text: "code".to_string(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -1361,7 +1362,7 @@ end
                     })],
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })),
@@ -1525,7 +1526,7 @@ end
     let pandoc = Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Div(Box::new(crate::pandoc::Div {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![
                 Block::Paragraph(crate::pandoc::Paragraph {
@@ -1613,7 +1614,7 @@ end
     let pandoc = Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Div(Box::new(crate::pandoc::Div {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
@@ -2350,7 +2351,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Code(Box::new(crate::pandoc::Code {
-                attr: ("my-code".to_string(), vec!["python".to_string()], attrs),
+                attr: ("my-code".to_string(), vec!["python".to_string()], attrs).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 text: "print(1)".to_string(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -2540,7 +2541,8 @@ end
                     "link-id".to_string(),
                     vec![],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "Click here".to_string(),
@@ -2602,7 +2604,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Image(Box::new(crate::pandoc::Image {
-                attr: ("img-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: ("img-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "Alt text".to_string(),
@@ -2795,7 +2797,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Insert(Box::new(crate::pandoc::Insert {
-                attr: ("ins-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: ("ins-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "added".to_string(),
@@ -2830,7 +2832,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Delete(Box::new(crate::pandoc::Delete {
-                attr: ("del-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: ("del-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "removed".to_string(),
@@ -2865,7 +2867,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Highlight(Box::new(crate::pandoc::Highlight {
-                attr: ("hl-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: ("hl-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "important".to_string(),
@@ -3206,7 +3208,7 @@ end
                     text: "original".to_string(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -3268,7 +3270,7 @@ end
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("http://old.url".to_string(), "old title".to_string()),
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 target_source: crate::pandoc::TargetSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3333,7 +3335,7 @@ end
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
                 target: ("old_image.png".to_string(), "old title".to_string()),
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 target_source: crate::pandoc::TargetSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -3392,7 +3394,7 @@ end
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Code(Box::new(crate::pandoc::Code {
                 text: "old_code()".to_string(),
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -3674,7 +3676,7 @@ end
                     text: "original".to_string(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -3712,7 +3714,7 @@ end
                     text: "original".to_string(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -3750,7 +3752,7 @@ end
                     text: "original".to_string(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -3858,7 +3860,8 @@ end
                     "old-id".to_string(),
                     vec!["class1".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -4009,7 +4012,8 @@ end
                 "my-header".to_string(),
                 vec!["section".to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -4061,7 +4065,8 @@ end
                 "code-id".to_string(),
                 vec!["python".to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -4218,7 +4223,8 @@ end
                 "div-id".to_string(),
                 vec!["wrapper".to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -4472,7 +4478,7 @@ end
                 text: "Old Title".to_string(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -4527,7 +4533,8 @@ end
                 "old-id".to_string(),
                 vec!["python".to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -4685,7 +4692,8 @@ end
                 "old-id".to_string(),
                 vec!["wrapper".to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -4755,7 +4763,8 @@ end
                     "test-id".to_string(),
                     vec!["class1".to_string(), "class2".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -4816,7 +4825,8 @@ end
                     "named-test-id".to_string(),
                     vec!["a".to_string(), "b".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -4875,7 +4885,8 @@ end
                     "old-id".to_string(),
                     vec!["old-class".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -4939,7 +4950,8 @@ end
                     "original-id".to_string(),
                     vec!["keep-class".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -5002,7 +5014,8 @@ end
                     "test-id".to_string(),
                     vec!["cls".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -5142,7 +5155,7 @@ end
                 })]),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             },
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -5195,7 +5208,7 @@ end
                     text: "test".to_string(),
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 })],
-                attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: ("old-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -5253,7 +5266,8 @@ end
                 "my-table".to_string(),
                 vec![],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             caption: crate::pandoc::Caption {
                 short: None,
@@ -5262,14 +5276,14 @@ end
             },
             colspec: vec![],
             head: TableHead {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 rows: vec![],
                 source_info: quarto_source_map::SourceInfo::for_test(),
             },
             bodies: vec![],
             foot: TableFoot {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 rows: vec![],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -5516,7 +5530,8 @@ end
                     "id".to_string(),
                     vec!["cls".to_string()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -5577,7 +5592,7 @@ end
                 text: "Heading".to_string(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            attr: ("hdr-id".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: ("hdr-id".to_string(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -5647,7 +5662,7 @@ end
                         source_info: quarto_source_map::SourceInfo::for_test(),
                     }),
                 ],
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 source_info: quarto_source_map::SourceInfo::for_test(),
             }))],
@@ -5718,7 +5733,7 @@ end
                     source_info: quarto_source_map::SourceInfo::for_test(),
                 }),
             ],
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             source_info: quarto_source_map::SourceInfo::for_test(),
         }))],
@@ -5949,7 +5964,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Header(Box::new(crate::pandoc::Header {
             level: 1,
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Inline::Str(crate::pandoc::Str {
                 text: "title".to_string(),
@@ -6190,7 +6205,7 @@ end
     let pandoc = Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Figure(Box::new(crate::pandoc::Figure {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             caption: crate::pandoc::Caption {
                 short: None,
@@ -6317,7 +6332,7 @@ end
     let pandoc = Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Div(Box::new(crate::pandoc::Div {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
@@ -6554,7 +6569,7 @@ end
     let pandoc = Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Div(Box::new(crate::pandoc::Div {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             attr_source: crate::pandoc::AttrSourceInfo::empty(),
             content: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
@@ -6718,7 +6733,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hi".to_string(),
@@ -6835,7 +6850,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
                 source_info: quarto_source_map::SourceInfo::generated(
@@ -6957,7 +6972,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -7065,7 +7080,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
                 source_info: quarto_source_map::SourceInfo::for_test(),
@@ -7123,7 +7138,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
                 // Source range [0, 5) — entirely inside Alice's run.
@@ -7189,7 +7204,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
                 // file_id = 1 → non-primary; lookup_range would
@@ -7777,7 +7792,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
                 source_info: quarto_source_map::SourceInfo::original(
@@ -7841,7 +7856,7 @@ end
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
             content: vec![Inline::Span(Box::new(crate::pandoc::Span {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
                 content: vec![],
                 source_info: quarto_source_map::SourceInfo::for_test(),

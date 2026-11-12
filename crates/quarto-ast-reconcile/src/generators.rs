@@ -395,6 +395,7 @@ fn gen_attr() -> impl Strategy<Value = Attr> {
         proptest::collection::vec(gen_class(), 0..=2),
         Just(LinkedHashMap::new()), // Keep attributes simple for now
     )
+        .prop_map(Attr::from)
 }
 
 /// Generate an empty Attr.

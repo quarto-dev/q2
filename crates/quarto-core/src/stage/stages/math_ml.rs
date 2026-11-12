@@ -202,7 +202,8 @@ fn convert_math(math: &Math) -> (Option<Inline>, Vec<DiagnosticMessage>) {
             String::new(),
             vec!["math".to_string(), class.to_string()],
             Default::default(),
-        ),
+        )
+            .into(),
         content: vec![Inline::RawInline(Box::new(RawInline {
             format: "html".to_string(),
             text: mathml,

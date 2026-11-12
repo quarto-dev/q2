@@ -502,7 +502,10 @@ fn escape_html(s: &str) -> String {
 ///
 /// Standard HTML5 attributes (style, title, dir, lang, etc.) and ARIA attributes
 /// are written as-is. Custom attributes are prefixed with `data-`.
-fn write_attr<W: Write>(attr: &Attr, ctx: &mut HtmlWriterContext<'_, W>) -> std::io::Result<()> {
+fn write_attr<W: Write>(
+    attr: &quarto_pandoc_types::AttrTuple,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
     let (id, classes, attrs) = attr;
 
     if !id.is_empty() {
@@ -545,7 +548,7 @@ fn write_code_container_attr<W: Write>(
         return write_attr(attr, ctx);
     }
 
-    let (id, classes, attrs) = attr;
+    let (id, classes, attrs) = &**attr;
 
     if !id.is_empty() {
         write!(ctx, " id=\"{}\"", escape_html(id))?;
@@ -593,7 +596,7 @@ fn write_highlighted_codeblock<W: Write>(
     spans: Option<&[quarto_highlight_encoding::HighlightSpan]>,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    let (id, classes, kvs) = &codeblock.attr;
+    let (id, classes, kvs) = &*codeblock.attr;
 
     // First class (if any) is the language, per Pandoc convention.
     let (language, extras) = match classes.split_first() {
@@ -1322,7 +1325,7 @@ fn composed_list_item_attr<W: Write>(
     ctx: &HtmlWriterContext<'_, W>,
 ) -> Attr {
     let fragment = ctx.incremental && ctx.config.incremental_lists;
-    let (id, classes, kvs) = item_attr;
+    let (id, classes, kvs) = &**item_attr;
     let mut out_classes: Vec<String> = Vec::with_capacity(classes.len() + 2);
     if fragment {
         out_classes.push("fragment".to_string());
@@ -1340,7 +1343,7 @@ fn composed_list_item_attr<W: Write>(
             out_classes.push(c.clone());
         }
     }
-    (id.clone(), out_classes, kvs.clone())
+    (id.clone(), out_classes, kvs.clone()).into()
 }
 
 /// Task-list detection, mirroring Pandoc's `Writers.Shared.toTaskListItem`:
@@ -2546,7 +2549,8 @@ mod tests {
                 "my-section".to_string(),
                 vec!["section".to_string(), "level2".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -2610,7 +2614,8 @@ mod tests {
                 "my-div".to_string(),
                 vec!["callout".to_string(), "warning".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -2658,7 +2663,7 @@ mod tests {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
         Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![language.to_string()], kvs),
+            attr: (String::new(), vec![language.to_string()], kvs).into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -2713,7 +2718,8 @@ mod tests {
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "def foo():".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -2760,7 +2766,7 @@ mod tests {
             r#"[[0,3,"keyword"]]"#.to_string(),
         );
         let code = Inline::Code(Box::new(Code {
-            attr: (String::new(), vec!["python".to_string()], kvs),
+            attr: (String::new(), vec!["python".to_string()], kvs).into(),
             text: "def".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -2798,7 +2804,7 @@ mod tests {
                     source_info: dummy_source_info(),
                 }),
                 Inline::Attr(Box::new(InlineAttr::new(
-                    attr,
+                    attr.into(),
                     AttrSourceInfo::empty(),
                     dummy_source_info(),
                 ))),
@@ -2852,7 +2858,7 @@ mod tests {
             m,
         );
         Inline::Attr(Box::new(InlineAttr::new(
-            attr,
+            attr.into(),
             AttrSourceInfo::empty(),
             dummy_source_info(),
         )))
@@ -3044,7 +3050,8 @@ mod tests {
                 id.to_string(),
                 classes.into_iter().map(|s| s.to_string()).collect(),
                 kvs,
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -3175,7 +3182,8 @@ mod tests {
                 "cb1".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "def foo()".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -3196,7 +3204,7 @@ mod tests {
         use hashlink::LinkedHashMap;
         let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
         let cell = |text: &str| Cell {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
@@ -3212,13 +3220,13 @@ mod tests {
         };
         let n = colspec.len();
         let row = Row {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             cells: (0..n).map(|_| cell("x")).collect(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
         Block::Table(Box::new(Table {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
                 long: None,
@@ -3226,13 +3234,13 @@ mod tests {
             },
             colspec,
             head: TableHead {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![row],
@@ -3240,7 +3248,7 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
@@ -3319,7 +3327,7 @@ mod tests {
         use hashlink::LinkedHashMap;
         let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
         let cell = |text: &str| Cell {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
@@ -3334,13 +3342,13 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         };
         let mk_row = |label: &str| Row {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             cells: vec![cell(label)],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
         Block::Table(Box::new(Table {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
                 long: None,
@@ -3348,13 +3356,13 @@ mod tests {
             },
             colspec: vec![(Alignment::Default, ColWidth::Default)],
             head: TableHead {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: (0..head_rows).map(|i| mk_row(&format!("h{i}"))).collect(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: (0..body_rows).map(|i| mk_row(&format!("b{i}"))).collect(),
@@ -3362,7 +3370,7 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),

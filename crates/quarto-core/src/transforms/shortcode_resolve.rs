@@ -3370,7 +3370,8 @@ mod tests {
                     String::new(),
                     classes.into_iter().map(String::from).collect(),
                     kvs,
-                ),
+                )
+                    .into(),
                 text: text.to_string(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
@@ -3462,7 +3463,8 @@ mod tests {
                         "{{< meta version >}}".to_string(),
                         vec!["{{< meta version >}}".to_string()],
                         kvs,
-                    ),
+                    )
+                        .into(),
                     content: vec![],
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),

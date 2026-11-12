@@ -1063,7 +1063,8 @@ mod tests {
                 String::new(),
                 classes.iter().map(|c| c.to_string()).collect(),
                 attrs,
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),

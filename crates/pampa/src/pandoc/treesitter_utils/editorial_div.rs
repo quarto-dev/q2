@@ -39,7 +39,7 @@ pub fn process_editorial_div(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut marker: Option<(&'static str, quarto_source_map::SourceInfo)> = None;
-    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new());
+    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new()).into();
     let mut attr_source = AttrSourceInfo::empty();
     let mut content: Vec<Block> = Vec::new();
 

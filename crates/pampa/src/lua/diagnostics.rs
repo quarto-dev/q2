@@ -1067,7 +1067,7 @@ mod tests {
             end_offset: 300,
         };
         let codeblock = Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             text: "print('hello')".to_string(),
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),

@@ -224,7 +224,7 @@ fn sugar_embed(div: &Div, diags: &mut Vec<DiagnosticMessage>) -> CustomNode {
             classes.push(c.clone());
         }
     }
-    let attr: Attr = (id, classes, LinkedHashMap::new());
+    let attr: Attr = (id, classes, LinkedHashMap::new()).into();
 
     let mut node = CustomNode::new(NODE_TYPE, attr, div.source_info.clone());
     node.plain_data = Value::Object(plain_data);
@@ -366,7 +366,8 @@ fn render_embed(node: &mut CustomNode, resolve: Resolve) -> Div {
             String::new(),
             vec![SOURCE_CLASS.to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: caption_blocks,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
@@ -376,7 +377,7 @@ fn render_embed(node: &mut CustomNode, resolve: Resolve) -> Div {
     let mut classes = vec![CONTAINER_CLASS.to_string()];
     classes.extend(extra_classes);
     Div {
-        attr: (id, classes, LinkedHashMap::new()),
+        attr: (id, classes, LinkedHashMap::new()).into(),
         content,
         source_info,
         attr_source: AttrSourceInfo::empty(),
@@ -437,7 +438,8 @@ fn with_number_label(
             String::new(),
             vec![LABEL_CLASS.to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: vec![Inline::Str(Str {
             // Non-breaking space between kind and number, matching crossref
             // reference text ("Figure\u{a0}1").
@@ -629,7 +631,7 @@ mod tests {
     fn source_link(text: &str, href: &str) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![Inline::Link(Box::new(Link {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: text.to_string(),
                     source_info: dummy_source_info(),
@@ -651,7 +653,7 @@ mod tests {
             map.insert((*k).to_string(), (*v).to_string());
         }
         Block::Div(Box::new(Div {
-            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map),
+            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map).into(),
             content: vec![source_link("View source", "https://github.com/q/x")],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -665,7 +667,8 @@ mod tests {
                 String::new(),
                 vec!["markdown".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -680,7 +683,7 @@ mod tests {
             map.insert((*k).to_string(), (*v).to_string());
         }
         Block::Div(Box::new(Div {
-            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map),
+            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map).into(),
             content: body,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),

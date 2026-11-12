@@ -301,7 +301,7 @@ fn extract_cell_attrs(blocks: &mut Blocks) -> CellAttrs {
 
 /// Create an empty Attr
 fn empty_table_attr() -> Attr {
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 /// Compute a tight hull `SourceInfo` spanning from `first.start` to `last.end`.
@@ -448,11 +448,11 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
         }
     }
     let table_attr = (table_id, table_classes, table_kvs);
-    let table_attr_source = AttrSourceInfo {
-        id: div.attr_source.id.clone(),
-        classes: table_class_sources,
-        attributes: table_kv_sources,
-    };
+    let table_attr_source = AttrSourceInfo::new(
+        div.attr_source.id.clone(),
+        table_class_sources,
+        table_kv_sources,
+    );
 
     // Split content: caption blocks vs the rows BulletList
     let mut content = div.content;
@@ -606,7 +606,7 @@ pub(crate) fn transform_list_table_div(div: Div) -> Block {
     };
 
     Block::Table(Box::new(Table {
-        attr: table_attr,
+        attr: table_attr.into(),
         caption,
         colspec,
         head,
@@ -632,8 +632,8 @@ fn take_caption_attr(
         unreachable!("checked above");
     };
     let content = trim_inlines(content).0;
-    let (id, classes, kvs) = inline_attr.attr;
-    let source = inline_attr.attr_source;
+    let (id, classes, kvs) = inline_attr.attr.into_tuple();
+    let source = inline_attr.attr_source.into_parts();
 
     // Pad the source vectors so a short (or empty) AttrSourceInfo never
     // drops a value; a missing source is just `None`.
@@ -1510,16 +1510,12 @@ pub fn postprocess(
                 kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
                     vec![Inline::Span(Box::new(Span {
-                        attr: (String::new(), vec!["quarto-note-reference".to_string()], kv),
+                        attr: (String::new(), vec!["quarto-note-reference".to_string()], kv).into(),
                         content: vec![],
                         source_info: note_ref.source_info,
                         // Both the class and the kv are synthesized; `None`
                         // placeholders keep the sidecar aligned (bd-nq3ed2im).
-                        attr_source: crate::pandoc::attr::AttrSourceInfo {
-                            id: None,
-                            classes: vec![None],
-                            attributes: vec![(None, None)],
-                        },
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::new(None, vec![None], vec![(None, None)]),
                     }))],
                     false,
                 )
@@ -1527,10 +1523,11 @@ pub fn postprocess(
             .with_insert(|insert, _ctx| {
                 let (content, _changed) = trim_inlines(insert.content);
                 let mut classes = vec!["quarto-insert".to_string()];
-                classes.extend(insert.attr.1);
+                let (id, old_classes, kvs) = insert.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
                     vec![Inline::Span(Box::new(Span {
-                        attr: (insert.attr.0, classes, insert.attr.2),
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: insert.source_info,
                         attr_source: with_synthesized_leading_class(insert.attr_source),
@@ -1541,10 +1538,11 @@ pub fn postprocess(
             .with_delete(|delete, _ctx| {
                 let (content, _changed) = trim_inlines(delete.content);
                 let mut classes = vec!["quarto-delete".to_string()];
-                classes.extend(delete.attr.1);
+                let (id, old_classes, kvs) = delete.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
                     vec![Inline::Span(Box::new(Span {
-                        attr: (delete.attr.0, classes, delete.attr.2),
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: delete.source_info,
                         attr_source: with_synthesized_leading_class(delete.attr_source),
@@ -1555,10 +1553,11 @@ pub fn postprocess(
             .with_highlight(|highlight, _ctx| {
                 let (content, _changed) = trim_inlines(highlight.content);
                 let mut classes = vec!["quarto-highlight".to_string()];
-                classes.extend(highlight.attr.1);
+                let (id, old_classes, kvs) = highlight.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
                     vec![Inline::Span(Box::new(Span {
-                        attr: (highlight.attr.0, classes, highlight.attr.2),
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: highlight.source_info,
                         attr_source: with_synthesized_leading_class(highlight.attr_source),
@@ -1569,10 +1568,11 @@ pub fn postprocess(
             .with_edit_comment(|edit_comment, _ctx| {
                 let (content, _changed) = trim_inlines(edit_comment.content);
                 let mut classes = vec!["quarto-edit-comment".to_string()];
-                classes.extend(edit_comment.attr.1);
+                let (id, old_classes, kvs) = edit_comment.attr.into_tuple();
+                classes.extend(old_classes);
                 FilterResult(
                     vec![Inline::Span(Box::new(Span {
-                        attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
+                        attr: (id, classes, kvs).into(),
                         content,
                         source_info: edit_comment.source_info,
                         attr_source: with_synthesized_leading_class(edit_comment.attr_source),
@@ -1640,7 +1640,7 @@ pub fn postprocess(
                                     inline_attr.attr.0.clone(),
                                     classes,
                                     inline_attr.attr.2.clone(),
-                                ),
+                                ).into(),
                                 content: vec![Inline::Math(math.clone())],
                                 source_info: math_with_attr_span_source_info(
                                     &math.source_info,

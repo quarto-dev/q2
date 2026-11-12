@@ -181,7 +181,8 @@ fn displayed_block_cell(code: &str, source_info: &SourceInfo) -> Block {
             String::new(),
             vec![LMD_LANG.to_string()],
             Default::default(),
-        ),
+        )
+            .into(),
         text: code.to_string(),
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
@@ -196,7 +197,8 @@ fn displayed_inline_cell(expr: &str, source_info: &SourceInfo) -> Inline {
             String::new(),
             vec![LMD_LANG.to_string()],
             Default::default(),
-        ),
+        )
+            .into(),
         text: expr.to_string(),
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),

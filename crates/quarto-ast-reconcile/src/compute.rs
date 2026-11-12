@@ -874,7 +874,7 @@ mod tests {
     fn make_header(level: usize, text: &str) -> Block {
         Block::Header(Box::new(Header {
             level,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str(text)],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -883,7 +883,7 @@ mod tests {
 
     fn make_div(blocks: Vec<Block>) -> Block {
         Block::Div(Box::new(Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: blocks,
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -914,7 +914,7 @@ mod tests {
 
     fn make_figure(blocks: Vec<Block>) -> Block {
         Block::Figure(Box::new(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,

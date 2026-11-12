@@ -353,13 +353,13 @@ fn resolve_callout(
     }
 
     // Preserve original non-callout classes from the source attr.
-    let (orig_id, orig_classes, orig_attrs) = &custom.attr;
+    let (orig_id, orig_classes, orig_attrs) = &*custom.attr;
     for cls in orig_classes {
         if !cls.starts_with("callout") {
             classes.push(cls.clone());
         }
     }
-    let outer_attr: Attr = (orig_id.clone(), classes, orig_attrs.clone());
+    let outer_attr: Attr = (orig_id.clone(), classes, orig_attrs.clone()).into();
 
     // Reserve unique ids for the collapse wrapper. Q1-parity
     // naming (callouts.lua:281, 307, 310, 316-317):
@@ -491,7 +491,7 @@ fn build_titled_content(
         }));
     }
     let header_div = Block::Div(Box::new(Div {
-        attr: (String::new(), header_classes, header_attrs),
+        attr: (String::new(), header_classes, header_attrs).into(),
         content: header_content,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
@@ -523,7 +523,8 @@ fn build_titled_content(
                 ids.wrapper_id.clone(),
                 collapse_classes,
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![absorb_section_wrapper(body_with_class)],
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
@@ -618,6 +619,7 @@ fn make_attr(classes: &[&str]) -> Attr {
         classes.iter().map(|s| (*s).to_string()).collect(),
         LinkedHashMap::new(),
     )
+        .into()
 }
 
 /// Extract a string value from JSON.
@@ -758,7 +760,7 @@ mod tests {
         assert_eq!(ast.blocks.len(), 1);
         match &ast.blocks[0] {
             Block::Div(div) => {
-                let (_, classes, _) = &div.attr;
+                let (_, classes, _) = &*div.attr;
                 assert!(classes.contains(&"callout".to_string()));
                 assert!(classes.contains(&"callout-warning".to_string()));
 
@@ -768,7 +770,7 @@ mod tests {
                 // Check header structure
                 match &div.content[0] {
                     Block::Div(header) => {
-                        let (_, classes, _) = &header.attr;
+                        let (_, classes, _) = &*header.attr;
                         assert!(classes.contains(&"callout-header".to_string()));
                     }
                     _ => panic!("Expected header Div"),
@@ -777,7 +779,7 @@ mod tests {
                 // Check body structure
                 match &div.content[1] {
                     Block::Div(body) => {
-                        let (_, classes, _) = &body.attr;
+                        let (_, classes, _) = &*body.attr;
                         assert!(classes.contains(&"callout-body-container".to_string()));
                         assert!(classes.contains(&"callout-body".to_string()));
                     }
@@ -827,7 +829,7 @@ mod tests {
         // Verify structure
         match &ast.blocks[0] {
             Block::Div(div) => {
-                let (_, classes, _) = &div.attr;
+                let (_, classes, _) = &*div.attr;
                 assert!(classes.contains(&"callout-tip".to_string()));
             }
             _ => panic!("Expected Div"),
@@ -848,7 +850,7 @@ mod tests {
             // Find title container (second child if icon is present)
             for block in &header_div.content {
                 if let Block::Div(div) = block {
-                    let (_, classes, _) = &div.attr;
+                    let (_, classes, _) = &*div.attr;
                     if classes.contains(&"callout-title-container".to_string())
                         && let Block::Plain(plain) = &div.content[0]
                         && let Inline::Str(s) = &plain.content[0]
@@ -933,7 +935,7 @@ mod tests {
         match &ast.blocks[0] {
             Block::BlockQuote(bq) => match &bq.content[0] {
                 Block::Div(div) => {
-                    let (_, classes, _) = &div.attr;
+                    let (_, classes, _) = &*div.attr;
                     assert!(classes.contains(&"callout-note".to_string()));
                 }
                 _ => panic!("Expected Div inside BlockQuote"),

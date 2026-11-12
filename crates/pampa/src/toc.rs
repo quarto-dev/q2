@@ -399,13 +399,13 @@ fn collect_toc_entries(blocks: &[Block], max_depth: i32) -> Vec<FlatTocEntry> {
 
 /// Check if a Div is a section created by sectionize_blocks.
 fn is_section_div(div: &Div) -> bool {
-    let (_, classes, _) = &div.attr;
+    let (_, classes, _) = &*div.attr;
     classes.iter().any(|c| c == "section")
 }
 
 /// Extract the heading level from a section Div's classes.
 fn get_section_level(div: &Div) -> Option<i32> {
-    let (_, classes, _) = &div.attr;
+    let (_, classes, _) = &*div.attr;
     for class in classes {
         if class.starts_with("level")
             && let Ok(level) = class[5..].parse::<i32>()
@@ -418,7 +418,7 @@ fn get_section_level(div: &Div) -> Option<i32> {
 
 /// Extract a TOC entry from a section Div.
 fn extract_entry_from_section(div: &Div, max_depth: i32) -> Option<FlatTocEntry> {
-    let (id, classes, _) = &div.attr;
+    let (id, classes, _) = &*div.attr;
 
     // Skip if unlisted
     if classes.iter().any(|c| c == "unlisted") {
@@ -466,7 +466,7 @@ fn extract_entry_from_section(div: &Div, max_depth: i32) -> Option<FlatTocEntry>
 
 /// Extract a TOC entry from a direct Header (non-sectionized document).
 fn extract_entry_from_header(header: &Header, max_depth: i32) -> Option<FlatTocEntry> {
-    let (id, classes, _) = &header.attr;
+    let (id, classes, _) = &*header.attr;
     let level = header.level as i32;
 
     // Skip if unlisted
@@ -574,7 +574,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: dummy_source_info(),
@@ -600,7 +601,8 @@ mod tests {
                 String::new(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: header_text.to_string(),
                 source_info: dummy_source_info(),
@@ -613,7 +615,7 @@ mod tests {
         section_content.extend(content);
 
         Block::Div(Box::new(Div {
-            attr: (id.to_string(), section_classes, LinkedHashMap::new()),
+            attr: (id.to_string(), section_classes, LinkedHashMap::new()).into(),
             content: section_content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -760,7 +762,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
@@ -1015,7 +1018,7 @@ mod tests {
             })),
             Inline::Code(Box::new(Code {
                 text: "volume".to_string(),
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             })),
@@ -1145,7 +1148,8 @@ mod tests {
                 "using-a-raw-volume".to_string(),
                 vec![],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: header_content.clone(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),

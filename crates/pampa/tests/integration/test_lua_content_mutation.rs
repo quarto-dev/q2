@@ -34,7 +34,7 @@ fn div_doc() -> Pandoc {
                 content: vec![str_inline("asdf")],
                 source_info: quarto_source_map::SourceInfo::for_test(),
             })],
-            attr: (String::new(), vec!["a-div".to_string()], Default::default()),
+            attr: (String::new(), vec!["a-div".to_string()], Default::default()).into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
         }))],

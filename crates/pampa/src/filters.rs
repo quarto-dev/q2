@@ -1267,7 +1267,7 @@ mod tests {
 
     // Helper to create empty attr
     fn empty_attr() -> pandoc::Attr {
-        (String::new(), vec![], hashlink::LinkedHashMap::new())
+        (String::new(), vec![], hashlink::LinkedHashMap::new()).into()
     }
 
     // Helper to create a ConfigValue with string

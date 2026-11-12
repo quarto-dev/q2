@@ -217,14 +217,14 @@ mod tests {
 
         let a = Block::Header(Box::new(Header {
             level: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         }));
         let b = Block::Header(Box::new(Header {
             level: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -238,14 +238,14 @@ mod tests {
 
         let a = Block::Header(Box::new(Header {
             level: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         }));
         let b = Block::Header(Box::new(Header {
             level: 2,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -348,13 +348,13 @@ mod tests {
     fn test_code_inline_eq() {
         use hashlink::LinkedHashMap;
         let a = Inline::Code(Box::new(quarto_pandoc_types::Code {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         }));
         let b = Inline::Code(Box::new(quarto_pandoc_types::Code {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             text: "code".to_string(),
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -366,7 +366,7 @@ mod tests {
     fn test_link_eq() {
         use hashlink::LinkedHashMap;
         let a = Inline::Link(Box::new(quarto_pandoc_types::Link {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             target: ("url".to_string(), "title".to_string()),
             source_info: dummy_source(),
@@ -374,7 +374,7 @@ mod tests {
             target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
         }));
         let b = Inline::Link(Box::new(quarto_pandoc_types::Link {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             target: ("url".to_string(), "title".to_string()),
             source_info: other_source(),
@@ -388,7 +388,7 @@ mod tests {
     fn test_image_eq() {
         use hashlink::LinkedHashMap;
         let a = Inline::Image(Box::new(quarto_pandoc_types::Image {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             target: ("img.png".to_string(), "alt".to_string()),
             source_info: dummy_source(),
@@ -396,7 +396,7 @@ mod tests {
             target_source: quarto_pandoc_types::TargetSourceInfo::empty(),
         }));
         let b = Inline::Image(Box::new(quarto_pandoc_types::Image {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             target: ("img.png".to_string(), "alt".to_string()),
             source_info: other_source(),
@@ -410,13 +410,13 @@ mod tests {
     fn test_span_eq() {
         use hashlink::LinkedHashMap;
         let a = Inline::Span(Box::new(quarto_pandoc_types::Span {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         }));
         let b = Inline::Span(Box::new(quarto_pandoc_types::Span {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -492,7 +492,8 @@ mod tests {
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print(1)".to_string(),
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -502,7 +503,8 @@ mod tests {
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "print(1)".to_string(),
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -574,13 +576,13 @@ mod tests {
     fn test_div_eq() {
         use hashlink::LinkedHashMap;
         let a = Block::Div(Box::new(quarto_pandoc_types::Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         }));
         let b = Block::Div(Box::new(quarto_pandoc_types::Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),

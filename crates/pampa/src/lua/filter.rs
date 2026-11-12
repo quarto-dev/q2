@@ -1345,7 +1345,7 @@ mod unit_tests {
         );
         assert_eq!(
             block_tag(&Block::CodeBlock(Box::new(CodeBlock {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 text: String::new(),
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1396,7 +1396,7 @@ mod unit_tests {
         assert_eq!(
             block_tag(&Block::Header(Box::new(Header {
                 level: 1,
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1411,7 +1411,7 @@ mod unit_tests {
         );
         assert_eq!(
             block_tag(&Block::Table(Box::new(Table {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 caption: Caption {
                     short: None,
                     long: None,
@@ -1419,14 +1419,14 @@ mod unit_tests {
                 },
                 colspec: vec![],
                 head: TableHead {
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     rows: vec![],
                     source_info: source_info.clone(),
                     attr_source: AttrSourceInfo::empty()
                 },
                 bodies: vec![],
                 foot: TableFoot {
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     rows: vec![],
                     source_info: source_info.clone(),
                     attr_source: AttrSourceInfo::empty()
@@ -1438,7 +1438,7 @@ mod unit_tests {
         );
         assert_eq!(
             block_tag(&Block::Figure(Box::new(Figure {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 caption: Caption {
                     short: None,
                     long: None,
@@ -1452,7 +1452,7 @@ mod unit_tests {
         );
         assert_eq!(
             block_tag(&Block::Div(Box::new(Div {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1496,7 +1496,7 @@ mod unit_tests {
                 type_name: String::new(),
                 slots: LinkedHashMap::new(),
                 plain_data: serde_json::Value::Null,
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: source_info.clone()
             }))),
             "Custom"
@@ -1591,7 +1591,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Code(Box::new(Code {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 text: String::new(),
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1635,7 +1635,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Link(Box::new(Link {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 target: (String::new(), String::new()),
                 source_info: source_info.clone(),
@@ -1646,7 +1646,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Image(Box::new(Image {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 target: (String::new(), String::new()),
                 source_info: source_info.clone(),
@@ -1664,7 +1664,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Span(Box::new(Span {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1692,7 +1692,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Attr(Box::new(InlineAttr::new(
-                (String::new(), vec![], LinkedHashMap::new()),
+                (String::new(), vec![], LinkedHashMap::new()).into(),
                 AttrSourceInfo::empty(),
                 quarto_source_map::SourceInfo::for_test(),
             )))),
@@ -1700,7 +1700,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Insert(Box::new(Insert {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1709,7 +1709,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Delete(Box::new(Delete {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1718,7 +1718,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::Highlight(Box::new(Highlight {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1727,7 +1727,7 @@ mod unit_tests {
         );
         assert_eq!(
             inline_tag(&Inline::EditComment(Box::new(EditComment {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![],
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty()
@@ -1739,7 +1739,7 @@ mod unit_tests {
                 type_name: String::new(),
                 slots: LinkedHashMap::new(),
                 plain_data: serde_json::Value::Null,
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: source_info.clone()
             }))),
             "Custom"

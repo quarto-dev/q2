@@ -359,7 +359,11 @@ fn build_resolved_ref(
 ) -> CustomNode {
     use hashlink::LinkedHashMap;
     let attr = (String::new(), Vec::new(), LinkedHashMap::new());
-    let mut node = CustomNode::new(CROSSREF_RESOLVED_REF, attr, original.source_info.clone());
+    let mut node = CustomNode::new(
+        CROSSREF_RESOLVED_REF,
+        attr.into(),
+        original.source_info.clone(),
+    );
     let mut data = serde_json::Map::new();
     data.insert("identifier".into(), json!(identifier));
     data.insert("ref_type".into(), json!(def.ref_type));
@@ -462,7 +466,7 @@ mod tests {
     }
 
     fn _attr_id(id: &str) -> Attr {
-        (id.to_string(), Vec::new(), LinkedHashMap::new())
+        (id.to_string(), Vec::new(), LinkedHashMap::new()).into()
     }
 
     fn make_cite(id: &str) -> Inline {

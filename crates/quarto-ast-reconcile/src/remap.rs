@@ -596,7 +596,7 @@ mod tests {
             source_info: src(0),
         });
         let div = Block::Div(Box::new(Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![inner_para],
             source_info: src(0),
             attr_source: AttrSourceInfo::empty(),
@@ -624,14 +624,14 @@ mod tests {
 
     #[test]
     fn remap_touches_attr_source() {
-        let mut attr_source = AttrSourceInfo {
-            id: Some(src(0)),
-            classes: vec![Some(src(0))],
-            attributes: vec![(Some(src(0)), Some(src(0)))],
-        };
+        let mut attr_source = AttrSourceInfo::new(
+            Some(src(0)),
+            vec![Some(src(0))],
+            vec![(Some(src(0)), Some(src(0)))],
+        );
         let header = Block::Header(Box::new(Header {
             level: 1,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![],
             source_info: src(0),
             attr_source: std::mem::replace(&mut attr_source, AttrSourceInfo::empty()),
@@ -671,17 +671,13 @@ mod tests {
 
     #[test]
     fn walk_labels_each_node_kind_with_its_role() {
-        let attr_source = AttrSourceInfo {
-            id: Some(src(0)),
-            classes: vec![],
-            attributes: vec![],
-        };
+        let attr_source = AttrSourceInfo::new(Some(src(0)), vec![], vec![]);
         let mut pandoc = Pandoc {
             meta: ConfigValue::null(src(0)),
             blocks: vec![
                 Block::Header(Box::new(Header {
                     level: 1,
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     content: vec![make_str(0)],
                     source_info: src(0),
                     attr_source,

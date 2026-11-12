@@ -707,7 +707,7 @@ mod tests {
     #[tokio::test]
     async fn test_inlines_code() {
         let inlines = vec![Inline::Code(Box::new(quarto_pandoc_types::inline::Code {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             text: "code()".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
@@ -744,7 +744,7 @@ mod tests {
     #[tokio::test]
     async fn test_inlines_link() {
         let inlines = vec![Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
                 text: "link text".to_string(),
                 source_info: dummy_source_info(),
@@ -762,7 +762,7 @@ mod tests {
     async fn test_inlines_image() {
         let inlines = vec![Inline::Image(Box::new(
             quarto_pandoc_types::inline::Image {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: "alt text".to_string(),
                     source_info: dummy_source_info(),
@@ -780,7 +780,7 @@ mod tests {
     #[tokio::test]
     async fn test_inlines_span() {
         let inlines = vec![Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
                 text: "span content".to_string(),
                 source_info: dummy_source_info(),
@@ -796,7 +796,7 @@ mod tests {
     async fn test_inlines_insert() {
         let inlines = vec![Inline::Insert(Box::new(
             quarto_pandoc_types::inline::Insert {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: "inserted".to_string(),
                     source_info: dummy_source_info(),
@@ -813,7 +813,7 @@ mod tests {
     async fn test_inlines_delete() {
         let inlines = vec![Inline::Delete(Box::new(
             quarto_pandoc_types::inline::Delete {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: "deleted".to_string(),
                     source_info: dummy_source_info(),
@@ -830,7 +830,7 @@ mod tests {
     async fn test_inlines_highlight() {
         let inlines = vec![Inline::Highlight(Box::new(
             quarto_pandoc_types::inline::Highlight {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: "highlighted".to_string(),
                     source_info: dummy_source_info(),
@@ -847,7 +847,7 @@ mod tests {
     async fn test_inlines_edit_comment() {
         let inlines = vec![Inline::EditComment(Box::new(
             quarto_pandoc_types::inline::EditComment {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: "comment".to_string(),
                     source_info: dummy_source_info(),
@@ -951,7 +951,7 @@ mod tests {
     async fn test_blocks_code_block() {
         use quarto_pandoc_types::block::CodeBlock;
         let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             text: "fn main() {}".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
@@ -1050,7 +1050,7 @@ mod tests {
         use quarto_pandoc_types::block::Header;
         let blocks = vec![Block::Header(Box::new(Header {
             level: 1,
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![make_str_inline("heading")],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
@@ -1063,7 +1063,7 @@ mod tests {
     async fn test_blocks_div() {
         use quarto_pandoc_types::block::{Div, Plain};
         let blocks = vec![Block::Div(Box::new(Div {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![Block::Plain(Plain {
                 content: vec![make_str_inline("div content")],
                 source_info: dummy_source_info(),
@@ -1082,7 +1082,7 @@ mod tests {
             Alignment, ColWidth, Table, TableBody, TableFoot, TableHead,
         };
         let blocks = vec![Block::Table(Box::new(Table {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             caption: Caption {
                 short: Some(vec![make_str_inline("table caption")]),
                 long: None,
@@ -1090,13 +1090,13 @@ mod tests {
             },
             colspec: vec![(Alignment::Default, ColWidth::Default)],
             head: TableHead {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![],
@@ -1104,7 +1104,7 @@ mod tests {
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
@@ -1121,7 +1121,7 @@ mod tests {
         use quarto_pandoc_types::block::Figure;
         use quarto_pandoc_types::caption::Caption;
         let blocks = vec![Block::Figure(Box::new(Figure {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             caption: Caption {
                 short: Some(vec![make_str_inline("figure caption")]),
                 long: None,

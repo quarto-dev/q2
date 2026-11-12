@@ -264,7 +264,7 @@ fn try_desugar_code_block(
             let attr_map: hashlink::LinkedHashMap<String, String> =
                 attributes.into_iter().collect();
             Block::Div(Box::new(Div {
-                attr: (label, classes, attr_map),
+                attr: (label, classes, attr_map).into(),
                 content,
                 source_info: cb.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
@@ -279,7 +279,7 @@ fn try_desugar_code_block(
                 other => vec![other],
             };
             Block::Figure(Box::new(Figure {
-                attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+                attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()).into(),
                 caption: Caption {
                     short: short.map(|s| caption_inlines(s, diagnostics)),
                     long: Some(long),
@@ -991,7 +991,7 @@ mod tests {
 
     fn code_in(language: &str, text: &str) -> Block {
         Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![language.into()], LinkedHashMap::new()),
+            attr: (String::new(), vec![language.into()], LinkedHashMap::new()).into(),
             text: text.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -1727,7 +1727,7 @@ mod tests {
         let reg = RefTypeRegistry::builtin();
         let inner = code("#| label: fig-inner\n#| fig-cap: inner cap\nprint(1)\n");
         let outer = Block::Div(Box::new(Div {
-            attr: (String::new(), vec!["wrapper".into()], LinkedHashMap::new()),
+            attr: (String::new(), vec!["wrapper".into()], LinkedHashMap::new()).into(),
             content: vec![inner],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

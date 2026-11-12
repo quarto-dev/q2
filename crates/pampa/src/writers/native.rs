@@ -21,7 +21,7 @@ fn write_safe_string<T: std::io::Write>(text: &str, buf: &mut T) -> std::io::Res
 }
 
 fn write_native_attr<T: std::io::Write>(attr: &Attr, buf: &mut T) -> std::io::Result<()> {
-    let (id, classes, attrs) = attr;
+    let (id, classes, attrs) = &**attr;
     write!(buf, "( ")?;
     write_safe_string(id, buf)?;
     write!(buf, " , [")?;

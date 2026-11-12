@@ -186,7 +186,8 @@ pub fn encode_number(span: &mut Span, number: &str, encoding: NumberEncoding) ->
                         String::new(),
                         vec![EQ_NUMBER_LABEL_CLASS.to_string()],
                         Default::default(),
-                    ),
+                    )
+                        .into(),
                     content: vec![Inline::Str(Str {
                         text: format!("({number})"),
                         source_info: source_info.clone(),
@@ -263,7 +264,8 @@ mod tests {
                 "eq-x".to_string(),
                 vec!["quarto-math-with-attribute".to_string()],
                 kvs,
-            ),
+            )
+                .into(),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

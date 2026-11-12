@@ -1282,7 +1282,8 @@ mod tests {
                 String::new(),
                 vec![format!("{{{}}}", lang)],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: format!("# {lang} code"),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -1297,7 +1298,8 @@ mod tests {
                 String::new(),
                 vec![format!("{{{}}}", lang), class.to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: format!("# {lang} {class} code"),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -1641,7 +1643,7 @@ mod tests {
             }),
             // A plain (non-braced) highlight fence: not an engine cell.
             Block::CodeBlock(Box::new(CodeBlock {
-                attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
+                attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()).into(),
                 text: "x <- 1".to_string(),
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -3937,7 +3939,8 @@ mod tests {
                 String::new(),
                 vec!["{{python}}".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "#| label: fig-line-plot\nimport matplotlib.pyplot as plt".to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

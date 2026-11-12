@@ -77,6 +77,7 @@ fn class_attr(classes: &[&str]) -> Attr {
         classes.iter().map(|c| c.to_string()).collect(),
         LinkedHashMap::new(),
     )
+        .into()
 }
 
 fn as_div(block: &Block) -> Option<&Div> {
@@ -596,7 +597,7 @@ fn cell_around_float(float: &mut Div) -> Option<Div> {
     let float = std::mem::replace(
         float,
         Div {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             content: Vec::new(),
             source_info: float.source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
@@ -607,7 +608,8 @@ fn cell_around_float(float: &mut Div) -> Option<Div> {
             String::new(),
             vec!["cell-output-display".to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: vec![Block::Div(Box::new(float))],
         source_info: generated(),
         attr_source: AttrSourceInfo::empty(),
@@ -694,7 +696,8 @@ fn card_toolbar_marker(d: Div) -> Block {
                 "card-toolbar-unprocessed".to_string(),
             ],
             attrs,
-        ),
+        )
+            .into(),
         content,
         source_info: source,
         attr_source: AttrSourceInfo::empty(),
@@ -736,7 +739,8 @@ fn card_sidebar_marker(d: Div) -> Block {
                 "card-sidebar-unprocessed".to_string(),
             ],
             attrs,
-        ),
+        )
+            .into(),
         content,
         source_info: source,
         attr_source: AttrSourceInfo::empty(),
@@ -758,7 +762,7 @@ fn content_panel_div(d: Div) -> Block {
         }
     }
     div(
-        (String::new(), vec![kind.to_string()], attrs),
+        (String::new(), vec![kind.to_string()], attrs).into(),
         escape_leaf_contents(d.content),
     )
 }
@@ -886,7 +890,7 @@ fn make_value_box(
         extra = pending;
     }
 
-    let mut vb_attr: Attr = (String::new(), Vec::new(), LinkedHashMap::new());
+    let mut vb_attr: Attr = (String::new(), Vec::new(), LinkedHashMap::new()).into();
     for key in ["color", "bg-color", "fg-color"] {
         if let Some(v) = el.attr.2.get(key) {
             vb_attr.2.insert(format!("data-{key}"), v.clone());
@@ -916,7 +920,8 @@ fn make_value_box(
                 String::new(),
                 vec!["value-box-showcase".to_string()],
                 showcase,
-            ),
+            )
+                .into(),
             Vec::new(),
         ));
     }

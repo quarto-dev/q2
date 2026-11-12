@@ -116,7 +116,7 @@ mod tests {
             kvs.insert("style".to_string(), s.to_string());
         }
         Div {
-            attr: (String::new(), vec!["column".to_string()], kvs),
+            attr: (String::new(), vec!["column".to_string()], kvs).into(),
             content: vec![],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
@@ -149,7 +149,7 @@ mod tests {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("width".to_string(), "40%".to_string());
         let mut div = Div {
-            attr: (String::new(), vec!["notcolumn".to_string()], kvs),
+            attr: (String::new(), vec!["notcolumn".to_string()], kvs).into(),
             content: vec![],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
@@ -174,7 +174,7 @@ mod tests {
         use quarto_pandoc_types::custom::{CustomNode, Slot};
         let mut callout = CustomNode::new(
             "Callout",
-            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), vec![], LinkedHashMap::new()).into(),
             SourceInfo::generated(By::revealjs()),
         );
         callout.set_slot(

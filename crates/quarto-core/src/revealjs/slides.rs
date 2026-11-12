@@ -55,7 +55,7 @@ fn slide_attr() -> Attr {
 
 fn make_section(attr: Attr, content: Vec<Block>) -> Block {
     Block::Div(Box::new(Div {
-        attr,
+        attr: attr.into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
@@ -66,7 +66,7 @@ fn make_section(attr: Attr, content: Vec<Block>) -> Block {
 /// the `section` class plus the heading's user classes; the heading keeps its
 /// classes/attrs but loses its id (which moves to the section).
 fn section_attr_and_header(h: &Header) -> (Attr, Header) {
-    let (id, classes, attrs) = &h.attr;
+    let (id, classes, attrs) = &*h.attr;
     let mut section_classes = Vec::with_capacity(classes.len() + 1);
     section_classes.push("section".to_string());
     section_classes.extend(classes.clone());
@@ -74,7 +74,7 @@ fn section_attr_and_header(h: &Header) -> (Attr, Header) {
 
     let header = Header {
         level: h.level,
-        attr: (String::new(), classes.clone(), attrs.clone()),
+        attr: (String::new(), classes.clone(), attrs.clone()).into(),
         content: h.content.clone(),
         source_info: h.source_info.clone(),
         attr_source: h.attr_source.clone(),
@@ -179,7 +179,7 @@ mod tests {
     fn header(level: usize, id: &str, text: &str) -> Block {
         Block::Header(Box::new(Header {
             level,
-            attr: (id.to_string(), vec![], LinkedHashMap::new()),
+            attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: SourceInfo::generated(By::revealjs()),
@@ -196,7 +196,8 @@ mod tests {
                 id.to_string(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: SourceInfo::generated(By::revealjs()),

@@ -2,7 +2,7 @@
 title: "Study: arena / borrowed string storage for the Pandoc AST"
 strand: bd-akgst1fi
 related: [bd-is4q72tt]
-status: "Direction agreed (no lifetimes; node layout first; text runs deferred). Inline and Block cold variants boxed: AST heap 88x -> 20.5x of source. Attr slimming and steps 3-5 open under epic bd-4x6kih4c."
+status: "Direction agreed (no lifetimes; node layout first; text runs deferred). Inline/Block cold variants boxed and Attr slimmed: AST heap 88x -> 18.3x of source. Steps 3-5 open under epic bd-4x6kih4c."
 date: 2026-11-12
 ---
 
@@ -479,6 +479,44 @@ guards `Block` (64 bytes native, 32 on wasm32).
 
 This matches the option-A estimate (~535 MiB). `Vec<Inline>` buffers are
 now 68% of the AST heap, and text fields 10.5%.
+
+### Step 2b: slim `Attr` and `AttrSourceInfo` (bd-gz80k6c6) — measured
+
+`Attr` and `AttrSourceInfo` are now one-word handles: empty is a null
+pointer, non-empty owns a boxed `AttrTuple` / `AttrSourceParts`.
+
+Design choices:
+
+- **Deref to the old shape.** `Attr` derefs to
+  `AttrTuple = (String, Vec<String>, LinkedHashMap<String, String>)` and
+  `AttrSourceInfo` to `AttrSourceParts { id, classes, attributes }`. So
+  `attr.0`, `attr.1.push(..)`, `attr_source.id` and the like are unchanged
+  at every read and write site. Empty values deref to a shared static.
+- **Construction and teardown are explicit.** A tuple becomes an `Attr`
+  with `.into()`; `Attr::into_tuple()` and `AttrSourceInfo::into_parts()`
+  replace moving fields out; `AttrSourceInfo::new(id, classes, attributes)`
+  replaces the struct literal.
+- **Mutable access to an empty value allocates.** Equality, `Debug` and
+  serde look only at the contents, so an allocated-but-empty value is
+  indistinguishable from an unallocated one, and JSON and snapshot output
+  are unchanged. The corpus shows this is not a problem in the reader:
+  heap blocks rose by 34 K for 28.8 K non-empty attrs and their sources.
+- **Helpers take the tuple.** `is_empty_attr` and the writers'
+  `write_attr` functions take `&AttrTuple`, which accepts `&Attr` by deref
+  coercion and a bare tuple alike.
+
+| | After step 2a | After step 2b |
+|---|---|---|
+| `size_of::<Attr>()` / `AttrSourceInfo` | 104 / 80 | 8 / 8 |
+| `size_of::<Code>()` | 240 | 72 |
+| AST heap | 538 MiB (20.5×) | 480 MiB (18.3×) |
+| AST heap blocks | 4.39 M | 4.43 M |
+| Peak RSS of the run | 0.72 GiB | 0.65 GiB |
+| Wall time | 6.2 s | 6.1 s |
+
+Slightly better than the option-B estimate (~490 MiB). `Vec<Inline>`
+buffers are now 76% of the AST heap and text fields 12%; `Str.text` is 64%
+of the heap blocks. The small-string step is the next lever on both.
 
 ## Decisions (2026-11-12)
 

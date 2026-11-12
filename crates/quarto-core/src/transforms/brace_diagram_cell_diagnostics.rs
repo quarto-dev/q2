@@ -130,7 +130,7 @@ mod tests {
 
     fn cell(class: &str) -> Block {
         Block::CodeBlock(Box::new(CodeBlock {
-            attr: (String::new(), vec![class.to_string()], Default::default()),
+            attr: (String::new(), vec![class.to_string()], Default::default()).into(),
             text: "A --> B".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),

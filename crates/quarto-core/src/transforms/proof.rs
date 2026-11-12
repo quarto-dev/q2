@@ -131,7 +131,7 @@ fn has_proof_class(attr: &Attr) -> bool {
 
 fn empty_attr() -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 fn convert_div(mut div: Div) -> CustomNode {
@@ -170,7 +170,7 @@ fn convert_div(mut div: Div) -> CustomNode {
 /// positional-alignment rationale (this is the parallel implementation
 /// for `.proof` Divs).
 fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<Inlines> {
-    let (_id, _classes, kvs) = attr;
+    let (_id, _classes, kvs) = &mut **attr;
 
     let name_idx = kvs.keys().position(|k| k == "name")?;
 
@@ -231,6 +231,7 @@ mod tests {
             classes.iter().map(|s| s.to_string()).collect(),
             LinkedHashMap::new(),
         )
+            .into()
     }
 
     fn para(text: &str) -> Block {
@@ -287,7 +288,7 @@ mod tests {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("name".into(), "Custom proof title".into());
         let div = Block::Div(Box::new(Div {
-            attr: (String::new(), vec!["proof".into()], kvs),
+            attr: (String::new(), vec!["proof".into()], kvs).into(),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

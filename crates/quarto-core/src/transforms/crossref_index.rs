@@ -622,7 +622,7 @@ mod tests {
     }
 
     fn attr_id(id: &str) -> Attr {
-        (id.to_string(), Vec::new(), LinkedHashMap::new())
+        (id.to_string(), Vec::new(), LinkedHashMap::new()).into()
     }
 
     fn header(level: usize, id: &str, text: &str) -> Block {
@@ -645,7 +645,8 @@ mod tests {
                 id.to_string(),
                 vec![class.to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: si(),
@@ -660,7 +661,7 @@ mod tests {
             attr: attr_id(id),
             content: vec![
                 Block::CodeBlock(Box::new(CodeBlock {
-                    attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
+                    attr: (String::new(), vec!["python".into()], LinkedHashMap::new()).into(),
                     text: "x=1".into(),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
@@ -697,7 +698,8 @@ mod tests {
                 id.to_string(),
                 vec!["section".to_string(), format!("level{level}")],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: children,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -1393,7 +1395,8 @@ mod tests {
                     id.to_string(),
                     vec!["quarto-math-with-attribute".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![Inline::Math(Box::new(Math {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),

@@ -143,7 +143,7 @@ pub fn process_pandoc_span(
     let mut content_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
     let mut target_source = TargetSourceInfo::empty();
-    let mut attr = (String::new(), vec![], hashlink::LinkedHashMap::new());
+    let mut attr = crate::pandoc::attr::empty_attr();
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {
@@ -296,7 +296,7 @@ pub fn process_pandoc_image(
     let mut alt_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
     let mut target_source = TargetSourceInfo::empty();
-    let mut attr = (String::new(), vec![], hashlink::LinkedHashMap::new());
+    let mut attr = crate::pandoc::attr::empty_attr();
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {

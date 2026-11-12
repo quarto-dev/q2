@@ -135,7 +135,7 @@ mod tests {
 
     fn make_float_ref_target(ident: &str, ref_type: &str, kind: &str) -> Block {
         let attr = (ident.to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
+        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr.into(), si());
         node.plain_data = json!({
             "ref_type": ref_type,
             "kind": kind,
@@ -175,7 +175,7 @@ mod tests {
     fn view_recognizes_theorem_custom_node() {
         use crate::crossref::THEOREM;
         let attr = ("thm-one".to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(THEOREM, attr, si());
+        let mut node = CustomNode::new(THEOREM, attr.into(), si());
         node.plain_data = json!({
             "ref_type": "thm",
             "kind": "Theorem",
@@ -194,7 +194,7 @@ mod tests {
         // a sugaring pass populates these fields on Callouts with
         // crossref ids).
         let attr = ("nte-one".to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new("Callout", attr, si());
+        let mut node = CustomNode::new("Callout", attr.into(), si());
         node.plain_data = json!({
             "ref_type": "nte",
             "kind": "Note",
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn view_none_for_float_ref_target_without_identifier() {
         let attr = (String::new(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
+        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr.into(), si());
         node.plain_data = json!({"ref_type": "fig", "kind": "Figure"});
         let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn view_none_when_plain_data_missing_ref_type() {
         let attr = ("fig-one".to_string(), vec![], LinkedHashMap::new());
-        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, si());
+        let mut node = CustomNode::new(FLOAT_REF_TARGET, attr.into(), si());
         node.plain_data = json!({"kind": "Figure"});
         let block = Block::Custom(Box::new(node));
         assert!(crossref_target_view(&block).is_none());

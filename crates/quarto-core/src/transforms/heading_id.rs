@@ -151,7 +151,7 @@ mod tests {
         let mut doc = parse("## Intro\n");
         doc.blocks.push(Block::Header(Box::new(Header {
             level: 2,
-            attr: (String::new(), vec![], Default::default()),
+            attr: (String::new(), vec![], Default::default()).into(),
             content: vec![Inline::Str(Str {
                 text: "Built".to_string(),
                 source_info: SourceInfo::generated(By::unknown()),
@@ -178,7 +178,7 @@ mod tests {
         let mut doc = parse("## Alpha\n");
         doc.blocks.push(Block::Header(Box::new(Header {
             level: 2,
-            attr: ("intro".to_string(), vec![], Default::default()),
+            attr: ("intro".to_string(), vec![], Default::default()).into(),
             content: vec![Inline::Str(Str {
                 text: "x".to_string(),
                 source_info: SourceInfo::generated(By::unknown()),

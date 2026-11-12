@@ -186,7 +186,7 @@ fn transform_block(
 /// Returns Some("warning") for a div with class "callout-warning", etc.
 /// Returns None if this is not a callout div.
 fn extract_callout_type(attr: &Attr) -> Option<String> {
-    let (_id, classes, _attrs) = attr;
+    let (_id, classes, _attrs) = &**attr;
 
     for class in classes {
         // Check for "callout-TYPE" pattern
@@ -310,7 +310,7 @@ fn convert_div_to_callout(
 
 /// Extract a key-value attribute from the Div's attr.
 fn extract_attr_value(attr: &Attr, key: &str) -> Option<String> {
-    let (_id, _classes, attrs) = attr;
+    let (_id, _classes, attrs) = &**attr;
     attrs.get(key).cloned()
 }
 
@@ -465,6 +465,7 @@ mod tests {
             vec![format!("callout-{}", callout_type)],
             hashlink::LinkedHashMap::new(),
         )
+            .into()
     }
 
     // ---------------------------------------------------------------
@@ -813,22 +814,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_callout_type_unknown() {
-        let attr = (
+        let attr = Attr::from((
             String::new(),
             vec!["callout-unknown".to_string()],
             hashlink::LinkedHashMap::new(),
-        );
+        ));
         // Unknown callout types are not converted
         assert_eq!(extract_callout_type(&attr), None);
     }
 
     #[tokio::test]
     async fn test_extract_callout_type_not_callout() {
-        let attr = (
+        let attr = Attr::from((
             String::new(),
             vec!["panel-tabset".to_string()],
             hashlink::LinkedHashMap::new(),
-        );
+        ));
         assert_eq!(extract_callout_type(&attr), None);
     }
 
@@ -1001,7 +1002,8 @@ mod tests {
                     "nte-important".into(),
                     vec!["callout-note".into()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
                         text: "A note.".into(),
@@ -1085,7 +1087,8 @@ mod tests {
                     "my-callout".into(),
                     vec!["callout-warning".into()],
                     hashlink::LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![quarto_pandoc_types::inline::Inline::Str(Str {
                         text: "body".into(),

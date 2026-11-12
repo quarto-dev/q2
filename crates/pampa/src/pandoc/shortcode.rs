@@ -22,7 +22,8 @@ fn shortcode_value_span(str: String) -> Inline {
             String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
-        ),
+        )
+            .into(),
         content: vec![],
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),
@@ -44,7 +45,8 @@ fn shortcode_key_recursive_value_span(key: String, value: Shortcode) -> Inline {
             String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
-        ),
+        )
+            .into(),
         content: vec![Inline::Span(Box::new(shortcode_to_span(value)))],
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),
@@ -68,7 +70,8 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
             String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
-        ),
+        )
+            .into(),
         content: vec![],
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),
@@ -162,7 +165,8 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
             String::new(),
             vec!["quarto-shortcode__".to_string()],
             attr_hash,
-        ),
+        )
+            .into(),
         content,
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),

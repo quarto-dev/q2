@@ -46,7 +46,8 @@ fn figure_with_kvs(kvs: &[(&str, &str)], caption: Option<&str>) -> Block {
             String::new(),
             vec!["quarto-float".to_string(), "quarto-float-fig".to_string()],
             map,
-        ),
+        )
+            .into(),
         caption: Caption {
             short: None,
             long: caption.map(|c| vec![caption_para(c)]),
@@ -142,7 +143,7 @@ fn uncaptioned_kv_adds_uncaptioned_class() {
 #[test]
 fn plain_figure_without_kvs_is_unchanged() {
     let html = to_html(Block::Figure(Box::new(Figure {
-        attr: ("fig-x".to_string(), Vec::new(), LinkedHashMap::new()),
+        attr: ("fig-x".to_string(), Vec::new(), LinkedHashMap::new()).into(),
         caption: Caption {
             short: None,
             long: Some(vec![caption_para("A caption")]),

@@ -722,6 +722,7 @@ mod tests {
             classes.iter().map(|c| c.to_string()).collect(),
             hashlink::LinkedHashMap::new(),
         )
+            .into()
     }
 
     fn div(id: &str, classes: &[&str], content: Vec<Block>) -> Block {

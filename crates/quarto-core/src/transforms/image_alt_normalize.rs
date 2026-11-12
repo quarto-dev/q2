@@ -181,7 +181,7 @@ mod tests {
             map.insert(k.to_string(), v.to_string());
         }
         Image {
-            attr: (String::new(), vec![], map),
+            attr: (String::new(), vec![], map).into(),
             content: text(alt),
             target: ("x.png".to_string(), String::new()),
             source_info: si(),
@@ -207,7 +207,7 @@ mod tests {
     /// The implicit figure the reader builds for `![caption](x.png){…}`.
     fn implicit_figure(caption: &str, kvs: &[(&str, &str)]) -> Block {
         Block::Figure(Box::new(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![plain(text(caption))]),
@@ -226,7 +226,7 @@ mod tests {
         }
         let node = CustomNode::new(
             FLOAT_REF_TARGET,
-            (format!("{ref_type}-x"), vec![], map),
+            (format!("{ref_type}-x"), vec![], map).into(),
             si(),
         )
         .with_data(json!({ "ref_type": ref_type, "kind": "Figure", "identifier": format!("{ref_type}-x") }))
@@ -364,7 +364,7 @@ mod tests {
     #[test]
     fn images_in_tables_and_footnotes_are_reached() {
         let cell = Cell {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
@@ -376,7 +376,7 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         };
         let table = Block::Table(Box::new(Table {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -384,17 +384,17 @@ mod tests {
             },
             colspec: vec![(Alignment::Default, ColWidth::Default)],
             head: TableHead {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![Row {
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     cells: vec![cell],
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
@@ -403,7 +403,7 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 rows: vec![],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),

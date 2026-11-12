@@ -202,7 +202,7 @@ impl AstTransform for LightboxTransform {
             let mut kvs = LinkedHashMap::new();
             kvs.insert("aria-hidden".to_string(), "true".to_string());
             ast.blocks.push(Block::Div(Box::new(Div {
-                attr: (String::new(), vec!["hidden".to_string()], kvs),
+                attr: (String::new(), vec!["hidden".to_string()], kvs).into(),
                 content: descriptions,
                 // The container is lightbox chrome; the descriptions inside
                 // keep their images' source info.
@@ -729,7 +729,8 @@ impl Walker<'_> {
                     String::new(),
                     vec!["glightbox-desc".to_string(), desc_class.clone()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content,
                 source_info: img.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
@@ -749,7 +750,7 @@ impl Walker<'_> {
 
         let source_info = img.source_info.clone();
         Link {
-            attr: (String::new(), vec![LIGHTBOX.to_string()], kvs),
+            attr: (String::new(), vec![LIGHTBOX.to_string()], kvs).into(),
             target: (img.target.0.clone(), title.unwrap_or_default()),
             content: vec![Inline::Image(Box::new(img))],
             source_info,
@@ -1177,7 +1178,7 @@ mod tests {
     fn image_para(src: &str, alt: &str) -> Block {
         Block::Plain(Plain {
             content: vec![Inline::Image(Box::new(Image {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: alt.to_string(),
                     source_info: SourceInfo::for_test(),
@@ -1194,7 +1195,7 @@ mod tests {
     fn float(id: &str, order: u64, caption: Option<&str>, content: Vec<Block>) -> Block {
         let mut node = CustomNode::new(
             FLOAT_REF_TARGET,
-            (id.to_string(), vec![], LinkedHashMap::new()),
+            (id.to_string(), vec![], LinkedHashMap::new()).into(),
             SourceInfo::for_test(),
         )
         .with_slot("content", Slot::Blocks(content))
@@ -1282,7 +1283,7 @@ mod tests {
         let mut ast = Pandoc {
             meta: auto_meta(),
             blocks: vec![Block::Figure(Box::new(Figure {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 caption: Caption {
                     short: None,
                     long: Some(vec![caption_img]),

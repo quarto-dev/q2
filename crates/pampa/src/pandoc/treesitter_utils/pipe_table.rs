@@ -111,7 +111,7 @@ pub fn process_pipe_table_cell(
         alignment: Alignment::Default,
         col_span: 1,
         row_span: 1,
-        attr: (String::new(), vec![], LinkedHashMap::new()),
+        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
         content: vec![],
         source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),

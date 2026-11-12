@@ -42,7 +42,8 @@ fn code_block_with(class: &str, text: &str) -> Block {
             String::new(),
             vec![class.to_string()],
             hashlink::LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         text: text.to_string(),
         source_info: si(),
         attr_source: AttrSourceInfo::empty(),
@@ -56,7 +57,8 @@ fn para_with_inline_code(class: &str, text: &str) -> Block {
                 String::new(),
                 vec![class.to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),

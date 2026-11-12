@@ -135,7 +135,7 @@ fn test_header_level_1() {
         meta: Default::default(),
         blocks: vec![Block::Header(Box::new(Header {
             level: 1,
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             content: vec![Inline::Str(Str {
                 text: "Title".to_string(),
                 source_info: empty_source(),
@@ -155,7 +155,7 @@ fn test_header_level_2() {
         meta: Default::default(),
         blocks: vec![Block::Header(Box::new(Header {
             level: 2,
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             content: vec![Inline::Str(Str {
                 text: "Section".to_string(),
                 source_info: empty_source(),
@@ -176,7 +176,7 @@ fn test_header_level_3_to_6() {
             meta: Default::default(),
             blocks: vec![Block::Header(Box::new(Header {
                 level,
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: format!("Header {}", level),
                     source_info: empty_source(),
@@ -340,7 +340,7 @@ fn test_div() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Div(Box::new(Div {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Div content".to_string(),
@@ -366,7 +366,7 @@ fn test_div_with_color() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::Div(Box::new(Div {
-            attr,
+            attr: attr.into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Colored".to_string(),
@@ -709,7 +709,7 @@ fn test_inline_code() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Code(Box::new(Code {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 text: "let x = 1".to_string(),
                 source_info: empty_source(),
                 attr_source: empty_attr_source(),
@@ -784,7 +784,7 @@ fn test_inline_link() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Link(Box::new(Link {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Click me".to_string(),
                     source_info: empty_source(),
@@ -808,7 +808,7 @@ fn test_inline_image() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Image(Box::new(Image {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Alt text".to_string(),
                     source_info: empty_source(),
@@ -856,7 +856,7 @@ fn test_inline_span() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Span text".to_string(),
                     source_info: empty_source(),
@@ -882,7 +882,7 @@ fn test_inline_span_with_color() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr,
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Blue text".to_string(),
                     source_info: empty_source(),
@@ -910,7 +910,7 @@ fn test_inline_span_with_background_color() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr,
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Highlighted".to_string(),
                     source_info: empty_source(),
@@ -945,7 +945,7 @@ fn test_color_parsing_basic_colors() {
             meta: Default::default(),
             blocks: vec![Block::Plain(Plain {
                 content: vec![Inline::Span(Box::new(Span {
-                    attr,
+                    attr: attr.into(),
                     content: vec![Inline::Str(Str {
                         text: format!("Color {}", color),
                         source_info: empty_source(),
@@ -990,7 +990,7 @@ fn test_color_parsing_dark_colors() {
             meta: Default::default(),
             blocks: vec![Block::Plain(Plain {
                 content: vec![Inline::Span(Box::new(Span {
-                    attr,
+                    attr: attr.into(),
                     content: vec![Inline::Str(Str {
                         text: "Text".to_string(),
                         source_info: empty_source(),
@@ -1018,7 +1018,7 @@ fn test_color_parsing_hex() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr,
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Hex color".to_string(),
                     source_info: empty_source(),
@@ -1045,7 +1045,7 @@ fn test_color_parsing_hex_short() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr,
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "Short hex".to_string(),
                     source_info: empty_source(),
@@ -1071,7 +1071,7 @@ fn test_color_parsing_rgb_function() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr,
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "RGB func".to_string(),
                     source_info: empty_source(),
@@ -1097,7 +1097,7 @@ fn test_color_parsing_ansi_palette() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr,
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "ANSI palette".to_string(),
                     source_info: empty_source(),
@@ -1123,7 +1123,7 @@ fn test_color_parsing_ansi_dash() {
         meta: Default::default(),
         blocks: vec![Block::Plain(Plain {
             content: vec![Inline::Span(Box::new(Span {
-                attr,
+                attr: attr.into(),
                 content: vec![Inline::Str(Str {
                     text: "ANSI dash".to_string(),
                     source_info: empty_source(),
@@ -1150,7 +1150,7 @@ fn test_unsupported_codeblock() {
     let pandoc = Pandoc {
         meta: Default::default(),
         blocks: vec![Block::CodeBlock(Box::new(CodeBlock {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             text: "code".to_string(),
             source_info: empty_source(),
             attr_source: empty_attr_source(),
@@ -1177,7 +1177,7 @@ fn test_mixed_blocks_and_inlines() {
         blocks: vec![
             Block::Header(Box::new(Header {
                 level: 1,
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 content: vec![Inline::Str(Str {
                     text: "Title".to_string(),
                     source_info: empty_source(),

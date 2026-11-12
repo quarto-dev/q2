@@ -190,7 +190,7 @@ fn register_quarto_component(lua: &Lua, quarto: &Table) -> Result<()> {
                 }))];
                 inlines.extend(peek_inlines_fuzzy(lua, content)?);
                 return lua.create_userdata(LuaInline::new(Inline::Span(Box::new(Span {
-                    attr,
+                    attr: attr.into(),
                     content: inlines,
                     source_info,
                     attr_source: AttrSourceInfo::empty(),
@@ -205,7 +205,7 @@ fn register_quarto_component(lua: &Lua, quarto: &Table) -> Result<()> {
                 blocks.extend(peek_blocks_fuzzy(lua, content)?);
             }
             lua.create_userdata(LuaBlock::new(Block::Div(Box::new(Div {
-                attr,
+                attr: attr.into(),
                 content: blocks,
                 source_info,
                 attr_source: AttrSourceInfo::empty(),

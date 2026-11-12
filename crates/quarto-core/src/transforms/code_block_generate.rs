@@ -369,7 +369,8 @@ mod tests {
                 String::new(),
                 classes.into_iter().map(String::from).collect(),
                 kv_map,
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: source_info_at(0, 0, text.len()),
             attr_source: AttrSourceInfo::empty(),
@@ -852,7 +853,7 @@ mod tests {
                 content: vec![
                     cb_inside_blockquote,
                     Block::Div(Box::new(Div {
-                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                        attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                         content: vec![cb_inside_div],
                         source_info: source_info_at(0, 100, 200),
                         attr_source: AttrSourceInfo::empty(),
@@ -951,7 +952,7 @@ mod tests {
         use quarto_pandoc_types::custom::{CustomNode, Slot};
         let mut callout = CustomNode::new(
             "Callout",
-            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             source_info_at(0, 0, 100),
         );
         callout.set_slot(

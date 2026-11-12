@@ -71,7 +71,7 @@ pub fn tab_nav(tabset_id: &str, titles: &[String]) -> Block {
     Block::Custom(Box::new(
         node(
             TAB_NAV,
-            (String::new(), Vec::new(), LinkedHashMap::new()),
+            (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             SourceInfo::generated(quarto_source_map::By::unknown()),
         )
         .with_data(json!({ "tabset_id": tabset_id, "tabs": tabs })),
@@ -181,7 +181,7 @@ fn sidebar_layout(d: &mut Div) -> Option<Block> {
     let sidebar = content.nth(1)?;
     let attr = std::mem::replace(
         &mut d.attr,
-        (String::new(), Vec::new(), LinkedHashMap::new()),
+        (String::new(), Vec::new(), LinkedHashMap::new()).into(),
     );
     Some(Block::Custom(Box::new(
         node(SIDEBAR_LAYOUT, attr, d.source_info.clone())
@@ -211,7 +211,7 @@ fn join_value_box_paragraphs(blocks: Blocks) -> Blocks {
                 out.push(Block::Custom(Box::new(
                     node(
                         PARAGRAPH,
-                        (String::new(), vec![class], LinkedHashMap::new()),
+                        (String::new(), vec![class], LinkedHashMap::new()).into(),
                         SourceInfo::generated(quarto_source_map::By::unknown()),
                     )
                     .with_slot("content", Slot::Blocks(vec![plain])),

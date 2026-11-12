@@ -349,7 +349,7 @@ mod tests {
     #[test]
     fn footer_slot_renders_inline_links() {
         let link = Inline::Link(Box::new(Link {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![str_inline("Quarto")],
             target: ("https://quarto.org".to_string(), String::new()),
             source_info: si(),

@@ -13,7 +13,7 @@ use quarto_source_map::{FileId, SourceInfo};
 
 fn attr_with_class(class: &str) -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), vec![class.to_string()], LinkedHashMap::new())
+    (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
 }
 
 fn empty_source_info() -> SourceInfo {
@@ -116,7 +116,8 @@ fn annotates_inline_code() {
             String::new(),
             vec!["python".to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         text: "print(42)".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
@@ -145,7 +146,7 @@ fn code_block_with_no_class_is_skipped() {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::CodeBlock(Box::new(CodeBlock {
-        attr: (String::new(), vec![], LinkedHashMap::new()),
+        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
         text: "foo bar".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
@@ -200,7 +201,8 @@ fn annotate_block_with_classes(classes: &[&str], text: &str) -> Attr {
             String::new(),
             classes.iter().map(|c| c.to_string()).collect(),
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
@@ -259,7 +261,7 @@ fn does_not_mark_inline_code_without_grammar() {
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
         content: Inlines::from(vec![Inline::Code(Box::new(Code {
-            attr: (String::new(), vec!["ini".to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec!["ini".to_string()], LinkedHashMap::new()).into(),
             text: "a = 1".to_string(),
             source_info: empty_source_info(),
             attr_source: empty_attr_source(),
