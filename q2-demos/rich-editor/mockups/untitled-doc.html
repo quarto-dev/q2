@@ -339,16 +339,20 @@ function build() {
         move(e, 1);
       } else if (ev.key === 'ArrowDown' && onEdgeLine(e, true)) { ev.preventDefault(); move(e, 1, caretRect().left); }
       else if (ev.key === 'ArrowUp' && onEdgeLine(e, false)) { ev.preventDefault(); move(e, -1, caretRect().left); }
-      else if (ev.key === 'Backspace' && e.textContent === '') {
+      // Backspace at a field's start goes up to the field before (subtitle to
+      // title), or from the first field to the widget; in an empty field it
+      // also removes the field. Landing in the widget focuses the removed
+      // field's "+" button, so Enter puts it back.
+      else if (ev.key === 'Backspace' && caretAtStart(e)) {
         ev.preventDefault();
+        const empty = e.textContent === '';
         const o = order(), prev = o[o.indexOf(e) - 1];
         const prevKey = prev && prev.dataset.field;
-        if (!isPersistent(k)) { delete meta[k]; renderHeader(); }
-        // With the widget, a removed field hands the caret back to its own
-        // "+" button, where you added it from.
-        if (!isPersistent(k) && f.widget && focusWidget(k)) return;
+        const removed = empty && !isPersistent(k);
+        if (removed) { delete meta[k]; renderHeader(); }
         if (prevKey) focusField(prevKey, true);
-        else if (!(f.widget && focusWidget())) focusBlock(body.firstElementChild, false);
+        else if (f.widget && focusWidget(removed ? k : undefined)) return;
+        else if (removed) focusBlock(body.firstElementChild, false);
       }
     });
     // An emptied field stays, showing its placeholder, until Backspace in it
@@ -491,14 +495,18 @@ function build() {
     }
     // Backspace in the body's only, empty line would delete the line itself
     // (and its placeholder); there's nothing to delete.
-    if (ev.key === 'Backspace' && b && body.children.length === 1 && blank(b) && b.tagName === 'P') {
-      ev.preventDefault();
-      return;
-    }
     if (ev.key === 'Backspace' && b && /^H[12]$/.test(b.tagName) && caretAtStart(b)) {
       ev.preventDefault();
       const p = el('p'); if (blank(b)) p.innerHTML = '<br>'; else p.textContent = b.textContent;
       b.replaceWith(p); focusBlock(p, false); update();
+      return;
+    }
+    // Backspace at the start of the body goes up to the last title-block
+    // field (it never deletes the body's first line, or its placeholder).
+    if (ev.key === 'Backspace' && b === body.firstElementChild && caretAtStart(b)) {
+      ev.preventDefault();
+      const o = order(), last = o[o.length - 1];
+      if (last) { last.focus(); placeIn(last, true); }
     }
   });
   body.addEventListener('input', () => {
