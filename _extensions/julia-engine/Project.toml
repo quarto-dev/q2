@@ -2,7 +2,7 @@
 QuartoNotebookRunner = "4c0109c6-14e9-4c88-93f0-2b974d3468f4"
 
 [sources]
-QuartoNotebookRunner = {url = "https://github.com/gordonwoodhull/QuartoNotebookRunner.jl", rev = "5e042849af546fdbe13dfac9157fc38c7acbe876"}
+QuartoNotebookRunner = {url = "https://github.com/gordonwoodhull/QuartoNotebookRunner.jl", rev = "ffe5dab72066ddd91bad480fc30f861749e305d4"}
 
 [compat]
 QuartoNotebookRunner = "=0.18.6"

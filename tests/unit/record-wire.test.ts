@@ -19,6 +19,52 @@ import {
   qnrRunOptions,
 } from "../../src/record-wire.ts";
 
+// The display-only options Julia declares: the same set as the Jupyter engine's
+// `DISPLAY_ONLY_KEYS` (crates/quarto-core/src/engine/jupyter/mod.rs), since both
+// run notebooks through the same presenter. Pinned literally so a change is deliberate.
+const DISPLAY_ONLY = [
+  "echo",
+  "output",
+  "warning",
+  "include",
+  "code-fold",
+  "code-summary",
+  "code-overflow",
+  "code-line-numbers",
+  "code-copy",
+  "fig-cap",
+  "fig-subcap",
+  "fig-scap",
+  "fig-alt",
+  "fig-align",
+  "fig-link",
+  "fig-cap-location",
+  "tbl-cap",
+  "tbl-subcap",
+  "tbl-scap",
+  "tbl-colwidths",
+  "tbl-cap-location",
+  "lst-cap",
+  "lst-label",
+  "cap-location",
+  "layout",
+  "layout-ncol",
+  "layout-nrow",
+  "layout-align",
+  "layout-valign",
+  "panel",
+  "column",
+  "keep-hidden",
+  "fig-env",
+  "fig-pos",
+  "out-width",
+  "out-height",
+  "out-extra",
+  "classes",
+  "fig-column",
+  "tbl-column",
+];
+
 const UNITS = [
   { id: "u-1", index: 0, kind: "cell", language: "julia", line: 7, owned: true },
   { id: "u-2", kind: "inline", language: "julia", line: 12, owned: true },
@@ -96,12 +142,65 @@ test("engine_returns_hash_definition_in_record_info", () => {
   assert.deepEqual(recordInfo.hashDefinition, JULIA_HASH_DEFINITION);
   assert.deepEqual(JULIA_HASH_DEFINITION, {
     id: "julia",
-    version: 1,
+    version: 2,
     granularity: "document",
-    presentationCellOptions: [],
-    presentationExecuteKeys: [],
+    presentationCellOptions: DISPLAY_ONLY,
+    // `execute: record-sources` (OPR-5) says where a record comes from, so it is not an input.
+    presentationExecuteKeys: [...DISPLAY_ONLY, "record-sources"],
     documentKeys: ["julia", "format", "fig-width", "fig-height", "fig-format", "fig-dpi"],
   });
+});
+
+test("declaration_lists_display_only_options_and_keeps_error_hashed", () => {
+  for (const key of ["echo", "output", "include", "warning"]) {
+    assert.ok(JULIA_HASH_DEFINITION.presentationCellOptions.includes(key), key);
+    assert.ok(JULIA_HASH_DEFINITION.presentationExecuteKeys.includes(key), key);
+  }
+  // `error` decides whether a failing cell aborts the render: it must stay hashed
+  assert.ok(!JULIA_HASH_DEFINITION.presentationCellOptions.includes("error"));
+  assert.ok(!JULIA_HASH_DEFINITION.presentationExecuteKeys.includes("error"));
+  // an option the engine runs on can never be display-only
+  for (const key of ["eval", "cache", "fig-width", "fig-height", "fig-format", "fig-dpi"]) {
+    assert.ok(!JULIA_HASH_DEFINITION.presentationCellOptions.includes(key), key);
+  }
+});
+
+test("record_info_acknowledges_core_presentation_exactly_when_offered", () => {
+  const ack = buildRecordResult({ cells: [] }, UNITS, { presentedBy: "core", units: UNITS });
+  assert.equal(ack.recordInfo?.presentedBy, "core");
+  // units without the offer: the engine presented, so no acknowledgement (and no key)
+  const noOffer = buildRecordResult({ cells: [] }, UNITS, { units: UNITS });
+  assert.ok(noOffer.recordInfo);
+  assert.ok(!("presentedBy" in noOffer.recordInfo));
+  // the old two-argument call shape still works and does not acknowledge
+  const legacy = buildRecordResult({ cells: [] }, UNITS);
+  assert.ok(legacy.recordInfo);
+  assert.ok(!("presentedBy" in legacy.recordInfo));
+  // any other value is not an offer
+  const other = buildRecordResult({ cells: [] }, UNITS, { presentedBy: "engine", units: UNITS });
+  assert.ok(!("presentedBy" in other.recordInfo!));
+  // no units: no record at all
+  assert.deepEqual(buildRecordResult({ cells: [] }, undefined, { presentedBy: "core" }), {});
+});
+
+test("record_info_declares_the_dependency_data_only_with_the_presentation_acknowledgement", () => {
+  // OPR-7i decision 8: a label with no acknowledgement would make core derive a second copy of
+  // the includes the engine's own `toMarkdown` already stored.
+  const ack = buildRecordResult({ cells: [] }, UNITS, { presentedBy: "core", units: UNITS });
+  assert.equal(ack.recordInfo?.dependencyData, "jupyter-outputs");
+  // core sent units but no offer: the engine presented itself, so no label
+  const noOffer = buildRecordResult({ cells: [] }, UNITS, { units: UNITS });
+  assert.ok(noOffer.recordInfo);
+  assert.ok(!("dependencyData" in noOffer.recordInfo));
+  // the two-argument call shape: no label
+  const legacy = buildRecordResult({ cells: [] }, UNITS);
+  assert.ok(legacy.recordInfo);
+  assert.ok(!("dependencyData" in legacy.recordInfo));
+  // an offer core made but the engine did not honor is not an acknowledgement
+  const other = buildRecordResult({ cells: [] }, UNITS, { presentedBy: "engine", units: UNITS });
+  assert.ok(!("dependencyData" in other.recordInfo!));
+  // no units: no record at all
+  assert.deepEqual(buildRecordResult({ cells: [] }, undefined, { presentedBy: "core" }), {});
 });
 
 test("engine_uses_core_located_lines", () => {

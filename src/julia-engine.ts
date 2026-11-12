@@ -266,6 +266,7 @@ export const juliaEngineDiscovery: ExecutionEngineDiscovery = {
         const record = buildRecordResult(
           nb,
           (options as { units?: unknown[] }).units,
+          options,
         );
 
         // q2 only: core presents the output from the record, so there is no markdown
