@@ -282,13 +282,13 @@ function build() {
   const order = () => (f.inplace || f.widget ? [...header.querySelectorAll('[data-slot]')] : present().map(fieldEl).filter(Boolean));
   /**
    * Put the caret in a field (at its start/end or near `x`), or focus a "+"
-   * button. Arriving at a widget row from above or below (`x` given) picks
-   * the row's button nearest `x`.
+   * button. Arriving at a widget row with ↓ (from above) picks its first
+   * button; with ↑ (from below, `end`), the button nearest `x`.
    */
   function focusSlot(t, end, x) {
     header.classList.add('active'); syncShow(); // so a hidden "+" button can take focus
     const row = !t.dataset.field && x !== undefined && t.closest('.widget');
-    if (row) t = nearestX([...row.querySelectorAll('.ghost')], x);
+    if (row) { const bs = [...row.querySelectorAll('.ghost')]; t = end ? nearestX(bs, x) : bs[0]; }
     t.focus();
     if (t.dataset.field) placeAtX(t, x, end);
   }
