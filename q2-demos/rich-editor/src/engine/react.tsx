@@ -25,6 +25,7 @@ import {
   fieldOf,
   markIslands,
   pointOnLine,
+  positionAt,
   readMouseSelection,
   readSelection,
   selectionOutside,
@@ -236,8 +237,17 @@ export function useFieldEditor(
       const selection = doc.getSelection()
       if (!key || !selection?.anchorNode || !selection.focusNode) return false
       const origin = fieldOf(root, selection.focusNode)
+      if (!origin) {
+        // The caret is outside the fields (after a click on an author): go
+        // to the nearest field that way.
+        const to = positionAt(root, selection.focusNode, selection.focusOffset, key.forward ? 'forward' : 'backward')
+        if (!to) return false
+        e.preventDefault()
+        writeSelection(root, caret(to.field, to.offset))
+        return true
+      }
       const granularity = arrowGranularity(e, key.vertical)
-      if (!origin || !granularity) return false
+      if (!granularity) return false
       e.preventDefault()
 
       const saved = {

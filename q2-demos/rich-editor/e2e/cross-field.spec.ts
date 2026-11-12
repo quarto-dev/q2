@@ -260,6 +260,34 @@ test.describe('the authors', () => {
 
   // (Not by double-click: Chrome doesn't select words in non-editable
   // content inside an editable region.)
+  test('clicking an author shows no caret', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    await editor.frame.getByText('Ana Silva').click()
+    await page.waitForTimeout(100)
+
+    const caretColor = await editor.frame.evaluate(() => {
+      const n = document.getSelection()!.focusNode!
+      const el = n.nodeType === Node.ELEMENT_NODE ? (n as Element) : n.parentElement!
+      return getComputedStyle(el).caretColor
+    })
+    expect(caretColor).toBe('rgba(0, 0, 0, 0)')
+  })
+
+  test('an arrow key after clicking an author goes straight to the nearest field that way', async ({ page }) => {
+    const editor = await openEditor(page, 'abstract')
+    const author = editor.frame.getByText('Ana Silva')
+    await author.click()
+    const leftFields = await watchSelection(editor)
+
+    await page.keyboard.press('ArrowRight')
+    expect(await editor.caret()).toMatchObject({ field: 'abstract', start: 0, end: 0 })
+
+    await author.click()
+    await page.keyboard.press('ArrowUp')
+    expect(await editor.caret()).toMatchObject({ field: 'subtitle', start: 13, end: 13 })
+    expect(await leftFields()).toBe(false)
+  })
+
   test("an author's text can be selected by dragging", async ({ page }) => {
     const editor = await openEditor(page, 'abstract')
     const box = (await editor.frame.getByText('Example University').boundingBox())!

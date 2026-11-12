@@ -155,7 +155,9 @@ export function targetRange(root: HTMLElement, e: InputEvent): { from: Position;
 
 /**
  * Make everything in `root` that is neither a field nor around one
- * non-editable (labels, the author and date grid).
+ * non-editable (labels, the author and date grid), with no visible caret:
+ * a click there selects nothing to type into, so it shouldn't look as if
+ * it does.
  */
 export function markIslands(root: HTMLElement): void {
   // Not `instanceof HTMLElement`: the root may be in another frame, whose
@@ -163,7 +165,10 @@ export function markIslands(root: HTMLElement): void {
   for (const child of root.children as HTMLCollectionOf<HTMLElement>) {
     if (child.matches(FIELD)) continue
     if (child.querySelector(FIELD)) markIslands(child)
-    else if (child.contentEditable !== 'false') child.contentEditable = 'false'
+    else if (child.contentEditable !== 'false') {
+      child.contentEditable = 'false'
+      child.style.caretColor = 'transparent'
+    }
   }
 }
 
