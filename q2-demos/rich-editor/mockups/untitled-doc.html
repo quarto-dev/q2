@@ -29,20 +29,27 @@ kbd { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; bord
 .source pre.empty { color:var(--muted); font-style:italic; }
 
 /* The "rendered" document */
-.page { max-width:760px; margin:0 auto; padding:28px 32px 160px; position:relative; }
+/* 799px of content, as in `q2 render`'s article layout; the top padding has
+   room for the inline widget's row above the title block. */
+.page { max-width:863px; margin:0 auto; padding:40px 32px 160px; position:relative; }
 [contenteditable] { outline:none; }
 .field { white-space:pre-wrap; }
 .field:empty::before { content:attr(data-placeholder); color:var(--ph); pointer-events:none; }
-.title-block { margin-bottom:1.75rem; }
-.title-block:empty { display:none; }
-h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem; }
-.subtitle { font-size:1.3rem; font-weight:300; color:#495057; margin:0 0 1rem; }
-.meta { display:flex; gap:3rem; margin-top:1.25rem; }
-.meta-label { font-size:.72rem; text-transform:uppercase; color:var(--muted); letter-spacing:.04em; margin-bottom:.2rem; }
-.abstract { margin-top:1.5rem; }
-.abstract-label { font-weight:600; margin-bottom:.35rem; }
-.body { font-size:1.0625rem; line-height:1.6; min-height:2em; }
-.body p { margin:0 0 1rem; }
+/* The title block and body text copy `q2 render`'s default theme: its
+   markup (class names) and its computed sizes and margins, measured from a
+   rendered page, so the spacing between the title block and the first
+   paragraph is the rendered page's. */
+.page { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif; font-size:17px; line-height:1.5; color:#212529; }
+.title-block { margin:-1px 0 17px; }
+.title-block:not(:has(.field)) { margin:0; } /* only hidden "+" rows: no title block */
+h1.title { font-size:34px; font-weight:600; line-height:1.2; margin:0; }
+p.subtitle { font-size:21.25px; font-weight:300; line-height:1.5; margin:5.3125px 0 10.625px; }
+.quarto-title-meta { display:grid; grid-template-columns:repeat(2, 1fr); column-gap:17px; }
+.quarto-title-meta-heading, .abstract .block-title { font-size:13.6px; line-height:1.5; margin-top:13.6px; text-transform:uppercase; opacity:.8; }
+.quarto-title-meta-contents p { font-size:15.3px; line-height:1.5; margin:0 0 1.53px; }
+.abstract p { font-size:15.3px; line-height:1.5; margin:0; }
+.body { min-height:2em; }
+.body p { margin:0 0 17px; }
 .body h1 { font-size:2rem; font-weight:600; margin:1.5rem 0 1rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
 .body h2 { font-size:1.6rem; font-weight:600; margin:1.5rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; }
 .body > :first-child { margin-top:0; }
@@ -57,9 +64,9 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 .opt-persist .title-block.untitled:not(.open) h1.title { height:1rem; overflow:hidden; margin:0; }
 .opt-persist .title-block.untitled:not(.open) h1.title:empty::before { color:transparent; }
 .opt-persist .title-block.untitled:not(.open) h1.title:hover,
-.opt-persist .title-block.untitled:not(.open) h1.title:focus { height:auto; margin:0 0 .5rem; }
+.opt-persist .title-block.untitled:not(.open) h1.title:focus { height:auto; }
 .opt-persist .title-block.untitled:not(.open) { margin-bottom:.75rem; }
-.opt-persist .title-block.untitled:not(.open):focus-within { margin-bottom:1.75rem; }
+.opt-persist .title-block.untitled:not(.open):focus-within { margin-bottom:17px; }
 .opt-persist .title-block h1.title:empty::before { color:var(--ph); }
 .opt-persist .title-block.untitled:not(.open) h1.title:hover:empty::before { color:var(--ph-faint); }
 /* "+ Subtitle": under the title, in the title block's bottom margin so it
@@ -76,12 +83,20 @@ h1.title { font-size:2.4rem; font-weight:600; line-height:1.2; margin:0 0 .5rem;
 .ghost:hover, .ghost:focus { background:#eef0f3; color:var(--ink); outline:none; }
 .title-block.untitled:not(.open) .add-sub { display:none; }
 
-/* Option: inline widget */
-.widget { display:flex; flex-wrap:wrap; gap:2px; min-height:30px; align-items:center; opacity:0; transition:opacity .12s; margin:0 0 6px -8px; }
-.widget.none { display:none; }
-/* Shows while the caret is anywhere in the title block (including a field
-   just added from it), on hover, and in an empty doc until a field is added. */
-.top:hover .widget, .top:focus-within .widget, .doc-empty .top:not(.has-blank) .widget { opacity:1; }
+/* Widget rows of "+" buttons. */
+.widget { display:flex; flex-wrap:wrap; gap:2px; align-items:center; margin-left:-8px; line-height:1.2; }
+/* Inline (top) row: laid over the space above the title block, so showing
+   and hiding it moves nothing. Shows while the caret is anywhere in the title
+   block, on hover, and in an empty doc until a field is added. */
+.opt-widget .title-block { position:relative; }
+.opt-widget .widget { position:absolute; bottom:100%; left:0; right:0; padding-bottom:4px; opacity:0; transition:opacity .12s; }
+.opt-widget .top:hover .widget, .opt-widget .top:focus-within .widget, .opt-widget.doc-empty .top:not(.has-blank) .widget { opacity:1; }
+/* Bottom and in-place rows take no space at all while hidden, so the page
+   is laid out exactly like `q2 render`'s. While the caret is in the title
+   block (`show`, set before a "+" button takes focus) they take their place
+   in the flow, pushing what's below down. */
+.opt-bottom .widget, .opt-inplace .widget { display:none; margin-top:4px; margin-bottom:4px; }
+.opt-bottom .title-block.show .widget, .opt-inplace .title-block.show .widget { display:flex; }
 .widget button { font:13px system-ui, sans-serif; color:var(--muted); background:none; border:0; padding:4px 8px; border-radius:4px; cursor:pointer; }
 .widget button:hover, .widget button:focus { background:#eef0f3; color:var(--ink); outline:none; }
 .widget .ghost { margin-left:0; }
@@ -324,59 +339,62 @@ function build() {
       wireField(e, k);
       return e;
     };
-    const metaItem = (k) => {
-      const w = el('div', 'meta-item'), l = el('div', 'meta-label');
+    // q2 render's title-block markup: the title and subtitle in
+    // .quarto-title, author and date in the .quarto-title-meta grid, and
+    // the abstract in a wrapper of its own.
+    const titles = el('div', 'quarto-title'), grid = el('div', 'quarto-title-meta'), abstractWrap = el('div');
+    header.append(titles, grid, abstractWrap);
+    const place = (k, e) => { if (k === 'title' || k === 'subtitle') titles.append(e); else if (k === 'abstract') abstractWrap.append(e); else grid.append(e); };
+    const build = (k) => {
+      if (k === 'title') return mk('title', 'h1', 'title');
+      if (k === 'subtitle') return mk('subtitle', 'p', 'subtitle lead');
+      if (k === 'abstract') {
+        const w = el('div', 'abstract'), l = el('div', 'block-title');
+        l.textContent = 'Abstract'; w.append(l, mk('abstract', 'p', 'abstract-text'));
+        return w;
+      }
+      const w = el('div'), l = el('div', 'quarto-title-meta-heading'), c = el('div', 'quarto-title-meta-contents');
       l.textContent = k === 'author' ? 'Author' : 'Published';
-      w.append(l, mk(k, 'div', 'meta-value'));
-      return w;
-    };
-    const abstract = () => {
-      const w = el('div', 'abstract'), l = el('div', 'abstract-label');
-      l.textContent = 'Abstract'; w.append(l, mk('abstract', 'div', 'abstract-text'));
+      c.append(mk(k, 'p', 'meta-value')); w.append(l, c);
       return w;
     };
     if (f.widget || f.inplace) {
       // The absent fields' "+" buttons, in rows. Inline: one row above the
       // fields, or (`bottom`) below them. In place: rows between the fields
       // that are there, each run of absent fields one row, where its fields
-      // would go.
-      let run = [], metaRow = null;
-      const flush = () => {
-        if (!run.length) return;
+      // would go (just before the next field there, inside its container).
+      let run = [];
+      const row = () => {
         const r = el('div', 'widget'); r.setAttribute('role', 'toolbar');
         for (const k of run) r.append(ghost(k));
-        header.append(r); run = [];
+        run = [];
+        return r;
       };
       const missing = FIELDS.filter((k) => !p.includes(k));
-      if (f.widget && !f.bottom) { run = missing; flush(); }
+      if (f.widget && !f.bottom && missing.length) { run = missing; header.prepend(row()); }
       for (const k of FIELDS) {
         if (!p.includes(k)) { if (f.inplace) run.push(k); continue; }
-        if (k === 'date' && metaRow) { metaRow.append(metaItem(k)); continue; } // right after author
-        flush();
-        if (k === 'title') header.append(mk('title', 'h1', 'title'));
-        else if (k === 'subtitle') header.append(mk('subtitle', 'p', 'subtitle'));
-        else if (k === 'abstract') header.append(abstract());
-        else { metaRow = el('div', 'meta'); metaRow.append(metaItem(k)); header.append(metaRow); }
+        if (run.length) {
+          // A row before author or date goes above the grid, not into it.
+          if (k === 'author' || k === 'date') header.insertBefore(row(), grid);
+          else place(k, row());
+        }
+        place(k, build(k));
       }
       if (f.bottom) run = missing;
-      flush();
+      if (run.length) header.append(row());
       if (focusKey) focusField(focusKey, end);
       update();
       return;
     }
-    if (p.includes('title')) header.append(mk('title', 'h1', 'title'));
-    if (f.subtitleButton && !p.includes('subtitle')) {
-      const b = el('button', 'add-sub'); b.type = 'button'; b.textContent = '+ Subtitle';
-      b.onclick = () => addField('subtitle');
-      header.append(b);
+    for (const k of FIELDS) {
+      if (p.includes(k)) place(k, build(k));
+      if (k === 'title' && f.subtitleButton && !p.includes('subtitle')) {
+        const b = el('button', 'add-sub'); b.type = 'button'; b.textContent = '+ Subtitle';
+        b.onclick = () => addField('subtitle');
+        titles.append(b);
+      }
     }
-    if (p.includes('subtitle')) header.append(mk('subtitle', 'p', 'subtitle'));
-    if (p.includes('author') || p.includes('date')) {
-      const m = el('div', 'meta');
-      for (const k of ['author', 'date']) if (p.includes(k)) m.append(metaItem(k));
-      header.append(m);
-    }
-    if (p.includes('abstract')) header.append(abstract());
     if (focusKey) focusField(focusKey, end);
     update();
   }
