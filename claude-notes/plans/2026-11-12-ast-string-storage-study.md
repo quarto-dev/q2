@@ -2,7 +2,7 @@
 title: "Study: arena / borrowed string storage for the Pandoc AST"
 strand: bd-akgst1fi
 related: [bd-is4q72tt]
-status: "Direction agreed (no lifetimes; node layout first; text runs deferred). Inline/Block cold variants boxed and Attr slimmed: AST heap 88x -> 18.3x of source. Steps 3-5 open under epic bd-4x6kih4c."
+status: "Layout steps 1, 2a, 2b merged: native AST heap 88x -> 18.3x of source; hub WASM peak -24%. ecow step implemented but unmerged (neutral end to end). WASM measurement shows JSON serialization, not AST storage, now dominates hub memory."
 date: 2026-11-12
 ---
 
@@ -517,6 +517,74 @@ Design choices:
 Slightly better than the option-B estimate (~490 MiB). `Vec<Inline>`
 buffers are now 76% of the AST heap and text fields 12%; `Str.text` is 64%
 of the heap blocks. The small-string step is the next lever on both.
+
+### Step 4: `ecow` for `Str.text` (bd-v6cug77d) — implemented, NOT merged
+
+On branch `feature/bd-v6cug77d-small-string-type-ast` (b72153c4c), not in
+`feature/ast-node-layout`. `Str.text` is `quarto_pandoc_types::Text`, an
+alias for `ecow::EcoString`. `Str` is 48 bytes natively and 32 on wasm32;
+`Inline` is unchanged on both (64 and 32). `cargo xtask verify` passes.
+
+Reader only (`ast-memory`, same corpus):
+
+| | After step 2b | With `ecow` |
+|---|---|---|
+| AST heap blocks | 4.43 M | 1.61 M (−64%) |
+| `Str.text` heap blocks | 2.84 M | 22 K |
+| AST heap (requested bytes) | 480 MiB | 466 MiB |
+| Peak RSS of the run | 0.65 GiB | 0.61 GiB |
+| Wall time | 6.1 s | 6.1 s |
+
+End to end, three runs each, before = `feature/ast-node-layout`:
+
+| Benchmark | Before | With `ecow` |
+|---|---|---|
+| `q2 render` of 1,319 plan pages + an lmd-built listing index, wall | 5.46–5.58 s | 5.49–5.68 s |
+| Same, peak RSS | 2.28–2.34 GB | 2.30–2.32 GB |
+| `q2 render` of the 40 largest plans through a Lua filter that rewrites every `Str`, wall | 1.04–1.07 s | 1.08–1.09 s |
+| Same, peak RSS | 552–563 MB | 575–583 MB |
+| Hub WASM memory growth, 40 largest plans | 43.6 MiB | 43.1 MiB |
+
+So the allocation count falls as predicted, but nothing a user would
+notice moves: render time and RSS are within noise (the Lua-filter case is
+2–4% slower, if anything), and WASM peak memory falls 1%. The change
+touches 156 files. **Open decision: merge, drop, or revisit after the JSON
+work below.**
+
+The lmd listing benchmark: copy `claude-notes/plans/*.md` into a scratch
+website project whose `index.md` declares
+`listing: {id: plans, type: metadata, contents: "*.md", sort: "date desc"}`
+and builds a `pandoc.BulletList` of `pandoc.Link(it.title, it.path)` plus
+date and description from `meta.listings.plans.items` in an lmd cell.
+
+### WASM measurement (bd-r17a0k7v) — the AST is not what dominates the hub
+
+Tool: `crates/perf-harness/scripts/wasm-mem/wasm-mem.mjs`. It loads the
+hub WASM module in Node, calls `parse_qmd_to_ast` on the largest files of
+a directory, and reports linear-memory growth (a high-water mark, since
+WASM memory never shrinks).
+
+Largest plan file, 188 KiB of source:
+
+| Build | Memory growth | × source |
+|---|---|---|
+| `main` (before the epic) | 57.1 MiB | 310× |
+| `feature/ast-node-layout` (steps 1, 2a, 2b) | 43.6 MiB | 237× |
+| + `ecow` | 43.1 MiB | 235× |
+
+The layout work cut hub peak memory by 24%. What remains is not AST
+storage: on wasm32 the AST of this document is now on the order of 2 MiB.
+The response `parse_qmd_to_ast` returns for it is **9.1 MiB of JSON** (48×
+the source), of which 7.3 MiB is the AST JSON carried as a string inside
+the response JSON. Building that — the AST JSON, then a second JSON
+document that embeds and escapes it, with `String` growth doubling along
+the way — plausibly accounts for most of the remaining 43 MiB. This has
+not been profiled; it is the next thing to measure.
+
+Since hub/WASM memory is the first priority, the highest-value next step
+is no longer in the AST: it is the size and construction of the JSON wire
+format (source-info encoding per node, the double encoding, and whether
+the writer builds `serde_json::Value` trees before printing).
 
 ## Decisions (2026-11-12)
 
