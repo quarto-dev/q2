@@ -13,14 +13,16 @@ import {
 import { inlinesToPlainText } from '../../framework/plainText';
 
 /** A title-block field that `renderField` can render. */
-export type TitleBlockField = 'title' | 'subtitle';
+export type TitleBlockField = 'title' | 'subtitle' | 'abstract';
 
 export type PreviewTitleBlockProps = AstProps & {
     /**
      * Renders a field's contents in place of its plain text, inside the
      * field's usual element (e.g. `h1.title`), so an editor can make the
      * field editable without changing the surrounding markup. `text` is
-     * the field's plain text, or undefined when the key is absent.
+     * the field's plain text, or undefined when the key is absent; an
+     * abstract's paragraphs are separated by `\n`, and its slot replaces
+     * all of them, inside one `<p>`.
      * Returning null or undefined keeps the default rendering; anything
      * else is rendered even when `text` is empty or absent.
      */
@@ -109,6 +111,17 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
     const hideDescription =
         extractMetaBool(meta['hide-description']) === true;
     const abstractParagraphs = extractParagraphs(meta.abstract);
+    const abstractSlot =
+        renderField?.(
+            'abstract',
+            meta.abstract === undefined ? undefined : abstractParagraphs.join('\n'),
+        ) ?? null;
+    const abstractBody =
+        abstractSlot !== null ? (
+            <p>{abstractSlot}</p>
+        ) : abstractParagraphs.length > 0 ? (
+            abstractParagraphs.map((text, i) => <p key={i}>{text}</p>)
+        ) : null;
     const authors = extractByAuthors(meta['by-author']);
     const hasAffiliations = authors.some((a) => a.affiliations.length > 0);
 
@@ -156,14 +169,12 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
                     </p>
                 ))}
                 {date ? <p className="date">{date}</p> : null}
-                {abstractParagraphs.length > 0 ? (
+                {abstractBody !== null ? (
                     <div className="abstract">
                         <div className="abstract-title">
                             {label('abstract', 'Abstract')}
                         </div>
-                        {abstractParagraphs.map((text, i) => (
-                            <p key={i}>{text}</p>
-                        ))}
+                        {abstractBody}
                     </div>
                 ) : null}
             </header>
@@ -225,7 +236,7 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
                     dateModified={dateModified}
                     doi={doi}
                     keywords={keywords}
-                    abstractParagraphs={abstractParagraphs}
+                    abstractBody={abstractBody}
                     label={label}
                 />
             </header>
@@ -253,7 +264,7 @@ export const PreviewTitleBlock = ({ ast, renderField }: PreviewTitleBlockProps) 
                 dateModified={dateModified}
                 doi={doi}
                 keywords={keywords}
-                abstractParagraphs={abstractParagraphs}
+                abstractBody={abstractBody}
                 label={label}
             />
         </header>
@@ -268,7 +279,8 @@ interface TitleMetaGridsProps {
     dateModified?: string;
     doi?: string;
     keywords: string[];
-    abstractParagraphs: string[];
+    /** The abstract's paragraphs, or null when there is no abstract. */
+    abstractBody: ReactNode;
     label: (key: string, fallback: string) => string;
 }
 
@@ -284,7 +296,7 @@ const TitleMetaGrids = ({
     dateModified,
     doi,
     keywords,
-    abstractParagraphs,
+    abstractBody,
     label,
 }: TitleMetaGridsProps) => (
     <>
@@ -367,15 +379,13 @@ const TitleMetaGrids = ({
                 </div>
             ) : null}
         </div>
-        {abstractParagraphs.length > 0 ? (
+        {abstractBody !== null ? (
             <div>
                 <div className="abstract">
                     <div className="block-title">
                         {label('abstract', 'Abstract')}
                     </div>
-                    {abstractParagraphs.map((text, i) => (
-                        <p key={i}>{text}</p>
-                    ))}
+                    {abstractBody}
                 </div>
             </div>
         ) : null}

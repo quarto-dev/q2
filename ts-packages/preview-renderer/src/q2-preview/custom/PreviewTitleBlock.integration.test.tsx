@@ -909,4 +909,36 @@ describe('PreviewTitleBlock — renderField slot', () => {
         const { container } = renderDirect(derived({ title: ms('') }), () => null);
         expect(container.querySelector('h1.title')).toBeNull();
     });
+
+    it('renders the abstract through one slot, its paragraphs joined by newlines', () => {
+        const { container } = renderDirect(
+            derived({
+                title: ms('T'),
+                abstract: {
+                    t: 'MetaBlocks',
+                    c: [PARA(STR('First.')), PARA(STR('Second.'))],
+                },
+            }),
+            (field, text) =>
+                field === 'abstract' ? <span data-testid="slot">{text}</span> : null,
+        );
+        const paras = container.querySelectorAll('div.abstract > p');
+        expect(paras.length).toBe(1);
+        expect(paras[0].querySelector('[data-testid="slot"]')?.textContent).toBe(
+            'First.\nSecond.',
+        );
+        expect(container.querySelector('div.abstract .block-title')?.textContent).toBe(
+            'Abstract',
+        );
+    });
+
+    it('passes undefined for an absent abstract, and renders none unless the slot does', () => {
+        const seen: (string | undefined)[] = [];
+        const { container } = renderDirect(derived({ title: ms('T') }), (field, text) => {
+            if (field === 'abstract') seen.push(text);
+            return null;
+        });
+        expect(seen).toEqual([undefined]);
+        expect(container.querySelector('div.abstract')).toBeNull();
+    });
 });
