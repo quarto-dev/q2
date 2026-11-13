@@ -2,7 +2,7 @@
 title: 'TS engines (julia, marimo): deliver the execute environment (bd-x3h4zjhl)'
 date: 2026-11-12
 description: 'Give julia and marimo cells the per-document variables (`QUARTO_DOCUMENT_*`, `QUARTO_EXECUTE_INFO`, `QUARTO_FIG_*`, `QUARTO_PROJECT_ROOT`) and the project environment (`_environment` files, `QUARTO_PROFILE`) through one optional `executeEnv` field on the TS execute protocol.'
-status: designed  # Decisions final 2026-11-12 (Gordon), after a design/implementation review
+status: session-1-done  # Decisions final 2026-11-12 (Gordon), after a design/implementation review
 braid:
   strand: bd-x3h4zjhl
 ---
@@ -125,7 +125,7 @@ The Rust tests below name `TsExecuteOptions::execute_env`, so until
 Phase 1 adds the field they fail as compile errors. That counts as
 "red" here.
 
-- [ ] Protocol parity. In `render_wire_parity_fixture`
+- [x] Protocol parity. In `render_wire_parity_fixture`
       (`crates/quarto-core/src/engine/ts_protocol.rs`, next to
       `exec_opts.units = ...`), set `exec_opts.execute_env` to a
       non-empty map; leave `make_execute_options` unchanged so it stays
@@ -135,10 +135,10 @@ Phase 1 adds the field they fail as compile errors. That counts as
       set equality). Once the field exists (Phase 1), regenerate
       `crates/quarto-core/tests/fixtures/ts_wire_parity.json` with
       `QUARTO_REGEN_WIRE_FIXTURES=1 cargo nextest run -p quarto-core -E 'test(ts_protocol::tests::test_ts_wire_parity_fixture)'`.
-- [ ] Rust unit test in `ts_protocol.rs`: an empty map leaves the
+- [x] Rust unit test in `ts_protocol.rs`: an empty map leaves the
       `executeEnv` key out, and a payload without the key deserializes
       (model: `presented_by_is_absent_by_default_and_roundtrips_as_core`).
-- [ ] Rust unit tests for `TsEngine::build_execute_options` in the
+- [x] Rust unit tests for `TsEngine::build_execute_options` in the
       `ts_engine.rs` tests module, building the context with
       `ExecutionContext::new(..).with_project_env(..).with_execute_env(..)`
       (existing examples near the `staged_ctx` tests): the result holds
@@ -146,7 +146,7 @@ Phase 1 adds the field they fail as compile errors. That counts as
       key; a `QUARTO_PROFILE` pair in `project_env` passes through; both
       empty gives an empty map. (Profile activation itself is covered by
       the marimo e2e.)
-- [ ] Host tests (`host.test.ts`), using the EXR-7 recorder pattern (a
+- [x] Host tests (`host.test.ts`), using the EXR-7 recorder pattern (a
       custom `instance.execute` that records `options`; `makeFakeEngine`
       does not record): the engine's `execute` receives `executeEnv`;
       no key when the request omits it; two executes queued on one
@@ -156,14 +156,14 @@ Phase 1 adds the field they fail as compile errors. That counts as
       "mutation does not leak" test (review P2, decided 2026-11-13):
       each request is parsed separately, so such a test could never
       fail.
-- [ ] Types: add
+- [x] Types: add
       `ts-packages/quarto-engine-host-node/src/__type-tests__/execute-env.type-test.ts`
       (pattern: `b2-conformance.type-test.ts`), checked by
       `npm run typecheck -w @quarto/engine-host-node`. Assert that
       `Readonly<Record<string, string>>` is assignable to
       `ExecuteOptions["executeEnv"]` (fails before Phase 2) and that an
       `ExecuteOptions` literal without `executeEnv` type-checks.
-- [ ] CLI e2e through the real binary (review P5, decided 2026-11-13),
+- [x] CLI e2e through the real binary (review P5, decided 2026-11-13),
       in `crates/quarto/tests/integration/execute_env_cli_e2e.rs`, next
       to the knitr and Jupyter tests and reusing that file's `render`,
       `read_json`, `canonical` and `assert_paths`. Each test builds a
@@ -176,14 +176,14 @@ Phase 1 adds the field they fail as compile errors. That counts as
       profile values, `QUARTO_PROFILE`, and `document-path` in
       `info.json`, and `eprintln!`s `env.json` so a `--no-capture`
       run shows what the cells saw.
-  - [ ] `marimo_cells_see_the_execute_environment`: copy
+  - [x] `marimo_cells_see_the_execute_environment`: copy
         `_extensions/marimo` from
         `crates/quarto-core/tests/fixtures/extensions/marimo/` (the
         same cross-crate pattern as `engine_diagnostics_cli.rs`). The
         Python cell writes `env.json` with `json` and `shutil.copy`.
         Skip unless `node_available_for_tests()` and `uv` are present.
         It runs in CI.
-  - [ ] `julia_cells_see_the_execute_environment`: `execute: daemon:
+  - [x] `julia_cells_see_the_execute_environment`: `execute: daemon:
         false`. The julia cell writes `env.json` by hand (no JSON
         package) and copies the info file with `cp`. Gate it with a
         `julia_available()` copy, as `julia_targets_cli.rs` does. It
@@ -191,12 +191,12 @@ Phase 1 adds the field they fail as compile errors. That counts as
 
   This replaces a marimo e2e in `quarto-core`. The CLI test also
   covers the embedded host bundle and command-line project discovery.
-- [ ] julia e2e (`crates/quarto-core/tests/integration/julia_engine_e2e.rs`,
+- [x] julia e2e (`crates/quarto-core/tests/integration/julia_engine_e2e.rs`,
       skipped by `julia_available()`, not run in CI), each case
       asserting every variable through `println` in the rendered HTML.
       Cells have no JSON package: check `QUARTO_EXECUTE_INFO` with
       `isfile` and `occursin` on `read(path, String)`.
-  - [ ] the same document rendered twice against a live daemon worker,
+  - [x] the same document rendered twice against a live daemon worker,
         with `fig-width` changed in between; the second render shows the
         new `QUARTO_FIG_WIDTH` and a different `QUARTO_EXECUTE_INFO`.
         Set `execute: daemon: true` explicitly (the default is off when
@@ -204,19 +204,19 @@ Phase 1 adds the field they fail as compile errors. That counts as
         does (`seed_isolated_julia_runtime`, `HOME` override,
         `IsolatedJuliaServerGuard`). No existing test uses
         `daemon: true`;
-  - [ ] two documents with `julia:` / `share_worker_process: true` in
+  - [x] two documents with `julia:` / `share_worker_process: true` in
         both front matters (same isolation), each seeing its own
         `QUARTO_DOCUMENT_FILE`;
-  - [ ] a single-file document outside a project
+  - [x] a single-file document outside a project
         (`setup_julia_project()`, `daemon: false`; QNR sets nothing
         here today);
-  - [ ] a document path containing a space
+  - [x] a document path containing a space
         (`tmp.path().join("my doc.qmd")`).
-- [ ] Mark every new e2e test (the CLI tests and the julia cases) with
+- [x] Mark every new e2e test (the CLI tests and the julia cases) with
       `#[ignore = "bd-x3h4zjhl: needs <engine> fork sync (Session 2)"]`,
       so that the Session 1 gate and CI stay green (review P1, approved
       2026-11-13).
-- [ ] Confirm every new test fails before implementation; compile errors
+- [x] Confirm every new test fails before implementation; compile errors
       count. The type test's "literal without the field" half passes
       already and is exempt. Prove the e2e tests red with
       `cargo nextest run -p quarto -p quarto-core --run-ignored only -E 'binary(integration) & (test(execute_env_cli_e2e::) | test(julia_engine_e2e::))'`
@@ -226,9 +226,9 @@ Phase 1 adds the field they fail as compile errors. That counts as
 
 ### Session 1, Phase 1: Rust
 
-- [ ] Add `execute_env: BTreeMap<String, String>` to `TsExecuteOptions`
+- [x] Add `execute_env: BTreeMap<String, String>` to `TsExecuteOptions`
       (decision 2) and update `make_execute_options`.
-- [ ] Build the merged map in `TsEngine::build_execute_options`
+- [x] Build the merged map in `TsEngine::build_execute_options`
       (`engine/ts_engine.rs`): extend a `BTreeMap` with
       `ctx.project_env`, then with `ctx.execute_env`. No helper is
       needed, because `ctx.project_env` already holds the filtered pairs
@@ -239,9 +239,9 @@ Phase 1 adds the field they fail as compile errors. That counts as
 
 ### Session 1, Phase 2: host and types
 
-- [ ] `quarto-engine-host-node/src/types.ts`: add
+- [x] `quarto-engine-host-node/src/types.ts`: add
       `executeEnv?: Record<string, string>` to the wire type.
-- [ ] `host.ts`, execute path: in the field-by-field `executeOptions`
+- [x] `host.ts`, execute path: in the field-by-field `executeOptions`
       literal (the `ExecuteOptions` assembly before the
       `Object.assign` that adds `signal`/`units`), add
       `...(opts.executeEnv !== undefined ? { executeEnv: { ...opts.executeEnv } } : {})`.
@@ -250,11 +250,11 @@ Phase 1 adds the field they fail as compile errors. That counts as
       reuses request objects. Leave the dependencies path alone. Rewrite the comment saying the
       vendored `@quarto/types` stays a parity copy of Q1 (already untrue
       for `ownedLanguages`).
-- [ ] `ts-packages/quarto-types/src/execution.ts`: add the optional,
+- [x] `ts-packages/quarto-types/src/execution.ts`: add the optional,
       `Readonly` field to `ExecuteOptions` with its doc comment
       (decision 5), marked as a q2 extension Q1 does not send, like
       `ownedLanguages`.
-- [ ] Rebuild the embedded host bundle: `cargo xtask
+- [x] Rebuild the embedded host bundle: `cargo xtask
       build-engine-host-bundle` (or `npm run bundle -w
       @quarto/engine-host-node`) and commit
       `ts-packages/quarto-engine-host-node/dist/engine-host-node.mjs`.
@@ -263,7 +263,7 @@ Phase 1 adds the field they fail as compile errors. That counts as
       `executeEnv`. CI's bundle-freshness step
       (`ts-test-suite.yml`, `git diff --exit-code`) also fails on a
       stale bundle.
-- [ ] Wire the host typecheck into CI and `verify` in one commit (review
+- [x] Wire the host typecheck into CI and `verify` in one commit (review
       P4, approved 2026-11-13). In `.github/workflows/ts-test-suite.yml`,
       add a "Typecheck engine-host-node" step running
       `npm run typecheck -w @quarto/engine-host-node`, next to the
@@ -274,7 +274,7 @@ Phase 1 adds the field they fail as compile errors. That counts as
       pandoc-host/typst-host `typecheck:tests` calls. Gate it with
       `cargo clippy -p xtask --all-targets -- -D warnings` and
       `cargo nextest run -p xtask`.
-- [ ] Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings`;
+- [x] Gate: `cargo clippy -p quarto-core --all-targets -- -D warnings`;
       `cargo nextest run -p quarto-core`;
       `npm run test -w @quarto/engine-host-node`;
       `npm run typecheck -w @quarto/engine-host-node` (covers the type
@@ -283,9 +283,56 @@ Phase 1 adds the field they fail as compile errors. That counts as
       after the bundle rebuild, `git status` shows no other change to
       `dist/engine-host-node.mjs`. Commit.
 
+#### Session 1 evidence (2026-11-13)
+
+**Red before implementation.**
+
+- Rust unit tests (`ts_protocol::tests::execute_env_is_absent_when_empty_and_roundtrips`,
+  the parity-fixture change, and the three `ts_engine` `execute_options_*` env
+  tests): `cargo nextest run -p quarto-core -E 'test(ts_protocol::) | test(ts_engine::)'`
+  failed to compile, six times ``error[E0609]: no field `execute_env` on type `ts_protocol::TsExecuteOptions` ``.
+  A compile error counts as red here.
+  failures: the three `executeEnv` host tests that expect a value (the one
+  that expects the key to be absent passes already) and `TsExecuteOptions
+  carries the EXR-7 keys`.
+- Type test: `npx tsc --noEmit` gave
+  `execute-env.type-test.ts(21,65): error TS2339: Property 'executeEnv' does not exist on type 'ExecuteOptions'.`
+- e2e tests, run after the Rust field existed (Phase 1) but before the host
+  and the forks changed, with
+  `cargo nextest run -p quarto -p quarto-core --run-ignored only --no-fail-fast --no-capture -E 'binary(integration) & (test(execute_env_cli_e2e::) | test(julia_engine_e2e::))'`:
+  `7 tests run: 1 passed, 6 failed, 2699 skipped` (the one pass is
+  `pc4a_abandoned_worker_close_busy`, which prints a skip line and returns).
+  The six failures are the new tests, each for the expected reason:
+  - `julia_cells_see_the_execute_environment`: render error
+    `KeyError: key "QUARTO_DOCUMENT_PATH" not found` from the cell;
+  - `marimo_cells_see_the_execute_environment`: `read .../proj/sub/env.json: No such file or directory`
+    (the cell could not read the variables, so it never wrote the file);
+  - the four `julia_engine_e2e` cases (the daemon rerender, the path with a
+    space, the shared worker and the single file outside a project): the
+    cell printed `QUARTO_DOCUMENT_PATH=` followed by the word unset.
+
+**Green after implementation.**
+
+- `cargo clippy -p quarto-core --all-targets -- -D warnings`,
+  `cargo clippy -p quarto --all-targets -- -D warnings` and
+  `cargo clippy -p xtask --all-targets -- -D warnings`: clean.
+- `cargo nextest run -p quarto-core`: 8393 passed, 40 skipped.
+- `cargo nextest run -p xtask`: 268 passed, 0 skipped.
+- `cargo nextest run -p quarto -E 'binary(integration) & test(execute_env_cli_e2e::)'`:
+  2 passed (knitr, Jupyter), 607 skipped; the new tests are ignored.
+- `npm run test -w @quarto/engine-host-node`: 181 passed (11 files).
+  `npm run typecheck -w @quarto/engine-host-node` and
+  `npx tsc --noEmit -p .` in `quarto-types`: clean.
+- The bundle rebuild changed only `dist/engine-host-node.mjs`.
+
+**Environment note.** An earlier `quarto-core` run failed because the
+`pandoc` on `PATH` was 3.12.1 (`Q-20-2`, minimum 3.13). The pandoc in
+`~/.local/bin` was swapped for 3.13, and the 3.12.1 binary was kept as
+`pandoc-3.12.1.bak`.
+
 ### Session 2, Phase 3: marimo (fork, then sync)
 
-- [ ] In `external-sources/quarto-marimo` (check that the branch is
+- [x] In `external-sources/quarto-marimo` (check that the branch is
       `q2/node-port`, `git status` is clean, and `git fetch` shows it
       level with `origin/q2/node-port`):
   - in `src/engine/index.ts`, add `executeEnv?: Record<string, string>`
@@ -299,18 +346,18 @@ Phase 1 adds the field they fail as compile errors. That counts as
     `env` is the sixth positional parameter, so pass
     `compilerTimeoutMs()` explicitly as the fifth. Do not change the
     `uv run ... command.py` call.
-- [ ] Fork test in `tests/engine/process.test.ts` with the existing
+- [x] Fork test in `tests/engine/process.test.ts` with the existing
       `withScript(...)` helper (`externalEnv: true`, a script that echoes
       a variable into its JSON payload); run `npm test` in the fork
       (Node 24).
-- [ ] Commit; push after Gordon's OK. Then run
+- [x] Commit; push after Gordon's OK. Then run
       `scripts/sync-marimo-fixture.sh external-sources/quarto-marimo`
       from the q2 worktree. It needs a clean tracked tree in the fork,
       runs `npm run build` itself, and records the fork HEAD in
       `FIXTURE-SOURCE`. Run
       `QUARTO_MARIMO_SRC=/Users/gordon/src/q2/external-sources/quarto-marimo cargo nextest run -p quarto-core -E 'binary(integration) & test(marimo_fixture_fresh::)'`;
       commit the sync naming the fork commit.
-- [ ] Remove the `#[ignore]` from `marimo_cells_see_the_execute_environment`;
+- [x] Remove the `#[ignore]` from `marimo_cells_see_the_execute_environment`;
       it passes:
       `cargo nextest run -p quarto -E 'binary(integration) & test(execute_env_cli_e2e::marimo)'`.
 
@@ -319,7 +366,7 @@ Phase 1 adds the field they fail as compile errors. That counts as
 - [x] Clean the fork's working tree: the stray `.gitignore` edit and
       `deno.lock` from an Oct 13 smoke-test run were discarded at
       Gordon's request (2026-11-12).
-- [ ] Bring the fork checkout up to date first. On 2026-11-13 the local
+- [x] Bring the fork checkout up to date first. On 2026-11-13 the local
       `q2/node-port` was at `ea4dcee`, five commits behind the pushed
       `4937625` (the subtree split q2 vendors, and the commit range that
       pins QNR `ffe5dab7`), with a stale `origin/q2/node-port` ref. Run

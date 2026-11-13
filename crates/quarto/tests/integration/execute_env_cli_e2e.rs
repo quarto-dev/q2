@@ -256,7 +256,6 @@ fn uv_available() -> bool {
 }
 
 #[test]
-#[ignore = "bd-x3h4zjhl: needs marimo fork sync (Session 2)"]
 fn marimo_cells_see_the_execute_environment() {
     if !node_available_for_tests() || !uv_available() {
         eprintln!("skipping: node + uv not both available");
