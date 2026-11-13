@@ -2,13 +2,12 @@
 title: 'Flaky fake_kernel two-names test exits during startup on ubuntu CI (bd-0w8rgjdf)'
 date: 2026-11-13
 description: 'The fake Jupyter kernel exits 0 with empty stderr when it loses a peeked port, because it discards TestKernel''s bind error, so the daemon''s port-conflict retry never fires; surface the error the way ipykernel does.'
-status: draft  # Investigation — pending design alignment with user; do not implement before the go-ahead
+status: implemented
 braid:
   strand: bd-0w8rgjdf
 ---
 
 **Branch:** `braid/bd-0w8rgjdf-fake-kernel-startup-flake` (topic branch in the main checkout, based on `main` @ `4f0c82a01`)
-**Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -184,3 +183,32 @@ A separate question: bd-v0ddo4o4 covers real-kernel "shell connect timed out
 after 30s" flakes, and it may share a root with this strand. A port-collision
 mechanism on the *client* side would be one candidate. This investigation did
 not check that.
+
+## Decisions and outcome (2026-11-13)
+
+The user answered the design questions:
+
+1. Fake-only fix; the daemon is unchanged.
+2. Smallest regression test.
+3. No upstream runtimelib change.
+
+What landed:
+
+- `run_kernel_process` now matches on `handle.await`. On an error it prints
+  `fake kernel failed: <e>` to stderr and exits 1.
+- `test_fake_kernel_losing_a_port_reports_a_port_conflict` holds a port with
+  a `TcpListener` and runs the fake-kernel entry on a connection file that
+  names it. The test asserts a non-zero exit and that the result
+  `is_port_conflict()`.
+
+Verification:
+
+- Before the fix, the new test failed with
+  `ExitedDuringStartup { code: Some(0), stderr: "" }`, the CI signature.
+- After the fix, all 12 fake_kernel tests pass, and the 199 jupyter tests in
+  the quarto-core lib pass in each of 5 runs.
+- `cargo clippy -p quarto-core --all-targets -D warnings` is clean on macOS.
+- The Windows cross-check cannot run from macOS, because the `tree-sitter`
+  and `aws-lc-sys` build scripts fail. The change uses only std/tokio, and
+  Winsock's `WSAEADDRINUSE` text is already one of the `is_port_conflict`
+  markers.
