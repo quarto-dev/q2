@@ -3,7 +3,8 @@
  * block. A paragraph of plain text is its text, a heading of plain text
  * is its text after a prefix for its level (`headingPrefix`), and a block
  * quote of one paragraph of plain text is that paragraph's text after the
- * quote prefix (`QUOTE`). Every other block (a paragraph or heading with
+ * quote prefix (`QUOTE`). A horizontal rule is a line that can be removed
+ * but not edited (`VOID`). Every other block (a paragraph or heading with
  * formatting, a list, a quote of anything else) is a line that can't be
  * edited (`ATOM`), and comes back from an edit as the block it was.
  *
@@ -17,7 +18,7 @@
  * and an edit keeps its line breaks wherever the text around them stays.
  */
 
-import { ATOM, isPrefix, withoutPrefixes } from '../engine/model.ts'
+import { ATOM, isPrefix, VOID, withoutPrefixes } from '../engine/model.ts'
 import { diff, matchLines } from '../engine/rebase.ts'
 
 export type Node = { t: string; c?: unknown }
@@ -59,6 +60,7 @@ function lineText(line: string): string {
  */
 export function lineOf(block: Node): string | undefined {
   if (block.t === 'Para') return plainParagraph(block)
+  if (block.t === 'HorizontalRule') return VOID
   if (block.t === 'BlockQuote') {
     const blocks = block.c as Node[]
     const text = blocks.length === 1 ? plainParagraph(blocks[0]) : undefined
@@ -73,7 +75,7 @@ export function lineOf(block: Node): string | undefined {
 
 /** Whether text can be a line's: it holds no character the editor gives a meaning. */
 function editable(text: string): boolean {
-  return !text.includes(ATOM) && withoutPrefixes(text) === text
+  return !text.includes(ATOM) && !text.includes(VOID) && withoutPrefixes(text) === text
 }
 
 /**
@@ -95,10 +97,12 @@ export function readOnlyBlocks(blocks: readonly Node[]): Node[] {
 /**
  * What typing turns into in the body: one to six `#` and a space at the
  * start of a paragraph make it a heading of that level, and `>` and a
- * space a block quote, as in qmd.
+ * space a block quote, as in qmd. `---`, `***` or `___` there make a
+ * horizontal rule, and the rest of the paragraph goes on the line after it.
  */
 export function bodyInputRule(line: string): string | null {
   if (line === '> ') return QUOTE
+  if (line === '---' || line === '***' || line === '___') return `${VOID}\n`
   const match = /^(#{1,6}) $/.exec(line)
   return match ? headingPrefix(match[1].length) : null
 }
@@ -137,7 +141,7 @@ export function bodyText(blocks: readonly Node[]): string {
 /**
  * The blocks of a body edited to read `text`. A line that reads as its
  * block did is that block, untouched; any other line is a new paragraph
- * (an empty one, for a line without text), heading or quote. A
+ * (an empty one, for a line without text), heading, quote or rule. A
  * paragraph, in a quote or not, is wrapped in the source where the text
  * it keeps was. A heading made from
  * one that was there (the one in the same place among the changed lines)
@@ -160,6 +164,7 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
     start += line.length + 1
     if (line === ATOM) return readOnly[atoms++]
     if (match[i] >= 0) return blocks[match[i]]
+    if (line === VOID) return { t: 'HorizontalRule' }
     const level = headingLevel(line)
     if (level > 0) return heading(level, lineText(line), blocks[replaced[i]])
     const text = lineText(line)

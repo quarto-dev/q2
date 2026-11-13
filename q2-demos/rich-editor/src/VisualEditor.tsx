@@ -8,9 +8,9 @@
  * The body is under it, block by block, from the parsed source.
  *
  * The title, subtitle and abstract are edited in place, and so are the
- * body's paragraphs, headings and one-paragraph quotes of plain text; the
- * rest of the body (formatted text, lists, code) is shown and can't be
- * edited yet. A
+ * body's paragraphs, headings and one-paragraph quotes of plain text, and
+ * its horizontal rules can be made and removed; the rest of the body
+ * (formatted text, lists, code) is shown and can't be edited yet. A
  * document has only the title-block fields its author adds, with the "+"
  * row above the title block (`TitleBlockWidget`); an added field stays,
  * empty, until Backspace in it removes it. Every edit is
@@ -85,7 +85,8 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * unless the body is empty. The abstract and the body take line breaks
  * (one per paragraph). The title-block fields stay when empty.
  * In the body, `## ` at the start of a paragraph makes it a heading and
- * `> ` a quote, and they're copied with their `#`s and `>`.
+ * `> ` a quote, and they're copied with their `#`s and `>`. `---` there
+ * makes a horizontal rule, which is copied as `---`.
  */
 const SCHEMA: Schema = {
   order: [...TITLE_BLOCK, 'body'],
@@ -93,6 +94,7 @@ const SCHEMA: Schema = {
   multiline: ['abstract', 'body'],
   inputRule: (field, line) => (field === 'body' ? bodyInputRule(line) : null),
   prefixText: prefixMarkdown,
+  voidText: '---',
   keepEmpty: TITLE_BLOCK,
   backspaceStops: ['body'],
 }
@@ -107,6 +109,8 @@ const PLACEHOLDERS: Record<TitleBlockField, string> = {
 const ADDABLE = TITLE_BLOCK.map((name) => ({ name, label: PLACEHOLDERS[name] }))
 
 const noop = () => {}
+
+const renderRule = () => <hr />
 
 export function VisualEditor({ file }: VisualEditorProps) {
   const { ast, parseError } = useSyncExternalStore(file.subscribe, file.getSnapshot)
@@ -239,6 +243,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
               className="qe-field"
               lineElement={lineElement}
               renderAtom={renderAtom}
+              renderVoid={renderRule}
             />
           </>,
           mount,

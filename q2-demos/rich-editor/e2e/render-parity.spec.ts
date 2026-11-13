@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 
 /** Fixtures whose rendering should match `q2 render`'s. */
-const MATCHING = ['title-block', 'paragraphs', 'long-title', 'no-subtitle', 'wrapped', 'quote']
+const MATCHING = ['title-block', 'paragraphs', 'long-title', 'no-subtitle', 'wrapped', 'quote', 'rules']
 
 test.describe('the HTML', () => {
   // The comparison is of HTML, which doesn't depend on the browser engine.

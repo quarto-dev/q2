@@ -14,6 +14,20 @@
 export const ATOM = '\uFFFC'
 
 /**
+ * A line of a multi-line field that holds only this character stands for
+ * something the editor shows and can't edit, but can remove (a horizontal
+ * rule). Like an atom, it's on a line of its own and can't be typed; but a
+ * deletion that covers it removes it, and so do Backspace at the start of
+ * the line after it and Delete at the end of the line before it.
+ */
+export const VOID = '\uFFFB'
+
+/** Whether `char` stands for a line that can't be edited (`ATOM` or `VOID`). */
+export function isAtom(char: string): boolean {
+  return char === ATOM || char === VOID
+}
+
+/**
  * A line of a multi-line field can start with a run of prefix characters,
  * the Unicode noncharacters U+FDD0 to U+FDEF, which give it a kind (what
  * each means is up to the schema; in the qmd editor, a heading's level).
@@ -93,6 +107,8 @@ export interface Schema {
   readonly backspaceStops?: readonly string[]
   /** A line prefix as text, for the clipboard (none unless given). */
   readonly prefixText?: (prefix: string) => string
+  /** A `VOID` line as text, for the clipboard (none unless given). */
+  readonly voidText?: string
   /**
    * Fields that stay when they're empty, rather than disappearing once the
    * selection leaves them: being there, empty, means something (a title
@@ -181,7 +197,8 @@ export function documentChanged(schema: Schema, a: Fields, b: Fields): boolean {
 
 /**
  * The selected text, one line per field. A line's prefix, when the
- * selection takes it in, is written as the schema's `prefixText` says.
+ * selection takes it in, is written as the schema's `prefixText` says,
+ * and a `VOID` line as its `voidText` says.
  */
 export function selectedText(schema: Schema, fields: Fields, selection: Selection): string {
   const { from, to } = ordered(schema, selection)
@@ -199,5 +216,5 @@ export function selectedText(schema: Schema, fields: Fields, selection: Selectio
     const text = value.slice(start, i === last ? to.offset : value.length)
     lines.push(text.replace(/(^|\n)([\uFDD0-\uFDEF]+)/g, (_, start: string, prefix: string) => start + (schema.prefixText?.(prefix) ?? '')))
   }
-  return withoutPrefixes(lines.join('\n'))
+  return withoutPrefixes(lines.join('\n')).replaceAll(VOID, schema.voidText ?? '')
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ATOM } from '../engine/model.ts'
+import { ATOM, VOID } from '../engine/model.ts'
 import {
   bodyInputRule,
   bodyText,
@@ -209,5 +209,34 @@ describe('quotes', () => {
   })
   it('a quote is copied with its >', () => {
     expect(prefixMarkdown(QUOTE)).toBe('> ')
+  })
+})
+
+describe('horizontal rules', () => {
+  const rule: Node = { t: 'HorizontalRule' }
+
+  it('a rule is a line that can be removed but not edited', () => {
+    expect(bodyText([para('One.'), rule, para('Two.')])).toBe(`One.\n${VOID}\nTwo.`)
+    expect(readOnlyBlocks([para('One.'), rule])).toEqual([])
+  })
+  it('text holding the character that stands for one can\'t be edited', () => {
+    expect(plainParagraph(para(`One${VOID}`))).toBeUndefined()
+  })
+
+  it('writes a line of it as a rule, and keeps an unchanged rule as it was', () => {
+    expect(editBody([para('One.')], `One.\n${VOID}\nTwo.`)).toEqual([para('One.'), rule, para('Two.')])
+    const was: Node = { t: 'HorizontalRule', s: 3 } as Node
+    expect(editBody([was, para('One.')], `${VOID}\nOne!`)![0]).toBe(was)
+  })
+  it('drops a rule whose line was removed', () => {
+    expect(editBody([para('One.'), rule, para('Two.')], 'One.\nTwo.')).toEqual([para('One.'), para('Two.')])
+  })
+
+  it('---, *** or ___ at the start of a line make a rule, and the rest of the line goes after it', () => {
+    for (const typed of ['---', '***', '___']) expect(bodyInputRule(typed)).toBe(`${VOID}\n`)
+    expect(bodyInputRule('--')).toBeNull()
+    expect(bodyInputRule('-*-')).toBeNull()
+    expect(bodyInputRule(`${QUOTE}---`)).toBeNull()
+    expect(bodyInputRule(`${headingPrefix(1)}---`)).toBeNull()
   })
 })

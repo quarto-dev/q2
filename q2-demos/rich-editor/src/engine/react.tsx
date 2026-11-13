@@ -65,7 +65,7 @@ import {
   writeSelection,
 } from './dom.ts'
 import { apply, createEditor, fieldChanges, redo, settle, undo, type ApplyOptions, type Editor } from './editor.ts'
-import { ATOM, caret, documentChanged, linePrefix, presentFields, selectedText, type Schema, type State } from './model.ts'
+import { ATOM, caret, documentChanged, VOID, linePrefix, presentFields, selectedText, type Schema, type State } from './model.ts'
 import { rebaseHistory } from './rebase.ts'
 import type { FieldSource } from './source.ts'
 
@@ -137,6 +137,8 @@ export interface LinesProps {
   lineElement?: (prefix: string, index: number) => LineElement
   /** What to show for the `index`th line that can't be edited (`ATOM`). */
   renderAtom: (index: number) => ReactNode
+  /** What to show for a line that can be removed but not edited (`VOID`). */
+  renderVoid?: () => ReactNode
 }
 
 /** How a line of a multi-line field is rendered (see `LinesProps.lineElement`). */
@@ -152,7 +154,7 @@ export interface LineElement {
  * edited are rendered by the caller, and get no caret. A line's prefix
  * isn't shown: it chooses the line's element, whose text starts after it.
  */
-export function Lines({ name, text, className, as = 'p', lineElement, renderAtom }: LinesProps) {
+export function Lines({ name, text, className, as = 'p', lineElement, renderAtom, renderVoid }: LinesProps) {
   if (text === undefined) return null
   let start = 0
   let atoms = 0
@@ -160,6 +162,7 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
     const at = start
     start += line.length + 1
     if (line === ATOM) return <Fragment key={i}>{renderAtom(atoms++)}</Fragment>
+    if (line === VOID) return <Fragment key={i}>{renderVoid?.()}</Fragment>
     const prefix = linePrefix(line, 0)
     const element = prefix === '' ? undefined : lineElement?.(prefix, i)
     const field = (
