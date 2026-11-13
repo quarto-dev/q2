@@ -19,6 +19,7 @@ import {
   contentChanged,
   documentChanged,
   keepsEmpty,
+  lineStartOf,
   sameSelection,
   type Fields,
   type Position,
@@ -144,7 +145,7 @@ export function settle(schema: Schema, editor: Editor, base: Fields): Editor {
 function settleLines(variant: string, base: string, offsets: number[]): { text: string; offsets: number[] } {
   const lines = offsets.map((offset) => {
     const end = variant.indexOf('\n', offset)
-    return { start: variant.lastIndexOf('\n', offset - 1) + 1, end: end < 0 ? variant.length : end }
+    return { start: lineStartOf(variant, offset), end: end < 0 ? variant.length : end }
   })
   // Each difference of `variant` from `base`, and where it starts in `variant`.
   let shift = 0

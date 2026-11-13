@@ -34,7 +34,8 @@ export function withoutPrefixes(text: string): string {
 
 /** Where the line that `offset` is on starts in `text`. */
 export function lineStartOf(text: string, offset: number): number {
-  return text.lastIndexOf('\n', offset - 1) + 1
+  // Not `lastIndexOf` from `offset - 1`: from -1, it would look at index 0.
+  return offset === 0 ? 0 : text.lastIndexOf('\n', offset - 1) + 1
 }
 
 /** The prefix of the line that `offset` is on. */

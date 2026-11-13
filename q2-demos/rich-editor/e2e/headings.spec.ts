@@ -429,6 +429,31 @@ test.describe('a body that starts with a heading', () => {
     await editor.document.expectSource(fixture('heading-first').replace('## Results', '## Key Results'))
   })
 
+  test('Enter at the start of the heading adds a paragraph above, which Up goes to', async ({ page }) => {
+    const editor = await openEditor(page, 'heading-first')
+    await editor.placeCaretInLine(0, 0)
+
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('ArrowUp')
+    await page.keyboard.type('Intro.')
+
+    expect(await editor.lines()).toEqual(['p: Intro.', 'h2: Results', 'p: Text.'])
+    await editor.document.expectSource(fixture('heading-first').replace('## Results', 'Intro.\n\n## Results'))
+  })
+
+  test('Delete on an empty paragraph before the heading leaves the heading a heading', async ({ page }) => {
+    const editor = await openEditor(page, 'heading-first')
+    await editor.placeCaretInLine(0, 0)
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('ArrowUp')
+
+    await page.keyboard.press('Delete')
+
+    expect(await editor.lines()).toEqual(['h2: Results', 'p: Text.'])
+    await editor.document.expectSource(fixture('heading-first'))
+    await editor.expectLineCaret(0, 0)
+  })
+
   test('typing over the whole body selected keeps the first line a heading', async ({ page }) => {
     const editor = await openEditor(page, 'heading-first')
     await editor.placeCaretInLine(1, 2)

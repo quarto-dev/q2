@@ -226,7 +226,7 @@ function deleteDirection(
 
   // What to delete: the range the browser would, within the caret's line,
   // or else the grapheme (or line break) next to the caret.
-  const lineStart = text.lastIndexOf('\n', at.offset - 1) + 1
+  const lineStart = lineStartOf(text, at.offset)
   const lineEnd = text.indexOf('\n', at.offset) < 0 ? text.length : text.indexOf('\n', at.offset)
   let start = 0
   let end = 0
