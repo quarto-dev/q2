@@ -172,6 +172,8 @@ pub(super) fn build_structured(
             owned_languages: ctx.owned_languages.clone(),
             document_metadata: ctx.document_metadata_json(),
             known_options: captured.known_options.map(<[String]>::to_vec),
+            // knitr interleaves source and output by default (Quarto 1 parity).
+            interleaves_output: true,
             ..Default::default()
         })
         .map_err(|e| build(&e))?;

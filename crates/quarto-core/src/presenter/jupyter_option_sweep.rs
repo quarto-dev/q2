@@ -138,10 +138,15 @@ const SWEEP: &[(&str, &str, Outcome)] = &[
     ("fig-column", "margin", Presents),
     ("tbl-column", "margin", Presents),
     ("out-extra", "\"'style=\\\"x\\\"'\"", Presents),
+    ("output-interleave", "true", Inert),
 ];
 
 /// Options the presenter does not render, and why that is correct for Jupyter.
-const INERT_REASONS: &[(&str, &str)] = &[];
+const INERT_REASONS: &[(&str, &str)] = &[(
+    "output-interleave",
+    "Jupyter records carry no output anchors, so every cell already renders held; the option \
+     is declared display-only so an edit does not re-run the cell once Jupyter can interleave",
+)];
 
 #[test]
 fn every_declared_display_only_key_is_swept() {

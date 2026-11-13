@@ -133,7 +133,9 @@ pub fn presenter_enforces_warning(cell: &RecordCell, engine: Option<&EngineEntry
 /// `code` is the cell\'s partitioned code (the `#|` lines removed) and `header` its current
 /// `#|` options (read as knitr reads them), used only with resolved options. `fallback` is the
 /// options and visibility a cell with no resolved options gets (the document scope layered
-/// under its own options).
+/// under its own options). `interleave` says whether outputs interleave with the source (the
+/// caller resolves `output-interleave` against the engine\'s default); when it is `false` the
+/// anchors are ignored and the cell renders whole, with every output after the source.
 pub fn present_with_inputs(
     language: &str,
     code: &str,
@@ -141,12 +143,12 @@ pub fn present_with_inputs(
     inputs: &CellInputs,
     header: Option<&ConfigValue>,
     fallback: (CellOptions, CellVisibility),
+    interleave: bool,
     fig: &mut dyn FigureSink,
 ) -> String {
     let code = inputs.echoed_code.as_deref().unwrap_or(code);
     let known = inputs.known_options.as_deref();
     let mut result = CellResult::from_nbformat(&cell.outputs, cell.execution_count);
-    let mut merged: Option<Value> = None;
     let (options, visibility) = match &inputs.resolved_options {
         Some(recorded) => {
             let mut m = layer_options(recorded, header, known);
@@ -154,36 +156,35 @@ pub fn present_with_inputs(
                 &mut m,
                 result.outputs.iter().filter(|o| is_plot_output(o)).count(),
             );
-            let pair = (
+            (
                 CellOptions::from_knitr_known(&m, known).with_engine_text(true),
                 CellVisibility::from_flags(
                     |k| m.get(k).and_then(Value::as_bool),
                     !inputs.capture_enforced_warning,
                 ),
-            );
-            merged = Some(m);
-            pair
+            )
         }
         None => fallback,
     };
     let mut kinds = inputs.output_kinds.clone();
-    let mut anchors = inputs.anchors.clone();
+    // Held (the default for every engine that does not declare otherwise): no anchors, so the
+    // cell renders whole. The expression starts stay; `prompt` and numeric `echo` use them.
+    let mut anchors = inputs.anchors.clone().filter(|_| interleave);
     let starts = inputs.expression_starts.clone().unwrap_or_default();
 
-    if let Some(merged) = &merged {
-        // `fig.beforecode` then the holds, as knitr orders them; both run at present time over
-        // the capture-order anchors (epic decision 21).
-        if merged.get("fig.beforecode").and_then(Value::as_bool) == Some(true)
+    // `fig.beforecode` then the holds, as knitr orders them; both run at present time over the
+    // capture-order anchors (epic decision 21), for any cell that has them.
+    {
+        if options.fig_beforecode()
             && let Some(a) = anchors
                 .as_deref()
                 .filter(|a| a.len() == result.outputs.len())
         {
             anchors = Some(before_code_anchors(&result.outputs, a));
         }
-        let is = |key: &str, want: &str| merged.get(key).and_then(Value::as_str) == Some(want);
         let hold = HoldMode {
-            plots: is("fig.show", "hold"),
-            text: is("results", "hold"),
+            plots: options.fig_show_hold(),
+            text: options.results_hold(),
         };
         if let Some(a) = anchors
             .as_deref()
@@ -500,7 +501,7 @@ mod tests {
         inputs.resolved_options.as_ref()?;
         let fallback = (CellOptions::default(), CellVisibility::resolve(None, true));
         Some(present_with_inputs(
-            language, code, cell, &inputs, header, fallback, fig,
+            language, code, cell, &inputs, header, fallback, true, fig,
         ))
     }
 
@@ -1081,6 +1082,8 @@ mod tests {
     // ---- OPR-1a: each input is independently optional ------------------------------------
 
     /// Present `c` with exactly `inputs` and a plain (Jupyter-style) fallback carrying `fallback`.
+    /// Interleaving is on: these tests are about the inputs, and the default that decides it is
+    /// tested in `cell_step`.
     fn present_inputs(c: &RecordCell, code: &str, inputs: &CellInputs, fallback: Value) -> String {
         let dir = tempfile::tempdir().unwrap();
         let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
@@ -1094,6 +1097,7 @@ mod tests {
                 CellOptions::from_knitr(&fallback),
                 CellVisibility::resolve(None, true),
             ),
+            true,
             &mut fig,
         )
     }

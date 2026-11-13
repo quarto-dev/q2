@@ -298,6 +298,9 @@ const DISPLAY_ONLY_KEYS: &[&str] = &[
     "classes",
     "fig-column",
     "tbl-column",
+    // Output placement (2026-11-13-output-interleave.md). Inert for Jupyter today: its records
+    // carry no anchors, so every cell renders held.
+    "output-interleave",
 ];
 
 /// The Jupyter engine's hash declaration (`ExecutionEngine::hash_definition`): the
@@ -462,6 +465,13 @@ mod tests {
             !def.presentation_cell_options
                 .contains(&"record-sources".to_string())
         );
+        // output-interleave (2026-11-13): display-only as a cell option and under execute:.
+        for list in [
+            &def.presentation_cell_options,
+            &def.presentation_execute_keys,
+        ] {
+            assert!(list.iter().any(|k| k == "output-interleave"), "{list:?}");
+        }
         for visibility in ["echo", "output", "warning", "include"] {
             assert!(
                 def.presentation_cell_options

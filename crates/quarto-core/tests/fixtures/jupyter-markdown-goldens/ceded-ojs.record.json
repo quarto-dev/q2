@@ -71,7 +71,8 @@
       "out-extra",
       "classes",
       "fig-column",
-      "tbl-column"
+      "tbl-column",
+      "output-interleave"
      ],
      "presentationExecuteKeys": [
       "echo",
@@ -114,6 +115,7 @@
       "classes",
       "fig-column",
       "tbl-column",
+      "output-interleave",
       "record-sources"
      ],
      "version": 1

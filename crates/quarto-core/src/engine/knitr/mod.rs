@@ -693,7 +693,10 @@ mod tests {
         assert_eq!(def.id, "knitr");
         assert_eq!(def.granularity, crate::record::Granularity::Unit);
         assert!(def.presentation_cell_options.is_empty());
-        assert_eq!(def.presentation_execute_keys, ["record-sources"]);
+        assert_eq!(
+            def.presentation_execute_keys,
+            ["output-interleave", "record-sources"]
+        );
         assert_eq!(def.document_keys, ["knitr"]);
         // KNR-3: the default profile is still the all-options rule; fallback units use it. The
         // `structured` profile is covered in `hash_rule`.

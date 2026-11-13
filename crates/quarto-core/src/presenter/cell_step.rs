@@ -102,6 +102,11 @@ pub fn present_cell_step(
         .is_some()
         .then(|| knitr_header_options(parsed.options))
         .flatten();
+    // `output-interleave` from the Quarto options (document scope under the cell\'s `#|` map),
+    // never from a knitr record\'s resolved options: R does not record the scope (D3).
+    let interleave = options
+        .output_interleave()
+        .unwrap_or_else(|| engine.is_some_and(|e| e.interleaves_output));
     let markdown = present_with_inputs(
         language,
         &parsed.code,
@@ -109,6 +114,7 @@ pub fn present_cell_step(
         &inputs,
         header.as_ref(),
         (options, visibility),
+        interleave,
         fig,
     );
     Ok((markdown, rejected))
@@ -434,6 +440,207 @@ mod tests {
                 def.id
             );
         }
+    }
+
+    // === output-interleave (2026-11-13-output-interleave.md) ===
+
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    /// An entry whose engine declares (or not) that it interleaves by default.
+    fn entry_with(def: &HashDefinition, interleaves: bool, known: Option<&[&str]>) -> EngineEntry {
+        RecordBuilder::new(&def.id, def, &[], &AuthorTexts::default())
+            .unwrap()
+            .finish(EngineEntryInput {
+                interleaves_output: interleaves,
+                known_options: known.map(|k| k.iter().map(|s| s.to_string()).collect()),
+                ..Default::default()
+            })
+            .unwrap()
+            .engine
+    }
+
+    /// A two-line cell (`a`, `b`) with capture facts: stdout `one` and a message after line 1,
+    /// stdout `two` after line 2. `resolved` makes it a knitr record.
+    fn anchored(def: &HashDefinition, resolved: Option<Value>) -> RecordCell {
+        let mut c = cell(def, resolved);
+        c.outputs = vec![
+            json!({"output_type": "stream", "name": "stdout", "text": "one\n"}),
+            json!({"output_type": "stream", "name": "stderr", "text": "careful\n"}),
+            json!({"output_type": "stream", "name": "stdout", "text": "two\n"}),
+        ];
+        let extra = &mut c.metadata.extra;
+        extra.insert("quarto_output_anchors".into(), json!([1, 1, 2]));
+        extra.insert("quarto_output_kinds".into(), json!([null, "message", null]));
+        extra.insert("quarto_expression_starts".into(), json!([0, 1]));
+        c
+    }
+
+    /// Present `cell` with `options` (the `#|` lines) over the code `a`, `b`.
+    fn present_ab(
+        options: &str,
+        cell: &RecordCell,
+        engine: Option<&EngineEntry>,
+        scope: Option<&ConfigValue>,
+    ) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
+        let author = if options.is_empty() {
+            "a\nb\n".to_string()
+        } else {
+            format!("{options}\na\nb\n")
+        };
+        let target = super::super::inline::InlineTarget::from_format("html");
+        present_cell_step("python", "", &author, cell, engine, scope, &mut fig, target)
+            .unwrap()
+            .0
+    }
+
+    /// Whole: one source fence holding both lines, every output after it.
+    fn is_held(md: &str) -> bool {
+        md.contains("```{.python .cell-code}\na\nb\n```")
+            && md.find("a\nb").unwrap() < md.find("one").unwrap()
+    }
+
+    /// Interleaved: `a` in its own fence, its outputs, then `b` in its own fence.
+    fn is_interleaved(md: &str) -> bool {
+        md.contains("```{.python .cell-code}\na\n```")
+            && md.contains("```{.python .cell-code}\nb\n```")
+            && md.find("one").unwrap() < md.find("\nb\n").unwrap()
+    }
+
+    fn scope(yaml: &str) -> ConfigValue {
+        crate::cell_options::options_to_config(quarto_yaml::parse(yaml).unwrap()).0
+    }
+
+    #[test]
+    fn a_cell_with_anchors_renders_held_when_its_engine_does_not_interleave() {
+        // Julia-shaped: capture facts, no resolved options, an engine that declares nothing.
+        let def = jupyter_like();
+        let md = present_ab(
+            "",
+            &anchored(&def, None),
+            Some(&entry_with(&def, false, None)),
+            None,
+        );
+        assert!(is_held(&md), "{md}");
+    }
+
+    #[test]
+    fn a_cell_with_anchors_and_no_engine_entry_renders_held() {
+        let def = knitr_like();
+        let md = present_ab("", &anchored(&def, Some(json!({}))), None, None);
+        assert!(is_held(&md), "{md}");
+    }
+
+    #[test]
+    fn output_interleave_true_on_the_cell_interleaves() {
+        let def = jupyter_like();
+        let e = entry_with(&def, false, None);
+        let md = present_ab(
+            "#| output-interleave: true",
+            &anchored(&def, None),
+            Some(&e),
+            None,
+        );
+        assert!(is_interleaved(&md), "{md}");
+    }
+
+    #[test]
+    fn output_interleave_in_the_scope_interleaves_and_the_cell_beats_it() {
+        let def = jupyter_like();
+        let (e, c) = (entry_with(&def, false, None), anchored(&def, None));
+        let on = scope("output-interleave: true");
+        assert!(is_interleaved(&present_ab("", &c, Some(&e), Some(&on))));
+        let md = present_ab("#| output-interleave: false", &c, Some(&e), Some(&on));
+        assert!(is_held(&md), "{md}");
+    }
+
+    #[test]
+    fn results_hold_holds_printed_text_on_any_interleaved_cell() {
+        // Not a knitr record: the hold used to apply only with resolved options.
+        let def = jupyter_like();
+        let e = entry_with(&def, false, None);
+        let md = present_ab(
+            "#| output-interleave: true\n#| results: hold",
+            &anchored(&def, None),
+            Some(&e),
+            None,
+        );
+        // The message stays after `a`; the printed text is one stream after `b`.
+        assert!(md.contains("```{.python .cell-code}\na\n```"), "{md}");
+        assert!(
+            md.find("careful").unwrap() < md.find("\nb\n").unwrap(),
+            "{md}"
+        );
+        assert!(md.contains("one\ntwo"), "{md}");
+        assert!(md.find("\nb\n").unwrap() < md.find("one").unwrap(), "{md}");
+    }
+
+    #[test]
+    fn fig_show_hold_holds_plots_on_any_interleaved_cell() {
+        let def = jupyter_like();
+        let e = entry_with(&def, false, None);
+        let mut c = anchored(&def, None);
+        c.outputs[0] =
+            json!({"output_type": "display_data", "data": {"image/png": PNG}, "metadata": {}});
+        let md = present_ab(
+            "#| output-interleave: true\n#| fig.show: hold",
+            &c,
+            Some(&e),
+            None,
+        );
+        // The plot moves after `two`, the last output.
+        assert!(md.find("two").unwrap() < md.find(".png").unwrap(), "{md}");
+    }
+
+    #[test]
+    fn a_knitr_record_interleaves_by_default_and_output_interleave_false_holds_it() {
+        let def = knitr_like();
+        let e = entry_with(&def, true, None);
+        let c = anchored(&def, Some(json!({})));
+        assert!(is_interleaved(&present_ab("", &c, Some(&e), None)));
+        let md = present_ab("#| output-interleave: false", &c, Some(&e), None);
+        assert!(is_held(&md), "cell: {md}");
+        // The document scope reaches a knitr cell too, although R does not record it.
+        let off = scope("output-interleave: false");
+        let md = present_ab("", &c, Some(&e), Some(&off));
+        assert!(is_held(&md), "scope: {md}");
+    }
+
+    #[test]
+    fn output_interleave_is_never_a_cell_attribute() {
+        // Jupyter-shaped: forwarding of unhandled cell options.
+        let def = jupyter_like();
+        let e = entry_with(&def, false, None);
+        let md = present_ab(
+            "#| output-interleave: true",
+            &anchored(&def, None),
+            Some(&e),
+            None,
+        );
+        assert!(!md.contains("output-interleave"), "{md}");
+        // knitr: an option outside `known_options` is forwarded unless the reader handles it.
+        let def = knitr_like();
+        let e = entry_with(&def, true, Some(&["results"]));
+        let md = present_ab(
+            "#| output-interleave: false",
+            &anchored(&def, Some(json!({}))),
+            Some(&e),
+            None,
+        );
+        assert!(!md.contains("output-interleave"), "{md}");
+        assert!(!md.contains("output.interleave"), "{md}");
+    }
+
+    #[test]
+    fn the_engine_declaration_round_trips_and_defaults_to_holding() {
+        let def = knitr_like();
+        let json = serde_json::to_value(entry_with(&def, true, None)).unwrap();
+        assert_eq!(json["interleaves_output"], json!(true));
+        let held = serde_json::to_value(entry_with(&def, false, None)).unwrap();
+        assert!(held.get("interleaves_output").is_none(), "{held}");
+        let back: EngineEntry = serde_json::from_value(held).unwrap();
+        assert!(!back.interleaves_output);
     }
 
     #[test]

@@ -27,8 +27,14 @@ pub use crate::record::OUTPUT_FORMAT_OPTION;
 
 /// The declaration version. Bumped from EXR-11's 1 when the `structured` profile was added, so
 /// every earlier record reads as stale (KNR-3 decision 1); to 3 when OPR-5 excluded the
-/// `execute: record-sources` key from the document hash.
-pub const KNITR_HASH_VERSION: u32 = 3;
+/// `execute: record-sources` key from the document hash; to 4 when knitr declared that it
+/// interleaves (`EngineEntry::interleaves_output`), since an earlier record lacks the
+/// declaration and would present held.
+pub const KNITR_HASH_VERSION: u32 = 4;
+
+/// The engine-neutral `output-interleave` option (2026-11-13-output-interleave.md): presentation
+/// only, as a cell option and under `execute:`.
+const OUTPUT_INTERLEAVE_KEY: &str = "output-interleave";
 
 /// The `execute:` key that says where a record comes from (OPR-5); it never reaches the engine.
 const RECORD_SOURCES_EXECUTE_KEY: &str = "record-sources";
@@ -97,6 +103,7 @@ pub const STRUCTURED_PRESENTATION_OPTIONS: &[&str] = &[
     "layout-valign",
     "keep-hidden",
     "html-table-processing",
+    "output-interleave",
 ];
 
 /// The list the `structured` profile excludes: every name of
@@ -120,10 +127,16 @@ pub fn knitr_hash_definition() -> HashDefinition {
         STRUCTURED_PROFILE.to_string(),
         HashProfile {
             presentation_cell_options: structured_presentation_options(),
-            presentation_execute_keys: vec![RECORD_SOURCES_EXECUTE_KEY.to_string()],
+            presentation_execute_keys: vec![
+                OUTPUT_INTERLEAVE_KEY.to_string(),
+                RECORD_SOURCES_EXECUTE_KEY.to_string(),
+            ],
         },
     );
-    def.presentation_execute_keys = vec![RECORD_SOURCES_EXECUTE_KEY.to_string()];
+    def.presentation_execute_keys = vec![
+        OUTPUT_INTERLEAVE_KEY.to_string(),
+        RECORD_SOURCES_EXECUTE_KEY.to_string(),
+    ];
     def
 }
 
@@ -186,8 +199,9 @@ mod tests {
         let def = knitr_hash_definition();
         assert_eq!(def.id, "knitr");
         assert_eq!(
-            def.version, 3,
-            "bumped from KNR-3's 2 (record-sources excluded, OPR-5)"
+            def.version, 4,
+            "bumped from 3 when knitr declared that it interleaves (output-interleave): \
+             older records lack the declaration and must re-run"
         );
         assert_eq!(def.document_keys, ["knitr"]);
         assert!(
@@ -196,11 +210,20 @@ mod tests {
         );
         assert_eq!(
             def.presentation_execute_keys,
-            ["record-sources"],
-            "only the record source list is excluded; every other execute: key counts"
+            ["output-interleave", "record-sources"],
+            "only the record source list and output-interleave are excluded; every other \
+             execute: key counts"
         );
         let profile: &HashProfile = &def.profiles[STRUCTURED_PROFILE];
-        assert_eq!(profile.presentation_execute_keys, ["record-sources"]);
+        assert_eq!(
+            profile.presentation_execute_keys,
+            ["output-interleave", "record-sources"]
+        );
+        assert!(
+            profile
+                .presentation_cell_options
+                .contains(&"output-interleave".to_string())
+        );
         assert_eq!(
             profile.presentation_cell_options,
             structured_presentation_options()

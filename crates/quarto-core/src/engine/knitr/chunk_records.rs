@@ -261,6 +261,8 @@ fn build(
         can_freeze: true,
         owned_languages: ctx.owned_languages.clone(),
         document_metadata: ctx.document_metadata_json(),
+        // knitr interleaves source and output by default (Quarto 1 parity).
+        interleaves_output: true,
         ..Default::default()
     })
 }

@@ -40,6 +40,10 @@ const OPTION_ALIASES: &[(&str, &str)] = &[
     ("out.extra", "out-extra"),
 ];
 
+/// Quarto options the presenter reads for every engine that no engine's option list names, so
+/// knitr's forwarding of unknown options (hooks.R `unknown_opts`) must skip them.
+const ENGINE_NEUTRAL_KEYS: &[&str] = &["output-interleave"];
+
 /// The cell options a Jupyter cell does not forward as attributes: Quarto 1\'s
 /// `kJupyterCellInternalOptionKeys` and its standard and third-party metadata keys, plus the keys
 /// the presenter reads itself (it writes the layout keys and `out-extra` in their own places).
@@ -296,6 +300,13 @@ pub struct CellOptions {
     keep_trailing_space: bool,
     /// knitr `fig.show = "hide"`: plots are not shown.
     fig_show_hide: bool,
+    /// knitr `fig.show = "hold"`: plots move to the end of an interleaved cell.
+    fig_show_hold: bool,
+    /// knitr `fig.beforecode`: a plot moves before the source run it followed.
+    fig_beforecode: bool,
+    /// `output-interleave`: whether outputs interleave with the source; `None` leaves it to the
+    /// engine's default (`EngineEntry::interleaves_output`).
+    output_interleave: Option<bool>,
     /// knitr numeric `echo`: the expression numbers to show (negative: all but those).
     echo_selection: Option<Vec<i64>>,
     /// knitr numeric `warning` / `message`: which of the cell\'s warnings or messages to show.
@@ -407,6 +418,7 @@ impl CellOptions {
             // list holds knitr\'s names only.
             let is_known = |name: &str| known.iter().any(|k| k == name);
             if is_known(key)
+                || ENGINE_NEUTRAL_KEYS.contains(&key.as_str())
                 || dotted_alias(key).is_some_and(is_known)
                 || key.starts_with('.')
                 || value.is_null()
@@ -542,6 +554,13 @@ impl CellOptions {
                 .filter(|l| l.trim_start_matches('#').starts_with("tbl-"))
                 .map(|l| l.trim_start_matches('#').to_string()),
             fig_show_hide: first("fig.show").as_deref() == Some("hide"),
+            fig_show_hold: first("fig.show").as_deref() == Some("hold"),
+            fig_beforecode: first("fig.beforecode").as_deref() == Some("true"),
+            output_interleave: match first("output-interleave").as_deref() {
+                Some("true") => Some(true),
+                Some("false") => Some(false),
+                _ => None,
+            },
             echo_selection: echo_selection(&get("echo")),
             warning_selection: echo_selection(&get("warning")),
             message_selection: echo_selection(&get("message")),
@@ -909,6 +928,26 @@ impl CellOptions {
         self.fig_show_hide
     }
 
+    /// `fig.show = "hold"`: plots are held to the end of an interleaved cell.
+    pub fn fig_show_hold(&self) -> bool {
+        self.fig_show_hold
+    }
+
+    /// `fig.beforecode = TRUE`: a plot moves before the source run it followed.
+    pub fn fig_beforecode(&self) -> bool {
+        self.fig_beforecode
+    }
+
+    /// `output-interleave`, when the cell or the document scope sets it.
+    pub fn output_interleave(&self) -> Option<bool> {
+        self.output_interleave
+    }
+
+    /// `results = "hold"`: printed text is held to the end of an interleaved cell.
+    pub fn results_hold(&self) -> bool {
+        self.results.as_deref() == Some("hold")
+    }
+
     /// `results = "hide"`: printed text is dropped (messages and plots stay).
     pub fn results_hide(&self) -> bool {
         self.results.as_deref() == Some("hide")
@@ -1143,6 +1182,7 @@ mod tests {
             "attr.warning",
             "fig.alt",
             "fig.show",
+            "fig.beforecode",
             "fenced.echo",
             "prompt",
             "comment",

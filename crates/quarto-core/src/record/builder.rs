@@ -71,6 +71,8 @@ pub struct EngineEntryInput {
     pub warnings: Vec<Value>,
     /// The option names the engine knows (see `EngineEntry::known_options`).
     pub known_options: Option<Vec<String>>,
+    /// Whether the engine interleaves by default (see `EngineEntry::interleaves_output`).
+    pub interleaves_output: bool,
 }
 
 /// Builds one engine's [`EngineRecord`] from the stage's units.
@@ -217,6 +219,7 @@ impl<'a> RecordBuilder<'a> {
                 resource_files: input.resource_files,
                 warnings: input.warnings,
                 known_options: input.known_options,
+                interleaves_output: input.interleaves_output,
                 dependency_data: None,
                 extra: BTreeMap::new(),
             },

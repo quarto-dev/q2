@@ -856,6 +856,8 @@ mod tests {
         fixture::apply(&mut record.cells[0]);
         record.metadata.quarto_engines[0].known_options =
             Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect());
+        // knitr declares that it interleaves; the fixture's anchors are only used then.
+        record.metadata.quarto_engines[0].interleaves_output = true;
         capture.record = Some(serde_json::to_value(&record).unwrap());
         let (_dir, ctx) = tmp_context("html");
         let result = ReplayEngine::new(capture)

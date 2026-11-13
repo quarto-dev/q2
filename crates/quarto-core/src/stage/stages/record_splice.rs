@@ -1275,6 +1275,8 @@ mod tests {
         fixture::apply(&mut record.cells[0]);
         record.metadata.quarto_engines[0].known_options =
             Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect());
+        // knitr declares that it interleaves; the fixture's anchors are only used then.
+        record.metadata.quarto_engines[0].interleaves_output = true;
         let (text, report) = splice_in(Format::html(), fixture::SOURCE, &record);
         assert_eq!(report.units[0].1, UnitStaleness::Fresh, "{text}");
         fixture::assert_rich(&text);

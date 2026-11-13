@@ -672,11 +672,13 @@ mod tests {
         fixture::apply(&mut cells[0]);
         // The entry is looked up per cell, by the engine the cell names.
         cells[0].metadata.quarto_engine = Some("knitr".into());
-        let engine = entry_with(
+        let mut engine = entry_with(
             &units,
             &texts,
             Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect()),
         );
+        // knitr declares that it interleaves; the fixture's anchors are only used then.
+        engine.interleaves_output = true;
         let dir = tempfile::tempdir().unwrap();
         let mut fig = FsFigureSink::new(&dir.path().join("doc.qmd"));
         let out = present_document(

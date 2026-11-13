@@ -319,10 +319,17 @@ const SWEEP: &[(&str, &str, Outcome)] = &[
     ("attr.message", "\"'.n'\"", Presents),
     ("attr.warning", "\"'.n'\"", Presents),
     ("attr.error", "\"'.n'\"", Inert),
+    ("output-interleave", "false", Inert),
     ("fig.link", "\"'http://x'\"", Presents),
 ];
 
 const INERT_REASONS: &[(&str, &str)] = &[
+    (
+        "output-interleave",
+        "the fixture carries no output anchors, so the cell renders held either way; the option's \
+         effect (and its precedence over the engine default) is covered with anchors in \
+         presenter::cell_step::tests",
+    ),
     (
         "attr.error",
         "the fixture has no error output; attr.message and attr.warning share the path and present",
