@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Block annotation mockups</title>
+<style>
+:root { --ink:#212529; --muted:#6c757d; --faint:#adb5bd; --line:#dee2e6; --accent:#2780e3; --chrome:#f6f7f9;
+  --chip:#eef0f3; --chip-hover:#e2e6ea; --sel:#9ec5f0; --sel-bg:#e7f1fc; --sel-ink:#145ca8; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#fff; }
+.app { display:grid; grid-template-columns: 260px 1fr 300px; height:100vh; }
+.app.nosrc { grid-template-columns: 260px 1fr; }
+.app.nosrc .source { display:none; }
+aside { background:var(--chrome); border-right:1px solid var(--line); padding:16px; overflow:auto; font-size:14px; }
+aside h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
+aside h2:first-child { margin-top:0; }
+.opt { display:block; padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+.opt:hover { background:#eceef1; }
+.opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
+.opt b { display:block; font-weight:600; }
+.opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.radio { display:flex; gap:6px; align-items:center; padding:3px 2px; cursor:pointer; }
+.reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
+.center { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.scroller { flex:1; overflow:auto; }
+.tips { max-width:760px; margin:16px auto 0; padding:9px 14px; background:#fff8e1; border:1px solid #f3e1a6; border-radius:6px; font-size:13px; color:#5c4b00; line-height:1.5; }
+kbd { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; border-bottom-width:2px; border-radius:3px; padding:0 4px; background:#fffdf3; }
+.source { border-left:1px solid var(--line); background:var(--chrome); padding:16px; overflow:auto; }
+.source h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+.source pre { font:12.5px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; margin:0; }
+.source .hov { background:#eef0f3; }
+.source .cur { background:var(--sel-bg); }
+
+/* The document. Gutters either side of the text leave room for the
+   annotations, which are laid over the page (.overlay) rather than put in
+   the editable DOM, so they never become part of what you edit. */
+.page { position:relative; max-width:1060px; margin:0 auto; padding:44px 100px 160px; }
+.page.v-gutter, .page.v-chip, .page.v-bracket { padding-left:210px; }
+.page.v-margin { padding-right:210px; }
+.body { outline:none; font-size:17px; line-height:1.5; }
+.body > :first-child { margin-top:0; }
+.body p { margin:0 0 17px; }
+.body h1 { font-size:2rem; font-weight:600; line-height:1.2; margin:1.5rem 0 1rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+.body h2 { font-size:1.6rem; font-weight:600; line-height:1.2; margin:1.5rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; }
+.body h3 { font-size:1.35rem; font-weight:600; line-height:1.2; margin:1.25rem 0 .6rem; }
+.body h4 { font-size:1.15rem; font-weight:600; line-height:1.2; margin:1.25rem 0 .5rem; }
+.body ul, .body ol { margin:0 0 17px; padding-left:2rem; }
+.body blockquote { margin:0 0 17px; padding:0 0 0 1rem; border-left:3px solid var(--line); color:#5c636a; }
+.body blockquote p, .body .callout p { margin:0 0 .5rem; }
+.body blockquote > :last-child, .body .callout > :last-child { margin-bottom:0; }
+.body pre { background:#f8f9fa; border:1px solid var(--line); padding:.6rem .8rem; border-radius:4px; font:14px/1.5 ui-monospace, Menlo, monospace; margin:0 0 17px; white-space:pre-wrap; }
+.callout { --c:#2780e3; --cbg:#eef5fd; border-left:4px solid var(--c); background:var(--cbg); padding:.6rem 1rem; margin:0 0 17px; border-radius:4px; }
+.callout::before { content:attr(data-kind); display:block; font-weight:600; text-transform:capitalize; color:var(--c); font-size:15px; margin-bottom:.25rem; }
+.callout[data-kind="tip"] { --c:#2f8a12; --cbg:#eff9ec; }
+.callout[data-kind="warning"] { --c:#c95400; --cbg:#fff3eb; }
+.callout[data-kind="important"] { --c:#d6002f; --cbg:#ffeef1; }
+
+/* ---- annotations ---- */
+.overlay { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.ann { position:absolute; display:flex; align-items:center; gap:1px; white-space:nowrap; font:12px/16px system-ui, -apple-system, sans-serif; pointer-events:auto; }
+.ann.caret { color:#5c636a; }
+.ann.hover { color:#9aa1a8; }
+.ann.idle { color:#c3c9cf; }
+.md .ann, .md .crumbs .chip { font-family: ui-monospace, Menlo, monospace; font-size:11.5px; }
+.ann .sep, .crumbs .sep { color:#c3c9cf; padding:0 2px; }
+.chip { all:unset; display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border-radius:4px; cursor:pointer; }
+.chip svg { width:8px; height:8px; flex:none; }
+.chip:hover, .chip.open { background:var(--chip-hover); color:var(--ink); }
+
+/* Gutter label: passive text. */
+.v-gutter .ann { pointer-events:none; }
+
+/* Gutter chip: a button and a drag handle. */
+.v-chip .ann.caret .chip { background:var(--chip); }
+.v-chip .ann.caret .chip:hover, .v-chip .chip.open { background:var(--chip-hover); }
+.handle { display:inline-flex; width:16px; height:20px; align-items:center; justify-content:center; cursor:grab; border-radius:3px; color:#b5bcc3; margin-right:2px; }
+.handle:hover { background:var(--chip); color:var(--ink); }
+.handle svg { width:8px; height:14px; }
+body.dragging, body.dragging * { cursor:grabbing !important; }
+
+/* Right margin: text until hovered; the chevron shows on hover. */
+.v-margin .chip svg { visibility:hidden; }
+.v-margin .chip:hover svg, .v-margin .chip.open svg { visibility:visible; }
+
+/* Outline + tab. */
+.box { position:absolute; border:1px solid; border-radius:4px; pointer-events:none; }
+.box.caret { border-color:var(--sel); }
+.box.hover { border-color:#ced4da; }
+.box.idle { border-color:#eceef1; }
+.v-tab .ann { padding:0 2px; border:1px solid; border-bottom:0; border-radius:4px 4px 0 0; background:#fff; }
+.v-tab .ann.caret { border-color:var(--sel); background:var(--sel-bg); color:var(--sel-ink); }
+.v-tab .ann.hover { border-color:#ced4da; background:#f8f9fa; }
+.v-tab .ann.idle { border-color:#eceef1; }
+.v-tab .chip { padding:1px 4px; }
+.v-tab .chip:hover, .v-tab .chip.open { background:none; text-decoration:underline; color:inherit; }
+
+/* Bracket. */
+.brk { position:absolute; width:6px; border:2px solid; border-right:0; border-radius:3px 0 0 3px; pointer-events:none; }
+.brk.caret { border-color:#8fa3b8; }
+.brk.hover { border-color:#d3d8dd; }
+.brk.idle { border-color:#eceef1; }
+.v-bracket .chip { padding:1px 4px; }
+
+/* Breadcrumb bar under the document. */
+.crumbs { display:none; border-top:1px solid var(--line); background:var(--chrome); padding:5px 12px; font:12.5px/18px system-ui, sans-serif; align-items:center; min-height:34px; color:#5c636a; }
+.app.v-crumbs-on .crumbs { display:flex; }
+.crumbs .none { color:var(--faint); padding:0 6px; }
+
+/* Highlight of the block a menu or drag acts on; drop position. */
+.hl { position:absolute; border:2px solid var(--sel); border-radius:5px; pointer-events:none; }
+.drop { position:absolute; height:2px; background:var(--accent); border-radius:1px; pointer-events:none; }
+
+/* Block menu. */
+.menu { position:fixed; z-index:10; width:230px; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,.12); padding:5px; font-size:13.5px; }
+.menu .grp { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:7px 8px 3px; }
+.menu .item { padding:5px 8px 5px 26px; border-radius:5px; cursor:pointer; display:flex; justify-content:space-between; position:relative; }
+.menu .item.on::before { content:"✓"; position:absolute; left:9px; color:var(--sel-ink); }
+.menu .item small { color:var(--muted); font-family:ui-monospace, Menlo, monospace; }
+.menu .item.sel { background:var(--sel-bg); }
+.menu .item.off { color:var(--faint); cursor:default; }
+.menu hr { border:0; border-top:1px solid var(--line); margin:4px 0; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside id="side"></aside>
+  <div class="center">
+    <div class="scroller" id="scroller">
+      <div class="tips" id="tips"></div>
+      <div class="page" id="page">
+        <div class="body" id="body" contenteditable="true" spellcheck="false"></div>
+        <div class="overlay" id="overlay"></div>
+      </div>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+  </div>
+  <div class="source"><h2>Source the editor would write</h2><pre id="source"></pre></div>
+</div>
+<div class="menu" id="menu" hidden></div>
+<script>
+const VARIANTS = {
+  gutter: { name: 'Gutter label', desc: 'Quiet text in the left margin, level with the block’s first line. It only says what the block is.',
+    tips: 'Hover a block or put the caret in it. The label is passive; <kbd>⌘/</kbd> still opens the block menu.' },
+  chip: { name: 'Gutter chip + handle', desc: 'A button in the left margin, with a drag handle. Click it to turn the block into another type, or move it.',
+    tips: 'Click the chip for the block menu. Drag <b>⠿</b> to move the block among its siblings (within a callout, it stays in the callout).' },
+  margin: { name: 'Right-margin label', desc: 'The same button in the right margin, away from where each line starts. Text until you hover it.',
+    tips: 'Hover a block or put the caret in it, then click its label in the right margin.' },
+  tab: { name: 'Outline + tab', desc: 'Outlines the block and hangs its type on a tab at its top-left corner, so you also see where it starts and ends.',
+    tips: 'Try <b>Nesting: all levels</b> with the caret in the callout or the quote: each level gets an outline.' },
+  bracket: { name: 'Bracket', desc: 'A thin bracket down the left edge shows the block’s extent; nested blocks get nested brackets, like code-folding guides.',
+    tips: 'Try <b>Nesting: all levels</b> in the callout; the label sits left of the brackets.' },
+  crumbs: { name: 'Breadcrumb bar', desc: 'Nothing on the page: a bar under the document shows the blocks the caret is in, outermost first.',
+    tips: 'Put the caret anywhere. Each crumb opens that block’s menu; hovering one outlines its block.' },
+};
+const LABELS = { name: 'Name (Heading 2)', short: 'Short (H2)', md: 'Markdown (##)' };
+const SHOWS = { focus: 'Hover and caret', caret: 'Caret only', always: 'Always' };
+const NESTS = { inner: 'Innermost block', all: 'All levels' };
+const GENERAL = ' <kbd>⌘/</kbd> or <kbd>Ctrl /</kbd> opens the menu for the caret’s block (<kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> <kbd>Esc</kbd>). <kbd>⌥↑</kbd><kbd>⌥↓</kbd> move it.';
+
+const FIXTURE = `
+<h1>Palmer penguins</h1>
+<p>Three species of penguin were measured over three seasons on islands near Palmer Station, Antarctica.</p>
+<h2>Data</h2>
+<p>Each row is one penguin: its species, island, bill and flipper measurements, body mass and sex.</p>
+<pre data-lang="python">import pandas as pd
+penguins = pd.read_csv("penguins.csv")
+penguins.head()</pre>
+<h3>Species</h3>
+<ul><li>Adélie</li><li>Chinstrap</li><li>Gentoo</li></ul>
+<div class="callout" data-kind="note"><p>Rows with missing measurements were dropped before plotting.</p><p>The appendix lists them.</p></div>
+<h2>Findings</h2>
+<p>Gentoo penguins are the heaviest of the three, and their flippers are the longest.</p>
+<blockquote><p>A drop-in replacement for the iris dataset, with more character.</p></blockquote>
+<h3>Next steps</h3>
+<ol><li>Fit a model of body mass on flipper length.</li><li>Check it for each species.</li></ol>
+<h4>Caveats</h4>
+<p>Three seasons is a short window.</p>`.replace(/>\s+</g, '><').trim();
+
+const SEL = 'p,h1,h2,h3,h4,h5,h6,ul,ol,blockquote,.callout,pre';
+const CALLOUTS = ['note', 'tip', 'warning', 'important'];
+const LANGS = { python: 'Python', r: 'R', julia: 'Julia' };
+const CHEV = '<svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
+const GRIP = '<svg viewBox="0 0 8 14"><g fill="currentColor"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/></g></svg>';
+
+const $ = (id) => document.getElementById(id);
+const app = $('app'), page = $('page'), body = $('body'), overlay = $('overlay'), crumbs = $('crumbs'), menuEl = $('menu');
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+document.execCommand('defaultParagraphSeparator', false, 'p');
+
+// ---- state --------------------------------------------------------------
+const params = new URLSearchParams(location.hash.slice(1));
+const pick = (k, set, d) => (set[params.get(k)] ? params.get(k) : d);
+const state = {
+  v: pick('v', VARIANTS, 'chip'), label: pick('label', LABELS, 'name'),
+  show: pick('show', SHOWS, 'focus'), nest: pick('nest', NESTS, 'inner'), src: params.get('src') !== '0',
+};
+let mouse = null, menu = null, drag = null, crumbHover = null;
+
+function saveHash() {
+  location.replace('#' + new URLSearchParams({ v: state.v, label: state.label, show: state.show, nest: state.nest, src: state.src ? '1' : '0' }));
+}
+
+function renderSide() {
+  const side = $('side');
+  side.innerHTML = '<h2>Annotation</h2>';
+  for (const [k, o] of Object.entries(VARIANTS)) {
+    const d = document.createElement('div');
+    d.className = 'opt' + (k === state.v ? ' on' : '');
+    d.innerHTML = `<b>${o.name}</b><span>${o.desc}</span>`;
+    d.onclick = () => { state.v = k; apply(); };
+    side.append(d);
+  }
+  const radios = (title, key, set) => {
+    const h = document.createElement('h2'); h.textContent = title; side.append(h);
+    for (const [k, name] of Object.entries(set)) {
+      const l = document.createElement('label'); l.className = 'radio';
+      l.innerHTML = `<input type="radio" name="${key}" ${state[key] === k ? 'checked' : ''}> ${name}`;
+      l.querySelector('input').onchange = () => { state[key] = k; apply(); };
+      side.append(l);
+    }
+  };
+  radios('Label', 'label', LABELS);
+  radios('Show on', 'show', SHOWS);
+  radios('Nesting', 'nest', NESTS);
+  const h = document.createElement('h2'); h.textContent = 'Panels'; side.append(h);
+  const l = document.createElement('label'); l.className = 'radio';
+  l.innerHTML = `<input type="checkbox" ${state.src ? 'checked' : ''}> Show source`;
+  l.querySelector('input').onchange = (e) => { state.src = e.target.checked; apply(); };
+  side.append(l);
+  const r = document.createElement('button'); r.className = 'reset'; r.textContent = 'Reset document';
+  r.onclick = () => { closeMenu(); body.innerHTML = FIXTURE; update(); };
+  side.append(r);
+}
+
+function apply() {
+  saveHash(); closeMenu(); renderSide();
+  $('tips').innerHTML = VARIANTS[state.v].tips + GENERAL;
+  app.classList.toggle('nosrc', !state.src);
+  app.classList.toggle('v-crumbs-on', state.v === 'crumbs');
+  app.classList.toggle('md', state.label === 'md');
+  page.className = 'page v-' + state.v;
+  for (const e of live.values()) e.remove();
+  live.clear();
+  schedule();
+}
+
+// ---- blocks -------------------------------------------------------------
+function kind(b) {
+  const t = b.tagName;
+  if (/^H[1-6]$/.test(t)) return 'h' + t[1];
+  if (t === 'P') return 'p';
+  if (t === 'UL') return 'ul';
+  if (t === 'OL') return 'ol';
+  if (t === 'BLOCKQUOTE') return 'quote';
+  if (t === 'PRE') return 'code';
+  if (b.classList.contains('callout')) return 'callout';
+  return 'p';
+}
+function label(b, mode = state.label) {
+  const k = kind(b);
+  if (/^h\d$/.test(k)) return { name: 'Heading ' + k[1], short: 'H' + k[1], md: '#'.repeat(+k[1]) }[mode];
+  const ck = b.dataset.kind || 'note', l = b.dataset.lang || 'python';
+  return {
+    p: { name: 'Paragraph', short: 'P', md: '¶' },
+    ul: { name: 'Bullet list', short: 'Bullets', md: '-' },
+    ol: { name: 'Numbered list', short: 'Numbered', md: '1.' },
+    quote: { name: 'Quote', short: 'Quote', md: '>' },
+    callout: { name: `Callout (${ck})`, short: cap(ck), md: '::: ' + ck },
+    code: { name: `Code (${LANGS[l] || l})`, short: LANGS[l] || l, md: '```{' + l + '}' },
+  }[k][mode];
+}
+const ids = new WeakMap(), byId = new Map(); let nextId = 1;
+function id(b) { if (!ids.has(b)) { ids.set(b, nextId); byId.set(nextId, b); nextId++; } return ids.get(b); }
+function depth(b) { let d = 0; for (let e = b.parentElement; e && e !== body; e = e.parentElement) if (e.matches(SEL)) d++; return d; }
+const blocks = () => [...body.querySelectorAll(SEL)].filter((b) => !b.parentElement.closest('li'));
+
+/** The blocks containing a node, outermost first. */
+function chainOf(n) {
+  if (n === body) n = body.childNodes[Math.min(getSelection().anchorOffset, body.childNodes.length - 1)];
+  const out = [];
+  for (let e = n && (n.nodeType === 1 ? n : n.parentElement); e && e !== body; e = e.parentElement) if (e.matches(SEL)) out.unshift(e);
+  return out;
+}
+function caretChain() {
+  const s = getSelection();
+  if (document.activeElement !== body || !s.rangeCount || !body.contains(s.anchorNode)) return [];
+  return chainOf(s.anchorNode);
+}
+/** The blocks under the pointer's height (anywhere across the page, gutters included), outermost first. */
+function hoverChain() {
+  if (!mouse) return [];
+  const pr = page.getBoundingClientRect();
+  if (mouse.x < pr.left || mouse.x > pr.right || mouse.y < pr.top || mouse.y > pr.bottom) return [];
+  const dist = (b) => { const r = b.getBoundingClientRect(); return mouse.y < r.top ? r.top - mouse.y : mouse.y > r.bottom ? mouse.y - r.bottom : 0; };
+  const out = [];
+  let level = [...body.children].filter((c) => c.matches(SEL));
+  while (level.length) {
+    const best = level.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+    if (dist(best) > 6) break; // half of most gaps between blocks
+    out.push(best);
+    level = [...best.children].filter((c) => c.matches(SEL));
+  }
+  return out;
+}
+/** The first line of a block's text, for lining a label up with it. */
+function firstLine(b) {
+  const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+  for (let n; (n = w.nextNode());) {
+    if (!n.textContent.trim()) continue;
+    const r = document.createRange(); r.selectNodeContents(n);
+    const x = [...r.getClientRects()].find((x) => x.height);
+    if (x) return { top: x.top, height: x.height };
+  }
+  let e = b;
+  while (e.firstElementChild && e.firstElementChild.tagName !== 'BR') e = e.firstElementChild;
+  const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
+  return { top: r.top + parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth), height: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 };
+}
+
+// ---- rendering ------------------------------------------------------------
+const live = new Map(); let seen = new Set();
+function put(key, cls) {
+  let e = live.get(key);
+  if (!e) { e = document.createElement('div'); live.set(key, e); overlay.append(e); }
+  e.className = cls; seen.add(key); return e;
+}
+function setHTML(e, html) { if (e._html !== html) { e.innerHTML = html; e._html = html; } }
+function place(e, r, pad = 0) {
+  Object.assign(e.style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + 2 * pad + 'px', height: r.height + 2 * pad + 'px' });
+}
+
+let raf = 0;
+function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
+
+function render() {
+  const pr = page.getBoundingClientRect(), br = body.getBoundingClientRect();
+  const rel = (r) => ({ left: r.left - pr.left, top: r.top - pr.top, width: r.width, height: r.height, bottom: r.bottom - pr.top, right: r.right - pr.left });
+  const L = br.left - pr.left, R = br.right - pr.left;
+  const car = caretChain(), hov = drag || menu ? [] : hoverChain();
+  seen = new Set();
+
+  // Which blocks are annotated, and how strongly.
+  const vis = new Map();
+  const nest = (c) => (state.nest === 'inner' ? c.slice(-1) : c);
+  if (state.show === 'always') blocks().forEach((b) => vis.set(b, 'idle'));
+  if (state.show !== 'caret') nest(hov).forEach((b) => vis.set(b, 'hover'));
+  nest(car).forEach((b) => vis.set(b, 'caret'));
+  if (menu) vis.set(menu.target, 'caret');
+  if (drag) vis.set(drag.el, 'caret');
+
+  if (state.v === 'crumbs') {
+    const chain = menu && !car.includes(menu.target) ? chainOf(menu.target) : car;
+    const html = chain.length
+      ? chain.map((b) => `<button class="chip${menu && menu.target === b ? ' open' : ''}" data-menu="${id(b)}">${esc(label(b))}${CHEV}</button>`).join('<span class="sep">›</span>')
+      : '<span class="none">Put the caret in a block</span>';
+    setHTML(crumbs, html);
+  } else {
+    // Group the annotated blocks whose first lines coincide (a callout and
+    // its first paragraph) into one label, outermost first.
+    const items = [...vis].map(([b, st]) => {
+      const f = firstLine(b);
+      return { b, st, r: rel(b.getBoundingClientRect()), c: f.top + f.height / 2 - pr.top, d: depth(b) };
+    }).sort((a, b) => a.c - b.c || a.d - b.d);
+    const groups = [];
+    for (const it of items) {
+      const g = groups[groups.length - 1];
+      if (g && Math.abs(g.c - it.c) < 5) g.items.push(it); else groups.push({ c: it.c, items: [it] });
+    }
+    const rank = { idle: 0, hover: 1, caret: 2 };
+    const interactive = state.v !== 'gutter';
+    for (const g of groups) {
+      g.items.sort((a, b) => a.d - b.d);
+      const st = g.items.reduce((s, it) => (rank[it.st] > rank[s] ? it.st : s), 'idle');
+      const e = put('g' + g.items.map((it) => id(it.b)).join('-'), 'ann ' + st);
+      const parts = g.items.map((it) => (interactive
+        ? `<button class="chip${menu && menu.target === it.b ? ' open' : ''}" data-menu="${id(it.b)}">${esc(label(it.b))}${state.v === 'chip' || state.v === 'margin' ? CHEV : ''}</button>`
+        : `<span>${esc(label(it.b))}</span>`));
+      const handle = state.v === 'chip' ? `<span class="handle" data-drag="${id(g.items[0].b)}" title="Drag to move">${GRIP}</span>` : '';
+      setHTML(e, handle + parts.join('<span class="sep">›</span>'));
+      const outer = g.items[0];
+      if (state.v === 'gutter' || state.v === 'chip') Object.assign(e.style, { left: L - 10 + 'px', top: g.c + 'px', transform: 'translate(-100%, -50%)' });
+      if (state.v === 'margin') Object.assign(e.style, { left: R + 10 + 'px', top: g.c + 'px', transform: 'translate(0, -50%)' });
+      if (state.v === 'tab') Object.assign(e.style, { left: outer.r.left - 6 + 'px', top: outer.r.top - 5 + 'px', transform: 'translate(0, -100%)' });
+      if (state.v === 'bracket') Object.assign(e.style, { left: L - 34 + 'px', top: g.c + 'px', transform: 'translate(-100%, -50%)' });
+    }
+    for (const it of items) {
+      if (state.v === 'tab') place(put('o' + id(it.b), 'box ' + it.st), it.r, 5);
+      if (state.v === 'bracket') {
+        const e = put('k' + id(it.b), 'brk ' + it.st);
+        place(e, { left: L - 26 + Math.min(it.d, 2) * 8, top: it.r.top, width: 6, height: it.r.height });
+      }
+    }
+  }
+
+  // The block a menu, drag or hovered crumb acts on.
+  const target = (drag && drag.el) || (menu && menu.target) || crumbHover;
+  if (target && body.contains(target) && !(state.v === 'tab' && !crumbHover)) place(put('hl', 'hl'), rel(target.getBoundingClientRect()), 5);
+  if (drag && drag.at != null) {
+    const s = drag.sibs, last = s[s.length - 1].getBoundingClientRect();
+    const y = drag.at < s.length
+      ? (drag.at ? (s[drag.at - 1].getBoundingClientRect().bottom + s[drag.at].getBoundingClientRect().top) / 2 : s[0].getBoundingClientRect().top - 4)
+      : last.bottom + 6;
+    const pb = drag.parent.getBoundingClientRect();
+    place(put('drop', 'drop'), { left: pb.left - pr.left, top: y - pr.top - 1, width: pb.width, height: 2 });
+  }
+
+  for (const [k, e] of live) if (!seen.has(k)) { e.remove(); live.delete(k); }
+  renderSource(car[0], hov[0]);
+}
+
+// ---- source ---------------------------------------------------------------
+function text(e) { return e.innerText.replace(/\n+$/, '').trim(); }
+function ser(b) {
+  const k = kind(b);
+  if (/^h\d$/.test(k)) return '#'.repeat(+k[1]) + ' ' + text(b);
+  if (k === 'ul') return [...b.children].map((li) => '- ' + text(li)).join('\n');
+  if (k === 'ol') return [...b.children].map((li, i) => `${i + 1}. ` + text(li)).join('\n');
+  if (k === 'quote') return [...b.children].map(ser).join('\n\n').split('\n').map((l) => (l ? '> ' + l : '>')).join('\n');
+  if (k === 'callout') return `::: {.callout-${b.dataset.kind || 'note'}}\n` + [...b.children].map(ser).join('\n\n') + '\n:::';
+  if (k === 'code') return '```{' + (b.dataset.lang || 'python') + '}\n' + b.innerText.replace(/\n+$/, '') + '\n```';
+  return text(b);
+}
+function renderSource(cur, hov) {
+  const html = [...body.children].map((b) => `<span class="${b === cur ? 'cur' : b === hov ? 'hov' : ''}">${esc(ser(b))}</span>`).join('\n\n');
+  setHTML($('source'), html);
+}
+
+// ---- block operations -------------------------------------------------------
+const mk = (t) => {
+  if (t === 'quote') return document.createElement('blockquote');
+  if (t === 'callout') { const d = document.createElement('div'); d.className = 'callout'; return d; }
+  return document.createElement(t);
+};
+/** Turn a block into another type; returns the block to put the caret in if it lost it. */
+function convert(b, target) {
+  const k = kind(b), isList = k === 'ul' || k === 'ol', isWrap = k === 'quote' || k === 'callout';
+  if (target === 'unwrap') { const kids = [...b.children]; b.replaceWith(...kids); return kids[0]; }
+  if (target === 'unlist') {
+    const ps = [...b.children].map((li) => { const p = mk('p'); p.append(...li.childNodes); if (!p.firstChild) p.innerHTML = '<br>'; return p; });
+    b.replaceWith(...ps); return ps[0];
+  }
+  if (target.startsWith('lang:')) { b.dataset.lang = target.slice(5); return b; }
+  if (target.startsWith('callout:') && k === 'callout') { b.dataset.kind = target.slice(8); return b; }
+  if (/^(p|h\d)$/.test(target)) { const n = mk(target); n.append(...b.childNodes); b.replaceWith(n); return n; }
+  if (target === 'ul' || target === 'ol') {
+    const n = mk(target);
+    if (isList) n.append(...b.childNodes); else { const li = mk('li'); li.append(...b.childNodes); n.append(li); }
+    b.replaceWith(n); return n;
+  }
+  const t = target.startsWith('callout') ? 'callout' : 'quote', n = mk(t);
+  if (t === 'callout') n.dataset.kind = target.split(':')[1] || 'note';
+  if (isWrap) { n.append(...b.childNodes); b.replaceWith(n); } else { b.before(n); n.append(b); }
+  return n;
+}
+function move(b, dir) {
+  const s = dir < 0 ? b.previousElementSibling : b.nextElementSibling;
+  if (!s) return b;
+  if (dir < 0) s.before(b); else s.after(b);
+  return b;
+}
+function del(b) {
+  const next = b.nextElementSibling || b.previousElementSibling, parent = b.parentElement;
+  b.remove();
+  if (!parent.children.length) { parent.innerHTML = '<p><br></p>'; return parent.firstChild; }
+  return next;
+}
+/** Run an operation, keeping the caret where it was (or putting it in `fn`'s result). */
+function withCaret(fn) {
+  const s = getSelection(), had = document.activeElement === body && s.rangeCount > 0;
+  const a = had ? [s.anchorNode, s.anchorOffset, s.focusNode, s.focusOffset] : null;
+  const fallback = fn();
+  if (had) {
+    body.focus({ preventScroll: true });
+    if (body.contains(a[0]) && body.contains(a[2])) s.setBaseAndExtent(...a);
+    else if (fallback && body.contains(fallback)) { const r = document.createRange(); r.selectNodeContents(fallback); r.collapse(true); s.removeAllRanges(); s.addRange(r); }
+  }
+  update();
+}
+
+// ---- block menu ------------------------------------------------------------
+function menuItems(b) {
+  const k = kind(b), items = [];
+  const T = (labelText, hint, target, on) => ({ label: labelText, hint, on, run: () => convert(b, target) });
+  if (/^(p|h\d)$/.test(k)) {
+    items.push({ grp: 'Turn into' }, T('Paragraph', '', 'p', k === 'p'),
+      ...[1, 2, 3, 4].map((n) => T('Heading ' + n, '#'.repeat(n), 'h' + n, k === 'h' + n)),
+      T('Bullet list', '-', 'ul'), T('Numbered list', '1.', 'ol'), T('Quote', '>', 'quote'), T('Callout', ':::', 'callout'));
+  } else if (k === 'ul' || k === 'ol') {
+    items.push({ grp: 'Turn into' }, T('Bullet list', '-', 'ul', k === 'ul'), T('Numbered list', '1.', 'ol', k === 'ol'), T('Paragraphs', '', 'unlist'),
+      { grp: 'Wrap in' }, T('Quote', '>', 'quote'), T('Callout', ':::', 'callout'));
+  } else if (k === 'quote') {
+    items.push({ grp: 'Turn into' }, T('Quote', '>', 'quote', true), T('Callout', ':::', 'callout'), T('Unwrap', '', 'unwrap'));
+  } else if (k === 'callout') {
+    items.push({ grp: 'Callout' }, ...CALLOUTS.map((c) => T(cap(c), '', 'callout:' + c, b.dataset.kind === c)),
+      { grp: 'Turn into' }, T('Quote', '>', 'quote'), T('Unwrap', '', 'unwrap'));
+  } else if (k === 'code') {
+    items.push({ grp: 'Language' }, ...Object.entries(LANGS).map(([l, n]) => T(n, '{' + l + '}', 'lang:' + l, (b.dataset.lang || 'python') === l)));
+  }
+  items.push({ sep: true },
+    { label: 'Move up', hint: '⌥↑', off: !b.previousElementSibling, run: () => move(b, -1) },
+    { label: 'Move down', hint: '⌥↓', off: !b.nextElementSibling, run: () => move(b, 1) },
+    { label: 'Duplicate', hint: '', run: () => { b.after(b.cloneNode(true)); } },
+    { label: 'Delete', hint: '', run: () => del(b) });
+  return items;
+}
+function openMenu(b) {
+  const items = menuItems(b), sel = items.findIndex((it) => it.on);
+  menu = { target: b, items, i: sel >= 0 ? sel : items.findIndex((it) => it.run && !it.off) };
+  render();
+  drawMenu();
+  const anchor = document.querySelector(`[data-menu="${id(b)}"]`);
+  const r = anchor ? anchor.getBoundingClientRect() : (() => { const f = firstLine(b), br = b.getBoundingClientRect(); return { left: br.left, top: f.top, bottom: f.top + f.height }; })();
+  menuEl.hidden = false;
+  const h = menuEl.offsetHeight, w = menuEl.offsetWidth;
+  const below = r.bottom + 4 + h <= innerHeight;
+  menuEl.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  menuEl.style.top = (below ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + 'px';
+}
+function drawMenu() {
+  menuEl.innerHTML = `<div class="grp" style="color:var(--ink)">${esc(label(menu.target, 'name'))}</div>`;
+  menu.items.forEach((it, i) => {
+    if (it.sep) { menuEl.append(document.createElement('hr')); return; }
+    if (it.grp) { const g = document.createElement('div'); g.className = 'grp'; g.textContent = it.grp; menuEl.append(g); return; }
+    const d = document.createElement('div');
+    d.className = 'item' + (it.on ? ' on' : '') + (it.off ? ' off' : '') + (i === menu.i ? ' sel' : '');
+    d.innerHTML = `<span>${esc(it.label)}</span><small>${esc(it.hint || '')}</small>`;
+    d.onmouseenter = () => { if (!it.off) { menu.i = i; drawMenu(); } };
+    d.onmousedown = (ev) => { ev.preventDefault(); if (!it.off) choose(it); };
+    menuEl.append(d);
+  });
+}
+function choose(it) { closeMenu(); withCaret(it.run); }
+function closeMenu() { if (!menu) return; menu = null; menuEl.hidden = true; schedule(); }
+function stepMenu(dir) {
+  const n = menu.items.length;
+  for (let j = 1; j <= n; j++) {
+    const i = (menu.i + dir * j + n * n) % n, it = menu.items[i];
+    if (it.run && !it.off) { menu.i = i; break; }
+  }
+  drawMenu();
+}
+
+// ---- drag --------------------------------------------------------------------
+function startDrag(b) {
+  closeMenu();
+  drag = { el: b, parent: b.parentElement, sibs: [], at: null };
+  document.body.classList.add('dragging');
+  const onMove = (ev) => {
+    const sibs = [...drag.parent.children].filter((c) => c.matches(SEL));
+    let at = sibs.length;
+    for (let i = 0; i < sibs.length; i++) { const r = sibs[i].getBoundingClientRect(); if (ev.clientY < r.top + r.height / 2) { at = i; break; } }
+    drag.sibs = sibs; drag.at = at; schedule();
+  };
+  const onUp = () => {
+    removeEventListener('mousemove', onMove);
+    document.body.classList.remove('dragging');
+    const d = drag; drag = null;
+    if (d.at != null && d.sibs[d.at] !== d.el && d.sibs[d.at - 1] !== d.el) {
+      withCaret(() => { if (d.at < d.sibs.length) d.sibs[d.at].before(d.el); else d.sibs[d.sibs.length - 1].after(d.el); return d.el; });
+    } else schedule();
+  };
+  addEventListener('mousemove', onMove);
+  addEventListener('mouseup', onUp, { once: true });
+}
+
+// ---- events -------------------------------------------------------------------
+function onControlDown(ev) {
+  const h = ev.target.closest('[data-drag]'), c = ev.target.closest('[data-menu]');
+  if (!h && !c) return;
+  ev.preventDefault(); ev.stopPropagation(); // keep the caret where it is
+  if (h) return startDrag(byId.get(+h.dataset.drag));
+  const b = byId.get(+c.dataset.menu);
+  if (menu && menu.target === b) closeMenu(); else openMenu(b);
+}
+overlay.addEventListener('mousedown', onControlDown);
+crumbs.addEventListener('mousedown', onControlDown);
+crumbs.addEventListener('mouseover', (ev) => { const c = ev.target.closest('[data-menu]'); const b = c && byId.get(+c.dataset.menu); if (b !== crumbHover) { crumbHover = b; schedule(); } });
+crumbs.addEventListener('mouseleave', () => { crumbHover = null; schedule(); });
+document.addEventListener('mousedown', (ev) => { if (menu && !menuEl.contains(ev.target)) closeMenu(); });
+page.addEventListener('mousemove', (ev) => { mouse = { x: ev.clientX, y: ev.clientY }; schedule(); });
+page.addEventListener('mouseleave', () => { mouse = null; schedule(); });
+$('scroller').addEventListener('scroll', () => { closeMenu(); schedule(); });
+addEventListener('resize', () => { closeMenu(); schedule(); });
+document.addEventListener('selectionchange', schedule);
+
+document.addEventListener('keydown', (ev) => {
+  if (menu) {
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); stepMenu(1); return; }
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); stepMenu(-1); return; }
+    if (ev.key === 'Enter') { ev.preventDefault(); const it = menu.items[menu.i]; if (it && it.run) choose(it); return; }
+    if (ev.key === 'Escape') { ev.preventDefault(); closeMenu(); return; }
+    closeMenu();
+  }
+  if (document.activeElement !== body) return;
+  const chain = caretChain(), b = chain[chain.length - 1];
+  if (!b) return;
+  if ((ev.metaKey || ev.ctrlKey) && ev.key === '/') { ev.preventDefault(); openMenu(b); }
+  if (ev.altKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) { ev.preventDefault(); withCaret(() => move(b, ev.key === 'ArrowUp' ? -1 : 1)); }
+}, true);
+
+function update() {
+  // Selecting everything and deleting can leave no block.
+  if (![...body.children].some((c) => c.matches(SEL))) {
+    body.innerHTML = '<p><br></p>';
+    const r = document.createRange(); r.setStart(body.firstChild, 0); getSelection().removeAllRanges(); getSelection().addRange(r);
+  }
+  schedule();
+}
+body.addEventListener('input', update);
+
+body.innerHTML = FIXTURE;
+apply();
+</script>
+</body>
+</html>
