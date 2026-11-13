@@ -51,6 +51,7 @@ interface TitleBlockWidgetProps {
 }
 
 const CSS = `
+body { padding-top: 5px; }
 .qe-widget { position: absolute; z-index: 1; display: flex; flex-wrap: wrap; gap: 2px;
   opacity: 0; pointer-events: none; transition: opacity .12s; }
 .qe-widget.qe-shown, .qe-widget:focus-within { opacity: 1; pointer-events: auto; }
