@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test:unit": "vitest run",
     "test:wasm": "vitest run --config vitest.wasm.config.ts",
-    "test:e2e": "NODE_OPTIONS=--conditions=source playwright test",
+    "test:e2e": "NODE_OPTIONS=--conditions=source node scripts/e2e-queue.mjs",
+    "test:e2e:chromium": "npm run test:e2e -- --project=chromium",
     "share-doc": "NODE_OPTIONS=--conditions=source tsx scripts/share-doc.ts",
     "deploy:connect": "npm run build:all && tsx scripts/deploy-connect.ts"
   },

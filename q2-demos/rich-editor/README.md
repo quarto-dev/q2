@@ -179,7 +179,13 @@ editor with nothing running on their machines:
 npm run test:unit   # editing logic, in Node
 npm run test:wasm   # needs the WASM build from step 1
 npm run test:e2e    # the app in Chromium, Firefox and WebKit, on a test hub; needs the WASM build
+npm run test:e2e:chromium   # the same in Chromium only, for iterating
 ```
+
+While iterating, run Chromium only, on the specs you're changing
+(`npm run test:e2e:chromium -- e2e/body.spec.ts`). Run every browser on
+those specs before committing a finished piece of work, and the whole suite
+in every browser before merging.
 
 The e2e tests are the most valuable part of this prototype. They are the
 specification of the editing experience, written against what a person
@@ -188,10 +194,16 @@ they are meant to be complete: someone with only the specs should be able
 to build this editor again. Behaviour that no spec describes is a gap in
 the specs; add the spec with (or before) the behaviour.
 
+`npm run test:e2e` runs one suite at a time across all of the repo's
+worktrees (`scripts/e2e-queue.mjs`): a run started while another is going
+waits for it to finish. Playwright sizes its workers for a machine to
+itself, so runs in parallel each run much slower and slow tests time out.
+`npx playwright test` skips the queue.
+
 The tests start a dev server on port 5192, and use one that's already
-there. To run them in two checkouts at once, give one a port of its own
-(`E2E_PORT=5200 npm run test:e2e`), or each will be testing the other's
-app.
+there. To run them outside the queue in two checkouts at once, give one a
+port of its own (`E2E_PORT=5200 npx playwright test`), or each will be
+testing the other's app.
 
 Every spec runs in Chromium, Firefox and WebKit (`npx playwright install`
 fetches them; `--project=firefox` runs one). The engines differ most
