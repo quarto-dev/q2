@@ -53,7 +53,7 @@ quarto-preview-fs-watcher = { max-threads = 1 }
 julia-shared-transport = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = "package(quarto-preview) & binary(integration) & test(/^(staleness|eager_capture|boot)::/)"
+filter = "package(quarto-preview) & binary(integration) & test(/^(staleness|eager_capture|boot|live_reexecute)::/)"
 test-group = "quarto-preview-fs-watcher"
 
 # `q2 preview --static` end-to-end tests (bd-sl79jjiq) each spawn the
