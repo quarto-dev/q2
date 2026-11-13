@@ -2,7 +2,7 @@
 title: 'Closing the Graphviz gap in Quarto 2 (bd-ijlapt70)'
 date: 2026-11-13
 description: 'Starting notes and a high-level plan for Graphviz (dot) diagram support, built as a rendering transform in parallel to Mermaid. Not yet ratified.'
-status: draft  # starting notes copied in from outside the repo; the two decisions in "Decisions to ratify" are open
+status: draft  # preview-component prototype exists; the two decisions in "Decisions to ratify" still need team ratification
 braid:
   strand: bd-ijlapt70
   priority: P2
@@ -313,8 +313,13 @@ Out of the first cut, tracked as follow-ups, not dropped silently:
 
 ### Phase 3: preview component
 
-- [ ] `GraphvizCodeBlock.tsx` beside `MermaidCodeBlock.tsx`, with vitest tests
-      first, pinned to the same runtime version as the Rust constant.
+- [x] `GraphvizCodeBlock.tsx` beside `MermaidCodeBlock.tsx`, with vitest tests
+      first, pinned to the same runtime version as the Rust constant. **Done as
+      a prototype on 2026-11-13**, ahead of Phases 1 and 2 and before team
+      ratification, so that there is something to try in QuartoHub. See
+      [Prototype: preview component](#prototype-preview-component). The Rust
+      constant does not exist yet; the test pins `3.31.0` on the TypeScript
+      side only.
 - [ ] Add the transform to `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
 - [ ] A `pipeline.rs` test that render and preview agree on cell-option
       handling, like the Mermaid one.
@@ -440,6 +445,93 @@ Not settled:
   Mermaid in preview does not work offline today. Whether the Graphviz
   component should copy that or bundle `dist/viz.js` (no dependencies, 1.2 MB)
   is a design choice for Phase 3.
+
+## Prototype: preview component
+
+**Verified** on 2026-11-13. A working preview component, built early so the
+feature can be tried in QuartoHub. It is a prototype: the design choices below
+are open to change when the plan is ratified.
+
+What exists:
+
+- `ts-packages/preview-renderer/src/q2-preview/blocks/GraphvizCodeBlock.tsx`.
+  Draws a `CodeBlock` with class `dot`. The brace form `{dot}` is not matched.
+- `blocks/DiagramCodeBlock.tsx`. A dispatcher, now the registry's `CodeBlock`
+  entry: `dot` goes to Graphviz, everything else to `MermaidCodeBlock`. Two
+  assertions in `MermaidCodeBlock.test.tsx` changed to match.
+- `@viz-js/viz` `3.31.0` as an exact-pinned dependency of
+  `@quarto/preview-renderer`, loaded with a dynamic `import()`. The bundler
+  splits it into its own lazy chunk (`viz-*.js`), so it is served with the app
+  and needs no CDN. This differs from `MermaidCodeBlock`, which imports from
+  jsDelivr.
+- `graph-layout` and `fig-align` are read from the block's attributes. An
+  unknown engine name falls back to `dot`.
+- A Graphviz syntax error shows an error box with the message and the source,
+  like the mermaid one.
+
+Design choices to review:
+
+- **SVG sanitising.** Graphviz copies `URL`/`href` attributes and HTML-like
+  labels from the source into its SVG, and hub projects are shared between
+  authors. `sanitizeGraphvizSvg` parses the SVG (it is never assigned to
+  `innerHTML`), removes `<script>` and `<foreignObject>`, removes `on*`
+  attributes, and keeps links only when they are `http(s):`, `mailto:` or a
+  `#fragment`. This is a minimal hand-written filter. The team should decide
+  whether it is enough or whether to use the sanitiser mermaid relies on.
+- **Bundled, not CDN.** See above. It adds a 1.2 MB lazy chunk to the hub
+  client and the sandboxed preview.
+- **Dispatcher.** The alternative was to chain the components. A dispatcher
+  keeps each renderer unaware of the other.
+- **Sizing.** The SVG gets `max-width: 100%` and `height: auto`, so it keeps
+  its natural size and shrinks to the column. There is no `fig-width` or
+  `fig-height` handling.
+
+Not done in the prototype:
+
+- Cell options. `//| fig-cap`, `label` and `fig-alt` are not handled by the
+  component, and whether `PreEngineSugaringStage` parses `//|` lines for a
+  `dot` block in preview was **not checked**.
+- `q2 render`. There is no Rust transform, so rendered HTML still shows the
+  source as a code block.
+- `q2 preview` and slides were not opened. Only the hub was.
+- Firefox and Safari.
+- hub-client changelog entry. No file under `hub-client/` changed.
+
+End-to-end evidence (hub, Aside browser, Chromium-based):
+
+- Stack: `cargo build --bin hub`, `cd hub-client && npm run build:local-prod`,
+  `npm run local-prod`, then `http://127.0.0.1:8080`.
+- A new project from the Default template, with `index.qmd` holding four
+  blocks: a plain `dot` digraph, a `{.dot graph-layout="neato"}` graph, a
+  `dot` block with a syntax error, and a `mermaid` flowchart.
+- Observed in the preview iframe's DOM (inspected, not only inferred from the
+  absence of errors):
+  - two `[data-graphviz-diagram] svg` elements: 335 by 113 px with 3 nodes
+    and 3 edges, and 205 by 176 px with 4 nodes and 5 edges;
+  - one `[data-graphviz-error]` box reading "Graphviz error: syntax error in
+    line 1 near '}'" with the source under it;
+  - one `[data-mermaid-diagram] svg`.
+- The check was on the DOM. A screenshot was taken but not kept, so the visual
+  result was judged by Andrew in the browser ("working quite well").
+
+Build and test results:
+
+| Step | Result |
+|---|---|
+| `npm test -w ts-packages/preview-renderer` | 679 passed, 40 skipped |
+| `npm run build -w ts-packages/preview-renderer` | passed |
+| `hub-client`: `npx tsc -b` | passed |
+| `hub-client`: `vite build` | passed, `viz-*.js` chunk emitted |
+| `check-sw-precache` | ok |
+| `hub-client`: `npm run test` | 1801 passed |
+| `hub-client`: `npm run test:integration` | 241 passed |
+| `hub-client`: `npm run test:wasm` | 452 passed, 28 skipped |
+
+`npm run build:all` was not run as one command. Its steps were run
+separately, and the `vite build` step wrote to a temporary directory, so the
+running local hub kept its local-prod build. The wasm and sandboxed-preview
+steps had already run as part of `build:local-prod`. `cargo xtask verify` was
+not run; no Rust source changed.
 
 ## Decisions to ratify
 
