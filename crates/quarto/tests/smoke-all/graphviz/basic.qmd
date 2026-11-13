@@ -1,0 +1,39 @@
+---
+title: "Graphviz Basic"
+# bd-ijlapt70: a plain ```dot fenced block renders as
+# <pre class="graphviz"> with the escaped diagram source, plus a single
+# after-body <script src> + init pair that lays the diagram out in the
+# browser. The `->` arrow doubles as the HTML-escaping probe (it must
+# appear as -&gt;).
+#
+# The runtime is BUNDLED, so the script src must be a relative path and
+# no absolute URL may appear anywhere in the output. The negative
+# pattern is what keeps a rendered page working offline.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - ["pre.graphviz"]
+        - ["pre.dot", "pre.sourceCode.dot", "pre.graphviz + button"]
+      ensureFileRegexMatches:
+        - [
+            "<pre class=\"graphviz\">",
+            "digraph G",
+            "a -&gt; b",
+            "<script src=\"[^\"]*graphviz/viz-global\\.js\" charset=\"utf-8\"></script>",
+            "Viz\\.instance\\(\\)",
+            "querySelectorAll\\('pre\\.graphviz'\\)",
+          ]
+        - ["a -> b", "cdn\\.jsdelivr\\.net", "https?://"]
+---
+
+Before the diagram.
+
+```dot
+digraph G {
+  a -> b
+}
+```
+
+After the diagram.

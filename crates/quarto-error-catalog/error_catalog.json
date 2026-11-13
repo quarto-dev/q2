@@ -1563,7 +1563,7 @@
   "Q-2-47": {
     "subsystem": "markdown",
     "title": "Cell option ignored on a diagram cell",
-    "message_template": "A diagram cell has no execution engine to pass unrecognized options to, so this option has no effect. Diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and `fig-align`.",
+    "message_template": "A diagram cell has no execution engine to pass unrecognized options to, so this option has no effect. Diagram cells accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and `fig-align`; Graphviz cells also accept `graph-layout`.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-47",
     "since_version": "99.9.9"
   },
@@ -1668,7 +1668,7 @@
   "Q-2-58": {
     "subsystem": "markdown",
     "title": "Quarto 1 diagram cell is not run",
-    "message_template": "Quarto 2 does not run `{mermaid}` or `{dot}` cells, so the block renders as a code block, not a diagram. For Mermaid, drop the braces and write a plain `mermaid` fence.",
+    "message_template": "Quarto 2 does not run `{mermaid}` or `{dot}` cells, so the block renders as a code block, not a diagram. Drop the braces and write a plain `mermaid` or `dot` fence.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-58",
     "since_version": "99.9.9"
   },

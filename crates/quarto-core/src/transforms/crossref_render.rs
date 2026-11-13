@@ -573,7 +573,9 @@ fn harvest_figure_attrs(blocks: &mut Blocks) -> Option<HarvestedFigureAttrs> {
             // A mermaid diagram carries its cell's `fig-align` as a code
             // block attribute (`codeblock_shorthand`, bd-2pmjmjmj) — the
             // diagram's stand-in for an image's own `fig-align`.
-            Block::CodeBlock(cb) if cb.attr.1.iter().any(|c| c == "mermaid") => {
+            // A Graphviz (`dot`) diagram carries it the same way
+            // (bd-ijlapt70).
+            Block::CodeBlock(cb) if cb.attr.1.iter().any(|c| c == "mermaid" || c == "dot") => {
                 return Some(HarvestedFigureAttrs {
                     align: cb.attr.2.remove("fig-align"),
                     style: None,
