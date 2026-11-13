@@ -188,6 +188,15 @@ Filed bd-hf93wq9r. Fix scope:
     `io.type`. It relies on libc `popen`/`pclose` being thread-safe without
     `fflush`. Apple's source supports that: neither walks the FILE list (see
     Prior art and mechanism), and Q2's 3/3 `NO_FFLUSH` runs agree.
+- **Chosen (c), after triage:** native Lua is built from the repo's own
+  lua-src fork, `crates/lua-src-wasm` (applied via `[patch.crates-io]` at
+  `Cargo.toml:317`). `liolib.c` only defines `l_popen`/`l_pclose` when
+  `l_popen` is undefined, so the fork's `Build` predefines them as plain
+  `popen(c,m)`/`pclose(file)` on the POSIX targets (linux, bsd, apple). That
+  gives stock `io.popen` semantics with no `fflush(NULL)`, no unsafe Rust,
+  and coverage of every Lua state. Risk: a future switch back to upstream
+  lua-src would bring the bug back silently. The regression test below
+  catches that on macOS.
 - Regression test: an integration test that runs `io.popen` from several Lua
   states on parallel threads, alongside `io.open`/`close`, under a timeout.
   On `main` this should deadlock on macOS.
