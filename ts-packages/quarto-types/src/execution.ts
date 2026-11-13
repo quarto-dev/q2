@@ -56,6 +56,16 @@ export interface ExecuteOptions {
    *  languages owned by nobody). q2 extension; Q1 does not send it. */
   ownedLanguages: string[];
 
+  /** Environment variables for the processes that run user code: the project
+   *  environment (`_environment` files, `QUARTO_PROFILE`), then the per-document
+   *  execute environment (`QUARTO_DOCUMENT_*`, `QUARTO_EXECUTE_INFO`,
+   *  `QUARTO_FIG_*`, `QUARTO_PROJECT_ROOT`) on top. Merge these into the
+   *  environment of every process that evaluates user code, and never cache them
+   *  across executes: they change from one render to the next. Do not mutate
+   *  `process.env`. May carry secrets: never log it. Absent when empty.
+   *  q2 extension; Q1 does not send it. */
+  executeEnv?: Readonly<Record<string, string>>;
+
   /** Project context */
   project: EngineProjectContext;
 }

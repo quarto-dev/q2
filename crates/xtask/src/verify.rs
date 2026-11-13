@@ -669,6 +669,18 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             None,
             "preview-runtime tests failed",
         )?;
+        // @quarto/engine-host-node: typecheck the sources and the `__type-tests__/` files
+        // (bd-x3h4zjhl). CI runs the same `npm run typecheck`; nothing else compiles them.
+        let engine_host_dir = project_root.join("ts-packages/quarto-engine-host-node");
+        if engine_host_dir.join("package.json").is_file() {
+            run_command(
+                "npm",
+                &["run", "typecheck"],
+                &engine_host_dir,
+                None,
+                "engine-host-node typecheck failed",
+            )?;
+        }
         // @quarto/pandoc-host (host core; its real-wasm tests run in hub-client, step 8).
         let pandoc_host_dir = project_root.join("ts-packages/pandoc-host");
         if pandoc_host_dir.join("package.json").is_file() {

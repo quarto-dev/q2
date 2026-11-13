@@ -3609,3 +3609,149 @@ describe("execution-record wire fields (EXR-7)", () => {
     expect("recordInfo" in result).toBe(false);
   });
 });
+
+// ===========================================================================
+// bd-x3h4zjhl — executeEnv crosses the host to each engine's execute
+// ===========================================================================
+
+describe("executeEnv (bd-x3h4zjhl)", () => {
+  type Env = Record<string, string>;
+
+  function envEngine(name: string, onExecute: (o: Record<string, unknown>) => Promise<void>) {
+    const instance: ExecutionEngineInstance = {
+      name,
+      canFreeze: false,
+      markdownForFile: async (f: string) => ({ value: f, map: () => undefined }),
+      target: async () => undefined,
+      partitionedMarkdown: async () => { throw new Error("n/a"); },
+      execute: async (options) => {
+        await onExecute(options as unknown as Record<string, unknown>);
+        return { markdown: "# ok", supporting: [], filters: [] };
+      },
+      dependencies: async () => ({ includes: {} }),
+      postprocess: async () => {},
+    };
+    const discovery: ExecutionEngineDiscovery = {
+      name,
+      defaultExt: ".qmd",
+      defaultYaml: () => [],
+      defaultContent: () => [],
+      validExtensions: () => [".qmd"],
+      claimsFile: () => false,
+      claimsLanguage: () => false,
+      canFreeze: false,
+      generatesFigures: false,
+      launch: () => instance,
+    };
+    return discovery;
+  }
+
+  function executeFrame(id: number, engine: string, executeEnv?: Env): Request {
+    return {
+      id,
+      msg: {
+        type: "execute",
+        engine,
+        options: {
+          input: "# content",
+          sourcePath: "/proj/doc.qmd",
+          format: {
+            identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" },
+            metadata: {},
+          },
+          tempDir: "/tmp",
+          cwd: "/proj",
+          libDir: "/proj/libs",
+          quiet: false,
+          handledLanguages: [],
+          ownedLanguages: [],
+          dependencies: true,
+          sourceMap: [],
+          ...(executeEnv !== undefined ? { executeEnv } : {}),
+        },
+      },
+    };
+  }
+
+  function setupFrames(names: string[]): Request[] {
+    return names.flatMap((n, i): Request[] => [
+      { id: 100 + i * 2, msg: { type: "loadEngine", enginePath: `/e/${n}.ts` } },
+      { id: 101 + i * 2, msg: { type: "launchEngine", engine: n, project: { isSingleFile: true } } },
+    ]);
+  }
+
+  it("passes executeEnv to the engine's execute", async () => {
+    // Named revert: drop the `executeEnv` spread in host.ts -> undefined -> RED.
+    let seen: unknown;
+    const d = envEngine("envEngine", async (o) => { seen = o.executeEnv; });
+    const env = { QUARTO_DOCUMENT_FILE: "doc.qmd", FROM_ENVFILE: "a b\\c" };
+    const { responses } = await runWithFrames(
+      [...setupFrames(["envEngine"]), executeFrame(1, "envEngine", env)],
+      { loadEngineModule: async () => d },
+    );
+    expect(responses.find((r) => r.id === 1)?.msg.type).toBe("executeResult");
+    expect(seen).toEqual(env);
+  });
+
+  it("leaves the key out when the request omits it", async () => {
+    let hasKey: boolean | undefined;
+    const d = envEngine("envEngine", async (o) => { hasKey = "executeEnv" in o; });
+    await runWithFrames(
+      [...setupFrames(["envEngine"]), executeFrame(1, "envEngine")],
+      { loadEngineModule: async () => d },
+    );
+    expect(hasKey).toBe(false);
+  });
+
+  it("gives two executes queued on one engine each their own values", async () => {
+    const seen: unknown[] = [];
+    const d = envEngine("envEngine", async (o) => { seen.push(o.executeEnv); });
+    await runWithFrames(
+      [
+        ...setupFrames(["envEngine"]),
+        executeFrame(1, "envEngine", { QUARTO_DOCUMENT_FILE: "one.qmd" }),
+        executeFrame(2, "envEngine", { QUARTO_DOCUMENT_FILE: "two.qmd" }),
+      ],
+      { loadEngineModule: async () => d },
+    );
+    expect(seen).toEqual([
+      { QUARTO_DOCUMENT_FILE: "one.qmd" },
+      { QUARTO_DOCUMENT_FILE: "two.qmd" },
+    ]);
+  });
+
+  it("gives executes running concurrently on different engines each their own values", async () => {
+    // Both executes wait until both have started, so they overlap.
+    const bothStarted = makeDeferred<void>();
+    let started = 0;
+    const seen: Record<string, unknown> = {};
+    const mk = (name: string) =>
+      envEngine(name, async (o) => {
+        seen[name] = o.executeEnv;
+        if (++started === 2) bothStarted.resolve();
+        await bothStarted.promise;
+      });
+    const loaders = new Map([
+      ["/e/envA.ts", mk("envA")],
+      ["/e/envB.ts", mk("envB")],
+    ]);
+    await runWithFrames(
+      [
+        ...setupFrames(["envA", "envB"]),
+        executeFrame(1, "envA", { QUARTO_DOCUMENT_FILE: "a.qmd" }),
+        executeFrame(2, "envB", { QUARTO_DOCUMENT_FILE: "b.qmd" }),
+      ],
+      {
+        loadEngineModule: async (p: string) => {
+          const d = loaders.get(p);
+          if (!d) throw new Error(`unknown: ${p}`);
+          return d;
+        },
+      },
+    );
+    expect(seen).toEqual({
+      envA: { QUARTO_DOCUMENT_FILE: "a.qmd" },
+      envB: { QUARTO_DOCUMENT_FILE: "b.qmd" },
+    });
+  });
+});

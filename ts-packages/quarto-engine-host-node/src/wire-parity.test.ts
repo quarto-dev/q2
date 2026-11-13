@@ -159,7 +159,7 @@ type _ExhaustiveTsHashDefinition =
 // The execute options and result: only the EXR-7 additions are pinned here (the older
 // fields predate this gate), so the check is that the fixture contains each new key
 // and that the TS type declares it.
-const EXR7_OPTIONS_KEYS = ["units"] as const satisfies readonly (keyof TsExecuteOptions)[];
+const EXR7_OPTIONS_KEYS = ["units", "executeEnv"] as const satisfies readonly (keyof TsExecuteOptions)[];
 const EXR7_RESULT_KEYS = [
   "notebook",
   "recordInfo",

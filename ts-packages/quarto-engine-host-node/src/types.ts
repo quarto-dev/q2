@@ -196,6 +196,10 @@ export interface TsExecuteOptions {
   /** q2-only (EXR-8 B4), absent from an older core: `"core"` means core presents the
    *  output from the record, so the engine returns its notebook and no markdown. */
   presentedBy?: "core";
+  /** q2-only (bd-x3h4zjhl), absent from an older core: the environment to merge into the
+   *  processes that run user code. Project environment first, then the per-document
+   *  execute environment on top. May carry secrets: never log it. */
+  executeEnv?: Record<string, string>;
 }
 
 /** One execution unit on the wire (q2-only, EXR-7). No byte or UTF-16 offsets in v1:

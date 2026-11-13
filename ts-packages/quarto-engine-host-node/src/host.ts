@@ -681,6 +681,13 @@ export async function runHost(
               handledLanguages: opts.handledLanguages,
               ownedLanguages: opts.ownedLanguages,
               dependencies: opts.dependencies,
+              // q2 extension (bd-x3h4zjhl). A fresh copy per execute: nothing here
+              // may mutate `process.env` (executes for different engines run
+              // concurrently), and the copy keeps one execute's object from being
+              // shared if the host ever reuses request objects.
+              ...(opts.executeEnv !== undefined
+                ? { executeEnv: { ...opts.executeEnv } }
+                : {}),
               project: richProject,
               previewServer: false,
             };
@@ -691,8 +698,10 @@ export async function runHost(
             // extra properties; q2-native engines read options.signal. Cast via
             // Object.assign + unknown to satisfy the Q1 type without widening it.
             //
-            // q2-only fields beyond Q1's types, all optional and read by cast
-            // (the vendored `@quarto/types` stays a parity copy of Q1):
+            // q2-only fields beyond Q1's types, all optional. `@quarto/types` is
+            // no longer a pure copy of Q1: it declares some of them as q2
+            // extensions (`ownedLanguages`, `executeEnv`); the ones below are
+            // attached by cast:
             //   options: `signal` (cooperative cancel) and `units` (EXR-7; the
             //     document's execution units with this engine's `owned` flags; see
             //     `TsUnit` in types.ts).
