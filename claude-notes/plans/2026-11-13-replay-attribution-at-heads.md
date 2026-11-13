@@ -75,8 +75,10 @@ instead of with shifted runs.
 
 ## Verification
 
-Unit and hook tests cover the run lists and the hook's replay path. The
-change was not exercised in a browser against a running hub.
+Unit and hook tests cover the run lists and the hook's replay path.
+
+Browser, local hub (2026-11-13): live typing with the authors overlay on was
+checked by hand. A multi-author replay and a local branch were not.
 
 ## Follow-up: cost of the synchronous live update
 
