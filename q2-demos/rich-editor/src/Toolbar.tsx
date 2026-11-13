@@ -4,8 +4,10 @@
  * margin, no breadcrumb, and no outline on the document while its menu is
  * open). It follows the caret: the style box shows the style of the
  * caret's line in the body (Paragraph, Heading 1, …), and its menu changes
- * it; the bulleted list button is pressed while the caret is on a list
- * item, and makes the line an item or a paragraph again; the quote button
+ * it; the bulleted list button is pressed while the caret is on a bullet
+ * list's item, and makes the line an item (a bullet one, from a numbered
+ * one too) or a paragraph again, and the numbered list button does the
+ * same for numbered lists; the quote button
  * is pressed while the caret is in a quote, and quotes or unquotes the
  * line. With a selection, they change every line it is on. A heading can't
  * be in a quote yet, so headings can't be chosen in a quote, and a heading
@@ -18,7 +20,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { BULLET, headingLevel, headingPrefix, isBullet, isQuote, QUOTE } from './editing/body.ts'
+import { BULLET, headingLevel, headingPrefix, isBullet, isItem, isNumbered, isQuote, NUMBERED, QUOTE } from './editing/body.ts'
 import { linePrefix, type State } from './engine/model.ts'
 
 interface ToolbarProps {
@@ -46,6 +48,13 @@ const LIST_ICON = (
   </svg>
 )
 
+// Material Icons' "format_list_numbered" (Apache 2.0), as in Google Docs' toolbar.
+const NUMBERED_ICON = (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z" />
+  </svg>
+)
+
 // Material Icons' "format_quote" (Apache 2.0), as in Google Docs' toolbar.
 const QUOTE_ICON = (
   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -69,7 +78,9 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
   const disabled = prefix === null
   const level = prefix === null ? 0 : headingLevel(prefix)
   const quoted = prefix !== null && isQuote(prefix)
-  const listed = prefix !== null && isBullet(prefix)
+  const bulleted = prefix !== null && isBullet(prefix)
+  const numbered = prefix !== null && isNumbered(prefix)
+  const listed = bulleted || numbered
   const style = level > 0 ? `Heading ${level}` : 'Paragraph'
 
   useEffect(() => {
@@ -103,12 +114,14 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
   const choose = (to: number) => {
     setOpen(false)
     // A quote's or a list item's line is a paragraph, and stays one.
-    setPrefixes((p) => (isQuote(p) || isBullet(p) ? p : to > 0 ? headingPrefix(to) : ''))
+    setPrefixes((p) => (isQuote(p) || isItem(p) ? p : to > 0 ? headingPrefix(to) : ''))
   }
 
-  const toggleList = () => {
+  // Pressed, a list button makes the items of its kind paragraphs; else it
+  // makes paragraphs and the other kind's items items of its kind.
+  const toggleList = (kind: string, pressed: boolean) => {
     setOpen(false)
-    setPrefixes((p) => (listed ? (isBullet(p) ? '' : p) : p === '' ? BULLET : p))
+    setPrefixes((p) => (pressed ? (p === kind ? '' : p) : p === '' || isItem(p) ? kind : p))
   }
 
   const toggleQuote = () => {
@@ -162,11 +175,22 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
         className="qe-icon"
         aria-label="Bulleted list"
         title="Bulleted list"
-        aria-pressed={listed}
+        aria-pressed={bulleted}
         disabled={disabled || level > 0 || quoted}
-        onClick={toggleList}
+        onClick={() => toggleList(BULLET, bulleted)}
       >
         {LIST_ICON}
+      </button>
+      <button
+        type="button"
+        className="qe-icon"
+        aria-label="Numbered list"
+        title="Numbered list"
+        aria-pressed={numbered}
+        disabled={disabled || level > 0 || quoted}
+        onClick={() => toggleList(NUMBERED, numbered)}
+      >
+        {NUMBERED_ICON}
       </button>
       <button
         type="button"

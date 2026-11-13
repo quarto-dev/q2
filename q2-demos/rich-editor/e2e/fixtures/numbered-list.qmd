@@ -1,0 +1,16 @@
+---
+title: Field notes
+---
+
+Intro.
+
+1.  One.
+2.  Two, wrapped
+    over two lines.
+
+Middle.
+
+7)  Seven.
+8)  Eight.
+
+End.

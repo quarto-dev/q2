@@ -5,7 +5,10 @@
  * quote of one paragraph of plain text is that paragraph's text after the
  * quote prefix (`QUOTE`). A bullet list whose items are each one line of
  * plain text (a tight list) is a line per item, after the bullet prefix
- * (`BULLET`), and the lines of items next to each other are one list. A
+ * (`BULLET`), and the lines of items next to each other are one list. So
+ * is a numbered list of such items, written `1.` or `1)` from any number,
+ * after the numbered prefix (`NUMBERED`): an edit keeps its start number
+ * and delimiter, and a new one is numbered `1.` from 1. A
  * horizontal rule is a line that can be removed but not edited (`VOID`).
  * Every other block (a paragraph or heading with formatting, a quote or
  * list of anything else) is a line that can't be edited (`ATOM`), and
@@ -44,6 +47,9 @@ export const QUOTE = '\ufdd7'
 /** The line prefix of a bullet list's item. */
 export const BULLET = '\ufdd8'
 
+/** The line prefix of a numbered list's item. */
+export const NUMBERED = '\ufdd9'
+
 /** Whether a line of the body's text is a block quote. */
 export function isQuote(line: string): boolean {
   return line.startsWith(QUOTE)
@@ -54,10 +60,25 @@ export function isBullet(line: string): boolean {
   return line.startsWith(BULLET)
 }
 
+/** Whether a line of the body's text is an item of a numbered list. */
+export function isNumbered(line: string): boolean {
+  return line.startsWith(NUMBERED)
+}
+
+/** Whether a line of the body's text is a list's item, of either kind. */
+export function isItem(line: string): boolean {
+  return isBullet(line) || isNumbered(line)
+}
+
 /** The heading level of a line of the body's text, or 0 for a paragraph. */
 export function headingLevel(line: string): number {
   const level = line.charCodeAt(0) - 0xfdd0
   return level >= 1 && level <= 6 ? level : 0
+}
+
+/** A line's prefix. */
+function linePrefix(line: string): string {
+  return line.slice(0, line.length - lineText(line).length)
 }
 
 /** A line's text, without its prefix. */
@@ -102,21 +123,55 @@ export function plainParagraph(block: Node): string | undefined {
   return text === undefined || text === '' || !editable(text) ? undefined : text
 }
 
+/** A numbered list's start number, numbering style and delimiter. */
+type ListAttrs = [number, { t: string }, { t: string }]
+
+/** What a numbered list made in the editor is numbered with: `1.`, from 1. */
+const NEW_LIST: ListAttrs = [1, { t: 'Decimal' }, { t: 'Period' }]
+
+/** The number a numbered list starts at: 1 for a new list, or any other block. */
+export function listStart(block: Node | undefined): number {
+  return block?.t === 'OrderedList' ? (block.c as [ListAttrs])[0][0] : 1
+}
+
+/** A list's items. */
+function listItems(list: Node): Node[][] {
+  return (list.t === 'OrderedList' ? (list.c as [ListAttrs, Node[][]])[1] : list.c) as Node[][]
+}
+
 /**
- * The lines of a bullet list's items, or undefined when it can't be
- * edited: when an item is anything but one line of plain text.
+ * The line prefix of a list's items, or undefined for a block that isn't
+ * a list the editor writes back as it reads (a numbered list must be
+ * numbered with digits, written `1.` or `1)`, which leaves out qmd's
+ * example lists, `(@)`).
+ */
+function itemPrefix(list: Node): string | undefined {
+  if (list.t === 'BulletList') return BULLET
+  if (list.t !== 'OrderedList') return undefined
+  const [, style, delim] = (list.c as [ListAttrs])[0]
+  const decimal = style.t === 'Decimal' || style.t === 'DefaultStyle'
+  const written = delim.t === 'Period' || delim.t === 'OneParen' || delim.t === 'DefaultDelim'
+  return decimal && written ? NUMBERED : undefined
+}
+
+/**
+ * The lines of a list's items, or undefined when it can't be edited: when
+ * an item is anything but one line of plain text, or it's numbered in a
+ * way the editor doesn't keep.
  */
 function itemLines(list: Node): string[] | undefined {
+  const prefix = itemPrefix(list)
+  if (prefix === undefined) return undefined
   const lines: string[] = []
-  for (const item of list.c as Node[][]) {
+  for (const item of listItems(list)) {
     if (item.length === 0) {
-      lines.push(BULLET)
+      lines.push(prefix)
       continue
     }
     if (item.length !== 1 || item[0].t !== 'Plain') return undefined
     const text = plainText(item[0].c as Node[], ' ')
     if (text === undefined || !editable(text)) return undefined
-    lines.push(BULLET + (text === NBSP ? '' : text))
+    lines.push(prefix + (text === NBSP ? '' : text))
   }
   return lines
 }
@@ -132,15 +187,16 @@ interface BodyLine {
 /**
  * The body's lines: one per block, or per item of a list that can be
  * edited, and an atom for each block that can't be. A list right after
- * one that can be edited can't be, since the lines of items next to each
- * other are one list.
+ * one of its kind that can be edited can't be, since the lines of items
+ * of a kind next to each other are one list.
  */
 function bodyLines(blocks: readonly Node[]): BodyLine[] {
   const lines: BodyLine[] = []
   blocks.forEach((block, i) => {
-    if (block.t === 'BulletList') {
+    if (block.t === 'BulletList' || block.t === 'OrderedList') {
       const prev = lines[lines.length - 1]
-      const items = prev?.item >= 0 ? undefined : itemLines(block)
+      const follows = prev?.item >= 0 && linePrefix(prev.line) === itemPrefix(block)
+      const items = follows ? undefined : itemLines(block)
       if (items) items.forEach((line, item) => lines.push({ line, block: i, item }))
       else lines.push({ line: ATOM, block: i, item: -1 })
       return
@@ -152,7 +208,7 @@ function bodyLines(blocks: readonly Node[]): BodyLine[] {
 
 /** The item a line of a list is. */
 function itemOf(blocks: readonly Node[], line: BodyLine): Node[] {
-  return (blocks[line.block].c as Node[][])[line.item]
+  return listItems(blocks[line.block])[line.item]
 }
 
 /** The blocks that can't be edited, in order: what the body's atoms stand for. */
@@ -165,13 +221,14 @@ export function readOnlyBlocks(blocks: readonly Node[]): Node[] {
 /**
  * What typing turns into in the body: one to six `#` and a space at the
  * start of a paragraph make it a heading of that level, `>` and a space a
- * block quote, and `-`, `*` or `+` and a space an item of a bullet list,
- * as in qmd. `---`, `***` or `___` there make a horizontal rule, and the
+ * block quote, `-`, `*` or `+` and a space an item of a bullet list, and
+ * `1.` and a space an item of a numbered list, as in qmd. `---`, `***` or `___` there make a horizontal rule, and the
  * rest of the paragraph goes on the line after it.
  */
 export function bodyInputRule(line: string): string | null {
   if (line === '> ') return QUOTE
   if (line === '- ' || line === '* ' || line === '+ ') return BULLET
+  if (line === '1. ') return NUMBERED
   if (line === '---' || line === '***' || line === '___') return `${VOID}\n`
   const match = /^(#{1,6}) $/.exec(line)
   return match ? headingPrefix(match[1].length) : null
@@ -181,6 +238,7 @@ export function bodyInputRule(line: string): string | null {
 export function prefixMarkdown(prefix: string): string {
   if (isQuote(prefix)) return '> '
   if (isBullet(prefix)) return '- '
+  if (isNumbered(prefix)) return '1. '
   const level = headingLevel(prefix)
   return level > 0 ? `${'#'.repeat(level)} ` : ''
 }
@@ -219,9 +277,10 @@ export function bodyText(blocks: readonly Node[]): string {
  * The blocks of a body edited to read `text`. A line that reads as its
  * block did is that block, untouched; any other line is a new paragraph
  * (an empty one, for a line without text), heading, quote or rule. Lines
- * of items next to each other are one list: the list that was, untouched,
- * when they're its items as they were, or else a new list, of the items
- * that read the same and new ones. A paragraph or item, in a quote or
+ * of items of a kind next to each other are one list: the list that was,
+ * untouched, when they're its items as they were, or else a new list, of
+ * the items that read the same and new ones (numbered as the list of the
+ * first that read the same was). A paragraph or item, in a quote or
  * not, is wrapped in the source where the text it keeps was. A heading
  * made from one that was there (the one in the same place among the
  * changed lines) keeps its attributes and source, so only its text is
@@ -238,10 +297,12 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
   const replaced = replacedBlocks(match, before.length)
   const wrapped = keptWraps(blocks, units, before.join('\n'), lines.join('\n'))
   const edited: Node[] = []
-  // The items of the list the lines so far end in, and the lines they were.
+  // The items of the list the lines so far end in, the lines they were,
+  // and their prefix.
   let items: { item: Node[]; was: number }[] = []
+  let kind = ''
   const endList = () => {
-    if (items.length > 0) edited.push(listOf(blocks, units, items))
+    if (items.length > 0) edited.push(listOf(blocks, units, kind, items))
     items = []
   }
   let atoms = 0
@@ -252,7 +313,10 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
     const text = lineText(line)
     const textStart = lineStart + line.length - text.length
     const wraps = (offset: number) => wrapped(textStart + offset)
-    if (isBullet(line)) {
+    if (isItem(line)) {
+      const prefix = linePrefix(line)
+      if (prefix !== kind) endList()
+      kind = prefix
       const was = match[i]
       items.push({ item: was >= 0 ? itemOf(blocks, units[was]) : item(text, wraps), was })
       return
@@ -274,17 +338,28 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
 }
 
 /**
- * The list of `items`: the list they were all the items of, in order, or
- * else a new one.
+ * The list of `items`, whose lines have the prefix `kind`: the list they
+ * were all the items of, in order, or else a new one, numbered (if it's
+ * numbered) as the list of the first item that was in one was.
  */
-function listOf(blocks: readonly Node[], units: readonly BodyLine[], items: { item: Node[]; was: number }[]): Node {
+function listOf(
+  blocks: readonly Node[],
+  units: readonly BodyLine[],
+  kind: string,
+  items: { item: Node[]; was: number }[],
+): Node {
   const first = items[0].was >= 0 ? units[items[0].was] : undefined
   const whole =
     first !== undefined &&
     first.item === 0 &&
-    (blocks[first.block].c as Node[][]).length === items.length &&
+    listItems(blocks[first.block]).length === items.length &&
     items.every(({ was }, i) => was === items[0].was + i)
-  return whole ? blocks[first.block] : { t: 'BulletList', c: items.map(({ item }) => item) }
+  if (whole) return blocks[first.block]
+  const content = items.map(({ item }) => item)
+  if (kind !== NUMBERED) return { t: 'BulletList', c: content }
+  const kept = items.find(({ was }) => was >= 0)
+  const attrs = kept ? (blocks[units[kept.was].block].c as [ListAttrs])[0] : NEW_LIST
+  return { t: 'OrderedList', c: [attrs, content] }
 }
 
 /** An item reading `text` (nothing in it, for no text), wrapped in the source where `wrapped` says. */
@@ -355,7 +430,8 @@ function keptWraps(
       if (line === ATOM) return ATOM
       if (item >= 0) {
         const [plain] = itemOf(blocks, { line, block: index, item })
-        return line === BULLET ? line : BULLET + plainText(plain.c as Node[], '\n')
+        const prefix = linePrefix(line)
+        return line === prefix ? line : prefix + plainText(plain.c as Node[], '\n')
       }
       if (block.t === 'Para' && line) return plainText(block.c as Node[], '\n')
       if (block.t === 'BlockQuote' && line !== QUOTE) {

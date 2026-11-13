@@ -219,3 +219,42 @@ End.
     expect(text()).toBe(BODY.replace('### Plain heading', '### Plain\n\nheading'))
   })
 })
+
+describe('numbered lists in the body', () => {
+  const N = '﷙'
+  const BODY = `---
+title: T
+---
+
+Intro.
+
+3) One.
+4) Two.
+
+End.
+`
+  function openBody(text = BODY) {
+    const file = createLocalFile(text)
+    const source = createMetaFieldSource(file, { keys: ['title'], body: 'body' })
+    return { source, text: () => file.getSnapshot().text }
+  }
+
+  it('reads a numbered list as a line per item, with the numbered prefix', () => {
+    expect(openBody().source.get().body).toBe(`Intro.\n${N}One.\n${N}Two.\nEnd.`)
+  })
+
+  // The qmd writer writes a changed list whole, two spaces after a number
+  // below 10.
+  it('writes an edited list from its start number, with its delimiter', () => {
+    const { source, text } = openBody()
+    source.set({ body: `Intro.\n${N}One.\n${N}Two!\nEnd.` })
+    expect(text()).toBe(BODY.replace('3) One.\n4) Two.', '3)  One.\n4)  Two!'))
+  })
+
+  it('writes a new list numbered 1. from 1, and an empty item, and reads them back', () => {
+    const { source, text } = openBody('---\ntitle: T\n---\n\nIntro.\n')
+    source.set({ body: `Intro.\n${N}A\n${N}\n${N}B` })
+    expect(text()).toBe('---\ntitle: T\n---\n\nIntro.\n\n1.  A\n2.\n3.  B\n')
+    expect(openBody(text()!).source.get().body).toBe(`Intro.\n${N}A\n${N}\n${N}B`)
+  })
+})

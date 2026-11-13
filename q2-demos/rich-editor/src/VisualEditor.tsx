@@ -8,10 +8,10 @@
  * The body is under it, block by block, from the parsed source.
  *
  * The title, subtitle and abstract are edited in place, and so are the
- * body's paragraphs, headings, one-paragraph quotes and tight bullet lists
- * of plain text, and its horizontal rules can be made and removed; the
- * rest of the body (formatted text, other lists, code) is shown and can't
- * be edited yet. A
+ * body's paragraphs, headings, one-paragraph quotes and tight bullet and
+ * numbered lists of plain text, and its horizontal rules can be made and
+ * removed; the rest of the body (formatted text, other lists, code) is
+ * shown and can't be edited yet. A
  * document has only the title-block fields its author adds, with the "+"
  * row above the title block (`TitleBlockWidget`); an added field stays,
  * empty, until Backspace in it removes it. Every edit is
@@ -36,7 +36,10 @@ import {
   headingAttr,
   headingLevel,
   isBullet,
+  isItem,
+  isNumbered,
   isQuote,
+  listStart,
   prefixMarkdown,
   readOnlyBlocks,
   type Node,
@@ -90,9 +93,9 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * unless the body is empty. The abstract and the body take line breaks
  * (one per paragraph). The title-block fields stay when empty.
  * In the body, `## ` at the start of a paragraph makes it a heading,
- * `> ` a quote and `- ` a list item, and they're copied with their `#`s,
- * `>` and `-`. Enter in an item starts another, and on an empty one ends
- * the list. `---` there makes a horizontal rule, which is copied as `---`.
+ * `> ` a quote, `- ` a list item and `1. ` a numbered one, and they're
+ * copied with their `#`s, `>`, `-` and `1.`. Enter in an item starts
+ * another, and on an empty one ends the list. `---` there makes a horizontal rule, which is copied as `---`.
  */
 const SCHEMA: Schema = {
   order: [...TITLE_BLOCK, 'body'],
@@ -100,7 +103,7 @@ const SCHEMA: Schema = {
   multiline: ['abstract', 'body'],
   inputRule: (field, line) => (field === 'body' ? bodyInputRule(line) : null),
   prefixText: prefixMarkdown,
-  continued: isBullet,
+  continued: isItem,
   voidText: '---',
   keepEmpty: TITLE_BLOCK,
   backspaceStops: ['body'],
@@ -182,7 +185,8 @@ export function VisualEditor({ file }: VisualEditorProps) {
 
   // A heading line is an `h1`-`h6`, with its block's id and classes, a
   // quote line a paragraph in a `blockquote`, and the lines of a list's
-  // items `li`s in one `ul`, as `q2 render` shows them.
+  // items `li`s in one `ul`, or in one `ol` from the list's start number,
+  // as `q2 render` shows them.
   const lineBlocks = useMemo(
     () => (ast && state.fields.body !== undefined ? blocksOfLines(ast.blocks as Node[], state.fields.body) : []),
     [ast, state.fields.body],
@@ -191,6 +195,11 @@ export function VisualEditor({ file }: VisualEditorProps) {
     (prefix: string, index: number) => {
       if (isQuote(prefix)) return { as: 'p', parent: { as: 'blockquote' } }
       if (isBullet(prefix)) return { as: 'li', parent: { as: 'ul', shared: true } }
+      if (isNumbered(prefix)) {
+        const start = listStart(lineBlocks[index])
+        const attrs: Record<string, string> = start === 1 ? { type: '1' } : { start: String(start), type: '1' }
+        return { as: 'li', parent: { as: 'ol', shared: true, attrs } }
+      }
       const level = headingLevel(prefix)
       const { id, classes } = headingAttr(lineBlocks[index])
       return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined, id }
