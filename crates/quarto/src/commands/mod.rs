@@ -27,6 +27,7 @@ pub mod provide_hub;
 pub mod publish;
 pub mod remove;
 pub mod render;
+pub mod render_dry_run;
 pub mod run;
 pub mod serve;
 pub mod terminal_style;

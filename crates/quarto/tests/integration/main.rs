@@ -47,6 +47,7 @@ pub mod preview_static_e2e;
 pub mod project_pandoc_gate_e2e;
 pub mod project_profile_cli;
 pub mod render_cli_e2e;
+pub mod render_dry_run_cli;
 pub mod render_exit_codes;
 pub mod render_integration;
 pub mod render_pandoc_formats_e2e;
