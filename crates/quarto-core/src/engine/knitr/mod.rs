@@ -287,7 +287,11 @@ impl ExecutionEngine for KnitrEngine {
             temp_dir: ctx.temp_dir.clone(),
             lib_dir: None,
             dependencies: true,
-            cwd: working_dir.clone(),
+            // knitr's `root.dir`: the execute dir the pipeline resolved (the document's
+            // directory unless `project: execute-dir: project`), as Quarto 1 passes
+            // `options.cwd` (GH #1202). The Rscript process itself still runs in
+            // `working_dir`.
+            cwd: ctx.cwd.clone(),
             params: None,
             resource_dir: resource_dir.to_path_buf(),
             // Languages that Quarto handles (knitr passes them through unchanged).
@@ -390,11 +394,12 @@ impl ExecutionEngine for KnitrEngine {
             (!result.pieces.is_empty()).then_some(&adapter::Captured {
                 pieces: &result.pieces,
                 known_options: result.known_options.as_deref(),
-                // knitr resolves a path the author wrote (`include_graphics`) against its working
-                // directory, but writes the figures it draws under the document\'s own directory
-                // (they differ in a project subdirectory), so look in both.
+                // knitr resolves a path the author wrote (`include_graphics`) against its root
+                // directory (the execute dir), but writes the figures it draws under the
+                // document\'s own directory (they differ under `execute-dir: project`), so look
+                // in both.
                 read_file: &|path| {
-                    std::fs::read(working_dir.join(path))
+                    std::fs::read(ctx.cwd.join(path))
                         .or_else(|_| std::fs::read(document_dir.join(path)))
                         .ok()
                 },

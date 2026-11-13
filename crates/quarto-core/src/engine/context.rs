@@ -74,8 +74,10 @@ pub struct ExecutionContext {
 
     /// Working directory for execution.
     ///
-    /// This is typically the directory containing the source document,
-    /// so relative paths in code cells resolve correctly.
+    /// The render pipeline sets this to the directory containing the source
+    /// document, or to the project root under `project: execute-dir:
+    /// project` (see `resolve_execute_dir` in the engine-execution stage),
+    /// so relative paths in code cells resolve as in Quarto 1.
     pub cwd: PathBuf,
 
     /// Project directory, if rendering within a Quarto project.

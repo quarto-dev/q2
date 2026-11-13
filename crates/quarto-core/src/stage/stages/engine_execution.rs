@@ -663,7 +663,12 @@ impl PipelineStage for EngineExecutionStage {
             let owned_languages = resolution.owned_languages_for(engine.name());
             let exec_context = ExecutionContext::new(
                 temp_dir,
-                ctx.project.dir.clone(),
+                resolve_execute_dir(
+                    &path,
+                    &ctx.project.dir,
+                    ctx.project.is_single_file,
+                    ctx.project.config.metadata.as_ref(),
+                ),
                 path.clone(),
                 ctx.format.identifier.to_string(),
             )
@@ -1604,6 +1609,33 @@ fn ts_document_metadata(
         }
     }
     map
+}
+
+/// The directory a document's code cells run in (GH #1202).
+///
+/// Matches Quarto 1 (`render-files.ts`, `command/render/project.ts`): the
+/// document's own directory, unless the document is part of a project whose
+/// `_quarto.yml` sets `project: execute-dir: project`, which runs it from
+/// the project root instead. Only the `project:` key counts, as in Quarto 1.
+pub fn resolve_execute_dir(
+    source_path: &std::path::Path,
+    project_dir: &std::path::Path,
+    is_single_file: bool,
+    project_metadata: Option<&quarto_pandoc_types::ConfigValue>,
+) -> std::path::PathBuf {
+    let wants_project = !is_single_file
+        && project_metadata
+            .and_then(|m| m.get("project"))
+            .and_then(|p| p.get("execute-dir"))
+            .and_then(|d| d.as_str())
+            == Some("project");
+    if wants_project {
+        return project_dir.to_path_buf();
+    }
+    match source_path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.to_path_buf(),
+        _ => project_dir.to_path_buf(),
+    }
 }
 
 pub fn merge_execute_scope(
@@ -3833,6 +3865,65 @@ mod tests {
         assert_eq!(ctx.includes.include_before[0], "<div>before</div>");
         assert_eq!(ctx.includes.include_after.len(), 1);
         assert_eq!(ctx.includes.include_after[0], "<div>after</div>");
+    }
+
+    // === execute dir (GH #1202) ===
+
+    fn project_meta(execute_dir: &str) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        let si = quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
+        let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: si.clone(),
+            value,
+        };
+        ConfigValue::new_map(
+            vec![entry(
+                "project",
+                ConfigValue::new_map(
+                    vec![entry(
+                        "execute-dir",
+                        ConfigValue::new_string(execute_dir, si.clone()),
+                    )],
+                    si.clone(),
+                ),
+            )],
+            si,
+        )
+    }
+
+    #[test]
+    fn execute_dir_defaults_to_the_documents_directory() {
+        let project = PathBuf::from("/proj");
+        let doc = project.join("sub").join("page.qmd");
+        assert_eq!(
+            resolve_execute_dir(&doc, &project, false, None),
+            project.join("sub")
+        );
+        assert_eq!(
+            resolve_execute_dir(&doc, &project, false, Some(&project_meta("file"))),
+            project.join("sub")
+        );
+    }
+
+    #[test]
+    fn execute_dir_project_runs_from_the_project_root() {
+        let project = PathBuf::from("/proj");
+        let doc = project.join("sub").join("page.qmd");
+        assert_eq!(
+            resolve_execute_dir(&doc, &project, false, Some(&project_meta("project"))),
+            project
+        );
+    }
+
+    #[test]
+    fn execute_dir_project_is_ignored_outside_a_project() {
+        let dir = PathBuf::from("/single");
+        let doc = dir.join("doc.qmd");
+        assert_eq!(
+            resolve_execute_dir(&doc, &dir, true, Some(&project_meta("project"))),
+            dir
+        );
     }
 
     // === Phase 0C: SourceInfo in ExecutionContext tests ===
