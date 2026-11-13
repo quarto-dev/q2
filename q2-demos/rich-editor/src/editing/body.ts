@@ -1,14 +1,17 @@
 /**
  * A document's body as the text of one multi-line field: a line per
- * block. A paragraph of plain text is its text, and a heading of plain
- * text is its text after a prefix for its level (`headingPrefix`). Every
- * other block (a paragraph or heading with formatting, a list) is a line
- * that can't be edited (`ATOM`), and comes back from an edit as the block
- * it was.
+ * block. A paragraph of plain text is its text, a heading of plain text
+ * is its text after a prefix for its level (`headingPrefix`), and a block
+ * quote of one paragraph of plain text is that paragraph's text after the
+ * quote prefix (`QUOTE`). Every other block (a paragraph or heading with
+ * formatting, a list, a quote of anything else) is a line that can't be
+ * edited (`ATOM`), and comes back from an edit as the block it was.
  *
  * An empty line is an empty paragraph, which qmd has no syntax for: it's
  * written as a paragraph of one non-breaking space, which takes up a line
- * when rendered, and a paragraph of only that reads as an empty line.
+ * when rendered, and a paragraph of only that reads as an empty line. An
+ * empty quote is a quote of such a paragraph: qmd's `>` alone is a quote
+ * with no paragraph in it, which the qmd writer can't write.
  *
  * A paragraph that the source wraps over several lines reads as one line,
  * and an edit keeps its line breaks wherever the text around them stays.
@@ -27,6 +30,14 @@ type Attr = [string, string[], [string, string][]]
 /** The line prefix of a heading of `level` (1 to 6). */
 export function headingPrefix(level: number): string {
   return String.fromCharCode(0xfdd0 + level)
+}
+
+/** The line prefix of a block quote. */
+export const QUOTE = '\ufdd7'
+
+/** Whether a line of the body's text is a block quote. */
+export function isQuote(line: string): boolean {
+  return line.startsWith(QUOTE)
 }
 
 /** The heading level of a line of the body's text, or 0 for a paragraph. */
@@ -48,6 +59,11 @@ function lineText(line: string): string {
  */
 export function lineOf(block: Node): string | undefined {
   if (block.t === 'Para') return plainParagraph(block)
+  if (block.t === 'BlockQuote') {
+    const blocks = block.c as Node[]
+    const text = blocks.length === 1 ? plainParagraph(blocks[0]) : undefined
+    return text === undefined ? undefined : QUOTE + text
+  }
   if (block.t !== 'Header' || !Array.isArray(block.c)) return undefined
   const [level, , inlines] = block.c as [number, Attr, Node[]]
   const text = plainText(inlines, ' ')
@@ -78,15 +94,18 @@ export function readOnlyBlocks(blocks: readonly Node[]): Node[] {
 
 /**
  * What typing turns into in the body: one to six `#` and a space at the
- * start of a paragraph make it a heading of that level, as in qmd.
+ * start of a paragraph make it a heading of that level, and `>` and a
+ * space a block quote, as in qmd.
  */
 export function bodyInputRule(line: string): string | null {
+  if (line === '> ') return QUOTE
   const match = /^(#{1,6}) $/.exec(line)
   return match ? headingPrefix(match[1].length) : null
 }
 
 /** A line's prefix as qmd, for the clipboard. */
 export function prefixMarkdown(prefix: string): string {
+  if (isQuote(prefix)) return '> '
   const level = headingLevel(prefix)
   return level > 0 ? `${'#'.repeat(level)} ` : ''
 }
@@ -118,8 +137,9 @@ export function bodyText(blocks: readonly Node[]): string {
 /**
  * The blocks of a body edited to read `text`. A line that reads as its
  * block did is that block, untouched; any other line is a new paragraph
- * (an empty one, for a line without text) or heading. A paragraph is
- * wrapped in the source where the text it keeps was. A heading made from
+ * (an empty one, for a line without text), heading or quote. A
+ * paragraph, in a quote or not, is wrapped in the source where the text
+ * it keeps was. A heading made from
  * one that was there (the one in the same place among the changed lines)
  * keeps its attributes and source, so only its text is rewritten. Null when
  * `text` doesn't have the body's read-only blocks, which no edit should
@@ -142,9 +162,20 @@ export function editBody(blocks: readonly Node[], text: string): Node[] | null {
     if (match[i] >= 0) return blocks[match[i]]
     const level = headingLevel(line)
     if (level > 0) return heading(level, lineText(line), blocks[replaced[i]])
-    if (line === '') return { t: 'Para', c: [{ t: 'Str', c: NBSP }] }
-    return { t: 'Para', c: words(line, (offset) => wrapped(lineStart + offset)) }
+    const text = lineText(line)
+    const textStart = lineStart + line.length - text.length
+    const para = paragraph(text, (offset) => wrapped(textStart + offset))
+    return isQuote(line) ? { t: 'BlockQuote', c: [para] } : para
   })
+}
+
+/**
+ * A paragraph reading `text` (an empty one, for no text), wrapped in the
+ * source where `wrapped` says.
+ */
+function paragraph(text: string, wrapped: (offset: number) => boolean): Node {
+  if (text === '') return { t: 'Para', c: [{ t: 'Str', c: NBSP }] }
+  return { t: 'Para', c: words(text, wrapped) }
 }
 
 /**
@@ -193,7 +224,12 @@ function keptWraps(blocks: readonly Node[], before: string, after: string): (off
   const source = blocks
     .map((block) => {
       const line = lineOf(block)
-      return line === undefined ? ATOM : block.t === 'Para' && line ? plainText(block.c as Node[], '\n') : line
+      if (line === undefined) return ATOM
+      if (block.t === 'Para' && line) return plainText(block.c as Node[], '\n')
+      if (block.t === 'BlockQuote' && line !== QUOTE) {
+        return QUOTE + plainText((block.c as Node[])[0].c as Node[], '\n')
+      }
+      return line
     })
     .join('\n')
   const changeEnd = change.start + change.inserted.length

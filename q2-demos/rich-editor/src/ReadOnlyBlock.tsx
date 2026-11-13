@@ -42,7 +42,7 @@ function renderBlock(block: Node): ReactNode {
       )
     }
     case 'BlockQuote':
-      return <blockquote className="blockquote">{renderBlocks(c)}</blockquote>
+      return <blockquote>{renderBlocks(c)}</blockquote>
     case 'BulletList':
       return <ul>{(c as Node[][]).map((item, i) => <li key={i}>{renderBlocks(item)}</li>)}</ul>
     case 'OrderedList': {

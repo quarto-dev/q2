@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { ATOM } from '../engine/model.ts'
-import { bodyText, editBody, headingLevel, headingPrefix, plainParagraph, readOnlyBlocks, words, type Node } from './body.ts'
+import {
+  bodyInputRule,
+  bodyText,
+  editBody,
+  headingLevel,
+  headingPrefix,
+  isQuote,
+  plainParagraph,
+  prefixMarkdown,
+  QUOTE,
+  readOnlyBlocks,
+  words,
+  type Node,
+} from './body.ts'
 
 const para = (text: string): Node => ({ t: 'Para', c: words(text) })
 // A heading with formatting, which can't be edited.
@@ -150,5 +163,51 @@ describe('headings', () => {
     const edited = editBody([explicit, para('Two.')], `${headingPrefix(1)}One\n${H2}New\nTwo.`)!
     expect(edited[0]).toBe(explicit)
     expect(edited[1]).toEqual(h(2, 'New'))
+  })
+})
+
+describe('quotes', () => {
+  const quote = (...blocks: Node[]): Node => ({ t: 'BlockQuote', c: blocks })
+
+  it('a quote of one paragraph of plain text is a line with the quote prefix', () => {
+    expect(bodyText([para('One.'), quote(para('A quote.'))])).toBe(`One.\n${QUOTE}A quote.`)
+    expect(isQuote(`${QUOTE}A quote.`)).toBe(true)
+    expect(isQuote('A quote.')).toBe(false)
+    expect(headingLevel(`${QUOTE}A quote.`)).toBe(0)
+  })
+  it('a quote of an empty paragraph is a line of only its prefix', () => {
+    expect(bodyText([quote(empty)])).toBe(QUOTE)
+  })
+  it('any other quote can\'t be edited', () => {
+    const others = [quote(formatted), quote(para('One.'), para('Two.')), quote(), quote(heading)]
+    expect(bodyText(others)).toBe(others.map(() => ATOM).join('\n'))
+    expect(readOnlyBlocks(others)).toEqual(others)
+  })
+
+  it('writes a line with the quote prefix as a quote, and an empty one as a quote of an empty paragraph', () => {
+    expect(editBody([para('One.')], `One.\n${QUOTE}New`)).toEqual([para('One.'), quote(para('New'))])
+    expect(editBody([para('One.')], `${QUOTE}  New  quote `)).toEqual([quote(para('New quote'))])
+    expect(editBody([para('One.')], QUOTE)).toEqual([quote(empty)])
+  })
+  it('keeps an unchanged quote as it was', () => {
+    const was = quote(para('A quote.'))
+    expect(editBody([was, para('One.')], `${QUOTE}A quote.\nOne!`)![0]).toBe(was)
+  })
+  it('keeps the line breaks of a wrapped quote around what changed', () => {
+    const wrapped = quote({ t: 'Para', c: [...words('One two'), { t: 'SoftBreak' }, ...words('three.')] })
+    const [edited] = editBody([wrapped], `${QUOTE}One two, three.`)!
+    expect(edited).toEqual(quote({ t: 'Para', c: [...words('One two,'), { t: 'SoftBreak' }, ...words('three.')] }))
+  })
+  it('writes a quote whose prefix was removed as a paragraph', () => {
+    expect(editBody([quote(para('A quote.'))], 'A quote.')).toEqual([para('A quote.')])
+  })
+
+  it('> and a space at the start of a line make a quote', () => {
+    expect(bodyInputRule('> ')).toBe(QUOTE)
+    expect(bodyInputRule('>> ')).toBeNull()
+    expect(bodyInputRule(`${QUOTE}> `)).toBeNull()
+  })
+  it('a quote is copied with its >', () => {
+    expect(prefixMarkdown(QUOTE)).toBe('> ')
   })
 })

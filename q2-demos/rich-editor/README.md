@@ -30,8 +30,10 @@ paragraphs and headings of plain text: Enter splits a paragraph, and
 Backspace at its start joins it to the one before. Typing one to six `#` and
 a space at the start of a paragraph makes it a heading (Backspace or undo
 right after gives back the `#`s as text), and Backspace at the start of a
-heading's text makes it a paragraph again. The rest of the body
-(paragraphs and headings with formatting, lists, code) is shown by
+heading's text makes it a paragraph again. Block quotes of one paragraph
+of plain text are edited the same way, made by typing `>` and a space.
+The rest of the body (paragraphs, headings and quotes with formatting,
+quotes of more than one paragraph, lists, code) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
 changes its source. The document is one
 `contenteditable` surface run by a small editing engine in `src/engine/`:
@@ -54,7 +56,7 @@ that can be edited is an element of its own (`Lines`).
 
 A line can start with a prefix, a run of characters the engine keeps out
 of the text (the Unicode noncharacters U+FDD0 to U+FDEF), which gives the
-line a kind: in the body, a heading's level. A change of kind is then a
+line a kind: in the body, a heading's level, or a quote. A change of kind is then a
 text edit like any other, so undo, collaborators' edits and the caret all
 handle it without knowing about headings. The engine's rules for prefixes
 are generic (one can't be typed; the caret never goes before one; a joined
@@ -62,7 +64,9 @@ line takes the kind of the line it joins; Enter in the middle of a line
 keeps the kind on both halves, and at the end starts a line without one);
 what a prefix means, how it's rendered, what typing makes one
 (`Schema.inputRule`) and how it's copied (`Schema.prefixText`) are up to
-`src/VisualEditor.tsx` and `src/editing/body.ts`. An edited heading keeps
+`src/VisualEditor.tsx` and `src/editing/body.ts`; a line can be rendered
+inside an element of its own, as a quote's paragraph is in a
+`blockquote`. An edited heading keeps
 its written attributes (`{#id .class}`), and only its text is rewritten in
 the source.
 
@@ -84,7 +88,9 @@ An empty line in the body is an empty paragraph, so Enter on an empty
 line adds another and they stay when the caret leaves. qmd has no syntax
 for one (blank lines between paragraphs don't add up), so it's written as
 a paragraph of one non-breaking space, which `q2 render` shows as an empty
-line too; `&nbsp;` on a line of its own in the source reads the same.
+line too; `&nbsp;` on a line of its own in the source reads the same. An
+empty quote is a quote of that paragraph (`> ` and a non-breaking
+space), since `>` alone is a quote with no paragraph in it.
 
 A paragraph that the source wraps over several lines is one line here. An
 edit keeps its line breaks wherever the text around them stays, so typing
@@ -150,8 +156,8 @@ spec that can't hold in one engine says so where it's skipped, with the
 reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
-`body.spec.ts` and `headings.spec.ts` (editing), `title-block-widget.spec.ts`
-(adding and removing title-block fields), `keys.spec.ts` (moving and
+`body.spec.ts`, `headings.spec.ts` and `quotes.spec.ts` (editing),
+`title-block-widget.spec.ts` (adding and removing title-block fields), `keys.spec.ts` (moving and
 deleting by word and by line), `clipboard.spec.ts` (copy, cut, paste, drag
 and drop),
 `composition.spec.ts` (input methods), `blocks.spec.ts` (how each kind of
@@ -210,7 +216,8 @@ editor has to keep:
   its children.
 - Text that can be edited is in `.qe-field` elements: one in each
   title-block field, and one for each editable line of the body (a direct
-  child of `#quarto-document-content`). An empty field's placeholder is
+  child of `#quarto-document-content`, or, for a quote, the `p` in a
+  `blockquote` that is one). An empty field's placeholder is
   its `::before` content. A block the editor doesn't know is a
   `.qe-unknown` box, and the row that adds title-block fields is
   `.qe-widget`.

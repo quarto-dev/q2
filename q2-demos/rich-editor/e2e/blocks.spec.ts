@@ -1,9 +1,10 @@
 /**
  * How the body's blocks are shown. A paragraph of plain text is a
- * paragraph that can be edited, and a heading of plain text a heading that
- * can be edited (`headings.spec.ts`). Every other block the editor knows is
- * shown as `q2 render` would show it, roughly (no syntax highlighting, no
- * rendered math), and can't be edited. A block it doesn't know is a box
+ * paragraph that can be edited, a heading of plain text a heading that
+ * can be edited (`headings.spec.ts`), and a quote of one such paragraph a
+ * quote that can be edited (`quotes.spec.ts`). Every other block the
+ * editor knows is shown as `q2 render` would show it, roughly (no syntax
+ * highlighting, no rendered math), and can't be edited. A block it doesn't know is a box
  * with the name of its kind.
  *
  * (That the editable parts match `q2 render` exactly is in
@@ -99,10 +100,10 @@ test.describe('other blocks', () => {
     await expect(shown(editor, 'pre.python > code')).toHaveText('print("hi")')
   })
 
-  test('a block quote holds its blocks', async ({ page }) => {
+  test('a block quote holds its blocks, with no class, as `q2 render` shows it', async ({ page }) => {
     const editor = await openEditor(page, 'blocks')
 
-    await expect(shown(editor, 'blockquote.blockquote > p')).toHaveText('A quote.')
+    await expect(shown(editor, 'blockquote > p')).toHaveText(['A quote.', 'Its second paragraph.'])
   })
 
   test('a bullet list and a numbered list hold their items, and the numbered one starts at its number', async ({

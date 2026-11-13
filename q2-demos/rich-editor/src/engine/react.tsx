@@ -130,12 +130,21 @@ export interface LinesProps {
   as?: string
   /**
    * The element to render for the `index`th line, which starts with
-   * `prefix` (see `isPrefix`), with a class to add to it and its id.
-   * Lines without a prefix are rendered as `as`.
+   * `prefix` (see `isPrefix`), with a class to add to it, its id, and the
+   * element to put it in, if any (a quote's paragraph is in a
+   * `blockquote`). Lines without a prefix are rendered as `as`.
    */
-  lineElement?: (prefix: string, index: number) => { as: string; className?: string; id?: string }
+  lineElement?: (prefix: string, index: number) => LineElement
   /** What to show for the `index`th line that can't be edited (`ATOM`). */
   renderAtom: (index: number) => ReactNode
+}
+
+/** How a line of a multi-line field is rendered (see `LinesProps.lineElement`). */
+export interface LineElement {
+  as: string
+  className?: string
+  id?: string
+  parent?: { as: string; className?: string }
 }
 
 /**
@@ -153,7 +162,7 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
     if (line === ATOM) return <Fragment key={i}>{renderAtom(atoms++)}</Fragment>
     const prefix = linePrefix(line, 0)
     const element = prefix === '' ? undefined : lineElement?.(prefix, i)
-    return (
+    const field = (
       <Field
         key={i}
         name={name}
@@ -164,6 +173,8 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
         id={element?.id}
       />
     )
+    const parent = element?.parent
+    return parent ? createElement(parent.as, { key: i, className: parent.className }, field) : field
   })
 }
 
