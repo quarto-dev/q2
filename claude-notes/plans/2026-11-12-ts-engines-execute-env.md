@@ -373,18 +373,18 @@ Phase 1 adds the field they fail as compile errors. That counts as
       `git fetch origin && git merge --ff-only origin/q2/node-port`, and
       confirm that HEAD equals the `version` of `subtree-julia-engine`
       in `resources/vendored.toml`.
-- [ ] In `external-sources/quarto-julia-engine`: map `executeEnv` to
+- [x] In `external-sources/quarto-julia-engine`: map `executeEnv` to
       `env` in `qnrRunOptions` (`src/record-wire.ts`), dropping
       `executeEnv`; add the field to `ExecuteOptions` in
       `types/quarto-types.d.ts` (repo root).
-- [ ] Fork unit tests in `tests/unit/record-wire.test.ts` (it already
+- [x] Fork unit tests in `tests/unit/record-wire.test.ts` (it already
       imports `qnrRunOptions` and has `baseOptions()`): the mapping, and
       no `env` key when `executeEnv` is empty or absent. Run `npm test`
       and `npm run typecheck`; add a `CHANGELOG.md` line.
-- [ ] Rebuild `_extensions/julia-engine/julia-engine.js` (`npm run
+- [x] Rebuild `_extensions/julia-engine/julia-engine.js` (`npm run
       build`, deterministic; the bundle is committed); commit; push after
       Gordon's OK.
-- [ ] Sync: in a clean q2 tree, run
+- [x] Sync: in a clean q2 tree, run
       `cargo xtask pull-extension-subtree julia-engine`. It fetches the
       pushed branch from GitHub (never the local clone), then runs
       `git subtree pull --squash`, which creates the squash commit
@@ -393,7 +393,7 @@ Phase 1 adds the field they fail as compile errors. That counts as
       and `last_reviewed` in the `subtree-julia-engine` entry of
       `resources/vendored.toml`, run `cargo xtask lint` (the registry
       rule fails on a stale version), and commit that.
-- [ ] Remove the `#[ignore]` from the julia e2e tests and from
+- [x] Remove the `#[ignore]` from the julia e2e tests and from
       `julia_cells_see_the_execute_environment`; they pass (the CLI one:
       `cargo nextest run -p quarto -E 'binary(integration) & test(execute_env_cli_e2e::julia)'`;
       the quarto-core ones:

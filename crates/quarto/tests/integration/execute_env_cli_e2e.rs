@@ -321,7 +321,6 @@ fn julia_available() -> bool {
 }
 
 #[test]
-#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
 fn julia_cells_see_the_execute_environment() {
     if !julia_available() {
         eprintln!("skipping: julia, node and a julia environment not all available");

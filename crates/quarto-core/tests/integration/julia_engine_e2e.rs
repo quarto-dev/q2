@@ -1691,11 +1691,11 @@ println(\"INFO_NAMES_DOC=\", isfile(info) && occursin(\"{file_name}\", read(info
     )
 }
 
-/// The value a cell printed for `key` (`KEY=value` in the rendered HTML).
+/// The value a cell printed for `key` (`KEY=value` in the rendered HTML). The last match: the code listing echoes `KEY=` before the output does.
 fn printed(html: &str, key: &str) -> String {
     let needle = format!("{key}=");
     let start = html
-        .find(&needle)
+        .rfind(&needle)
         .unwrap_or_else(|| panic!("`{needle}` not printed:\n{}", body_excerpt(html)))
         + needle.len();
     let end = html[start..]
@@ -1766,7 +1766,6 @@ fn isolated_daemon(name: &str) -> Option<IsolatedDaemon> {
 }
 
 #[test]
-#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
 fn julia_daemon_rerender_sees_the_new_execute_environment() {
     let Some(_iso) = isolated_daemon("julia_daemon_rerender_sees_the_new_execute_environment")
     else {
@@ -1791,7 +1790,6 @@ fn julia_daemon_rerender_sees_the_new_execute_environment() {
 }
 
 #[test]
-#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
 fn julia_shared_worker_documents_each_see_their_own_environment() {
     let Some(_iso) =
         isolated_daemon("julia_shared_worker_documents_each_see_their_own_environment")
@@ -1810,7 +1808,6 @@ fn julia_shared_worker_documents_each_see_their_own_environment() {
 }
 
 #[test]
-#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
 fn julia_single_file_outside_a_project_sees_the_execute_environment() {
     if !node_available_for_tests() || !julia_available() {
         eprintln!("SKIP: node or julia not available");
@@ -1824,7 +1821,6 @@ fn julia_single_file_outside_a_project_sees_the_execute_environment() {
 }
 
 #[test]
-#[ignore = "bd-x3h4zjhl: needs julia fork sync (Session 2)"]
 fn julia_document_path_with_a_space_sees_the_execute_environment() {
     if !node_available_for_tests() || !julia_available() {
         eprintln!("SKIP: node or julia not available");
