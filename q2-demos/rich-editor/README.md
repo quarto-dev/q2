@@ -88,7 +88,11 @@ implements `FieldSource` for a qmd file's metadata: it writes the edited
 document with the incremental qmd writer, which rewrites only the changed
 front-matter keys and body paragraphs, and sends the difference as one
 splice. While the source doesn't parse, the editor shows the last text it
-could read and takes no edits.
+could read and takes no edits. While the connection to the sync server
+is down, editing goes on: edits go into the local automerge document,
+and are synced, and merged with what others did meanwhile, once the
+connection is back. They're kept only in memory, so reloading the page
+before then loses them.
 
 An empty line in the body is an empty paragraph, so Enter on an empty
 line adds another and they stay when the caret leaves. qmd has no syntax

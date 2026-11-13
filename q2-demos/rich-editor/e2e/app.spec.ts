@@ -184,7 +184,7 @@ test.describe('the connection to the hub', () => {
     await expect(page.locator('.status.status-error')).toContainText('ws://127.0.0.1:1/ws', { timeout: 30000 })
   })
 
-  test('when the connection drops, the editor comes back with the document once it reconnects', async ({ page }) => {
+  test('when the connection drops, the editor stays, and catches up with the document once it reconnects', async ({ page }) => {
     const hub = await cuttableHub(page)
     const document = await createDocument(basic)
     await document.open(page)
@@ -193,31 +193,52 @@ test.describe('the connection to the hub', () => {
     await hub.drop()
     document.replace('Quarterly report', 'Annual report')
 
-    // It tries again after a few seconds.
-    await expect(page.locator('.status')).toHaveText('Disconnected.')
+    // It tries again after a few seconds; the editor stays all along.
+    await expect(page.locator('.visual-editor .status')).toContainText('Offline')
+    await expect(page.locator('iframe.visual-frame')).toHaveCount(1)
     await expect(title).toHaveText('Annual report', { timeout: 15000 })
+    await expect(page.locator('.visual-editor .status')).not.toContainText('Offline')
     await page.frameLocator('iframe.visual-frame').locator('h1.title .qe-field').click()
     await page.keyboard.type('!')
     await expect.poll(() => document.source()).toContain('!')
   })
 
-  // Today the page says it is connecting instead, and the editor, its
-  // caret and its undo history are gone until the connection is back.
-  test.fixme('while the connection is down, the editor stays, read-only, with its caret', async ({ page }) => {
+  test('while the connection is down, the editor stays editable, with its caret, and what was typed reaches the document once it is back', async ({ page }) => {
     const hub = await cuttableHub(page)
-    const editor = await (await createDocument(basic)).open(page)
+    const document = await createDocument(basic)
+    const editor = await document.open(page)
     await editor.placeCaret('title', 4)
 
     await hub.cut()
 
-    await expect(page.locator('.visual-editor .status')).toContainText('Read-only: not connected')
+    await expect(page.locator('.visual-editor .status')).toContainText('Offline')
     await editor.expectCaret('title', 4)
     await page.keyboard.type('x')
-    expect(await editor.text('title')).toBe('Quarterly report')
+    expect(await editor.text('title')).toBe('Quarxterly report')
+    expect(document.source()).toContain('title: Quarterly report')
 
     hub.restore()
-    await expect(page.locator('.visual-editor .status')).not.toContainText('Read-only')
-    await editor.expectCaret('title', 4)
+    await expect(page.locator('.visual-editor .status')).not.toContainText('Offline', { timeout: 15000 })
+    await expect.poll(() => document.source()).toContain('title: Quarxterly report')
+    await editor.expectCaret('title', 5)
+  })
+
+  test('edits made on both sides while the connection is down are merged once it is back', async ({ page }) => {
+    const hub = await cuttableHub(page)
+    const document = await createDocument(basic)
+    const editor = await document.open(page)
+    await editor.placeCaret('title', 4)
+
+    await hub.cut()
+    await expect(page.locator('.visual-editor .status')).toContainText('Offline')
+    await page.keyboard.type('x')
+    document.replace('Third quarter', 'Third quarter, revised')
+
+    hub.restore()
+    await expect.poll(() => document.source(), { timeout: 15000 }).toContain('title: Quarxterly report')
+    expect(document.source()).toContain('subtitle: Third quarter, revised')
+    await expect(page.frameLocator('iframe.visual-frame').locator('p.subtitle')).toHaveText('Third quarter, revised')
+    await editor.expectCaret('title', 5)
   })
 })
 
