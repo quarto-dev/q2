@@ -655,3 +655,70 @@ fn absolute_attributes_untouched_in_html() {
         body_markup(&html)
     );
 }
+
+// ── aside placement ──────────────────────────────────────────────────────
+//
+// An aside is `position: absolute; bottom: 20px`, so it reaches the bottom of
+// the slide only when the slide's `<section>` is as tall as the deck. These
+// rules are CSS-only; where the aside lands was measured in a browser against
+// Quarto 1 (claude-notes/plans/2026-11-13-layout-gaps-revealjs-absolute-aside-html-columns.md).
+
+/// Quarto 1: `.reveal .slide:not(.center) { height: 100%; }` (`styles.html`).
+/// q2 sections have no `slide` class and stack wrappers are sections too, so
+/// leaf slides are picked out with reveal's run-time `stack` class; a centered
+/// deck is recognised on the `.reveal` wrapper, where reveal puts `center`.
+#[test]
+fn leaf_slides_are_full_height() {
+    let css = compact(&rendered_quarto_reveal_css());
+    assert!(
+        css.contains(".reveal:not(.center).slidessection:not(.stack):not(.center){height:100%;}"),
+        "leaf slides of a top-aligned deck must be full height so a bottom aside \
+         reaches the slide bottom"
+    );
+}
+
+/// Quarto 1: `.reveal .slide.scrollable { overflow-y: auto; }` and, for its
+/// aside, `position: relative; margin-top: 1em` so the aside follows the
+/// scrolled content instead of covering it.
+#[test]
+fn scrollable_slide_scrolls_and_its_aside_follows_the_content() {
+    let css = compact(&rendered_quarto_reveal_css());
+    assert!(
+        css.contains(".reveal.slidessection.scrollable{overflow-y:auto;}"),
+        "a `.scrollable` slide must scroll"
+    );
+    assert!(
+        css.contains(
+            ".reveal.slidessection.scrollableaside.aside{position:relative;margin-top:1em;}"
+        ),
+        "the aside of a `.scrollable` slide must be in the flow"
+    );
+}
+
+/// Quarto 1: `.reveal.center .slide aside { position: initial; }`.
+#[test]
+fn centered_deck_aside_is_not_pinned() {
+    let css = compact(&rendered_quarto_reveal_css());
+    assert!(
+        css.contains(".reveal.center.slidesaside.aside{position:initial;}"),
+        "in a centered deck the aside must stay in the flow"
+    );
+}
+
+/// The classes the rules above key on reach the slide `<section>`.
+#[test]
+fn scrollable_and_center_classes_reach_the_section() {
+    let html = render_revealjs(
+        "---\nformat: revealjs\n---\n\n## One {.scrollable}\n\nBody.\n\n\
+         ## Two {.center}\n\nBody.\n",
+    );
+    let body = body_markup(&html);
+    assert!(
+        body.contains("<section id=\"one\" class=\"section scrollable\">"),
+        "`.scrollable` on the slide heading must land on its section; body:\n{body}"
+    );
+    assert!(
+        body.contains("<section id=\"two\" class=\"section center\">"),
+        "`.center` on the slide heading must land on its section; body:\n{body}"
+    );
+}

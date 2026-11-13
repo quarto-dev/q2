@@ -110,11 +110,12 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
 
 ### Slice B: RevealJS aside placement
 
-- [ ] Confirm the cause in a browser by giving the section full height.
-- [ ] Integration tests: the four rules ship in the deck.
-- [ ] Rules in `quarto-reveal.css`: full height for leaf slides, `.scrollable` overflow, and the two aside overrides.
-- [ ] smoke-all fixture `revealjs/aside-bottom.qmd`.
-- [ ] Measure the aside, and check centered slides, vertical stacks, auto-stretch and scrollable slides against Quarto 1. Record below.
+- [x] Confirm the cause in a browser by giving the section full height. The four rules were injected into the unchanged q2 deck with a `<style>` element first: the aside moved from y=78 to y=625.
+- [x] Integration tests: the four rules ship in the deck stylesheet. 3 of 4 failed before the change. The fourth is a guard that the `scrollable` and `center` classes reach the section.
+- [x] Rules in `quarto-reveal.css`: full height for leaf slides, `.scrollable` overflow, and the two aside overrides.
+- [x] smoke-all fixture `revealjs/aside-bottom.qmd`. It asserts markup only. The CSS is asserted in the Rust integration tests, because no RevealJS fixture uses `ensureCssRegexMatches` yet and the WASM runner for it was not run here.
+- [x] Measure the aside, and check centered slides, vertical stacks, auto-stretch and scrollable slides against Quarto 1. Record below.
+- [ ] Preview: `quarto-reveal.css` is imported by the preview deck too, so the same rules apply there. Not checked in `q2 preview`.
 
 ### Slice C: HTML `.columns`
 
@@ -182,10 +183,51 @@ Measured in the browser, slide units:
 
 The image and the text below it are where Quarto 1 puts them. No other slide of the fixture moved: the measurements of the other seven slides are identical before and after.
 
+### After slice B
+
+Two decks were added to the measurement folder for this slice: one with a plain slide, a `.center` slide, a `.scrollable` slide, a single-image slide, a vertical stack and a footnote, and the same deck with `center: true`. Slide units throughout.
+
+Top-aligned deck (the default):
+
+| Element | Quarto 1 | q2 before | q2 after slice B |
+|---|---|---|---|
+| Plain slide `<section>` height | 700 | 153 | 700 |
+| Its `<aside>` | y=620, 60 tall, absolute | y=78, 55 tall, absolute | y=625, 55 tall, absolute |
+| Aside bottom edge | 680 | 133 | 680 |
+| `.center` slide `<section>` | 153 tall, `top: 273.5px` | 153 tall, `top: 273.5px` | 153 tall, `top: 273.5px` |
+| `.scrollable` slide `<section>` | 700 tall, `overflow-y: auto`, content 1545 | 1165 tall, `overflow-y: visible` | 700 tall, `overflow-y: auto`, content 1220 |
+| Its `<aside>` | relative, after the last paragraph | absolute, on top of the last paragraph | relative, after the last paragraph |
+| Single-image slide: `img.r-stretch` | 0, 165, 660, 495 | 0, 165, 660, 495 | 0, 165, 660, 495 |
+| Slide in a vertical stack: `<aside>` | y=620, absolute | y=78, absolute | y=625, absolute |
+| Footnote slide: `<aside>` | y=638, 42 tall (bottom 680) | y=85, 55 tall | y=625, 55 tall (bottom 680) |
+
+Deck with `center: true`:
+
+| Element | Quarto 1 | q2 before | q2 after slice B |
+|---|---|---|---|
+| Plain slide `<section>` | 201 tall, `top: 249.5px` | 153 tall, `top: 273.5px` | 196 tall, `top: 252px` |
+| Its `<aside>` | y=153, static, under the body text | y=78, absolute, on top of the body text | y=153, static, under the body text |
+| Single-image slide: `img.r-stretch` | 0, 165, 660, 495 | 0, 165, 660, 495 | 0, 165, 660, 495 |
+
+What this shows:
+
+- The aside reaches the slide bottom. Its bottom edge is at 680 in both renderers.
+- Centering, auto-stretch and vertical stacks are not disturbed.
+- Scrollable slides now scroll, and their aside follows the content.
+
+What still differs from Quarto 1, and why. None of it is part of this slice:
+
+- The aside is 55 tall in q2 and 60 in Quarto 1, so its top edge is 5 lower. q2's rule has `font-size: 0.6em`. Quarto 1 uses `$presentation-font-smaller`, which is 0.7. The 0.6 is written into `plans/2026-06-08-revealjs-presentations.md`, so it was left alone.
+- Quarto 1 centers the first slide of a vertical stack (the level-1 heading slide gets `title-slide center`). q2 top-aligns it, before and after this slice.
+- A footnote-only aside is 42 tall in Quarto 1 and 55 in q2. The cause was not investigated. Its bottom edge is at 680 in both.
+
+In the main layout fixture, slice B changed nothing except the section heights (all 700 now) and the aside position.
+
 ## Not covered
 
 - RevealJS tabsets, figure panels, HTML margin and wide content, sidebar panels.
 - The deck-wide `scrollable: true` option.
 - `.absolute` on a captioned image that becomes a cross-referenced figure.
 - RevealJS column sizes (D8).
+- The aside font size (0.6em in q2, 0.7em in Quarto 1), centering of the first slide of a vertical stack, and the height of a footnote-only aside. All three are described under "After slice B".
 - A small difference in deck scale between the two renderers (1.1571 in Quarto 1, 1.1600 in q2) seen in the baseline. Not investigated.
