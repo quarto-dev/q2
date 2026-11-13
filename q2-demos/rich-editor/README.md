@@ -36,6 +36,15 @@ Typing `---` (or `***` or `___`) at the start of a paragraph puts a
 horizontal rule before it; Backspace at the start of the line after a
 rule, Delete at the end of the line before it, or deleting a selection
 across it, removes it.
+A toolbar above the document (`src/Toolbar.tsx`) follows the caret, as
+in a word processor: its style box shows the style of the caret's line
+(Paragraph, Heading 1 to 4) and its menu changes it, and its quote button
+is pressed while the caret is in a quote and quotes or unquotes the line.
+With a selection, they change every line it is on, as one undo step, and
+the caret stays on its text. A heading can't be in a quote yet, so neither
+can be made into the other from the toolbar; outside the body, it's
+disabled. Its design is the toolbar of `mockups/block-annotations.html`
+with nothing in the margin and no breadcrumb.
 The rest of the body (paragraphs, headings and quotes with formatting,
 quotes of more than one paragraph, lists, code) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
@@ -218,7 +227,8 @@ reason.
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
 `body.spec.ts`, `headings.spec.ts`, `quotes.spec.ts` and `rules.spec.ts`
 (editing),
-`title-block-widget.spec.ts` (adding and removing title-block fields), `keys.spec.ts` (moving and
+`title-block-widget.spec.ts` (adding and removing title-block fields),
+`toolbar.spec.ts` (the toolbar's style box and quote button), `keys.spec.ts` (moving and
 deleting by word and by line), `clipboard.spec.ts` (copy, cut, paste, drag
 and drop),
 `composition.spec.ts` (input methods), `blocks.spec.ts` (how each kind of
@@ -283,13 +293,16 @@ editor has to keep:
   blocks. A block the editor doesn't know is a
   `.qe-unknown` box, and the row that adds title-block fields is
   `.qe-widget`.
+- The toolbar is found by its roles: a `toolbar` named "Formatting",
+  holding a "Text style" button that opens a "Text style" `menu` of
+  `menuitemradio`s, and a "Quote" button with `aria-pressed`.
 
 ### What no spec covers
 
 No spec describes these, and the prototype doesn't do them: right-to-left
 and mixed-direction text, touch input, and showing where collaborators'
-carets are. Accessibility is barely covered: the title-block widget's
-buttons are found by their role and name, and nothing else is. Pressing Enter
+carets are. Accessibility is barely covered: the title-block widget's and the
+toolbar's buttons are found by their role and name, and nothing else is. Pressing Enter
 to confirm an input-method composition is also unspecified: the specs
 play an input method's part with synthetic events (`Editor.compose`),
 which can't reproduce that key.

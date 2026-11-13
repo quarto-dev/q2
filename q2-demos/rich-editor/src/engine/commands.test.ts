@@ -9,6 +9,7 @@ import {
   paste,
   select,
   selectAllStep,
+  setLinePrefixes,
 } from './commands.ts'
 import { ATOM, VOID, caret, range, selectedText, type Fields, type Schema, type State } from './model.ts'
 
@@ -347,5 +348,45 @@ describe('lines that can be removed but not edited', () => {
     expect(selectedText({ ...lines, voidText: undefined }, { body: text }, range('body', 0, 'body', 14))).toBe(
       'First\n\nSecond',
     )
+  })
+})
+
+describe('setLinePrefixes', () => {
+  const H = '\ufdd1'
+  const Q = '\ufdd7'
+  const doc: Schema = { order: ['title', 'body'], multiline: ['body'] }
+  const text = `One\n${H}Two\n${ATOM}\nThree`
+  const at = (selection: State['selection']) => state({ title: 'T', body: text }, selection)
+
+  it('gives the caret\'s line the prefix it returns, keeping the caret on the same text', () => {
+    const next = setLinePrefixes(doc, at(caret('body', 2)), () => Q)
+    expect(next.fields.body).toBe(`${Q}One\n${H}Two\n${ATOM}\nThree`)
+    expect(next.selection).toEqual(caret('body', 3))
+  })
+
+  it('is given the line\'s prefix, and can remove it', () => {
+    const next = setLinePrefixes(doc, at(caret('body', 6)), (prefix) => (prefix === H ? '' : Q))
+    expect(next.fields.body).toBe(`One\nTwo\n${ATOM}\nThree`)
+    expect(next.selection).toEqual(caret('body', 5))
+  })
+
+  it('changes every line a selection is on, but not lines that can\'t be edited', () => {
+    const next = setLinePrefixes(doc, at(range('body', 1, 'body', text.length - 1)), () => Q)
+    expect(next.fields.body).toBe(`${Q}One\n${Q}Two\n${ATOM}\n${Q}Three`)
+    expect(next.selection).toEqual(range('body', 2, 'body', next.fields.body!.length - 1))
+  })
+
+  it('leaves fields that aren\'t multi-line, and returns the same state when nothing changes', () => {
+    const s = at(range('title', 0, 'body', 2))
+    expect(setLinePrefixes(doc, s, (prefix) => prefix)).toBe(s)
+    const next = setLinePrefixes(doc, s, () => Q)
+    expect(next.fields.title).toBe('T')
+    expect(next.fields.body).toBe(`${Q}One\n${H}Two\n${ATOM}\nThree`
+    )
+  })
+
+  it('does nothing without a selection', () => {
+    const s = at(null)
+    expect(setLinePrefixes(doc, s, () => Q)).toBe(s)
   })
 })

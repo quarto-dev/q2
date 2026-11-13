@@ -49,6 +49,7 @@ import {
   paste,
   select,
   selectAllStep,
+  setLinePrefixes,
 } from './commands.ts'
 import {
   edge,
@@ -190,6 +191,11 @@ export interface FieldEditor {
   add(field: string): void
   /** Put the caret at the start of the first field (none: nothing happens). */
   focusStart(): void
+  /**
+   * Give each line the selection is on the prefix `prefixFor` returns for
+   * the one it has (see `setLinePrefixes`): an edit of its own.
+   */
+  setPrefixes(prefixFor: (prefix: string) => string): void
 }
 
 /** How the caret left the fields before the first one. */
@@ -309,6 +315,16 @@ export function useFieldEditor(
       if (!source.writable()) return
       const h = latest.current
       commit(apply(h, addField(schema, h.present, field), { schema, before: h.present.selection }), true)
+    },
+    [schema, source, commit],
+  )
+
+  const setPrefixes = useCallback(
+    (prefixFor: (prefix: string) => string) => {
+      if (!source.writable()) return
+      const h = latest.current
+      const next = setLinePrefixes(schema, h.present, prefixFor)
+      commit(apply(h, next, { schema, inputType: 'formatBlock' }), true)
     },
     [schema, source, commit],
   )
@@ -672,7 +688,7 @@ export function useFieldEditor(
     }
   }, [root, schema, source, commit, followDocument])
 
-  return { state: editor.present, editor, writable, add, focusStart }
+  return { state: editor.present, editor, writable, add, focusStart, setPrefixes }
 }
 
 /** Keys that move the selection: after one, it is no longer the mouse's. */

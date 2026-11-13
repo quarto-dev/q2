@@ -184,6 +184,45 @@ fn splice_str_change_in_header() {
     assert_eq!(result, "## Goodbye World\n");
 }
 
+/// Write `new_ast` incrementally over `original_qmd`.
+fn incremental(original_qmd: &str, new_ast: &Pandoc) -> String {
+    let original_ast = parse_qmd(original_qmd);
+    let plan = compute_reconciliation(&original_ast, new_ast);
+    writers::incremental::incremental_write(original_qmd, &original_ast, new_ast, &plan).unwrap()
+}
+
+/// The `##` of a header is source the splice keeps, so a change of level
+/// can't be spliced: the header is rewritten.
+#[test]
+fn header_level_change_is_written() {
+    let original_qmd = "Intro.\n\n## Hello World\n\nEnd.\n";
+    let mut new_ast = parse_qmd(original_qmd);
+    if let Block::Header(ref mut h) = new_ast.blocks[1] {
+        h.level = 3;
+    }
+
+    assert_eq!(
+        incremental(original_qmd, &new_ast),
+        "Intro.\n\n### Hello World\n\nEnd.\n"
+    );
+}
+
+#[test]
+fn header_level_and_text_change_is_written() {
+    let original_qmd = "## Hello World {.big}\n";
+    let mut new_ast = modify_str_text(&parse_qmd(original_qmd), 0, 0, "Goodbye");
+    if let Block::Header(ref mut h) = new_ast.blocks[0] {
+        h.level = 1;
+        h.attr.0 = "goodbye-world".to_string();
+    }
+
+    assert_incremental_write_correct(original_qmd, &new_ast);
+    assert_eq!(
+        incremental(original_qmd, &new_ast),
+        "# Goodbye World {.big}\n"
+    );
+}
+
 // =============================================================================
 // Tests: Str change preserves multi-line paragraph (Scenario B)
 // =============================================================================

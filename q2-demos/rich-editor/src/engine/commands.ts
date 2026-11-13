@@ -168,6 +168,56 @@ export function applyInputRule(schema: Schema, state: State): State {
 }
 
 /**
+ * Give each line the selection is on, in a multi-line field, the prefix
+ * `prefixFor` returns for the prefix it has (a line's kind, changed from a
+ * toolbar, say). Lines that can't be edited (`ATOM`, `VOID`) keep theirs.
+ * The selection stays on the same text.
+ */
+export function setLinePrefixes(schema: Schema, state: State, prefixFor: (prefix: string) => string): State {
+  const { selection } = state
+  if (!selection) return state
+  const { from, to } = ordered(schema, selection)
+  const first = schema.order.indexOf(from.field)
+  const last = schema.order.indexOf(to.field)
+  const fields: Record<string, string | undefined> = { ...state.fields }
+  // For each changed field, where its lines started and how far each moved.
+  const shifts = new Map<string, { start: number; shift: number }[]>()
+  for (let i = first; i <= last; i++) {
+    const field = schema.order[i]
+    const value = fields[field]
+    if (value === undefined || !schema.multiline?.includes(field)) continue
+    const start = i === first ? from.offset : 0
+    const end = i === last ? to.offset : value.length
+    let out = ''
+    let at = 0
+    let shift = 0
+    const lines: { start: number; shift: number }[] = []
+    for (const line of value.split('\n')) {
+      const prefix = linePrefix(line, 0)
+      const covered = at <= end && at + line.length >= start && !isAtom(line)
+      const next = covered ? prefixFor(prefix) : prefix
+      shift += next.length - prefix.length
+      lines.push({ start: at, shift })
+      out += (at > 0 ? '\n' : '') + next + line.slice(prefix.length)
+      at += line.length + 1
+    }
+    if (out !== value) {
+      fields[field] = out
+      shifts.set(field, lines)
+    }
+  }
+  if (shifts.size === 0) return state
+  const moved = (p: Position): Position => {
+    const lines = shifts.get(p.field)
+    if (!lines) return p
+    let line = 0
+    while (line + 1 < lines.length && lines[line + 1].start <= p.offset) line++
+    return { field: p.field, offset: p.offset + lines[line].shift }
+  }
+  return select(schema, { fields, selection }, { anchor: moved(selection.anchor), focus: moved(selection.focus) })
+}
+
+/**
  * Move the selection, removing any empty field it leaves. Neither end of
  * it stays before a line's prefix.
  */

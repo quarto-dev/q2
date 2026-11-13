@@ -813,9 +813,13 @@ fn config_map_entry_content_eq(a: &ConfigMapEntry, b: &ConfigMapEntry) -> bool {
 /// For the ID (attr.0), we only compare when the original block has an explicitly written
 /// ID (`attr_source.id.is_some()`). Auto-generated IDs (derived from header text) are not
 /// in the source, so changes to them don't affect the suffix and don't need Rewrite.
+/// A header's level is in its prefix (`##`), so it is compared too.
 fn block_attrs_eq(a: &Block, b: &Block) -> bool {
     match (a, b) {
         (Block::Header(ha), Block::Header(hb)) => {
+            if ha.level != hb.level {
+                return false;
+            }
             let id_eq = if ha.attr_source.id.is_some() {
                 ha.attr.0 == hb.attr.0
             } else {

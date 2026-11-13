@@ -19,7 +19,8 @@
  * without disturbing the caret, the selection or the undo history. The
  * editing itself is the generic engine in `engine/`; `editing/` connects
  * it to the qmd file. Nothing can be edited while the source doesn't
- * parse.
+ * parse. Above the document, a toolbar (`Toolbar`) shows and changes the
+ * style of the caret's line.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
@@ -42,6 +43,7 @@ import { createMetaFieldSource, type QmdFile } from './editing/fieldSource.ts'
 import { setMetaText, type Meta } from './editing/meta.ts'
 import { ReadOnlyBlock } from './ReadOnlyBlock.tsx'
 import { TitleBlockWidget, type WidgetFocus } from './TitleBlockWidget.tsx'
+import { Toolbar } from './Toolbar.tsx'
 
 interface VisualEditorProps {
   file: QmdFile
@@ -154,7 +156,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
   // Where the focus goes in the "+" row when the caret leaves the fields for it.
   const [widgetFocus, setWidgetFocus] = useState<WidgetFocus | null>(null)
   const onLeaveStart = useCallback((how: LeaveStart) => setWidgetFocus({ field: how.removed, x: how.x }), [])
-  const { state, writable, add, focusStart } = useFieldEditor(root, SCHEMA, source, { autoFocus: true, onLeaveStart })
+  const { state, writable, add, focusStart, setPrefixes } = useFieldEditor(root, SCHEMA, source, { autoFocus: true, onLeaveStart })
   const present = useMemo(() => new Set(TITLE_BLOCK.filter((f) => state.fields[f] !== undefined)), [state.fields])
   const caretInTitleBlock = TITLE_BLOCK.some((f) => state.selection?.focus.field === f)
   const empty = present.size === 0 && !state.fields.body
@@ -199,6 +201,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
 
   return (
     <div className="visual-editor">
+      <Toolbar state={state} writable={writable} frameDoc={frameDoc} setPrefixes={setPrefixes} />
       <iframe
         className="visual-frame"
         title="Visual editor"
