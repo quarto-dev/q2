@@ -1,0 +1,31 @@
+---
+title: A subfigure group from Julia
+engine: julia
+---
+
+```{julia}
+#| label: fig-one
+#| fig-cap: One figure.
+using Plots
+display(MIME("image/png"), plot(1:3))
+```
+
+```{julia}
+#| label: fig-two
+#| fig-cap: A group.
+#| fig-subcap:
+#|   - First.
+#|   - Second.
+#| layout-ncol: 2
+display(MIME("image/png"), plot(1:4))
+display(MIME("image/png"), plot((1:4) .^ 2))
+```
+
+```{julia}
+#| label: tbl-one
+#| tbl-cap: A table.
+using Markdown
+display(MIME("text/markdown"), md"| a | b |\n|---|---|\n| 1 | 2 |")
+```
+
+References: @fig-one, @fig-two, @fig-two-1, @fig-two-2, @tbl-one.

@@ -1,0 +1,33 @@
+---
+# contract: a level-1 .toolbar heading is global across pages
+title: "C30 Global Toolbar"
+format: dashboard
+---
+
+# {.toolbar}
+
+C30-TOOLBAR text.
+
+# Page 1
+
+::: {.cell title="C30-P1"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+# Page 2
+
+::: {.cell title="C30-P2"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

@@ -830,7 +830,7 @@ pub struct RenderToHtmlRenderer {
     /// shows the output of a document executed by a connected `q2 provide-hub`.
     /// Empty (the default) renders code cells as source. Mirrors
     /// [`RenderToPreviewAstRenderer`]'s `captures` for the AST path.
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: crate::pandoc_request::captures::CapturePayload,
 }
 
 impl RenderToHtmlRenderer {
@@ -841,15 +841,18 @@ impl RenderToHtmlRenderer {
             vfs_root: vfs_root.into(),
             vfs_url_root: None,
             user_grammars: None,
-            captures: Vec::new(),
+            captures: Default::default(),
         }
     }
 
     /// Attach server-recorded engine captures to splice into the active page's
     /// HTML (bd-uy4uygha). Mirrors
     /// [`RenderToPreviewAstRenderer::with_captures`].
-    pub fn with_captures(mut self, captures: Vec<quarto_trace::EngineCapture>) -> Self {
-        self.captures = captures;
+    pub fn with_captures(
+        mut self,
+        captures: impl Into<crate::pandoc_request::captures::CapturePayload>,
+    ) -> Self {
+        self.captures = captures.into();
         self
     }
 
@@ -940,7 +943,7 @@ impl Pass2Renderer for RenderToHtmlRenderer {
         // bd-uy4uygha: thread the active page's captures into the HTML render
         // so recorded engine output appears without re-running the engine.
         let config =
-            HtmlRenderConfig::with_resolver(resolver.clone()).with_captures(self.captures.clone());
+            HtmlRenderConfig::with_resolver(resolver.clone()).with_payload(self.captures.clone());
         let source_name = doc_info.input.to_string_lossy().to_string();
 
         let mut render_output = render_qmd_to_html(
@@ -1069,7 +1072,7 @@ pub struct RenderToPreviewAstRenderer {
     /// [`crate::pipeline::render_qmd_to_preview_ast`] on every per-doc
     /// `render` call. Empty by default (no splice; engine cells render as
     /// raw source — same as the pre-bd-lucp path).
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: crate::pandoc_request::captures::CapturePayload,
     /// Optional transport JSON payload (a serialized
     /// [`crate::attribution::types::TransportAttributionData`]). When
     /// `Some`, the renderer installs a
@@ -1099,7 +1102,7 @@ impl RenderToPreviewAstRenderer {
             vfs_root: vfs_root.into(),
             vfs_url_root: None,
             attribution_json: None,
-            captures: Vec::new(),
+            captures: Default::default(),
             chapter_seeds: std::collections::HashMap::new(),
         }
     }
@@ -1113,8 +1116,11 @@ impl RenderToPreviewAstRenderer {
     /// the SPA hands in a capture binary doc from the IndexDocument
     /// sidecar; native test callers either pass an empty vec (no splice)
     /// or hand in synthetic captures.
-    pub fn with_captures(mut self, captures: Vec<quarto_trace::EngineCapture>) -> Self {
-        self.captures = captures;
+    pub fn with_captures(
+        mut self,
+        captures: impl Into<crate::pandoc_request::captures::CapturePayload>,
+    ) -> Self {
+        self.captures = captures.into();
         self
     }
 
@@ -1166,7 +1172,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         runtime: Arc<dyn SystemRuntime>,
         project_artifacts: &mut ArtifactStore,
     ) -> Result<Self::Output> {
-        use crate::pipeline::render_qmd_to_preview_ast;
+        use crate::pipeline::render_qmd_to_preview_ast_with_capture;
         use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
 
         // Read source bytes from the runtime (VFS in WASM, native FS
@@ -1242,7 +1248,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
 
         let source_name = doc_info.input.to_string_lossy().to_string();
 
-        let mut preview_output = render_qmd_to_preview_ast(
+        let mut preview_output = render_qmd_to_preview_ast_with_capture(
             &input_bytes,
             &source_name,
             &mut ctx,
@@ -1255,6 +1261,9 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             // captures; future per-page capture maps would replace this
             // with an index-lookup.
             self.captures.clone(),
+            // WasmPassTwoOutput keeps only the transformed AST. The response
+            // builder recaptures the baseline with the original active path.
+            false,
         )
         .await?;
         preview_output.diagnostics.extend(static_sweep_diagnostics);
@@ -1396,14 +1405,14 @@ pub struct PandocRequestPassTwoOutput {
 /// are fields set by the constructor.
 pub struct RenderToPandocRequestRenderer {
     prepare_options: crate::pandoc_request::PrepareOptions,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: crate::pandoc_request::captures::CapturePayload,
     attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
 }
 
 impl RenderToPandocRequestRenderer {
     pub fn new(
         prepare_options: crate::pandoc_request::PrepareOptions,
-        captures: Vec<quarto_trace::EngineCapture>,
+        captures: crate::pandoc_request::captures::CapturePayload,
     ) -> Self {
         Self {
             prepare_options,

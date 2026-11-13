@@ -31,6 +31,12 @@ export interface ReplaySession {
   /** Get text content at a history index (cached after first access) */
   getContentAt(index: number): string;
 
+  /**
+   * The change hashes that identify the document at a history index (its
+   * content is those changes plus their ancestors), or null when out of range.
+   */
+  getHeadsAt(index: number): string[] | null;
+
   /** Get metadata (timestamp, attribution key) for a history index */
   getMetadataAt(index: number): ReplayStepMetadata;
 
@@ -79,6 +85,11 @@ export function createReplaySession(
     const text = (viewed as { text?: string })?.text ?? '';
     textCache.set(index, text);
     return text;
+  }
+
+  function getHeadsAt(index: number): string[] | null {
+    if (closed || index < 0 || index >= history.length) return null;
+    return decodeHeads(history[index] as Parameters<typeof decodeHeads>[0]) as unknown as string[];
   }
 
   function getMetadataAt(index: number): ReplayStepMetadata {
@@ -134,6 +145,7 @@ export function createReplaySession(
       return history.length;
     },
     getContentAt,
+    getHeadsAt,
     getMetadataAt,
     applyContentAt,
     close,

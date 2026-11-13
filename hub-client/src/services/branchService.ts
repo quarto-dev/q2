@@ -285,6 +285,16 @@ export function createBranch(path: string, name?: string): BranchMeta | null {
   return meta;
 }
 
+/**
+ * The branch's current Automerge doc (read-only; each edit replaces it), or
+ * null. It carries main's history up to the fork plus the branch's own
+ * changes, which is what authorship on a branch is built from.
+ */
+export function getBranchDoc(path: string, branchId: string): A.Doc<FileDocShape> | null {
+  const docId = resolveDocId(path);
+  return docId ? loadDoc(docId, branchId) : null;
+}
+
 export function getBranchText(path: string, branchId: string): string | null {
   const docId = resolveDocId(path);
   if (!docId) return null;

@@ -121,6 +121,7 @@ async fn cell_edit_flips_staleness_in_sidecar() {
         spa_dir_override: None,
         engine_registry: Some(Arc::new(registry)),
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

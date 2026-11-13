@@ -1112,7 +1112,7 @@ Example 208 - https://github.github.com/gfm/#example-208
               (pandoc_soft_break)
               (pandoc_str))))))
 ================================================================================
-Example 209 - https://github.github.com/gfm/#example-209 (qmd: 4-space indent rejected as Q-2-35)
+Example 209 - https://github.github.com/gfm/#example-209 (qmd: 4-space indent rejected as Q-2-59)
 ================================================================================
     > # Foo
     > bar

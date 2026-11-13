@@ -1,0 +1,25 @@
+---
+# contract: raw HTML output containing bslib- markup is lifted out of the card
+title: "C39 bslib Raw"
+format: dashboard
+---
+
+## Row
+
+::: {.cell title="C39-CELL"}
+
+::: {.cell-output .cell-output-display}
+
+```{=html}
+<div class="bslib-value-box">C39-RAW</div>
+```
+
+:::
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

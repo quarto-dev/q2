@@ -169,7 +169,7 @@ fn transform_block(block: &mut Block, diagnostics: &mut Vec<DiagnosticMessage>) 
             if div.attr.1.iter().any(|c| c == TABSET_CLASS)
                 && let Some(custom) = convert_div_to_tabset(div, diagnostics)
             {
-                *block = Block::Custom(custom);
+                *block = Block::Custom(Box::new(custom));
             }
         }
         Block::Table(table) => {
@@ -330,20 +330,21 @@ mod tests {
     }
 
     fn header(level: usize, text: &str, classes: &[&str]) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (
                 String::new(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: si(),
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(text: &str) -> Block {
@@ -357,16 +358,17 @@ mod tests {
     }
 
     fn tabset_div(content: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec![TABSET_CLASS.to_string()],
                 hashlink::LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     async fn run_transform(blocks: Vec<Block>, format: Format) -> (Pandoc, Vec<String>) {
@@ -519,12 +521,12 @@ mod tests {
     async fn group_attribute_lands_in_plain_data() {
         let mut attrs = hashlink::LinkedHashMap::new();
         attrs.insert("group".to_string(), "language".to_string());
-        let div = Block::Div(Div {
-            attr: (String::new(), vec![TABSET_CLASS.to_string()], attrs),
+        let div = Block::Div(Box::new(Div {
+            attr: (String::new(), vec![TABSET_CLASS.to_string()], attrs).into(),
             content: vec![header(2, "Python", &[]), para("py")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let (ast, _) = run_transform(vec![div], Format::html()).await;
 
         let Block::Custom(custom) = &ast.blocks[0] else {

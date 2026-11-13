@@ -136,7 +136,7 @@ describe('bd-9x3zbuj8 Task 2 — inline breadcrumb in the rich-text toolbar', ()
         // The crumbs must live INSIDE the toolbar row — proving side-by-side layout
         // with the formatting buttons (no separate floating chip to overlap).
         const inlineCrumbs = Array.from(tb!.querySelectorAll<HTMLElement>('.q2-crumb'));
-        expect(inlineCrumbs.map((c) => c.textContent)).toEqual(['Dv', '¶']);
+        expect(inlineCrumbs.map((c) => c.getAttribute('data-abbrev'))).toEqual(['Dv', '¶']);
         // The in/out nav arrows are inline too.
         expect(tb!.querySelector('.q2-breadcrumb-out')).not.toBeNull();
         expect(tb!.querySelector('.q2-breadcrumb-in')).not.toBeNull();
@@ -184,7 +184,7 @@ describe('bd-9x3zbuj8 Task 2 — inline breadcrumb in the rich-text toolbar', ()
         const tb = toolbar(container);
         expect(tb, 'the folded toolbar renders for a CodeBlock').not.toBeNull();
         // Nesting on → full breadcrumb with ◀/▶ (path is just the CodeBlock crumb).
-        expect(Array.from(tb!.querySelectorAll('.q2-crumb')).map((c) => c.textContent)).toEqual(['Cd']);
+        expect(Array.from(tb!.querySelectorAll('.q2-crumb')).map((c) => c.getAttribute('data-abbrev'))).toEqual(['Cd']);
         expect(tb!.querySelector('.q2-breadcrumb-out')).not.toBeNull();
         // No rich chrome for a non-rich block.
         expect(tb!.querySelector('.q2-rt-tb-mode'), 'no mode toggle for a CodeBlock').toBeNull();

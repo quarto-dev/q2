@@ -131,7 +131,13 @@ fn fail(diag: &DiagnosticMessage, json: bool) -> ! {
     if json {
         emit_json_line(&diagnostic_to_json(diag, &SourceContext::new()));
     } else {
-        eprintln!("{}", diag.to_text(None));
+        eprintln!(
+            "{}",
+            diag.to_text_with_options(
+                None,
+                &crate::commands::terminal_style::stderr_text_options()
+            )
+        );
     }
     std::process::exit(1);
 }
@@ -140,7 +146,13 @@ fn emit_warning(diag: &DiagnosticMessage, json: bool) {
     if json {
         emit_json_line(&diagnostic_to_json(diag, &SourceContext::new()));
     } else {
-        eprintln!("{}", diag.to_text(None));
+        eprintln!(
+            "{}",
+            diag.to_text_with_options(
+                None,
+                &crate::commands::terminal_style::stderr_text_options()
+            )
+        );
     }
 }
 

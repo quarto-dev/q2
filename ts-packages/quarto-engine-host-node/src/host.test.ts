@@ -23,7 +23,7 @@ import type {
 } from "@quarto/types";
 import type { PlatformHost } from "@quarto/api/platform";
 import { interop, fallback } from "@quarto/api";
-import type { HtmlDependency, TsExecuteResult, TsPandocIncludes } from "./types.js";
+import type { HtmlDependency, TsExecuteOptions, TsExecuteResult, TsPandocIncludes } from "./types.js";
 
 // ===========================================================================
 // Test helpers
@@ -870,7 +870,7 @@ describe("T3 — handler dispatch and id correlation", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2016,7 +2016,7 @@ describe("Execute field routing", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2100,7 +2100,7 @@ describe("Execute field routing", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2206,7 +2206,7 @@ describe("F2b deferred-deps", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: false, // deferred mode
               sourceMap: [],
             },
@@ -2252,7 +2252,7 @@ describe("F2b deferred-deps", () => {
               cwd: "/proj",
               libDir: "/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true, // inline mode → no engineDependencies returned
               sourceMap: [],
             },
@@ -2360,7 +2360,7 @@ describe("htmlDependencies forwarding", () => {
               cwd: "/proj",
               libDir: "/lib", // the base for relative resolution
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2422,7 +2422,7 @@ describe("htmlDependencies forwarding", () => {
               cwd: "/proj",
               libDir: "/lib",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
             },
@@ -2646,7 +2646,7 @@ describe("execute projectDir from launch context", () => {
               cwd: "/abs/proj",
               libDir: "/abs/proj/libs",
               quiet: false,
-              handledLanguages: [],
+              handledLanguages: [], ownedLanguages: [],
               dependencies: true,
               sourceMap: [],
               // NOTE: projectDir intentionally ABSENT from wire execute options —
@@ -2793,7 +2793,7 @@ describe("T5 — per-engine execute serialization queue", () => {
           cwd: "/proj",
           libDir: "/proj/libs",
           quiet: false,
-          handledLanguages: [],
+          handledLanguages: [], ownedLanguages: [],
           dependencies: true,
           sourceMap: [],
         },
@@ -3103,13 +3103,13 @@ describe("T6 — cooperative Cancel", () => {
       input: "# hello", sourcePath: "/proj/doc.qmd",
       format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} },
       tempDir: "/tmp", cwd: "/proj", libDir: "/lib",
-      quiet: false, handledLanguages: [], dependencies: true, sourceMap: [],
+      quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [],
     }}});
     duplex.push({ id: 200, msg: { type: "execute", engine: "t6EngineM", options: {
       input: "# hello", sourcePath: "/proj/doc.qmd",
       format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} },
       tempDir: "/tmp", cwd: "/proj", libDir: "/lib",
-      quiet: false, handledLanguages: [], dependencies: true, sourceMap: [],
+      quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [],
     }}});
 
     // Wait for M to complete and N to be blocked.
@@ -3201,7 +3201,7 @@ describe("T6 — cooperative Cancel", () => {
     duplex2.push({ id: 3, msg: { type: "launchEngine", engine: "t6EngineN2", project: { isSingleFile: true } } });
     duplex2.push({ id: 4, msg: { type: "launchEngine", engine: "t6EngineP",  project: { isSingleFile: true } } });
 
-    const opts6b = { input: "# hi", sourcePath: "/p/doc.qmd", format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} }, tempDir: "/tmp", cwd: "/p", libDir: "/p/libs", quiet: false, handledLanguages: [], dependencies: true, sourceMap: [] };
+    const opts6b = { input: "# hi", sourcePath: "/p/doc.qmd", format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} }, tempDir: "/tmp", cwd: "/p", libDir: "/p/libs", quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [] };
 
     const runPromise2 = runHost(duplex2.reader, duplex2.writer, host2, {
       loadEngineModule: async (p) => { const d = loaderMap2.get(p); if (!d) throw new Error(`unknown: ${p}`); return d; },
@@ -3349,7 +3349,7 @@ describe("T7 — poison + transparent re-launch", () => {
       input: "# hello", sourcePath: "/proj/doc.qmd",
       format: { identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" }, metadata: {} },
       tempDir: "/tmp", cwd: "/proj", libDir: "/proj/libs",
-      quiet: false, handledLanguages: [], dependencies: true, sourceMap: [],
+      quiet: false, handledLanguages: [], ownedLanguages: [], dependencies: true, sourceMap: [],
     };
 
     // A: blocks on abort-aware deferred.
@@ -3398,5 +3398,360 @@ describe("T7 — poison + transparent re-launch", () => {
     duplex.push({ id: 9999, msg: { type: "shutdown" } });
     duplex.end();
     await runPromise;
+  });
+});
+
+// ===========================================================================
+// Plan 4d-C (JOL-4) — ownedLanguages reaches the engine's ExecuteOptions
+// ===========================================================================
+
+describe("ownedLanguages passthrough (Plan 4d-C)", () => {
+  async function executeAndCapture(owned: string[], handled: string[]) {
+    const seen: { owned?: string[]; handled?: string[] } = {};
+    const instance: ExecutionEngineInstance = {
+      name: "ownedEngine",
+      canFreeze: false,
+      markdownForFile: async (f: string) => ({ value: f, map: () => undefined }),
+      target: async () => undefined,
+      partitionedMarkdown: async () => { throw new Error("n/a"); },
+      execute: async (options) => {
+        seen.owned = options.ownedLanguages;
+        seen.handled = options.handledLanguages;
+        return { markdown: "# ok", supporting: [], filters: [] };
+      },
+      dependencies: async () => ({ includes: {} }),
+      postprocess: async () => {},
+    };
+    const discovery: ExecutionEngineDiscovery = {
+      name: "ownedEngine",
+      defaultExt: ".qmd",
+      defaultYaml: () => [],
+      defaultContent: () => [],
+      validExtensions: () => [".qmd"],
+      claimsFile: () => false,
+      claimsLanguage: () => false,
+      canFreeze: false,
+      generatesFigures: false,
+      launch: () => instance,
+    };
+    const loader = async (_p: string) => discovery;
+
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/e/owned.ts" } },
+        { id: 2, msg: { type: "launchEngine", engine: "ownedEngine", project: { isSingleFile: true } } },
+        {
+          id: 3,
+          msg: {
+            type: "execute",
+            engine: "ownedEngine",
+            options: {
+              input: "# content",
+              sourcePath: "/proj/doc.qmd",
+              format: {
+                identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" },
+                metadata: {},
+              },
+              tempDir: "/tmp",
+              cwd: "/proj",
+              libDir: "/proj/libs",
+              quiet: false,
+              handledLanguages: handled,
+              ownedLanguages: owned,
+              dependencies: true,
+              sourceMap: [],
+            },
+          },
+        },
+      ],
+      { loadEngineModule: loader },
+    );
+    expect(responses.find((r) => r.id === 3)?.msg.type).toBe("executeResult");
+    return seen;
+  }
+
+  it("forwards the positive set verbatim, independent of handledLanguages", async () => {
+    // Named revert: drop `ownedLanguages: opts.ownedLanguages` in host.ts → seen.owned undefined → RED.
+    const seen = await executeAndCapture(["synth", "r"], ["python"]);
+    expect(seen.owned).toEqual(["synth", "r"]);
+    expect(seen.handled).toEqual(["python"]);
+  });
+});
+
+// ===========================================================================
+// EXR-7 — units, notebook and recordInfo cross the host
+// ===========================================================================
+
+describe("execution-record wire fields (EXR-7)", () => {
+  type Unit = NonNullable<TsExecuteOptions["units"]>[number];
+
+  async function run(opts: {
+    units?: Unit[];
+    presentedBy?: "core";
+    result: Record<string, unknown>;
+  }) {
+    const seen: { units?: unknown; hasUnitsKey?: boolean; presentedBy?: unknown; hasPresentedByKey?: boolean } = {};
+    const instance: ExecutionEngineInstance = {
+      name: "recEngine",
+      canFreeze: false,
+      markdownForFile: async (f: string) => ({ value: f, map: () => undefined }),
+      target: async () => undefined,
+      partitionedMarkdown: async () => { throw new Error("n/a"); },
+      execute: async (options) => {
+        const o = options as unknown as Record<string, unknown>;
+        seen.hasUnitsKey = "units" in o;
+        seen.units = o.units;
+        seen.hasPresentedByKey = "presentedBy" in o;
+        seen.presentedBy = o.presentedBy;
+        return {
+          markdown: "# ok",
+          supporting: [],
+          filters: [],
+          ...opts.result,
+        } as unknown as Awaited<ReturnType<ExecutionEngineInstance["execute"]>>;
+      },
+      dependencies: async () => ({ includes: {} }),
+      postprocess: async () => {},
+    };
+    const discovery: ExecutionEngineDiscovery = {
+      name: "recEngine",
+      defaultExt: ".qmd",
+      defaultYaml: () => [],
+      defaultContent: () => [],
+      validExtensions: () => [".qmd"],
+      claimsFile: () => false,
+      claimsLanguage: () => false,
+      canFreeze: false,
+      generatesFigures: false,
+      launch: () => instance,
+    };
+    const { responses } = await runWithFrames(
+      [
+        { id: 1, msg: { type: "loadEngine", enginePath: "/e/rec.ts" } },
+        { id: 2, msg: { type: "launchEngine", engine: "recEngine", project: { isSingleFile: true } } },
+        {
+          id: 3,
+          msg: {
+            type: "execute",
+            engine: "recEngine",
+            options: {
+              input: "# content",
+              sourcePath: "/proj/doc.qmd",
+              format: {
+                identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" },
+                metadata: {},
+              },
+              tempDir: "/tmp",
+              cwd: "/proj",
+              libDir: "/proj/libs",
+              quiet: false,
+              handledLanguages: [],
+              ownedLanguages: ["julia"],
+              dependencies: true,
+              sourceMap: [],
+              ...(opts.units !== undefined ? { units: opts.units } : {}),
+              ...(opts.presentedBy !== undefined ? { presentedBy: opts.presentedBy } : {}),
+            },
+          },
+        },
+      ],
+      { loadEngineModule: async (_p: string) => discovery },
+    );
+    const msg = responses.find((r) => r.id === 3)?.msg;
+    expect(msg?.type).toBe("executeResult");
+    const result = (msg as unknown as { result: TsExecuteResult }).result;
+    return { seen, result };
+  }
+
+  const units: Unit[] = [
+    { id: "0-1a2b3c4d-unlabeled", index: 0, kind: "cell", language: "julia", line: 3, owned: true },
+    { id: "0-9f8e7d6c-inline", kind: "inline", language: "julia", line: 9, owned: false, inFrontMatter: true },
+  ];
+
+  it("host_forwards_presented_by_to_engine_options_only_when_core_sends_it", async () => {
+    // Named revert: drop the `presentedBy` spread in host.ts -> seen.presentedBy undefined -> RED.
+    const withIt = await run({ units, presentedBy: "core", result: {} });
+    expect(withIt.seen.presentedBy).toBe("core");
+    const without = await run({ units, result: {} });
+    expect(without.seen.hasPresentedByKey).toBe(false);
+  });
+
+  it("host_forwards_units_and_owned_languages_to_engine_options", async () => {
+    // Named revert: drop the `units` spread in host.ts → seen.units undefined → RED.
+    const { seen } = await run({ units, result: {} });
+    expect(seen.units).toEqual(units);
+  });
+
+  it("new_engine_on_core_that_sends_no_units_still_runs", async () => {
+    const { seen, result } = await run({ result: {} });
+    expect(seen.hasUnitsKey).toBe(false);
+    expect(result.markdown).toBe("# ok");
+  });
+
+  it("host_forwards_notebook_and_record_info_from_engine_result", async () => {
+    // Named revert: drop the notebook/recordInfo spreads in host.ts → keys absent → RED.
+    const notebook = { nbformat: 4, nbformat_minor: 5, metadata: {}, cells: [] };
+    const recordInfo = {
+      version: 1,
+      granularity: "unit",
+      outputKind: "raw",
+      alignment: "ids",
+      hashDefinition: { id: "julia", version: 1, granularity: "document", documentKeys: [] },
+    };
+    const { result } = await run({ result: { notebook, recordInfo } });
+    expect(result.notebook).toEqual(notebook);
+    expect(result.recordInfo).toEqual(recordInfo);
+  });
+
+  it("old_engine_result_has_no_notebook_or_record_info_keys", async () => {
+    const { result } = await run({ result: {} });
+    expect("notebook" in result).toBe(false);
+    expect("recordInfo" in result).toBe(false);
+  });
+});
+
+// ===========================================================================
+// bd-x3h4zjhl — executeEnv crosses the host to each engine's execute
+// ===========================================================================
+
+describe("executeEnv (bd-x3h4zjhl)", () => {
+  type Env = Record<string, string>;
+
+  function envEngine(name: string, onExecute: (o: Record<string, unknown>) => Promise<void>) {
+    const instance: ExecutionEngineInstance = {
+      name,
+      canFreeze: false,
+      markdownForFile: async (f: string) => ({ value: f, map: () => undefined }),
+      target: async () => undefined,
+      partitionedMarkdown: async () => { throw new Error("n/a"); },
+      execute: async (options) => {
+        await onExecute(options as unknown as Record<string, unknown>);
+        return { markdown: "# ok", supporting: [], filters: [] };
+      },
+      dependencies: async () => ({ includes: {} }),
+      postprocess: async () => {},
+    };
+    const discovery: ExecutionEngineDiscovery = {
+      name,
+      defaultExt: ".qmd",
+      defaultYaml: () => [],
+      defaultContent: () => [],
+      validExtensions: () => [".qmd"],
+      claimsFile: () => false,
+      claimsLanguage: () => false,
+      canFreeze: false,
+      generatesFigures: false,
+      launch: () => instance,
+    };
+    return discovery;
+  }
+
+  function executeFrame(id: number, engine: string, executeEnv?: Env): Request {
+    return {
+      id,
+      msg: {
+        type: "execute",
+        engine,
+        options: {
+          input: "# content",
+          sourcePath: "/proj/doc.qmd",
+          format: {
+            identifier: { "base-format": "html", "target-format": "html", "display-name": "HTML" },
+            metadata: {},
+          },
+          tempDir: "/tmp",
+          cwd: "/proj",
+          libDir: "/proj/libs",
+          quiet: false,
+          handledLanguages: [],
+          ownedLanguages: [],
+          dependencies: true,
+          sourceMap: [],
+          ...(executeEnv !== undefined ? { executeEnv } : {}),
+        },
+      },
+    };
+  }
+
+  function setupFrames(names: string[]): Request[] {
+    return names.flatMap((n, i): Request[] => [
+      { id: 100 + i * 2, msg: { type: "loadEngine", enginePath: `/e/${n}.ts` } },
+      { id: 101 + i * 2, msg: { type: "launchEngine", engine: n, project: { isSingleFile: true } } },
+    ]);
+  }
+
+  it("passes executeEnv to the engine's execute", async () => {
+    // Named revert: drop the `executeEnv` spread in host.ts -> undefined -> RED.
+    let seen: unknown;
+    const d = envEngine("envEngine", async (o) => { seen = o.executeEnv; });
+    const env = { QUARTO_DOCUMENT_FILE: "doc.qmd", FROM_ENVFILE: "a b\\c" };
+    const { responses } = await runWithFrames(
+      [...setupFrames(["envEngine"]), executeFrame(1, "envEngine", env)],
+      { loadEngineModule: async () => d },
+    );
+    expect(responses.find((r) => r.id === 1)?.msg.type).toBe("executeResult");
+    expect(seen).toEqual(env);
+  });
+
+  it("leaves the key out when the request omits it", async () => {
+    let hasKey: boolean | undefined;
+    const d = envEngine("envEngine", async (o) => { hasKey = "executeEnv" in o; });
+    await runWithFrames(
+      [...setupFrames(["envEngine"]), executeFrame(1, "envEngine")],
+      { loadEngineModule: async () => d },
+    );
+    expect(hasKey).toBe(false);
+  });
+
+  it("gives two executes queued on one engine each their own values", async () => {
+    const seen: unknown[] = [];
+    const d = envEngine("envEngine", async (o) => { seen.push(o.executeEnv); });
+    await runWithFrames(
+      [
+        ...setupFrames(["envEngine"]),
+        executeFrame(1, "envEngine", { QUARTO_DOCUMENT_FILE: "one.qmd" }),
+        executeFrame(2, "envEngine", { QUARTO_DOCUMENT_FILE: "two.qmd" }),
+      ],
+      { loadEngineModule: async () => d },
+    );
+    expect(seen).toEqual([
+      { QUARTO_DOCUMENT_FILE: "one.qmd" },
+      { QUARTO_DOCUMENT_FILE: "two.qmd" },
+    ]);
+  });
+
+  it("gives executes running concurrently on different engines each their own values", async () => {
+    // Both executes wait until both have started, so they overlap.
+    const bothStarted = makeDeferred<void>();
+    let started = 0;
+    const seen: Record<string, unknown> = {};
+    const mk = (name: string) =>
+      envEngine(name, async (o) => {
+        seen[name] = o.executeEnv;
+        if (++started === 2) bothStarted.resolve();
+        await bothStarted.promise;
+      });
+    const loaders = new Map([
+      ["/e/envA.ts", mk("envA")],
+      ["/e/envB.ts", mk("envB")],
+    ]);
+    await runWithFrames(
+      [
+        ...setupFrames(["envA", "envB"]),
+        executeFrame(1, "envA", { QUARTO_DOCUMENT_FILE: "a.qmd" }),
+        executeFrame(2, "envB", { QUARTO_DOCUMENT_FILE: "b.qmd" }),
+      ],
+      {
+        loadEngineModule: async (p: string) => {
+          const d = loaders.get(p);
+          if (!d) throw new Error(`unknown: ${p}`);
+          return d;
+        },
+      },
+    );
+    expect(seen).toEqual({
+      envA: { QUARTO_DOCUMENT_FILE: "a.qmd" },
+      envB: { QUARTO_DOCUMENT_FILE: "b.qmd" },
+    });
   });
 });

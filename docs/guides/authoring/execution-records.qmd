@@ -1,0 +1,171 @@
+---
+title: Execution records
+---
+
+## Overview
+
+When Quarto runs the code in a document, it can keep what the code
+produced --- each cell's outputs and each inline expression's value --- as an
+**execution record**. A record lets Quarto present the document again
+without running anything: `q2 preview` and hub use
+this to show an up-to-date page while you edit prose.
+
+A record is an ordinary Jupyter notebook file (`.ipynb`), whichever engine ran
+the code, so other tools can read it. Each cell of the notebook is one
+**unit** of the document: a code cell, or an inline expression.
+
+::: callout-note
+## Opt-in for now
+
+A plain `q2 render` writes nothing under `.quarto/`. The preview keeps the
+records it needs on its own. `record: true`, shown below, asks for a copy of
+the record under the project's `.quarto/` directory. Hub uploads from
+`q2 provide-hub` still use the older format unless you set the environment
+variable `QUARTO_ENGINE_RECORD_WRITE` to `1`, while the feature is rolled out.
+:::
+
+## Keeping a copy of the record
+
+Add `record: true` to the document's `execute` options:
+
+````markdown
+---
+title: Report
+jupyter: python3
+execute:
+  record: true
+---
+````
+
+A render then also writes a copy of the record under the project's `.quarto/` directory, at
+`.quarto/execution-records/<document path without extension>.ipynb`. In a
+project, `reports/q3.qmd` gets `.quarto/execution-records/reports/q3.ipynb`
+at the project root. A standalone document with no project gets a `.quarto/`
+beside it, so `q3.qmd` gets `.quarto/execution-records/q3.ipynb`.
+
+Two renders of the same inputs write the same bytes. Many projects ignore
+`.quarto/` in version control, so a record is not something to commit; do not
+expect it to be shared between collaborators until a durable use for it
+exists.
+
+## What an edit does to a record
+
+Quarto compares a record with the document to decide whether it still
+describes it:
+
+| You edit                                             | The record is |
+|------------------------------------------------------|---------------|
+| prose outside cells and spans                        | still fresh   |
+| the code in a cell                                   | stale         |
+| a `#|` option line                                   | stale         |
+| an inline expression                                 | stale         |
+| a front matter key that affects execution            | stale         |
+
+So correcting a typo in a paragraph does not re-run your cells in the preview
+or in hub. Any other edit above does.
+
+The preview also keeps a cache of its own, keyed on the whole input. A prose
+edit can therefore still cause a re-run there for reasons unrelated to the
+record; the table is about the record only.
+
+## Positron's cache is a different file
+
+[Positron](https://positron.posit.co) keeps its own cache of Quarto outputs,
+in per-user storage. Quarto does not use or write that file as its record,
+for three reasons: Positron's file is rewritten from a fixed set of fields, so
+extra information in it is dropped; it is named after a hash of the document's
+location, which Quarto cannot reproduce; and it carries a timestamp that
+changes on every write, so its bytes are never stable.
+
+`q2 render` does not read Positron's cache. Only a preview or `q2 provide-hub`
+does, and only when you ask for it with `--records positron` (or a directory
+of Positron cache files), described next. Quarto never writes to or deletes
+Positron's cache. Output shown from it is marked as generated, so the viewer
+does not offer to edit it; see
+[Outputs from an imported record](../projects/preview.qmd#outputs-from-an-imported-record).
+
+To go the other way and give Positron a cache file built from a document's
+record, use [`q2 convert`](convert.qmd).
+
+### Setting it from the command line
+
+`q2 preview` passes `-M` to the document's code too, so a preview can write the
+copy without editing the document:
+
+``` {.bash filename="Terminal"}
+q2 preview report.qmd -M 'execute: {record: true}'
+```
+
+The copy is then written at the path above each time the preview runs the
+document. Turning `record` on or off does not make a record out of date.
+
+## Choosing where a preview gets records
+
+`q2 preview` and `q2 provide-hub` take `--records`, a list of the places to
+look for a document's record, in order. The first place that has a record for
+the document wins; records are never merged.
+
+| Entry | Where the record comes from |
+|---|---|
+| `cache` | the preview's own cache of earlier runs (`q2 preview` only) |
+| `q2` | the copy under `.quarto/execution-records/` that `record: true` writes |
+| `positron` | Positron's inline output cache, read without starting a kernel |
+| a directory path | a directory of Positron-format cache files |
+| `engine` | run the code |
+
+Write the list with commas (`--records cache,q2,engine`) or repeat the flag.
+A directory path needs a path separator or a leading `./`, `../`, `/` or `~`;
+a bare word that is not one of the names is an error, so write `./notes` for a
+directory called `notes`. A directory must exist when the command starts, a
+relative path is taken from the directory you run the command in, and a path
+that contains a comma cannot be given.
+
+The defaults differ. `q2 preview` uses `cache,q2,engine`: it reuses an earlier
+run, then a saved record, and runs the code only if neither has one.
+`q2 provide-hub` uses `engine` alone, which is a fresh run each time, after you
+approve it. Leave `engine` out and the command never runs code: a preview shows
+only the records it finds, and says on the page why each place had none.
+`--records` cannot be combined with `--join`, `--static` or `--no-project`, and
+`cache` is not available for `provide-hub`.
+
+"Never run code" means no code cell, inline expression or engine process runs.
+Your document's filters, shortcodes and includes still run, as in any preview,
+and so do the project's pre-render scripts, once, when the preview starts. A
+guest of a shared preview can re-run code only when `engine` is in the list and
+`preview.engine` is not `off` (under `off`, `engine` in the list is ignored with
+a warning).
+
+Two things to know about `provide-hub`. A record from `q2`, `positron` or a
+directory is published to everyone viewing the hub document **without** the
+approval prompt, because no code runs; naming the source is how you choose to
+share those outputs. And until the hosted hub can read records, publishing one
+needs `QUARTO_ENGINE_RECORD_WRITE=1` in the environment; without it the record
+is refused with a message that names the variable.
+
+The preview reads its sources when it starts, not again when a file changes. A
+Positron cache written after the preview started, or a new `.qmd` file, is not
+seen until you restart it. With a persisted `--data-dir`, a document that was
+re-run keeps the record of that run across restarts, and "Clear results" in
+the editor removes a record for every collaborator without looking at the
+list again.
+
+## Limits
+
+- A document that uses an engine that builds no execution record is stored in
+  the older format. Every output is still shown, but features that read
+  records may not work with it.
+- A preview that keeps its data with `--data-dir` stores execution records
+  there. If you later open that directory with an older version of `q2`, the
+  page shows "Failed to parse capture". Use a new `--data-dir`, or delete the
+  old one: the older version records the file again. Edits made in the
+  `--ui editor` session are not written to your files unless you pass
+  `--allow-edit`, so save anything you want to keep first.
+- A record from a knitr document can be exported with
+  [`q2 convert`](convert.qmd), and a preview reads Positron's outputs for its R
+  cells. Cells in other languages of a knitr document do not take outputs from
+  Positron's cache.
+- To run cells in a kernel other than Python, see
+  [Running other languages with Jupyter kernels](jupyter-kernels.qmd), which
+  also covers choosing a kernel and what happens when one is missing.
+- Inline expressions are described in
+  [Inline expressions](computations.qmd#inline-expressions).

@@ -102,6 +102,28 @@ describe('Preview capture consumption (bd-uy4uygha)', () => {
     });
   });
 
+  it('threads a record-typed payload (EXR-14) into the html render call the same way', async () => {
+    // The wire shape is decided in Rust from the decompressed JSON, so the TS layer must
+    // pass an engine record's bytes through untouched, whatever the stored MIME type says.
+    const RECORD_BYTES = new Uint8Array([1, 2, 3, 4, 5]);
+    getBinaryDocById.mockResolvedValueOnce({
+      content: RECORD_BYTES,
+      mimeType: 'application/x-engine-record+gzip',
+    });
+    const captures: Record<string, CaptureRef> = {
+      'doc.qmd': { captureDocId: 'rec-1', state: 'idle' },
+    };
+
+    render(<Preview {...baseProps(captures)} />);
+
+    await waitFor(() => expect(getBinaryDocById).toHaveBeenCalledWith('rec-1'));
+    await waitFor(() => {
+      const withPayload = renderToHtml.mock.calls.find((c) => c[0]?.captureGzJson !== undefined);
+      expect(withPayload, 'a render call must carry the record bytes').toBeTruthy();
+      expect(withPayload![0].captureGzJson).toEqual(RECORD_BYTES);
+    });
+  });
+
   it('passes no capture bytes when the active doc has no capture entry', async () => {
     render(<Preview {...baseProps(undefined)} />);
 

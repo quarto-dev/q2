@@ -668,6 +668,7 @@ mod orchestrator_engine_channel {
                 },
                 "needs_postprocess": false,
             }),
+            record: None,
             files: Vec::new(),
         };
 

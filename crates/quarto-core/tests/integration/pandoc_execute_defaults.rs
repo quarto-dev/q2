@@ -101,7 +101,9 @@ fn observed_execute_scope(content: &str, to_format: &str) -> Option<ConfigValue>
 
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
-    if to_format == "html" {
+    // Native formats (html, revealjs, dashboard) go through the HTML
+    // pipeline; everything else through the pandoc writer.
+    if format.native_pipeline {
         // `render_qmd_to_html` unconditionally overwrites
         // `ctx.engine_registry_override` from `config.engine_registry`
         // (`pipeline.rs:955`) — the registry must ride in through the
@@ -269,4 +271,53 @@ fn tier_d_execute_defaults_reach_engine() {
             "{target_format}'s fig-height:6.5 default did not reach the engine"
         );
     }
+}
+
+// === HTML presentation family and dashboards (bd-cymkcyaf, dashboard D3) ===
+
+/// A revealjs render observes Q1's `createHtmlPresentationFormat`
+/// defaults: echo and warnings off, 10x5 figures.
+#[test]
+fn revealjs_execute_defaults_reach_engine() {
+    let scope =
+        observed_execute_scope(CELL_FIXTURE, "revealjs").expect("revealjs must produce a scope");
+    assert_eq!(scope.get("echo").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(scope.get("warning").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        scope.get("fig-width").and_then(|v| v.as_f64_lenient()),
+        Some(10.0)
+    );
+}
+
+/// A dashboard render observes Q1's `dashboardFormat()` defaults.
+#[test]
+fn dashboard_execute_defaults_reach_engine() {
+    let scope =
+        observed_execute_scope(CELL_FIXTURE, "dashboard").expect("dashboard must produce a scope");
+    assert_eq!(scope.get("echo").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(scope.get("warning").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        scope.get("fig-width").and_then(|v| v.as_f64_lenient()),
+        Some(8.0)
+    );
+    assert_eq!(
+        scope.get("fig-height").and_then(|v| v.as_f64_lenient()),
+        Some(5.0)
+    );
+    assert_eq!(
+        scope
+            .get("ipynb-shell-interactivity")
+            .and_then(|v| v.as_plain_text()),
+        Some("all".to_string())
+    );
+}
+
+/// The document still wins over the dashboard defaults.
+#[test]
+fn document_execute_wins_over_dashboard_default() {
+    let content = "---\ntitle: F\nexecute:\n  echo: true\n---\n\n```{probeeng}\n1 + 1\n```\n";
+    let scope =
+        observed_execute_scope(content, "dashboard").expect("dashboard must produce a scope");
+    assert_eq!(scope.get("echo").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(scope.get("warning").and_then(|v| v.as_bool()), Some(false));
 }

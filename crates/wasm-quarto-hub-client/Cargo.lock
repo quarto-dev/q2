@@ -711,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -4247,7 +4247,7 @@ checksum = "edecfcd5d755a5e5d98e24cf43113e7cdaec5a070edd0f6b250c03a573da30fa"
 
 [[package]]
 name = "quarto-analysis"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -4269,7 +4269,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "hashlink",
  "pathdiff",
@@ -4281,14 +4281,14 @@ dependencies = [
 
 [[package]]
 name = "quarto-build-support"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "filetime",
 ]
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -4319,11 +4319,12 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "biblatex 0.12.0",
  "css-inline",
  "cssparser 0.36.0",
  "dirs",
@@ -4373,6 +4374,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_yaml 0.9.34+deprecated",
+ "sha1",
  "sha2 0.11.0",
  "smallvec",
  "tempfile",
@@ -4393,7 +4395,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -4444,7 +4446,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "once_cell",
  "quarto-highlight-encoding",
@@ -4463,6 +4465,7 @@ dependencies = [
  "tree-sitter-lmd",
  "tree-sitter-lua",
  "tree-sitter-python",
+ "tree-sitter-qmd",
  "tree-sitter-r",
  "tree-sitter-rust",
  "tree-sitter-sequel",
@@ -4472,7 +4475,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4480,7 +4483,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "pampa",
  "pollster",
@@ -4501,7 +4504,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-math"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "mitex-lexer",
  "mitex-parser",
@@ -4517,7 +4520,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-navigation"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -4529,7 +4532,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-node-discovery"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "dirs",
  "thiserror 2.0.21",
@@ -4563,7 +4566,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
@@ -4573,7 +4576,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-sass"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "include_dir",
  "once_cell",
@@ -4606,7 +4609,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "async-lock",
  "async-trait",
@@ -4627,7 +4630,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "flate2",
  "quarto-build-support",
@@ -4639,7 +4642,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-transpile"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "oxc_allocator",
  "oxc_codegen",
@@ -4660,16 +4663,18 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
+ "anstyle-query",
  "dirs",
  "serde",
+ "supports-hyperlinks",
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "quarto-xml"
-version = "0.39.0"
+version = "0.45.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -5900,6 +5905,12 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+
+[[package]]
+name = "supports-hyperlinks"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e396b6523b11ccb83120b115a0b7366de372751aa6edf19844dfb13a6af97e91"
 
 [[package]]
 name = "svgtypes"
@@ -7202,7 +7213,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.39.0"
+version = "0.45.0"
 
 [[package]]
 name = "wasm-quarto-hub-client"

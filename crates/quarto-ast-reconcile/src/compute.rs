@@ -872,22 +872,22 @@ mod tests {
     }
 
     fn make_header(level: usize, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![make_str(text)],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_div(blocks: Vec<Block>) -> Block {
-        Block::Div(Div {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        Block::Div(Box::new(Div {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: blocks,
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_blockquote(blocks: Vec<Block>) -> Block {
@@ -905,16 +905,16 @@ mod tests {
     }
 
     fn make_ordered_list(items: Vec<Vec<Block>>) -> Block {
-        Block::OrderedList(OrderedList {
+        Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
             content: items,
             source_info: dummy_source(),
-        })
+        }))
     }
 
     fn make_figure(blocks: Vec<Block>) -> Block {
-        Block::Figure(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        Block::Figure(Box::new(Figure {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -923,7 +923,7 @@ mod tests {
             content: blocks,
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_emph(text: &str) -> Inline {

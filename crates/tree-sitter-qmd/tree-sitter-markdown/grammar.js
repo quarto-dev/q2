@@ -445,10 +445,32 @@ module.exports = grammar({
         target: $ => seq(
             /[ \t]*[\]][(]/, 
             optional($._inline_whitespace),
-            alias(repeat(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
+            choice(
+                field('angle_bracket_url', alias($._angle_bracket_url, $.url)),
+                alias(repeat(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
+            ),
             optional(seq($._inline_whitespace, alias($._commonmark_double_quote_string, $.title))),
             ')'
         ),
+
+        // bd-angle-link-dest-qkqkegqo: CommonMark's pointy-bracket link
+        // destination, `[x](<a path with spaces.png>)`. Following CommonMark
+        // (stricter than Pandoc): no line ending and no unescaped `<` or `>`
+        // inside the brackets; backslash escapes are allowed.
+        //
+        // This is deliberately ONE lexical token, not seq('<', ..., '>'). The
+        // lexer prefers the longest match, so `<a b.png>` lexes as this token,
+        // while an unclosed `[x](<foo)` cannot match it and falls back to the
+        // char-by-char bare URL above (unchanged behaviour). A grammar-level
+        // '<' literal would win ties against the bare-URL regex and turn such
+        // inputs into errors. Shortcodes are not recognized inside the
+        // brackets. The node keeps the `url` name (so highlight queries and
+        // other `(target (url))` consumers are unaffected); the
+        // `angle_bracket_url` field is how pampa tells the two forms apart
+        // (tree-sitter renames an always-aliased token, so its grammar_name()
+        // is just "url"). pampa strips the brackets, decodes escapes and
+        // percent-encodes (Pandoc's escapeURI).
+        _angle_bracket_url: $ => token(prec(1, seq('<', /([^<>\\\n\r]|\\.)*/, '>'))),
 
         pandoc_math: $ => seq(
             '$',
@@ -965,10 +987,20 @@ module.exports = grammar({
             // would lex as a marker and could never backtrack to the inline
             // `[` interpretation; with it, `[x](`/`[xx]` fail the token and
             // parse as inline spans/links.
+            //
+            // Everything after the marker is optional so an empty task item (`- [ ] ` with
+            // nothing after the marker's whitespace) parses as a task item
+            // instead of an ERROR: that is exactly what a user has typed in
+            // the collaborative editor just before the item text
+            // (bd-2ydvebkc). Like an empty plain item (see `_list_item_minus`),
+            // the empty task item consumes the rest of its line as a
+            // `_blank_line`.
             prec(1, seq(
                 choice($.task_list_marker_checked, $.task_list_marker_unchecked),
-                $.pandoc_paragraph,
-                repeat($._block),
+                optional(choice(
+                    seq($.pandoc_paragraph, repeat($._block)),
+                    $._blank_line,
+                )),
             )),
         )),
 
@@ -1299,8 +1331,8 @@ module.exports = grammar({
         // code blocks. The scanner emits this token when leftover indentation
         // (after block-quote / list-item matchers consume their share) is >= 4
         // at a block-start position, so the parser can raise the user-facing
-        // error Q-2-35 ("Indented code blocks are not supported",
-        // see crates/pampa/resources/error-corpus/Q-2-35.json) suggesting a
+        // error Q-2-59 ("Indented code blocks are not supported",
+        // see crates/pampa/resources/error-corpus/Q-2-59.json) suggesting a
         // fenced code block. Emission site: scanner.c,
         // EMIT_TOKEN(INDENTED_CODE_BLOCK_DISALLOWED).
         // See CONTRIBUTING.md "Known limitations" for the full list.

@@ -672,6 +672,17 @@ pub fn rewrite_item_text(
     surface: &NavSurface<'_>,
     diagnostics: &mut Vec<DiagnosticMessage>,
 ) {
+    // Breakpoint variants (bd-navbar-responsive-text-am98rw95) are what
+    // the navbar displays, and `text` is a copy of one of them. Rewrite
+    // the variants, then re-derive `text`, so each target is resolved
+    // (and any Q-13-2 reported) once.
+    if !item.text_variants.is_empty() {
+        for (_, cv) in item.text_variants.iter_mut() {
+            rewrite_config_text(cv, resolver, index, surface, diagnostics);
+        }
+        item.refresh_canonical_text();
+        return;
+    }
     if let Some(cv) = item.text.as_mut() {
         rewrite_config_text(cv, resolver, index, surface, diagnostics);
     }
@@ -944,27 +955,27 @@ mod tests {
     fn test_image(url: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Image, Inline};
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![],
             target: (url.to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn test_link(url: &str) -> quarto_pandoc_types::inline::Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::{Inline, Link};
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Default::default(),
             content: vec![],
             target: (url.to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn plain(
@@ -988,7 +999,7 @@ mod tests {
         use quarto_pandoc_types::block::{Block, Figure, Paragraph};
 
         let mut blocks = vec![
-            Block::Figure(Figure {
+            Block::Figure(Box::new(Figure {
                 attr: Default::default(),
                 caption: Caption {
                     short: None,
@@ -998,7 +1009,7 @@ mod tests {
                 content: vec![plain(vec![test_image("/images/x.svg")])],
                 source_info: SourceInfo::for_test(),
                 attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-            }),
+            })),
             Block::Paragraph(Paragraph {
                 content: vec![test_image("images/y.svg")],
                 source_info: SourceInfo::for_test(),

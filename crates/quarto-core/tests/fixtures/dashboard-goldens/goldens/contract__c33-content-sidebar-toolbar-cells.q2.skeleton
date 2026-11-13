@@ -1,0 +1,31 @@
+body.dashboard-fill.dashboard-toolbar.fullcontent.quarto-dashboard.quarto-light
+  header#quarto-dashboard-header
+    nav.navbar.navbar-expand-md.slim [data-bs-theme=dark]
+      div.container-fluid.navbar-container
+        button.hidden.navbar-toggler [aria-controls=dashboard-collapse aria-label=Toggle navigation data-bs-target=#dashboard-collapse data-bs-toggle=collapse]
+          span.navbar-toggler-icon
+        div.navbar-brand-container
+          div.navbar-title
+            div.navbar-title-text "C33 Content Cells"
+  div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.html-fill-container.page-layout-custom.quarto-dashboard-content [role=main]
+    div.dashboard-toolbar-container.html-fill-container.html-fill-item.toolbar-toplevel
+      div.html-fill-container.toolbar
+        div.cell-output-display
+      div.html-fill-container.html-fill-item.toolbar-content
+        div.bslib-grid.dashboard-sidebar-container.html-fill-container.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, 1fr); grid-auto-columns: minmax(0, 1fr);]
+          div.bslib-sidebar-layout.html-fill-container.html-fill-item.sidebar-right [data-bslib-sidebar-init=true data-bslib-sidebar-open=desktop]
+            div.html-fill-container.html-fill-item.main
+              div.html-fill-container.html-fill-item.sidebar-content
+                div.bslib-grid.html-fill-container.html-fill-item [style=display: grid; grid-template-columns: minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+                  div.bslib-card.card.cell.html-fill-container.html-fill-item [data-bslib-card-init= data-full-screen=false]
+                    div.card-header
+                      div.card-title.html-fill-container.html-fill-item "C33-A"
+                    div.card-body.html-fill-container.html-fill-item
+                      div.cell-output-display.html-fill-container.html-fill-item
+                        img.img-fluid.quarto-dashboard-img-contain
+                    bslib-tooltip
+                      span.badge.bslib-full-screen-enter.rounded-pill
+            aside#bslib-sidebar-1.html-fill-container.html-fill-item.sidebar
+              div.html-fill-container.html-fill-item
+                div.cell-output-display
+            button.collapse-toggle [aria-controls=bslib-sidebar-1 title=Toggle sidebar]

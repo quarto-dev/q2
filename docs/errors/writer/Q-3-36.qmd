@@ -1,6 +1,6 @@
 ---
 title: "Unprocessed EditComment Markup"
-description: !str "EditComment editorial markup ({>> ...}) was not desugared to a Span during postprocessing."
+description: !str "EditComment editorial markup ([>> ...]) was not desugared to a Span during postprocessing."
 code: Q-3-36
 subsystem: writer
 status: stub
@@ -11,15 +11,15 @@ categories:
 
 # `Q-3-36` — Unprocessed EditComment Markup
 
-> EditComment editorial markup `{>> ...}` was not desugared to
+> EditComment editorial markup `[>> ...]` was not desugared to
 > a Span during postprocessing.
 
 ## What this means
 
-Quarto's CriticMarkup-inspired comment construct `{>> ...}` is
+Quarto's CriticMarkup-inspired comment construct `[>> ...]` is
 parsed as an `EditComment` AST node — an editorial aside from
 one collaborator to another, not intended for the final reader.
-Postprocessing rewrites it as a `Span` with the `.comment`
+Postprocessing rewrites it as a `Span` with the `.quarto-edit-comment`
 class before the writer runs. This error fires when a raw
 `EditComment` node reaches the writer.
 

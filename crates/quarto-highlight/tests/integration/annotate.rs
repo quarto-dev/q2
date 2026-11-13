@@ -13,7 +13,7 @@ use quarto_source_map::{FileId, SourceInfo};
 
 fn attr_with_class(class: &str) -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), vec![class.to_string()], LinkedHashMap::new())
+    (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
 }
 
 fn empty_source_info() -> SourceInfo {
@@ -25,12 +25,12 @@ fn empty_attr_source() -> AttrSourceInfo {
 }
 
 fn make_code_block(class: &str, text: &str) -> Block {
-    Block::CodeBlock(CodeBlock {
+    Block::CodeBlock(Box::new(CodeBlock {
         attr: attr_with_class(class),
         text: text.to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    })
+    }))
 }
 
 fn empty_pandoc() -> Pandoc {
@@ -111,16 +111,17 @@ fn leaves_existing_annotation_alone() {
 #[test]
 fn annotates_inline_code() {
     use hashlink::LinkedHashMap;
-    let inline = Inline::Code(Code {
+    let inline = Inline::Code(Box::new(Code {
         attr: (
             String::new(),
             vec!["python".to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         text: "print(42)".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    });
+    }));
     let mut doc = empty_pandoc();
     doc.blocks.push(Block::Paragraph(Paragraph {
         content: Inlines::from(vec![inline]),
@@ -144,12 +145,12 @@ fn annotates_inline_code() {
 fn code_block_with_no_class_is_skipped() {
     use hashlink::LinkedHashMap;
     let mut doc = empty_pandoc();
-    doc.blocks.push(Block::CodeBlock(CodeBlock {
-        attr: (String::new(), vec![], LinkedHashMap::new()),
+    doc.blocks.push(Block::CodeBlock(Box::new(CodeBlock {
+        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
         text: "foo bar".to_string(),
         source_info: empty_source_info(),
         attr_source: empty_attr_source(),
-    }));
+    })));
 
     annotate_pandoc(&mut doc, None).expect("annotate must not error");
 
@@ -157,4 +158,122 @@ fn code_block_with_no_class_is_skipped() {
         unreachable!()
     };
     assert!(get_hl_attr(&cb.attr).is_none());
+}
+
+#[test]
+fn annotates_builtin_class_case_insensitively() {
+    // GH #1080: ```R and ```Python must highlight like ```r and ```python
+    // (Pandoc matches language names case-insensitively). The author's
+    // class is left on the node as written.
+    for class in ["R", "Python", "YAML", "Js"] {
+        let mut doc = empty_pandoc();
+        doc.blocks.push(make_code_block(class, "x <- 1\n"));
+
+        annotate_pandoc(&mut doc, None).expect("annotate must not error");
+
+        let Block::CodeBlock(cb) = &doc.blocks[0] else {
+            panic!("expected CodeBlock");
+        };
+        assert!(
+            get_hl_attr(&cb.attr).is_some(),
+            "class {class:?} should resolve to a built-in grammar"
+        );
+        assert_eq!(cb.attr.1, vec![class.to_string()]);
+    }
+}
+
+#[test]
+fn builtin_lookup_api_is_case_insensitive() {
+    assert!(quarto_highlight::is_language_supported("R"));
+    assert!(quarto_highlight::is_language_supported("TypeScript"));
+    assert!(!quarto_highlight::is_language_supported("Klingon"));
+    assert_eq!(
+        quarto_highlight::highlight("R", "x <- 1").unwrap(),
+        quarto_highlight::highlight("r", "x <- 1").unwrap(),
+    );
+}
+
+fn annotate_block_with_classes(classes: &[&str], text: &str) -> Attr {
+    use hashlink::LinkedHashMap;
+    let mut doc = empty_pandoc();
+    doc.blocks.push(Block::CodeBlock(Box::new(CodeBlock {
+        attr: (
+            String::new(),
+            classes.iter().map(|c| c.to_string()).collect(),
+            LinkedHashMap::new(),
+        )
+            .into(),
+        text: text.to_string(),
+        source_info: empty_source_info(),
+        attr_source: empty_attr_source(),
+    })));
+    annotate_pandoc(&mut doc, None).expect("annotate must not error");
+    let Block::CodeBlock(cb) = doc.blocks.remove(0) else {
+        unreachable!()
+    };
+    cb.attr
+}
+
+/// GH #1079: a block whose language Pandoc knows but q2 has no grammar
+/// for gets an empty span list, so the HTML writer still emits the
+/// `div.sourceCode` wrapper (as Quarto 1 does).
+#[test]
+fn marks_pandoc_known_language_without_grammar() {
+    for classes in [
+        &["ini"][..],
+        &["default"],
+        &["INI"],
+        &["conf"],
+        &["toml"],
+        &["cell-code", "toml"],
+    ] {
+        let attr = annotate_block_with_classes(classes, "a = 1\n");
+        assert_eq!(get_hl_attr(&attr), Some("[]"), "{classes:?}");
+    }
+}
+
+#[test]
+fn does_not_mark_classes_pandoc_does_not_know() {
+    for classes in [
+        &["text"][..],
+        &["nginx"],
+        &["cell-output", "cell-output-stdout"],
+        &["code-with-copy"],
+    ] {
+        let attr = annotate_block_with_classes(classes, "x\n");
+        assert_eq!(get_hl_attr(&attr), None, "{classes:?}");
+    }
+}
+
+/// A grammar language whose text yields no captures still gets the
+/// (empty) marker, so it keeps the wrapper too.
+#[test]
+fn marks_grammar_language_with_no_captures() {
+    let attr = annotate_block_with_classes(&["python"], "");
+    assert_eq!(get_hl_attr(&attr), Some("[]"));
+}
+
+/// Inline code is out of scope for GH #1079: no marker for a known
+/// language without a grammar.
+#[test]
+fn does_not_mark_inline_code_without_grammar() {
+    use hashlink::LinkedHashMap;
+    let mut doc = empty_pandoc();
+    doc.blocks.push(Block::Paragraph(Paragraph {
+        content: Inlines::from(vec![Inline::Code(Box::new(Code {
+            attr: (String::new(), vec!["ini".to_string()], LinkedHashMap::new()).into(),
+            text: "a = 1".to_string(),
+            source_info: empty_source_info(),
+            attr_source: empty_attr_source(),
+        }))]),
+        source_info: empty_source_info(),
+    }));
+    annotate_pandoc(&mut doc, None).expect("annotate must not error");
+    let Block::Paragraph(p) = &doc.blocks[0] else {
+        unreachable!()
+    };
+    let Inline::Code(c) = &p.content[0] else {
+        panic!("expected inline Code");
+    };
+    assert_eq!(get_hl_attr(&c.attr), None);
 }

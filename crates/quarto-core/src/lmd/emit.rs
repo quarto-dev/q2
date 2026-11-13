@@ -45,7 +45,7 @@ use quarto_source_map::SourceInfo;
 
 use super::anchor::Anchor;
 use super::desugar::{DesugarOptions, EmitMode, LmdError, desugar_lua_at, desugar_lua_expr_with};
-use crate::engine::capture_splice::engine_cell_lang;
+use crate::engine::cell_lang::engine_cell_lang;
 
 /// Output buffer plus indentation state.
 pub(super) struct Emitter {
@@ -163,7 +163,7 @@ impl Emitter {
     }
 
     fn attr(&mut self, attr: &Attr) -> Result<(), LmdError> {
-        let (id, classes, kvs) = attr;
+        let (id, classes, kvs) = &**attr;
         let kvs: Vec<(&String, &String)> = kvs.iter().collect();
         self.call("Attr", |e| {
             e.string(id);
@@ -607,7 +607,7 @@ mod tests {
 
     #[test]
     fn inline_lmd_source_recognizes_both_forms() {
-        let empty: Attr = (String::new(), vec![], Default::default());
+        let empty: Attr = (String::new(), vec![], Default::default()).into();
         assert_eq!(inline_lmd_source(&empty, "{lmd} v"), Some("v"));
         assert_eq!(inline_lmd_source(&empty, "{lmd}v + 1"), Some("v + 1"));
         assert_eq!(inline_lmd_source(&empty, "{python} v"), None);
@@ -615,7 +615,7 @@ mod tests {
         // A bare tag is a mention of the syntax, not a cell.
         assert_eq!(inline_lmd_source(&empty, "{lmd}"), None);
         assert_eq!(inline_lmd_source(&empty, "{lmd} "), None);
-        let classed: Attr = (String::new(), vec!["{lmd}".into()], Default::default());
+        let classed: Attr = (String::new(), vec!["{lmd}".into()], Default::default()).into();
         assert_eq!(inline_lmd_source(&classed, " v "), Some("v"));
     }
 }

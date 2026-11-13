@@ -1,0 +1,6 @@
+---
+title: "Own `{python} 1`"
+subtitle: plain
+---
+
+Body `{python} 2`.

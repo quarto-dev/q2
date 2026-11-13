@@ -29,6 +29,7 @@ import { normalizeLineEndings } from '../utils/normalizeLineEndings';
 import { AssetManifestContext } from './AssetManifestContext';
 import { NoteNumberingContext } from './NoteNumberingContext';
 import { RevealDeck } from './RevealDeck';
+import { DashboardDocument } from './custom/dashboard/DashboardDocument';
 import { installLinkHandlers } from '../utils/iframeLinkHandlers';
 import { installCodeCopy } from '../utils/codeCopy';
 import { buildNestingCommitDestination, buildNestingSurfaces, parentSurface, childSurfaceToward, childSurfaceTowardLine, topBlockR0, depthOfSurface, relocateSurface, surfaceAtLine } from './nestingNav';
@@ -1495,6 +1496,13 @@ export function PreviewRoot(props: PreviewRootProps) {
     // `format: revealjs` previews as the `q2-slides` pseudo-format.
     const previewFormat = parsed ? extractMetaString(parsed.meta?.format) : undefined;
     const isSlides = previewFormat === 'q2-slides' || previewFormat === 'revealjs';
+    // `format: dashboard` previews as `q2-dashboard`: the dashboard shell
+    // replaces the document wrapper (the registry's `Ast` entry); the body
+    // renders through the same dispatchers.
+    const isDashboard = previewFormat === 'q2-dashboard' || previewFormat === 'dashboard';
+    const shellRegistry: FormatRegistry = isDashboard
+        ? ({ ...mergedPreviewRegistry, Ast: DashboardDocument } as FormatRegistry)
+        : mergedPreviewRegistry;
 
     // Build SourceInfo-value index from the untransformed AST (Plan 2a).
     const sourceIndex = useMemo(
@@ -1625,7 +1633,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                                     currentFilePath={props.currentFilePath}
                                     onNavigateToDocument={props.onNavigateToDocument}
                                     setAst={props.setAst}
-                                    registry={mergedPreviewRegistry}
+                                    registry={shellRegistry}
                                 />
                             )}
                         </NoteNumberingContext.Provider>

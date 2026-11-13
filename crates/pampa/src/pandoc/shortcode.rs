@@ -17,16 +17,17 @@ fn shortcode_value_span(str: String) -> Inline {
     attr_hash.insert("data-value".to_string(), str);
     attr_hash.insert("data-is-shortcode".to_string(), "1".to_string());
 
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
-        ),
+        )
+            .into(),
         content: vec![],
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Key-value param whose value is itself a shortcode. Q1 convention
@@ -39,16 +40,17 @@ fn shortcode_key_recursive_value_span(key: String, value: Shortcode) -> Inline {
     attr_hash.insert("data-key".to_string(), key);
     attr_hash.insert("data-is-shortcode".to_string(), "1".to_string());
 
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
-        ),
-        content: vec![Inline::Span(shortcode_to_span(value))],
+        )
+            .into(),
+        content: vec![Inline::Span(Box::new(shortcode_to_span(value)))],
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 fn shortcode_key_value_span(key: String, value: String) -> Inline {
@@ -63,16 +65,17 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
     attr_hash.insert("data-value".to_string(), value);
     attr_hash.insert("data-is-shortcode".to_string(), "1".to_string());
 
-    Inline::Span(Span {
+    Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
-        ),
+        )
+            .into(),
         content: vec![],
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
@@ -94,7 +97,7 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
                 }));
             }
             ShortcodeArg::Shortcode(inner_shortcode) => {
-                content.push(Inline::Span(shortcode_to_span(inner_shortcode)));
+                content.push(Inline::Span(Box::new(shortcode_to_span(inner_shortcode))));
             }
             ShortcodeArg::KeyValue(spec) => {
                 for (key, value) in spec {
@@ -162,7 +165,8 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
             String::new(),
             vec!["quarto-shortcode__".to_string()],
             attr_hash,
-        ),
+        )
+            .into(),
         content,
         source_info: empty_source_info(),
         attr_source: AttrSourceInfo::empty(),

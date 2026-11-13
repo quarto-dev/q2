@@ -1,0 +1,8 @@
+---
+title: output asis printing a fenced block (the #1156 use case)
+---
+
+```{python}
+#| output: asis
+print("::: {.panel-tabset}\n## pip\n```bash\npip install MARK-ASIS\n```\n:::")
+```

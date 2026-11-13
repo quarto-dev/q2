@@ -463,6 +463,13 @@ impl<'a> ResourceVisitor<'a> {
         // this arm keeps the collector correct on its own, and gives
         // `collect_referenced_asset_urls` — whose anchors are empty —
         // the doc-dir-relative form the preview asset sync needs.)
+        //
+        // The URL is percent-decoded first: `![](<my file.png>)` reaches the
+        // AST as `my%20file.png` (Pandoc's escapeURI, bd-angle-link-dest-
+        // qkqkegqo), as does a hand-written `my%20file.png`, but the file on
+        // disk is `my file.png`. Same decoding as `link_resource_discovery`.
+        let decoded = percent_encoding::percent_decode_str(url).decode_utf8_lossy();
+        let url: &str = &decoded;
         let (src, dest) = if let Some(stripped) = url.strip_prefix('/') {
             if stripped.is_empty() {
                 return;
@@ -571,14 +578,14 @@ mod tests {
 
     /// Build an `Image` inline with the given target URL.
     fn image(url: &str) -> Inline {
-        Inline::Image(Image {
-            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+        Inline::Image(Box::new(Image {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
             content: vec![],
             target: (url.to_string(), String::new()),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(inlines: Vec<Inline>) -> Block {
@@ -630,6 +637,24 @@ mod tests {
         );
     }
 
+    /// Image URLs are percent-encoded in the AST (`![](<my file.png>)`
+    /// becomes `my%20file.png`, matching Pandoc), but the copy source must
+    /// be the on-disk name (bd-angle-link-dest-qkqkegqo).
+    #[test]
+    fn percent_encoded_image_urls_resolve_to_decoded_paths() {
+        let blocks = vec![para(vec![
+            image("figs/sales%20chart.png"),
+            image("/root%20dir/a%2Bb.png"),
+        ])];
+        assert_eq!(
+            collect_referenced_asset_urls(&blocks),
+            vec![
+                "figs/sales chart.png".to_string(),
+                "root dir/a+b.png".to_string(),
+            ]
+        );
+    }
+
     /// R5 (bd-cfl67): the collector pushes a `(src, dest)` pair
     /// into `ctx.resource_copies`, where `src` is the source-tree
     /// path the qmd points at and `dest` is the matching position
@@ -641,8 +666,8 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Image(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Image(Box::new(Image {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![Inline::Str(Str {
                         text: "alt text".to_string(),
                         source_info: dummy_source_info(),
@@ -651,7 +676,7 @@ mod tests {
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -688,14 +713,14 @@ mod tests {
     #[tokio::test]
     async fn test_dedupes_repeated_urls() {
         let image = |url: &str| {
-            Inline::Image(Image {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            Inline::Image(Box::new(Image {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![],
                 target: (url.to_string(), String::new()),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })
+            }))
         };
 
         let mut ast = Pandoc {
@@ -772,14 +797,14 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Image(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Image(Box::new(Image {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![],
                     target: ("https://example.com/image.png".to_string(), String::new()),
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -803,14 +828,14 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
-                content: vec![Inline::Image(Image {
-                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Inline::Image(Box::new(Image {
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                     content: vec![],
                     target: ("data:image/png;base64,abc123".to_string(), String::new()),
                     source_info: dummy_source_info(),
                     attr_source: AttrSourceInfo::empty(),
                     target_source: TargetSourceInfo::empty(),
-                })],
+                }))],
                 source_info: dummy_source_info(),
             })],
         };

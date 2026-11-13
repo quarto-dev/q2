@@ -1,0 +1,32 @@
+---
+title: A footnote in a tabset inside a callout
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            'div.callout div.tab-pane a.footnote-ref[href="#fn1"]',
+            'section#footnotes div#fn2',
+          ]
+        - ['span.quarto-note-reference']
+---
+
+Regression fixture for bd-akkproqy: a tabset nested in a callout is a
+custom node inside a custom node when the footnote transforms run, so their
+walkers must recurse through both. q2-preview has no tabset component yet
+(bd-47afd5ro), so this fixture's DOM checks run on native render only.
+
+::: {.callout-note}
+::: {.panel-tabset}
+## Tab
+
+In a tab.[^c]
+:::
+:::
+
+After the callout.[^a]
+
+[^c]: Note C.
+[^a]: Note A.

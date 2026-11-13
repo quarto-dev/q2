@@ -493,7 +493,7 @@ fn id_expressible_as_shorthand(id: &str) -> bool {
 }
 
 fn write_attr<W: std::io::Write + ?Sized>(
-    attr: &crate::pandoc::Attr,
+    attr: &quarto_pandoc_types::AttrTuple,
     writer: &mut W,
     _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
@@ -535,7 +535,7 @@ fn write_attr<W: std::io::Write + ?Sized>(
 /// code spans) where the parser encodes a space-separated `{lang .cls}`
 /// language token as a literal bracket-wrapped class string
 /// (`"{python}"` — see `test_code_block_attributes.rs` and
-/// `engine_cell_lang` in `quarto-core::engine::capture_splice`, the
+/// `engine_cell_lang` in `quarto-core::engine::cell_lang`, the
 /// reader-side unwrap this mirrors). Such a class is written back as a
 /// bare, unprefixed token instead of being dot-prefixed like a normal
 /// class, so `{python .marimo}` round-trips instead of becoming
@@ -548,7 +548,7 @@ fn write_code_attr<W: std::io::Write + ?Sized>(
     writer: &mut W,
     _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    let (id, classes, keyvals) = attr;
+    let (id, classes, keyvals) = &**attr;
     let mut wrote_something = false;
     write!(writer, "{{")?;
     if id_expressible_as_shorthand(id) {
@@ -713,7 +713,7 @@ fn write_div(
     // A div whose first class is an editorial mark's is written with the
     // block marker (`::: --`), the rest of its attributes following it.
     // The reader puts the mark's class first, so this round-trips.
-    let (id, classes, keyvals) = &div.attr;
+    let (id, classes, keyvals) = &*div.attr;
     match classes.first().and_then(|c| editorial_marker_for_class(c)) {
         Some(marker) => {
             write!(writer, "::: {marker}")?;
@@ -741,8 +741,9 @@ fn write_div(
 }
 
 /// Pandoc's `taskListItemToAscii`: when a list item's first block is a
-/// `Plain`/`Paragraph` starting with `Str "☐"`/`Str "☒"` + `Space` (the
-/// task-list convention the reader produces), rewrite the ballot-box `Str`
+/// `Plain`/`Paragraph` starting with `Str "☐"`/`Str "☒"` + `Space`, or
+/// holding that `Str` alone (the task-list convention the reader produces),
+/// rewrite the ballot-box `Str`
 /// into `RawInline("markdown", "[ ]"/"[x]")` so the qmd writer round-trips
 /// the source syntax instead of emitting the Unicode character. The raw
 /// inline inherits the marker's source-info (the original bracket bytes).
@@ -760,14 +761,19 @@ fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
         "☒" => "[x]",
         _ => return None,
     };
-    if !matches!(content.get(1), Some(crate::pandoc::Inline::Space(_))) {
-        return None;
-    }
-    let marker = crate::pandoc::Inline::RawInline(crate::pandoc::RawInline {
+    // An empty item is the lone marker `Str` (bd-2ydvebkc). The grammar's
+    // marker token requires the whitespace after `]`, so write it here —
+    // without it `- [ ]` reads back as an empty span, not a task item.
+    let text = match content.get(1) {
+        Some(crate::pandoc::Inline::Space(_)) => ascii.to_string(),
+        None => format!("{ascii} "),
+        Some(_) => return None,
+    };
+    let marker = crate::pandoc::Inline::RawInline(Box::new(crate::pandoc::RawInline {
         format: "markdown".to_string(),
-        text: ascii.to_string(),
+        text,
         source_info: s.source_info.clone(),
-    });
+    }));
     let mut rewritten: Vec<Block> = item.to_vec();
     match &mut rewritten[0] {
         Block::Plain(p) => p.content[0] = marker,
@@ -777,19 +783,70 @@ fn task_item_to_ascii(item: &[Block]) -> Option<Vec<Block>> {
     Some(rewritten)
 }
 
+/// Spell the list tight (no blank lines between items or between an item's
+/// blocks) unless some item directly contains a `Paragraph`.
+///
+/// The reader (CommonMark, bd-az53ojvo) turns every direct `Paragraph` of a
+/// tight list's items into `Plain`, so a `Paragraph` anywhere means loose.
+/// Items with no paragraph at all (a code block, a sublist, an empty item)
+/// carry no spacing information either way, so they must not force the
+/// loose spelling: `[[BulletList ..], [Plain]]` written with a blank line
+/// between the items would read back as `[[BulletList ..], [Para]]`.
+/// (pandoc's markdown writer looks only at each item's first block and does
+/// lose that shape; the qmd writer round-trips it.)
+fn list_is_tight(items: &[Vec<Block>]) -> bool {
+    !items.iter().any(|item| {
+        item.iter()
+            .any(|block| matches!(block, Block::Paragraph(_)))
+    })
+}
+
+/// In a tight item two blocks are written back to back, except where the
+/// reader would then merge them: a block quote directly followed by another
+/// block quote continues it, and a paragraph directly below a block quote or
+/// a sublist is a lazy continuation line of it. Those pairs get a blank line
+/// even in a tight list. (A tight item holding such a pair *and* a `Plain`
+/// has no CommonMark spelling at all; the reader never produces one, and
+/// the blank line is the conservative choice for an AST built by hand.)
+fn tight_blocks_need_separator(prev: &Block, next: &Block) -> bool {
+    let prev_can_continue = matches!(
+        prev,
+        Block::BlockQuote(_) | Block::BulletList(_) | Block::OrderedList(_)
+    );
+    let next_is_text = matches!(next, Block::Plain(_) | Block::Paragraph(_));
+    let both_quotes = matches!(prev, Block::BlockQuote(_)) && matches!(next, Block::BlockQuote(_));
+    (prev_can_continue && next_is_text) || both_quotes
+}
+
+/// In a tight item, the raw HTML block written directly after a list, if it
+/// must be fenced rather than written bare.
+///
+/// The reader's HTML-block extent is the paragraph, so a bare `<!-- -->`
+/// line written tight after a list is read back as a lazy continuation of
+/// the list's last line (a `RawInline`), and an empty item after it can't
+/// interrupt it. Two lists separated that way merge on the next read. A
+/// blank line around the bare block would avoid this, but it makes the item
+/// loose. A fence closes explicitly and stays tight. This is the list
+/// separator the pre-pass inserts between same-delimiter ordered lists, or
+/// one the author wrote (bd-2bcre8cr). At top level and in loose items the
+/// block is still written bare, between blank lines, as pandoc does.
+fn fenced_after_list_in_tight_item<'a>(prev: &Block, block: &'a Block) -> Option<&'a RawBlock> {
+    match (prev, block) {
+        (Block::BulletList(_) | Block::OrderedList(_), Block::RawBlock(raw))
+            if raw.format == "html" && html_writes_bare(&raw.text) =>
+        {
+            Some(raw)
+        }
+        _ => None,
+    }
+}
+
 fn write_bulletlist(
     bulletlist: &BulletList,
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    // A list is tight if every non-empty item starts with Plain (not Para).
-    // Length-0 items (Vec<Block> = []) carry no spacing information and
-    // are skipped here, so a list with a trailing empty item stays tight
-    // when its other items are tight.
-    let is_tight = bulletlist
-        .content
-        .iter()
-        .all(|item| item.is_empty() || matches!(item[0], Block::Plain(_)));
+    let is_tight = list_is_tight(&bulletlist.content);
 
     // Read before the items are written: nested lists reset the context field.
     let marker = ctx.bullet_marker;
@@ -827,11 +884,18 @@ fn write_bulletlist(
             let mut item_writer = BulletListContext::new(buf, marker);
             ctx.begin_block_sequence();
             for (j, block) in item.iter().enumerate() {
-                if j > 0 && !is_tight {
-                    // Add a blank line between blocks within a list item in loose lists
+                if j > 0 && (!is_tight || tight_blocks_need_separator(&item[j - 1], block)) {
+                    // Blank line between blocks within a list item: always in
+                    // loose lists, and where the pair would otherwise merge.
                     writeln!(&mut item_writer)?;
                 }
-                write_block(block, &mut item_writer, ctx)?;
+                match (j > 0 && is_tight)
+                    .then(|| fenced_after_list_in_tight_item(&item[j - 1], block))
+                    .flatten()
+                {
+                    Some(raw) => write_rawblock_fenced(raw, &mut item_writer)?,
+                    None => write_block(block, &mut item_writer, ctx)?,
+                }
             }
         }
     }
@@ -845,11 +909,7 @@ fn write_orderedlist(
 ) -> std::io::Result<()> {
     let (start_num, number_style, delimiter) = &orderedlist.attr;
 
-    // See write_bulletlist: empty items don't carry spacing info.
-    let is_tight = orderedlist
-        .content
-        .iter()
-        .all(|item| item.is_empty() || matches!(item[0], Block::Plain(_)));
+    let is_tight = list_is_tight(&orderedlist.content);
 
     for (i, item) in orderedlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
@@ -882,11 +942,17 @@ fn write_orderedlist(
             OrderedListContext::new(buf, current_num, number_style.clone(), delimiter.clone());
         ctx.begin_block_sequence();
         for (j, block) in item.iter().enumerate() {
-            if j > 0 && !is_tight {
-                // Add a blank line between blocks within a list item in loose lists
+            if j > 0 && (!is_tight || tight_blocks_need_separator(&item[j - 1], block)) {
+                // See write_bulletlist.
                 writeln!(&mut item_writer)?;
             }
-            write_block(block, &mut item_writer, ctx)?;
+            match (j > 0 && is_tight)
+                .then(|| fenced_after_list_in_tight_item(&item[j - 1], block))
+                .flatten()
+            {
+                Some(raw) => write_rawblock_fenced(raw, &mut item_writer)?,
+                None => write_block(block, &mut item_writer, ctx)?,
+            }
         }
     }
     Ok(())
@@ -914,7 +980,7 @@ fn write_header(
         && header.attr_source.id.is_none()
         && header.attr.0 == crate::utils::autoid::auto_generated_id(&header.content)
     {
-        (String::new(), header.attr.1.clone(), header.attr.2.clone())
+        (String::new(), header.attr.1.clone(), header.attr.2.clone()).into()
     } else {
         header.attr.clone()
     };
@@ -969,7 +1035,7 @@ fn write_codeblock(
     }
 
     // Write language/attributes if they exist
-    let (id, classes, keyvals) = &codeblock.attr;
+    let (id, classes, keyvals) = &*codeblock.attr;
 
     // Only write language as bare word if it's a single class with no other attributes
     if classes.len() == 1 && id.is_empty() && keyvals.is_empty() {
@@ -1051,14 +1117,19 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
         writeln!(buf, "{}", rawblock.text.trim_end())?;
     } else {
         // For other formats, use fenced raw block notation with `=` prefix
-        writeln!(buf, "```{{={}}}", rawblock.format)?;
-        write!(buf, "{}", rawblock.text)?;
-        if !rawblock.text.ends_with('\n') {
-            writeln!(buf)?;
-        }
-        writeln!(buf, "```")?;
+        write_rawblock_fenced(rawblock, buf)?;
     }
     Ok(())
+}
+
+/// Write `rawblock` as a ```` ```{=format} ```` fence.
+fn write_rawblock_fenced(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    writeln!(buf, "```{{={}}}", rawblock.format)?;
+    write!(buf, "{}", rawblock.text)?;
+    if !rawblock.text.ends_with('\n') {
+        writeln!(buf)?;
+    }
+    writeln!(buf, "```")
 }
 
 /// Write a definition list as the `.definition-list` div the qmd reader
@@ -1153,11 +1224,11 @@ fn match_implicit_figure_shape(
     if caption_plain.content.is_empty() && !image.content.is_empty() {
         return None;
     }
-    let (_fig_id, fig_classes, fig_kvs) = &figure.attr;
+    let (_fig_id, fig_classes, fig_kvs) = &*figure.attr;
     if !fig_classes.is_empty() || !fig_kvs.is_empty() {
         return None;
     }
-    let (img_id, _, _) = &image.attr;
+    let (img_id, _, _) = &*image.attr;
     if !img_id.is_empty() {
         return None;
     }
@@ -2232,7 +2303,7 @@ fn write_linebreak(
 /// Returns the anchor id if it matches, None otherwise.
 fn anchor_shorthand_id(link: &crate::pandoc::Link) -> Option<&str> {
     // Must have exactly one class "anchor", no id, no key-value pairs
-    let (ref id, ref classes, ref kvs) = link.attr;
+    let (ref id, ref classes, ref kvs) = *link.attr;
     if !id.is_empty() || classes.len() != 1 || classes[0] != "anchor" || !kvs.is_empty() {
         return None;
     }
@@ -2384,7 +2455,7 @@ fn write_span(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    let (id, classes, keyvals) = &span.attr;
+    let (id, classes, keyvals) = &*span.attr;
 
     // A span whose first class is an editorial mark's is written with the
     // decorated syntax (`[++ …]`), the rest of its attributes following in
@@ -3294,7 +3365,7 @@ pub fn write_paragraph(
     if let [Inline::Image(image)] = para.content.as_slice()
         && !image.content.is_empty()
     {
-        let respelled = Inline::Image(respell_alt_as_fig_alt(image, &Vec::new()));
+        let respelled = Inline::Image(Box::new(respell_alt_as_fig_alt(image, &Vec::new())));
         write_prose_inlines(std::slice::from_ref(&respelled), buf, ctx)?;
         writeln!(buf)?;
         return Ok(());

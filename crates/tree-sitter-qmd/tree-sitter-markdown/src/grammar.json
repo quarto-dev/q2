@@ -1538,25 +1538,43 @@
           ]
         },
         {
-          "type": "ALIAS",
-          "content": {
-            "type": "REPEAT",
-            "content": {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "PATTERN",
-                  "value": "[^ {\\t)]|(\\\\.)+"
-                },
-                {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "angle_bracket_url",
+              "content": {
+                "type": "ALIAS",
+                "content": {
                   "type": "SYMBOL",
-                  "name": "shortcode"
+                  "name": "_angle_bracket_url"
+                },
+                "named": true,
+                "value": "url"
+              }
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "REPEAT",
+                "content": {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "PATTERN",
+                      "value": "[^ {\\t)]|(\\\\.)+"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "shortcode"
+                    }
+                  ]
                 }
-              ]
+              },
+              "named": true,
+              "value": "url"
             }
-          },
-          "named": true,
-          "value": "url"
+          ]
         },
         {
           "type": "CHOICE",
@@ -1589,6 +1607,30 @@
           "value": ")"
         }
       ]
+    },
+    "_angle_bracket_url": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": 1,
+        "content": {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "<"
+            },
+            {
+              "type": "PATTERN",
+              "value": "([^<>\\\\\\n\\r]|\\\\.)*"
+            },
+            {
+              "type": "STRING",
+              "value": ">"
+            }
+          ]
+        }
+      }
     },
     "pandoc_math": {
       "type": "SEQ",
@@ -4489,15 +4531,37 @@
                   ]
                 },
                 {
-                  "type": "SYMBOL",
-                  "name": "pandoc_paragraph"
-                },
-                {
-                  "type": "REPEAT",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_block"
-                  }
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "SEQ",
+                          "members": [
+                            {
+                              "type": "SYMBOL",
+                              "name": "pandoc_paragraph"
+                            },
+                            {
+                              "type": "REPEAT",
+                              "content": {
+                                "type": "SYMBOL",
+                                "name": "_block"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "_blank_line"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
                 }
               ]
             }

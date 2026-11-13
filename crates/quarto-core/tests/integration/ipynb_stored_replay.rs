@@ -19,6 +19,7 @@
  */
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use quarto_core::engine::jupyter::{JupyterEngine, find_jupyter_call_count};
 use quarto_core::engine::{
@@ -78,6 +79,35 @@ impl ExecutionEngine for StubJupyter {
     }
 }
 
+/// A registered jupyter that is unavailable and counts every availability
+/// check. Replay must never consult it (EXR-1b: no engine-availability probe).
+struct UnavailableJupyter {
+    availability_checks: Arc<AtomicUsize>,
+}
+
+impl ExecutionEngine for UnavailableJupyter {
+    fn name(&self) -> &str {
+        "jupyter"
+    }
+
+    fn is_available(&self) -> bool {
+        self.availability_checks.fetch_add(1, Ordering::SeqCst);
+        false
+    }
+
+    fn file_claims(&self) -> Vec<FileClaim> {
+        JupyterEngine::static_file_claims()
+    }
+
+    fn execute(
+        &self,
+        _input: &str,
+        _ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        panic!("replay must not execute the jupyter engine");
+    }
+}
+
 fn registry_with_stub_jupyter() -> Arc<EngineRegistry> {
     let mut registry = EngineRegistry::empty();
     registry.register(Arc::new(StubJupyter));
@@ -114,7 +144,7 @@ async fn preview_ast(
         &mut ctx,
         runtime,
         registry,
-        Vec::new(),
+        Vec::new().into(),
     )
     .await
     .unwrap_or_else(|e| panic!("notebook must render: {e}"))
@@ -190,6 +220,96 @@ async fn stored_stdout_replays_without_jupyter() {
         find_jupyter_call_count(),
         1,
         "replay must not probe for jupyter beyond the registry-construction cap"
+    );
+}
+
+/// Jupyter registered but unavailable, `.ipynb` input without `execute.enabled`:
+/// replay succeeds and the engine's availability check is never called.
+#[tokio::test]
+async fn replay_does_not_probe_engine_availability() {
+    let availability_checks = Arc::new(AtomicUsize::new(0));
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(UnavailableJupyter {
+        availability_checks: availability_checks.clone(),
+    }));
+
+    let out = preview_ast(STDOUT_NB, ExecutionPolicy::None, Some(Arc::new(registry))).await;
+
+    assert!(
+        out.ast_json.contains("hello from the notebook"),
+        "stored stdout must replay with jupyter unavailable, got: {}",
+        out.ast_json
+    );
+    assert_eq!(
+        availability_checks.load(Ordering::SeqCst),
+        0,
+        "replay must not consult the registered engine's availability"
+    );
+}
+
+/// EXR-4 Phase 6: a *record* (the engine execution record, written by `write_record`) is an
+/// nbformat 4 notebook, and presenting it needs no engine: with Jupyter registered but
+/// unavailable, its recorded outputs replay through the same path and the availability
+/// check is never called.
+#[tokio::test]
+async fn a_record_replays_without_probing_engine_availability() {
+    use quarto_core::engine::units::scan_units;
+    use quarto_core::record::{
+        AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, coalesce,
+        fill_ids, write_record,
+    };
+
+    let doc = "# Report\n\nProse.\n\n```{python}\nprint('recorded output')\n```\n";
+    let mut units = scan_units(doc);
+    let texts = AuthorTexts::from_scanned(&units);
+    fill_ids(&mut units, &texts).unwrap();
+    let def = HashDefinition::conservative("jupyter");
+    let mut builder = RecordBuilder::new("jupyter", &def, &units, &texts).unwrap();
+    builder
+        .push(
+            0,
+            UnitResult {
+                outputs: vec![serde_json::json!({
+                    "output_type": "stream", "name": "stdout", "text": ["ONLY-IN-THE-RECORD\n"]
+                })],
+                execution_count: Some(1),
+                kernel: Some("python3".into()),
+            },
+        )
+        .unwrap();
+    let entry = builder
+        .finish(EngineEntryInput {
+            owned_languages: vec!["python".into()],
+            ..Default::default()
+        })
+        .unwrap();
+    let record = coalesce(&[entry], &units).unwrap();
+    let bytes = write_record(&record).unwrap();
+    // The notebook converter takes the fence language from `metadata.kernelspec.language`
+    // (Q1 behavior), and a record carries a per-cell `quarto_lang` instead. Supply the
+    // kernelspec a consumer would derive from it; without one the cell converts to an empty
+    // `{}` fence and nothing replays (a finding for the code that presents records, EXR-13/14).
+    let mut notebook: serde_json::Value = serde_json::from_str(&bytes).unwrap();
+    notebook["metadata"]["kernelspec"] =
+        serde_json::json!({"name": "python3", "language": "python"});
+    let bytes = serde_json::to_string(&notebook).unwrap();
+
+    let availability_checks = Arc::new(AtomicUsize::new(0));
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(UnavailableJupyter {
+        availability_checks: availability_checks.clone(),
+    }));
+    let out = preview_ast(&bytes, ExecutionPolicy::None, Some(Arc::new(registry))).await;
+
+    assert!(
+        out.ast_json.contains("ONLY-IN-THE-RECORD") && out.ast_json.contains("cell-output-stdout"),
+        "the record's stored output (absent from its source) must be presented, got: {}",
+        out.ast_json
+    );
+    assert_eq!(
+        availability_checks.load(Ordering::SeqCst),
+        0,
+        "presenting a record must not consult any engine's availability"
     );
 }
 
@@ -297,7 +417,7 @@ async fn stored_png_output_written_as_figure_file() {
         &mut ctx,
         runtime,
         None,
-        Vec::new(),
+        Vec::new().into(),
     )
     .await
     .expect("png-output notebook must render");
@@ -378,4 +498,77 @@ async fn no_execute_demand_replays_instead_of_running_jupyter() {
         "replayed markdown-only notebook must render clean, got: {:?}",
         problems(&out)
     );
+}
+
+/// GH #1156: a cell's `#| output: asis` stdout is document markdown (Quarto 1 `jupyter.ts`),
+/// so the printed heading, emphasis and callout reach the AST as structure, with no
+/// `.cell-output-stdout` code block and no `.cell` div around them.
+#[tokio::test]
+async fn output_asis_stdout_becomes_document_markdown() {
+    let notebook = r###"{"cells":[{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["## Generated heading\n","\n","Some **bold** text.\n","\n","::: {.callout-note}\n","A note.\n",":::\n"]}],"source":["#| echo: false\n","#| output: asis\n","print('...')\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"###;
+    let out = preview_ast(notebook, ExecutionPolicy::None, None).await;
+    let ast = &out.ast_json;
+    assert!(
+        ast.contains("\"Header\"") && ast.contains("Generated"),
+        "the printed heading must be a Header: {ast}"
+    );
+    assert!(
+        ast.contains("\"Strong\""),
+        "the printed **bold** must be Strong: {ast}"
+    );
+    assert!(
+        ast.contains("callout"),
+        "the printed callout must survive: {ast}"
+    );
+    assert!(
+        !ast.contains("cell-output-stdout") && !ast.contains("\"CodeBlock\""),
+        "no stdout code block under output: asis: {ast}"
+    );
+    assert!(problems(&out).is_empty(), "{:?}", problems(&out));
+}
+
+/// GH #1156: a document-level `execute: output: asis` applies to every cell, and a cell's own
+/// `output: true` turns it off (Quarto 1 `jupyter.ts`: asis is the cell option, or the
+/// document's with no cell override).
+#[tokio::test]
+async fn document_level_output_asis_yields_to_a_cell_override() {
+    let notebook = r###"{"cells":[{"cell_type":"markdown","metadata":{},"source":["---\nexecute:\n  output: asis\n---\n"]},{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["Document-level **asis**.\n"]}],"source":["#| echo: false\n","print('a')\n"]},{"cell_type":"code","execution_count":2,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["Cell override: not asis.\n"]}],"source":["#| echo: false\n","#| output: true\n","print('b')\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"###;
+    let out = preview_ast(notebook, ExecutionPolicy::None, None).await;
+    let ast = &out.ast_json;
+    assert!(
+        ast.contains("\"Strong\""),
+        "the document-level asis cell's **asis** must be Strong: {ast}"
+    );
+    assert_eq!(
+        ast.matches("cell-output-stdout").count(),
+        1,
+        "only the overriding cell keeps its stdout div: {ast}"
+    );
+    assert!(
+        ast.contains("Cell override: not asis."),
+        "the override cell's text stays a code block: {ast}"
+    );
+}
+
+/// bd-f63cqoke: a backtick run of three or more in a code cell's source lengthens the cell's
+/// fence (the ipynb converter for a line-leading run, the qmd writer for one anywhere in a
+/// line). The replayer must still treat the cell as a code cell and present its stored output;
+/// it used to accept only three-backtick fences and left such a cell as plain source.
+#[tokio::test]
+async fn cell_whose_source_holds_a_backtick_run_replays_its_output() {
+    let notebook = r###"{"cells":[{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["MID-LINE-OUT\n"]}],"source":["print(\"a ``` b\")\n"]},{"cell_type":"code","execution_count":2,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["LINE-START-OUT\n"]}],"source":["s = '''\n","```bash\n","pip install x\n","```\n","'''\n","print(s)\n"]}],"metadata":{"kernelspec":{"name":"python3","language":"python"}},"nbformat":4,"nbformat_minor":5}"###;
+    let out = preview_ast(notebook, ExecutionPolicy::None, None).await;
+    let ast = &out.ast_json;
+    for marker in ["MID-LINE-OUT", "LINE-START-OUT"] {
+        assert!(
+            ast.contains(marker),
+            "the stored output {marker} must be presented: {ast}"
+        );
+    }
+    assert_eq!(
+        ast.matches("cell-output-stdout").count(),
+        2,
+        "both cells present their stdout: {ast}"
+    );
+    assert!(problems(&out).is_empty(), "{:?}", problems(&out));
 }

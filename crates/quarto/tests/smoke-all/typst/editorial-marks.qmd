@@ -1,0 +1,43 @@
+---
+title: "Editorial marks [++ in the title]"
+format:
+  typst:
+    keep-typ: true
+_quarto:
+  tests:
+    typst:
+      # GH #1102: every mark becomes a call to the template's annotation functions instead
+      # of plain body text, and the document compiles (the functions are defined).
+      ensureTypstFileRegexMatches:
+        -
+          - '#quarto-insert\(\)\[Inserted text\.\];'
+          - '#quarto-delete\(\)\[Deleted text\.\];'
+          - '#quarto-highlight\(\)\[highlighted\];'
+          - '#quarto-edit-comment\(author: "Ana", date: "2026-11-07"\)\[Is this right\?\];'
+          # the `;` ends the call, so a following `(` stays text
+          - '#quarto-insert\(\)\[x\];\\\(after\)'
+          - '#quarto-delete-block\(\)\['
+          - '#quarto-edit-comment-block\(author: "Ana"\)\['
+          - '#let quarto-insert\(author: none, date: none, body\)'
+          - 'title: \[Editorial marks #quarto-insert\(\)\[in the title\];\]'
+        -
+          # the unfixed output: the marks' text as plain prose
+          - 'Inserted text\. Deleted text\.'
+---
+
+[++ Inserted text.] [-- Deleted text.] Some [!! highlighted] words.
+[>> Is this right?]{author="Ana" date="2026-11-07"}
+
+Edge case: [++ x](after).
+
+::: --
+
+A deleted paragraph.
+
+:::
+
+::: >> {author="Ana"}
+
+A block comment.
+
+:::

@@ -1,0 +1,39 @@
+---
+title: "Execution Record Skipped"
+description: "The document uses an engine that builds no execution record, so it is stored in the older capture format."
+code: Q-18-15
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-15` — Execution Record Skipped
+
+> The document uses an engine that builds no execution record, so it is stored in the
+> older capture format.
+
+## What this means
+
+An engine can describe what it ran in an *execution record*. Some engines, including engines
+provided by extensions, do not build one. When a document mixes such an engine with engines
+that do, Quarto stores the whole document in the older capture format, so that none of the
+output is lost.
+
+Every cell still ran and every output is shown. This is a note, not a problem: nothing needs
+fixing.
+
+## What may not work
+
+Features that read execution records, like reusing saved results or sharing them with other
+editors, may not work with this document.
+
+## What you can do
+
+Nothing needs to change. If you write the engine, you can add record support; see
+[Execution records](../../guides/authoring/execution-records.qmd).
+
+## Related errors
+
+- [`Q-18-13`](Q-18-13.qmd) — a knitr chunk includes a child document.

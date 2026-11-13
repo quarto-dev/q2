@@ -7,6 +7,24 @@ trace file pinned to a single document).
 
 It is a debugging / QA tool — not a substitute for the real engines.
 
+Two replay paths (EXR-6, 2026-11-01):
+
+- **Markdown engines** (knitr, marimo, any engine that returns markdown):
+  the captured `ExecuteResult` is returned verbatim, byte-identical to
+  what the recording saw.
+- **Jupyter**: the capture carries the engine's execution record on
+  `engine_capture.record` (EXR-5), and replay *re-presents* it: the
+  record comes back byte for byte on `ExecuteResult.record`, and the
+  markdown is `present_document(record, input_qmd, units, execute
+  scope, target format)` computed now. So replayed Jupyter markdown
+  follows the current presenter and the render's target format (one
+  trace replayed to `html` and to `docx` differs where the presenter's
+  mime choice differs), and a presenter bug that lived at recording
+  time no longer reproduces from the trace. The engine-produced record
+  is what stays fixed. A Jupyter capture with no `engine_capture.record`
+  was recorded before EXR-5 and fails with a "re-record this trace"
+  error; there is no fallback to its stored markdown.
+
 ## When to use it
 
 - **Regression tests** for engine-emitted features (resources, filters,
@@ -35,15 +53,26 @@ trace: true
 q2 render path/to/doc.qmd
 ```
 
-Quarto writes `path/to/.quarto/trace/<doc-stem>/latest.json`. When the
-document declared a non-markdown engine that actually executed, the
-trace's top-level `engine_capture` block carries the engine name, the
-verbatim QMD that was passed to `engine.execute()`, and the full
+Quarto writes `path/to/.quarto/trace/<doc-stem>/latest.json.gz`
+(the reader also accepts a plain `latest.json`). A render that replays a
+trace (`--replay`, `QUARTO_REPLAY`) writes none, so a document that still
+says `trace: true` cannot overwrite the recording it replays. When the document
+declared a non-markdown engine that actually executed, the trace's
+top-level `engine_captures` array holds one entry per engine that ran,
+in execution order. Each entry carries the engine name, the verbatim
+QMD that was passed to `engine.execute()`, and the full
 `ExecuteResult` (markdown, supporting files, includes, filters,
-post-process flag).
+post-process flag). A trace written before the array existed has a
+single `engine_capture` object; the reader folds it into a one-element
+`engine_captures` (`crates/quarto-trace/src/lib.rs`, `TraceDocumentDe`).
 
-The markdown engine is a no-op passthrough — `engine_capture` is
-absent for documents that did not run a real engine. That is correct
+For a Jupyter run the capture also carries `record`, the engine's
+execution record (a one-engine record notebook), which is what replay
+presents from. The trace observer always asks the stage for records,
+so every trace recorded since EXR-5 has it.
+
+The markdown engine is a no-op passthrough — `engine_captures` is
+empty for documents that did not run a real engine. That is correct
 behavior; replay against such a trace fails loudly rather than
 silently degrading (see "Miss policy" below).
 
@@ -62,8 +91,9 @@ QUARTO_REPLAY=path/to/trace.json q2 render path/to/doc.qmd
 The flag wins over the env var. Both surface the same
 `load_replay_capture` path.
 
-The replay reads the trace, extracts `engine_capture`, builds an
-`EngineRegistry` with `ReplayEngine` substituted under the recorded
+The replay reads the trace, extracts `engine_captures`
+(`load_replay_captures`, `crates/quarto/src/commands/render.rs`), builds an
+`EngineRegistry` with `ReplayEngine` substituted under each recorded
 engine's name, and hands it to `EngineExecutionStage` via
 `HtmlRenderConfig.engine_registry`. Everything else in the pipeline
 (parse, metadata-merge, transforms, render, template-apply) runs
@@ -72,7 +102,7 @@ against the real implementations.
 ## Miss policy: hard fail, no fallback
 
 The replay engine compares the QMD `EngineExecutionStage` hands to
-`execute()` against `engine_capture.input_qmd` byte-for-byte. On any
+`execute()` against the capture's `input_qmd` byte-for-byte. On any
 mismatch (one byte difference, different metadata, a renamed
 heading), `execute()` returns
 `ExecutionError::ExecutionFailed` with a "replay miss" diagnostic and
@@ -84,6 +114,12 @@ they know.
 
 If the document genuinely changed since the trace was recorded,
 re-record the trace.
+
+A Jupyter capture without a record (recorded before EXR-5 landed)
+fails the same way, with a message that says to re-record. A record
+whose cell ids a fresh scan of `input_qmd` cannot reproduce (a sugared
+cell, whose id came from the stage's author text) still presents: the
+presenter falls back to the cell's content hash.
 
 ## Source-info caveat
 
@@ -104,10 +140,10 @@ For checked-in CI fixtures that exercise engine-channel behavior:
 
 1. On a development machine with R/Python/Jupyter installed, render
    the fixture once with `trace: true`.
-2. Copy the produced `latest.json` into the test fixture tree (e.g.
+2. Copy the produced `latest.json.gz` into the test fixture tree (e.g.
    `crates/<your-crate>/tests/fixtures/<feature>/`).
 3. In your test, use `RenderToFileOptions.replay_capture` (set from
-   `quarto_trace::read::read_trace(...).engine_capture`) and assert
+   `quarto_trace::read::read_trace(...).engine_captures`) and assert
    on the rendered output.
 
 For an example, see
@@ -130,16 +166,17 @@ cost in exchange for byte-faithful reproduction.
 
 | Surface | Effect |
 |---------|--------|
-| `trace: true` in metadata | Records `engine_capture` into the trace. |
-| `q2 render --replay <trace>` | Replays the trace's `engine_capture`. |
+| `trace: true` in metadata | Records `engine_captures` into the trace. Ignored while replaying: a replay never writes a trace. |
+| `q2 render --replay <trace>` | Replays the trace's `engine_captures`. |
 | `QUARTO_REPLAY=<trace>` | Same as `--replay` (CLI flag wins). |
 | `RenderToFileOptions.replay_capture` | Library-level activation. |
 | `RenderToFileOptions.engine_registry_override` | Test escape hatch (takes precedence over `replay_capture`). |
 
 ## Code references
 
-- `crates/quarto-trace/src/lib.rs` — `EngineCapture`, `TraceDocument.engine_capture`
+- `crates/quarto-trace/src/lib.rs` — `EngineCapture`, `TraceDocument.engine_captures`
 - `crates/quarto-core/src/engine/replay.rs` — `ReplayEngine`
+- `crates/quarto-core/src/presenter/document.rs` — `present_document`, what a Jupyter replay runs
 - `crates/quarto-core/src/engine/registry.rs` — `EngineRegistry::with_replay`
 - `crates/quarto-core/src/stage/stages/engine_execution.rs` — `ENGINE_CAPTURE_KIND` and the recording emit
 - `crates/quarto-core/src/stage/trace.rs` — `JsonTraceObserver::on_auxiliary_data` routing
@@ -147,3 +184,12 @@ cost in exchange for byte-faithful reproduction.
 - `crates/quarto/src/commands/render.rs` — `--replay` / `QUARTO_REPLAY` plumbing
 
 Plan: `claude-notes/plans/2026-05-03-replay-engine.md`.
+
+## Known issue: knitr traces are not claimed
+
+`ReplayEngine::claims_language` (`crates/quarto-core/src/engine/replay.rs:107-113`)
+claims only a language equal to the engine name, so the replay engine
+registered under `knitr` does not claim `{r}` chunks. Replaying a
+knitr trace renders the page with unexecuted code and no error, which
+contradicts the miss policy above. Seen on 2026-11-01 (KNR-1 S6) with
+an unmodified trace; tracked as bd-js24dold.

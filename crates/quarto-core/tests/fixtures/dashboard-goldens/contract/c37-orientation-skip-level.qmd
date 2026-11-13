@@ -1,0 +1,53 @@
+---
+# contract: orientation when heading levels are skipped (Q1 toggles globally; D5 uses a level stack)
+title: "C37 Skip Level"
+format: dashboard
+---
+
+## Row
+
+#### Deep {width=30%}
+
+::: {.cell title="C37-DEEP"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+#### Deep
+
+::: {.cell title="C37-DEEP2"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Row
+
+::: {.cell title="C37-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C37-C"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

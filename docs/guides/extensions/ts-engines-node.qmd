@@ -66,6 +66,35 @@ Import the built-ins explicitly (`import process from "node:process"`,
 child, pass `env: { ...process.env, MY_VAR: "…" }`.
 :::
 
+## The execute environment
+
+Quarto 2 never changes its own process environment. It sends the
+variables that user code should see as `executeEnv` in the options
+passed to your engine's `execute`: a plain object of strings, left
+out when empty. It holds, merged:
+
+- the project environment: values from `_environment` files for
+  names the real environment does not set, and `QUARTO_PROFILE`;
+- the per-document variables: `QUARTO_PROJECT_ROOT`,
+  `QUARTO_DOCUMENT_PATH`, `QUARTO_DOCUMENT_FILE`,
+  `QUARTO_EXECUTE_INFO` and `QUARTO_FIG_*`. See
+  [Execution Context](../authoring/execution-context.qmd).
+
+Per-document values win over project values. Quarto 1 does not send
+`executeEnv`, so treat it as optional.
+
+An engine that runs user code opts in by merging `executeEnv` into the
+environment of each process that runs that code, for example
+`env: { ...process.env, ...options.executeEnv }`. Do not copy it into
+`process.env`: engines for different documents can run at the same
+time, and the values differ per document. Do not cache it between
+executes, because `QUARTO_EXECUTE_INFO` changes with every render. An
+engine that ignores `executeEnv` keeps working, and its code sees none
+of these variables. An engine that runs no user code needs nothing.
+
+The values can include secrets from `_environment.local`, so do not
+log them.
+
 ## Keeping one bundle for both Quarto 1 and Quarto 2
 
 Quarto 1 still runs engine extensions under Deno 2. An engine that uses

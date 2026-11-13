@@ -1,0 +1,29 @@
+---
+# contract: header-for / footer-for naming the target card's or cell's own id. Q1 only resolves ids *inside* a card and fails fatally here (dashboard.lua:732); D5 accepts the own id.
+title: "C43 Own Id"
+format: dashboard
+---
+
+## Row
+
+::: {#c43-cell .cell title="C43-CELL"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.card-toolbar header-for="c43-cell"}
+C43-HEADER-TOOLBAR
+:::
+
+::: {#c43-card .card title="C43-CARD"}
+Card with its own id.
+:::
+
+::: {.card-toolbar footer-for="c43-card"}
+C43-FOOTER-TOOLBAR
+:::

@@ -230,6 +230,19 @@ pub trait PipelineObserver: Send + Sync {
     fn wants_engine_capture_files(&self) -> bool {
         false
     }
+
+    /// Whether this observer wants the engines to build execution records
+    /// (EXR-5).
+    ///
+    /// Building a record holds every cell's raw outputs (base64 figures
+    /// included) a second time, so `EngineExecutionStage` asks the engines
+    /// for one only when the observer opts in: the preview capture recorder
+    /// and the JSON trace observer do. A plain `q2 render` keeps the default
+    /// `false` and pays nothing, unless the document itself asks with
+    /// `execute: {record: true}`.
+    fn wants_execution_record(&self) -> bool {
+        false
+    }
 }
 
 /// No-op observer implementation.

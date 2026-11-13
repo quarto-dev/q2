@@ -39,5 +39,5 @@ editorial mark, escape the bracket: `\[--text]`.
 ## Related
 
 - [`Q-2-19`](Q-2-19.qmd) — unclosed editorial insert (`[++`).
-- [`Q-2-21`](Q-2-21.qmd) — unclosed editorial comment (`[!!`).
-- [`Q-2-22`](Q-2-22.qmd) — unclosed editorial highlight (`[>>`).
+- [`Q-2-21`](Q-2-21.qmd) — unclosed editorial comment (`[>>`).
+- [`Q-2-22`](Q-2-22.qmd) — unclosed editorial highlight (`[!!`).

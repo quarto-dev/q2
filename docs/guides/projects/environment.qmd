@@ -49,8 +49,8 @@ A variable defined in several places resolves in this order:
   the value; the shortcode checks the real environment first, then
   the project's environment files, then its optional fallback
   argument (`{{{< env NAME fallback >}}}`).
-- **Executed code.** Code cells run by the Jupyter and knitr engines
-  see the variables (e.g. `Sys.getenv("PRODUCT_VERSION")` in R,
+- **Executed code.** Code cells run by the Jupyter, knitr, julia and
+  marimo engines see the variables (e.g. `Sys.getenv("PRODUCT_VERSION")` in R,
   `os.environ` in Python).
 - **Pre and post render scripts.** Scripts receive the variables
   alongside the `QUARTO_PROJECT_*` variables described in

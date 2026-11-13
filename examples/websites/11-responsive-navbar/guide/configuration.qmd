@@ -1,0 +1,17 @@
+---
+title: Configuration Guide
+---
+
+A key that isn't a breakpoint name is ignored, and the render reports a
+`Q-13-18` warning that points at it. For example, this item's `md2` text
+is never shown:
+
+```yaml
+- href: guide/configuration.qmd
+  text:
+    md2: Config        # Q-13-18: not a breakpoint name
+    xl: Configuration Guide
+```
+
+Responsive text is a navbar feature. Sidebar and page-footer items that
+use a map-valued `text:` show only the widest variant.

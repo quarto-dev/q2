@@ -1,0 +1,46 @@
+body.dashboard-fill.fullcontent.quarto-dashboard.quarto-light
+  header#quarto-dashboard-header
+    nav.navbar.navbar-expand-md.slim [data-bs-theme=dark]
+      div.container-fluid.navbar-container
+        button.hidden.navbar-toggler [aria-controls=dashboard-collapse aria-label=Toggle navigation data-bs-target=#dashboard-collapse data-bs-toggle=collapse]
+          span.navbar-toggler-icon
+        div.navbar-brand-container
+          div.navbar-title
+            div.navbar-title-text "Sidebar Example"
+        div.quarto-dashboard-links
+          a.quarto-dashboard-link [href=https://www.usps.gov?url=|url|]
+          a.quarto-dashboard-link [href=https://twitter.com/intent/tweet?url=|url|&text=Sidebar%20Example title=Twitter]
+          a.quarto-dashboard-link [href=https://reddit.com/submit?url=|url|&title=Sidebar%20Example title=Reddit]
+  div#quarto-document-content.bslib-gap-spacing.bslib-page-fill.html-fill-container.page-layout-custom.quarto-dashboard-content [role=main]
+    div.bslib-grid.bslib-grid-item.html-fill-item [style=display: grid; grid-template-rows: minmax(3em, max-content) minmax(3em, 1fr); grid-auto-columns: minmax(0, 1fr);]
+      div.bslib-grid [style=display: grid; grid-template-columns: minmax(3em, 1fr) minmax(3em, 1fr) minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+        div.bg-red.bslib-card.bslib-value-box.card.cell.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
+          div.card-body.html-fill-container.html-fill-item
+            div.html-fill-container.html-fill-item.value-box-grid
+              div.html-fill-container.html-fill-item.value-box-showcase
+              div.value-box-area
+                p.value-box-title "Cool Things"
+                p.value-box-value "45.5"
+        div.bg-red.bslib-card.bslib-value-box.card.cell.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
+          div.card-body.html-fill-container.html-fill-item
+            div.html-fill-container.html-fill-item.value-box-grid
+              div.html-fill-container.html-fill-item.value-box-showcase
+              div.value-box-area
+                p.value-box-title "Cool Things"
+                p.value-box-value "45.5"
+        div.bg-red.bslib-card.bslib-value-box.card.cell.html-fill-container.showcase-left-center.valuebox [data-bslib-card-init=]
+          div.card-body.html-fill-container.html-fill-item
+            div.html-fill-container.html-fill-item.value-box-grid
+              div.html-fill-container.html-fill-item.value-box-showcase
+              div.value-box-area
+                p.value-box-title "Cool Things"
+                p.value-box-value "45.5"
+      div.bslib-grid [style=display: grid; grid-template-columns: minmax(3em, 1fr); grid-auto-rows: minmax(0, 1fr);]
+        div.bslib-card.card.html-fill-container [data-bslib-card-init= data-full-screen=false]
+          div.card-body.cell.html-fill-container.html-fill-item
+            div.cell-output-display.html-fill-container.html-fill-item
+              img.img-fluid.quarto-dashboard-img-contain
+          div.card-body.html-fill-container.html-fill-item
+          bslib-tooltip
+            span.badge.bslib-full-screen-enter.rounded-pill
+    div#quarto-appendix.bslib-grid-item.default.html-fill-item

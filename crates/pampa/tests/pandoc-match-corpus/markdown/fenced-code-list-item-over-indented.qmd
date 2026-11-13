@@ -1,0 +1,5 @@
+1. Run:
+
+    ```bash
+    chmod 750 x.sh
+    ```

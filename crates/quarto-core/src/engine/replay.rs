@@ -8,12 +8,22 @@
 //! Replay engine for deterministic, no-runtime execution.
 //!
 //! `ReplayEngine` reproduces the behavior of a previously-recorded
-//! engine run (knitr, jupyter, …) by returning the captured
-//! [`ExecuteResult`] verbatim. It is used as a debugging and
+//! engine run (knitr, jupyter, …). It is used as a debugging and
 //! regression-testing tool — running the pipeline against a checked-in
 //! trace fixture exercises engine-channel features (resources,
 //! filters, `ExecuteResult` fields, includes) without requiring R,
 //! Python, or Jupyter installs.
+//!
+//! Engines that return markdown (knitr, marimo, …) replay the captured
+//! [`ExecuteResult`] verbatim. A Jupyter capture replays its **record**
+//! (EXR-6, epic review D2): the trace stores the engine's execution record
+//! on `engine_capture.record` (EXR-5), the replay returns that record byte
+//! for byte and runs the presenter on it again, with the current `execute:`
+//! scope and target format. So replayed Jupyter markdown depends on the
+//! current presenter and the format, not on what the recording machine
+//! saw; the engine-produced record is what stays fixed. A Jupyter capture
+//! without a record predates EXR-5 and fails with a "re-record" error,
+//! never a silent fallback to its stored markdown.
 //!
 //! See `claude-notes/plans/2026-05-03-replay-engine.md` (bd-45yw) for
 //! the design rationale.
@@ -49,7 +59,16 @@ use quarto_trace::EngineCapture;
 use super::LanguageClaim;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
+use super::skeleton::{Shipped, present_skeleton};
 use super::traits::ExecutionEngine;
+use super::units::units_for_engine;
+use crate::presenter::document::{PresentNote, present_document};
+use crate::presenter::figures::FsFigureSink;
+use crate::presenter::inline::InlineTarget;
+use crate::record::{AuthorTexts, EngineRecord, fill_ids, read_record_value};
+
+/// The engine whose captures replay from their record.
+const JUPYTER: &str = "jupyter";
 
 /// Engine that replays a previously-recorded `ExecuteResult`.
 ///
@@ -59,6 +78,8 @@ use super::traits::ExecutionEngine;
 #[derive(Debug, Clone)]
 pub struct ReplayEngine {
     capture: Arc<EngineCapture>,
+    /// Set by the first `execute` call; see [`ExecutionEngine::is_unused_replay`].
+    executed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ReplayEngine {
@@ -68,21 +89,152 @@ impl ReplayEngine {
     /// that happens on each `execute()` call so a malformed capture
     /// surfaces with the actual call's diagnostics.
     pub fn new(capture: EngineCapture) -> Self {
-        Self {
-            capture: Arc::new(capture),
-        }
+        Self::from_arc(Arc::new(capture))
     }
 
     /// Construct from a shared `Arc<EngineCapture>`.
     ///
     /// Useful when the same capture drives multiple registry instances.
     pub fn from_arc(capture: Arc<EngineCapture>) -> Self {
-        Self { capture }
+        Self {
+            capture,
+            executed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
     }
 
     /// The recorded engine's name (e.g. `"jupyter"`, `"knitr"`).
     pub fn recorded_engine_name(&self) -> &str {
         &self.capture.engine_name
+    }
+}
+
+impl ReplayEngine {
+    /// A Jupyter capture: present the recorded execution record over `input` with the
+    /// stage's units (a fresh scan with ids filled when no stage supplied them), the
+    /// current `execute:` scope and target format. The stored result's side data
+    /// (filters, includes, warnings, …) is kept; its markdown and supporting files
+    /// are recomputed, and the record travels on the result byte for byte.
+    fn present_record(
+        &self,
+        input: &str,
+        ctx: &ExecutionContext,
+        stored: ExecuteResult,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        let fail = |message: String| {
+            ExecutionError::execution_failed(self.capture.engine_name.clone(), message)
+        };
+        let Some(record) = self.capture.record.as_ref() else {
+            return Err(fail(
+                "replay: this trace's jupyter capture has no execution record \
+                 (`engine_capture.record`), so it was recorded before records existed and \
+                 cannot be presented. Re-record the trace with `trace: true`."
+                    .to_string(),
+            ));
+        };
+        let record = read_record_value(record.clone())
+            .map_err(|e| fail(format!("malformed engine_capture.record in trace: {e}")))?;
+
+        let mut units = units_for_engine(&ctx.units, input);
+        if ctx.units.is_empty() {
+            let texts = AuthorTexts::from_scanned(&units);
+            fill_ids(&mut units, &texts).map_err(|e| fail(format!("replay: {e}")))?;
+        }
+        let mut fig = FsFigureSink::new(&ctx.source_path).with_format(&ctx.format);
+        // A whole-document engine (knitr) recorded a skeleton: present over it, not over the
+        // input text, so the spans and chunks its own run substituted are already in place.
+        let (markdown, files_written, notes, note_units, derived_includes) = if let Some(skeleton) =
+            stored.skeleton.as_ref()
+        {
+            // The markers are keyed by unit id, so every unit needs one (a stage that did not
+            // want a record leaves them unset; filling is idempotent).
+            let mut units = units.clone();
+            let has_id = |u: &crate::engine::units::Unit| match u {
+                crate::engine::units::Unit::Cell(c) => c.id.is_some(),
+                crate::engine::units::Unit::Inline(i) => i.id.is_some(),
+            };
+            if !units.iter().all(has_id) {
+                let texts = AuthorTexts::from_scanned(&units);
+                fill_ids(&mut units, &texts).map_err(|e| fail(format!("replay: {e}")))?;
+            }
+            let engine_record = record
+                .metadata
+                .quarto_engines
+                .first()
+                .map(|engine| EngineRecord {
+                    engine: engine.clone(),
+                    cells: record.cells.clone(),
+                });
+            // Markers the live run could not fill were already filled in `skeleton.text`.
+            let presented = present_skeleton(
+                &skeleton.text,
+                &skeleton.nonce,
+                engine_record.as_ref(),
+                &units,
+                ctx.execute_scope.as_ref(),
+                &ctx.format,
+                &Shipped::default(),
+                &mut fig,
+            );
+            (
+                presented.markdown,
+                presented.files_written,
+                presented.notes,
+                presented.ranged_units,
+                // A skeleton is a whole-document engine's (knitr): it carries no label.
+                Vec::new(),
+            )
+        } else {
+            let presented = present_document(
+                &record.cells,
+                input,
+                &units,
+                ctx.execute_scope.as_ref(),
+                InlineTarget::from_format(&ctx.format),
+                &ctx.format,
+                &record.metadata.quarto_engines,
+                &mut fig,
+            )
+            .map_err(|e| {
+                fail(format!(
+                    "replay: presenting the recorded execution failed: {e}"
+                ))
+            })?;
+            (
+                presented.markdown,
+                presented.files_written,
+                presented.notes,
+                units.clone(),
+                // Derived again, never read from the stored result: one copy on replay.
+                presented.header_includes,
+            )
+        };
+
+        let mut result = stored;
+        result.markdown = markdown;
+        result.supporting_files = files_written;
+        result.derived_header_includes = derived_includes;
+        let stored_text: Vec<String> = result.warnings.iter().map(|w| w.to_text(None)).collect();
+        for note in &notes {
+            let diagnostic = crate::engine::diagnostics::note_diagnostic(note, &note_units, ctx);
+            // A live run stored the widget warning on the result, so presenting again would raise
+            // it twice (OPR-7i). Only this note is guarded; the others (an unusable image, for
+            // one) are raised again as they always were.
+            if matches!(note, PresentNote::WidgetViewUnsupported { .. })
+                && stored_text.contains(&diagnostic.to_text(None))
+            {
+                continue;
+            }
+            result.warnings.push(diagnostic);
+        }
+        result.record = record
+            .metadata
+            .quarto_engines
+            .first()
+            .map(|engine| EngineRecord {
+                engine: engine.clone(),
+                cells: record.cells.clone(),
+            });
+        Ok(result)
     }
 }
 
@@ -107,6 +259,9 @@ impl ExecutionEngine for ReplayEngine {
     fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
         if language == self.capture.engine_name {
             LanguageClaim::Primary(1)
+        } else if self.capture.engine_name == "knitr" {
+            // `{r}` cells: claim what the recorded engine claims.
+            super::knitr_claims(language)
         } else {
             LanguageClaim::None
         }
@@ -125,8 +280,10 @@ impl ExecutionEngine for ReplayEngine {
     fn execute(
         &self,
         input: &str,
-        _ctx: &ExecutionContext,
+        ctx: &ExecutionContext,
     ) -> Result<ExecuteResult, ExecutionError> {
+        self.executed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         if input != self.capture.input_qmd {
             return Err(ExecutionError::execution_failed(
                 self.capture.engine_name.clone(),
@@ -141,12 +298,26 @@ impl ExecutionEngine for ReplayEngine {
             ));
         }
 
-        serde_json::from_value::<ExecuteResult>(self.capture.result.clone()).map_err(|e| {
-            ExecutionError::execution_failed(
-                self.capture.engine_name.clone(),
-                format!("malformed engine_capture.result in trace: {e}"),
-            )
-        })
+        let stored =
+            serde_json::from_value::<ExecuteResult>(self.capture.result.clone()).map_err(|e| {
+                ExecutionError::execution_failed(
+                    self.capture.engine_name.clone(),
+                    format!("malformed engine_capture.result in trace: {e}"),
+                )
+            })?;
+        if self.capture.engine_name == JUPYTER || self.capture.record.is_some() {
+            self.present_record(input, ctx, stored)
+        } else {
+            Ok(stored)
+        }
+    }
+
+    fn is_replay(&self) -> bool {
+        true
+    }
+
+    fn is_unused_replay(&self) -> bool {
+        !self.executed.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn can_freeze(&self) -> bool {
@@ -177,12 +348,13 @@ mod tests {
         )
     }
 
+    /// A markdown-replaying engine's capture (knitr: its markdown is returned verbatim).
     fn sample_capture() -> EngineCapture {
         EngineCapture {
-            engine_name: "jupyter".into(),
-            input_qmd: "---\nengine: jupyter\n---\n\n```{python}\nprint('hi')\n```\n".into(),
+            engine_name: "knitr".into(),
+            input_qmd: "---\nengine: knitr\n---\n\n```{r}\nprint('hi')\n```\n".into(),
             result: json!({
-                "markdown": "---\nengine: jupyter\n---\n\nhi\n",
+                "markdown": "---\nengine: knitr\n---\n\nhi\n",
                 "supporting_files": ["fig1.png"],
                 "filters": ["quarto"],
                 "includes": {
@@ -193,13 +365,14 @@ mod tests {
                 "needs_postprocess": false,
             }),
             files: Vec::new(),
+            record: None,
         }
     }
 
     #[test]
     fn test_replay_engine_name_matches_recorded() {
         let engine = ReplayEngine::new(sample_capture());
-        assert_eq!(engine.name(), "jupyter");
+        assert_eq!(engine.name(), "knitr");
     }
 
     #[test]
@@ -223,7 +396,7 @@ mod tests {
         let ctx = make_test_context();
         let result = engine.execute(&recorded_input, &ctx).unwrap();
 
-        assert_eq!(result.markdown, "---\nengine: jupyter\n---\n\nhi\n");
+        assert_eq!(result.markdown, "---\nengine: knitr\n---\n\nhi\n");
         assert_eq!(result.supporting_files, vec![PathBuf::from("fig1.png")]);
         assert_eq!(result.filters, vec!["quarto".to_string()]);
         assert_eq!(result.includes.header_includes, vec!["<style>.x{}</style>"]);
@@ -272,9 +445,10 @@ mod tests {
         // protects investigators from acting on a partially-decoded
         // replay.
         let capture = EngineCapture {
-            engine_name: "jupyter".into(),
+            engine_name: "knitr".into(),
             input_qmd: "x".into(),
             result: json!({"not_an_execute_result": true}),
+            record: None,
             files: Vec::new(),
         };
         let recorded_input = capture.input_qmd.clone();
@@ -313,6 +487,7 @@ mod tests {
             engine_name: "knitr".into(),
             input_qmd: "input".into(),
             result: result_value,
+            record: None,
             files: Vec::new(),
         };
         let engine = ReplayEngine::new(capture);
@@ -339,5 +514,355 @@ mod tests {
             engine_a.recorded_engine_name(),
             engine_b.recorded_engine_name()
         );
+    }
+
+    // ── EXR-6 Phase 3b: Jupyter captures replay from their record ────────
+
+    use crate::engine::units::{Unit, UnitId, scan_units};
+    use crate::record::{EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, coalesce};
+    use serde_json::Value;
+
+    fn stdout(text: &str) -> Vec<Value> {
+        vec![json!({"output_type": "stream", "name": "stdout", "text": text})]
+    }
+
+    fn plain_and_html(plain: &str, html: &str) -> Vec<Value> {
+        vec![json!({
+            "output_type": "execute_result",
+            "execution_count": 1,
+            "data": {"text/plain": plain, "text/html": html},
+            "metadata": {}
+        })]
+    }
+
+    /// A Jupyter capture whose record holds `results` for the units of `text`, with
+    /// `stored_markdown` as the recorded (pre-flip style) markdown. `ids` overrides
+    /// the units' ids before the record is built, to simulate a sugared cell whose
+    /// recorded id a fresh scan cannot reproduce.
+    fn jupyter_capture(
+        text: &str,
+        results: &[(usize, Vec<Value>)],
+        stored_markdown: &str,
+        ids: Option<&[&str]>,
+    ) -> EngineCapture {
+        engine_capture("jupyter", text, results, stored_markdown, ids)
+    }
+
+    fn engine_capture(
+        engine: &str,
+        text: &str,
+        results: &[(usize, Vec<Value>)],
+        stored_markdown: &str,
+        ids: Option<&[&str]>,
+    ) -> EngineCapture {
+        let mut units = scan_units(text);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        if let Some(ids) = ids {
+            for (unit, id) in units.iter_mut().zip(ids) {
+                match unit {
+                    Unit::Cell(c) => c.id = Some(UnitId(id.to_string())),
+                    Unit::Inline(i) => i.id = Some(UnitId(id.to_string())),
+                }
+            }
+        }
+        let def = HashDefinition::conservative(engine);
+        let mut builder = RecordBuilder::new(engine, &def, &units, &texts).unwrap();
+        for (index, outputs) in results {
+            builder
+                .push(
+                    *index,
+                    UnitResult {
+                        outputs: outputs.clone(),
+                        execution_count: Some(1),
+                        kernel: Some("python3".to_string()),
+                    },
+                )
+                .unwrap();
+        }
+        let engine_record = builder.finish(EngineEntryInput::default()).unwrap();
+        let record = coalesce(std::slice::from_ref(&engine_record), &units).unwrap();
+        EngineCapture {
+            engine_name: engine.into(),
+            input_qmd: text.into(),
+            result: json!({
+                "markdown": stored_markdown,
+                "supporting_files": [],
+                "filters": ["quarto"],
+                "includes": {
+                    "header_includes": [],
+                    "include_before": [],
+                    "include_after": [],
+                },
+                "needs_postprocess": false,
+            }),
+            files: Vec::new(),
+            record: Some(serde_json::to_value(&record).unwrap()),
+        }
+    }
+
+    /// A context whose document lives in a temp dir (figures would land there).
+    fn tmp_context(format: &str) -> (tempfile::TempDir, ExecutionContext) {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ExecutionContext::new(
+            dir.path().to_path_buf(),
+            dir.path().to_path_buf(),
+            dir.path().join("doc.qmd"),
+            format,
+        );
+        (dir, ctx)
+    }
+
+    const CELL_MD: &str = "::: {.cell}\n\n```{.python .cell-code}\nprint('hi')\n```\n\n\
+        ::: {.cell-output .cell-output-stdout}\n\n```\nhi\n```\n\n:::\n\n:::\n";
+
+    #[test]
+    fn replay_trace_recorded_before_exr5_fails_with_rerecord_error() {
+        let mut capture = sample_capture();
+        capture.engine_name = "jupyter".into();
+        capture.record = None;
+        let input = capture.input_qmd.clone();
+        let engine = ReplayEngine::new(capture);
+        let err = engine.execute(&input, &make_test_context()).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("no execution record"), "{msg}");
+        assert!(msg.contains("Re-record"), "{msg}");
+        assert!(matches!(err, ExecutionError::ExecutionFailed { .. }));
+    }
+
+    #[test]
+    fn replay_trace_recorded_between_exr5_and_flip_replays() {
+        // The stored markdown is not what the presenter makes of the record (a
+        // pre-flip recording); replay presents the record, never returns the string.
+        let text = "Before.\n\n```{python}\nprint('hi')\n```\n";
+        let capture = jupyter_capture(text, &[(0, stdout("hi\n"))], "STALE STORED MARKDOWN", None);
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        assert_eq!(result.markdown, format!("Before.\n\n{CELL_MD}"));
+        // The side data is the stored result's.
+        assert_eq!(result.filters, ["quarto"]);
+    }
+
+    #[test]
+    fn replay_engine_returns_byte_identical_record() {
+        let text = "```{python}\nprint('hi')\n```\n";
+        let capture = jupyter_capture(text, &[(0, stdout("hi\n"))], "", None);
+        let recorded = read_record_value(capture.record.clone().unwrap()).unwrap();
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        let replayed = result.record.expect("the record travels on the result");
+        assert_eq!(replayed.cells, recorded.cells);
+        assert_eq!(replayed.engine, recorded.metadata.quarto_engines[0]);
+    }
+
+    #[test]
+    fn replay_id_mismatch_falls_back_to_content_hash() {
+        // The recorded id is one a fresh scan cannot reproduce (a sugared cell's);
+        // the content hash still matches the cell.
+        let text = "```{python}\nprint('hi')\n```\n";
+        let capture = jupyter_capture(
+            text,
+            &[(0, stdout("hi\n"))],
+            "",
+            Some(&["0-deadbeef-fig-sugared"]),
+        );
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        assert_eq!(result.markdown, CELL_MD);
+    }
+
+    #[test]
+    fn replay_knitr_trace_unchanged() {
+        // The markdown replay path: a knitr capture's result comes back verbatim,
+        // record or not.
+        let capture = sample_capture();
+        let input = capture.input_qmd.clone();
+        let result = ReplayEngine::new(capture)
+            .execute(&input, &make_test_context())
+            .unwrap();
+        assert_eq!(result.markdown, "---\nengine: knitr\n---\n\nhi\n");
+        assert_eq!(result.supporting_files, vec![PathBuf::from("fig1.png")]);
+    }
+
+    #[test]
+    fn replay_miss_policy_still_hard_fails() {
+        let text = "```{python}\nprint('hi')\n```\n";
+        let capture = jupyter_capture(text, &[(0, stdout("hi\n"))], "", None);
+        let (_dir, ctx) = tmp_context("html");
+        let changed = "```{python}\nprint('hi') \n```\n";
+        let err = ReplayEngine::new(capture)
+            .execute(changed, &ctx)
+            .unwrap_err();
+        assert!(err.to_string().contains("replay miss"), "{err}");
+    }
+
+    #[test]
+    fn replay_output_follows_target_format() {
+        // One trace, two target formats: the span's value is raw html for html and
+        // the plain text for a format with no html.
+        let text = "Value `{python} v` here.\n";
+        let capture = jupyter_capture(
+            text,
+            &[(0, plain_and_html("'plain'", "<b>rich</b>"))],
+            "",
+            None,
+        );
+        let (_dir, html) = tmp_context("html");
+        let (_dir2, docx) = tmp_context("docx");
+        let engine = ReplayEngine::new(capture);
+        let for_html = engine.execute(text, &html).unwrap().markdown;
+        let for_docx = engine.execute(text, &docx).unwrap().markdown;
+        assert!(for_html.contains("<b>rich</b>"), "{for_html}");
+        assert!(for_docx.contains("plain"), "{for_docx}");
+        assert!(!for_docx.contains("<b>rich</b>"), "{for_docx}");
+        assert_ne!(for_html, for_docx);
+    }
+
+    // ── OPR-7i: derived page dependencies and the widget warning on replay ──
+
+    fn widget_view() -> Vec<Value> {
+        vec![json!({
+            "output_type": "display_data",
+            "data": {"application/vnd.jupyter.widget-view+json": {"model_id": "a"}, "text/plain": "w"},
+            "metadata": {}
+        })]
+    }
+
+    /// A jupyter capture whose engine entry carries the label, as a live run stored it.
+    fn labeled_capture(text: &str, outputs: Vec<Value>) -> EngineCapture {
+        let mut capture = jupyter_capture(text, &[(0, outputs)], "", None);
+        capture.record.as_mut().unwrap()["metadata"]["quarto_engines"][0]["dependency_data"] =
+            json!("jupyter-outputs");
+        capture
+    }
+
+    #[test]
+    fn replay_derives_the_page_dependencies_again_and_stores_none() {
+        let text = "```{python}\n1\n```\n";
+        let capture = labeled_capture(text, plain_and_html("x", "<b>hi</b>"));
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        assert_eq!(result.derived_header_includes.len(), 1);
+        assert!(result.derived_header_includes[0].contains("requirejs@2.3.6"));
+        // The stored includes are untouched: one copy, never two.
+        assert!(result.includes.header_includes.is_empty());
+        // A non-HTML target derives nothing.
+        let (_dir2, docx) = tmp_context("docx");
+        let capture = labeled_capture(text, plain_and_html("x", "<b>hi</b>"));
+        let result = ReplayEngine::new(capture).execute(text, &docx).unwrap();
+        assert!(result.derived_header_includes.is_empty());
+    }
+
+    #[test]
+    fn replay_raises_the_widget_warning_once_when_the_stored_result_already_has_it() {
+        use crate::engine::diagnostics::widget_view_unsupported_diagnostic;
+        let text = "```{python}\n1\n```\n";
+        let mut capture = labeled_capture(text, widget_view());
+        // What a live run stored: the note became a warning on the result.
+        capture.result["warnings"] =
+            json!([serde_json::to_value(widget_view_unsupported_diagnostic(None)).unwrap()]);
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        let count = result
+            .warnings
+            .iter()
+            .filter(|w| w.code.as_deref() == Some("Q-18-16"))
+            .count();
+        assert_eq!(count, 1, "{:?}", result.warnings);
+    }
+
+    #[test]
+    fn replay_raises_the_widget_warning_when_the_stored_result_has_none() {
+        let text = "```{python}\n1\n```\n";
+        let capture = labeled_capture(text, widget_view());
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        let count = result
+            .warnings
+            .iter()
+            .filter(|w| w.code.as_deref() == Some("Q-18-16"))
+            .count();
+        assert_eq!(count, 1, "{:?}", result.warnings);
+    }
+
+    // ── knitr traces (bd-js24dold) ──────────────────────────
+
+    #[test]
+    fn knitr_replay_claims_what_knitr_claims() {
+        let engine = ReplayEngine::new(sample_capture());
+        assert!(matches!(
+            engine.claims_language("r", None),
+            LanguageClaim::Primary(1)
+        ));
+        assert!(matches!(
+            engine.claims_language("python", None),
+            LanguageClaim::Interop(0)
+        ));
+        assert!(matches!(
+            engine.claims_language("julia", None),
+            LanguageClaim::None
+        ));
+    }
+
+    #[test]
+    fn jupyter_replay_claims_only_its_own_name() {
+        let engine = ReplayEngine::new(jupyter_capture("", &[], "", None));
+        assert!(matches!(
+            engine.claims_language("r", None),
+            LanguageClaim::None
+        ));
+    }
+
+    #[test]
+    fn old_knitr_trace_without_a_record_returns_its_stored_markdown() {
+        let capture = sample_capture();
+        let input = capture.input_qmd.clone();
+        let result = ReplayEngine::new(capture)
+            .execute(&input, &make_test_context())
+            .unwrap();
+        assert_eq!(result.markdown, "---\nengine: knitr\n---\n\nhi\n");
+    }
+
+    #[test]
+    fn knitr_trace_with_a_structured_record_replays_through_the_presenter() {
+        let text = "Before.\n\n```{r}\nsum(1:3)\n```\n";
+        let capture = engine_capture("knitr", text, &[(0, stdout("[1] 6\n"))], "STALE", None);
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture).execute(text, &ctx).unwrap();
+        assert!(
+            result
+                .markdown
+                .contains("```{.r .cell-code}\nsum(1:3)\n```"),
+            "{}",
+            result.markdown
+        );
+        assert!(result.markdown.contains("[1] 6"), "{}", result.markdown);
+        assert!(!result.markdown.contains("STALE"));
+        assert!(result.record.is_some());
+    }
+
+    #[test]
+    fn a_structured_knitr_cell_reaches_the_shared_reader() {
+        use crate::presenter::knitr_inputs::fixture;
+        let mut capture = engine_capture(
+            "knitr",
+            fixture::SOURCE,
+            &[(0, fixture::outputs())],
+            "STALE",
+            None,
+        );
+        let mut record: crate::record::Record =
+            serde_json::from_value(capture.record.take().unwrap()).unwrap();
+        fixture::apply(&mut record.cells[0]);
+        record.metadata.quarto_engines[0].known_options =
+            Some(fixture::KNOWN.iter().map(|s| s.to_string()).collect());
+        // knitr declares that it interleaves; the fixture's anchors are only used then.
+        record.metadata.quarto_engines[0].interleaves_output = true;
+        capture.record = Some(serde_json::to_value(&record).unwrap());
+        let (_dir, ctx) = tmp_context("html");
+        let result = ReplayEngine::new(capture)
+            .execute(fixture::SOURCE, &ctx)
+            .unwrap();
+        fixture::assert_rich(&result.markdown);
     }
 }

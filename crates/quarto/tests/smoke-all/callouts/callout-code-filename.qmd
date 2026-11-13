@@ -1,0 +1,25 @@
+---
+title: A filename code block inside a callout
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            'div.callout div.code-with-filename div.code-with-filename-file',
+            'div.callout div.code-copy-outer-scaffold button.code-copy-button',
+          ]
+---
+
+Regression fixture for bd-akkproqy: `code-block-generate` runs while a
+callout is still a `Callout` custom node (since #1050), so it must walk into
+the callout's slots or the block loses its filename header and copy
+scaffold. q2-preview does not render these decorations for any code block
+yet (bd-3zc4sye5), so this fixture's DOM checks run on native render only.
+
+::: {.callout-note}
+```{.python filename="x.py"}
+x = 1
+```
+:::

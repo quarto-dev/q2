@@ -7,6 +7,12 @@
 //! shared format means the same readers/writers work for both the
 //! authoritative automerge store and the local fast-path cache.
 //!
+//! Record: the execution record of the same run is cached beside it, in
+//! `<key>.record.bin` (gzipped canonical record JSON, EXR-15), so a hit can hand a
+//! capture writer both. The key stays the whole-input hash on purpose: keying on the
+//! record's execution hash would make a hit skip execution, which is reuse and belongs
+//! with freeze.
+//!
 //! Cache key: hex SHA-256 of the canonical `input_qmd` bytes — the
 //! same QMD shape `EngineExecutionStage` hands to the engine, and the
 //! same shape Phase C.2's staleness check uses. Drift between the two
@@ -26,12 +32,13 @@
 //! "Open follow-up".
 
 use std::fmt::Write as _;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::preview_record::{compute_input_qmd, record_capture};
+use quarto_core::engine::preview_record::{CaptureRun, compute_input_qmd, record_capture_run};
+use quarto_core::pandoc_request::captures::{CapturePayload, parse_capture_payload};
 use quarto_core::project::ProjectContext;
 use quarto_core::stage::PipelineError;
 use quarto_system_runtime::SystemRuntime;
@@ -49,6 +56,24 @@ pub fn compute_key(input_qmd: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input_qmd);
     hex_encode(&hasher.finalize())
+}
+
+/// The cache key of a session's engine run: [`compute_key`] over the source `input_qmd`, plus
+/// the session's `-M` overlay when it has one. The overlay changes what the engine produces
+/// (`-M 'execute: {echo: false}'`) without changing the overlay-free `input_qmd`, so two
+/// sessions with different `-M` must not share an entry. A session without `-M` keeps the
+/// plain key, so existing entries stay valid.
+pub fn session_cache_key(input_qmd: &[u8]) -> String {
+    match crate::render_flags::get().metadata {
+        None => compute_key(input_qmd),
+        Some(overlay) => {
+            // `serde_json::Value` objects are sorted maps, so the bytes are deterministic.
+            let mut keyed = input_qmd.to_vec();
+            keyed.extend_from_slice(b"\0-M\0");
+            keyed.extend_from_slice(overlay.to_string().as_bytes());
+            compute_key(&keyed)
+        }
+    }
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -72,29 +97,34 @@ pub fn cache_file_path(cache_dir: &Path, key: &str) -> PathBuf {
 /// `tracing::warn!` so a corrupt cache entry doesn't take the preview
 /// server down.
 ///
-/// For robustness against a stale pre-bd-5yff4 entry (a single capture
-/// object), a failed array parse falls back to a single-object parse
-/// wrapped in a vec.
+/// The shape is decided by
+/// [`parse_capture_payload`](quarto_core::pandoc_request::captures::parse_capture_payload),
+/// which also accepts a stale pre-bd-5yff4 single-capture entry. The capture file
+/// holds legacy captures only (the record lives in its own file, see
+/// [`read_cached_record`]): an empty or record payload here is reported as unreadable
+/// (`InvalidData`), which the driver treats as a miss.
 pub fn read_cached(cache_dir: &Path, key: &str) -> std::io::Result<Option<Vec<EngineCapture>>> {
     let path = cache_file_path(cache_dir, key);
-    let file = match std::fs::File::open(&path) {
-        Ok(f) => f,
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e),
     };
-    let mut decoder = flate2::read::GzDecoder::new(file);
-    let mut json_bytes = Vec::new();
-    decoder.read_to_end(&mut json_bytes)?;
-    match serde_json::from_slice::<Vec<EngineCapture>>(&json_bytes) {
-        Ok(captures) => Ok(Some(captures)),
-        Err(array_err) => match serde_json::from_slice::<EngineCapture>(&json_bytes) {
-            Ok(single) => Ok(Some(vec![single])),
-            Err(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                array_err,
-            )),
-        },
+    let invalid = |msg: String| std::io::Error::new(std::io::ErrorKind::InvalidData, msg);
+    match parse_capture_payload(Some(&bytes), key).map_err(invalid)? {
+        CapturePayload::Legacy(captures) => Ok(Some(captures)),
+        CapturePayload::Empty => Err(invalid("cache entry is empty".to_string())),
+        CapturePayload::Record(_) => Err(invalid(
+            "cache entry holds an engine record, which this cache does not read yet".to_string(),
+        )),
     }
+}
+
+/// The on-disk path of the execution record cached beside the captures for `key`
+/// (EXR-15). A sibling file, so an entry written before records were cached keeps
+/// hitting, and the capture file keeps the one shape [`read_cached`] reads.
+pub fn record_file_path(cache_dir: &Path, key: &str) -> PathBuf {
+    cache_dir.join(format!("{key}.record.{CACHE_FILE_EXT}"))
 }
 
 /// Persist a capture sequence to the cache. Creates `cache_dir` (and
@@ -105,26 +135,77 @@ pub fn write_cached(
     key: &str,
     captures: &[EngineCapture],
 ) -> std::io::Result<()> {
-    std::fs::create_dir_all(cache_dir)?;
-
-    let tmp_path = cache_dir.join(format!("{key}.{CACHE_FILE_EXT}.tmp"));
-    let final_path = cache_file_path(cache_dir, key);
-
     let json = serde_json::to_vec(captures)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    write_gzipped_atomic(cache_dir, &cache_file_path(cache_dir, key), &json)
+}
+
+/// Persist the execution record for `key`, in the canonical writer bytes the hub
+/// stores (gzipped), atomically.
+pub fn write_cached_record(
+    cache_dir: &Path,
+    key: &str,
+    record: &quarto_core::record::Record,
+) -> std::io::Result<()> {
+    let text = quarto_core::record::write_record(record)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    write_gzipped_atomic(
+        cache_dir,
+        &record_file_path(cache_dir, key),
+        text.as_bytes(),
+    )
+}
+
+/// Look up the cached record for `key`: `Ok(None)` when there is none (a clean miss,
+/// or an entry written before records were cached); `Err` when the file is present but
+/// unreadable or not a record, which callers downgrade to "no record".
+pub fn read_cached_record(
+    cache_dir: &Path,
+    key: &str,
+) -> std::io::Result<Option<Arc<quarto_core::record::Record>>> {
+    let bytes = match std::fs::read(record_file_path(cache_dir, key)) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let invalid = |msg: String| std::io::Error::new(std::io::ErrorKind::InvalidData, msg);
+    match parse_capture_payload(Some(&bytes), key).map_err(invalid)? {
+        CapturePayload::Record(record) => Ok(Some(record)),
+        _ => Err(invalid(
+            "cache record file does not hold a record".to_string(),
+        )),
+    }
+}
+
+/// Gzip `json` and move it into place at `final_path`. Each writer uses its own temp
+/// file, so concurrent writers never interleave bytes; they race only on the rename
+/// (last writer wins, and the payload is the same whichever lands).
+fn write_gzipped_atomic(cache_dir: &Path, final_path: &Path, json: &[u8]) -> std::io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_TMP: AtomicU64 = AtomicU64::new(0);
+
+    std::fs::create_dir_all(cache_dir)?;
+    let mut tmp_name = final_path.file_name().unwrap_or_default().to_os_string();
+    tmp_name.push(format!(
+        ".{}.{}.tmp",
+        std::process::id(),
+        NEXT_TMP.fetch_add(1, Ordering::Relaxed)
+    ));
+    let tmp_path = cache_dir.join(tmp_name);
 
     // Wrap the file in a scope so the encoder + file close before
     // rename — Windows requires the source file to be closed.
     {
         let file = std::fs::File::create(&tmp_path)?;
         let mut encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
-        encoder.write_all(&json)?;
+        encoder.write_all(json)?;
         let file = encoder.finish()?;
         file.sync_data()?;
     }
 
-    std::fs::rename(&tmp_path, &final_path)?;
-    Ok(())
+    std::fs::rename(&tmp_path, final_path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp_path);
+    })
 }
 
 /// Cached wrapper around
@@ -154,6 +235,23 @@ pub async fn record_capture_cached(
     runtime: Arc<dyn SystemRuntime>,
     engine_registry: Option<Arc<EngineRegistry>>,
 ) -> Result<Vec<EngineCapture>, PipelineError> {
+    record_capture_run_cached(cache_dir, path, project, runtime, engine_registry)
+        .await
+        .map(|run| run.captures)
+}
+
+/// [`record_capture_cached`] returning the whole [`CaptureRun`] (EXR-13b), so a
+/// capture writer can store the execution record when its gate is on. The cache
+/// holds the record beside the captures (EXR-15), so a **hit** returns both; an entry
+/// written before records were cached, or whose record file is unreadable, returns
+/// `record: None` and the writer falls back to a legacy capture doc.
+pub async fn record_capture_run_cached(
+    cache_dir: &Path,
+    path: &Path,
+    project: &ProjectContext,
+    runtime: Arc<dyn SystemRuntime>,
+    engine_registry: Option<Arc<EngineRegistry>>,
+) -> Result<CaptureRun, PipelineError> {
     // Compute the same input_qmd the engine would receive — this
     // doubles as the cache key derivation and as the source of truth
     // for what we hash. compute_input_qmd already runs the pre-engine
@@ -162,34 +260,86 @@ pub async fn record_capture_cached(
     let input_qmd = compute_input_qmd(path, project, runtime.clone()).await?;
     let key = compute_key(&input_qmd);
 
-    match read_cached(cache_dir, &key) {
-        Ok(Some(captures)) => {
-            tracing::debug!(path = %path.display(), key = %key, "engine capture cache hit");
-            return Ok(captures);
-        }
-        Ok(None) => {}
+    if let Some(run) = lookup_cached_run(cache_dir, &key) {
+        tracing::debug!(path = %path.display(), key = %key, "engine capture cache hit");
+        return Ok(run);
+    }
+
+    let run = record_capture_run(path, project, runtime, engine_registry).await?;
+    store_run(cache_dir, &key, &run);
+    Ok(run)
+}
+
+/// The `cache` record source: the run stored under `key`, or `None` on a miss.
+///
+/// A hit is **either** file readable: the legacy `<key>.bin` (the captures) or the record
+/// file beside it, so a record-only entry (an imported record has no captures) hits with an
+/// empty capture list. An unreadable record file is a warning and "no record": beside a
+/// readable `.bin` the captures still hit, alone it is a miss and the engine re-runs. An
+/// unreadable `.bin` is a miss whatever the record file holds. It takes no registry, so it
+/// can never run an engine.
+///
+/// Reuse across a restart does not come from here: it comes from the hub `CaptureRef` in the
+/// persisted store. This cache is keyed by content, so an edit misses. A path-keyed pointer
+/// is the fallback if the cache ever moves out of `data_dir` (RIU-0 S2b: about 85 lines, plus
+/// garbage collection the prototype did not have).
+pub fn lookup_cached_run(cache_dir: &Path, key: &str) -> Option<CaptureRun> {
+    let captures = match read_cached(cache_dir, key) {
+        Ok(captures) => captures,
         Err(e) => {
             tracing::warn!(
-                path = %path.display(),
                 key = %key,
                 error = %e,
                 "engine capture cache read failed; falling through to engine",
             );
+            return None;
         }
+    };
+    let record = match read_cached_record(cache_dir, key) {
+        Ok(record) => record.map(|r| (*r).clone()),
+        Err(e) => {
+            tracing::warn!(
+                key = %key,
+                error = %e,
+                "cached execution record unreadable; using the captures alone",
+            );
+            None
+        }
+    };
+    if captures.is_none() && record.is_none() {
+        return None;
     }
+    Some(CaptureRun {
+        captures: captures.unwrap_or_default(),
+        record,
+    })
+}
 
-    let captures = record_capture(path, project, runtime, engine_registry).await?;
-    if !captures.is_empty()
-        && let Err(e) = write_cached(cache_dir, &key, &captures)
+/// Store what `run` has under `key`: the legacy `.bin` when there are captures, the record
+/// file when the record describes something. Neither depends on the other, and **the writer
+/// gate is never read here**: the cache holds what a run has (RIU epic, decision 9). An engine
+/// run always has captures, so it writes both; an import has none, so it writes only the
+/// record. A failed write is logged and the run is still emitted, so a later call re-runs the
+/// engine.
+pub fn store_run(cache_dir: &Path, key: &str, run: &CaptureRun) {
+    if !run.captures.is_empty()
+        && let Err(e) = write_cached(cache_dir, key, &run.captures)
     {
         tracing::warn!(
-            path = %path.display(),
             key = %key,
             error = %e,
             "engine capture cache write failed; capture still emitted",
         );
     }
-    Ok(captures)
+    if let Some(record) = run.record.as_ref().filter(|r| r.describes_something())
+        && let Err(e) = write_cached_record(cache_dir, key, record)
+    {
+        tracing::warn!(
+            key = %key,
+            error = %e,
+            "execution record cache write failed; record still emitted",
+        );
+    }
 }
 
 #[cfg(test)]
@@ -216,6 +366,7 @@ mod tests {
                 "needs_postprocess": false,
             }),
             files: Vec::new(),
+            record: None,
         }
     }
 
@@ -545,5 +696,210 @@ mod tests {
                     .collect::<Vec<_>>()
             );
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // EXR-15: the cache holds the execution record beside the captures
+    // ──────────────────────────────────────────────────────────────
+
+    use crate::test_support::{RECORDING_DOC, counting_recording_registry};
+
+    #[test]
+    fn record_round_trips_through_the_cache() {
+        let tmp = TempDir::with_prefix("exr15-cache-record-").unwrap();
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        write_cached_record(tmp.path(), "k", &record).expect("write succeeds");
+        let read = read_cached_record(tmp.path(), "k")
+            .expect("read succeeds")
+            .expect("entry exists");
+        assert_eq!(*read, record);
+        assert!(read_cached_record(tmp.path(), "other").unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn cached_wrapper_stores_and_returns_the_record() {
+        let tmp = TempDir::with_prefix("exr15-cached-record-").unwrap();
+        let cache_dir = tmp.path().join("captures");
+        let (path, project, runtime) = write_fixture(&tmp, RECORDING_DOC);
+
+        let (registry, calls) = counting_recording_registry();
+        let first =
+            record_capture_run_cached(&cache_dir, &path, &project, runtime.clone(), Some(registry))
+                .await
+                .unwrap();
+        let first_record = first.record.expect("a miss returns the engine's record");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let (registry2, calls2) = counting_recording_registry();
+        let second =
+            record_capture_run_cached(&cache_dir, &path, &project, runtime, Some(registry2))
+                .await
+                .unwrap();
+        assert_eq!(calls2.load(Ordering::SeqCst), 0, "a hit runs no engine");
+        assert_eq!(
+            second.record.expect("a hit returns the cached record"),
+            first_record
+        );
+        assert_eq!(second.captures.len(), first.captures.len());
+    }
+
+    #[tokio::test]
+    async fn a_different_input_misses_for_the_record_too() {
+        let tmp = TempDir::with_prefix("exr15-cached-record-miss-").unwrap();
+        let cache_dir = tmp.path().join("captures");
+        let (path, project, runtime) = write_fixture(&tmp, RECORDING_DOC);
+        let (registry, _) = counting_recording_registry();
+        record_capture_run_cached(&cache_dir, &path, &project, runtime.clone(), Some(registry))
+            .await
+            .unwrap();
+
+        std::fs::write(&path, RECORDING_DOC.replace("SENTINEL", "CHANGED")).unwrap();
+        let (registry2, calls2) = counting_recording_registry();
+        record_capture_run_cached(&cache_dir, &path, &project, runtime, Some(registry2))
+            .await
+            .unwrap();
+        assert_eq!(
+            calls2.load(Ordering::SeqCst),
+            1,
+            "new input_qmd re-executes"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // RIU-2: the split wrapper and the record-only entry
+    // ──────────────────────────────────────────────────────────────
+
+    fn basic_record() -> quarto_core::record::Record {
+        quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap()
+    }
+
+    /// An import supplies a record and no captures. Only the record file is written, and the
+    /// lookup hits on it alone. `lookup_cached_run` takes no registry, so it cannot run an engine.
+    #[test]
+    fn a_record_only_run_is_stored_and_hit() {
+        let tmp = TempDir::with_prefix("riu2-record-only-").unwrap();
+        let run = CaptureRun {
+            captures: Vec::new(),
+            record: Some(basic_record()),
+        };
+        assert!(lookup_cached_run(tmp.path(), "k").is_none());
+        store_run(tmp.path(), "k", &run);
+        assert!(!cache_file_path(tmp.path(), "k").exists(), "no legacy file");
+        assert!(record_file_path(tmp.path(), "k").exists());
+        let hit = lookup_cached_run(tmp.path(), "k").expect("hit on the record file alone");
+        assert!(hit.captures.is_empty());
+        assert_eq!(hit.record.expect("record"), basic_record());
+    }
+
+    /// An engine run has captures and a record, so it writes both files.
+    #[tokio::test]
+    async fn an_engine_run_writes_both_files() {
+        let tmp = TempDir::with_prefix("riu2-both-files-").unwrap();
+        let cache_dir = tmp.path().join("captures");
+        let (path, project, runtime) = write_fixture(&tmp, RECORDING_DOC);
+        let input_qmd = compute_input_qmd(&path, &project, runtime.clone())
+            .await
+            .unwrap();
+        let key = compute_key(&input_qmd);
+        let (registry, _) = counting_recording_registry();
+        record_capture_run_cached(&cache_dir, &path, &project, runtime, Some(registry))
+            .await
+            .unwrap();
+        assert!(cache_file_path(&cache_dir, &key).exists());
+        assert!(record_file_path(&cache_dir, &key).exists());
+    }
+
+    /// A run with neither captures nor a record that describes something stores nothing.
+    #[test]
+    fn an_empty_run_stores_nothing() {
+        let tmp = TempDir::with_prefix("riu2-empty-run-").unwrap();
+        let mut empty = basic_record();
+        empty.metadata.quarto_engines.clear();
+        empty.cells.clear();
+        store_run(
+            tmp.path(),
+            "k",
+            &CaptureRun {
+                captures: Vec::new(),
+                record: Some(empty),
+            },
+        );
+        store_run(
+            tmp.path(),
+            "k",
+            &CaptureRun {
+                captures: Vec::new(),
+                record: None,
+            },
+        );
+        assert!(!tmp.path().join("k.bin").exists());
+        assert!(lookup_cached_run(tmp.path(), "k").is_none());
+    }
+
+    /// An unreadable record with no legacy file is a miss (the engine re-runs); with the
+    /// legacy file present the captures still come back, with no record.
+    #[test]
+    fn an_unreadable_record_is_a_miss_alone_and_falls_back_beside_captures() {
+        let tmp = TempDir::with_prefix("riu2-unreadable-").unwrap();
+        let mut future = basic_record();
+        future.metadata.quarto_record_version = 99;
+        let future_text = quarto_core::record::write_record(&future).unwrap();
+        for bytes in [b"not gzip".to_vec(), gzip(future_text.as_bytes())] {
+            let dir = tmp.path();
+            let _ = std::fs::remove_file(cache_file_path(dir, "k"));
+            std::fs::write(record_file_path(dir, "k"), &bytes).unwrap();
+            assert!(
+                lookup_cached_run(dir, "k").is_none(),
+                "unreadable record alone is a miss"
+            );
+            write_cached(dir, "k", &[sample_capture()]).unwrap();
+            let hit = lookup_cached_run(dir, "k").expect("the captures still hit");
+            assert_eq!(hit.captures.len(), 1);
+            assert!(hit.record.is_none());
+        }
+    }
+
+    fn gzip(bytes: &[u8]) -> Vec<u8> {
+        let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        enc.write_all(bytes).unwrap();
+        enc.finish().unwrap()
+    }
+
+    /// An entry written before records were cached (captures only) still hits, with no
+    /// record, and a corrupt record file downgrades to "no record", never an error.
+    #[test]
+    fn a_missing_or_corrupt_record_file_reads_as_no_record() {
+        let tmp = TempDir::with_prefix("exr15-cache-record-missing-").unwrap();
+        assert!(read_cached_record(tmp.path(), "k").unwrap().is_none());
+        std::fs::write(record_file_path(tmp.path(), "k"), b"not gzip").unwrap();
+        assert!(read_cached_record(tmp.path(), "k").is_err());
+    }
+
+    /// Concurrent writers of one key never leave a torn file: every read sees a whole
+    /// payload (last writer wins on the rename).
+    #[test]
+    fn concurrent_record_writers_leave_a_readable_entry() {
+        let tmp = TempDir::with_prefix("exr15-cache-record-race-").unwrap();
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                s.spawn(|| {
+                    for _ in 0..20 {
+                        write_cached_record(tmp.path(), "k", &record).unwrap();
+                        let got = read_cached_record(tmp.path(), "k").unwrap().unwrap();
+                        assert_eq!(*got, record);
+                    }
+                });
+            }
+        });
     }
 }

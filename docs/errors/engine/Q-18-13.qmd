@@ -1,0 +1,41 @@
+---
+title: "knitr Hook Replaced By The Document"
+description: "A chunk replaced a knitr hook, so that chunk and every later one keep knitr's finished markdown."
+code: Q-18-13
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-13` — knitr Hook Replaced By The Document
+
+> A chunk replaced a knitr hook, so that chunk and every later one keep knitr's finished markdown.
+
+## What this means
+
+knitr turns each chunk's code and results into markdown with a set of hooks
+(`source`, `output`, `message`, `warning`, `error` and `plot`). Code such as
+
+````markdown
+```{r}
+knitr::knit_hooks$set(output = function(x, options) paste0("> ", x))
+```
+````
+
+replaces one of them for the rest of the document. Quarto records what each chunk produced
+and presents it itself, and it cannot know what your hook did. So the chunk that replaced the
+hook, and every chunk after it, keep the markdown knitr produced, and Quarto does not present
+them from the recorded pieces.
+
+The output is the same as knitr's. This is a note, not a problem: nothing needs fixing.
+
+## How to change it
+
+If you want Quarto to present those chunks itself, use the chunk options that do the same job
+(for example `class.output`, `attr.source` or `collapse`) instead of replacing the hook.
+
+## Related errors
+
+- [`Q-18-12`](Q-18-12.qmd) — knitr's cache is off while recording.

@@ -191,7 +191,7 @@ mod tests {
     }
 
     fn link(url: &str, text: &str) -> Inline {
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: Default::default(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -201,7 +201,7 @@ mod tests {
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     struct Run {

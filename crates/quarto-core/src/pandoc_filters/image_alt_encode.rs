@@ -70,20 +70,21 @@ mod tests {
     }
 
     fn image(alt: &str, kvs: &[(&str, &str)]) -> Inline {
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: (
                 String::new(),
                 vec![],
                 kvs.iter()
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect::<LinkedHashMap<_, _>>(),
-            ),
+            )
+                .into(),
             content: split_string_to_inlines(alt),
             target: ("x.png".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(content: Vec<Inline>) -> Block {
@@ -123,14 +124,14 @@ mod tests {
 
     #[test]
     fn standalone_linked_image_alt_moves_to_fig_alt() {
-        let link = Inline::Link(Link {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        let link = Inline::Link(Box::new(Link {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![image("Alt L", &[])],
             target: ("https://example.com".into(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         assert_eq!(
             summary(vec![para(vec![link])]),
             vec![(String::new(), Some("Alt L".into()))]
@@ -147,8 +148,8 @@ mod tests {
 
     #[test]
     fn inline_and_figure_images_keep_their_alt_inlines() {
-        let figure = Block::Figure(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        let figure = Block::Figure(Box::new(Figure {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![Block::Plain(Plain {
@@ -163,7 +164,7 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(
             summary(vec![
                 para(vec![word("Text"), image("Alt D", &[])]),

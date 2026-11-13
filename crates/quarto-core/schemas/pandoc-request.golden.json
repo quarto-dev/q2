@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "kind": "pandoc",
-  "job_id": "a938279e0a553118",
+  "job_id": "a6b7e1167f273a0b",
   "writer": "docx",
   "argv": [
     "pandoc",
@@ -55,7 +55,7 @@
   "stage_name": "pandoc-write",
   "json_path": "/__q2_share__/pandoc-input.json",
   "post": "none",
-  "expected_pandoc_wasm_sha256": "784497e55d1f23eb8bb5e21633cb76e6503360fede48536cad64a911fb623bbc",
+  "expected_pandoc_wasm_sha256": "6f4d43505a545fbfbe3ace4cd1204a7a5d5aea4a7a93c22f09056c0a9381bb4a",
   "share_tree_version": "48e259f5c9b22be5e40b8fa2253a26a5ef6e9b85aeec3796989ba420264a3ceb",
   "typst_available_fonts": null
 }

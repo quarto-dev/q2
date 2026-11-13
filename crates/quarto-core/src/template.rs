@@ -249,7 +249,13 @@ $endfor$
 ///   for the page-footer slot, written by `RepoActionsRenderTransform`.
 /// - `$rendered.navigation.page_navigation$` - Rendered prev/next page-nav strip
 /// - `$rendered.navigation.footer$` - Rendered page-footer HTML (if page-footer: set)
-const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
+/// The `<head>` shared by [`FULL_HTML_TEMPLATE`] and
+/// [`DASHBOARD_HTML_TEMPLATE`] (meta tags, title, linked CSS and scripts,
+/// math, header includes). A macro so both templates are built with
+/// `concat!` from one literal.
+macro_rules! html_head {
+    () => {
+        r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
 <meta charset="utf-8">
@@ -292,7 +298,13 @@ $for(header-includes)$
 $header-includes$
 $endfor$
 </head>
-<body class="$body-classes$">
+"#
+    };
+}
+
+const FULL_HTML_TEMPLATE: &str = concat!(
+    html_head!(),
+    r#"<body class="$body-classes$">
 $skip-link()$
 $if(color-mode-script)$
 $color-mode-script$
@@ -376,7 +388,166 @@ $rendered.navigation.footer$
 $endif$
 </body>
 </html>
-"#;
+"#
+);
+
+/// The dashboard page (`format: dashboard`): Q1's
+/// `formats/dashboard/template.html` on Q2's shared head, plus the
+/// container classes Q1's DOM postprocessor adds (`format-dashboard.ts:322-341`).
+///
+/// - `<body>` gets `quarto-dashboard`, and `dashboard-fill` unless
+///   `scrolling: true`, ahead of the computed `$body-classes$`.
+/// - The header is the `title-block` partial, which for dashboards is
+///   [`DASHBOARD_TITLE_BLOCK_PARTIAL`] (overridable through
+///   `template-partials`, as in Q1).
+/// - The body sits in Q1's `div.page-layout-custom`, which also carries
+///   the skip link's `#quarto-document-content` target with
+///   `tabindex="-1"` and `role="main"` (Q1's `injectSkipLink` and
+///   `format-dashboard.ts:337`).
+/// - The closing script initializes bslib cards, as Q1's template does.
+/// - In a website with a navbar, as in Q1: the site header wraps the
+///   dashboard header (`dashboard-site-header`), the content area is the
+///   site\'s `div#quarto-content.quarto-container.page-navbar` (which the
+///   dashboard CSS styles) and the skip link targets it, and the site
+///   footer follows.
+///
+/// Plan: `claude-notes/plans/2026-11-03-dashboard-format-port.md`, Phase 2.
+pub const DASHBOARD_HTML_TEMPLATE: &str = concat!(
+    html_head!(),
+    r##"<body class="$if(scrolling)$quarto-dashboard$else$quarto-dashboard dashboard-fill$endif$ $body-classes$$if(rendered.dashboard.body-classes)$ $rendered.dashboard.body-classes$$endif$">
+$if(rendered.navigation.navbar)$
+<a id="quarto-skip-link" class="visually-hidden-focusable" href="#quarto-content">$skip-to-content-text$</a>
+$else$
+$skip-link()$
+$endif$
+$if(color-mode-script)$
+$color-mode-script$
+$endif$
+$if(rendered.navigation.navbar)$
+${dashboard-site-header()}
+$elseif(rendered.navigation.announcement-above)$
+${dashboard-site-header()}
+$elseif(rendered.navigation.announcement-below)$
+${dashboard-site-header()}
+$else$
+$title-block()$
+$endif$
+$for(include-before)$
+$include-before$
+$endfor$
+<div class="$if(rendered.navigation.navbar)$quarto-container page-navbar $endif$page-layout-custom quarto-dashboard-content bslib-gap-spacing html-fill-container $if(scrolling)$dashboard-scrolling$else$bslib-page-fill$endif$ $if(rendered.dashboard.pages)$quarto-dashboard-pages$endif$$if(rendered.dashboard.content-classes)$ $rendered.dashboard.content-classes$$endif$" id="$if(rendered.navigation.navbar)$quarto-content$else$quarto-document-content$endif$" tabindex="-1" role="main">
+$body$
+</div>
+$for(include-after)$
+$include-after$
+$endfor$
+$if(rendered.navigation.footer)$
+$rendered.navigation.footer$
+$endif$
+<script type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (_event) {
+  if (window.bslib && window.bslib.Card) {
+    window.bslib.Card.initializeAllCards();
+  }
+});
+</script>
+</body>
+</html>
+"##
+);
+
+/// A dashboard page in a website: the site\'s `#quarto-header` (its
+/// announcement banner and navbar, as [`QUARTO_HEADER_PARTIAL`] writes
+/// them) with the dashboard\'s own header inside it, after the site\'s
+/// navbar (Q1 `processNavigation`, `format-dashboard-website.ts`, which
+/// moves `#quarto-dashboard-header` into `#quarto-header`). A dashboard
+/// page has no site sidebar or secondary nav (its layout is custom).
+pub const DASHBOARD_SITE_HEADER_PARTIAL: &str = r#"<header id="quarto-header" class="headroom fixed-top">
+$if(rendered.navigation.announcement-above)$
+$rendered.navigation.announcement-above$
+$endif$
+$if(rendered.navigation.navbar)$
+$rendered.navigation.navbar$
+$endif$
+$title-block()$
+$if(rendered.navigation.announcement-below)$
+$rendered.navigation.announcement-below$
+$endif$
+</header>"#;
+
+/// A dashboard's header and navbar: Q1's `formats/dashboard/title-block.html`.
+/// Registered as `title-block` in [`dashboard_html_partials`]. Unlike Q1,
+/// the `navbar-container` closes here rather than inside `_nav-container`,
+/// so the markup stays balanced when there is no title, subtitle or
+/// author. With pages (`rendered.dashboard.pages`, written by
+/// `DashboardTransform`) the toggler is shown and the page tabs follow the
+/// brand block (Q1 `processPages`).
+pub const DASHBOARD_TITLE_BLOCK_PARTIAL: &str = r##"<header id="quarto-dashboard-header">
+<nav class="navbar navbar-expand-md slim" data-bs-theme="dark">
+<div class="navbar-container container-fluid">
+$if(rendered.dashboard.pages)$
+<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-controls="dashboard-collapse" aria-expanded="false" aria-label="Toggle navigation">
+<span class="navbar-toggler-icon"></span>
+</button>
+$else$
+<button class="navbar-toggler hidden" type="button" data-bs-toggle="collapse" data-bs-target="#dashboard-collapse" aria-controls="dashboard-collapse" aria-expanded="false" aria-label="Toggle navigation">
+<span class="navbar-toggler-icon"></span>
+</button>
+$endif$
+$if(title)$
+${_nav-container()}
+$elseif(rendered.dashboard.logo)$
+${_nav-container()}
+$elseif(subtitle)$
+${_nav-container()}
+$elseif(by-author)$
+${_nav-container()}
+$endif$
+$if(color-mode-script)$
+<button class="quarto-color-scheme-toggle" type="button" role="switch" aria-checked="false" aria-label="$if(quarto.language.toggle-dark-mode)$$quarto.language.toggle-dark-mode$$else$Toggle dark mode$endif$" onclick="window.quartoToggleColorScheme(); return false;"><i class="bi"></i></button>
+$endif$
+$if(rendered.dashboard.pages)$
+<div id="dashboard-collapse" class="navbar-collapse collapse"><ul class="navbar-nav navbar-nav-scroll me-auto" role="tablist">
+$for(rendered.dashboard.pages)$
+<li class="nav-item" role="presentation"><a id="tab-$it.id$" class="nav-link$if(it.active)$ active$endif$" data-bs-toggle="tab" role="tab" data-bs-target="#$it.id$" data-scrolling="$it.scrolling$" href="#$it.id$" aria-controls="$it.id$" aria-selected="$if(it.active)$true$else$false$endif$"><span class="nav-link-text">$it.text$</span></a></li>
+$endfor$
+</ul>
+${_nav-buttons()}
+</div>
+$else$
+${_nav-buttons()}
+$endif$
+</div>
+</nav>
+</header>
+"##;
+
+/// The navbar's brand block: Q1's `formats/dashboard/_nav-container.html`
+/// (title, subtitle, authors). Authors come from the normalized
+/// `by-author` list, comma-separated (Q1 #10334). The logo arrives with
+/// Phase 7.
+/// The dashboard\'s `nav-buttons` links (Q1 `processNavButtons`), from
+/// `rendered.dashboard.nav-buttons`: inside the page collapse when there are
+/// pages, else at the end of the navbar container.
+pub const DASHBOARD_NAV_BUTTONS_PARTIAL: &str = r##"$if(rendered.dashboard.nav-buttons)$<div class="quarto-dashboard-links">
+$for(rendered.dashboard.nav-buttons)$
+<a class="quarto-dashboard-link" href="$it.href$"$if(it.rel)$ rel="$it.rel$"$endif$$if(it.title)$ title="$it.title$"$endif$$if(it.target)$ target="$it.target$"$endif$$if(it.aria-label)$ aria-label="$it.aria-label$"$endif$>$if(it.icon)$<i class="bi bi-$it.icon$"></i>$endif$$if(it.text)$<span class="quarto-dashboard-link-text">$it.text$</span>$endif$</a>
+$endfor$
+</div>$endif$
+"##;
+
+pub const DASHBOARD_NAV_CONTAINER_PARTIAL: &str = r##"<div class="navbar-brand-container">
+$if(rendered.dashboard.logo)$
+<a href="#"><img src="$rendered.dashboard.logo.light.path$" alt="$rendered.dashboard.logo.light.alt$" class="navbar-logo light-content d-inline-block"></a>
+<a href="#"><img src="$rendered.dashboard.logo.dark.path$" alt="$rendered.dashboard.logo.dark.alt$" class="navbar-logo dark-content d-inline-block"></a>
+$endif$
+<div class="navbar-title">
+$if(title)$<div class="navbar-title-text"><a href="#">$title$</a></div>$endif$
+$if(subtitle)$<div class="navbar-subtitle">$subtitle$</div>$endif$
+$if(by-author)$<div class="navbar-author">$for(by-author)$$it.name.literal$$sep$, $endfor$</div>$endif$
+</div>
+</div>
+"##;
 
 // =============================================================================
 // Built-in template partials (title block)
@@ -761,6 +932,24 @@ pub fn builtin_html_partials() -> MemoryResolver {
     resolver
 }
 
+/// The dashboard's own partials, which shadow the built-in ones of the same
+/// name (`title-block`) and add `_nav-container`; chained ahead of
+/// [`builtin_html_partials`] for a dashboard. Registered bare and with the
+/// `.html` suffix, like the built-ins.
+pub fn dashboard_html_partials() -> MemoryResolver {
+    let mut resolver = MemoryResolver::new();
+    for (name, content) in [
+        ("title-block", DASHBOARD_TITLE_BLOCK_PARTIAL),
+        ("_nav-container", DASHBOARD_NAV_CONTAINER_PARTIAL),
+        ("_nav-buttons", DASHBOARD_NAV_BUTTONS_PARTIAL),
+        ("dashboard-site-header", DASHBOARD_SITE_HEADER_PARTIAL),
+    ] {
+        resolver.add(name, content);
+        resolver.add(format!("{name}.html"), content);
+    }
+    resolver
+}
+
 // =============================================================================
 // Template Compilation
 // =============================================================================
@@ -772,11 +961,38 @@ pub fn minimal_html_template() -> Result<Template> {
 }
 
 /// Compile the full HTML template (resolving built-in partials).
+///
+/// The template and its partials are compile-time constants, so the
+/// result is compiled once per process and cloned per call: compiling
+/// (a tree-sitter parse plus partial resolution) per document was ~5.7 %
+/// of a website render (bd-wb9mp3lk).
 pub fn full_html_template() -> Result<Template> {
+    static COMPILED: std::sync::OnceLock<std::result::Result<Template, String>> =
+        std::sync::OnceLock::new();
+    COMPILED
+        .get_or_init(|| {
+            Template::compile_with_resolver(
+                FULL_HTML_TEMPLATE,
+                std::path::Path::new("<builtin>.html"),
+                &builtin_html_partials(),
+                0,
+            )
+            .map_err(|e| e.to_string())
+        })
+        .clone()
+        .map_err(crate::error::QuartoError::other)
+}
+
+/// Compile the dashboard template ([`DASHBOARD_HTML_TEMPLATE`]) with the
+/// dashboard partials ahead of the built-in ones.
+pub fn dashboard_html_template() -> Result<Template> {
+    let partials = dashboard_html_partials();
+    let builtins = builtin_html_partials();
+    let chained = ChainedResolver::new(&partials, builtins);
     Template::compile_with_resolver(
-        FULL_HTML_TEMPLATE,
+        DASHBOARD_HTML_TEMPLATE,
         std::path::Path::new("<builtin>.html"),
-        &builtin_html_partials(),
+        &chained,
         0,
     )
     .map_err(|e| crate::error::QuartoError::other(e.to_string()))
@@ -979,7 +1195,10 @@ pub fn render_with_compiled_template(
         ctx.insert(
             "color-mode-script",
             TemplateValue::String(format!(
-                "<script id=\"quarto-color-mode\" data-author-prefers-dark=\"{author_prefers_dark}\" data-respect-user-color-scheme=\"{respect}\">{}</script>",
+                "<script id=\"quarto-color-mode\" data-author-prefers-dark=\"{author_prefers_dark}\" data-respect-user-color-scheme=\"{respect}\" data-toggle-label=\"{}\">{}</script>",
+                // Names the runtime's floating fallback toggle
+                // (bd-kwgtllvn); attribute-escaped like any term.
+                escape_html_attr(&crate::language::toggle_dark_mode_label(meta)),
                 COLOR_MODE_JS
             )),
         );
@@ -1308,16 +1527,31 @@ pub fn compile_builtin_template_with_partials(
     meta: &ConfigValue,
     resolver: &impl PartialResolver,
     source_context: &mut quarto_source_map::SourceContext,
+    dashboard: bool,
 ) -> Result<Template> {
+    // User-supplied partials shadow the built-in ones (so a document
+    // can override `title-block.html` Q1-style); built-ins resolve
+    // anything the user didn't provide. A dashboard's own partials
+    // (`title-block`, `_nav-container`) sit between the two.
+    if dashboard {
+        let dashboard_partials = dashboard_html_partials();
+        let builtins = ChainedResolver::new(&dashboard_partials, builtin_html_partials());
+        let chained = ChainedResolver::new(resolver, builtins);
+        return Template::compile_with_resolver_and_context(
+            DASHBOARD_HTML_TEMPLATE,
+            std::path::Path::new("<builtin>.html"),
+            &chained,
+            0,
+            source_context,
+        )
+        .map_err(|e| crate::error::QuartoError::other(e.to_string()));
+    }
     let minimal = is_minimal_html(meta);
     let source = if minimal {
         MINIMAL_HTML_TEMPLATE
     } else {
         FULL_HTML_TEMPLATE
     };
-    // User-supplied partials shadow the built-in ones (so a document
-    // can override `title-block.html` Q1-style); built-ins resolve
-    // anything the user didn't provide.
     let chained = ChainedResolver::new(resolver, builtin_html_partials());
     Template::compile_with_resolver_and_context(
         source,
@@ -2134,45 +2368,45 @@ mod tests {
 
     #[test]
     fn test_inlines_to_text_quoted() {
-        let inlines = vec![Inline::Quoted(Quoted {
+        let inlines = vec![Inline::Quoted(Box::new(Quoted {
             quote_type: QuoteType::DoubleQuote,
             content: vec![Inline::Str(Str {
                 text: "quoted".to_string(),
                 source_info: dummy_source_info(),
             })],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "\"quoted\"");
     }
 
     #[test]
     fn test_inlines_to_text_code() {
-        let inlines = vec![Inline::Code(Code {
+        let inlines = vec![Inline::Code(Box::new(Code {
             attr: quarto_pandoc_types::attr::Attr::default(),
             text: "code()".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "code()");
     }
 
     #[test]
     fn test_inlines_to_text_math() {
-        let inlines = vec![Inline::Math(Math {
+        let inlines = vec![Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source_info(),
             text_source: None,
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "x^2");
     }
 
     #[test]
     fn test_inlines_to_text_link() {
-        let inlines = vec![Inline::Link(Link {
+        let inlines = vec![Inline::Link(Box::new(Link {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
                 text: "link text".to_string(),
@@ -2182,14 +2416,14 @@ mod tests {
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
             target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "link text");
     }
 
     #[test]
     fn test_inlines_to_text_span() {
-        let inlines = vec![Inline::Span(Span {
+        let inlines = vec![Inline::Span(Box::new(Span {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
                 text: "span content".to_string(),
@@ -2197,7 +2431,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "span content");
     }
@@ -2232,7 +2466,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_header() {
-        let blocks = vec![Block::Header(Header {
+        let blocks = vec![Block::Header(Box::new(Header {
             level: 1,
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Inline::Str(Str {
@@ -2241,19 +2475,19 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "Heading");
     }
 
     #[test]
     fn test_blocks_to_text_code_block() {
-        let blocks = vec![Block::CodeBlock(CodeBlock {
+        let blocks = vec![Block::CodeBlock(Box::new(CodeBlock {
             attr: quarto_pandoc_types::attr::Attr::default(),
             text: "fn main() {}".to_string(),
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "fn main() {}");
     }
@@ -2276,7 +2510,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_div() {
-        let blocks = vec![Block::Div(Div {
+        let blocks = vec![Block::Div(Box::new(Div {
             attr: quarto_pandoc_types::attr::Attr::default(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
@@ -2287,7 +2521,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert_eq!(text, "div content");
     }
@@ -2314,7 +2548,7 @@ mod tests {
 
     #[test]
     fn test_blocks_to_text_ordered_list() {
-        let blocks = vec![Block::OrderedList(OrderedList {
+        let blocks = vec![Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
             content: vec![vec![Block::Plain(Plain {
                 content: vec![Inline::Str(Str {
@@ -2324,7 +2558,7 @@ mod tests {
                 source_info: dummy_source_info(),
             })]],
             source_info: dummy_source_info(),
-        })];
+        }))];
         let text = blocks_to_text(&blocks);
         assert!(text.contains("Item 1"));
     }
@@ -4050,12 +4284,12 @@ mod tests {
 
     /// A `Code` inline `\`text\``.
     fn code_inline(text: &str) -> Inline {
-        Inline::Code(Code {
+        Inline::Code(Box::new(Code {
             attr: empty_attr(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn str_inline(text: &str) -> Inline {

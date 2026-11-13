@@ -1,0 +1,11 @@
+---
+title: Three backticks mid-line in a cell
+---
+
+```{python}
+print("MARK-A a ``` b")
+```
+
+```{python}
+print("MARK-CONTROL")
+```

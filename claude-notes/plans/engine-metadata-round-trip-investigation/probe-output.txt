@@ -1,0 +1,22 @@
+PROBE | p-path-underscores | Path("_extensions/a/_b.scss") | Inlines(plain="extensions/a/b.scss", nodes=Emph,Str) | span-text=Some("_extensions/a/_b.scss")
+PROBE | p-path-plain | Path("styles/main.css") | Inlines(plain="styles/main.css", nodes=Str) | span-text=Some("styles/main.css")
+PROBE | p-glob | Glob("posts/*_draft_*.qmd") | Inlines(plain="posts/draft.qmd", nodes=Str,Emph,Str) | span-text=Some("posts/*_draft_*.qmd")
+PROBE | p-expr | Expr("params$x") | Inlines(plain="!expr params$x", nodes=Span) | span-text=Some("!expr params$x")
+PROBE | s-url | Scalar(String("https://example.com/a_b_/c")) | Inlines(plain="https://example.com/a_b_/c", nodes=Span) | span-text=Some("https://example.com/a_b_/c")
+PROBE | s-star | Scalar(String("*.qmd")) | Inlines(plain="*.qmd", nodes=Span) | span-text=Some("*.qmd")
+PROBE | s-snake | Scalar(String("my_var_name")) | Inlines(plain="my_var_name", nodes=Str) | span-text=Some("my_var_name")
+PROBE | s-lead-underscore | Scalar(String("_a_b")) | Inlines(plain="_a_b", nodes=Span) | span-text=Some("_a_b")
+PROBE | s-backslash | Scalar(String("C:\\a\\b")) | Inlines(plain="C:\\a\\b", nodes=Str) | span-text=Some("C:\\a\\b")
+PROBE | s-markdown-chars | Scalar(String("a [b](c) `d`")) | Inlines(plain="a b d", nodes=Str,Space,Link,Space,Code) | span-text=Some("a [b](c) `d`")
+PROBE | s-html | Scalar(String("<b>x</b>")) | Inlines(plain="x", nodes=RawInline,Str,RawInline) | span-text=Some("<b>x</b>")
+PROBE | s-at | Scalar(String("@ref")) | Inlines(plain="@ref", nodes=Cite) | span-text=Some("@ref")
+PROBE | s-dollar | Scalar(String("$x$")) | Inlines(plain="x", nodes=Math) | span-text=Some("$x$")
+PROBE | s-yesno | Scalar(String("yes")) | Inlines(plain="yes", nodes=Str) | span-text=Some("yes")
+PROBE | s-number-like | Scalar(String("1.10")) | Inlines(plain="1.10", nodes=Str) | span-text=Some("1.10")
+PROBE | s-empty | Scalar(String("")) | Blocks | span-text=None
+PROBE | s-multiline | Scalar(String("line1\nline2")) | Inlines(plain="line1 line2", nodes=Str,SoftBreak,Str) | span-text=Some("line1\nline2")
+PROBE | b-bool | Scalar(Boolean(true)) | Scalar(Boolean(true)) | span-text=None
+PROBE | i-int | Scalar(Integer(3)) | Scalar(Integer(3)) | span-text=None
+PROBE | r-real | Scalar(Real("1.10")) | Scalar(Real("1.10")) | span-text=None
+PROBE | n-null | Scalar(Null) | Scalar(Null) | span-text=None
+PROBE | title | Inlines(plain="Doc title", nodes=Str,Space,Emph)

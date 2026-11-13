@@ -352,6 +352,7 @@ fn test_engine_capture_roundtrip_through_disk() {
         engine_name: "jupyter".into(),
         input_qmd: "---\nengine: jupyter\n---\n\n# Hello\n".into(),
         result: result_json.clone(),
+        record: None,
         files: Vec::new(),
     }];
 
@@ -810,6 +811,7 @@ fn test_engine_capture_empty_files_serializes_without_key() {
         engine_name: "knitr".into(),
         input_qmd: "```{r}\n1\n```\n".into(),
         result: serde_json::json!({"markdown": "output"}),
+        record: None,
         files: Vec::new(),
     };
     let value = serde_json::to_value(&capture).unwrap();
@@ -828,6 +830,7 @@ fn test_engine_capture_files_roundtrip() {
         engine_name: "knitr".into(),
         input_qmd: "```{r}\nplot(1)\n```\n".into(),
         result: serde_json::json!({"markdown": "![](doc_files/figure-html/f.png)"}),
+        record: None,
         files: vec![CaptureFile {
             path: "doc_files/figure-html/f.png".into(),
             contents_base64: "iVBORw0KGgo=".into(),
@@ -838,4 +841,41 @@ fn test_engine_capture_files_roundtrip() {
     assert_eq!(back.files.len(), 1);
     assert_eq!(back.files[0].path, "doc_files/figure-html/f.png");
     assert_eq!(back.files[0].contents_base64, "iVBORw0KGgo=");
+}
+
+/// EXR-5: `EngineCapture.record` is trace-only and optional. A capture that predates
+/// the field (every preview and hub capture, and every old trace) still parses.
+#[test]
+fn trace_without_record_field_still_parses() {
+    let capture: EngineCapture = serde_json::from_value(json!({
+        "engine_name": "jupyter",
+        "input_qmd": "---\nengine: jupyter\n---\n",
+        "result": { "markdown": "out\n" },
+    }))
+    .expect("a pre-field capture parses");
+    assert_eq!(capture.record, None);
+    assert!(capture.files.is_empty());
+}
+
+/// EXR-5: the preview and hub recorders never set `record`, so their captures
+/// serialize without the key, byte-identical to the pre-field wire format; only a
+/// trace that stores a record carries the key.
+#[test]
+fn preview_and_hub_capture_bytes_unchanged_when_trace_field_exists() {
+    let mut capture = EngineCapture {
+        engine_name: "jupyter".into(),
+        input_qmd: "in".into(),
+        result: json!({ "markdown": "out\n" }),
+        files: Vec::new(),
+        record: None,
+    };
+    let bytes = serde_json::to_string(&capture).unwrap();
+    assert_eq!(
+        bytes,
+        r#"{"engine_name":"jupyter","input_qmd":"in","result":{"markdown":"out\n"}}"#
+    );
+
+    capture.record = Some(json!({ "cells": [] }));
+    let with_record: serde_json::Value = serde_json::to_value(&capture).unwrap();
+    assert_eq!(with_record["record"], json!({ "cells": [] }));
 }

@@ -49,6 +49,7 @@ function mountWithResolveSource(resolveSource: PreviewContextValue['resolveSourc
         currentFilePath: '/project/test.qmd',
         pool: POOL,
         content: '',
+        sourceIndex: new Map(),
         resolveSource,
     };
     return render(

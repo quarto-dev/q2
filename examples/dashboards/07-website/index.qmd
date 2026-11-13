@@ -1,0 +1,6 @@
+---
+title: "Acme Analytics"
+---
+
+An ordinary website page. The [dashboard](dashboard.qmd) is another page of
+this site, with `format: dashboard`.

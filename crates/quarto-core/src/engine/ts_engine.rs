@@ -205,6 +205,9 @@ pub struct TsEngine {
     /// the claim verbs only.
     load_failed: OnceLock<()>,
 
+    /// The manifest's `kernel-equivalence:` declaration (RFU-2); `None` = undeclared.
+    kernel_equivalence: Mutex<Option<crate::extension::types::KernelEquivalence>>,
+
     // ── Registry sinks (leaf-Arc sharing; no cycle back to EngineRegistry) ───
     extension_id: ExtensionId,
     aliases: Arc<Mutex<HashMap<String, ExtensionId>>>,
@@ -212,6 +215,15 @@ pub struct TsEngine {
 }
 
 impl TsEngine {
+    /// Record the manifest's `kernel-equivalence:` declaration. Called once at construction,
+    /// like [`Self::set_extension_yml_path`].
+    pub fn set_kernel_equivalence(
+        &self,
+        declaration: Option<crate::extension::types::KernelEquivalence>,
+    ) {
+        *self.kernel_equivalence.lock().unwrap() = declaration;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: impl Into<String>,
@@ -244,6 +256,7 @@ impl TsEngine {
             static_file_answers: Mutex::new(Vec::new()),
             conversion_cache: Mutex::new(HashMap::new()),
             load_failed: OnceLock::new(),
+            kernel_equivalence: Mutex::new(None),
             extension_id,
             aliases,
             diagnostics,
@@ -558,11 +571,25 @@ impl TsEngine {
             lib_dir,
             quiet: ctx.quiet,
             handled_languages: ctx.handled_languages.clone(),
+            owned_languages: ctx.owned_languages.clone(),
             params: None,
             source_map,
             // v1/Julia always resolves dependencies inline; deferred consumer
             // (render orchestrator) is RTQ FC-2 and not yet wired.
             dependencies: true,
+            // EXR-7: the stage's one shared unit list, relocated into `input`
+            // (`None` when the context carries no units).
+            units: crate::engine::ts_record::wire_units(input, ctx),
+            // Set by `execute` when core offers to present (`offers_presentation`).
+            presented_by: None,
+            // bd-x3h4zjhl: `project_env` is already filtered, with `QUARTO_PROFILE`
+            // applied (`EngineExecutionStage`); `execute_env` wins on a shared key.
+            execute_env: ctx
+                .project_env
+                .iter()
+                .chain(ctx.execute_env.iter())
+                .cloned()
+                .collect(),
         }
     }
 
@@ -659,6 +686,11 @@ impl TsEngine {
             // TS engines report problems through the protocol; nothing maps
             // to `ExecuteResult::warnings` yet (bd-yd94iyq9).
             warnings: Vec::new(),
+            // Set by `execute` through `ts_record::attach_record`, which needs
+            // the context's units; the mapping here never builds a record.
+            record: None,
+            derived_header_includes: Vec::new(),
+            skeleton: None,
         })
     }
 }
@@ -952,6 +984,14 @@ impl ExecutionEngine for TsEngine {
             .map(|cf| cf.iter().any(|c| c.extension == ext))
     }
 
+    fn kernel_equivalence(&self, language: &str) -> Option<bool> {
+        self.kernel_equivalence
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|d| d.covers(language))
+    }
+
     fn extension_yml_path(&self) -> Option<PathBuf> {
         self.extension_yml_path.lock().unwrap().clone()
     }
@@ -1048,7 +1088,13 @@ impl ExecutionEngine for TsEngine {
     ) -> Result<ExecuteResult, ExecutionError> {
         self.ensure_launched(&ctx.cancellation)?;
 
-        let options = Self::build_execute_options(input, ctx);
+        let mut options = Self::build_execute_options(input, ctx);
+        // OPR-7a (D8): core offers to present from the record whenever it builds one. An
+        // engine that supports it returns only its notebook and acknowledges on its record
+        // info; one that ignores the offer presents for itself, as before.
+        if crate::engine::ts_record::offers_presentation(ctx) {
+            options.presented_by = Some(crate::engine::ts_protocol::TsPresentedBy::Core);
+        }
         let msg = ToEngine::Execute {
             engine: self.wire_name(),
             options,
@@ -1100,8 +1146,34 @@ impl ExecutionEngine for TsEngine {
             })?;
 
         match response {
-            FromEngine::ExecuteResult { result } => {
-                Self::map_execute_result(&self.wire_name(), result)
+            FromEngine::ExecuteResult { mut result } => {
+                // EXR-7: the notebook and its description become the engine's
+                // record. A problem with them is a warning on the result, never
+                // a failed render (the record is additive for now).
+                let notebook = result.notebook.take();
+                let record_info = result.record_info.take();
+                let core_presents =
+                    crate::engine::ts_record::acknowledged_presentation(record_info.as_ref());
+                let engine = self.wire_name();
+                let mut mapped = Self::map_execute_result(&engine, result)?;
+                crate::engine::ts_record::attach_record(
+                    &engine,
+                    input,
+                    ctx,
+                    self.can_freeze(),
+                    notebook,
+                    record_info,
+                    &mut mapped,
+                );
+                if core_presents {
+                    crate::engine::ts_record::present_from_record(
+                        &engine,
+                        input,
+                        ctx,
+                        &mut mapped,
+                    )?;
+                }
+                Ok(mapped)
             }
             other => Err(ExecutionError::other(format!(
                 "unexpected response to Execute: {other:?}"
@@ -2156,6 +2228,113 @@ mod tests {
     // Named revert (a): re-hardcode `needs_postprocess: false` in
     // `map_execute_result` → this assertion REDS (behavioral bind).
 
+    // ── EXR-7: units and handled languages on the execute options ─────────────
+
+    fn staged_ctx(doc: &str, owned: &[&str]) -> ExecutionContext {
+        use crate::engine::units::scan_units;
+        use crate::record::{AuthorTexts, fill_ids};
+        let mut units = scan_units(doc);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_owned_languages(owned.iter().map(|s| s.to_string()).collect())
+        .with_units(units)
+        .with_author_texts(texts)
+    }
+
+    #[test]
+    fn execute_options_carry_the_stage_units_and_none_without_them() {
+        let doc = "```{julia}\n1\n```\n\n```{python}\n2\n```\n";
+        let ctx = staged_ctx(doc, &["julia"]);
+        let units = TsEngine::build_execute_options(doc, &ctx).units.unwrap();
+        assert_eq!(units.len(), 2);
+        assert!(units.iter().all(|u| u.id.is_some()));
+        assert_eq!(
+            units.iter().map(|u| u.owned).collect::<Vec<_>>(),
+            vec![true, false]
+        );
+
+        let bare = ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        );
+        assert_eq!(TsEngine::build_execute_options(doc, &bare).units, None);
+    }
+
+    #[test]
+    fn stage_handled_languages_reach_the_wire_unchanged() {
+        // The stage's value, including the language of a span no engine owns.
+        let handled = vec![
+            "ojs".to_string(),
+            "mermaid".to_string(),
+            "klingon".to_string(),
+        ];
+        let doc = "Inline `{klingon} qapla` here.\n";
+        let ctx = staged_ctx(doc, &["julia"]).with_handled_languages(handled.clone());
+        let options = TsEngine::build_execute_options(doc, &ctx);
+        assert_eq!(options.handled_languages, handled);
+        assert_eq!(options.owned_languages, vec!["julia".to_string()]);
+    }
+
+    // ── bd-x3h4zjhl: execute environment on the execute options ───────────────
+
+    fn env_ctx(project: &[(&str, &str)], execute: &[(&str, &str)]) -> ExecutionContext {
+        let pairs = |v: &[(&str, &str)]| {
+            v.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<Vec<_>>()
+        };
+        ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_project_env(pairs(project))
+        .with_execute_env(pairs(execute))
+    }
+
+    #[test]
+    fn execute_options_merge_project_env_then_execute_env() {
+        let ctx = env_ctx(
+            &[("FROM_ENVFILE", "a"), ("SHARED", "project")],
+            &[("QUARTO_DOCUMENT_FILE", "doc.qmd"), ("SHARED", "execute")],
+        );
+        let env = TsEngine::build_execute_options("", &ctx).execute_env;
+        assert_eq!(env.get("FROM_ENVFILE").map(String::as_str), Some("a"));
+        assert_eq!(
+            env.get("QUARTO_DOCUMENT_FILE").map(String::as_str),
+            Some("doc.qmd")
+        );
+        // execute_env wins on a shared key, as for knitr.
+        assert_eq!(env.get("SHARED").map(String::as_str), Some("execute"));
+        assert_eq!(env.len(), 3);
+    }
+
+    #[test]
+    fn execute_options_pass_quarto_profile_through() {
+        let ctx = env_ctx(&[("QUARTO_PROFILE", "prod")], &[]);
+        let env = TsEngine::build_execute_options("", &ctx).execute_env;
+        assert_eq!(env.get("QUARTO_PROFILE").map(String::as_str), Some("prod"));
+    }
+
+    #[test]
+    fn execute_options_env_is_empty_when_both_maps_are() {
+        let ctx = env_ctx(&[], &[]);
+        assert!(
+            TsEngine::build_execute_options("", &ctx)
+                .execute_env
+                .is_empty()
+        );
+    }
+
     #[test]
     fn test_map_execute_result_wires_post_process() {
         let ts_result = TsExecuteResult {
@@ -2755,6 +2934,21 @@ mod tests {
                 "manifest must claim .jl via the percent processor"
             );
 
+            // RFU-2: the manifest declares kernel equivalence, and the engine reports it.
+            let declaration = extension
+                .contributes
+                .engines
+                .iter()
+                .find_map(|c| match c {
+                    crate::extension::types::EngineContribution::External {
+                        kernel_equivalence,
+                        ..
+                    } => kernel_equivalence.clone(),
+                    _ => None,
+                })
+                .expect("bundled julia-engine manifest must declare kernel-equivalence");
+            assert_eq!(declaration, crate::extension::types::KernelEquivalence::Any);
+
             let (write, read, mock) = MockTransport::pair_with_handle();
             let ctx = make_host_global_config();
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
@@ -2773,6 +2967,13 @@ mod tests {
                 aliases,
                 diag,
             );
+            assert_eq!(
+                engine.kernel_equivalence("julia"),
+                None,
+                "an engine with no declaration is undeclared, never admitted"
+            );
+            engine.set_kernel_equivalence(Some(declaration));
+            assert_eq!(engine.kernel_equivalence("julia"), Some(true));
 
             let dir = tempfile::tempdir().unwrap();
             let file = dir.path().join("script.jl");
@@ -3519,5 +3720,186 @@ mod tests {
             );
             mock.signal_eof();
         });
+    }
+}
+
+/// OPR-7a: the presentation handshake. Core offers `presentedBy: "core"` whenever it builds
+/// a record for a document with units, and presents from the record exactly when the engine
+/// acknowledges. No engine name decides.
+#[cfg(test)]
+mod handshake_tests {
+    use super::*;
+    use crate::engine::ts_process::{MockTransport, TsEngineHost};
+    use crate::engine::ts_protocol::{
+        FromEngine, HostGlobalConfig, LaunchEngineResult, ToEngine, TsExecuteResult, TsPresentedBy,
+    };
+    use crate::engine::units::scan_units;
+    use crate::record::{AuthorTexts, fill_ids};
+    use serde_json::json;
+
+    const DOC: &str = "Prose.\n\n```{julia}\nx = 1\n```\n";
+    const ENGINE_MD: &str = "ENGINE-OWN-MARKDOWN";
+
+    fn notebook() -> serde_json::Value {
+        json!({
+            "nbformat": 4, "nbformat_minor": 5,
+            "metadata": {"kernelspec": {"name": "k"}},
+            "cells": [{
+                "cell_type": "code", "id": "1", "execution_count": 1,
+                "metadata": {"quarto": {"unit": 1, "language": "julia", "file": "doc.qmd", "line": 3}},
+                "outputs": [{"output_type": "stream", "name": "stdout", "text": ["x\n"]}],
+                "source": ["x = 1"],
+            }],
+        })
+    }
+
+    fn ctx(want_record: bool, present_from_record: bool) -> ExecutionContext {
+        let mut units = scan_units(DOC);
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        ExecutionContext::new(
+            PathBuf::from("/tmp"),
+            PathBuf::from("/proj"),
+            PathBuf::from("/proj/doc.qmd"),
+            "html",
+        )
+        .with_owned_languages(vec!["julia".to_string()])
+        .with_units(units)
+        .with_author_texts(texts)
+        .with_want_record(want_record)
+        .with_present_from_record(present_from_record)
+        .with_execute_timeout(Some(Duration::from_secs(5)))
+    }
+
+    /// Run one execute against a mock engine called `name`; `ack` is whether its returned
+    /// record info acknowledges the offer. Returns the result and the options core sent.
+    fn run(
+        name: &str,
+        ack: bool,
+        ctx: &ExecutionContext,
+    ) -> (ExecuteResult, Option<TsPresentedBy>) {
+        let (write, read, mock) = MockTransport::pair_with_handle();
+        let host = Arc::new(TsEngineHost::with_transport(
+            write,
+            read,
+            HostGlobalConfig {
+                resource_dir: "/res".into(),
+                runtime_dir: "/rt".into(),
+                data_dir: "/data".into(),
+                pandoc_path: None,
+                is_interactive_session: false,
+                running_in_ci: false,
+                quarto_version: "0.1.0".into(),
+            },
+        ));
+        let engine = TsEngine::new(
+            name,
+            false,
+            PathBuf::from(format!("/engines/{name}.ts")),
+            host,
+            None,
+            None,
+            None,
+            ExtensionId::new(name),
+            Arc::new(Mutex::new(HashMap::new())),
+            Arc::new(Mutex::new(Vec::new())),
+        );
+        mock.enable_auto_echo();
+        mock.auto_respond(
+            |m| matches!(m, ToEngine::LaunchEngine { .. }),
+            vec![FromEngine::Launched {
+                instance: LaunchEngineResult { can_freeze: false },
+            }],
+            None,
+        );
+        let mut info = json!({"version": 1, "alignment": "positional"});
+        if ack {
+            info["presentedBy"] = json!("core");
+        }
+        mock.auto_respond(
+            |m| matches!(m, ToEngine::Execute { .. }),
+            vec![FromEngine::ExecuteResult {
+                result: TsExecuteResult {
+                    markdown: ENGINE_MD.to_string(),
+                    notebook: Some(notebook()),
+                    record_info: Some(serde_json::from_value(info).unwrap()),
+                    ..Default::default()
+                },
+            }],
+            None,
+        );
+        let result = engine.execute(DOC, ctx).expect("execute succeeds");
+        let offered = mock.sent_messages().into_iter().find_map(|m| match m {
+            ToEngine::Execute { options, .. } => Some(options.presented_by),
+            _ => None,
+        });
+        mock.signal_eof();
+        (result, offered.flatten())
+    }
+
+    #[test]
+    fn an_engine_that_acknowledges_is_presented_by_core() {
+        let (result, offered) = run("mock", true, &ctx(true, false));
+        assert_eq!(offered, Some(TsPresentedBy::Core));
+        assert!(
+            result
+                .markdown
+                .contains("::: {#cell-0 .cell execution_count='1'}"),
+            "{}",
+            result.markdown
+        );
+        assert_ne!(result.markdown, ENGINE_MD);
+    }
+
+    #[test]
+    fn an_engine_that_does_not_acknowledge_keeps_its_own_markdown() {
+        let (result, offered) = run("mock", false, &ctx(true, false));
+        assert_eq!(
+            offered,
+            Some(TsPresentedBy::Core),
+            "the offer is not name-gated"
+        );
+        assert_eq!(result.markdown, ENGINE_MD);
+        assert!(result.record.is_some(), "the record is still built");
+    }
+
+    /// The name no longer matters: an engine called `julia` that ignores the offer is not
+    /// presented by core.
+    #[test]
+    fn an_engine_named_julia_that_does_not_acknowledge_is_not_presented_by_core() {
+        // An engine named `julia` is gated on a julia binary being on PATH before the mock
+        // transport is reached. Point `QUARTO_JULIA` at `node` (answers `--version`, and the
+        // TS-engine tests already need it) so the test does not depend on a real Julia install
+        // (CI runners have none). Each nextest test runs in its own process, so mutating the
+        // environment is safe, as in `ensure_loaded_reports_runtime_not_found_...` above.
+        unsafe {
+            std::env::set_var("QUARTO_JULIA", "node");
+        }
+        let (result, _) = run("julia", false, &ctx(true, false));
+        unsafe {
+            std::env::remove_var("QUARTO_JULIA");
+        }
+        assert_eq!(result.markdown, ENGINE_MD);
+    }
+
+    #[test]
+    fn present_from_record_alone_offers_and_presents() {
+        let (result, offered) = run("mock", true, &ctx(false, true));
+        assert_eq!(offered, Some(TsPresentedBy::Core));
+        assert!(
+            result
+                .markdown
+                .contains("::: {#cell-0 .cell execution_count='1'}"),
+            "{}",
+            result.markdown
+        );
+    }
+
+    #[test]
+    fn no_record_built_means_no_offer() {
+        let (result, offered) = run("mock", true, &ctx(false, false));
+        assert_eq!(offered, None);
+        assert_eq!(result.markdown, ENGINE_MD);
+        assert!(result.record.is_none());
     }
 }

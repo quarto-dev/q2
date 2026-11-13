@@ -22,7 +22,7 @@ pub fn process_atx_heading(
 ) -> PandocNativeIntermediate {
     let mut level = 0;
     let mut content: Vec<Inline> = Vec::new();
-    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new());
+    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new()).into();
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_kind, child) in children {
@@ -80,11 +80,11 @@ pub fn process_atx_heading(
         .count();
     content.drain(..leading);
 
-    PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
+    PandocNativeIntermediate::IntermediateBlock(Block::Header(Box::new(Header {
         level,
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
         attr_source,
-    }))
+    })))
 }

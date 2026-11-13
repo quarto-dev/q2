@@ -51,12 +51,11 @@ use crate::ast_walk::{
 use crate::attribution::AttributionData;
 use crate::editorial_marks::{
     CommentedRange, MarkKind, PANDOC_COMMENT_END, PANDOC_COMMENT_START, PANDOC_DELETION,
-    PANDOC_INSERTION, PANDOC_MARK, blocks_to_inlines, commented_range, new_span,
+    PANDOC_INSERTION, PANDOC_MARK, blocks_to_inlines, commented_range, new_span, stamp_attribution,
 };
 use crate::format::FormatIdentifier;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
-use crate::transforms::attribution_render::query_attribution;
 use crate::transforms::metadata_normalize::inlines_to_plain_text;
 
 /// pandoc's default author for a tracked change that has none.
@@ -169,19 +168,6 @@ impl ListVisitor for Wrapper<'_> {
     }
 }
 
-/// `time` as `YYYY-MM-DDTHH:MM:SSZ`. Providers differ in the unit (git blame gives seconds);
-/// anything above 1e11 would be past the year 5000 as seconds, so it is milliseconds.
-fn iso_utc(time: i64) -> Option<String> {
-    let secs = if time > 100_000_000_000 {
-        time / 1000
-    } else {
-        time
-    };
-    let at = time::OffsetDateTime::from_unix_timestamp(secs).ok()?;
-    at.format(&time::format_description::well_known::Rfc3339)
-        .ok()
-}
-
 fn xml_escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -194,22 +180,7 @@ impl Converter {
     /// Copy the blamed author and time onto an insert, delete or comment mark, where the
     /// source didn't set them. No data, or no hit: the mark is left alone.
     fn stamp(&self, attrs: &mut LinkedHashMap<String, String>, source_info: &SourceInfo) {
-        let Some(data) = &self.attribution else {
-            return;
-        };
-        let Some(record) = query_attribution(source_info, &data.runs, data.file_id) else {
-            return;
-        };
-        if !attrs.contains_key("author")
-            && let Some(identity) = data.identities.get(&record.actor)
-        {
-            attrs.insert("author".to_string(), identity.display_name.clone());
-        }
-        if !attrs.contains_key("date")
-            && let Some(date) = iso_utc(record.time)
-        {
-            attrs.insert("date".to_string(), date);
-        }
+        stamp_attribution(self.attribution.as_deref(), attrs, source_info);
     }
 
     // ----- inline lists ------------------------------------------------------------------
@@ -218,7 +189,7 @@ impl Converter {
         let mut out: Inlines = Vec::with_capacity(list.len());
         for inline in std::mem::take(list) {
             match inline {
-                Inline::Span(span) => self.span(span, &mut out),
+                Inline::Span(span) => self.span(*span, &mut out),
                 mut other => {
                     inline_children_mut(&mut other, self);
                     out.push(other);
@@ -236,7 +207,7 @@ impl Converter {
             Some(MarkKind::Comment) if self.fold_comments > 0 => {
                 strip_mark_classes(&mut span);
                 Neutralizer.inlines(&mut span.content);
-                out.push(Inline::Span(span));
+                out.push(Inline::Span(Box::new(span)));
             }
             Some(kind) => match self.target {
                 Target::Docx => self.docx_span(kind, span, out),
@@ -250,7 +221,7 @@ impl Converter {
                     self.commented_range(span, range, out);
                 } else {
                     self.inline_list(&mut span.content);
-                    out.push(Inline::Span(span));
+                    out.push(Inline::Span(Box::new(span)));
                 }
             }
         }
@@ -268,7 +239,7 @@ impl Converter {
                 .to_string();
                 span.attr_source = AttrSourceInfo::empty();
                 self.inline_list(&mut span.content);
-                out.push(Inline::Span(span));
+                out.push(Inline::Span(Box::new(span)));
             }
             MarkKind::Highlight => {
                 // The writer applies a highlight only to a bare span: no id, classes or
@@ -303,7 +274,7 @@ impl Converter {
                 }),
             );
             if let Inline::Span(s) = taken {
-                comments.push(s);
+                comments.push(*s);
             }
         }
         comments.reverse();
@@ -353,7 +324,7 @@ impl Converter {
         let mut out: Vec<Block> = Vec::with_capacity(list.len());
         for block in std::mem::take(list) {
             match block {
-                Block::Div(div) if self.is_live_mark(&div.attr.1) => self.mark_div(div, &mut out),
+                Block::Div(div) if self.is_live_mark(&div.attr.1) => self.mark_div(*div, &mut out),
                 Block::Paragraph(mut p) if wrap.is_some() => {
                     self.inline_list(&mut p.content);
                     p.content = wrap.expect("checked").wrap(p.content);
@@ -587,14 +558,14 @@ fn pptx_run(kind: MarkKind, author: Option<&str>, text: &str) -> Inline {
             ),
         ),
     };
-    Inline::RawInline(RawInline {
+    Inline::RawInline(Box::new(RawInline {
         format: "openxml".to_string(),
         text: format!(
             "<a:r>{rpr}<a:t xml:space=\"preserve\">{}</a:t></a:r>",
             xml_escape(&text)
         ),
         source_info: generated(),
-    })
+    }))
 }
 
 #[cfg(test)]
@@ -860,7 +831,7 @@ mod tests {
             .with_slot("title", Slot::Inlines(title))
             .with_slot("content", Slot::Blocks(vec![Block::Paragraph(inline_para)]))
             .with_slot("one", Slot::Block(Box::new(div)));
-        ast.blocks = vec![Block::Custom(node)];
+        ast.blocks = vec![Block::Custom(Box::new(node))];
         convert_document(&mut ast, Target::Docx, None);
 
         let shown = show_blocks(&ast.blocks);
@@ -884,7 +855,7 @@ mod tests {
         let div = ast.blocks[0].clone();
         let node = CustomNode::new("Callout", Default::default(), SourceInfo::for_test())
             .with_slot("one", Slot::Block(Box::new(div)));
-        ast.blocks = vec![Block::Custom(node)];
+        ast.blocks = vec![Block::Custom(Box::new(node))];
         convert_document(&mut ast, Target::Docx, None);
         assert_eq!(
             show_blocks(&ast.blocks),

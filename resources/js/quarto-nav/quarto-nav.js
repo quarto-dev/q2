@@ -21,8 +21,9 @@
  * Deliberate deviations from Q1 (each because q2 lacks the consumer;
  * revisit when porting the corresponding feature):
  * - no `.headroom-target` selector — q2 has no sidebar-rollup toggle;
- * - no `footerOffset()` / `dashboardOffset()` — no fixed footer or
- *   dashboard header exists in q2;
+ * - no `dashboardOffset()`: Q1 adds the dashboard header\'s height on
+ *   top of the site header that already contains it (double-counted);
+ * - `footerOffset()` only on dashboard pages (see `updateDocumentOffset`);
  * - no `quarto-hrChanged` CustomEvent — no consumer.
  *
  * The announcement bar (`#quarto-announcement`,
@@ -90,10 +91,18 @@
       }
     });
 
-    // Keep the page at least viewport-height below the header.
+    // Keep the page at least viewport-height below the header. On a
+    // dashboard page (a fill layout) the footer is subtracted too, as in
+    // Q1, so it stays on screen below the dashboard instead of being
+    // pushed past the fold (dashboard plan Phase 9). Other pages keep the
+    // header-only offset (bd-f19dbajh).
     const mainContainer = window.document.querySelector(".quarto-container");
     if (mainContainer) {
-      mainContainer.style.minHeight = "calc(100vh - " + topOffset + "px)";
+      const footerEl = window.document.body.classList.contains("quarto-dashboard")
+        ? window.document.querySelector("footer.footer")
+        : null;
+      const offset = topOffset + (footerEl ? footerEl.clientHeight : 0);
+      mainContainer.style.minHeight = "calc(100vh - " + offset + "px)";
     }
 
     // Anchor-jump compensation: a `section:target` pseudo-spacer the
@@ -322,6 +331,34 @@
       }, 50);
     }
   });
+
+  // Scroll the active sidebar item into view, if necessary (Q1's block
+  // of the same name; GH #1065). A ResizeObserver on the scrollable nav
+  // waits until its height has resolved; while it is still laying out,
+  // the visible bottom equals `scrollHeight`. Then, if the active item
+  // is below the visible area, scroll it to the top, once.
+  //
+  // Q1 runs this only off `file:` (it sits inside its index.html link
+  // fixup block); the scroll has nothing to do with links, so q2 runs
+  // it on every page. Runs once at init: in the hub-client preview the
+  // sidebar mounts later, so this is a no-op there.
+  const navSidebar = window.document.querySelector("nav#quarto-sidebar");
+  const activeItem = navSidebar
+    ? navSidebar.querySelector("li.sidebar-item a.active")
+    : null;
+  if (activeItem && window.ResizeObserver) {
+    const sidebarObserver = new window.ResizeObserver(() => {
+      const elTop = activeItem.offsetTop;
+      const viewBottom = navSidebar.scrollTop + navSidebar.clientHeight;
+      if (viewBottom !== navSidebar.scrollHeight) {
+        if (elTop >= viewBottom) {
+          navSidebar.scrollTop = elTop;
+        }
+        sidebarObserver.unobserve(navSidebar);
+      }
+    });
+    sidebarObserver.observe(navSidebar);
+  }
   }
 
   // Native pages load this via a plain <script src> in <head>, before

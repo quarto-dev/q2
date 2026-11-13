@@ -60,6 +60,14 @@ export interface RunConfig {
    * gate before this matters.
    */
   requires_js?: boolean;
+  /**
+   * Execution engines whose runtime the fixture needs (e.g. `jupyter`), a
+   * string or a list, as in the Rust runner (`RunConfig::requires`), which
+   * skips the fixture when that runtime is not installed. WASM has no engine
+   * runtimes, so any entry skips it here. Keep in step with `shouldSkip`
+   * in `e2e/helpers/smokeAllDiscovery.ts` (the Playwright runner).
+   */
+  requires?: string | string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +207,11 @@ export function shouldSkip(runConfig: RunConfig | null): string | null {
 
   if (runConfig.ci === false && (process.env.CI || process.env.GITHUB_ACTIONS)) {
     return 'tests.run.ci is false';
+  }
+
+  const requires = runConfig.requires === undefined ? [] : [runConfig.requires].flat();
+  if (requires.length > 0) {
+    return `tests.run.requires ${requires.join(', ')} (no engine runtime in WASM)`;
   }
 
   // os/not_os: WASM is platform-independent, but implement for completeness

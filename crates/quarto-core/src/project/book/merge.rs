@@ -118,18 +118,20 @@ fn marker_blocks(item: &BookRenderItem) -> [Block; 2] {
     let block_text = file_metadata_marker_text(&file_metadata_json(item, &dir));
 
     let inline_marker = Block::Paragraph(Paragraph {
-        content: vec![quarto_pandoc_types::Inline::RawInline(RawInline {
-            format: "html".to_string(),
-            text: inline_text,
-            source_info: generated_source_info(),
-        })],
+        content: vec![quarto_pandoc_types::Inline::RawInline(Box::new(
+            RawInline {
+                format: "html".to_string(),
+                text: inline_text,
+                source_info: generated_source_info(),
+            },
+        ))],
         source_info: generated_source_info(),
     });
-    let block_marker = Block::RawBlock(RawBlock {
+    let block_marker = Block::RawBlock(Box::new(RawBlock {
         format: "html".to_string(),
         text: block_text,
         source_info: generated_source_info(),
-    });
+    }));
     [inline_marker, block_marker]
 }
 
@@ -203,7 +205,7 @@ fn build_divider_heading(title: &str) -> Block {
     }) {
         return Block::Header(header);
     }
-    Block::Header(Header {
+    Block::Header(Box::new(Header {
         level: 1,
         attr: quarto_pandoc_types::empty_attr(),
         content: vec![quarto_pandoc_types::Inline::Str(Str {
@@ -212,7 +214,7 @@ fn build_divider_heading(title: &str) -> Block {
         })],
         source_info: generated_source_info(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// A chapter's front-matter `title:` as a level-1 heading, or `None` when
@@ -223,13 +225,13 @@ fn front_matter_title_heading(meta: &ConfigValue) -> Option<Block> {
         return None;
     }
     if let quarto_pandoc_types::ConfigValueKind::PandocInlines(inlines) = &title.value {
-        return Some(Block::Header(Header {
+        return Some(Block::Header(Box::new(Header {
             level: 1,
             attr: quarto_pandoc_types::empty_attr(),
             content: inlines.clone(),
             source_info: generated_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        }));
+        })));
     }
     title.as_plain_text().map(|t| build_divider_heading(&t))
 }
@@ -256,13 +258,13 @@ fn add_chapter_heading(body: &mut Blocks, meta: &ConfigValue) {
                 }
                 _ => unreachable!("position() matched a Header"),
             },
-            None => Block::Header(Header {
+            None => Block::Header(Box::new(Header {
                 level: 1,
                 attr: quarto_pandoc_types::empty_attr(),
                 content: Vec::new(),
                 source_info: generated_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         }
     });
     body.insert(0, heading);
@@ -368,16 +370,17 @@ pub fn merge_book_chapters(
         }
 
         if should_wrap_in_part_div(&item) {
-            blocks.push(Block::Div(Div {
+            blocks.push(Block::Div(Box::new(Div {
                 attr: (
                     String::new(),
                     vec!["quarto-book-part".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content,
                 source_info: generated_source_info(),
                 attr_source: AttrSourceInfo::empty(),
-            }));
+            })));
         } else {
             blocks.extend(content);
         }

@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PANDOC_VERSION: "3.12.1"
+  PANDOC_VERSION: "3.13"
   # Typst — the Pandoc-hybrid typst leg's `L`-tier tests (typst_compile.rs)
   # require a real `typst` binary on PATH (TYPST_VERSION_FLOOR is 0.8+).
   TYPST_VERSION: "0.15.1"
@@ -79,7 +79,8 @@ jobs:
         with:
           tool: cargo-insta
 
-      # Pandoc setup (pinned to match Quarto 1.9)
+      # Pandoc setup: PANDOC_VERSION must equal PANDOC_PIN (crates/quarto-core/src/pandoc_filters/mod.rs;
+      # enforced by `cargo xtask lint` pandoc-pin). Bump procedure: dev-docs/pandoc-wasm-bump.md.
       - name: Set up Pandoc (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -203,6 +204,12 @@ jobs:
       - name: Run engine-host-node tests (vitest)
         shell: bash
         run: npm run test -w @quarto/engine-host-node
+
+      # engine-host-node: typecheck the sources and the `__type-tests__/` files
+      # (vitest only transforms; nothing else compiles the type tests).
+      - name: Typecheck engine-host-node
+        shell: bash
+        run: npm run typecheck -w @quarto/engine-host-node
 
       # Bundle freshness gate: rebuild engine-host-node.mjs from source and assert
       # the committed bytes are unchanged.  Fails if someone edited TS but forgot
@@ -376,6 +383,10 @@ jobs:
       - name: Run quarto-automerge-schema tests
         shell: bash
         run: npm test -w ts-packages/quarto-automerge-schema
+
+      - name: Run annotated-qmd tests
+        shell: bash
+        run: npm test -w ts-packages/annotated-qmd
 
       - name: Run wasm-js-bridge tests
         shell: bash

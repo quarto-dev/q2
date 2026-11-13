@@ -42,6 +42,7 @@
 //! ```
 
 use pampa::toc::{NavigationToc, TocEntry};
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_pandoc_types::inline::{
     Cite, Delete, EditComment, Emph, Highlight, Inline, Inlines, Insert, Quoted, SmallCaps, Span,
@@ -84,7 +85,7 @@ impl AstTransform for TocRenderTransform {
         TransformPhase::Navigation
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         // Affirmative disable: `toc: false` in merged metadata suppresses
         // rendering even if `navigation.toc` has been pre-populated.
         if is_feature_disabled(&ast.meta, "toc") {
@@ -115,7 +116,20 @@ impl AstTransform for TocRenderTransform {
         // (`toc-expand`) for the scroll-tracking script, and the first link
         // is `.active` so the no-script page shows one current entry; Q1
         // does both at render time (bd-toc-scrollspy-js-41e624d8).
-        let html = render_toc_entries_to_html(&toc.entries, toc_expand_depth(&ast.meta));
+        // The option is checked here, once per render that draws a TOC
+        // (`TocJsTransform` reads the same value without reporting it).
+        let toc_expand = ast.meta.get("toc-expand");
+        let expanded = match parse_toc_expand(toc_expand) {
+            TocExpand::Depth(n) => Some(n),
+            TocExpand::Unset => None,
+            TocExpand::Invalid => {
+                if let Some(value) = toc_expand {
+                    ctx.diagnostics.push(invalid_toc_expand_warning(value));
+                }
+                None
+            }
+        };
+        let html = render_toc_entries_to_html(&toc.entries, expanded);
 
         // Store rendered HTML
         ast.meta.insert_path(
@@ -211,34 +225,34 @@ pub(crate) fn strip_links_and_notes(inlines: &[Inline]) -> Inlines {
                 content: strip_links_and_notes(&s.content),
                 ..s.clone()
             })),
-            Inline::Quoted(q) => out.push(Inline::Quoted(Quoted {
+            Inline::Quoted(q) => out.push(Inline::Quoted(Box::new(Quoted {
                 content: strip_links_and_notes(&q.content),
-                ..q.clone()
-            })),
-            Inline::Cite(c) => out.push(Inline::Cite(Cite {
+                ..*q.clone()
+            }))),
+            Inline::Cite(c) => out.push(Inline::Cite(Box::new(Cite {
                 content: strip_links_and_notes(&c.content),
-                ..c.clone()
-            })),
-            Inline::Span(s) => out.push(Inline::Span(Span {
+                ..*c.clone()
+            }))),
+            Inline::Span(s) => out.push(Inline::Span(Box::new(Span {
                 content: strip_links_and_notes(&s.content),
-                ..s.clone()
-            })),
-            Inline::Insert(i) => out.push(Inline::Insert(Insert {
+                ..*s.clone()
+            }))),
+            Inline::Insert(i) => out.push(Inline::Insert(Box::new(Insert {
                 content: strip_links_and_notes(&i.content),
-                ..i.clone()
-            })),
-            Inline::Delete(d) => out.push(Inline::Delete(Delete {
+                ..*i.clone()
+            }))),
+            Inline::Delete(d) => out.push(Inline::Delete(Box::new(Delete {
                 content: strip_links_and_notes(&d.content),
-                ..d.clone()
-            })),
-            Inline::Highlight(h) => out.push(Inline::Highlight(Highlight {
+                ..*d.clone()
+            }))),
+            Inline::Highlight(h) => out.push(Inline::Highlight(Box::new(Highlight {
                 content: strip_links_and_notes(&h.content),
-                ..h.clone()
-            })),
-            Inline::EditComment(e) => out.push(Inline::EditComment(EditComment {
+                ..*h.clone()
+            }))),
+            Inline::EditComment(e) => out.push(Inline::EditComment(Box::new(EditComment {
                 content: strip_links_and_notes(&e.content),
-                ..e.clone()
-            })),
+                ..*e.clone()
+            }))),
             // An Image's `content` is alt text, not rendered children —
             // leave the node intact so the writer emits the `<img>`.
             Inline::Image(_)
@@ -275,17 +289,76 @@ fn render_toc_label(title: &[Inline]) -> String {
     }
 }
 
-/// `toc-expand` as the scroll-tracking script reads it
-/// (bd-toc-scrollspy-js-41e624d8), mirroring Q1's render step
-/// (`format-html-bootstrap.ts`): `true` is 99 (every level open), an
-/// integer is that depth, `false` is -1 (every nested level closed), and
-/// anything else is `None` (no attribute; the script defaults to 1).
-pub(crate) fn toc_expand_depth(meta: &ConfigValue) -> Option<i64> {
-    let value = meta.get("toc-expand")?;
+/// The `toc-expand` option, classified ([`parse_toc_expand`]).
+#[derive(Debug, PartialEq)]
+pub(crate) enum TocExpand {
+    /// Not set (or `null`): no attribute; the script defaults to 1.
+    Unset,
+    /// The depth written to `data-toc-expanded`: 99 is every level
+    /// open, -1 is every nested level closed.
+    Depth(i64),
+    /// A value Quarto cannot use; warned about once (Q-13-19) by
+    /// [`TocRenderTransform`] and otherwise treated as [`Self::Unset`].
+    Invalid,
+}
+
+/// Classify `toc-expand` as the scroll-tracking script reads it
+/// (bd-toc-scrollspy-js-41e624d8, bd-kr6721bn), mirroring Q1's render
+/// step (`format-html-bootstrap.ts`), which writes `true` as 99, any other
+/// truthy value as is and any falsy one as -1:
+///
+/// - `true` is 99, `false` is -1;
+/// - an integer `n >= 1` is `n`, and `0` is -1 (falsy in Q1);
+/// - `-1` is -1 (Q1 writes it through, and it is the `false` depth);
+/// - a finite float is rounded down, then read as an integer: Q1's
+///   schema accepts any number, and the script's `depth <= 2.5` behaves
+///   like 2;
+/// - quoted numbers (`"3"`) are accepted, as with other numeric options;
+/// - anything else, including integers below -1, is invalid.
+pub(crate) fn parse_toc_expand(value: Option<&ConfigValue>) -> TocExpand {
+    let Some(value) = value.filter(|v| !v.is_null()) else {
+        return TocExpand::Unset;
+    };
     if let Some(b) = value.as_bool() {
-        return Some(if b { 99 } else { -1 });
+        return TocExpand::Depth(if b { 99 } else { -1 });
     }
-    value.as_int().or_else(|| value.as_int_lenient())
+    let n = match value.as_int_lenient() {
+        Some(n) => n,
+        None => match value.as_f64_lenient() {
+            // `as` saturates, so a huge float lands on i64::MAX: open.
+            Some(x) if x.is_finite() => x.floor() as i64,
+            _ => return TocExpand::Invalid,
+        },
+    };
+    match n {
+        1.. => TocExpand::Depth(n),
+        0 | -1 => TocExpand::Depth(-1),
+        _ => TocExpand::Invalid,
+    }
+}
+
+/// `toc-expand` as a depth, `None` when unset or invalid.
+pub(crate) fn toc_expand_depth(meta: &ConfigValue) -> Option<i64> {
+    match parse_toc_expand(meta.get("toc-expand")) {
+        TocExpand::Depth(n) => Some(n),
+        TocExpand::Unset | TocExpand::Invalid => None,
+    }
+}
+
+/// Q-13-19: `toc-expand` has a value Quarto cannot use.
+fn invalid_toc_expand_warning(value: &ConfigValue) -> DiagnosticMessage {
+    let shown = value
+        .as_plain_text()
+        .or_else(|| value.as_f64_lenient().map(|x| x.to_string()))
+        .map_or_else(String::new, |s| format!(" `{s}`"));
+    DiagnosticMessageBuilder::warning(format!("Invalid `toc-expand` value{shown}"))
+        .with_code("Q-13-19")
+        .problem(
+            "`toc-expand` takes `true`, `false`, or a depth of 1 or more. \
+             Using the default depth of 1.",
+        )
+        .with_location(value.source_info.clone())
+        .build()
 }
 
 /// Render TOC entries to HTML string. The top-level `<ul>` carries
@@ -671,24 +744,24 @@ mod tests {
                 text: "Using a ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Quoted(Quoted {
+            Inline::Quoted(Box::new(Quoted {
                 quote_type: QuoteType::DoubleQuote,
                 content: vec![Inline::Str(Str {
                     text: "raw".to_string(),
                     source_info: dummy_source_info(),
                 })],
                 source_info: dummy_source_info(),
-            }),
+            })),
             Inline::Str(Str {
                 text: " ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Code(Code {
+            Inline::Code(Box::new(Code {
                 text: "volume".to_string(),
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
-            }),
+            })),
         ];
 
         let html = render_toc_label(&title);
@@ -710,8 +783,8 @@ mod tests {
                 text: "See ".to_string(),
                 source_info: dummy_source_info(),
             }),
-            Inline::Link(Link {
-                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            Inline::Link(Box::new(Link {
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: "the docs".to_string(),
                     source_info: dummy_source_info(),
@@ -720,7 +793,7 @@ mod tests {
                 source_info: dummy_source_info(),
                 attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
                 target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-            }),
+            })),
             Inline::Note(Note {
                 content: vec![],
                 source_info: dummy_source_info(),
@@ -1242,6 +1315,11 @@ mod tests {
     }
 
     async fn render_with(meta_extra: &[(&str, ConfigValue)]) -> String {
+        render_with_diagnostics(meta_extra).await.0
+    }
+
+    /// The rendered TOC HTML plus the codes of the diagnostics emitted.
+    async fn render_with_diagnostics(meta_extra: &[(&str, ConfigValue)]) -> (String, Vec<String>) {
         let mut ast = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![],
@@ -1273,12 +1351,19 @@ mod tests {
             .transform(&mut ast, &mut ctx)
             .await
             .unwrap();
-        ast.meta
+        let html = ast
+            .meta
             .get_path(&["rendered", "navigation", "toc"])
             .unwrap()
             .as_str()
             .unwrap()
-            .to_string()
+            .to_string();
+        let codes = ctx
+            .diagnostics
+            .iter()
+            .map(|d| d.code.clone().unwrap_or_default())
+            .collect();
+        (html, codes)
     }
 
     #[tokio::test]
@@ -1310,19 +1395,60 @@ mod tests {
         assert!(!html.contains("data-toc-expanded"), "{html}");
     }
 
+    fn config_real(r: &str) -> ConfigValue {
+        ConfigValue::new_scalar(yaml_rust2::Yaml::Real(r.into()), dummy_source_info())
+    }
+
     #[tokio::test]
     async fn test_toc_expand_values_map_like_q1() {
         for (value, expected) in [
             (config_bool(true), "99"),
             (config_bool(false), "-1"),
             (config_int(2), "2"),
+            // Falsy in Q1, so `-1` (bd-kr6721bn).
+            (config_int(0), "-1"),
+            (config_int(-1), "-1"),
+            // Q1's schema takes any number; the script's `depth <= 2.5`
+            // behaves like 2.
+            (config_real("2.5"), "2"),
+            (config_str("3"), "3"),
         ] {
-            let html = render_with(&[("toc-expand", value)]).await;
+            let (html, codes) = render_with_diagnostics(&[("toc-expand", value)]).await;
             let open = format!("<ul data-toc-expanded=\"{expected}\">\n");
             assert!(html.starts_with(&open), "{html}");
             // Only the top-level list carries it.
             assert_eq!(html.matches("data-toc-expanded").count(), 1, "{html}");
+            assert!(codes.is_empty(), "{codes:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn test_toc_expand_invalid_values_warn_once_and_use_default() {
+        let map = ConfigValue::new_map(vec![], dummy_source_info());
+        for value in [
+            config_str("sideways"),
+            config_int(-3),
+            config_real("-1.5"),
+            config_str("inf"),
+            map,
+        ] {
+            let (html, codes) = render_with_diagnostics(&[("toc-expand", value)]).await;
+            assert!(html.starts_with("<ul>\n"), "{html}");
+            assert!(!html.contains("data-toc-expanded"), "{html}");
+            assert_eq!(codes, ["Q-13-19"]);
+        }
+        // The title names the value, for floats too.
+        for (value, shown) in [(config_real("-1.5"), "`-1.5`"), (config_int(-3), "`-3`")] {
+            let warning = invalid_toc_expand_warning(&value);
+            assert!(warning.title.contains(shown), "{}", warning.title);
+        }
+    }
+
+    #[test]
+    fn test_parse_toc_expand_unset_and_null() {
+        assert_eq!(parse_toc_expand(None), TocExpand::Unset);
+        let null = ConfigValue::null(dummy_source_info());
+        assert_eq!(parse_toc_expand(Some(&null)), TocExpand::Unset);
     }
 
     #[test]

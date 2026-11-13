@@ -17,10 +17,10 @@ categories:
 ## What this means
 
 The `theme:` key (under `format.html` or a similar HTML-like
-format) accepts three shapes of value: the name of a built-in
-Bootswatch theme (`cosmo`, `darkly`, `flatly`, ...), a path to
-a `.scss` or `.css` file in the project, or `none` to suppress
-the Bootstrap-derived default. This error fires when the value
+format) accepts these values: the name of a built-in
+Bootswatch theme (`cosmo`, `darkly`, `flatly`, ...), `default`
+for plain Bootstrap, a path to a `.scss` or `.css` file in the
+project, or `none` to suppress the Bootstrap-derived default. This error fires when the value
 matches none of those — it is not a built-in name, and Quarto
 cannot find a file at the path.
 
@@ -42,6 +42,7 @@ Pick a value Quarto can resolve:
 
 - A built-in Bootswatch name — the full list is in the
   Bootswatch documentation.
+- `theme: default` for plain Bootstrap.
 - A path to a `.scss` or `.css` file inside the project.
 - `theme: none` to suppress Bootstrap entirely.
 

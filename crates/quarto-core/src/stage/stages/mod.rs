@@ -86,6 +86,7 @@ mod parse_document;
 mod pre_engine_sugaring;
 mod prefetch_remote_images;
 mod rasterize_svg_images;
+pub(crate) mod record_splice;
 mod render_html;
 mod unexecuted_cell_count;
 // book-projects P2c: flushes queued resource copies (images, etc.)
@@ -98,6 +99,7 @@ mod resource_report;
 // Tabsets-sync JS injection (bd-toc-tabset-titles-zq93gjvf): vendors
 // the grouped-tabset sync module as a Project-scoped artifact whenever
 // Bootstrap is active. Same WASM-exclusion reasoning as `bootstrap_js`.
+mod dashboard_js;
 #[cfg(not(target_arch = "wasm32"))]
 mod search_capture;
 #[cfg(not(target_arch = "wasm32"))]
@@ -116,9 +118,10 @@ pub use ast_transforms::AstTransformsStage;
 pub use attribution_generate::AttributionGenerateStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use bootstrap_js::BootstrapJsStage;
-pub use capture_splice::CaptureSpliceStage;
+pub use capture_splice::{CaptureSpliceStage, RECORD_STALENESS_KIND};
 #[cfg(not(target_arch = "wasm32"))]
 pub use clipboard_js::ClipboardJsStage;
+pub use record_splice::SpliceReport;
 // The embedded clipboard library + init handler bytes, re-exported for the
 // native revealjs scaffold to register as `js:revealjs:*` assets (bd-lg6t6qfy).
 // Native-only: like `ClipboardJsStage`, reveal copy is functional in `q2 render`
@@ -131,7 +134,10 @@ pub use compile_theme_css::{
     sass_perf_counters, theme_fingerprint,
 };
 pub use document_profile::DocumentProfileStage;
-pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
+pub use engine_execution::{
+    ENGINE_CAPTURE_KIND, ENGINE_CAPTURE_RECORD_KIND, ENGINE_RECORD_KIND, EngineExecutionStage,
+    merge_execute_scope,
+};
 pub use equation_number::{
     EQ_NUMBER_LABEL_CLASS, EQ_SIBLING_NUMBER_CLASS, EquationNumberStage, NumberEncoding,
 };
@@ -161,6 +167,7 @@ pub use unexecuted_cell_count::{UnexecutedCellCountStage, count_engine_cells};
 // Pure, so ungated (the wasm host classifies a completion with it); the path
 // `stages::classify_pandoc_completion` is unchanged.
 pub use crate::pandoc_filters::diagnostics::classify_pandoc_completion;
+pub use dashboard_js::DashboardJsStage;
 pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;

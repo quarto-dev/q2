@@ -50,6 +50,7 @@ use std::collections::HashMap;
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, OrderedList, Paragraph};
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::{Inline, Link, Span, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, ListNumberDelim, ListNumberStyle};
@@ -279,6 +280,19 @@ fn process_block(block: &mut Block, collector: &mut FootnoteCollector) {
         Block::Div(div) => {
             process_blocks(&mut div.content, collector);
         }
+        // Custom-node slots (since #1050 a callout is still a `Callout` custom node here (bd-akkproqy)). Document order
+        // matters for numbering: slots iterate in insertion order, and
+        // `CalloutTransform` inserts `title` before `content`.
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                match slot {
+                    Slot::Blocks(blocks) => process_blocks(blocks, collector),
+                    Slot::Block(b) => process_block(b, collector),
+                    Slot::Inlines(inlines) => process_inlines(inlines, collector),
+                    Slot::Inline(i) => process_inline(i, collector),
+                }
+            }
+        }
         Block::Figure(fig) => {
             process_blocks(&mut fig.content, collector);
             // Caption has short: Option<Inlines> and long: Option<Blocks>
@@ -396,12 +410,13 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
 
     // The link inside the superscript
     // Target is a tuple: (url, title)
-    let link = Inline::Link(Link {
+    let link = Inline::Link(Box::new(Link {
         attr: (
             String::new(),
             vec!["footnote-ref".to_string()],
             LinkedHashMap::from_iter([("role".to_string(), "doc-noteref".to_string())]),
-        ),
+        )
+            .into(),
         content: vec![Inline::Str(Str {
             text: number.to_string(),
             source_info: source_info.clone(),
@@ -410,7 +425,7 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
         target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-    });
+    }));
 
     // Build the class list for the outer span
     let classes = if is_margin {
@@ -422,15 +437,15 @@ fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool)
     // Wrap in a Span with the fnref ID, then in Superscript
     // Actually, Pandoc puts the ID on the superscript, but we don't have that field.
     // Let's use a Span wrapper.
-    Inline::Span(Span {
-        attr: (fnref_id, classes, LinkedHashMap::new()),
+    Inline::Span(Box::new(Span {
+        attr: (fnref_id, classes, LinkedHashMap::new()).into(),
         content: vec![Inline::Superscript(Superscript {
             content: vec![link],
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Create the footnotes section block.
@@ -455,20 +470,21 @@ fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
     let list_items: Vec<Blocks> = footnotes.iter().map(create_footnote_item).collect();
 
     // Create the ordered list
-    let ordered_list = Block::OrderedList(OrderedList {
+    let ordered_list = Block::OrderedList(Box::new(OrderedList {
         attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
         content: list_items,
         source_info: source_info.clone(),
-    });
+    }));
 
     // Wrap in a section Div with appropriate attributes
     // Note: We use a Div with class "section" so the HTML writer emits <section>
-    Block::Div(Div {
+    Block::Div(Box::new(Div {
         attr: (
             "footnotes".to_string(),
             vec!["footnotes".to_string(), "section".to_string()],
             LinkedHashMap::from_iter([("role".to_string(), "doc-endnotes".to_string())]),
-        ),
+        )
+            .into(),
         content: vec![
             Block::HorizontalRule(quarto_pandoc_types::block::HorizontalRule {
                 source_info: source_info.clone(),
@@ -477,7 +493,7 @@ fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
         ],
         source_info,
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Create a single footnote list item.
@@ -488,12 +504,13 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
 
     // Create the backlink
     // Target is a tuple: (url, title)
-    let backlink = Inline::Link(Link {
+    let backlink = Inline::Link(Box::new(Link {
         attr: (
             String::new(),
             vec!["footnote-back".to_string()],
             LinkedHashMap::from_iter([("role".to_string(), "doc-backlink".to_string())]),
-        ),
+        )
+            .into(),
         content: vec![Inline::Str(Str {
             text: "↩︎".to_string(),
             source_info: source_info.clone(),
@@ -502,7 +519,7 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
         target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-    });
+    }));
 
     // Convert content to blocks and append backlink to last paragraph
     let mut content_blocks = footnote.content.clone();
@@ -537,12 +554,12 @@ fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
     // with OrderedList. So we wrap content in a Div with ID.
     // Actually, looking at Pandoc output more carefully, the ID is on the <li>.
     // Our OrderedList doesn't support per-item IDs, so we'll wrap in a Div.
-    vec![Block::Div(Div {
-        attr: (fn_id, Vec::new(), LinkedHashMap::new()),
+    vec![Block::Div(Box::new(Div {
+        attr: (fn_id, Vec::new(), LinkedHashMap::new()).into(),
         content: content_blocks,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    })]
+    }))]
 }
 
 #[cfg(test)]

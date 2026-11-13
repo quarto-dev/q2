@@ -87,8 +87,7 @@ async fn second_eager_run_with_same_cache_dir_hits_cache_skips_engine() {
         ctx.clone(),
         runtime.clone(),
         Some(registry_with_counter(calls.clone())),
-        EnginePolicy::Manual,
-        &cache_dir,
+        &quarto_preview::config::ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()),
     )
     .await
     .expect("first run succeeds");
@@ -119,8 +118,7 @@ async fn second_eager_run_with_same_cache_dir_hits_cache_skips_engine() {
         ctx.clone(),
         runtime,
         Some(registry_with_counter(calls2.clone())),
-        EnginePolicy::Manual,
-        &cache_dir,
+        &quarto_preview::config::ReExecuteConfig::new(EnginePolicy::Manual, cache_dir.clone()),
     )
     .await
     .expect("second run succeeds");
@@ -142,7 +140,8 @@ async fn second_eager_run_with_same_cache_dir_hits_cache_skips_engine() {
     assert!(!sidecar.capture_doc_id.is_empty());
     let captures = capture_driver::read_capture_from_doc(&ctx, &sidecar.capture_doc_id)
         .await
-        .expect("binary doc round-trips");
+        .expect("binary doc round-trips")
+        .into_captures();
     assert_eq!(captures.len(), 1);
     let capture = &captures[0];
     assert_eq!(capture.engine_name, "test-passthrough");

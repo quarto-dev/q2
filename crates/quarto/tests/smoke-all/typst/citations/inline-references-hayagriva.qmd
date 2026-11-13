@@ -1,0 +1,21 @@
+---
+title: "Typst: an inline reference shadowed by a Hayagriva file"
+format: typst
+bibliography: refs-hayagriva.yml
+references:
+  - id: smith2020
+    type: webpage
+    title: An inline copy that Typst ignores
+_quarto:
+  tests:
+    typst:
+      noErrors: default
+      printsMessage:
+        level: WARN
+        regex: "Q-21-6"
+---
+
+bd-yjf99rzx: Hayagriva `.yml` bibliographies are read for their keys too, so
+this key is found in `refs-hayagriva.yml` and only warned about.
+
+See [@smith2020].

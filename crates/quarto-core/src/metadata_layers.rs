@@ -21,7 +21,7 @@
 //! 3. [`LayerKind::ExtensionFormat`]: the extension's format metadata for the
 //!    target format. Only when extensions *and* a target format are passed.
 //! 4. [`LayerKind::Directory`]: the `_metadata.yml` chain, root to leaf.
-//!    Absent for a single-file project.
+//!    For a single-file project, only the document's own directory.
 //! 5. [`LayerKind::Document`]: the document's front matter.
 //! 6. [`LayerKind::Runtime`]: the runtime metadata (`-M`, preview settings).
 //!
@@ -130,21 +130,18 @@ pub fn collect_metadata_layers(inputs: &LayerInputs<'_>) -> Vec<MetadataLayer> {
         });
     }
 
-    if !project.is_single_file {
-        let entries =
-            directory_metadata_for_document(project, inputs.document_path, inputs.runtime)
-                .unwrap_or_default();
-        for (path, config) in entries {
-            let base_dir = path
-                .parent()
-                .map_or_else(|| project.dir.clone(), Path::to_path_buf);
-            layers.push(MetadataLayer {
-                kind: LayerKind::Directory,
-                source: Some(path),
-                config,
-                base_dir,
-            });
-        }
+    let entries = directory_metadata_for_document(project, inputs.document_path, inputs.runtime)
+        .unwrap_or_default();
+    for (path, config) in entries {
+        let base_dir = path
+            .parent()
+            .map_or_else(|| project.dir.clone(), Path::to_path_buf);
+        layers.push(MetadataLayer {
+            kind: LayerKind::Directory,
+            source: Some(path),
+            config,
+            base_dir,
+        });
     }
 
     let document_config = match inputs.document {
@@ -168,6 +165,30 @@ pub fn collect_metadata_layers(inputs: &LayerInputs<'_>) -> Vec<MetadataLayer> {
     }
 
     layers
+}
+
+/// The highest layer that sets the key at `path` (for example
+/// `["execute", "record-sources"]`), with the value it set.
+///
+/// This is "last one wins", not a merge: right for a scalar read before the
+/// pipeline runs. `include_runtime: false` ignores the runtime layer (`-M`,
+/// the provider overlay), for a reader that treats the runtime layer as the
+/// host's and the layers below it as a guest's.
+pub fn layered_value<'a>(
+    layers: &'a [MetadataLayer],
+    path: &[&str],
+    include_runtime: bool,
+) -> Option<(&'a ConfigValue, &'a MetadataLayer)> {
+    layers.iter().rev().find_map(|layer| {
+        if !include_runtime && layer.kind == LayerKind::Runtime {
+            return None;
+        }
+        let mut value = &layer.config;
+        for key in path {
+            value = value.get(key)?;
+        }
+        Some((value, layer))
+    })
 }
 
 /// The document layer read from source text: its leading YAML front matter
@@ -415,7 +436,7 @@ mod tests {
 
     /// A project with a `_quarto.yml`, two nested `_metadata.yml` and a
     /// document at `<root>/a/b/doc.qmd`.
-    fn fixture(single_file: bool) -> Fixture {
+    fn fixture() -> Fixture {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path().canonicalize().unwrap();
         write(
@@ -427,8 +448,7 @@ mod tests {
         let doc = root.join("a/b/doc.qmd");
         write(&doc, "---\nprobe: doc\n---\n");
         let runtime = MetaRuntime::new(None);
-        let mut project = ProjectContext::discover_with_profile(&root, &runtime, None).unwrap();
-        project.is_single_file = single_file;
+        let project = ProjectContext::discover_with_profile(&root, &runtime, None).unwrap();
         Fixture {
             _tmp: tmp,
             root,
@@ -461,8 +481,31 @@ mod tests {
     }
 
     #[test]
+    fn layered_value_returns_the_highest_layer_that_sets_the_path() {
+        let f = fixture();
+        let layers = collect(
+            &f,
+            "---\nexecute:\n  record-sources: q2\n---\n",
+            None,
+            None,
+            &MetaRuntime::new(Some(json!({"execute": {"record-sources": "engine"}}))),
+        );
+        let (v, layer) = layered_value(&layers, &["execute", "record-sources"], true).unwrap();
+        assert_eq!(v.as_plain_text().as_deref(), Some("engine"));
+        assert_eq!(layer.kind, LayerKind::Runtime);
+        let (v, layer) = layered_value(&layers, &["execute", "record-sources"], false).unwrap();
+        assert_eq!(v.as_plain_text().as_deref(), Some("q2"));
+        assert_eq!(layer.kind, LayerKind::Document);
+        assert!(layered_value(&layers, &["execute", "nope"], true).is_none());
+        // `probe` is set by the project and both directories; the leaf wins.
+        let (_, layer) = layered_value(&layers, &["probe"], true).unwrap();
+        assert_eq!(layer.kind, LayerKind::Directory);
+        assert_eq!(layer.base_dir, f.doc.parent().unwrap());
+    }
+
+    #[test]
     fn every_kind_in_order_lowest_to_highest() {
-        let f = fixture(false);
+        let f = fixture();
         let runtime = MetaRuntime::new(Some(json!({"probe": "runtime"})));
         let layers = collect(
             &f,
@@ -489,7 +532,7 @@ mod tests {
 
     #[test]
     fn extension_layers_are_absent_without_extensions() {
-        let f = fixture(false);
+        let f = fixture();
         let layers = collect(&f, "", None, Some("acme-html"), &MetaRuntime::new(None));
         assert_eq!(
             kinds(&layers),
@@ -504,7 +547,7 @@ mod tests {
 
     #[test]
     fn extension_format_layer_is_absent_without_a_target_format() {
-        let f = fixture(false);
+        let f = fixture();
         let layers = collect(&f, "", Some(&[acme()]), None, &MetaRuntime::new(None));
         assert_eq!(layers[0].kind, LayerKind::ExtensionContribution);
         assert!(!kinds(&layers).contains(&LayerKind::ExtensionFormat));
@@ -512,7 +555,7 @@ mod tests {
 
     #[test]
     fn extension_contribution_drops_the_project_key() {
-        let f = fixture(false);
+        let f = fixture();
         let layers = collect(&f, "", Some(&[acme()]), None, &MetaRuntime::new(None));
         let contribution = &layers[0].config;
         assert!(contribution.get("probe-ext-meta").is_some());
@@ -521,15 +564,39 @@ mod tests {
     }
 
     #[test]
-    fn directory_chain_is_absent_for_a_single_file_project() {
-        let f = fixture(true);
-        let layers = collect(&f, "", None, None, &MetaRuntime::new(None));
-        assert!(!kinds(&layers).contains(&LayerKind::Directory));
+    fn single_file_project_reads_only_its_own_directory() {
+        // No `_quarto.yml`: the document's stand-in project is rooted at its
+        // own directory, so `a/_metadata.yml` counts and the parent's does not.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        write(&root.join("_metadata.yml"), "probe: parent\n");
+        write(&root.join("a/_metadata.yml"), "probe: own\n");
+        let doc = root.join("a/doc.qmd");
+        write(&doc, "# Doc\n");
+        let runtime = MetaRuntime::new(None);
+        let project = ProjectContext::discover_with_profile(&doc, &runtime, None).unwrap();
+        assert!(project.is_single_file);
+        let f = Fixture {
+            _tmp: tmp,
+            root: root.clone(),
+            doc,
+            project,
+        };
+        let layers = collect(&f, "", None, None, &runtime);
+        let dirs: Vec<_> = layers
+            .iter()
+            .filter(|l| l.kind == LayerKind::Directory)
+            .collect();
+        assert_eq!(dirs.len(), 1);
+        assert_eq!(
+            dirs[0].source.as_deref(),
+            Some(root.join("a/_metadata.yml").as_path())
+        );
     }
 
     #[test]
     fn deepest_directory_layer_comes_last_and_carries_its_file() {
-        let f = fixture(false);
+        let f = fixture();
         let layers = collect(&f, "", None, None, &MetaRuntime::new(None));
         let dirs: Vec<_> = layers
             .iter()
@@ -549,7 +616,7 @@ mod tests {
 
     #[test]
     fn runtime_layer_is_last_and_absent_without_runtime_metadata() {
-        let f = fixture(false);
+        let f = fixture();
         let with = collect(
             &f,
             "",
@@ -573,7 +640,7 @@ mod tests {
 
     #[test]
     fn project_layer_carries_the_config_file() {
-        let f = fixture(false);
+        let f = fixture();
         let layers = collect(&f, "", None, None, &MetaRuntime::new(None));
         let project = layers
             .iter()
@@ -588,7 +655,7 @@ mod tests {
 
     #[test]
     fn content_override_never_reads_the_copy_on_disk() {
-        let f = fixture(false);
+        let f = fixture();
         // The file on disk says `probe: doc`; the buffer says otherwise.
         let layers = collect(
             &f,
@@ -613,7 +680,7 @@ mod tests {
 
     #[test]
     fn parsed_document_layer_is_taken_as_given() {
-        let f = fixture(false);
+        let f = fixture();
         let meta = map(vec![("probe", string("parsed"))]);
         let layers = collect_metadata_layers(&LayerInputs {
             project: &f.project,
@@ -647,7 +714,7 @@ mod tests {
     fn extension_metadata_format_key_is_seen_only_with_extensions() {
         let mut ext = acme();
         ext.contributes.metadata = Some(map(vec![("format", string("typst"))]));
-        let f = fixture(false);
+        let f = fixture();
         let runtime = MetaRuntime::new(None);
         let format_in = |layers: &[MetadataLayer]| {
             layers.iter().any(|l| {

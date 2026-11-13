@@ -1,0 +1,11 @@
+---
+# contract: card titles keep inline markup (code, emphasis, math) in place
+title: "C40 Title Markup"
+format: dashboard
+---
+
+## Row
+
+::: {.card title="C40 `code` and *em* and $x^2$ end"}
+Body.
+:::

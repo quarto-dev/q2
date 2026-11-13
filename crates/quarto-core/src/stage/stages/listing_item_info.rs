@@ -591,33 +591,33 @@ mod tests {
         })
     }
     fn heading(level: usize, content: Vec<Inline>) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: empty_attr(),
             content,
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
     fn img(src: &str) -> Inline {
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: empty_attr(),
             content: vec![],
             target: (src.to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
     fn link(content: Vec<Inline>, target: &str) -> Inline {
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr: empty_attr(),
             content,
             target: (target.to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
     fn note(content: Vec<Block>) -> Inline {
         Inline::Note(Note {

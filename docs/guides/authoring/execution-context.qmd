@@ -1,0 +1,151 @@
+---
+title: "Execution Context"
+summary: Environment variables and execution information available to code cells
+---
+
+## Overview
+
+When Quarto runs the code cells of a document, it tells that code where it is running and how the document is being rendered. It does this through environment variables, which every language can read. One of them, `QUARTO_EXECUTE_INFO`, points to a JSON file with the document's resolved format, including its brand.
+
+Use this information to:
+
+- find files relative to the document or the project;
+- skip work that only makes sense for one output format;
+- style plots and tables with the colors and fonts of your brand, in light and dark mode.
+
+## Environment variables
+
+| Variable | Value |
+|----------|-------|
+| `QUARTO_PROJECT_ROOT` | The project directory. For a document outside a project, the document's directory. |
+| `QUARTO_DOCUMENT_PATH` | The directory of the document being rendered. |
+| `QUARTO_DOCUMENT_FILE` | The file name of the document being rendered. |
+| `QUARTO_EXECUTE_INFO` | The path of a JSON file with [execution information](#execution-information). |
+| `QUARTO_FIG_WIDTH` | Default figure width in inches (`fig-width`). |
+| `QUARTO_FIG_HEIGHT` | Default figure height in inches (`fig-height`). |
+| `QUARTO_FIG_DPI` | Default figure resolution (`fig-dpi`). |
+| `QUARTO_FIG_FORMAT` | Default figure format (`fig-format`). For `retina`, Quarto reports `png` at twice the resolution. |
+| `QUARTO_PROFILE` | The active [project profiles](../projects/profiles.qmd), comma-separated. |
+
+::: panel-tabset
+## Python
+
+``` python
+import os
+print(os.environ["QUARTO_DOCUMENT_FILE"])
+```
+
+## R
+
+``` r
+Sys.getenv("QUARTO_DOCUMENT_FILE")
+```
+
+## Julia
+
+``` julia
+ENV["QUARTO_DOCUMENT_FILE"]
+```
+:::
+
+## Execution information
+
+`QUARTO_EXECUTE_INFO` holds the path of a JSON file. The file exists while the document's code runs; read it from a cell, not after the render.
+
+| Field | Description |
+|-------|-------------|
+| `document-path` | The absolute path of the document. |
+| `format` | The resolved format, in six parts (below). |
+
+The `format` object has these parts:
+
+| Field | Description |
+|-------|-------------|
+| `identifier` | `target-format` (as written, such as `html` or `acm-html`), `base-format` (such as `html`), and `display-name` (such as `HTML`). |
+| `execute` | Execution options: `eval`, `echo`, `output`, `warning`, `error`, `include`, `fig-width`, `fig-height`, `fig-dpi`, `fig-format`, and any other `execute` option the document sets. |
+| `render` | Rendering options, such as `code-fold` and `keep-tex`, and the document's [brand](#brand). |
+| `pandoc` | Pandoc options, such as `to` and `toc`. |
+| `language` | The localized text Quarto uses for this document, such as `callout-tip-title`. |
+| `metadata` | Everything else in the document's metadata, such as `title`, including project-level settings. |
+
+::: panel-tabset
+## Python
+
+``` python
+import json, os
+
+with open(os.environ["QUARTO_EXECUTE_INFO"]) as f:
+    info = json.load(f)
+
+print(info["format"]["identifier"]["base-format"])
+```
+
+## R
+
+``` r
+info <- jsonlite::fromJSON(Sys.getenv("QUARTO_EXECUTE_INFO"))
+info$format$identifier$`base-format`
+```
+
+## Julia
+
+``` julia
+using JSON
+info = JSON.parsefile(ENV["QUARTO_EXECUTE_INFO"])
+info["format"]["identifier"]["base-format"]
+```
+:::
+
+### Running code only for some formats
+
+Conditional content (`.content-visible`, `.content-hidden`) controls whether output is *shown*; the code inside still runs. To skip the work itself, read the format in the cell:
+
+``` python
+import json, os
+
+with open(os.environ["QUARTO_EXECUTE_INFO"]) as f:
+    info = json.load(f)
+
+if info["format"]["identifier"]["base-format"] in ("html", "dashboard", "revealjs"):
+    # interactive output only for HTML-based formats
+    ...
+```
+
+### Brand
+
+When the document has a [brand](brand.qmd), `format.render.brand` holds it once per color mode:
+
+- `light` is always present;
+- `dark` is present when the brand defines dark values: a color with a `dark:` value, or a separate dark brand file (`brand: {light: ..., dark: ...}`).
+
+Each mode has `data`, the brand as written in `_brand.yml` with the colors for that mode, and `brandDir`, the directory the brand file is in.
+
+``` python
+import json, os
+
+with open(os.environ["QUARTO_EXECUTE_INFO"]) as f:
+    brand = json.load(f)["format"]["render"].get("brand", {})
+
+for mode, entry in brand.items():
+    colors = entry["data"].get("color", {})
+    print(mode, colors.get("background"), colors.get("foreground"))
+```
+
+## Engines
+
+The knitr engine, the `julia` and `marimo` engines, and Jupyter kernels for Python, R and Julia see all of these variables, along with the values from the project's [environment files](../projects/environment.qmd).
+
+Quarto sets the values inside the document's Jupyter kernel before the document's first cell runs, on every render, so a kernel that `q2 preview` keeps running between re-renders still sees current values. For kernels in other languages, Quarto cannot set them.
+
+The `julia` and `marimo` engines receive them for the code they run, set separately for each document.
+
+## Migrating from Quarto 1
+
+The variable names and the JSON layout are the same as in Quarto 1. The differences:
+
+- The `julia` and `marimo` engines see `QUARTO_FIG_*` and the richer execution-information file, which Quarto 1 did not give them. They also see `QUARTO_PROFILE` and the values from the project's environment files, which Quarto 1 set in the environment those engines inherited.
+- A `_brand.yml` file is used only when a `brand:` key names it, so `format.render.brand` is absent without one. See [Brand](brand.qmd).
+- `format.render.brand.dark` is present whenever the brand defines dark values. Quarto 1 also includes it when the document turns dark mode on for a brand without dark values; that dark entry repeated the light one.
+- Each brand mode has `data` and `brandDir`. Quarto 1 also includes other internal fields, such as `processedData`.
+- `QUARTO_FIG_*` report the figure options Quarto 2 uses. For HTML, Quarto 1 defaults to `retina` and reports `png` at 192 dpi; Quarto 2 reports `png` at 96 dpi.
+- The `execute` part lists the default visibility and figure options. Quarto 1 also includes other per-format defaults.

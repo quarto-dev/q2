@@ -1,0 +1,16 @@
+---
+# contract: explicit .card-header + .card-body markup passes through
+title: "C17 Literal"
+format: dashboard
+---
+
+## Row
+
+::: {.card}
+::: {.card-header}
+C17-HEADER
+:::
+::: {.card-body}
+C17-BODY
+:::
+:::

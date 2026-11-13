@@ -1,0 +1,13 @@
+project:
+  type: website
+lang: de
+website:
+  title: Dark toggle switch
+  navbar:
+    left:
+      - index.qmd
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly

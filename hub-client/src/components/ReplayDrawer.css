@@ -130,6 +130,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  max-width: 200px;
   font-size: 11px;
   color: var(--editor-text-dim);
   font-family: var(--font-mono);

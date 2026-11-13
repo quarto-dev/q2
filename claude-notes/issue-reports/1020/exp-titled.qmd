@@ -1,0 +1,19 @@
+---
+format: html
+---
+
+::: {#nte-x .callout-note}
+## My title
+
+Body.
+:::
+
+::: {#wrn-y .callout-warning title="Attr title"}
+Body.
+:::
+
+::: {#tip-z .callout-tip appearance="simple"}
+Simple, untitled.
+:::
+
+See @nte-x, @wrn-y, @tip-z.

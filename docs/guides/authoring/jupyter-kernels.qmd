@@ -1,0 +1,246 @@
+---
+title: Running other languages with Jupyter kernels
+---
+
+## Overview
+
+The [Jupyter engine](engines.qmd) runs code cells on a **Jupyter kernel**.
+Python is only one of many: any language with an installed kernel works, so a
+`{ggsql}`, `{julia}` or `{r}` cell runs the same way a `{python}` cell does.
+This page uses [ggsql](https://ggsql.org) as the worked example, then explains
+how Quarto picks the kernel and what it does when none is installed.
+
+You need a `jupyter` executable on your `PATH`. Quarto checks for it by
+running `jupyter --version`; without it the Jupyter engine is unavailable.
+
+## Worked example: ggsql
+
+Install Jupyter and the ggsql kernel into a virtual environment, then register
+the kernel. Activate the environment first: `ggsql-jupyter --install` runs
+`jupyter kernelspec install`, so `jupyter` has to be on your `PATH`.
+
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install jupyter ggsql-jupyter
+ggsql-jupyter --install
+```
+
+`jupyter kernelspec list` shows the kernels Quarto can see; it should list
+`ggsql`. Run Quarto from a shell where that environment is still active, so
+that its `jupyter` is the one Quarto finds.
+
+A document with a `{ggsql}` cell then needs no engine configuration at all:
+
+````{.markdown filename="penguins.qmd"}
+---
+title: Penguins
+format: html
+---
+
+```{ggsql}
+VISUALISE species AS fill
+FROM ggsql:penguins
+DRAW bar
+```
+````
+
+```bash
+q2 render penguins.qmd
+```
+
+Quarto sees that no other engine claims `ggsql`, gives the cell to Jupyter,
+and finds the kernel whose `language` is `ggsql`. The plot appears in the
+output. Neither an `engine:` key nor a `jupyter:` key is needed.
+
+::: {.callout-note}
+Cell options written as `#|` comments in a `{ggsql}` cell have not been
+tested. ggsql's own comment syntax is `--`.
+:::
+
+## How Quarto picks the kernel
+
+Quarto uses one kernel for the whole document. It picks it in this order:
+
+1. **The `jupyter:` key** in the document's front matter. Write a kernel name,
+   or a map with a `kernel` entry:
+
+   ```yaml
+   jupyter: ggsql
+   ```
+
+   ```yaml
+   jupyter:
+     kernel: ggsql
+   ```
+
+2. **The engine configuration**, `engine: [{jupyter: {kernel: ggsql}}]`
+   (see [engine configuration](engines.qmd)).
+3. **The language of the cells.** Quarto looks for the first installed kernel
+   whose `language` matches the first executable cell's language, ignoring
+   case. For Python, a kernel inside the active virtual environment is
+   preferred.
+
+A `jupyter:` map without a `kernel` entry, and Quarto 1's `kernelspec:`
+object, name no kernel. Quarto warns ([`Q-18-4`](../../errors/engine/Q-18-4.qmd))
+and falls back to the next rule.
+
+Once a kernel is picked, **every cell Jupyter owns runs on it**, whatever the
+cell's language. This differs from Quarto 1, which ran only the cells written
+in the kernel's own language.
+
+### Inline expressions
+
+The `jupyter:` key also makes a document that holds only inline expressions
+run: the key selects the kernel, and spans written in that kernel's language
+run on it. The key has to be in the document's own front matter. A
+project-level `jupyter:` picks the kernel for pages that have cells, but does
+not make a page without cells start the engine. See
+[Inline expressions](computations.qmd#inline-expressions) for where spans are
+and are not evaluated.
+
+## Each document has its own kernel
+
+Every document runs on its own kernel process, even when several documents of
+a project use the same kernel and render in parallel. One document never sees
+the variables, imports or other state of another, as in Quarto 1.
+
+- `q2 render` starts a document's kernel when the document's first cell runs
+  and shuts it down as soon as the document finishes, so at most one kernel
+  per parallel render job is running at a time.
+- `q2 preview` keeps each previewed document's kernel running between
+  re-renders, so a re-render does not pay the startup cost again (as Quarto 1's
+  preview does). The kernel keeps its state across re-renders: a variable
+  defined by a cell you have since deleted is still defined until the preview
+  stops.
+
+## Running R cells on Ark {#r-on-jupyter}
+
+By default `{r}` cells run in knitr. To run them on a Jupyter R kernel
+instead, such as [Ark](https://github.com/posit-dev/ark) or IRkernel, make
+two choices: which kernel, and that Jupyter is the engine that gets `r`.
+One block does both:
+
+```{.yaml filename="document.qmd"}
+jupyter:
+  kernel: ark              # a name from `jupyter kernelspec list`
+  claims:
+    r: 1                   # Jupyter takes r cells, not knitr
+```
+
+The same block works in `_quarto.yml` to switch a whole project. The
+document needs no `engine:` key. Plots come back as figures, like the
+figures of a Python cell.
+
+A few things to know:
+
+- **`claims` is what moves `{r}` cells to Jupyter.** `jupyter: ark` on its
+  own picks the kernel, but knitr still runs the cells, because knitr is the
+  default owner of `r`. A later release may make the `claims` line
+  unnecessary when you name a kernel.
+- **Leave `engine: jupyter` out.** With `engine: jupyter` written as a
+  plain name, a top-level `jupyter:` block, `claims` included, is not read,
+  and knitr runs your `{r}` cells without a warning. Use the block above
+  by itself, or put the settings inside the `engine:` entry:
+
+  ```{.yaml filename="document.qmd"}
+  engine:
+    jupyter:
+      kernel: ark
+      claims:
+        r: 1
+  ```
+
+- **If `engine:` also lists knitr, write `r: 2`.** At `r: 1` knitr and
+  Jupyter tie, and the order of the list decides. `r: 2` wins in either
+  order:
+
+  ```{.yaml filename="document.qmd"}
+  engine:
+    - knitr
+    - jupyter:
+        kernel: ark
+        claims:
+          r: 2
+  ```
+
+- **Write `claims` as a number.** Other spellings of the same entry, such
+  as `r: {kind: primary}`, are not honored here yet.
+- **One kernel runs the whole document.** A `claims` table replaces
+  Jupyter's usual one, so this block gives Jupyter only `r`. Keep the
+  document to `{r}` cells, or Jupyter's other languages will not be run
+  by it.
+
+If a plot cannot be saved, for example because the kernel sent a malformed
+image, Quarto warns ([`Q-18-11`](../../errors/engine/Q-18-11.qmd)) and
+shows the output's text instead.
+
+## Which cells run
+
+Jupyter runs the cells in the languages it owns. When no engine claims a
+language, Jupyter owns it, so `ggsql` or any other language with a kernel runs
+without a list of supported languages anywhere. Two cases leave a cell alone:
+
+- another engine owns its language (a `{r}` cell under `engine: knitr`), or
+- you named an `engine:` that does not cover the language: your list is the
+  complete statement of who runs what.
+
+Such cells stay in the output as written.
+
+### Fence aliases
+
+Quarto 2 accepted a few short fence names, `py`, `jl`, `rs`, `rb`, `ts` and
+`js`. They are deprecated, and a warning says so; they will be removed. Write
+`python`, `julia`, `rust`, `ruby`, `typescript` and `javascript`.
+
+## When no kernel is installed
+
+If Jupyter owns a language but no installed kernel declares it,
+[`Q-18-5`](../../errors/engine/Q-18-5.qmd) reports it:
+
+- In a document without an `engine:` list, it is a **warning**. The cell is
+  left as written and is not run, and the render continues.
+- In a document with an `engine:` list, it is an **error**, and the render
+  stops before any cell runs.
+
+Either way the fix is to install a kernel for the language, then check
+`jupyter kernelspec list`. If the cell is only meant to be shown, give it
+`eval: false`. A document that names its kernel with `jupyter:` is not checked
+against the installed kernels: every cell goes to the kernel you named.
+
+## Mixed-language documents with SoS
+
+Quarto runs a document on one kernel, so a document that mixes `{python}` and
+`{ggsql}` cells needs a kernel that can run both. The
+[SoS](https://vatlab.github.io/sos-docs/) kernel is such a multiplexing
+kernel. Select it with `jupyter:`, and switch language inside a cell with a
+`%use` line:
+
+````{.markdown filename="mixed.qmd"}
+---
+jupyter: sos
+---
+
+```{python}
+x = 21
+print(x * 2)
+```
+
+```{ggsql}
+%use ggsql
+VISUALISE species AS fill
+FROM ggsql:penguins
+DRAW bar
+```
+
+```{python}
+%use sos
+print(x + 1)
+```
+````
+
+Because every cell runs on the one SoS kernel, a `{python}` fence goes to SoS
+like any other, which is why the last cell needs `%use sos` after the ggsql
+cell switched the subkernel. SoS prints the ggsql subkernel's log lines in the
+cell's output. Quarto does not choose SoS's subkernel from the fence language, and
+fences without `%use` lines in a mixed document have not been tested.

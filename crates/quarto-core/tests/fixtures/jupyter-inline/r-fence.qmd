@@ -1,0 +1,17 @@
+---
+title: t
+format: html
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+x = 1
+```
+
+```{r}
+#| eval: false
+# a `{python} x + 1` span inside an r fence
+```
+
+Outside `{python} x + 1`.

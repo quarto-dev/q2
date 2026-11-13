@@ -1,0 +1,14 @@
+---
+title: Julia error
+engine: julia
+execute:
+  error: true
+---
+
+```{julia}
+1 + 1
+```
+
+```{julia}
+error("boom")
+```

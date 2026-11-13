@@ -53,3 +53,7 @@ crates/quarto-core/tests/fixtures/pandoc-goldens/parity/** text eol=lf
 # pandoc-request R9: native book refactor-guard recordings are byte-compared.
 crates/quarto-core/tests/integration/book_refactor_guard/** text eol=lf
 crates/quarto-core/tests/integration/pandoc_request_books/** text eol=lf
+
+# EXR-2 unit-scanner fixtures: byte-exact inputs (cells_crlf.qmd deliberately has CRLF,
+# the rest LF) and `code` fields in the JSON; never let git rewrite line endings.
+crates/quarto-core/tests/fixtures/units/* -text

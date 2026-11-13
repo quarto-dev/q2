@@ -2252,6 +2252,10 @@ where
         );
     }
 
+    // Wait for samod's background storage writes (index changes such as
+    // capture refs) to reach disk; dropping the repo abandons them.
+    ctx_for_shutdown.shutdown().await;
+
     Ok(())
 }
 

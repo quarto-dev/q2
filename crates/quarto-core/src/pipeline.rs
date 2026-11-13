@@ -53,6 +53,7 @@ use quarto_pandoc_types::Pandoc;
 use quarto_source_map::SourceContext;
 
 use crate::Result;
+use crate::pandoc_request::captures::CapturePayload;
 use crate::render::RenderContext;
 use crate::stage::CodeHighlightStage;
 use crate::stage::stages::ApplyTemplateConfig;
@@ -82,16 +83,16 @@ use crate::transform::TransformPipeline;
 use crate::transforms::{
     AnnouncementGenerateTransform, AnnouncementRenderTransform, AppendixStructureTransform,
     AttributionRenderTransform, AttributionViewerTransform, AuthorsNormalizeTransform,
-    BookCoverImageTransform, BreadcrumbsRenderTransform, CalloutResolveTransform, CalloutTransform,
-    CategoriesSidebarTransform, CodeBlockGenerateTransform, CodeBlockRenderTransform,
-    ConditionalContentTransform, CrossrefIndexTransform, CrossrefRenderTransform,
-    CrossrefResolveTransform, DraftAlertTransform, EditorialMarksOoxmlTransform,
-    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
-    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesResolveTransform, FootnotesTransform, LinkExternalTransform, LinkRewriteTransform,
-    ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
-    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    BookCoverImageTransform, BraceDiagramCellDiagnosticsTransform, BreadcrumbsRenderTransform,
+    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
+    CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
+    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform, DraftAlertTransform,
+    EditorialMarksOoxmlTransform, EditorialMarksTypstTransform, EquationLabelTransform,
+    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
+    LinkExternalTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
+    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
+    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
     ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
     ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
     SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
@@ -150,6 +151,14 @@ pub struct HtmlRenderConfig {
     /// pre-bd-uy4uygha behavior for every existing caller (`q2 render` runs the
     /// real engine natively instead).
     pub captures: Vec<quarto_trace::EngineCapture>,
+
+    /// A server-recorded engine execution record (EXR-13), carried beside
+    /// [`captures`](Self::captures). **At most one of the two is set**:
+    /// [`with_record`](Self::with_record) clears `captures` and
+    /// [`with_captures`](Self::with_captures) clears the record, so attach either
+    /// through those builders rather than by struct literal. Nothing presents a
+    /// record yet (EXR-14), so a render that carries one shows code cells as source.
+    pub record: Option<std::sync::Arc<crate::record::Record>>,
 }
 
 impl HtmlRenderConfig {
@@ -160,7 +169,21 @@ impl HtmlRenderConfig {
             engine_registry: None,
             execution_policy: crate::engine::ExecutionPolicy::default(),
             captures: Vec::new(),
+            record: None,
         }
+    }
+
+    /// The carried engine execution record, if any (never set with `captures`).
+    pub fn record(&self) -> Option<&std::sync::Arc<crate::record::Record>> {
+        self.record.as_ref()
+    }
+
+    /// Attach a server-recorded engine execution record (EXR-13), clearing any
+    /// legacy captures: a render carries one kind of payload, never both.
+    pub fn with_record(mut self, record: std::sync::Arc<crate::record::Record>) -> Self {
+        self.captures = Vec::new();
+        self.record = Some(record);
+        self
     }
 
     /// Attach an engine registry override (bd-45yw replay activation).
@@ -172,10 +195,21 @@ impl HtmlRenderConfig {
         self
     }
 
+    /// Attach whichever payload kind a render received (legacy captures, a
+    /// record, or nothing). EXR-14.
+    pub fn with_payload(self, payload: CapturePayload) -> Self {
+        match payload {
+            CapturePayload::Empty => self,
+            CapturePayload::Legacy(captures) => self.with_captures(captures),
+            CapturePayload::Record(record) => self.with_record(record),
+        }
+    }
+
     /// Attach server-recorded engine captures to splice into the HTML render
     /// (bd-uy4uygha). See the [`captures`](Self::captures) field.
     pub fn with_captures(mut self, captures: Vec<quarto_trace::EngineCapture>) -> Self {
         self.captures = captures;
+        self.record = None;
         self
     }
 }
@@ -397,6 +431,10 @@ pub fn build_html_pipeline_stages_with_options(
     // tabsets). Same WASM-exclusion reasoning as the two above.
     #[cfg(not(target_arch = "wasm32"))]
     stages.push(Box::new(crate::stage::stages::TabsetsJsStage::new()));
+    // Dashboard runtime scripts (quarto-dashboard.js, bslib components);
+    // a no-op for every other format. Same WASM-exclusion reasoning.
+    #[cfg(not(target_arch = "wasm32"))]
+    stages.push(Box::new(crate::stage::stages::DashboardJsStage::new()));
     // Attribution-generate runs *before* user filters so the
     // `quarto.attribution.*` Lua host binding sees a populated
     // sidecar in both `pre` and `post` filter passes. No-op when
@@ -488,7 +526,8 @@ pub async fn render_qmd_to_pandoc(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
-    render_qmd_to_pandoc_with_captures(content, source_name, ctx, runtime, Vec::new()).await
+    render_qmd_to_pandoc_with_captures(content, source_name, ctx, runtime, CapturePayload::Empty)
+        .await
 }
 
 /// [`render_qmd_to_pandoc`] splicing recorded `captures` before engine
@@ -501,7 +540,7 @@ pub async fn render_qmd_to_pandoc_with_captures(
     source_name: &str,
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
     let stages = build_pandoc_pipeline_stages_with_captures(
         ctx.format.identifier,
@@ -570,9 +609,7 @@ const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &[
 /// `None`, the stage is still inserted but runs as a pass-through.
 /// See `crates/quarto-core/src/engine/capture_splice.rs` and
 /// `claude-notes/plans/2026-05-18-q2-preview-project-replay-engine.md`.
-pub fn build_q2_preview_pipeline_stages(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+pub fn build_q2_preview_pipeline_stages(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     // Build the base list; the engine registry comes from ctx.registry
     // (set by run_pipeline from project.registry or the override seam).
     // We still reconstruct the engine-execution stage ourselves so it can
@@ -613,6 +650,7 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
     "bootstrap-js",
     "clipboard-js",
     "tabsets-js",
+    "dashboard-js",
     "code-highlight",
     "math-js",
     // `html-math-method` is an HTML option; MathMlStage is a no-op for
@@ -633,16 +671,14 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 /// engine execution (the wasm entry point passes the document's). With none,
 /// the list is exactly the old pandoc list minus its tail: the splice stage
 /// is only inserted when there is something to splice.
-pub fn build_pandoc_prefix_stages(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+pub fn build_pandoc_prefix_stages(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     build_pandoc_prefix_stages_in(captures, None)
 }
 
 /// [`build_pandoc_prefix_stages`] with the capture files written into
 /// `materialize_dir` rather than beside the document (epic E10).
 pub fn build_pandoc_prefix_stages_in(
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None);
@@ -662,14 +698,12 @@ pub fn build_pandoc_prefix_stages_in(
 /// classes, present with or without captures). The single source for the
 /// single-document list, the book pause list and the book finishing list, so
 /// they cannot drift.
-fn build_pandoc_request_prefix(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+fn build_pandoc_request_prefix(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     build_pandoc_request_prefix_in(captures, None)
 }
 
 fn build_pandoc_request_prefix_in(
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_pandoc_prefix_stages_in(captures, materialize_dir);
@@ -686,9 +720,7 @@ fn build_pandoc_request_prefix_in(
 /// the [`crate::pandoc_request::PandocRequest`] in the render context
 /// instead of running pandoc. Typst gets no `ResourceCopyFlushStage` or
 /// `TypstCompileStage` here.
-pub fn build_pandoc_request_stages(
-    captures: Vec<quarto_trace::EngineCapture>,
-) -> Vec<Box<dyn PipelineStage>> {
+pub fn build_pandoc_request_stages(captures: CapturePayload) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_pandoc_request_prefix(captures);
     stages.push(Box::new(PandocPrepareStage::new()));
     stages
@@ -701,7 +733,7 @@ pub fn build_pandoc_request_stages(
 /// plain one never touches the network, which tests of the prepare step rely
 /// on.
 pub fn build_pandoc_request_stages_fetching(
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_pandoc_request_stages(captures);
     let tail = stages.len() - 1;
@@ -719,7 +751,7 @@ pub fn build_pandoc_request_stages_fetching(
 /// ends in a process spawn and cannot run in the browser. Ungated.
 pub fn build_pandoc_request_pause_stages(
     upper_bound: crate::transform::TransformPhase,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Vec<Box<dyn PipelineStage>> {
     build_pandoc_request_pause_stages_in(upper_bound, captures, None)
 }
@@ -728,7 +760,7 @@ pub fn build_pandoc_request_pause_stages(
 /// `materialize_dir` (epic E10; the book download's chapters).
 pub fn build_pandoc_request_pause_stages_in(
     upper_bound: crate::transform::TransformPhase,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) -> Vec<Box<dyn PipelineStage>> {
     pause_stages_from(
@@ -749,7 +781,7 @@ pub fn build_pandoc_request_finishing_stages(
     lower_bound: crate::transform::TransformPhase,
 ) -> Vec<Box<dyn PipelineStage>> {
     finishing_stages_from(
-        build_pandoc_request_stages_fetching(Vec::new()),
+        build_pandoc_request_stages_fetching(CapturePayload::Empty),
         lower_bound,
     )
 }
@@ -776,7 +808,12 @@ pub fn build_pandoc_request_finishing_stages(
 pub fn build_pandoc_pipeline_stages(
     format_identifier: crate::format::FormatIdentifier,
 ) -> Vec<Box<dyn PipelineStage>> {
-    build_pandoc_pipeline_stages_with_captures(format_identifier, Vec::new(), None, false)
+    build_pandoc_pipeline_stages_with_captures(
+        format_identifier,
+        CapturePayload::Empty,
+        None,
+        false,
+    )
 }
 
 /// [`build_pandoc_pipeline_stages`] splicing server-recorded `captures`
@@ -788,7 +825,7 @@ pub fn build_pandoc_pipeline_stages(
 #[cfg(not(target_arch = "wasm32"))]
 pub fn build_pandoc_pipeline_stages_with_captures(
     format_identifier: crate::format::FormatIdentifier,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
     count_unexecuted: bool,
 ) -> Vec<Box<dyn PipelineStage>> {
@@ -928,10 +965,7 @@ pub fn build_pandoc_pipeline_finishing_stages(
 /// cell-aligned with `build_capture_pipeline_stages`. With empty `captures` the
 /// inserted splice is a pass-through and the engine stage is still (re)built
 /// with the registry, so callers may invoke this unconditionally.
-fn insert_capture_splice_stage(
-    stages: &mut Vec<Box<dyn PipelineStage>>,
-    captures: Vec<quarto_trace::EngineCapture>,
-) {
+fn insert_capture_splice_stage(stages: &mut Vec<Box<dyn PipelineStage>>, captures: CapturePayload) {
     insert_capture_splice_stage_in(stages, captures, None);
 }
 
@@ -939,11 +973,12 @@ fn insert_capture_splice_stage(
 /// `materialize_dir` instead of beside the document.
 fn insert_capture_splice_stage_in(
     stages: &mut Vec<Box<dyn PipelineStage>>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
     materialize_dir: Option<std::path::PathBuf>,
 ) {
-    let spliced_engine_names: std::collections::HashSet<String> =
-        captures.iter().map(|c| c.engine_name.clone()).collect();
+    // The engines this payload serves: a legacy capture's engine name, or each
+    // `quarto_engines` entry of a record (EXR-14).
+    let spliced_engine_names = captures.served_engine_names();
 
     // Reconstruct the engine-execution stage with the spliced-engine set.
     // The registry is no longer a stage-level concern — it is read from
@@ -954,11 +989,13 @@ fn insert_capture_splice_stage_in(
         .position(|s| s.name() == "engine-execution")
         .expect("engine-execution stage must exist in the pipeline");
     stages[engine_idx] = Box::new(engine_stage);
-    let splice_stage: Box<dyn PipelineStage> = Box::new(
-        crate::stage::CaptureSpliceStage::new()
-            .with_captures(captures)
-            .with_materialize_dir(materialize_dir),
-    );
+    let splice = crate::stage::CaptureSpliceStage::new().with_materialize_dir(materialize_dir);
+    let splice = match captures {
+        CapturePayload::Empty => splice,
+        CapturePayload::Legacy(captures) => splice.with_captures(captures),
+        CapturePayload::Record(record) => splice.with_record(record),
+    };
+    let splice_stage: Box<dyn PipelineStage> = Box::new(splice);
     stages.insert(engine_idx, splice_stage);
 }
 
@@ -974,7 +1011,7 @@ fn insert_capture_splice_stage_in(
 /// (`build_capture_pipeline_stages`).
 pub fn build_html_pipeline_stages_with_captures(
     apply_config: Option<ApplyTemplateConfig>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
 ) -> Vec<Box<dyn PipelineStage>> {
     // The engine registry is not a builder concern — it flows via
     // `ctx.registry` at run time (Task 8 of ts-engine-extensions). This helper
@@ -1331,6 +1368,8 @@ fn stage_context_from_render_context(
     // `UserFiltersStage::pre()`, never mutated by stages), so it is
     // bridged one-way and not restored.
     stage_ctx.defer_citeproc = ctx.defer_citeproc;
+    // Input-only like `defer_citeproc`: bridged one-way, never restored.
+    stage_ctx.suppress_trace_output = ctx.suppress_trace_output;
     // book-projects P4: the per-chapter seed is likewise input-only for
     // the crossref transforms — bridged one-way, never restored.
     stage_ctx.chapter_seed = ctx.chapter_seed;
@@ -1533,14 +1572,12 @@ pub enum PartialKind {
     /// prefix with `captures` spliced in and the unexecuted-cell count (the
     /// chapter context never gets `prepare_options`, so the intent must be
     /// explicit); the HTML list otherwise.
-    Request {
-        captures: Vec<quarto_trace::EngineCapture>,
-    },
+    Request { captures: CapturePayload },
     /// [`PartialKind::Request`] writing capture files into
     /// `materialize_dir` instead of beside the document (epic E10: the
     /// book download's request directory).
     RequestMaterialized {
-        captures: Vec<quarto_trace::EngineCapture>,
+        captures: CapturePayload,
         materialize_dir: Option<std::path::PathBuf>,
     },
 }
@@ -1972,10 +2009,14 @@ pub async fn render_qmd_to_html(
     // The engine registry is NOT threaded through the builders — it flows via
     // `ctx.engine_registry_override` (set above) into `ctx.registry` at run time
     // (Task 8 of ts-engine-extensions).
-    let stages = if config.captures.is_empty() {
+    let payload = match config.record() {
+        Some(record) => CapturePayload::Record(record.clone()),
+        None => CapturePayload::from(config.captures.clone()),
+    };
+    let stages = if payload.is_empty() {
         build_html_pipeline_stages_with_options(apply_config)
     } else {
-        build_html_pipeline_stages_with_captures(apply_config, config.captures.clone())
+        build_html_pipeline_stages_with_captures(apply_config, payload)
     };
 
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
@@ -2031,7 +2072,32 @@ pub async fn render_qmd_to_preview_ast(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
     engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
-    captures: Vec<quarto_trace::EngineCapture>,
+    captures: CapturePayload,
+) -> Result<PreviewAstOutput> {
+    render_qmd_to_preview_ast_with_capture(
+        content,
+        source_name,
+        ctx,
+        runtime,
+        engine_registry,
+        captures,
+        true,
+    )
+    .await
+}
+
+/// Capture-aware implementation of [`render_qmd_to_preview_ast`].
+///
+/// Project pass 2 discards the untransformed AST, so it disables the capture;
+/// response-producing callers retain the public capture-on wrapper above.
+pub async fn render_qmd_to_preview_ast_with_capture(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    captures: CapturePayload,
+    capture_untransformed_ast: bool,
 ) -> Result<PreviewAstOutput> {
     // Capture the untransformed AST before any pipeline stage runs.
     // This is the baseline `incremental_write` reconciles against (plan:
@@ -2039,7 +2105,11 @@ pub async fn render_qmd_to_preview_ast(
     // content a second time rather than intercepting the pipeline's own
     // parse so that the returned JSON is wholly self-contained (its own
     // source-info pool) and independent of the main pipeline's run.
-    let untransformed_ast_json = capture_untransformed_ast_json(content, source_name);
+    let untransformed_ast_json = if capture_untransformed_ast {
+        capture_untransformed_ast_json(content, source_name)
+    } else {
+        None
+    };
 
     // Thread the optional engine registry override onto `RenderContext` so
     // `run_pipeline` can apply it to `StageContext` after populating the
@@ -2154,7 +2224,7 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///
 /// ## Normalization Phase
 /// 1. `CalloutTransform` - Convert callout Divs to CustomNodes
-/// 2. `CalloutResolveTransform` - Resolve CustomNodes to structured Divs
+/// 2. (`CalloutResolveTransform` runs in the Crossref Phase — see 8c)
 /// 3. `ShortcodeResolveTransform` - Resolve shortcodes (e.g., `{{< meta title >}}`)
 /// 3a. `HeadingIdTransform` - Re-derive heading ids that expansion (shortcodes,
 ///     lmd cells) made stale, unique document-wide
@@ -2179,6 +2249,13 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///     (excluded for `Pandoc(_)` profiles — pandoc's own writer numbers/places `Note`s)
 /// 8. `FloatRefTargetSugarTransform` - Wrap float crossref Divs / Figures in canonical CustomNode
 ///
+/// ## Crossref Phase
+/// 8a. `CrossrefIndexTransform` - Number crossref targets (`plain_data.order`)
+/// 8b. `CrossrefResolveTransform` - Rewrite `@ref` citations into resolved-ref nodes
+/// 8c. `CalloutResolveTransform` - Resolve Callout CustomNodes to structured Divs;
+///     here, not in Normalization, so crossref callout titles carry their
+///     number ("Note 1", GH #1020)
+///
 /// ## Navigation Phase
 ///
 /// All `Generate` transforms run first so that by the time any renderer sees
@@ -2188,8 +2265,9 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// but emit different HTML.
 ///
 /// 9. `TocGenerateTransform` - Generate TOC from headers (if `toc: true`)
-/// 10. `NavbarGenerateTransform` - Resolve `navbar:` YAML into `navigation.navbar`
-/// 11. `SidebarGenerateTransform` - Resolve `website.sidebar:` into `navigation.sidebar`
+/// 10. `SidebarGenerateTransform` - Resolve `website.sidebar:` into `navigation.sidebar`
+/// 11. `NavbarGenerateTransform` - Resolve `navbar:` YAML into `navigation.navbar`
+///     (after the sidebar: it marks the page's section active, GH #1064)
 /// 12. `FooterGenerateTransform` - Resolve `page-footer:` YAML into `navigation.footer`
 /// 13. `TocRenderTransform` - Render TOC to HTML for template insertion
 /// 13a. `RepoActionsRenderTransform` - Render repository action links
@@ -2275,6 +2353,11 @@ pub fn build_transform_pipeline(
     // Family axis, from the single derivation point (`PipelineProfile`):
     // true for `RevealjsRender` (native render) and `RevealjsPreview`
     // (`q2-slides`).
+    let is_dashboard = matches!(
+        pipeline_profile,
+        crate::format::PipelineProfile::DashboardRender
+            | crate::format::PipelineProfile::DashboardPreview
+    );
     let is_revealjs = matches!(
         pipeline_profile,
         crate::format::PipelineProfile::RevealjsRender
@@ -2303,10 +2386,16 @@ pub fn build_transform_pipeline(
     // before any sugaring rewrites spans, so it still sees the document
     // essentially as the author wrote it.
     pipeline.push(Box::new(ReferenceLinkDiagnosticsTransform::new()));
+    // GH #1067: warn on Quarto 1 `{mermaid}` / `{dot}` cells (Q-2-58), which
+    // otherwise render silently as code blocks. Read-only; runs after engine
+    // execution, so cells an engine claimed are already gone.
+    pipeline.push(Box::new(BraceDiagramCellDiagnosticsTransform::new()));
+    // The callout's resolve half runs in the CROSSREF PHASE below, not
+    // here: a crossref callout's title shows its number ("Note 1"), which
+    // `CrossrefIndexTransform` assigns (GH #1020, bd-h14a4m83).
     pipeline.push(Box::new(CalloutTransform::new()));
-    pipeline.push(Box::new(CalloutResolveTransform::new()));
     // Panel-tabset pair (bd-toc-tabset-titles-zq93gjvf), mirroring the
-    // callout pair above. Position is load-bearing: the parse half
+    // callout sugar above. Position is load-bearing: the parse half
     // consumes the tab-title Headers *before* SectionizeTransform and
     // TocGenerateTransform run, which is what keeps tab titles out of
     // sections and the TOC (Q1 does the same by filter ordering).
@@ -2399,7 +2488,12 @@ pub fn build_transform_pipeline(
         // net shape after its DOM postprocessor).
         pipeline.push(Box::new(BookCoverImageTransform::new()));
         pipeline.push(Box::new(TitleBlockTransform::new()));
-        pipeline.push(Box::new(SectionizeTransform::new()));
+        // Dashboards sectionize inside `DashboardTransform`, after cards
+        // are built (Q1's order: a `.card` div that opens with a heading
+        // must not merge into a section first).
+        if !is_dashboard {
+            pipeline.push(Box::new(SectionizeTransform::new()));
+        }
     }
     pipeline.push(Box::new(FootnotesTransform::new()));
     // Immediately after: the HTML-chrome half consuming the `Inline::Note`s
@@ -2453,6 +2547,14 @@ pub fn build_transform_pipeline(
     // === CROSSREF PHASE ===
     pipeline.push(Box::new(CrossrefIndexTransform::new()));
     pipeline.push(Box::new(CrossrefResolveTransform::new()));
+    // Callout resolve needs `plain_data.order` from the indexer for the
+    // crossref title prefix. Until here callouts stay `Callout` custom
+    // nodes — the same shape every transform above already handles in the
+    // q2-preview pipeline, which never resolves them. Keeping them custom
+    // also keeps a callout's `#nte-…` id away from
+    // `FloatRefTargetSugarTransform`, which used to wrap the resolved Div
+    // as a float target.
+    pipeline.push(Box::new(CalloutResolveTransform::new()));
 
     // === NAVIGATION PHASE ===
     // All generates run before any renders so a future user filter or
@@ -2468,8 +2570,11 @@ pub fn build_transform_pipeline(
     // TocGenerate must run after SectionizeTransform so section IDs are
     // available; navbar/footer generates only read top-level metadata.
     pipeline.push(Box::new(TocGenerateTransform::new()));
-    pipeline.push(Box::new(NavbarGenerateTransform::new()));
+    // NavbarGenerate runs after SidebarGenerate: on pages the navbar
+    // doesn't link to, it marks the item for the page's sidebar section
+    // active, reading the resolved `navigation.sidebar` (GH #1064).
     pipeline.push(Box::new(SidebarGenerateTransform::new()));
+    pipeline.push(Box::new(NavbarGenerateTransform::new()));
     // PageNavGenerate must run after SidebarGenerate so it reads the
     // resolved `navigation.sidebar` for the current page.
     pipeline.push(Box::new(PageNavGenerateTransform::new()));
@@ -2644,6 +2749,14 @@ pub fn build_transform_pipeline(
     // the `quarto-float` wrapper Div; `table-bootstrap-class` (below)
     // normalizes the forwarded copies.
     pipeline.push(Box::new(TableFloatClassForwardTransform::new()));
+    // bd-kcpkgftw: wrap lightbox images in `<a class="lightbox">` and ship
+    // GLightbox (Q1 `lightbox`). Right *before* `crossref-render`, so a
+    // float is still a `FloatRefTarget` with its caption and number at
+    // hand for the slide title — the same shape the q2-preview pipeline
+    // (which never runs `crossref-render`) sees. The crossref renderer
+    // looks through `Link[Image]` for the figure's image. HTML render +
+    // preview; only the render ships the runtime.
+    pipeline.push(Box::new(crate::transforms::LightboxTransform::new()));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     // Example-embed render (bd-t3cert81). Runs right after
     // `CrossrefRenderTransform` so the per-`demo` `order` the index assigned
@@ -2684,6 +2797,12 @@ pub fn build_transform_pipeline(
     // profile; bucket B3, registered for every profile and excluded for none. After every
     // content transform that survives the Pandoc cut, so the whole tree it sees is final.
     pipeline.push(Box::new(EditorialMarksOoxmlTransform::new()));
+    // Editorial marks to Typst (GH #1102): rewrites the same marks into calls to the
+    // `quarto-insert`/`quarto-delete`/`quarto-highlight`/`quarto-edit-comment` functions
+    // the Typst template defines (`definitions.typ`), so the PDF shows them as annotations
+    // instead of body text. Self-gated on the typst identifier; bucket B3 for the same
+    // reasons as its OOXML sibling.
+    pipeline.push(Box::new(EditorialMarksTypstTransform::new()));
     // bd-react-components-a8flgldm: bind `components:` declarations to
     // their Divs/Spans (`data-quarto-component`), copy the modules under
     // `site_libs/quarto-components/`, register the vendored React ESM +
@@ -2696,6 +2815,13 @@ pub fn build_transform_pipeline(
     pipeline.push(Box::new(
         crate::transforms::ComponentsResolveTransform::new(),
     ));
+    // bd-5kf2dnw4 (GH #1058): mark headings, figures and tables with
+    // `anchored` and ship AnchorJS for the hover link (Q1 `anchor-sections`).
+    // After `appendix-structure` (its headings already carry the class and
+    // must not get it twice) and `crossref-render` (the figure/table
+    // wrappers must exist). Bootstrap HTML render + preview; only the render
+    // ships the script (the preview needs the class for DOM parity).
+    pipeline.push(Box::new(crate::transforms::AnchorSectionsTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
     // bd-3qych45b: render hephaestus plot documents (`![](plot.hep)`)
     // to SVG artifacts under `figure-html/` and point the image at
@@ -2762,6 +2888,22 @@ pub fn build_transform_pipeline(
     // future finalization stage that mutates `SourceInfo` is
     // automatically covered without having to remember to insert it
     // before attribution-render.
+    // Dashboards (bd-dashboard-format-k21hd4vy): build the page / row /
+    // column / card structure, then lower it to bslib markup. Last of the
+    // content transforms, as Q1's dashboard filter runs in quarto-post:
+    // every transform above sees an ordinary sectioned document, including
+    // the ones whose walkers do not descend into custom-node slots. The
+    // q2 preview runs the same lowering in its preview mode, which leaves
+    // view nodes for the React preview (plan Phase 8).
+    if is_dashboard {
+        pipeline.push(Box::new(crate::dashboard::DashboardTransform::new()));
+        pipeline.push(Box::new(
+            crate::dashboard::DashboardResolveTransform::with_preview(matches!(
+                pipeline_profile,
+                crate::format::PipelineProfile::DashboardPreview
+            )),
+        ));
+    }
     pipeline.push(Box::new(AttributionRenderTransform::new()));
 
     // After attribution-render: auto-inject the default viewer
@@ -2778,7 +2920,8 @@ pub fn build_transform_pipeline(
     // Format-profile exclude-list application: the same `retain_excluding`
     // seam used by `build_q2_preview_transform_pipeline`, applied here so
     // `build_transform_pipeline` itself is total over `PipelineProfile` —
-    // `HtmlRender`/`RevealjsRender` (native renders) keep every transform;
+    // `HtmlRender`/`RevealjsRender`/`DashboardRender` (native renders) keep
+    // every transform;
     // `HtmlPreview`/`RevealjsPreview` drop `Q2_PREVIEW_TRANSFORM_EXCLUDED`;
     // `Pandoc(_)` (docx, pptx, gfm, …) drops `PANDOC_TRANSFORM_EXCLUDED`,
     // since a Pandoc writer has no HTML chrome/decoration to consume those
@@ -2788,11 +2931,13 @@ pub fn build_transform_pipeline(
             pipeline.retain_excluding(PANDOC_TRANSFORM_EXCLUDED);
         }
         crate::format::PipelineProfile::HtmlPreview
-        | crate::format::PipelineProfile::RevealjsPreview => {
+        | crate::format::PipelineProfile::RevealjsPreview
+        | crate::format::PipelineProfile::DashboardPreview => {
             pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
         }
         crate::format::PipelineProfile::HtmlRender
-        | crate::format::PipelineProfile::RevealjsRender => {}
+        | crate::format::PipelineProfile::RevealjsRender
+        | crate::format::PipelineProfile::DashboardRender => {}
     }
 
     pipeline
@@ -2928,6 +3073,8 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "code-block-render",
     "table-bootstrap-class",
     "components-resolve",
+    "anchor-sections",
+    "lightbox",
     // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
     // analog.
     "title-block",
@@ -3059,6 +3206,7 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // predicate, so a docx render warns about `[label][ref]` exactly as an
     // HTML one does.
     ("reference-link-diagnostics", Bucket::B1),
+    ("brace-diagram-cell-diagnostics", Bucket::B1),
     // Sugar halves only. Each `*-resolve` sibling is B4 (see below).
     ("callout", Bucket::B1),
     ("panel-tabset", Bucket::B1),
@@ -3131,6 +3279,10 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // I23). Gates itself on the docx/pptx identifiers, so it is inert elsewhere; it
     // crosses the cut because pandoc's docx writer needs the rewritten classes.
     ("editorial-marks-ooxml", Bucket::B3),
+    // Editorial marks to calls of the Typst template's annotation functions (GH #1102).
+    // Gates itself on the typst identifier; crosses the cut because pandoc's typst writer
+    // must see the raw Typst calls.
+    ("editorial-marks-typst", Bucket::B3),
     ("resource-collector", Bucket::B3),
     // Captures the markdown companion for llms.txt. A service, not
     // presentation of the current format; self-gates on `llms_view_active`
@@ -3151,8 +3303,8 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // new Navigation transform cannot land unexcluded — but it can still
     // land unclassified here, which is what the totality test catches.
     ("toc-generate", Bucket::B4),
-    ("navbar-generate", Bucket::B4),
     ("sidebar-generate", Bucket::B4),
+    ("navbar-generate", Bucket::B4),
     ("page-nav-generate", Bucket::B4),
     ("footer-generate", Bucket::B4),
     ("announcement-generate", Bucket::B4),
@@ -3192,6 +3344,12 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // block (bd-react-components-a8flgldm). Pure HTML presentation; the
     // transform also self-gates on `PipelineProfile::HtmlRender`.
     ("components-resolve", Bucket::B4),
+    // Heading/figure/table hover anchors: `anchored` class + AnchorJS
+    // (bd-5kf2dnw4). HTML-only presentation.
+    ("anchor-sections", Bucket::B4),
+    // Wraps lightbox images in `<a class="lightbox">` and ships GLightbox
+    // (bd-kcpkgftw). HTML-only presentation; Pandoc formats exclude it.
+    ("lightbox", Bucket::B4),
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact —
     // an HTML-only presentation decision (sibling of `responsive-image`,
     // which it runs immediately before). No Pandoc-writer analog exists yet.
@@ -3306,6 +3464,7 @@ mod tests {
             result: serde_json::json!({
                 "markdown": "::: {.cell}\n```{.markerlang .cell-code}\n1 + 1\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nSPLICEMARKER_ZX9\n```\n:::\n:::\n"
             }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -3371,6 +3530,7 @@ mod tests {
             result: serde_json::json!({
                 "markdown": "::: {.cell}\n![](test_files/figure-html/fig.png)\n:::\n"
             }),
+            record: None,
             files: vec![CaptureFile {
                 path: "test_files/figure-html/fig.png".into(),
                 contents_base64: base64::engine::general_purpose::STANDARD.encode(b"FAKE-PNG"),
@@ -3439,6 +3599,56 @@ mod tests {
         assert!(output.html.contains("Be careful!"));
     }
 
+    /// GH #1020 (bd-h14a4m83): a crossref callout's title carries the same
+    /// "Kind N" its `@ref` link shows — untitled, titled, and untitled
+    /// `simple` alike (Q1 `decorate_callout_title_with_crossref`). Guards
+    /// the pipeline position: `callout-resolve` must run after
+    /// `crossref-index`, or no number exists when the title is built.
+    #[test]
+    fn test_render_crossref_callout_titles_carry_number() {
+        let content = b"---\ntitle: Test\n---\n\n\
+            ::: {#nte-a .callout-note}\nBody A.\n:::\n\n\
+            ::: {#nte-b .callout-note}\n## My title\n\nBody B.\n:::\n\n\
+            ::: {#tip-c .callout-tip appearance=\"simple\"}\nBody C.\n:::\n\n\
+            See @nte-a, @nte-b and @tip-c.\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+        let html = &output.html;
+
+        let title = |text: &str| {
+            format!("<div class=\"callout-title-container flex-fill\">\n{text}\n</div>")
+        };
+        for expected in [
+            title("Note\u{a0}1"),
+            title("Note\u{a0}2: My title"),
+            title("Tip\u{a0}1"),
+        ] {
+            assert!(html.contains(&expected), "missing {expected:?} in:\n{html}");
+        }
+        for link in ["Note\u{a0}1</a>", "Note\u{a0}2</a>", "Tip\u{a0}1</a>"] {
+            assert!(
+                html.contains(link),
+                "missing xref text {link:?} in:\n{html}"
+            );
+        }
+        // The callouts stay callouts — not re-wrapped as float targets.
+        assert!(
+            !html.contains("quarto-float"),
+            "callout became a float:\n{html}"
+        );
+    }
+
     #[test]
     fn test_render_code_block_is_syntax_highlighted() {
         // Full-pipeline end-to-end: a Python code block should be
@@ -3490,6 +3700,54 @@ mod tests {
             output.html.contains("sourceCode"),
             "pre/code container should carry the `sourceCode` class",
         );
+    }
+
+    #[test]
+    fn test_render_wraps_code_blocks_like_quarto1() {
+        // GH #1079: Quarto 1 wraps every block whose language Pandoc
+        // knows in `div.sourceCode` (the theme paints the code-block box
+        // there), even without colors. Blocks in other languages, output
+        // blocks and language-less blocks stay a bare `<pre>`.
+        let content = b"---\ntitle: Test\n---\n\n\
+            ```ini\n[Widget]\nEnabled = true\n```\n\n\
+            ```default\n/opt/widget/bin/widget\n```\n\n\
+            ```conf\nkey = value\n```\n\n\
+            ```text\nplain\n```\n\n\
+            ```{.cell-output .cell-output-stdout}\n[1] 2\n```\n\n\
+            ```\nno language\n```\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+        let html = &output.html;
+
+        for lang in ["ini", "default", "conf"] {
+            assert!(
+                html.contains(&format!("<pre class=\"sourceCode {lang}\"")),
+                "`{lang}` block should be pre.sourceCode inside div.sourceCode; got:\n{html}",
+            );
+        }
+        assert_eq!(
+            html.matches("<div class=\"sourceCode").count(),
+            3,
+            "only the ini/default/conf blocks get the wrapper; got:\n{html}",
+        );
+        for bare in [
+            "<pre class=\"text",
+            "<pre class=\"cell-output cell-output-stdout",
+        ] {
+            assert!(html.contains(bare), "expected bare `{bare}`; got:\n{html}");
+        }
+        assert!(!html.contains("data-hl-spans="), "got:\n{html}");
     }
 
     #[test]
@@ -3751,8 +4009,9 @@ mod tests {
         // MathMlStage after the post filters (bd-vlhi2zkj, bd-3evfzwal),
         // plus LmdDesugarStage before the engine and LmdExecuteStage before
         // the user pre-filters (bd-lmd-exploration-jqv2nbl4), plus
-        // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4): 31.
-        assert_eq!(stages.len(), 31);
+        // ListingResolveStage before lmd-execute (bd-2oqen84t), plus SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
+        // (bd-dashboard-format-k21hd4vy): 32.
+        assert_eq!(stages.len(), 32);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -3795,40 +4054,43 @@ mod tests {
         // grouped-tabset sync module whenever Bootstrap does — same
         // gate as bootstrap-js, so it sits in the same JS block.
         assert_eq!(stages[16].name(), "tabsets-js");
+        // DashboardJsStage ships the dashboard runtime scripts; a no-op for
+        // every other format (bd-dashboard-format-k21hd4vy).
+        assert_eq!(stages[17].name(), "dashboard-js");
         // Attribution-generate runs before user filters so the
         // `quarto.attribution.*` Lua host binding sees a populated
         // sidecar (bd-0fd0). No-op when no provider is installed.
-        assert_eq!(stages[17].name(), "attribution-generate");
+        assert_eq!(stages[18].name(), "attribution-generate");
         // Listings resolve before the lmd cells and the user pre-filters
         // so both see `meta.listings.<id>` (bd-2oqen84t).
-        assert_eq!(stages[18].name(), "listing-resolve");
+        assert_eq!(stages[19].name(), "listing-resolve");
         // lmd exploration spike 2: cells run after the engine, before user
         // pre-filters.
-        assert_eq!(stages[19].name(), "lmd-execute");
-        assert_eq!(stages[20].name(), "user-filters-pre");
-        assert_eq!(stages[21].name(), "ast-transforms");
-        assert_eq!(stages[22].name(), "user-filters-post");
+        assert_eq!(stages[20].name(), "lmd-execute");
+        assert_eq!(stages[21].name(), "user-filters-pre");
+        assert_eq!(stages[22].name(), "ast-transforms");
+        assert_eq!(stages[23].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
-        assert_eq!(stages[23].name(), "resource-report");
+        assert_eq!(stages[24].name(), "resource-report");
         // Equation-number encoding (bd-vlhi2zkj) must follow
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
-        assert_eq!(stages[24].name(), "equation-number");
+        assert_eq!(stages[25].name(), "equation-number");
         // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
         // converts carries no `\tag`) and precedes math-js (which loads
         // MathJax only for what this stage left as TeX).
-        assert_eq!(stages[25].name(), "math-ml");
-        assert_eq!(stages[26].name(), "code-highlight");
+        assert_eq!(stages[26].name(), "math-ml");
+        assert_eq!(stages[27].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[27].name(), "math-js");
-        assert_eq!(stages[28].name(), "render-html-body");
+        assert_eq!(stages[28].name(), "math-js");
+        assert_eq!(stages[29].name(), "render-html-body");
         // Website search capture (bd-eip0naf4): records the rendered
         // body before the template wraps it.
-        assert_eq!(stages[29].name(), "search-capture");
-        assert_eq!(stages[30].name(), "apply-template");
+        assert_eq!(stages[30].name(), "search-capture");
+        assert_eq!(stages[31].name(), "apply-template");
     }
 
     #[test]
@@ -3838,8 +4100,9 @@ mod tests {
         // LanguageResolveStage and TabsetsJsStage (main), plus
         // EquationNumberStage and MathMlStage, plus LmdDesugarStage and
         // LmdExecuteStage, plus ListingResolveStage (bd-2oqen84t), plus
-        // SearchCaptureStage (bd-eip0naf4) → 31 stages.
-        assert_eq!(pipeline.len(), 31);
+        // SearchCaptureStage (bd-eip0naf4), plus DashboardJsStage
+        // (bd-dashboard-format-k21hd4vy) → 32 stages.
+        assert_eq!(pipeline.len(), 32);
     }
 
     #[test]
@@ -4284,6 +4547,7 @@ mod tests {
                 },
                 "needs_postprocess": false,
             }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -4339,6 +4603,7 @@ mod tests {
             engine_name: "replay-only-engine".into(),
             input_qmd: String::new(),
             result: serde_json::json!({ "markdown": "" }),
+            record: None,
             files: Vec::new(),
         };
 
@@ -4355,7 +4620,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            vec![capture],
+            vec![capture].into(),
         ))
         .expect("q2-preview render");
 
@@ -4435,7 +4700,7 @@ mod tests {
             &mut ctx,
             runtime,
             Some(Arc::new(registry)),
-            Vec::new(),
+            CapturePayload::Empty,
         ));
 
         // P2-12: a registered engine with no available runtime and no spliced
@@ -4519,7 +4784,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -4579,7 +4844,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -4634,7 +4899,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides render");
 
@@ -4679,7 +4944,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides render");
 
@@ -4735,7 +5000,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides render");
 
@@ -4797,7 +5062,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-slides brand render");
 
@@ -4833,7 +5098,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -4876,6 +5141,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn render_qmd_to_preview_ast_capture_gate_preserves_transformed_ast() {
+        let content = b"---\nformat: q2-preview\n---\n\nHello world.\n";
+        let project = make_test_project();
+        let format = Format::from_format_string("q2-preview").unwrap();
+        let binaries = BinaryDependencies::new();
+        let render = |capture_untransformed_ast| {
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            pollster::block_on(render_qmd_to_preview_ast_with_capture(
+                content,
+                "/project/test.qmd",
+                &mut ctx,
+                make_test_runtime(),
+                None,
+                CapturePayload::Empty,
+                capture_untransformed_ast,
+            ))
+            .expect("q2-preview render")
+        };
+
+        let capture_on = render(true);
+        let capture_off = render(false);
+
+        assert!(capture_on.untransformed_ast_json.is_some());
+        assert!(capture_off.untransformed_ast_json.is_none());
+        assert_eq!(capture_off.ast_json, capture_on.ast_json);
+    }
+
     /// Plan 2B: with `FootnotesTransform` no longer in the
     /// q2-preview deny-list, inline-footnote rendering (`^[body]`
     /// syntax — produces `Inline::Note` directly) must emit the
@@ -4910,7 +5204,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -5061,7 +5355,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -5172,7 +5466,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -5255,7 +5549,7 @@ mod tests {
     /// Python / etc. cells; `q2 render` keeps highlighting.
     #[test]
     fn q2_preview_pipeline_includes_code_highlight() {
-        let stages = build_q2_preview_pipeline_stages(Vec::new());
+        let stages = build_q2_preview_pipeline_stages(CapturePayload::Empty);
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
         assert!(
             names.contains(&"code-highlight"),
@@ -5516,7 +5810,15 @@ mod tests {
         // RevealjsRender, HtmlPreview, RevealjsPreview, Pandoc(_). Add new
         // format strings here as they land; the invariant then covers them
         // automatically.
-        for format in ["html", "revealjs", "q2-preview", "q2-slides", "docx"] {
+        for format in [
+            "html",
+            "revealjs",
+            "dashboard",
+            "q2-preview",
+            "q2-slides",
+            "q2-dashboard",
+            "docx",
+        ] {
             let runtime = make_test_runtime();
             let pipeline = build_transform_pipeline(
                 vec![],
@@ -6605,8 +6907,8 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
-                "callout-resolve",
                 "panel-tabset",
                 "panel-tabset-resolve",
                 "config-markdown",
@@ -6635,9 +6937,10 @@ mod tests {
                 "image-alt-normalize",
                 "crossref-index",
                 "crossref-resolve",
+                "callout-resolve",
                 "toc-generate",
-                "navbar-generate",
                 "sidebar-generate",
+                "navbar-generate",
                 "page-nav-generate",
                 "footer-generate",
                 "announcement-generate",
@@ -6664,12 +6967,15 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "crossref-render",
                 "example-embed-render",
                 "mermaid-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "components-resolve",
+                "anchor-sections",
                 "resource-collector",
                 "hephaestus-render",
                 "table-bootstrap-class",
@@ -6702,8 +7008,8 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
-                "callout-resolve",
                 "panel-tabset",
                 "panel-tabset-resolve",
                 "config-markdown",
@@ -6733,9 +7039,10 @@ mod tests {
                 "image-alt-normalize",
                 "crossref-index",
                 "crossref-resolve",
+                "callout-resolve",
                 "toc-generate",
-                "navbar-generate",
                 "sidebar-generate",
+                "navbar-generate",
                 "page-nav-generate",
                 "footer-generate",
                 "announcement-generate",
@@ -6762,13 +7069,16 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "crossref-render",
                 "example-embed-render",
                 "reveal-auto-stretch",
                 "mermaid-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "components-resolve",
+                "anchor-sections",
                 "resource-collector",
                 "hephaestus-render",
                 "table-bootstrap-class",
@@ -6891,6 +7201,7 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
                 "panel-tabset",
                 "config-markdown",
@@ -6914,6 +7225,7 @@ mod tests {
                 "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
                 "resource-collector",
                 "llms-capture",
             ]
@@ -7083,6 +7395,7 @@ mod tests {
             [
                 "conditional-content",
                 "reference-link-diagnostics",
+                "brace-diagram-cell-diagnostics",
                 "callout",
                 "config-markdown",
                 "shortcode-resolve",
@@ -7110,8 +7423,8 @@ mod tests {
                 "crossref-index",
                 "crossref-resolve",
                 "toc-generate",
-                "navbar-generate",
                 "sidebar-generate",
+                "navbar-generate",
                 "page-nav-generate",
                 "footer-generate",
                 "announcement-generate",
@@ -7138,9 +7451,12 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "table-float-class-forward",
+                "lightbox",
                 "example-embed-render",
                 "code-block-render",
                 "editorial-marks-ooxml",
+                "editorial-marks-typst",
+                "anchor-sections",
                 "resource-collector",
                 "table-bootstrap-class",
                 "responsive-image",
@@ -7261,7 +7577,7 @@ mod tests {
         let native = names(build_pandoc_pipeline_stages(
             crate::format::FormatIdentifier::Docx,
         ));
-        let prefix = names(build_pandoc_prefix_stages(Vec::new()));
+        let prefix = names(build_pandoc_prefix_stages(CapturePayload::Empty));
         assert_eq!(
             prefix,
             native[..native.len() - 1],
@@ -7271,7 +7587,7 @@ mod tests {
             !prefix.iter().any(|n| n == "pandoc-write"),
             "the prefix has no writer"
         );
-        let request = names(build_pandoc_request_stages(Vec::new()));
+        let request = names(build_pandoc_request_stages(CapturePayload::Empty));
         // The request list is the prefix plus the cell count (just before
         // `engine-execution`) and the `pandoc-prepare` tail.
         let mut expected = prefix.clone();
@@ -7292,11 +7608,11 @@ mod tests {
     /// before `pandoc-prepare`.
     #[test]
     fn fetching_request_list_adds_the_prefetch_and_rasterizer_before_the_tail() {
-        let plain: Vec<String> = build_pandoc_request_stages(Vec::new())
+        let plain: Vec<String> = build_pandoc_request_stages(CapturePayload::Empty)
             .iter()
             .map(|s| s.name().to_string())
             .collect();
-        let fetching: Vec<String> = build_pandoc_request_stages_fetching(Vec::new())
+        let fetching: Vec<String> = build_pandoc_request_stages_fetching(CapturePayload::Empty)
             .iter()
             .map(|s| s.name().to_string())
             .collect();
@@ -7317,16 +7633,17 @@ mod tests {
             engine_name: "knitr".to_string(),
             input_qmd: String::new(),
             result: serde_json::Value::Null,
+            record: None,
             files: Vec::new(),
         };
-        let stages = build_pandoc_prefix_stages(vec![capture]);
+        let stages = build_pandoc_prefix_stages(vec![capture].into());
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
         let splice = names
             .iter()
             .position(|n| *n == "capture-splice")
             .expect("capture-splice present when captures are given");
         assert_eq!(names[splice + 1], "engine-execution");
-        let none = build_pandoc_prefix_stages(Vec::new());
+        let none = build_pandoc_prefix_stages(CapturePayload::Empty);
         assert!(!none.iter().any(|s| s.name() == "capture-splice"));
     }
 
@@ -7340,6 +7657,7 @@ mod tests {
             input_qmd: String::new(),
             result: serde_json::Value::Null,
             files: Vec::new(),
+            record: None,
         }
     }
 
@@ -7350,7 +7668,7 @@ mod tests {
     fn request_pause_list_is_the_prefix_cut_at_ast_transforms() {
         let pause = stage_names(build_pandoc_request_pause_stages(
             TransformPhase::Normalization,
-            Vec::new(),
+            CapturePayload::Empty,
         ));
         assert_eq!(pause.last().map(String::as_str), Some("ast-transforms"));
         let count = pause.iter().position(|n| n == "unexecuted-cell-count");
@@ -7364,14 +7682,14 @@ mod tests {
             assert!(!pause.iter().any(|n| n == excluded), "{excluded}");
         }
         // It is exactly the single-document request list up to `ast-transforms`.
-        let single = stage_names(build_pandoc_request_stages(Vec::new()));
+        let single = stage_names(build_pandoc_request_stages(CapturePayload::Empty));
         let at = single.iter().position(|n| n == "ast-transforms").unwrap();
         assert_eq!(pause[..pause.len() - 1], single[..at]);
 
         // With captures: capture-splice, then the count, then the engine.
         let with = stage_names(build_pandoc_request_pause_stages(
             TransformPhase::Normalization,
-            vec![some_capture()],
+            vec![some_capture()].into(),
         ));
         let splice = with.iter().position(|n| n == "capture-splice").unwrap();
         assert_eq!(with[splice + 1], "unexecuted-cell-count");
@@ -7391,7 +7709,7 @@ mod tests {
         assert_eq!(finishing[n - 1], "pandoc-prepare");
         assert_eq!(finishing[n - 2], "rasterize-svg-images");
         assert_eq!(finishing[n - 3], "prefetch-remote-images");
-        let single = stage_names(build_pandoc_request_stages_fetching(Vec::new()));
+        let single = stage_names(build_pandoc_request_stages_fetching(CapturePayload::Empty));
         let at = single.iter().position(|n| n == "ast-transforms").unwrap();
         assert_eq!(finishing[1..], single[at + 1..], "one source of truth");
     }
@@ -7411,12 +7729,12 @@ mod tests {
                 &ctx,
                 TransformPhase::Normalization,
                 PartialKind::Request {
-                    captures: Vec::new(),
+                    captures: CapturePayload::Empty,
                 },
             ));
             let want = stage_names(build_pandoc_request_pause_stages(
                 TransformPhase::Normalization,
-                Vec::new(),
+                CapturePayload::Empty,
             ));
             assert_eq!(got, want, "{format_key}");
             assert!(got.iter().any(|n| n == "unexecuted-cell-count"));
@@ -7428,7 +7746,7 @@ mod tests {
             &ctx,
             TransformPhase::Normalization,
             PartialKind::Request {
-                captures: Vec::new(),
+                captures: CapturePayload::Empty,
             },
         ));
         assert_eq!(
@@ -7458,7 +7776,7 @@ mod tests {
             make_test_runtime(),
             TransformPhase::Normalization,
             PartialKind::Request {
-                captures: Vec::new(),
+                captures: CapturePayload::Empty,
             },
         )
         .await
@@ -7582,7 +7900,7 @@ mod tests {
                 &mut ctx,
                 runtime,
                 None,
-                Vec::new(),
+                CapturePayload::Empty,
             ))
             .expect("baseline q2-preview render")
         };
@@ -7625,7 +7943,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("attributed q2-preview render");
 
@@ -7748,7 +8066,7 @@ mod tests {
             &mut ctx,
             runtime,
             None,
-            Vec::new(),
+            CapturePayload::Empty,
         ))
         .expect("q2-preview render");
 
@@ -7784,5 +8102,69 @@ mod tests {
             .iter()
             .filter_map(|d| d.code.clone())
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod record_carrier_tests {
+    use super::*;
+    use crate::engine::units::scan_units;
+    use crate::record::{
+        AuthorTexts, EngineEntryInput, HashDefinition, RecordBuilder, UnitResult, coalesce,
+        fill_ids,
+    };
+    use std::sync::Arc;
+
+    fn a_record() -> Arc<crate::record::Record> {
+        let mut units = scan_units("# T\n\n```{python}\nprint(1)\n```\n");
+        let texts = AuthorTexts::from_scanned(&units);
+        fill_ids(&mut units, &texts).unwrap();
+        let def = HashDefinition::conservative("jupyter");
+        let mut b = RecordBuilder::new("jupyter", &def, &units, &texts).unwrap();
+        b.push(
+            0,
+            UnitResult {
+                outputs: vec![],
+                execution_count: Some(1),
+                kernel: Some("python3".into()),
+            },
+        )
+        .unwrap();
+        let entry = b
+            .finish(EngineEntryInput {
+                owned_languages: vec!["python".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        Arc::new(coalesce(&[entry], &units).unwrap())
+    }
+
+    fn a_capture() -> quarto_trace::EngineCapture {
+        serde_json::from_str(r#"{"engine_name":"r","input_qmd":"","result":null,"files":[]}"#)
+            .unwrap()
+    }
+
+    #[test]
+    fn a_default_config_carries_neither() {
+        let c = HtmlRenderConfig::default();
+        assert!(c.captures.is_empty());
+        assert!(c.record().is_none());
+    }
+
+    #[test]
+    fn at_most_one_of_captures_and_record_is_set() {
+        let with_both_orders = [
+            HtmlRenderConfig::default()
+                .with_captures(vec![a_capture()])
+                .with_record(a_record()),
+            HtmlRenderConfig::default()
+                .with_record(a_record())
+                .with_captures(vec![a_capture()]),
+        ];
+        // Whichever is attached last wins; the other is cleared.
+        assert!(with_both_orders[0].captures.is_empty());
+        assert!(with_both_orders[0].record().is_some());
+        assert_eq!(with_both_orders[1].captures.len(), 1);
+        assert!(with_both_orders[1].record().is_none());
     }
 }

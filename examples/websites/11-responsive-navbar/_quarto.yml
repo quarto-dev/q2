@@ -1,0 +1,60 @@
+project:
+  type: website
+
+website:
+  title: "Responsive Navbar"
+
+navbar:
+  # Below `lg` (992px) the navbar collapses into a toggle menu.
+  collapse-below: lg
+  left:
+    - href: index.qmd
+      text: Home
+    # Full text in the collapsed menu, short text while the expanded bar
+    # is cramped (992px to 1200px), and full text again when wide.
+    - href: guide/index.qmd
+      text:
+        xs: Getting Started
+        lg: Start
+        xl: Getting Started
+    - href: guide/configuration.qmd
+      text:
+        xs: Configuration Guide
+        lg: Config
+        xl: Configuration Guide
+    - href: guide/tutorials.qmd
+      text:
+        xs: Tutorials and Examples
+        lg: Tutorials
+        xl: Tutorials and Examples
+    - href: releases.qmd
+      text:
+        xs: Release Notes
+        lg: Releases
+        xl: Release Notes
+    # No `xs` key: the lowest key (`lg`) also covers narrower widths.
+    - href: reference.qmd
+      text:
+        lg: API
+        xxl: API Reference
+    # Variants also work on a dropdown toggle and on the items inside it.
+    - text:
+        xs: Community Resources
+        lg: Community
+      menu:
+        - href: about.qmd
+          text:
+            xs: About
+            xl: About this project
+        - href: https://github.com/quarto-dev/q2/discussions
+          text: Discussions
+  right:
+    # An empty variant gives an icon-only item. The link gets
+    # `aria-label="GitHub"` automatically, so screen readers can still
+    # name it at every width.
+    - icon: github
+      href: https://github.com/quarto-dev/q2
+      text:
+        xs: GitHub
+        lg: ""
+        xxl: GitHub

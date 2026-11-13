@@ -159,6 +159,7 @@ impl AstTransform for ConditionalContentTransform {
         {
             let env = ConditionEnv {
                 format: &lua_format,
+                base_format: Some(ctx.format.base_format()),
                 llms_view,
                 active_profiles: &active,
                 meta: &ast.meta,
@@ -176,6 +177,10 @@ impl AstTransform for ConditionalContentTransform {
 struct ConditionEnv<'a> {
     /// Canonical Pandoc format (`lua_format_for`), for the alias table.
     format: &'a str,
+    /// The base format ([`crate::format::Format::base_format`]), which
+    /// also matches: `when-format="dashboard"` under a dashboard whose
+    /// `format` is `html`.
+    base_format: Option<&'a str>,
     /// When true, also evaluate visibility for the `llms` view and
     /// tag view-specific content instead of resolving it here.
     llms_view: bool,
@@ -336,9 +341,17 @@ impl Walker<'_> {
             return pampa::lua::quarto_doc::is_format_match(
                 crate::transforms::llms::LLMS_FORMAT,
                 query,
-            ) || pampa::lua::quarto_doc::is_format_match(self.env.format, query);
+            ) || pampa::lua::quarto_doc::is_format_match_with_base(
+                self.env.format,
+                self.env.base_format,
+                query,
+            );
         }
-        pampa::lua::quarto_doc::is_format_match(self.env.format, query)
+        pampa::lua::quarto_doc::is_format_match_with_base(
+            self.env.format,
+            self.env.base_format,
+            query,
+        )
     }
 
     fn check_profile(&self, name: &str) -> bool {
@@ -658,6 +671,7 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
         )
+            .into()
     }
 
     fn plain(text: &str) -> Block {
@@ -671,7 +685,7 @@ mod tests {
     }
 
     fn div(classes: &[&str], kvs: &[(&str, &str)], text: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: attr(classes, kvs),
             content: vec![Block::Plain(quarto_pandoc_types::block::Plain {
                 content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
@@ -682,7 +696,7 @@ mod tests {
             })],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn run(
@@ -704,6 +718,7 @@ mod tests {
         let mut diagnostics = Vec::new();
         let env = ConditionEnv {
             format,
+            base_format: None,
             llms_view,
             active_profiles: active,
             meta,
@@ -896,12 +911,12 @@ mod tests {
         // `adv` is not active, so the inner block is removed; the outer
         // condition holds, so the outer's *other* content survives.
         let inner = div(&["content-visible"], &[("when-profile", "adv")], "INNER");
-        let outer = Block::Div(Div {
+        let outer = Block::Div(Box::new(Div {
             attr: attr(&["content-visible"], &[("when-format", "html")]),
             content: vec![inner, plain("OUTER")],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let mut blocks = vec![outer];
         run(&mut blocks, "html", &[], &meta);
         assert!(!texts(&blocks).contains("INNER"), "inner removed");
@@ -1101,6 +1116,56 @@ mod tests {
         );
     }
 
+    /// Q1 1.7 added `dashboard` to `when-format` / `unless-format`
+    /// (changelog #12462). A dashboard is written by the `html` writer, so
+    /// both `html` and `dashboard` match it, and `revealjs` does not.
+    #[test]
+    fn when_format_dashboard_matches_base_format_and_html() {
+        use crate::project::{DocumentInfo, ProjectContext};
+        use crate::render::BinaryDependencies;
+
+        let project = ProjectContext {
+            dir: std::path::PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = crate::format::Format::from_format_string("dashboard").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks: vec![
+                div(
+                    &["content-visible"],
+                    &[("when-format", "dashboard")],
+                    "DASH-VISIBLE",
+                ),
+                div(
+                    &["content-visible"],
+                    &[("when-format", "html")],
+                    "HTML-VISIBLE",
+                ),
+                div(
+                    &["content-visible"],
+                    &[("when-format", "revealjs")],
+                    "REVEAL-VISIBLE",
+                ),
+                div(
+                    &["content-hidden"],
+                    &[("when-format", "dashboard")],
+                    "DASH-HIDDEN",
+                ),
+            ],
+        };
+        pollster::block_on(ConditionalContentTransform::new().transform(&mut ast, &mut ctx))
+            .unwrap();
+        let text = texts(&ast.blocks);
+        assert!(text.contains("DASH-VISIBLE"), "{text}");
+        assert!(text.contains("HTML-VISIBLE"), "{text}");
+        assert!(!text.contains("REVEAL-VISIBLE"), "{text}");
+        assert!(!text.contains("DASH-HIDDEN"), "{text}");
+    }
+
     /// T1.5: the same four-quadrant matrix as T1.2, for `pptx`.
     #[test]
     fn when_format_pptx_four_quadrant_matrix() {
@@ -1192,7 +1257,7 @@ mod tests {
             "VISIBLE-DIV",
         );
         let visible_span = Block::Paragraph(quarto_pandoc_types::block::Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: attr(&["content-visible"], &[("when-format", "docx")]),
                 content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
                     text: "VISIBLE-SPAN".to_string(),
@@ -1204,16 +1269,16 @@ mod tests {
                     quarto_source_map::By::unknown(),
                 ),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
         });
-        let hidden_codeblock = Block::CodeBlock(CodeBlock {
+        let hidden_codeblock = Block::CodeBlock(Box::new(CodeBlock {
             attr: attr(&["content-hidden"], &[("when-format", "docx")]),
             text: "HIDDEN-CODEBLOCK".to_string(),
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        });
-        let nested_in_custom = Block::Custom(
+        }));
+        let nested_in_custom = Block::Custom(Box::new(
             CustomNode::new(
                 "test-custom",
                 attr(&[], &[]),
@@ -1227,7 +1292,7 @@ mod tests {
                     "VISIBLE-IN-CUSTOM",
                 ))),
             ),
-        );
+        ));
 
         let mut blocks = vec![
             hidden_div,
@@ -1307,7 +1372,7 @@ mod tests {
     }
 
     fn inline_span(classes: &[&str], kvs: &[(&str, &str)], text: &str) -> Inline {
-        Inline::Span(Span {
+        Inline::Span(Box::new(Span {
             attr: attr(classes, kvs),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
@@ -1315,7 +1380,7 @@ mod tests {
             })],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn inline_str(text: &str) -> Inline {
@@ -1337,7 +1402,7 @@ mod tests {
             SourceInfo::generated(By::unknown()),
         );
         node.slots.insert("content".into(), Slot::Inlines(content));
-        Inline::Custom(node)
+        Inline::Custom(Box::new(node))
     }
 
     /// `Inline::Custom` with a single `Slot::Inline` (the *singular*,
@@ -1355,7 +1420,7 @@ mod tests {
         );
         node.slots
             .insert("content".into(), Slot::Inline(Box::new(inline)));
-        Inline::Custom(node)
+        Inline::Custom(Box::new(node))
     }
 
     fn paragraph(content: Vec<Inline>) -> Block {
@@ -1568,7 +1633,7 @@ mod tests {
                 "SECRET",
             )])]),
         );
-        let mut blocks = vec![Block::Custom(outer)];
+        let mut blocks = vec![Block::Custom(Box::new(outer))];
         let meta = empty_meta();
         run(&mut blocks, "html", &[], &meta);
 

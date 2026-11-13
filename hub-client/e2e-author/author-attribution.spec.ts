@@ -42,6 +42,7 @@ import {
   type ProjectFile,
 } from '../e2e/helpers/projectFactory';
 import { waitForPreviewRender } from '../e2e/helpers/previewExtraction';
+import type {} from '../e2e/helpers/testHooks';
 import { AUTHOR_E2E_INFO_PATH, type AuthorE2EInfo, type AuthorE2EUser } from './setup';
 
 const info: AuthorE2EInfo = JSON.parse(readFileSync(AUTHOR_E2E_INFO_PATH, 'utf-8'));
@@ -178,17 +179,26 @@ async function waitForServerDocuments(
 
 type DecodedChange = ReturnType<typeof A.decodeChange>;
 
+function isSubsequence(text: string, expected: string): boolean {
+  let matched = 0;
+  for (const char of text) {
+    if (char === expected[matched]) matched += 1;
+  }
+  return matched === expected.length;
+}
+
 /**
  * Observer sync client: connects, waits until the file doc contains
- * `expectText` (a fresh client's `whenReady` can lag the hub's latest
- * heads), then returns the change history.
+ * `expectText` or satisfies it as a predicate (a fresh client's
+ * `whenReady` can lag the hub's latest heads), then returns the change
+ * history.
  */
 async function readFileDocChanges(
   wsUrl: string,
   indexDocId: string,
   path: string,
   google?: string,
-  expectText?: string,
+  expectText?: string | ((text: string) => boolean),
 ): Promise<{
   doc: A.Doc<unknown>;
   changes: DecodedChange[];
@@ -210,7 +220,10 @@ async function readFileDocChanges(
   const deadline = Date.now() + 20_000;
   for (;;) {
     const doc = handle.doc() as A.Doc<unknown> | undefined;
-    if (doc && (!expectText || String((doc as { text?: unknown }).text ?? '').includes(expectText))) {
+    const text = String((doc as { text?: unknown } | undefined)?.text ?? '');
+    const matched =
+      typeof expectText === 'function' ? expectText(text) : text.includes(expectText ?? '');
+    if (doc && matched) {
       const changes = A.getAllChanges(doc).map((bytes) => A.decodeChange(bytes));
       return {
         doc,
@@ -222,7 +235,11 @@ async function readFileDocChanges(
       };
     }
     if (Date.now() > deadline) {
-      throw new Error(`observer's ${path} never contained ${JSON.stringify(expectText)}`);
+      const expected =
+        typeof expectText === 'function' ? 'the expected text' : JSON.stringify(expectText);
+      throw new Error(
+        `observer's ${path} never matched ${expected}; last text: ${JSON.stringify(text)}`,
+      );
     }
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -309,6 +326,33 @@ async function typeAtDocEnd(page: Page, text: string): Promise<void> {
 }
 
 const editorText = (page: Page) => page.locator('.monaco-editor .view-lines');
+
+/** Read exact document text without Monaco's non-breaking-space rendering. */
+async function automergeText(page: Page, path: string): Promise<string | null> {
+  return page.evaluate(async (filePath) => {
+    await window.__quartoTestReady;
+    return window.__quartoTest?.wasmRenderer.getFileContent(filePath) ?? null;
+  }, path);
+}
+
+/** Concurrent inserts may interleave; require convergence and complete edits, not adjacency. */
+async function expectConvergedText(
+  pages: readonly Page[],
+  path: string,
+  matches: (text: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const texts = await Promise.all(pages.map((page) => automergeText(page, path)));
+        const first = texts[0];
+        // On timeout the failure shows the texts rather than a bare `false`.
+        return (first != null && texts.every((text) => text === first) && matches(first)) || texts;
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+}
 
 /** Enable the Authors overlay (idempotent per page load). */
 async function enableAuthorsOverlay(page: Page): Promise<void> {
@@ -531,13 +575,15 @@ test('auth-on: H4 negative — two tabs, one user, no duplicate-seq', async ({ b
   await expect(editorText(tab2)).toContainText('Start line.');
 
   // Simultaneous edits in both tabs (the bd-6f21d4c6 collision shape).
-  await Promise.all([typeAtDocEnd(tab1, '\ntab one edit\n'), typeAtDocEnd(tab2, '\ntab two edit\n')]);
+  const edits = ['tab one edit', 'tab two edit'] as const;
+  const inserts = [`\n${edits[0]}\n`, `\n${edits[1]}\n`] as const;
+  const mergedLength = MAIN_QMD.length + inserts[0].length + inserts[1].length;
+  const merged = (text: string) =>
+    text.length === mergedLength && edits.every((edit) => isSubsequence(text, edit));
+  await Promise.all([typeAtDocEnd(tab1, inserts[0]), typeAtDocEnd(tab2, inserts[1])]);
 
-  // Both tabs converge to a document containing both edits.
-  await expect(editorText(tab1)).toContainText('tab one edit', { timeout: 20_000 });
-  await expect(editorText(tab1)).toContainText('tab two edit', { timeout: 20_000 });
-  await expect(editorText(tab2)).toContainText('tab one edit', { timeout: 20_000 });
-  await expect(editorText(tab2)).toContainText('tab two edit', { timeout: 20_000 });
+  // Same-position CRDT inserts can interleave character by character.
+  await expectConvergedText([tab1, tab2], 'main.qmd', merged);
   expect(failureSignatures).toEqual([]);
 
   // Protocol: one author, but three distinct actors (creation + tab1 +
@@ -547,7 +593,7 @@ test('auth-on: H4 negative — two tabs, one user, no duplicate-seq', async ({ b
     indexDocId,
     'main.qmd',
     info.alice.google,
-    'tab two edit',
+    merged,
   );
   const entries = resolveAttribution(doc, changes);
   expect([...new Set(entries.map((e) => e.key))]).toEqual([authorA]);

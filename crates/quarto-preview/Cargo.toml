@@ -16,6 +16,7 @@ pollster.workspace = true
 pampa.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json.workspace = true
+async-trait.workspace = true
 sha2 = "0.11"
 thiserror.workspace = true
 # Match quarto-hub's versions so `capture_driver::read_capture_from_doc`
@@ -26,6 +27,7 @@ samod = { version = "0.16.0", features = ["tokio"] }
 
 quarto-core.workspace = true
 quarto-error-reporting = { workspace = true, features = ["json"] }
+quarto-util.workspace = true
 quarto-hub.workspace = true
 # Live-share tunnel host (`--share`, plan Phase 2). Native-only; keeps
 # all iroh usage behind quarto-p2p's API.

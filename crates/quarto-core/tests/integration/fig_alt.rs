@@ -437,7 +437,7 @@ fn preview_ast_carries_fig_alt_as_alt_inlines() {
         &mut ctx,
         runtime(),
         None,
-        vec![],
+        vec![].into(),
     ))
     .expect("preview render");
     let ast: serde_json::Value = serde_json::from_str(&output.ast_json).expect("AST JSON");

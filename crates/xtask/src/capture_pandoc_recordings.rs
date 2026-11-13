@@ -80,17 +80,14 @@ pub fn recording_name(fixture: &Fixture, format: &str) -> String {
     format!("{}-{format}", fixture.name)
 }
 
-/// The pandoc version pinned by `resources/pandoc-wasm.json`'s asset name
-/// (`pandoc-<version>.wasm.zip`).
+/// The pandoc version pinned by `resources/pandoc-wasm.json`'s `version`.
 pub(crate) fn pinned_version(worktree_root: &Path) -> Result<String> {
     let text = std::fs::read_to_string(worktree_root.join(CONSTANTS))?;
     let json: serde_json::Value = serde_json::from_str(&text)?;
-    let asset = json["asset_name"].as_str().context("asset_name")?;
-    asset
-        .strip_prefix("pandoc-")
-        .and_then(|s| s.strip_suffix(".wasm.zip"))
+    json["version"]
+        .as_str()
         .map(str::to_string)
-        .with_context(|| format!("unexpected asset_name {asset}"))
+        .context("resources/pandoc-wasm.json has no string `version`")
 }
 
 pub(crate) fn check_pandoc(pinned: &str) -> Result<PathBuf> {

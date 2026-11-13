@@ -16,6 +16,7 @@ project:
     - "!research/2026-10-02-document-import-spike/track-changes-source.md"
     # nested repro projects (their own _quarto.yml); q2 skips them anyway, with Q-5-31
     - "!plans/2026-08-11-lua-filter-returned-table-form-investigation/repro/**"
+    - "!issue-reports/1079/repro/**"
     - "!plans/heading-id-drops-inline-content-investigation/**"
     - "!plans/index-miss-relativize-investigation/repro/**"
     - "!plans/listing-declared-order-investigation/repro/**"
@@ -25,6 +26,8 @@ project:
     - "!plans/listing-table-fields-investigation/repro/**"
     - "!plans/llms-link-target-annotation-investigation/repro/**"
     - "!plans/sidebar-dir-index-md-investigation/repro/**"
+    - "!plans/navbar-dark-toggle-switch-investigation/repro-site/**"
+    - "!plans/navbar-dark-toggle-switch-investigation/repro-plain/**"
 
 
 website:

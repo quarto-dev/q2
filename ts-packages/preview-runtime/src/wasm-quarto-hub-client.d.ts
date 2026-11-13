@@ -46,12 +46,16 @@ declare module 'wasm-quarto-hub-client' {
     path: string,
     user_grammars?: JsUserGrammars,
   ): Promise<string>;
+  /** Per-render baseline capture. Omitted means capture-on for raw-WASM compatibility. */
+  export interface RenderPageInProjectOptions {
+    captureUntransformedAst?: boolean;
+  }
   /**
-   * `options` is the live viewer's `{ to?, metadata? }`: `to` is the requested
+   * `options` adds the live viewer's `{ to?, metadata? }`: `to` is the requested
    * format (`q2 preview --to`; wins over the document's and the project's) and
    * `metadata` the render's runtime metadata layer (`-M`, a JSON object).
    */
-  export interface RenderPageForPreviewOptions {
+  export interface RenderPageForPreviewOptions extends RenderPageInProjectOptions {
     to?: string;
     metadata?: Record<string, unknown>;
   }
@@ -372,7 +376,8 @@ declare module 'wasm-quarto-hub-client' {
   export function lsp_get_diagnostics(path: string): string;
 
   // QMD parsing and AST conversion functions
-  export function parse_qmd_content(content: string): string;
+  /** Returns the response object itself, not a JSON string; `ast` inside it is a JSON string. */
+  export function parse_qmd_content(content: string): AstResponse;
   export function ast_to_qmd(ast_json: string): string;
   /** Incrementally write a modified AST back to QMD, preserving unchanged source text. */
   export function incremental_write_qmd(original_qmd: string, new_ast_json: string): string;

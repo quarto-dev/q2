@@ -12,6 +12,7 @@
 //! (braid strand bd-llhlzd7p).
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use include_dir::{Dir, include_dir};
 use pampa::utils::diagnostic_collector::DiagnosticCollector;
@@ -225,6 +226,17 @@ impl LanguageTerms {
     }
 }
 
+/// The localized `toggle-dark-mode` term, which names every color-scheme
+/// toggle switch (bd-kwgtllvn): the navbar's (via
+/// `NavbarGenerateTransform`) and the runtime's floating fallback (via
+/// the color-mode script's `data-toggle-label`). English without a
+/// resolved language table.
+pub fn toggle_dark_mode_label(meta: &ConfigValue) -> String {
+    LanguageTerms::from_meta(meta)
+        .and_then(|t| t.get("toggle-dark-mode").map(str::to_owned))
+        .unwrap_or_else(|| "Toggle dark mode".to_string())
+}
+
 /// The BCP 47 subtag prefix chain for a tag, most general first:
 /// `"pt-BR"` → `["pt", "pt-BR"]`. (Exposed for the stage's sibling-file
 /// probing; resolution itself uses it internally.)
@@ -271,6 +283,26 @@ fn subtag_prefixes(lang: &str) -> Vec<String> {
     prefixes
 }
 
+/// Parsed embedded language file, memoized per process. The embedded
+/// files are compile-time constants, and re-parsing their YAML on every
+/// document was ~1 % of a website render. `None` when no such file is
+/// embedded; the inner `Err` carries the parse error's message.
+fn embedded_term_layer(filename: &str) -> Option<Arc<Result<TermLayer, String>>> {
+    static PARSED: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Arc<Result<TermLayer, String>>>>,
+    > = std::sync::OnceLock::new();
+    let content = embedded_language_file(filename)?;
+    let mut parsed = PARSED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Some(Arc::clone(
+        parsed.entry(filename.to_string()).or_insert_with(|| {
+            Arc::new(parse_term_file(content, filename).map_err(|e| e.to_string()))
+        }),
+    ))
+}
+
 /// Resolves the term table for `lang`.
 ///
 /// Layer order (lowest to highest precedence):
@@ -292,21 +324,23 @@ pub fn resolve_language(lang: &str, extra_layers: &[StructuredTermLayer]) -> Lan
     let mut terms: BTreeMap<String, TermEntry> = BTreeMap::new();
 
     // 1. Embedded base catalog.
-    if let Some(content) = embedded_language_file(BASE_LANGUAGE_FILE)
-        && let Ok(layer) = parse_term_file(content, BASE_LANGUAGE_FILE)
+    if let Some(parsed) = embedded_term_layer(BASE_LANGUAGE_FILE)
+        && let Ok(layer) = parsed.as_ref()
     {
-        terms.extend(layer.terms);
+        terms.extend(layer.terms.clone());
     }
 
     // 2. Embedded per-language files along the subtag walk.
     for prefix in subtag_prefixes(lang) {
         let filename = format!("_language-{prefix}.yml");
-        if let Some(content) = embedded_language_file(&filename) {
+        if let Some(parsed) = embedded_term_layer(&filename) {
             // Embedded files are integrity-tested; a parse failure here is a
             // build defect, not a user error.
-            let layer = parse_term_file(content, &filename)
+            let layer = parsed
+                .as_ref()
+                .as_ref()
                 .expect("embedded language file parses (integrity-tested)");
-            terms.extend(layer.terms);
+            terms.extend(layer.terms.clone());
         }
     }
 

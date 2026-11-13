@@ -2,12 +2,21 @@
 //! `--profile` (F8).
 //!
 //! The server holds them once, from [`crate::PreviewConfig::render`], and
-//! uses them two ways:
+//! uses them three ways:
 //!
 //! - `to` and `metadata` travel to the SPA in the `render` block of
 //!   `GET /api/preview/config`; the browser applies them to every render
 //!   it does (the html preview and the pandoc requests). The native routes
 //!   take per-request `metadata` from the SPA, so they need no copy here.
+//! - `metadata` also reaches **every engine run** of the server (the startup
+//!   captures, a file change's re-execute, the Re-execute button and `auto`),
+//!   as the runtime layer of [`runtime_with_overlay`], so `-M
+//!   'execute: {record: true}'` makes the engine stage write the `.quarto`
+//!   copy and `-M 'execute: {echo: false}'` changes what the code produces.
+//!   The run is then made to describe the *source* again
+//!   ([`quarto_core::record::overlay_free_run`]), because staleness is
+//!   recomputed overlay-free; the source side (project discovery, inputs,
+//!   staleness) uses the plain [`native_runtime`].
 //! - `profile` selects the project profile for every **native** site
 //!   through one runtime factory, [`native_runtime`]. The browser's runtime
 //!   has no environment, so the html preview cannot honor it.
@@ -70,6 +79,21 @@ pub(crate) fn get() -> RenderFlags {
 /// `quarto_core::project::project_profile::native_runtime_for_selection`.
 pub fn native_runtime_for(profile: &[String]) -> NativeRuntime {
     native_runtime_for_selection(profile)
+}
+
+/// The session's native runtime with the `-M` overlay applied: what an **engine run** gets
+/// (a lint enforces it), and what reads a metadata key before any pipeline runs
+/// (`execute: record-sources`). The overlay is the runtime layer, the highest precedence.
+pub(crate) fn runtime_with_overlay() -> std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> {
+    let native: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+        std::sync::Arc::new(native_runtime());
+    match get().metadata {
+        Some(m) => std::sync::Arc::new(quarto_core::overlay_runtime::RenderOverlay::with_metadata(
+            m,
+        ))
+        .apply(native),
+        None => native,
+    }
 }
 
 /// The session's native runtime: [`native_runtime_for`] the session's

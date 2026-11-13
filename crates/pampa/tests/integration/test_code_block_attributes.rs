@@ -33,7 +33,7 @@ fn parse_code_block_attrs(input: &str) -> (String, Vec<String>, Vec<(String, Str
 
     match block {
         Block::CodeBlock(cb) => {
-            let (id, classes, attrs) = cb.attr;
+            let (id, classes, attrs) = cb.attr.into_tuple();
             let attrs_vec: Vec<(String, String)> = attrs.into_iter().collect();
             (id, classes, attrs_vec)
         }

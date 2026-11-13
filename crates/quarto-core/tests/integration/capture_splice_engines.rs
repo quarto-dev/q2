@@ -23,11 +23,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use quarto_core::engine::EngineRegistry;
-use quarto_core::engine::capture_splice::{derive_cell_outputs, engine_cell_lang, splice_cells};
+use quarto_core::engine::capture_splice::{derive_cell_outputs, splice_cells};
+use quarto_core::engine::cell_lang::engine_cell_lang;
 use quarto_core::engine::jupyter::JupyterError;
 use quarto_core::engine::preview_record::record_capture;
 use quarto_core::project::ProjectContext;
-use quarto_pandoc_types::{Block, Div, Pandoc};
+use quarto_pandoc_types::{Block, Pandoc};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn engine_available(name: &str) -> bool {
@@ -95,10 +96,10 @@ fn parse(qmd: &str, name: &str) -> Pandoc {
 }
 
 fn is_cell_div(block: &Block) -> bool {
-    let Block::Div(Div { attr, .. }) = block else {
+    let Block::Div(div) = block else {
         return false;
     };
-    attr.1.iter().any(|c| c == "cell")
+    div.attr.1.iter().any(|c| c == "cell")
 }
 
 /// Run `content` through the real engine via `record_capture`, then

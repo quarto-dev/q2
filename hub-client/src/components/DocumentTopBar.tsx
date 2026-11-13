@@ -77,7 +77,8 @@ export default function DocumentTopBar({
     !!currentFilePath &&
     (currentFormat === 'q2-preview' ||
       currentFormat === 'q2-slides' ||
-      currentFormat === 'revealjs');
+      currentFormat === 'revealjs' ||
+      currentFormat === 'q2-dashboard');
   const handleOpenPrintable = useCallback(() => {
     if (!currentFilePath) return;
     setPrintableError(null);

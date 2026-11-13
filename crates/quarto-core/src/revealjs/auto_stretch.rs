@@ -291,7 +291,7 @@ fn hoist_figure(f: &mut Figure, fallback_id: &str) -> Vec<Block> {
     }
     let img_source = image.source_info.clone();
     let mut blocks = vec![Block::Plain(Plain {
-        content: vec![Inline::Image(image)],
+        content: vec![Inline::Image(Box::new(image))],
         source_info: img_source,
     })];
 
@@ -324,12 +324,13 @@ fn caption_paragraph(mut content: Vec<Inline>) -> Block {
         String::new(),
         vec!["caption".to_string()],
         LinkedHashMap::new(),
-    );
-    content.push(Inline::Attr(InlineAttr::new(
+    )
+        .into();
+    content.push(Inline::Attr(Box::new(InlineAttr::new(
         caption_attr,
         AttrSourceInfo::empty(),
         SourceInfo::generated(By::revealjs()),
-    )));
+    ))));
     Block::Paragraph(Paragraph {
         content,
         source_info: SourceInfo::generated(By::revealjs()),
@@ -519,18 +520,19 @@ mod tests {
         for (k, v) in kvs {
             m.insert(k.to_string(), v.to_string());
         }
-        Inline::Image(Image {
+        Inline::Image(Box::new(Image {
             attr: (
                 String::new(),
                 classes.iter().map(|s| s.to_string()).collect(),
                 m,
-            ),
+            )
+                .into(),
             content: vec![],
             target: ("pic.png".to_string(), String::new()),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(inlines: Vec<Inline>) -> Block {
@@ -541,32 +543,32 @@ mod tests {
     }
 
     fn header() -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level: 2,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![Inline::Str(Str {
                 text: "Slide".to_string(),
                 source_info: si(),
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn section(classes: &[&str], content: Vec<Block>) -> Block {
         let mut cls = vec!["section".to_string()];
         cls.extend(classes.iter().map(|s| s.to_string()));
-        Block::Div(Div {
-            attr: (String::new(), cls, LinkedHashMap::new()),
+        Block::Div(Box::new(Div {
+            attr: (String::new(), cls, LinkedHashMap::new()).into(),
             content,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn figure(blocks: Vec<Block>) -> Block {
-        Block::Figure(Figure {
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+        Block::Figure(Box::new(Figure {
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -575,14 +577,14 @@ mod tests {
             content: blocks,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A `Figure` with an `id` and a `caption.long` of `[Plain[caption]]`,
     /// mirroring what `![caption](x)` parses to.
     fn figure_with_caption(blocks: Vec<Block>, caption: Vec<Inline>, id: &str) -> Block {
-        Block::Figure(Figure {
-            attr: (id.to_string(), vec![], LinkedHashMap::new()),
+        Block::Figure(Box::new(Figure {
+            attr: (id.to_string(), vec![], LinkedHashMap::new()).into(),
             caption: Caption {
                 short: None,
                 long: Some(vec![Block::Plain(Plain {
@@ -594,7 +596,7 @@ mod tests {
             content: blocks,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn caption_inlines() -> Vec<Inline> {
@@ -857,19 +859,20 @@ mod tests {
     fn slide_with_aside_skipped() {
         // A peripheral aside (e.g. a coalesced footnote) suppresses auto-stretch,
         // matching Q1 (`aside:not(.notes)`).
-        let aside = Block::Div(Div {
+        let aside = Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["aside".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![para(vec![Inline::Str(Str {
                 text: "note".to_string(),
                 source_info: si(),
             })])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let blocks = vec![section(
             &[],
             vec![header(), para(vec![image(&[], &[])]), aside],
@@ -881,16 +884,17 @@ mod tests {
     fn image_nested_in_column_div_skipped() {
         // A single image inside a `.column` is not a top-level standalone block,
         // so it is left alone (Q1 screens out layout/column/fragment parents).
-        let column = Block::Div(Div {
+        let column = Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["column".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![para(vec![image(&[], &[])])],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let blocks = vec![section(&[], vec![header(), column])];
         assert!(!stretch_classes(blocks, true).contains(&"r-stretch".to_string()));
     }

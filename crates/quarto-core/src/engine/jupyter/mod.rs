@@ -27,9 +27,10 @@
 //! # Kernel Management
 //!
 //! Kernels are managed by an in-process daemon that:
-//! - Starts kernels on demand
-//! - Reuses kernels for documents in the same directory
-//! - Shuts down idle kernels after a timeout
+//! - Starts kernels on demand, one per document (bd-i7yz08uh), so documents
+//!   never share kernel state
+//! - Shuts a document's kernel down when the document finishes (`q2 render`),
+//!   or keeps it warm for the document's next render (`q2 preview`)
 //! - Cleans up kernel processes on shutdown
 //!
 //! # Availability
@@ -40,17 +41,28 @@
 mod daemon;
 mod error;
 mod execute;
+#[cfg(test)]
+mod fake_kernel;
+mod inline;
+mod kernel_select;
 mod kernelspec;
+#[cfg(test)]
+mod presenter_goldens;
+pub mod router;
 mod session;
-mod stored;
 mod text_execute;
 
-pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
+pub use crate::engine::ipynb_replay::IpynbReplayEngine;
+pub use daemon::{
+    JupyterDaemon, KernelScope, Retention, SessionLease, daemon, kernel_scope,
+    kernel_scope_retaining,
+};
 pub use error::{JupyterError, Result};
-pub use execute::{CellOutput, ExecuteResult, ExecuteStatus, MimeBundle};
-pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
+// The kernel result types live in the presenter (EXR-1); this public path stays for
+// the session API's callers.
+pub use crate::presenter::output::{CellOutput, CellResult, ExecuteStatus, MimeBundle};
+pub use kernelspec::{ResolvedKernel, find_kernelspec, list_kernelspecs};
 pub use session::{KernelInfo, KernelSession, SessionKey};
-pub use stored::IpynbReplayEngine;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -233,6 +245,79 @@ impl Default for JupyterEngine {
     }
 }
 
+/// Options and `execute:` keys that only change how finished outputs are presented, never
+/// what the kernel runs (EXR-4 hash declaration). A closed allowlist: a key missing from it
+/// counts, which over-invalidates and never shows stale output. The Rust Jupyter engine reads
+/// only `error` and the four visibility keys from options (`presenter/visibility.rs`,
+/// `text_execute.rs`); `error` is deliberately absent because it changes whether a cell's
+/// failure aborts the render. Lives here, not in core: core names no engine.
+const DISPLAY_ONLY_KEYS: &[&str] = &[
+    // Visibility.
+    "echo",
+    "output",
+    "warning",
+    "include",
+    // Code display.
+    "code-fold",
+    "code-summary",
+    "code-overflow",
+    "code-line-numbers",
+    "code-copy",
+    // Captions, listing and layout.
+    "fig-cap",
+    "fig-subcap",
+    "fig-scap",
+    "fig-alt",
+    "fig-align",
+    "fig-link",
+    "fig-cap-location",
+    "tbl-cap",
+    "tbl-subcap",
+    "tbl-scap",
+    "tbl-colwidths",
+    "tbl-cap-location",
+    "lst-cap",
+    "lst-label",
+    "cap-location",
+    "layout",
+    "layout-ncol",
+    "layout-nrow",
+    "layout-align",
+    "layout-valign",
+    // Cell wrapper attributes the presenter writes (KNR-3 slice 7, D10).
+    "panel",
+    "column",
+    "keep-hidden",
+    // Image attributes the presenter writes (KNR-3 slice 7, D6, D10).
+    "fig-env",
+    "fig-pos",
+    "out-width",
+    "out-height",
+    "out-extra",
+    // Cell classes the presenter writes (KNR-3 slice 7, D10).
+    "classes",
+    "fig-column",
+    "tbl-column",
+    // Output placement (2026-11-13-output-interleave.md). Inert for Jupyter today: its records
+    // carry no anchors, so every cell renders held.
+    "output-interleave",
+];
+
+/// The Jupyter engine's hash declaration (`ExecutionEngine::hash_definition`): the
+/// display-only cell options and `execute:` keys above are excluded from its hashes,
+/// and the `jupyter:` document key counts. A free function so the text executor can
+/// take it without an engine instance (`text_execute::execute_qmd`).
+pub(crate) fn jupyter_hash_definition() -> crate::record::HashDefinition {
+    let mut def = crate::record::HashDefinition::conservative("jupyter");
+    def.presentation_cell_options = DISPLAY_ONLY_KEYS.iter().map(|k| k.to_string()).collect();
+    def.presentation_execute_keys = def.presentation_cell_options.clone();
+    // Where a record comes from (OPR-5) is not an input of the run; an `execute:` key only.
+    def.presentation_execute_keys
+        .push("record-sources".to_string());
+    def.document_keys = vec!["jupyter".to_string()];
+    def
+}
+
 impl ExecutionEngine for JupyterEngine {
     fn name(&self) -> &str {
         "jupyter"
@@ -249,11 +334,15 @@ impl ExecutionEngine for JupyterEngine {
         }
 
         // Execute code blocks via the Jupyter daemon
-        text_execute::execute_qmd(input, ctx)
+        text_execute::execute_qmd_with(input, ctx, &self.hash_definition())
     }
 
     fn can_freeze(&self) -> bool {
         true
+    }
+
+    fn hash_definition(&self) -> crate::record::HashDefinition {
+        jupyter_hash_definition()
     }
 
     /// Deliberate q2 design choice: jupyter is the universal fallback kernel.
@@ -274,6 +363,11 @@ impl ExecutionEngine for JupyterEngine {
         first_class: Option<&str>,
     ) -> Option<LanguageClaim> {
         Some(self.claims_language(language, first_class))
+    }
+
+    /// A Jupyter kernel is what Positron runs: any plain language gives the same outputs.
+    fn kernel_equivalence(&self, _language: &str) -> Option<bool> {
+        Some(true)
     }
 
     fn is_available(&self) -> bool {
@@ -310,7 +404,156 @@ impl ExecutionEngine for JupyterEngine {
 
 #[cfg(test)]
 mod tests {
+    /// D2: Jupyter lists `warning` display-only, so the presenter enforces it; it has no
+    /// `message` option, which stays in the hash.
+    #[test]
+    fn the_presenter_enforces_jupyter_warning_and_not_message() {
+        let def = jupyter_hash_definition();
+        assert!(def.presenter_enforces(None, "warning"));
+        assert!(!def.presenter_enforces(None, "message"));
+    }
+
     use super::*;
+
+    // === EXR-4: hash declarations ===
+
+    fn opts(v: serde_json::Value) -> std::collections::BTreeMap<String, serde_json::Value> {
+        v.as_object().unwrap().clone().into_iter().collect()
+    }
+
+    fn unit_hash(def: &crate::record::HashDefinition, options: serde_json::Value) -> String {
+        use crate::record::{UnitHashInput, UnitKind, hash_unit};
+        let options = opts(options);
+        hash_unit(
+            def,
+            &UnitHashInput {
+                kind: UnitKind::Cell,
+                lang: "python",
+                code: "x = 1",
+                options: &options,
+                attr_tail: "",
+                profile: None,
+            },
+        )
+        .unwrap()
+    }
+
+    fn doc_hash(def: &crate::record::HashDefinition, metadata: serde_json::Value) -> String {
+        use crate::record::{UnitHashRef, hash_document};
+        hash_document(
+            def,
+            &opts(metadata),
+            &[UnitHashRef {
+                hash: "u",
+                profile: None,
+            }],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn jupyter_declares_a_closed_display_only_list_and_the_jupyter_key() {
+        let def = JupyterEngine { jupyter_path: None }.hash_definition();
+        assert_eq!(def.id, "jupyter");
+        assert_eq!(def.granularity, crate::record::Granularity::Unit);
+        assert_eq!(def.document_keys, ["jupyter"]);
+        // The execute: keys are the cell options plus the record source list (OPR-5).
+        let mut expected = def.presentation_cell_options.clone();
+        expected.push("record-sources".to_string());
+        assert_eq!(def.presentation_execute_keys, expected);
+        assert!(
+            !def.presentation_cell_options
+                .contains(&"record-sources".to_string())
+        );
+        // output-interleave (2026-11-13): display-only as a cell option and under execute:.
+        for list in [
+            &def.presentation_cell_options,
+            &def.presentation_execute_keys,
+        ] {
+            assert!(list.iter().any(|k| k == "output-interleave"), "{list:?}");
+        }
+        for visibility in ["echo", "output", "warning", "include"] {
+            assert!(
+                def.presentation_cell_options
+                    .iter()
+                    .any(|k| k == visibility),
+                "{visibility}"
+            );
+        }
+        // Keys that change what runs or whether a failure aborts must count.
+        for counted in [
+            "error",
+            "eval",
+            "label",
+            "execute-dir",
+            "params",
+            "fig-width",
+            "fig-height",
+        ] {
+            assert!(
+                !def.presentation_cell_options.iter().any(|k| k == counted),
+                "{counted}"
+            );
+        }
+    }
+
+    #[test]
+    fn toggling_execute_echo_leaves_the_jupyter_document_hash_and_toggling_error_moves_it() {
+        let def = JupyterEngine { jupyter_path: None }.hash_definition();
+        let with = |execute: serde_json::Value| {
+            doc_hash(
+                &def,
+                serde_json::json!({"jupyter": "python3", "execute": execute}),
+            )
+        };
+        assert_eq!(
+            with(serde_json::json!({"echo": true})),
+            with(serde_json::json!({"echo": false}))
+        );
+        assert_ne!(
+            with(serde_json::json!({"error": true})),
+            with(serde_json::json!({"error": false}))
+        );
+    }
+
+    #[test]
+    fn adding_execute_record_sources_leaves_the_jupyter_document_hash() {
+        let def = JupyterEngine { jupyter_path: None }.hash_definition();
+        let with = |execute: serde_json::Value| {
+            doc_hash(
+                &def,
+                serde_json::json!({"jupyter": "python3", "execute": execute}),
+            )
+        };
+        assert_eq!(
+            with(serde_json::json!({"error": true})),
+            with(serde_json::json!({"error": true, "record-sources": "q2,engine"}))
+        );
+    }
+
+    #[test]
+    fn a_jupyter_cell_with_fig_width_and_echo_false_differs_from_plain_only_by_fig_width() {
+        let def = JupyterEngine { jupyter_path: None }.hash_definition();
+        let both = unit_hash(&def, serde_json::json!({"fig-width": 7, "echo": false}));
+        assert_eq!(
+            both,
+            unit_hash(&def, serde_json::json!({"fig-width": 7})),
+            "echo is display-only"
+        );
+        assert_ne!(
+            both,
+            unit_hash(&def, serde_json::json!({"echo": false})),
+            "fig-width counts"
+        );
+        // The recorded flat keys are exactly `fig-width`.
+        let recorded = crate::record::execution_options(
+            &def,
+            None,
+            &opts(serde_json::json!({"fig-width": 7, "echo": false})),
+        )
+        .unwrap();
+        assert_eq!(recorded.keys().collect::<Vec<_>>(), ["fig-width"]);
+    }
 
     #[test]
     fn test_jupyter_engine_name() {

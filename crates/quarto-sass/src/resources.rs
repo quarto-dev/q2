@@ -67,6 +67,28 @@ static TEMPLATES_DIR: Dir<'static> =
 static REVEALJS_DIR: Dir<'static> =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/revealjs");
 
+/// bslib component SCSS and htmltools `fill.css` (dashboards; see
+/// `resources/scss/bslib/README.md`). Flattened into the Bootstrap framework
+/// sections by [`crate::bundle::load_bslib_extension`] rather than resolved
+/// through a load path, so it stays out of [`all_resources`].
+static BSLIB_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/bslib");
+
+/// Quarto 1's dashboard Sass layer (`quarto-dashboard.scss`; see
+/// `resources/scss/dashboard/README.md`). Read as text by
+/// [`crate::bundle::load_dashboard_layer`].
+static DASHBOARD_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/dashboard");
+
+/// A file of the embedded bslib tree (`resources/scss/bslib/<path>`).
+pub fn bslib_file(path: &str) -> Option<&'static str> {
+    BSLIB_DIR.get_file(path).and_then(|f| f.contents_utf8())
+}
+
+/// A file of the embedded dashboard SCSS tree (`resources/scss/dashboard/<path>`).
+pub fn dashboard_file(path: &str) -> Option<&'static str> {
+    DASHBOARD_DIR.get_file(path).and_then(|f| f.contents_utf8())
+}
+
 /// Pandoc/skylighting highlight-style `.theme` JSON files embedded at
 /// compile time (Quarto 1's palette catalog, vendored — see
 /// `resources/pandoc/highlight-styles/README.md` for provenance).

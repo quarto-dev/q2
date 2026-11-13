@@ -1,0 +1,11 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+#| warning: false
+import sys
+print("to stderr", file=sys.stderr)
+print("to stdout")
+```

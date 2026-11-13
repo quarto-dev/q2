@@ -24,6 +24,8 @@ use quick_xml::events::{BytesText, Event};
 use quick_xml::name::QName;
 use zip::ZipArchive;
 
+pub mod dashboard;
+pub mod dashboard_corpus;
 pub mod epub;
 mod golden_fixtures;
 pub use golden_fixtures::{FIXTURES, FixtureEntry, fixtures_json, golden_snapshot_name};

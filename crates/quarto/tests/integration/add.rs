@@ -407,6 +407,167 @@ fn an_untracked_install_updates_with_a_note() {
 }
 
 // ====================================================================
+// The record as a shared format (bd-yjg91sls)
+// ====================================================================
+
+/// GH #1175: another tool's keys in the record survive `q2 add`
+/// replacing the extension, both on an update and on a `--force`
+/// reinstall. The keys q2 owns are rewritten.
+#[test]
+fn keys_q2_does_not_own_survive_a_rewrite_of_the_record() {
+    let proj = project();
+    assert_succeeded(&run_q2_add(
+        proj.path(),
+        &[&path_arg(demo_source("1.0.0").path())],
+    ));
+    let installed = proj.path().join("_extensions/demo");
+    let record_path = installed.join(".quarto-source.yml");
+    let mut text = read(&record_path);
+    text.push_str(
+        "quarto-wizard:\n  track: branch\n  commit: 3f2a9c1e5b7d4a60918c2d4e6f8a0b1c3d5e7f90\n",
+    );
+    std::fs::write(&record_path, text).unwrap();
+
+    let v2 = demo_source("1.1.0");
+    let out = run_q2_add(proj.path(), &[&path_arg(v2.path())]);
+    assert_succeeded(&out);
+    assert!(
+        stdout_str(&out).contains("[Update]"),
+        "{}",
+        stdout_str(&out)
+    );
+    let rec = record(&installed);
+    assert_eq!(
+        rec["quarto-wizard"]["commit"].as_str(),
+        Some("3f2a9c1e5b7d4a60918c2d4e6f8a0b1c3d5e7f90"),
+        "{}",
+        read(&record_path)
+    );
+    assert_eq!(rec["quarto-wizard"]["track"].as_str(), Some("branch"));
+    assert_eq!(rec["version"].as_u64(), Some(1));
+    assert!(rec["files"].get("demo.lua").is_some());
+
+    assert_succeeded(&run_q2_add(proj.path(), &["--force", &path_arg(v2.path())]));
+    assert_eq!(
+        record(&installed)["quarto-wizard"]["track"].as_str(),
+        Some("branch"),
+        "a --force reinstall keeps them too"
+    );
+}
+
+/// GH #1176: a record with a schema version above the one this q2
+/// writes is not read with this version's rules. Replacing it needs
+/// `--force`, which writes a clean current-version record.
+#[test]
+fn a_record_from_a_newer_q2_needs_force_to_replace() {
+    let proj = project();
+    assert_succeeded(&run_q2_add(
+        proj.path(),
+        &[&path_arg(demo_source("1.1.0").path())],
+    ));
+    let installed = proj.path().join("_extensions/demo");
+    let record_path = installed.join(".quarto-source.yml");
+    let text = read(&record_path).replace("\nversion: 1\n", "\nversion: 2\n") + "v2-only: x\n";
+    assert!(text.contains("version: 2"), "{text}");
+    std::fs::write(&record_path, &text).unwrap();
+
+    let v3 = demo_source("1.2.0");
+    let out = run_q2_add(proj.path(), &[&path_arg(v3.path())]);
+    assert_failed(&out, "local changes");
+    let stderr = stderr_str(&out);
+    assert!(
+        stderr.contains(".quarto-source.yml (written by a newer version of q2"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Upgrade q2"), "{stderr}");
+    assert_eq!(read(&record_path), text, "nothing written");
+
+    assert_succeeded(&run_q2_add(proj.path(), &["--force", &path_arg(v3.path())]));
+    let rec = record(&installed);
+    assert_eq!(rec["version"].as_u64(), Some(1));
+    assert!(
+        rec.get("v2-only").is_none(),
+        "a newer record's keys are not carried: q2 can't tell what they meant"
+    );
+}
+
+/// The `.gitattributes` that stops git from converting line endings:
+/// created by an install, beside the extensions, never overwritten,
+/// and not created by a run that writes nothing.
+#[test]
+fn an_install_creates_extensions_gitattributes_only_when_missing() {
+    let proj = project();
+    let src = demo_source("1.0.0");
+    let attrs = proj.path().join("_extensions/.gitattributes");
+
+    let out = run_q2_add(proj.path(), &["--dry-run", &path_arg(src.path())]);
+    assert_succeeded(&out);
+    assert!(
+        stdout_str(&out).contains("would also create"),
+        "{}",
+        stdout_str(&out)
+    );
+    assert!(!attrs.exists());
+
+    let out = run_q2_add(proj.path(), &[&path_arg(src.path())]);
+    assert_succeeded(&out);
+    assert!(
+        stdout_str(&out).contains(".gitattributes"),
+        "{}",
+        stdout_str(&out)
+    );
+    let content = read(&attrs);
+    assert!(content.lines().any(|l| l == "* -text"), "{content}");
+    assert!(
+        record(&proj.path().join("_extensions/demo"))["files"]
+            .get(".gitattributes")
+            .is_none(),
+        "it sits outside the extension, so it is never hashed"
+    );
+
+    // No Change writes nothing, even when the file is gone.
+    std::fs::remove_file(&attrs).unwrap();
+    assert_succeeded(&run_q2_add(proj.path(), &[&path_arg(src.path())]));
+    assert!(!attrs.exists());
+
+    // An existing file is the user's.
+    std::fs::write(&attrs, "*.lua text eol=lf\n").unwrap();
+    let out = run_q2_add(
+        proj.path(),
+        &["--json", &path_arg(demo_source("1.1.0").path())],
+    );
+    assert_succeeded(&out);
+    assert_eq!(read(&attrs), "*.lua text eol=lf\n");
+    let v: serde_json::Value = serde_json::from_str(&stdout_str(&out)).unwrap();
+    assert_eq!(v["gitattributes_written"], false);
+}
+
+/// A checkout that converted LF to CRLF (git's `core.autocrlf`) is
+/// still refused without `--force`, but the error names the cause and
+/// the `.gitattributes` fix.
+#[test]
+fn line_ending_only_changes_are_named_with_the_gitattributes_fix() {
+    let proj = project();
+    assert_succeeded(&run_q2_add(
+        proj.path(),
+        &[&path_arg(demo_source("1.0.0").path())],
+    ));
+    let manifest_path = proj.path().join("_extensions/demo/_extension.yml");
+    let crlf = read(&manifest_path).replace('\n', "\r\n");
+    std::fs::write(&manifest_path, crlf).unwrap();
+
+    let out = run_q2_add(proj.path(), &[&path_arg(demo_source("1.1.0").path())]);
+    assert_failed(&out, "local changes");
+    let stderr = stderr_str(&out);
+    assert!(
+        stderr.contains("_extension.yml (line endings changed)"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("core.autocrlf"), "{stderr}");
+    assert!(stderr.contains("_extensions/.gitattributes"), "{stderr}");
+}
+
+// ====================================================================
 // --dry-run and --json
 // ====================================================================
 
@@ -451,6 +612,7 @@ fn json_emits_one_result_object() {
     assert_eq!(ext["action"], "install");
     assert_eq!(ext["to"], "1.0.0");
     assert_eq!(ext["written"], true);
+    assert_eq!(v["gitattributes_written"], true);
 }
 
 // ====================================================================

@@ -2838,7 +2838,18 @@
   {
     "type": "target",
     "named": true,
-    "fields": {},
+    "fields": {
+      "angle_bracket_url": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "url",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": false,

@@ -1,0 +1,4 @@
+quarto --version: 99.9.9
+binary: /Users/cscheid/repos/github/quarto-dev/quarto-cli/package/dist/bin/quarto
+git describe: v1.11.4-233-gd3263862a
+commit: d3263862a1bcc02ce84a1b727d5057baf0e30c2c 2026-11-03T17:56:26+01:00

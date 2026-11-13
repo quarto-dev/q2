@@ -111,7 +111,7 @@ pub fn process_pipe_table_cell(
         alignment: Alignment::Default,
         col_span: 1,
         row_span: 1,
-        attr: (String::new(), vec![], LinkedHashMap::new()),
+        attr: (String::new(), vec![], LinkedHashMap::new()).into(),
         content: vec![],
         source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -125,7 +125,11 @@ pub fn process_pipe_table_cell(
                 plain_content.extend(inlines);
             }
             PandocNativeIntermediate::IntermediateAttr(attr, attr_source, attr_si) => {
-                plain_content.push(Inline::Attr(InlineAttr::new(attr, attr_source, attr_si)));
+                plain_content.push(Inline::Attr(Box::new(InlineAttr::new(
+                    attr,
+                    attr_source,
+                    attr_si,
+                ))));
             }
             _ => {
                 // Skip other intermediate types (e.g., markers)
@@ -298,7 +302,7 @@ pub fn process_pipe_table(
         node_source_info_with_context(node, context)
     };
 
-    PandocNativeIntermediate::IntermediateBlock(Block::Table(Table {
+    PandocNativeIntermediate::IntermediateBlock(Block::Table(Box::new(Table {
         attr,
         caption,
         colspec,
@@ -324,5 +328,5 @@ pub fn process_pipe_table(
         },
         source_info: table_source_info,
         attr_source,
-    }))
+    })))
 }

@@ -84,6 +84,8 @@ struct Call {
     output_dir: PathBuf,
     /// `runtime.runtime_metadata()` of the runtime the seam was handed.
     runtime_metadata: Option<serde_json::Value>,
+    /// `options.record_sources.ceiling`: the host list a guest document is bounded by (OPR-6).
+    record_sources_ceiling: Option<quarto_core::record::RecordSources>,
 }
 
 #[derive(Default)]
@@ -113,7 +115,7 @@ impl FakeSeam {
             kind,
             format: format.to_string(),
             source: options.source_override.clone(),
-            captures: options.captures.len(),
+            captures: options.captures.clone().into_captures().len(),
             typst_target: options.typst_target,
             attribution: options.attribution_json.clone(),
             materialize_is_output: options.capture_materialize_dir.as_deref()
@@ -123,6 +125,7 @@ impl FakeSeam {
             has_deadline: options.child_deadline.is_some(),
             output_dir: output_dir.clone(),
             runtime_metadata: runtime.runtime_metadata(),
+            record_sources_ceiling: options.record_sources.ceiling.clone(),
         });
         if n < self.hold_calls {
             loop {
@@ -593,13 +596,21 @@ fn capture(input: &str) -> EngineCapture {
             path: "plot.png".to_string(),
             contents_base64: base64::engine::general_purpose::STANDARD.encode(b"png"),
         }],
+        record: None,
     }
 }
 
 async fn record(ctx: &SharedContext, path: &str, captures: &[EngineCapture]) {
-    let id = crate::capture_driver::write_capture_doc(ctx, path, captures)
-        .await
-        .expect("capture doc");
+    let id = crate::capture_driver::write_capture_doc(
+        ctx,
+        path,
+        &quarto_core::engine::preview_record::CaptureRun {
+            captures: captures.to_vec(),
+            record: None,
+        },
+    )
+    .await
+    .expect("capture doc");
     ctx.index()
         .set_capture(
             path,
@@ -811,11 +822,57 @@ fn job_with_metadata(
         content: None,
         metadata,
         attribution_json: None,
-        captures: Vec::new(),
+        captures: Default::default(),
         all_captures: Default::default(),
         hub_root: root.to_path_buf(),
         cancellation: quarto_core::stage::Cancellation::new(),
     }
+}
+
+/// OPR-6: under `--share` both render routes (the PDF pane and the downloads) hand the render the
+/// host's list as a ceiling, whatever the request's `metadata` says; without `--share` there is
+/// no ceiling and the request metadata is an ordinary override.
+#[tokio::test]
+async fn the_render_routes_pass_the_share_ceiling_to_the_render() {
+    use quarto_core::record::{RecordSource as S, RecordSources};
+    let (_project, ctx) = build_ctx(BOOK).await;
+    let fake = install(FakeSeam::default());
+    let guest = Some(serde_json::json!({"execute": {"record-sources": "positron"}}));
+
+    // No `--share`: no ceiling.
+    let r = pdf_handler(
+        State(ctx.clone()),
+        pdf_req("other.qmd", None, guest.clone()),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    // `--share` with the host's list `cache,q2`.
+    crate::render_helper::set_record_sources_ceiling(Some(RecordSources::new(vec![
+        S::Cache,
+        S::Q2,
+    ])));
+    let r = pdf_handler(
+        State(ctx.clone()),
+        pdf_req("other.qmd", None, guest.clone()),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    let r = render_handler(
+        State(ctx),
+        render_req("other.qmd", "docx", None, guest.clone()),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    crate::render_helper::set_record_sources_ceiling(None);
+
+    let calls = fake.calls.lock().unwrap();
+    assert_eq!(calls[0].record_sources_ceiling, None);
+    let host = Some(RecordSources::new(vec![S::Cache, S::Q2]));
+    assert_eq!(calls[1].record_sources_ceiling, host);
+    assert_eq!(calls[2].record_sources_ceiling, host);
+    // The request's own metadata still reaches the runtime layer (the reader ignores that
+    // layer under a ceiling).
+    assert_eq!(calls[1].runtime_metadata, guest);
 }
 
 #[tokio::test]

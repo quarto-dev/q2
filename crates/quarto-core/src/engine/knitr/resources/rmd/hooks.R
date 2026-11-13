@@ -32,9 +32,242 @@ eng2lang <- function(x) {
 }
 
 
+# EXR-11: per-chunk records. A chunk that carries a `quarto-unit-id` option is
+# recorded as {id, markdown, options_digest, files} next to the unchanged
+# document markdown. The store lives at top level so execute.R can read it
+# after rendering.
+quarto_chunk_records <- new.env()
+quarto_chunk_records$records <- list()
+
+# Set by capture.R on a captured run: called with (options, markdown) for each `child=` chunk
+# (see `install_child_wrapper` in `knitr_hooks`).
+quarto_child_state <- new.env()
+quarto_child_state$on_child <- NULL
+
+# Options that change between runs or carry the code rather than the
+# configuration; they stay out of the digest.
+chunk_digest_skip <- c(
+  "quarto-unit-id", "code", "yaml.code", "original.code", "params.src",
+  "original.params.src", "hash", "fig.num", "fig.cur"
+)
+
+# Stable digest of the resolved chunk options: sorted by name, volatile
+# entries removed, functions and environments reduced to a tag.
+chunk_options_digest <- function(options) {
+  normalize <- function(v) {
+    if (is.function(v) || is.environment(v)) {
+      "<opaque>"
+    } else if (is.list(v)) {
+      lapply(v, normalize)
+    } else {
+      v
+    }
+  }
+  keep <- setdiff(names(options), chunk_digest_skip)
+  keep <- keep[order(keep)]
+  knitr:::digest(lapply(options[keep], normalize))
+}
+
+# Files under the chunk's figure directory, as knitr would address them
+# (relative to the knit working directory unless base.dir is set).
+chunk_figure_files <- function(options) {
+  fig_dir <- dirname(paste0(options[["fig.path"]], "x"))
+  base <- knitr::opts_knit$get("base.dir")
+  dir <- if (is.null(base)) fig_dir else file.path(base, fig_dir)
+  if (!dir.exists(dir)) {
+    return(character())
+  }
+  file.path(fig_dir, list.files(dir, recursive = TRUE))
+}
+
+# EXR-12: per-span records. The Rust side rewrites each brace-spelling inline span to
+# `.QuartoInlineId("<id>"); .QuartoInlineRender(expr)`. knitr's `inline` hook is not
+# called for a `NULL`, invisible or zero-length value (`knitr:::inline_exec` skips it),
+# so a span cannot be recorded from that hook alone. The `evaluate.inline` hook runs for
+# every span: it takes the id from the span's code and holds it as pending. The `inline`
+# hook, which receives the value and returns the markdown knitr inserts, records
+# {id, markdown} and clears it; a pending id still set when the next span starts (or
+# knitting ends) was never served, so it is recorded with empty markdown.
+quarto_span_records <- new.env()
+quarto_span_records$records <- list()
+quarto_span_records$pending <- NULL
+quarto_span_records$pending_piece <- NULL
+# Set by execute() to capture.R's capture_piece when the call is captured; a span value is
+# only turned into a piece then (the live path is untouched).
+quarto_span_records$piece_fn <- NULL
+quarto_span_records$installed <- NULL
+# KNR-6: set by execute() on a captured run; a brace span then returns a marker (capture.R).
+quarto_span_records$nonce <- NULL
+
+# An inline value as a captured piece. Only a chunk's auto-printed widget carries knitr's
+# `knit_asis_htmlwidget` class, so a widget in a span (`I(knit_print(w))`) is recognized by
+# what makes it one: a `knit_meta` attribute holding its dependencies. Such a value is a
+# widget piece, which maps to `text/html` with the dependencies attached.
+quarto_span_piece <- function(res) {
+  piece <- quarto_span_records$piece_fn(res)
+  meta <- attr(res, "knit_meta")
+  if (identical(piece$class, "asis") && length(meta) > 0) {
+    piece$widget <- TRUE
+    piece$mime <- "text/html"
+    piece$knit_meta <- as.character(jsonlite::serializeJSON(meta))
+  }
+  piece
+}
+
+quarto_record_span <- function(markdown) {
+  id <- quarto_span_records$pending
+  if (is.null(id)) {
+    return(invisible(NULL))
+  }
+  record <- list(id = id, markdown = markdown)
+  # KNR-4: a value knitr reads as knit_asis or image paths also travels as a piece, so the
+  # record keeps its mime, dependencies and file (see capture_piece in capture.R).
+  if (!is.null(quarto_span_records$pending_piece) && nzchar(markdown)) {
+    record$piece <- quarto_span_records$pending_piece
+  }
+  quarto_span_records$pending <- NULL
+  quarto_span_records$pending_piece <- NULL
+  quarto_span_records$records[[length(quarto_span_records$records) + 1]] <- record
+  invisible(NULL)
+}
+
+# Record an unserved pending id as an empty span. Called before each span and at the end
+# of knitting (execute.R).
+quarto_flush_span_records <- function() {
+  quarto_record_span("")
+}
+
+# Wrap whatever `inline` hook is current, so the markdown is exactly what knitr (or a
+# hook the document installed) produces. Installed at the first span, before knitr's
+# `inline_exec` reads the hook (its `hook` argument is a lazy default), and again if a
+# chunk replaces the hook mid-document.
+quarto_ensure_inline_hook <- function() {
+  current <- knitr::knit_hooks$get("inline")
+  if (identical(current, quarto_span_records$installed)) {
+    return(invisible(NULL))
+  }
+  installed <- function(x) {
+    text <- paste(current(x), collapse = "")
+    id <- quarto_span_records$pending
+    quarto_record_span(text)
+    # KNR-6: a brace span (the only kind with an id) returns a marker; the finished text
+    # travels in `spans`. A classic span stays substituted by knitr.
+    if (!is.null(quarto_span_records$nonce) && !is.null(id)) {
+      return(paste0("<!-- q2:", quarto_span_records$nonce, ":", id, " -->"))
+    }
+    text
+  }
+  quarto_span_records$installed <- installed
+  knitr::knit_hooks$set(inline = installed)
+  invisible(NULL)
+}
+
+quarto_evaluate_inline_hook <- function(base) {
+  # knitr_hooks() can run more than once in a process; never wrap our own wrapper
+  # (it would call itself).
+  while (!is.null(attr(base, "quarto_base"))) {
+    base <- attr(base, "quarto_base")
+  }
+  hook <- function(code, envir = knitr::knit_global()) {
+    quarto_flush_span_records()
+    quarto_ensure_inline_hook()
+    m <- regmatches(
+      code,
+      regexec("^\\s*\\.QuartoInlineId\\(\"([^\"]+)\"\\);", code)
+    )[[1]]
+    if (length(m) == 2) {
+      quarto_span_records$pending <- m[2]
+    }
+    res <- base(code, envir)
+    if (
+      length(m) == 2 &&
+        is.function(quarto_span_records$piece_fn) &&
+        inherits(res, c("knit_asis", "knit_image_paths"))
+    ) {
+      quarto_span_records$pending_piece <- quarto_span_piece(res)
+    }
+    res
+  }
+  attr(hook, "quarto_base") <- base
+  hook
+}
+
 knitr_hooks <- function(format, resourceDir, handledLanguages) {
   knit_hooks <- list()
   opts_hooks <- list()
+  quarto_chunk_records$records <- list()
+  quarto_span_records$records <- list()
+  quarto_span_records$pending <- NULL
+  quarto_span_records$pending_piece <- NULL
+  quarto_span_records$piece_fn <- NULL
+  quarto_span_records$installed <- NULL
+  quarto_span_records$nonce <- NULL
+  knit_hooks[["evaluate.inline"]] <- quarto_evaluate_inline_hook(
+    knitr::knit_hooks$get("evaluate.inline")
+  )
+  chunk_pending <- list()
+
+  # Snapshot taken before each recorded chunk runs. Options hooks run before
+  # the chunk executes and before the cache check.
+  opts_hooks[["quarto-unit-id"]] <- function(options) {
+    chunk_pending[[options[["quarto-unit-id"]]]] <<- list(
+      digest = chunk_options_digest(options),
+      files_before = chunk_figure_files(options)
+    )
+    if (!is.null(options$child)) {
+      install_child_wrapper()
+    }
+    options
+  }
+
+  # knitr calls no hook for a chunk with `child=`: `call_block` returns the child document's
+  # markdown straight into the output (block.R). To give that chunk a record, wrap
+  # `knitr::knit_child` for the calls `call_block` makes (they pass the chunk's options, with
+  # `child` still set). Installed only when such a chunk with a unit id is about to run, so
+  # other documents never see it. The wrapper returns what knit_child returned, unchanged.
+  # Several children of one chunk are joined with "\n", as `call_block` does.
+  child_installed <- FALSE
+  install_child_wrapper <- function() {
+    if (child_installed) {
+      return(invisible())
+    }
+    child_installed <<- TRUE
+    orig <- knitr::knit_child
+    wrapped <- function(..., options = NULL, envir = knitr::knit_global()) {
+      id <- if (is.list(options) && !is.null(options$child)) {
+        options[["quarto-unit-id"]]
+      }
+      # knit_child copies the parent's options into `opts_chunk`, so without this the child's
+      # own chunks would be recorded under the parent's id.
+      if (!is.null(id)) {
+        options[["quarto-unit-id"]] <- NULL
+      }
+      res <- orig(..., options = options, envir = envir)
+      options[["quarto-unit-id"]] <- id
+      pending <- if (is.null(id)) NULL else chunk_pending[[id]]
+      if (!is.null(pending)) {
+        recs <- quarto_chunk_records$records
+        at <- which(vapply(recs, function(r) identical(r$id, id), NA))
+        if (length(at)) {
+          quarto_chunk_records$records[[at[[1]]]]$markdown <-
+            paste(recs[[at[[1]]]]$markdown, res, sep = "\n")
+        } else {
+          quarto_chunk_records$records[[length(recs) + 1]] <- list(
+            id = id,
+            markdown = res,
+            optionsDigest = pending$digest,
+            files = I(character())
+          )
+          if (is.function(quarto_child_state$on_child)) {
+            quarto_child_state$on_child(options, res)
+          }
+        }
+      }
+      res
+    }
+    utils::assignInNamespace("knit_child", wrapped, ns = "knitr")
+  }
+
 
   # options in yaml (save last yaml.code for source hook)
   lastYamlCode <- NULL
@@ -202,7 +435,7 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
   }
 
   # entire chunk
-  knit_hooks$chunk <- delegating_hook("chunk", function(x, options) {
+  chunk_hook <- delegating_hook("chunk", function(x, options) {
     # Do nothing more for some specific chunk content -----
 
     # Quarto language handler
@@ -367,7 +600,8 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
       "fenced.echo", "chunk.echo", "lang", "out.width.px", "out.height.px",
       "indent", "class.source", "class.output", "class.message",
       "class.warning", "class.error", "attr.source", "attr.output",
-      "attr.message", "attr.warning", "attr.error", "connection", "hash"
+      "attr.message", "attr.warning", "attr.error", "connection", "hash",
+      "quarto-unit-id"
     )
     known_opts <- c(
       knitr_default_opts,
@@ -487,6 +721,30 @@ knitr_hooks <- function(format, resourceDir, handledLanguages) {
       )
     }
   })
+  knit_hooks$chunk <- function(x, options) {
+    out <- chunk_hook(x, options)
+    id <- options[["quarto-unit-id"]]
+    pending <- if (is.null(id)) NULL else chunk_pending[[id]]
+    if (!is.null(pending)) {
+      chunk_pending[[id]] <<- NULL
+      # knitr drops a hook's output for include: false (block.R), keeping only
+      # the indent; the record must hold what lands in the document
+      markdown <- if (isTRUE(options[["include"]])) {
+        out
+      } else {
+        options[["indent"]] %||% ""
+      }
+      files <- setdiff(chunk_figure_files(options), pending$files_before)
+      quarto_chunk_records$records[[length(quarto_chunk_records$records) + 1]] <-
+        list(
+          id = id,
+          markdown = markdown,
+          optionsDigest = pending$digest,
+          files = I(sort(files))
+        )
+    }
+    out
+  }
   knit_hooks$source <- function(x, options) {
     # How knitr handles the prompt option for R chunks
     x <- knitr:::hilight_source(x, "markdown", options)

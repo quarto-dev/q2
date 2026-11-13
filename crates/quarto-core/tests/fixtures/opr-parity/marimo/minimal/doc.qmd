@@ -1,0 +1,15 @@
+---
+title: Minimal marimo
+engine: marimo
+---
+
+Prose.
+
+```{python .marimo}
+x = 1 + 1
+x
+```
+
+```{python .marimo}
+print("hi")
+```

@@ -52,7 +52,18 @@ for `q2 render` ([Render options](render-options.qmd)); for instance
 - They are refused with `--ui editor` (the editor has its own settings),
   `--join` and `--no-project`.
 - `--to` and `-M` are applied to the page preview, the PDF pane and the
-  downloads. They do not reach code execution.
+  downloads. `-M` also reaches code execution: when the preview runs a
+  document's code (at startup, after an edit, or from **Re-execute**), the
+  run sees the `-M` values too, so `-M 'execute: {record: true}'` makes it
+  write the document's [execution record
+  copy](../authoring/execution-records.qmd) and `-M 'execute: {echo: false}'`
+  changes what the code produces. `--to` does not reach code execution.
+- `-M 'preview: {engine: auto}'` sets what the preview does when you save a
+  document. `auto` re-runs a document's code whenever it is out of date;
+  `manual` (the default) marks it out of date and waits for **Re-execute**;
+  `off` never runs code. It wins over `preview: engine:` in `_quarto.yml`, and
+  it is the only way to turn `auto` on for a single file with no project.
+  A value other than `auto`, `manual` or `off` is an error.
 - `-M book-scope:...` is ignored (a startup notice says so): the viewer
   renders one page at a time, and the PDF pane always asks for the
   chapter.
@@ -143,7 +154,35 @@ With `--share`, anyone holding the join string can ask the host to run
 renders, downloads and imports: those requests use the host's `pandoc`
 and `typst` and read the host's project, and an import uploads the file
 to the host (up to 25 MB), where it is converted by a sandboxed `pandoc`.
-Treat the join string like a password, as the `--share` help says.
+A guest can also re-run the document's code, but only when `engine` is in
+`--records` and `preview.engine` is not `off` (see
+[Execution records](../authoring/execution-records.qmd)). With
+`preview.engine: auto` (from `_quarto.yml` or `-M`), a guest's edit to a
+document runs that document's code on your machine, and the preview prints a
+warning at startup. Treat the join string like a password, as the `--share`
+help says.
+
+### Outputs from an imported record
+
+`--records positron`, or a directory of Positron cache files, shows the outputs
+Positron saved for a document without starting a kernel or an engine. Those
+outputs appear in the viewer like any other cell output, but they are marked as
+generated: you cannot edit them in place, and a cell that holds them has no
+edit handle. Edit the code instead.
+
+When you change a cell's code, its saved output no longer belongs to the code,
+so the page is marked stale. The viewer shows its Re-execute control, and in
+the editor UI the status bar reads "Showing executed output · code changed".
+Re-execute runs the code only when `engine` is in `--records` and
+`preview.engine` is not `off`; otherwise the request is refused and the page
+says so. A cell that Positron never ran is shown as source, and that alone
+does not mark the page stale.
+
+Quarto finds the cache file from the document's location. If that fails, it
+falls back to the cache file that shares the most cells with the document. In
+a shared preview (`--share`) that fallback can serve the host's Positron
+outputs to guests, and it can pick the cache of a different document with
+similar cells, so check the outputs before you share them.
 
 ## Static preview
 
@@ -204,6 +243,9 @@ do not apply to static mode.
 
 ### Code execution
 
+`q2 preview --static -M 'preview: {engine: off}'` turns lazy execution off for one
+run, as `_quarto.yml` does below.
+
 A static preview does not execute every page's code up front: a site
 with many Jupyter or knitr pages would take a long time to start. Pages
 whose code has not run are served with their code cells shown as
@@ -217,7 +259,11 @@ preview:
   engine: off
 ```
 
-This is the same key the default preview uses.
+This is the same key the default preview uses. With it, no cell or engine code
+runs, and re-run requests from the editor or from a shared guest are refused; a
+`--records` source such as `cache` or `positron` can still supply saved
+outputs. The document's filters and shortcodes, and the project's pre-render
+scripts, still run.
 
 ### Defaults in `_quarto.yml`
 
@@ -237,3 +283,15 @@ project:
 
 The `timeout` and `serve` keys from Quarto 1 are not supported. They are
 reported once at startup and otherwise ignored.
+
+## Behind a proxy
+
+Both modes work behind a reverse proxy that serves the preview under a
+path prefix and strips the prefix before forwarding, as Posit Workbench,
+JupyterHub (`/user/<name>/proxy/<port>/`) and code-server
+(`/proxy/<port>/`) do. There is nothing to configure: the page makes
+every request relative to its own URL, so the requests stay under the
+prefix. Open the preview with the trailing slash (`/proxy/4321/`, not
+`/proxy/4321`).
+
+The editor UI (`--ui editor`) does not support a path prefix yet.

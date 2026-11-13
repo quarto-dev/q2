@@ -1,0 +1,15 @@
+```{r asis, results='asis'}
+cat("**bold from asis**\n")
+cat("second line\n")
+```
+
+```{r hold, results='hold'}
+print("one")
+print("two")
+cat("three\n")
+```
+
+```{r hide, results='hide'}
+print("hidden by results")
+1 + 1
+```

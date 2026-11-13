@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { getBinaryDocById, type CaptureRef } from '@quarto/preview-runtime';
 
 /**
- * Fetch the gzipped `EngineCapture[]` bytes for the active document's recorded
- * capture (bd-sfet3264 / bd-uy4uygha).
+ * Fetch the gzipped bytes of the active document's recorded capture (bd-sfet3264 /
+ * bd-uy4uygha): an `EngineCapture[]` or an engine execution record (EXR-13). The
+ * bytes are opaque here — they go to WASM unchanged and Rust tells the two apart
+ * from the payload, so this hook never looks at the MIME type.
  *
  * Given the project's `captures` sidecar and the active file path, resolves the
  * active document's `captureDocId` and fetches the capture binary doc's bytes

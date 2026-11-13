@@ -318,7 +318,11 @@ scan is non-empty). A doc resolves load-free at Pass-1 iff any of:
 
 - **P1** — the file is claimed (`claimed = Some(engine)`): §8's short-circuit
   consults no claims at all.
-- **P2** — the language scan is empty (markdown passthrough).
+- **P2** — the language scan is empty *and* the document's own front matter
+  declares no engine (markdown passthrough). A declaration counts as the
+  document's own when its value roots at the document's file id (`FileId(0)`),
+  not at `_quarto.yml`, `_metadata.yml`, an extension or a format default
+  (JOL-2a).
 - **P3** — an explicit `engine: markdown` opt-out.
 - **P4** — **every claim consultation the resolution needs returns a static
   answer.** For each `(candidate engine, language)` pair, either a metadata
@@ -487,6 +491,15 @@ neither set, which is exactly how such a cell reads as "not mine, pass through
 unexecuted." `owned_languages` does **not** re-resolve or execute injected
 languages; §6.1's ratified pass-through is unchanged.
 
+*Amended by JOL-2b (2026-10-31).* "Informational" holds for knitr and the TS engines
+(`handled_languages` stays their gate). It no longer holds for **Jupyter**: the Jupyter
+engine reads `ctx.owned_languages` as its execution gate, replacing the old language
+allowlist, so any language the resolver assigns to Jupyter runs if a kernel exists for
+it (`text_execute.rs`, `plan_document`). An owned language with no kernel is reported
+as `Q-18-5` (an error in a multi-engine document, a warning otherwise). The end-to-end
+tests are `owned_e2e_tests` in `text_execute.rs` (JOL-5); the user-facing description is
+`docs/guides/authoring/jupyter-kernels.qmd`.
+
 - **knitr** already enforces: `execute.R` does `knit_engines$set(lang = <re-emit
   verbatim>)` for each `handled_languages` entry, which **replaces** knitr's
   default engine for that language — so adding `python` to knitr's set makes it
@@ -598,6 +611,14 @@ the wrong sequence. Therefore:
   engine set**, not only the input hash — installing an extension changes
   resolution while `input_qmd` still byte-matches. (Freeze is future; recorded
   here so its design accounts for it.)
+  **Amended 2026-11-01 (EXR-18):** freeze is now planned over the ipynb execution
+  record, not a trace replay (see
+  [the epic](../plans/2026-10-28-execution-records-epic.md)). The resolved engine
+  set and each engine's owned languages are stored in the record as
+  **provenance**, not used as an invalidation key: a record is keyed by source
+  and unit hashes, which hold no engine or kernel. The Jupyter engine's gate
+  (JOL-2b) also changed from a language allowlist to resolver-assigned
+  ownership, so "which engine ran a unit" now follows the ownership map.
 
 Preview (`CaptureSpliceStage`) is the same story: resolution runs at *record*
 time; the browser folds captures.
@@ -899,7 +920,9 @@ case-4. **Deliberate divergence from Q1's eager
   set) *for freeze specifically*, whenever freeze is built; the V1
   load-free-only stamp here is sufficient for the LSP, which already
   tolerates `None`, but not sufficient on its own for a freeze cache that
-  must cover every doc.
+  must cover every doc. *(2026-11-01, EXR-18: the record carries the resolved
+  engine set and owned languages as provenance, so this caveat concerns
+  which docs can be frozen at all, not how an entry is invalidated.)*
 - **Project-level claim overrides.** §3.3 above ("Claim tables from
   metadata") and `engine-and-engines-keys.md` §3: static claims as project
   config, via the `engines:` key's `claims:` entries. "Knitr does not interop

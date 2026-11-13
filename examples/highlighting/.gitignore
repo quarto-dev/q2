@@ -1,0 +1,7 @@
+# Quarto 2 project outputs and caches
+_site/
+.quarto/
+*_files/
+# type: default projects render the output in place beside the source
+document.html
+slides.html

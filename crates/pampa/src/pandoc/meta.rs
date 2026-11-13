@@ -213,7 +213,8 @@ fn parse_yaml_string_as_markdown_to_config(
                     String::new(),
                     vec!["yaml-markdown-syntax-error".to_string()],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 content: vec![Inline::Str(Str {
                     text: value.to_string(),
                     source_info: source_info.clone(),
@@ -221,7 +222,7 @@ fn parse_yaml_string_as_markdown_to_config(
                 source_info: source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
             };
-            ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
+            ConfigValueKind::PandocInlines(vec![Inline::Span(Box::new(span))])
         }
     }
 }
@@ -392,7 +393,8 @@ fn yaml_to_config_value_at(
                                 String::new(),
                                 vec!["yaml-tagged-string".to_string()],
                                 attributes,
-                            ),
+                            )
+                                .into(),
                             content: vec![Inline::Str(Str {
                                 text: s,
                                 source_info: source_info.clone(),
@@ -403,7 +405,7 @@ fn yaml_to_config_value_at(
                             source_info: source_info.clone(),
                             attr_source: AttrSourceInfo::empty(),
                         };
-                        ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
+                        ConfigValueKind::PandocInlines(vec![Inline::Span(Box::new(span))])
                     } else if let Some(annotated) =
                         super::meta_annotations::annotated_interpretation(path)
                     {

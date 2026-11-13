@@ -23,7 +23,7 @@ use crate::commands::common::plan::CommandFailure;
 use crate::commands::common::prompter::Prompter;
 use crate::commands::use_cmd::find_project_config;
 
-use super::record::{InstalledState, SourceKind};
+use super::record::{EditKind, InstalledState, SourceKind, SourceRecord};
 use super::stage::{
     EXTENSIONS_DIR, locate_extensions_dir, read_staged, type_summary, validate_segment,
 };
@@ -75,6 +75,11 @@ pub struct AddPlan {
     pub provenance: Provenance,
     pub learn_more: Option<String>,
     pub dry_run: bool,
+    /// Whether this run creates `_extensions/.gitattributes` (see
+    /// [`super::install::GITATTRIBUTES_FILENAME`]): true when the plan
+    /// writes an extension and the file does not exist yet. Under
+    /// `--dry-run`, whether it *would*.
+    pub writes_gitattributes: bool,
 }
 
 impl AddPlan {
@@ -97,6 +102,9 @@ pub struct PlannedExtension {
     pub change: Change,
     pub types: String,
     pub installed: InstalledState,
+    /// The installed copy's record, when it could be read. Its keys that
+    /// q2 does not define are written into the new record (GH #1175).
+    pub prior_record: Option<SourceRecord>,
     /// Whether this extension is (re)installed. False for No Change
     /// unless `--force` was given.
     pub writes: bool,
@@ -199,7 +207,7 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
             ext.version.as_deref(),
             installed_version.as_ref().map(Option::as_deref),
         );
-        let installed = super::record::installed_state(&installed_dir)?;
+        let inspection = super::record::inspect(&installed_dir)?;
         let writes = change.action != Action::NoChange || req.force;
 
         extensions.push(PlannedExtension {
@@ -209,12 +217,20 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
             dest,
             change,
             types: type_summary(ext),
-            installed,
+            installed: inspection.state,
+            prior_record: inspection.record,
             writes,
         });
     }
 
     refuse_local_edits(&extensions, req)?;
+
+    let writes_gitattributes = extensions.iter().any(|e| e.writes)
+        && std::fs::symlink_metadata(
+            root.join(EXTENSIONS_DIR)
+                .join(super::install::GITATTRIBUTES_FILENAME),
+        )
+        .is_err();
 
     Ok(AddPlan {
         root,
@@ -223,6 +239,7 @@ pub fn resolve(req: &AddRequest, ctx: &mut ResolveContext) -> Result<AddPlan, Co
         provenance,
         learn_more,
         dry_run: req.dry_run,
+        writes_gitattributes,
     })
 }
 
@@ -312,22 +329,44 @@ fn refuse_local_edits(
         return Ok(());
     }
     let mut lines = Vec::new();
+    let mut line_endings = false;
+    let mut newer_record = false;
     for ext in extensions.iter().filter(|e| e.writes) {
         if let InstalledState::Modified(edits) = &ext.installed {
             lines.push(format!("{}:", ext.dest.display()));
             for edit in edits {
-                lines.push(format!("  {} ({})", edit.path, edit.kind.as_str()));
+                lines.push(format!("  {} ({})", edit.path, edit.kind.describe()));
+                match edit.kind {
+                    EditKind::LineEndings => line_endings = true,
+                    EditKind::NewerRecord(_) => newer_record = true,
+                    _ => {}
+                }
             }
         }
     }
     if lines.is_empty() {
         return Ok(());
     }
+    let mut hints = String::new();
+    if line_endings {
+        hints.push_str(
+            "\n\nFiles marked \"line endings changed\" differ from the record only in CRLF \
+             vs LF line endings. This is usually git's core.autocrlf setting converting them \
+             on checkout. To stop it, add the line `* -text` to `_extensions/.gitattributes` \
+             (`q2 add` creates that file when it is missing) and check the files out again.",
+        );
+    }
+    if newer_record {
+        hints.push_str(
+            "\n\nAn install record from a newer version of q2 can't be checked by this one. \
+             Upgrade q2, or use --force to replace the extension and its record.",
+        );
+    }
     Err(CommandFailure::new(
         "Installed extensions have local changes",
         format!(
             "Installing would replace files that changed since `q2 add` installed them:\n\n{}\n\n\
-             Nothing was written. Re-run with --force to replace them.",
+             Nothing was written. Re-run with --force to replace them.{hints}",
             lines.join("\n")
         ),
     ))

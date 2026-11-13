@@ -197,20 +197,21 @@ fn convert_math(math: &Math) -> (Option<Inline>, Vec<DiagnosticMessage>) {
         MathType::InlineMath => "inline",
         MathType::DisplayMath => "display",
     };
-    let replacement = Inline::Span(Span {
+    let replacement = Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec!["math".to_string(), class.to_string()],
             Default::default(),
-        ),
-        content: vec![Inline::RawInline(RawInline {
+        )
+            .into(),
+        content: vec![Inline::RawInline(Box::new(RawInline {
             format: "html".to_string(),
             text: mathml,
             source_info: math.source_info.clone(),
-        })],
+        }))],
         source_info: math.source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
     (Some(replacement), conversion.diagnostics)
 }
 
@@ -236,12 +237,12 @@ mod tests {
     }
 
     fn math(math_type: MathType, text: &str) -> Inline {
-        Inline::Math(Math {
+        Inline::Math(Box::new(Math {
             math_type,
             text: text.to_string(),
             source_info: si(),
             text_source: None,
-        })
+        }))
     }
 
     fn para(content: Vec<Inline>) -> Block {
@@ -338,12 +339,12 @@ mod tests {
         // `$x + \bogus y$` at file bytes 0..14; text at 1..13.
         let node = SourceInfo::original(FileId(0), 0, 14);
         let text = SourceInfo::original(FileId(0), 1, 13);
-        let mut blocks = vec![para(vec![Inline::Math(Math {
+        let mut blocks = vec![para(vec![Inline::Math(Box::new(Math {
             math_type: MathType::InlineMath,
             text: "x + \\bogus y".to_string(),
             source_info: node,
             text_source: Some(text),
-        })])];
+        }))])];
         let out = convert_document(&mut blocks);
         let loc = out.diagnostics[0].location.as_ref().expect("located");
         // `\bogus` is at text offsets 4..10, so file bytes 5..11.
@@ -358,18 +359,18 @@ mod tests {
             Slot::Inlines(vec![math(MathType::InlineMath, "c^2")]),
         );
         let mut blocks = vec![
-            Block::Header(Header {
+            Block::Header(Box::new(Header {
                 level: 1,
                 attr: quarto_pandoc_types::attr::empty_attr(),
                 content: vec![math(MathType::InlineMath, "h^2")],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
             para(vec![Inline::Note(quarto_pandoc_types::inline::Note {
                 content: vec![para(vec![math(MathType::InlineMath, "n^2")])],
                 source_info: si(),
             })]),
-            Block::Custom(custom),
+            Block::Custom(Box::new(custom)),
         ];
         let out = convert_document(&mut blocks);
         assert_eq!((out.converted, out.left), (3, 0));

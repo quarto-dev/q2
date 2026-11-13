@@ -691,4 +691,50 @@ mod tests {
         assert!(!json.contains("\"metadata\""));
         assert!(!json.contains("\"language\""));
     }
+
+    /// EXR-4 Phase 0 audit: the `execute:` keys knitr reads, as a fact.
+    /// `overlay_document_scope` changes the config for exactly these fifteen
+    /// keys and for nothing else, so the knitr hash declaration (which
+    /// excludes nothing) over-invalidates on `execute-dir` and `params`
+    /// only. `ctx.format` is the other input (`with_defaults(&ctx.format)`
+    /// in `build_format_config`, `knitr/mod.rs`).
+    #[test]
+    fn exr4_audit_knitr_reads_exactly_these_execute_keys() {
+        let baseline = serde_json::to_value(ExecuteConfig::with_defaults()).unwrap();
+        let changes = |yaml: &str| serde_json::to_value(overlaid(yaml)).unwrap() != baseline;
+
+        let read = [
+            "fig-width: 3",
+            "fig-height: 3",
+            "fig-asp: 0.5",
+            "fig-dpi: 50",
+            "fig-format: jpeg",
+            "df-print: paged",
+            "eval: false",
+            "warning: false",
+            "error: true",
+            "include: false",
+            "enabled: false",
+            "debug: true",
+            "echo: false",
+            "output: false",
+            "cache: true",
+        ];
+        for yaml in read {
+            assert!(changes(yaml), "knitr should read `{yaml}`");
+        }
+
+        let not_read = [
+            "execute-dir: project",
+            "params: {a: 1}",
+            "freeze: true",
+            "keep-md: true",
+            "label: fig-x",
+            "fig-cap: A caption",
+            "some-unknown-key: 1",
+        ];
+        for yaml in not_read {
+            assert!(!changes(yaml), "knitr should not read `{yaml}`");
+        }
+    }
 }

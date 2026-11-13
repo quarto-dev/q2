@@ -113,7 +113,7 @@ pub fn format_class(key: &str) -> FormatClass {
         Ok(f)
             if matches!(
                 f.identifier,
-                FormatIdentifier::Html | FormatIdentifier::Revealjs
+                FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Dashboard
             ) =>
         {
             FormatClass::Preview
@@ -326,13 +326,19 @@ pub fn resolve_document_formats_in(
 /// The format the live preview renders `key` with, or `None` when the preview
 /// does not render it through the React pipeline (the full-DOM renderer, a
 /// download or nothing takes it): `html` previews as `q2-preview`, `revealjs`
-/// and the other `q2-*` pseudo-formats as themselves, `q2-html-render` is the
+/// and the buildable `q2-*` pseudo-formats as themselves, `dashboard` as
+/// `q2-dashboard`, `q2-html-render` is the
 /// explicit opt-out. The Rust half of the hub-client's former `getQ2Format`.
 pub fn preview_pseudo_format(key: &str) -> Option<String> {
     match key {
         "q2-html-render" => None,
         "html" => Some("q2-preview".to_string()),
-        k if k.starts_with("q2-") || k == "revealjs" => Some(k.to_string()),
+        "dashboard" => Some("q2-dashboard".to_string()),
+        // A `q2-*` key previews as itself only when the pipeline can build
+        // it (the gate `format_class` uses); a partial or misspelt key is
+        // `None`, like any unknown key (bd-luoo7qgu).
+        k if k.starts_with("q2-") && Format::from_format_string(k).is_ok() => Some(k.to_string()),
+        "revealjs" => Some("revealjs".to_string()),
         _ => None,
     }
 }
@@ -383,7 +389,7 @@ mod tests {
         for key in ["docx", "odt", "pptx", "epub", "typst", "typst-pdf"] {
             assert_eq!(format_class(key), FormatClass::Download, "{key}");
         }
-        for key in ["html", "revealjs", "acm-html", "q2-preview"] {
+        for key in ["html", "revealjs", "acm-html", "q2-preview", "dashboard"] {
             assert_eq!(format_class(key), FormatClass::Preview, "{key}");
         }
         for key in ["latex", "opendocument", "no-such-format", "my-docx"] {
@@ -402,8 +408,25 @@ mod tests {
             preview_pseudo_format("q2-slides").as_deref(),
             Some("q2-slides")
         );
+        assert_eq!(
+            preview_pseudo_format("dashboard").as_deref(),
+            Some("q2-dashboard")
+        );
+        // The buildable `q2-*` pseudo-formats preview as themselves.
+        for key in [
+            "q2-preview",
+            "q2-debug",
+            "q2-sandboxed-preview",
+            "q2-slides",
+            "q2-dashboard",
+        ] {
+            assert_eq!(preview_pseudo_format(key).as_deref(), Some(key), "{key}");
+        }
         assert_eq!(preview_pseudo_format("q2-html-render"), None);
-        for key in ["typst-pdf", "docx", "acm-html", "latex"] {
+        // A `q2-*` key the pipeline cannot build — a partial key while
+        // typing (`q2-s`) or a misspelling — is `None`, like any unknown
+        // key (bd-luoo7qgu).
+        for key in ["q2-s", "q2-bogus", "typst-pdf", "docx", "acm-html", "latex"] {
             assert_eq!(preview_pseudo_format(key), None, "{key}");
         }
     }

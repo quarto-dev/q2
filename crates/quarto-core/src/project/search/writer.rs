@@ -20,7 +20,12 @@
 //!   federated parent reads before merging this site's index
 //!   ([`SearchManifest`]).
 //! - `<output>/search.json` — Quarto 1's record array
-//!   ([`super::records`]).
+//!   ([`super::records`]), only when
+//!   [`SearchOptions::search_json`](super::SearchOptions::search_json)
+//!   is on (by default: when Algolia is configured). Otherwise the
+//!   records are not even extracted: on a large site they cost more
+//!   than the Pagefind bundle, and q2's own search box never reads
+//!   them.
 //!
 //! ## Incremental renders
 //!
@@ -42,9 +47,16 @@
 //! ## Turning search off
 //!
 //! `website.search: false` removes the outputs a previous run wrote
-//! (`<lib_dir>/quarto-search/`, and `search.json` when
-//! `.quarto/search/state.json` records that this writer produced it)
-//! so a site cannot keep serving an index it no longer maintains.
+//! (`<lib_dir>/quarto-search/`, and `search.json` as below) so a site
+//! cannot keep serving an index it no longer maintains.
+//!
+//! When `search.json` is not wanted, or a run has no pages to index,
+//! a `search.json` left by a previous run is removed **if it is
+//! unchanged since this writer wrote it**: `.quarto/search/state.json`
+//! records the SHA-256 of the bytes written, and a file whose contents
+//! differ (or that the state does not mention) is left alone. This is
+//! a best-effort courtesy for this one file, not a general guarantee
+//! about files in the output directory.
 
 #![cfg(not(target_arch = "wasm32"))]
 
@@ -93,15 +105,22 @@ pub struct SearchManifest {
 pub const MANIFEST_VERSION: u32 = 1;
 
 /// `.quarto/search/state.json`: what this writer produced outside its
-/// own lib subdirectory, so it can clean up when search is turned off.
+/// own lib subdirectory, so it can clean up when search (or
+/// `search.json`) is turned off.
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 struct WriterState {
     version: u32,
-    /// `search.json` at the output root was written by us.
+    /// Version 1 only: `search.json` at the output root was written by
+    /// us. Kept so a site rendered by a v1 writer has its file removed
+    /// once when `search.json` turns off; v2 writes `false`.
+    #[serde(default)]
     search_json: bool,
+    /// SHA-256 (hex) of the `search.json` bytes this writer last wrote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    search_json_sha256: Option<String>,
 }
 
-const STATE_VERSION: u32 = 1;
+const STATE_VERSION: u32 = 2;
 
 fn search_state_dir(project: &ProjectContext) -> PathBuf {
     project.dir.join(".quarto").join("search")
@@ -139,6 +158,48 @@ fn read_state(project: &ProjectContext, runtime: &dyn SystemRuntime) -> WriterSt
         .unwrap_or_default()
 }
 
+fn write_state(
+    project: &ProjectContext,
+    runtime: &dyn SystemRuntime,
+    search_json_sha256: Option<String>,
+) -> Result<()> {
+    let state = WriterState {
+        version: STATE_VERSION,
+        search_json: false,
+        search_json_sha256,
+    };
+    let state_file = state_path(project);
+    runtime
+        .file_write(
+            &state_file,
+            serde_json::to_string(&state)
+                .expect("state serializes")
+                .as_bytes(),
+        )
+        .map_err(|e| io_err("write", &state_file, e))
+}
+
+/// Remove `<output>/search.json` if `state` says this writer wrote it
+/// and (for a v2 state) its bytes are unchanged since. See the module
+/// docs, "Turning search off".
+fn remove_own_search_json(
+    project: &ProjectContext,
+    state: &WriterState,
+    runtime: &dyn SystemRuntime,
+) -> Result<()> {
+    let path = project.output_dir.join("search.json");
+    let ours = match &state.search_json_sha256 {
+        Some(expected) => runtime
+            .file_read(&path)
+            .is_ok_and(|bytes| &hex::encode(Sha256::digest(&bytes)) == expected),
+        None => state.search_json,
+    };
+    if ours {
+        remove_if_present(&path, runtime)?;
+    }
+    Ok(())
+}
+
 fn remove_if_present(path: &Path, runtime: &dyn SystemRuntime) -> Result<()> {
     match runtime.path_exists(path, None) {
         Ok(true) => {
@@ -167,9 +228,7 @@ fn remove_outputs(
 ) -> Result<()> {
     let state = read_state(project, runtime);
     remove_if_present(&search_lib_dir(project, lib_dir), runtime)?;
-    if state.search_json {
-        remove_if_present(&project.output_dir.join("search.json"), runtime)?;
-    }
+    remove_own_search_json(project, &state, runtime)?;
     remove_if_present(&search_state_dir(project), runtime)?;
     Ok(())
 }
@@ -186,7 +245,7 @@ pub(crate) fn write_search_index(
     let Some(meta) = project.config.metadata.as_ref() else {
         return Ok(());
     };
-    let Some(_opts) = resolve_website_search(meta, diagnostics) else {
+    let Some(opts) = resolve_website_search(meta, diagnostics) else {
         return remove_outputs(project, lib_dir, runtime);
     };
 
@@ -281,7 +340,28 @@ pub(crate) fn write_search_index(
             html: synthesize_document(p),
         })
         .collect();
-    let bundle: Bundle = match build_bundle(index_pages) {
+    // Pagefind's indexing is single-threaded for most of its run (each
+    // `add_html_file` holds the index lock while it parses the page), so
+    // when `search.json` is wanted, extract its records on a second
+    // thread meanwhile; that took ~1 s on a 1600-page site, all on the
+    // critical path. `QUARTO_JOBS=1` keeps everything on this thread.
+    // Extraction is pure (no I/O), so doing it before the bundle result
+    // is known only wastes work on the error paths below.
+    let (bundle_result, early_records) =
+        if opts.search_json && crate::project::orchestrator::worker_count() > 1 {
+            std::thread::scope(|scope| {
+                let extraction =
+                    scope.spawn(|| pages.iter().flat_map(extract_records).collect::<Vec<_>>());
+                let bundle_result = build_bundle(index_pages);
+                let records = extraction
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                (bundle_result, Some(records))
+            })
+        } else {
+            (build_bundle(index_pages), None)
+        };
+    let bundle: Bundle = match bundle_result {
         Ok(bundle) => bundle,
         Err(err) => {
             diagnostics.push(
@@ -301,11 +381,8 @@ pub(crate) fn write_search_index(
         // Nothing to search: leave no bundle behind, like Quarto 1
         // (which never wrote an empty search.json).
         remove_if_present(&search_lib, runtime)?;
-        let state = read_state(project, runtime);
-        if state.search_json {
-            remove_if_present(&project.output_dir.join("search.json"), runtime)?;
-        }
-        return Ok(());
+        remove_own_search_json(project, &read_state(project, runtime), runtime)?;
+        return write_state(project, runtime, None);
     }
     for file in &bundle.files {
         let path = bundle_dir.join(&file.path);
@@ -340,25 +417,20 @@ pub(crate) fn write_search_index(
         .file_write(&manifest_path, manifest_json.as_bytes())
         .map_err(|e| io_err("write", &manifest_path, e))?;
 
-    let records: Vec<_> = pages.iter().flat_map(extract_records).collect();
+    if !opts.search_json {
+        remove_own_search_json(project, &read_state(project, runtime), runtime)?;
+        return write_state(project, runtime, None);
+    }
+    let records: Vec<_> =
+        early_records.unwrap_or_else(|| pages.iter().flat_map(extract_records).collect());
     let search_json_path = project.output_dir.join("search.json");
     let records_json = serde_json::to_string_pretty(&records).expect("records serialize");
     runtime
         .file_write(&search_json_path, records_json.as_bytes())
         .map_err(|e| io_err("write", &search_json_path, e))?;
-
-    let state = WriterState {
-        version: STATE_VERSION,
-        search_json: true,
-    };
-    let state_file = state_path(project);
-    runtime
-        .file_write(
-            &state_file,
-            serde_json::to_string(&state)
-                .expect("state serializes")
-                .as_bytes(),
-        )
-        .map_err(|e| io_err("write", &state_file, e))?;
-    Ok(())
+    write_state(
+        project,
+        runtime,
+        Some(hex::encode(Sha256::digest(records_json.as_bytes()))),
+    )
 }

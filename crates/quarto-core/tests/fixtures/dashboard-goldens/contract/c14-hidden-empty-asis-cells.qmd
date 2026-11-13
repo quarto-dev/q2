@@ -1,0 +1,34 @@
+---
+# contract: cells with no output, hidden cells and output: asis cells do not become cards
+title: "C14 Hidden"
+format: dashboard
+---
+
+## Row
+
+::: {.cell}
+
+```{.python .cell-code .hidden}
+x = 1
+```
+
+:::
+
+::: {.cell}
+:::
+
+::: {.cell output="asis"}
+
+C14-ASIS raw markdown output.
+
+:::
+
+::: {.cell title="C14-VISIBLE"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

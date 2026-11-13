@@ -24,7 +24,8 @@
 //!
 //! Outside websites they ship only when `link-external-icon` names an
 //! icon (`LinkExternalTransform` places a `bi-<name>` span after each
-//! external link), the one consumer a standalone document has today.
+//! external link), or for a dashboard (value-box icons and nav-buttons
+//! are `bi-*` classes), the consumers a standalone document has today.
 //! Quarto 1 ships them with every Bootstrap HTML document; the narrower
 //! gate was chosen to keep single pages light (bd-t3n1nghb).
 //!
@@ -79,7 +80,9 @@ impl AstTransform for WebsiteBootstrapIconsTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        if !needs_bootstrap_icons(ctx.project.project_kind(), &ast.meta) {
+        if !needs_bootstrap_icons(ctx.project.project_kind(), &ast.meta)
+            && ctx.format.base_format() != "dashboard"
+        {
             return Ok(());
         }
         store_artifacts(&mut ctx.artifacts);

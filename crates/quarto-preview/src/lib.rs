@@ -34,6 +34,7 @@ pub mod import_route;
 pub mod join_frontend;
 pub mod pdf_preview;
 pub mod re_execute;
+pub mod record_lookup;
 pub mod render_download;
 pub mod render_flags;
 pub mod render_helper;
@@ -44,6 +45,8 @@ pub use render_flags::RenderFlags;
 
 #[cfg(test)]
 mod route_tests;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 pub use asset_manifest::{
     AssetMode, AssetsBlock, EmbeddedManifests, TunnelReason, decide_asset_mode, embedded_manifest,
@@ -264,6 +267,10 @@ pub struct PreviewConfig {
     /// start via [`config::read_engine_policy_from_project`]; tests
     /// substitute directly.
     pub engine_policy: EnginePolicy,
+    /// The ordered record sources (RIU-2): where a document's record may come from, first
+    /// wins. `-M 'execute: {record-sources: ...}'` sets it; the default is
+    /// [`RecordSources::preview_default`](quarto_core::record::RecordSources::preview_default).
+    pub record_sources: quarto_core::record::RecordSources,
     /// Resources-scoped `.html` files (project-root-relative) to carry
     /// into the VFS as text, so the preview iframe post-processor can
     /// inline embedded example decks via `srcdoc` (bd-kjrpya2d). The CLI
@@ -338,6 +345,9 @@ where
     // native runtime, since every native site goes through
     // `render_flags::native_runtime()`.
     render_flags::set(config.render.clone());
+    // OPR-6: under `--share` the host's record source list is the ceiling for what a guest's
+    // render request may read (`execute: record-sources` in the document or the request).
+    render_helper::set_record_sources_ceiling(config.share.then(|| config.record_sources.clone()));
 
     // bd-kjrpya2d: resolve the project's `resources:` set to (output-relative
     // → disk path) so the artifact route can SERVE embedded-example decks +
@@ -354,16 +364,6 @@ where
         })
         .unwrap_or_default();
     let _ = RESOURCE_DISK_MAP.set(resource_map);
-
-    // Phase C.7: tell the re-execute HTTP handler where the per-doc
-    // capture cache lives. Same OnceLock-first-wins pattern; in
-    // production this fires once at server boot.
-    re_execute::set_cache_dir(
-        config
-            .cache_dir
-            .clone()
-            .unwrap_or_else(|| config.data_dir.join("captures")),
-    );
 
     // bd-b9kzg: initialize the per-server diagnostic sink so the
     // HTTP handler (`/api/preview/diagnostics`) and migrating
@@ -416,11 +416,22 @@ where
     // (see `.claude/rules/wasm.md`); `pollster::block_on` runs them
     // on the spawned thread without requiring `Send`.
     let engine_registry = config.engine_registry.clone();
-    let engine_policy = config.engine_policy;
-    let cache_dir = config
-        .cache_dir
-        .clone()
-        .unwrap_or_else(|| config.data_dir.join("captures"));
+    // One config carries everything that decides whether and how the engine may run: the
+    // policy, the record sources, the writer gate (read from the environment here and nowhere
+    // else) and the cache root. The driver and the staleness hook take it by reference; the
+    // re-execute handler receives it as an axum `Extension`.
+    let re_execute_cfg = config::ReExecuteConfig {
+        policy: config.engine_policy,
+        sources: config.record_sources.clone(),
+        share: config.share,
+        record_gate: quarto_core::engine::capture_files::record_writing_enabled(
+            quarto_core::engine::capture_files::WriterSurface::Preview,
+        ),
+        cache_dir: config
+            .cache_dir
+            .clone()
+            .unwrap_or_else(|| config.data_dir.join("captures")),
+    };
     // Live-share gate (bd-jhvkwosw): the share task below starts its
     // tunnel only once the server reaches `on_ready`, so the production
     // preset's relay wait never delays the host's own preview, and the
@@ -428,11 +439,11 @@ where
     let (share_ready_tx, share_ready_rx) = tokio::sync::watch::channel(false);
 
     let registry_for_on_ready = engine_registry.clone();
-    let cache_dir_for_on_ready = cache_dir.clone();
+    let cfg_for_on_ready = re_execute_cfg.clone();
     let project_root_for_scripts = config.project_root.clone();
     let on_ready: server::OnReadyCallback = Box::new(move |ctx| {
         let registry = registry_for_on_ready;
-        let cache_dir = cache_dir_for_on_ready;
+        let cfg = cfg_for_on_ready;
         let runtime: Arc<dyn SystemRuntime> = Arc::new(render_flags::native_runtime());
         let ctx_for_driver = ctx.clone();
         tokio::task::spawn_blocking(move || {
@@ -450,8 +461,7 @@ where
                 ctx_for_driver,
                 runtime,
                 registry,
-                engine_policy,
-                &cache_dir,
+                &cfg,
             ));
             if let Err(e) = result {
                 tracing::warn!(error = %e, "eager capture driver failed");
@@ -481,7 +491,7 @@ where
     // `sync_file_by_path` already has — see canonicalize note in
     // tests/staleness.rs).
     let registry_for_on_file_changed = engine_registry.clone();
-    let cache_dir_for_on_file_changed = cache_dir.clone();
+    let cfg_for_on_file_changed = re_execute_cfg.clone();
     let on_file_changed: server::OnFileChangedCallback = Arc::new(move |ctx, abs_path| {
         let Some(project_root_raw) = ctx.storage().project_root().map(|p| p.to_path_buf()) else {
             return;
@@ -494,15 +504,10 @@ where
         let rel_path = rel.to_string_lossy().to_string();
         let runtime: Arc<dyn SystemRuntime> = Arc::new(render_flags::native_runtime());
         let registry = registry_for_on_file_changed.clone();
-        let cache_dir = cache_dir_for_on_file_changed.clone();
+        let cfg = cfg_for_on_file_changed.clone();
         tokio::task::spawn_blocking(move || {
             let result = pollster::block_on(capture_driver::recompute_staleness(
-                ctx,
-                runtime,
-                &rel_path,
-                engine_policy,
-                registry,
-                &cache_dir,
+                ctx, runtime, &rel_path, registry, &cfg,
             ));
             if let Err(e) = result {
                 tracing::warn!(error = %e, rel_path = %rel_path, "staleness recompute failed");
@@ -529,6 +534,7 @@ where
             config.host.clone(),
             config.port,
             config.allow_edit,
+            config::engine_can_run(config.engine_policy, &config.record_sources),
             share_ready_rx,
             |banner| println!("\n{banner}\n"),
         ))
@@ -539,7 +545,7 @@ where
     let server_result = server::run_server_with(
         storage,
         hub_config,
-        Some(extend_with_preview),
+        Some(move |router| extend_with_preview(router).layer(axum::Extension(re_execute_cfg))),
         Some(on_ready),
         Some(on_file_changed),
     )
@@ -599,7 +605,10 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         ))
         .chain(project.config.config_diagnostics.iter().cloned())
     {
-        eprintln!("{}", diagnostic.to_text(None));
+        eprintln!(
+            "{}",
+            diagnostic.to_text_with_options(None, &stderr_text_options())
+        );
     }
     if project.config.pre_render_scripts.is_empty() {
         return;
@@ -635,7 +644,7 @@ fn run_boot_pre_render_scripts(project_root: &std::path::Path) {
         &ctx,
         &input_files,
     ) {
-        eprintln!("{parse_error}");
+        eprintln!("{}", parse_error.render_with(&stderr_text_options()));
         eprintln!(
             "note: the preview keeps serving; fix the script and restart `q2 preview` to re-run it."
         );
@@ -1313,6 +1322,15 @@ fn content_type_for(path: &str) -> HeaderValue {
     HeaderValue::from_static(spa_manifest::content_type_for(path))
 }
 
+/// Diagnostic render options for this process's stderr, per the style
+/// resolved once at startup (`quarto_util::output_style`, bd-be8ve52f).
+fn stderr_text_options() -> quarto_error_reporting::TextRenderOptions {
+    let style = quarto_util::output_style::get().stderr;
+    quarto_error_reporting::TextRenderOptions::default()
+        .color(style.color)
+        .hyperlinks(style.hyperlinks)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1406,6 +1424,7 @@ mod tests {
             spa_dir_override: None,
             engine_registry: None,
             engine_policy: EnginePolicy::Manual,
+            record_sources: quarto_core::record::RecordSources::preview_default(),
             resource_html_files: Vec::new(),
             cache_dir: None,
             allow_edit,

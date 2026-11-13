@@ -1,0 +1,12 @@
+---
+bibliography: refs.bib
+references:
+  - id: item
+    type: webpage
+    title: A page
+  - id: both
+    type: book
+    title: Inline copy
+---
+
+See [@item].

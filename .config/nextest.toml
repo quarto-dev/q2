@@ -45,10 +45,15 @@ quarto-preview-fs-watcher = { max-threads = 1 }
 # intra-suite race, not any single bad test. Serializing the suite is
 # the config-level fix; full hermetic isolation for the j-tests is
 # tracked separately (they belong to the julia-validation plan).
+# `engine_output_parity::parity_julia_cell_and_inline_span` also runs the Julia
+# engine on the real HOME, so it belongs to the group too. The group only
+# serializes within ONE nextest invocation; the isolated rows (j7, pc4a) must
+# not assert on the shared file's existence or mtime, because other sessions
+# running Julia tests concurrently legitimately change it.
 julia-shared-transport = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = "package(quarto-preview) & binary(integration) & test(/^(staleness|eager_capture|boot)::/)"
+filter = "package(quarto-preview) & binary(integration) & test(/^(staleness|eager_capture|boot|live_reexecute)::/)"
 test-group = "quarto-preview-fs-watcher"
 
 # `q2 preview --static` end-to-end tests (bd-sl79jjiq) each spawn the
@@ -61,5 +66,5 @@ filter = "package(quarto) & binary(integration) & test(/^preview_static_e2e::/)"
 test-group = "quarto-preview-fs-watcher"
 
 [[profile.default.overrides]]
-filter = "package(quarto-core) & binary(integration) & test(/^julia_engine_e2e::/)"
+filter = "package(quarto-core) & binary(integration) & (test(/^julia_engine_e2e::/) | test(engine_output_parity::parity_julia_cell_and_inline_span))"
 test-group = "julia-shared-transport"

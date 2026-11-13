@@ -67,8 +67,10 @@ use serde_json::Value;
 
 use crate::Result;
 use crate::language::LanguageTerms;
-use crate::render::RenderContext;
+use crate::render::{ChapterSeed, RenderContext};
 use crate::transform::{AstTransform, TransformPhase};
+use crate::transforms::crossref_render::format_crossref_number;
+use pampa::transforms::sectionize::absorb_section_wrapper;
 
 /// Transform that resolves Callout CustomNodes to standard Pandoc Div structure.
 ///
@@ -95,11 +97,17 @@ impl AstTransform for CalloutResolveTransform {
         "callout-resolve"
     }
 
+    /// Crossref phase, not Normalization: a crossref-eligible callout's
+    /// title carries its number ("Note 1"), which only exists once
+    /// `CrossrefIndexTransform` has written `plain_data.order`. Until
+    /// then the callout stays a `Callout` CustomNode, exactly as it does
+    /// for the whole q2-preview pipeline (which never runs this
+    /// transform). GH #1020, bd-h14a4m83.
     fn phase(&self) -> TransformPhase {
-        TransformPhase::Normalization
+        TransformPhase::Crossref
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         // Document-scoped counter for generating unique `callout-N-contents`
         // ids on collapsible callouts. Starts at 1 to match TS Quarto's
         // `calloutidx` (`src/resources/filters/modules/callouts.lua`).
@@ -108,64 +116,76 @@ impl AstTransform for CalloutResolveTransform {
         // `None` when the LanguageResolveStage hasn't run (direct unit
         // tests) — the capitalize() fallback applies then.
         let terms = LanguageTerms::from_meta(&ast.meta);
-        resolve_blocks(&mut ast.blocks, &mut counter, terms.as_ref());
+        let env = ResolveEnv {
+            terms: terms.as_ref(),
+            chapter_seed: ctx.chapter_seed.as_ref(),
+        };
+        resolve_blocks(&mut ast.blocks, &mut counter, &env);
         Ok(())
     }
 }
 
+/// Read-only, document-wide inputs to callout resolution.
+struct ResolveEnv<'a> {
+    terms: Option<&'a LanguageTerms>,
+    /// Book chapters number crossref targets `{chapter}.{n}`; see
+    /// `format_crossref_number`.
+    chapter_seed: Option<&'a ChapterSeed>,
+}
+
 /// Resolve CustomNodes in a vector of blocks.
-fn resolve_blocks(blocks: &mut Vec<Block>, counter: &mut u32, terms: Option<&LanguageTerms>) {
+fn resolve_blocks(blocks: &mut Vec<Block>, counter: &mut u32, env: &ResolveEnv) {
     for block in blocks.iter_mut() {
-        resolve_block(block, counter, terms);
+        resolve_block(block, counter, env);
     }
 }
 
 /// Resolve a single block, potentially converting CustomNode to Div.
-fn resolve_block(block: &mut Block, counter: &mut u32, terms: Option<&LanguageTerms>) {
+fn resolve_block(block: &mut Block, counter: &mut u32, env: &ResolveEnv) {
     // First, recursively resolve any nested blocks
     match block {
         Block::BlockQuote(bq) => {
-            resolve_blocks(&mut bq.content, counter, terms);
+            resolve_blocks(&mut bq.content, counter, env);
         }
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                resolve_blocks(item, counter, terms);
+                resolve_blocks(item, counter, env);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                resolve_blocks(item, counter, terms);
+                resolve_blocks(item, counter, env);
             }
         }
         Block::DefinitionList(dl) => {
             for (_term, defs) in &mut dl.content {
                 for def in defs {
-                    resolve_blocks(def, counter, terms);
+                    resolve_blocks(def, counter, env);
                 }
             }
         }
         Block::Figure(fig) => {
-            resolve_blocks(&mut fig.content, counter, terms);
+            resolve_blocks(&mut fig.content, counter, env);
         }
         Block::Div(div) => {
-            resolve_blocks(&mut div.content, counter, terms);
+            resolve_blocks(&mut div.content, counter, env);
         }
         Block::Table(table) => {
             for body in &mut table.bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        resolve_blocks(&mut cell.content, counter, terms);
+                        resolve_blocks(&mut cell.content, counter, env);
                     }
                 }
             }
             for row in &mut table.head.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, counter, terms);
+                    resolve_blocks(&mut cell.content, counter, env);
                 }
             }
             for row in &mut table.foot.rows {
                 for cell in &mut row.cells {
-                    resolve_blocks(&mut cell.content, counter, terms);
+                    resolve_blocks(&mut cell.content, counter, env);
                 }
             }
         }
@@ -173,16 +193,16 @@ fn resolve_block(block: &mut Block, counter: &mut u32, terms: Option<&LanguageTe
             // First resolve any nested blocks in slots
             for (_name, slot) in &mut custom.slots {
                 match slot {
-                    Slot::Block(b) => resolve_block(b, counter, terms),
-                    Slot::Blocks(bs) => resolve_blocks(bs, counter, terms),
+                    Slot::Block(b) => resolve_block(b, counter, env),
+                    Slot::Blocks(bs) => resolve_blocks(bs, counter, env),
                     _ => {}
                 }
             }
 
             // Then check if this is a Callout that should be resolved
             if custom.type_name == "Callout" {
-                let resolved_div = resolve_callout(custom, counter, terms);
-                *block = Block::Div(resolved_div);
+                let resolved_div = resolve_callout(custom, counter, env.terms, env.chapter_seed);
+                *block = Block::Div(Box::new(resolved_div));
             }
         }
         // Other block types don't contain nested blocks
@@ -199,6 +219,7 @@ fn resolve_callout(
     custom: &mut CustomNode,
     counter: &mut u32,
     terms: Option<&LanguageTerms>,
+    chapter_seed: Option<&ChapterSeed>,
 ) -> Div {
     // Extract callout properties from plain_data. Appearance is
     // already normalized at CalloutTransform time (minimal → simple +
@@ -237,13 +258,21 @@ fn resolve_callout(
     let content_blocks = extract_content_blocks(custom);
     let has_content = !content_blocks.is_empty();
 
-    // Whether the callout already carries a crossref-rendered prefix
-    // in its title (set by `CalloutTransform` when `classify_cite_id`
-    // matched — see `callout.rs:236-241`). The prefix announces the
-    // type to screen readers on its own, so we skip the
-    // screen-reader-only span in that case to avoid duplication.
-    // Mirror of `callouts.lua:194-197`'s `needs_screen_reader_callout_type`.
+    // Whether the callout is crossref-eligible (`CalloutTransform` writes
+    // `ref_type` when `classify_cite_id` matches its id — see
+    // `convert_div_to_callout` in `callout.rs`). Its title gets the
+    // crossref prefix below, which announces the type to screen readers
+    // on its own, so we skip the screen-reader-only span in that case to
+    // avoid duplication. Mirror of `callouts.lua:202-205`'s
+    // `needs_screen_reader_callout_type`.
     let is_crossref = custom.plain_data.get("ref_type").is_some();
+
+    // Crossref title prefix ("Note 1"), per Q1's
+    // `decorate_callout_title_with_crossref` (`callouts.lua:26-56`). Q1
+    // applies it before the appearance check below, so a crossref callout
+    // is always titled — even an untitled `simple` one. `None` when the
+    // callout isn't crossref-eligible or the indexer gave it no number.
+    let crossref_prefix = crossref_title_prefix(&custom.plain_data, terms, chapter_seed);
 
     // Default-title injection (per `callouts.lua:224-227`):
     // `appearance="default"` + empty title → inject the type's display name.
@@ -252,17 +281,34 @@ fn resolve_callout(
     // Tracks whether the title came from the user (vs. our
     // default-injection) so we can decide later whether to prepend
     // the screen-reader-only type span.
-    let (title_inlines, title_is_user_supplied): (Option<Vec<Inline>>, bool) = match user_title {
-        Some(t) if !t.is_empty() => (Some(t), true),
-        _ if appearance == "default" => (
-            Some(vec![Inline::Str(Str {
-                text: callout_display_name(&callout_type, terms),
-                source_info: SourceInfo::generated(By::callout()),
-            })]),
-            false,
-        ),
-        _ => (None, false),
+    let generated_str = |text: String| {
+        Inline::Str(Str {
+            text,
+            source_info: SourceInfo::generated(By::callout()),
+        })
     };
+    let user_title = user_title.filter(|t| !t.is_empty());
+    let (title_inlines, title_is_user_supplied): (Option<Vec<Inline>>, bool) =
+        match (user_title, crossref_prefix) {
+            // "Note 1: " + title. Q1's `titlePrefix` joins kind and number
+            // with a non-breaking space, then title-delim + a regular space
+            // (same shape as `prefix_caption` in `crossref_render.rs`).
+            (Some(t), Some(prefix)) => {
+                let mut inlines = vec![generated_str(format!("{prefix}: "))];
+                inlines.extend(t);
+                (Some(inlines), true)
+            }
+            (Some(t), None) => (Some(t), true),
+            (None, Some(prefix)) => (Some(vec![generated_str(prefix)]), false),
+            (None, None) if appearance == "default" => (
+                Some(vec![generated_str(callout_display_name(
+                    &callout_type,
+                    terms,
+                ))]),
+                false,
+            ),
+            _ => (None, false),
+        };
     let is_titled = title_inlines.is_some();
 
     // Screen-reader-only type announcement (per `callouts.lua:271-275`):
@@ -275,7 +321,7 @@ fn resolve_callout(
         Some(mut inlines) if title_is_user_supplied && !is_crossref => {
             inlines.insert(
                 0,
-                Inline::Span(quarto_pandoc_types::inline::Span {
+                Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
                     attr: make_attr(&["screen-reader-only"]),
                     content: vec![Inline::Str(Str {
                         text: callout_display_name(&callout_type, terms),
@@ -283,7 +329,7 @@ fn resolve_callout(
                     })],
                     source_info: SourceInfo::generated(By::callout()),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
             );
             Some(inlines)
         }
@@ -307,13 +353,13 @@ fn resolve_callout(
     }
 
     // Preserve original non-callout classes from the source attr.
-    let (orig_id, orig_classes, orig_attrs) = &custom.attr;
+    let (orig_id, orig_classes, orig_attrs) = &*custom.attr;
     for cls in orig_classes {
         if !cls.starts_with("callout") {
             classes.push(cls.clone());
         }
     }
-    let outer_attr: Attr = (orig_id.clone(), classes, orig_attrs.clone());
+    let outer_attr: Attr = (orig_id.clone(), classes, orig_attrs.clone()).into();
 
     // Reserve unique ids for the collapse wrapper. Q1-parity
     // naming (callouts.lua:281, 307, 310, 316-317):
@@ -333,6 +379,12 @@ fn resolve_callout(
         None
     };
 
+    // The body container is a wrapper built *after* sectionize, so each
+    // place it becomes a Block goes through `absorb_section_wrapper`:
+    // a body that is exactly one section (a heading plus its content)
+    // merges into it — `<section id=… class="level4
+    // callout-body-container callout-body">`, the DOM Q1 gets from
+    // pandoc's `makeSections` running after its callout render.
     let body_inner_div = Div {
         attr: make_attr(&["callout-body-container"]),
         content: content_blocks,
@@ -385,10 +437,10 @@ fn build_titled_content(
 
     // Always emit the icon container (Q1-parity, callouts.lua:254-262);
     // when icon=false the inner `<i>` carries `no-icon` so CSS can hide it.
-    header_content.push(Block::Div(icon_container_div(source_info, icon)));
+    header_content.push(Block::Div(Box::new(icon_container_div(source_info, icon))));
 
     // Title container.
-    header_content.push(Block::Div(Div {
+    header_content.push(Block::Div(Box::new(Div {
         attr: make_attr(&["callout-title-container", "flex-fill"]),
         content: vec![Block::Plain(Plain {
             content: title_inlines,
@@ -396,7 +448,7 @@ fn build_titled_content(
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    }));
+    })));
 
     // Header: classes + (when collapsible) Bootstrap toggle attrs.
     let mut header_classes: Vec<String> = vec![
@@ -428,22 +480,22 @@ fn build_titled_content(
 
         // Trailing toggle button.
         header_content.push(Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "<div class=\"callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 \
                        float-end\"><i class=\"callout-toggle\"></i></div>"
                     .to_string(),
                 source_info: source_info.clone(),
-            })],
+            }))],
             source_info: source_info.clone(),
         }));
     }
-    let header_div = Block::Div(Div {
-        attr: (String::new(), header_classes, header_attrs),
+    let header_div = Block::Div(Box::new(Div {
+        attr: (String::new(), header_classes, header_attrs).into(),
         content: header_content,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     // Body. With collapse, wrap the body-container in a
     // `.callout-collapse.collapse[.show]` div; without collapse, the
@@ -464,22 +516,23 @@ fn build_titled_content(
         // titled+collapse output).
         let mut body_with_class = body_inner_div;
         body_with_class.attr.1.push("callout-body".to_string());
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             // Wrapper id is the clean `callout-N` (no -contents
             // suffix); aria-controls on the header points at this id.
             attr: (
                 ids.wrapper_id.clone(),
                 collapse_classes,
                 LinkedHashMap::new(),
-            ),
-            content: vec![Block::Div(body_with_class)],
+            )
+                .into(),
+            content: vec![absorb_section_wrapper(body_with_class)],
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     } else {
         let mut body_with_class = body_inner_div;
         body_with_class.attr.1.push("callout-body".to_string());
-        Block::Div(body_with_class)
+        absorb_section_wrapper(body_with_class)
     };
 
     vec![header_div, body_block]
@@ -493,8 +546,8 @@ fn build_untitled_content(source_info: &SourceInfo, icon: bool, body_inner_div: 
     // Always emit the icon container (Q1-parity); icon=false adds
     // the `no-icon` co-class to the inner `<i>`.
     let body_content = vec![
-        Block::Div(icon_container_div(source_info, icon)),
-        Block::Div(body_inner_div),
+        Block::Div(Box::new(icon_container_div(source_info, icon))),
+        absorb_section_wrapper(body_inner_div),
     ];
 
     let body_outer = Div {
@@ -503,7 +556,7 @@ fn build_untitled_content(source_info: &SourceInfo, icon: bool, body_inner_div: 
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     };
-    vec![Block::Div(body_outer)]
+    vec![Block::Div(Box::new(body_outer))]
 }
 
 /// Build the icon container div. The container is ALWAYS emitted
@@ -522,11 +575,11 @@ fn icon_container_div(source_info: &SourceInfo, icon: bool) -> Div {
     Div {
         attr: make_attr(&["callout-icon-container"]),
         content: vec![Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: format!("<i class=\"{}\"></i>", i_class),
                 source_info: source_info.clone(),
-            })],
+            }))],
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),
@@ -566,6 +619,7 @@ fn make_attr(classes: &[&str]) -> Attr {
         classes.iter().map(|s| (*s).to_string()).collect(),
         LinkedHashMap::new(),
     )
+        .into()
 }
 
 /// Extract a string value from JSON.
@@ -582,6 +636,34 @@ fn extract_bool(value: &Value, key: &str) -> Option<bool> {
 /// `callout-<type>-title` term when available (bd-llhlzd7p), else the
 /// capitalized type keyword (which is also how unknown/custom callout
 /// types are titled).
+/// The crossref title prefix of a numbered callout: `"{Kind}\u{a0}{n}"`
+/// (e.g. "Note 1" with a non-breaking space), or `None` when the callout
+/// isn't crossref-eligible or `CrossrefIndexTransform` gave it no
+/// `plain_data.order` (e.g. a duplicate id).
+///
+/// Q1's `titlePrefix` (`crossref/format.lua`) takes the kind from the
+/// `crossref-<type>-title` language term; the registry's `kind` (the
+/// display name `CalloutTransform` recorded) is the fallback when no
+/// language table is in play. The number goes through
+/// `format_crossref_number`, so book chapters get `{chapter}.{n}` — the
+/// same text the `@ref` link shows.
+fn crossref_title_prefix(
+    plain_data: &Value,
+    terms: Option<&LanguageTerms>,
+    chapter_seed: Option<&ChapterSeed>,
+) -> Option<String> {
+    let ref_type = plain_data.get("ref_type")?.as_str()?;
+    let order = plain_data.get("order")?.get("order")?.as_u64()?;
+    let order = u32::try_from(order).ok()?;
+    let kind = terms
+        .and_then(|t| t.crossref_title(ref_type))
+        .or_else(|| plain_data.get("kind").and_then(|v| v.as_str()))?;
+    Some(format!(
+        "{kind}\u{a0}{}",
+        format_crossref_number(order, chapter_seed)
+    ))
+}
+
 fn callout_display_name(callout_type: &str, terms: Option<&LanguageTerms>) -> String {
     terms
         .and_then(|t| t.get(&format!("callout-{callout_type}-title")))
@@ -662,7 +744,7 @@ mod tests {
 
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Custom(custom)],
+            blocks: vec![Block::Custom(Box::new(custom))],
         };
 
         let project = make_test_project();
@@ -678,7 +760,7 @@ mod tests {
         assert_eq!(ast.blocks.len(), 1);
         match &ast.blocks[0] {
             Block::Div(div) => {
-                let (_, classes, _) = &div.attr;
+                let (_, classes, _) = &*div.attr;
                 assert!(classes.contains(&"callout".to_string()));
                 assert!(classes.contains(&"callout-warning".to_string()));
 
@@ -688,7 +770,7 @@ mod tests {
                 // Check header structure
                 match &div.content[0] {
                     Block::Div(header) => {
-                        let (_, classes, _) = &header.attr;
+                        let (_, classes, _) = &*header.attr;
                         assert!(classes.contains(&"callout-header".to_string()));
                     }
                     _ => panic!("Expected header Div"),
@@ -697,7 +779,7 @@ mod tests {
                 // Check body structure
                 match &div.content[1] {
                     Block::Div(body) => {
-                        let (_, classes, _) = &body.attr;
+                        let (_, classes, _) = &*body.attr;
                         assert!(classes.contains(&"callout-body-container".to_string()));
                         assert!(classes.contains(&"callout-body".to_string()));
                     }
@@ -732,7 +814,7 @@ mod tests {
 
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Custom(custom)],
+            blocks: vec![Block::Custom(Box::new(custom))],
         };
 
         let project = make_test_project();
@@ -747,7 +829,7 @@ mod tests {
         // Verify structure
         match &ast.blocks[0] {
             Block::Div(div) => {
-                let (_, classes, _) = &div.attr;
+                let (_, classes, _) = &*div.attr;
                 assert!(classes.contains(&"callout-tip".to_string()));
             }
             _ => panic!("Expected Div"),
@@ -760,7 +842,7 @@ mod tests {
         custom.plain_data = json!({"type": "note"});
         // No title slot - should use default
 
-        let resolved = resolve_callout(&mut custom, &mut 1, None);
+        let resolved = resolve_callout(&mut custom, &mut 1, None, None);
 
         // Find the title container and check it has "Note"
         let header = &resolved.content[0];
@@ -768,7 +850,7 @@ mod tests {
             // Find title container (second child if icon is present)
             for block in &header_div.content {
                 if let Block::Div(div) = block {
-                    let (_, classes, _) = &div.attr;
+                    let (_, classes, _) = &*div.attr;
                     if classes.contains(&"callout-title-container".to_string())
                         && let Block::Plain(plain) = &div.content[0]
                         && let Inline::Str(s) = &plain.content[0]
@@ -787,7 +869,7 @@ mod tests {
         let mut custom = CustomNode::new("Callout", empty_attr(), dummy_source_info());
         custom.plain_data = json!({"type": "warning", "icon": false});
 
-        let resolved = resolve_callout(&mut custom, &mut 1, None);
+        let resolved = resolve_callout(&mut custom, &mut 1, None, None);
 
         // Q1-parity: header always contains an icon container; the
         // `no-icon` marker lives on the outer div + the inner `<i>`.
@@ -835,7 +917,7 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
-                content: vec![Block::Custom(custom)],
+                content: vec![Block::Custom(Box::new(custom))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -853,7 +935,7 @@ mod tests {
         match &ast.blocks[0] {
             Block::BlockQuote(bq) => match &bq.content[0] {
                 Block::Div(div) => {
-                    let (_, classes, _) = &div.attr;
+                    let (_, classes, _) = &*div.attr;
                     assert!(classes.contains(&"callout-note".to_string()));
                 }
                 _ => panic!("Expected Div inside BlockQuote"),
@@ -1006,7 +1088,7 @@ mod tests {
             Some(vec![str_inline("Watch Out")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout");
         assert_has_class(&classes, "callout-style-default");
@@ -1021,7 +1103,7 @@ mod tests {
     #[tokio::test]
     async fn test_canonical_default_no_title_injects_default() {
         let mut node = callout_node("tip", Some("default"), None, None, None, vec![para("Body")]);
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-default");
         assert_has_class(&classes, "callout-titled");
@@ -1035,7 +1117,7 @@ mod tests {
     #[tokio::test]
     async fn test_canonical_simple_no_title_stays_untitled() {
         let mut node = callout_node("note", Some("simple"), None, None, None, vec![para("Body")]);
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-simple");
         assert_no_class(&classes, "callout-titled");
@@ -1084,7 +1166,7 @@ mod tests {
             Some(vec![str_inline("Please Read")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-simple");
         assert_has_class(&classes, "callout-titled");
@@ -1105,7 +1187,7 @@ mod tests {
             None,
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let classes = outer_classes(&resolved);
         assert_has_class(&classes, "callout-style-simple");
         assert_no_class(&classes, "callout-style-minimal");
@@ -1138,7 +1220,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         assert_has_class(&outer_classes(&resolved), "no-icon");
         assert!(
             contains_class_anywhere(&resolved, "callout-icon-container"),
@@ -1162,7 +1244,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let raw_icon_html = collect_raw_html(&resolved);
         assert!(
             raw_icon_html.contains("callout-icon no-icon"),
@@ -1183,7 +1265,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let raw_icon_html = collect_raw_html(&resolved);
         assert!(
             raw_icon_html.contains("callout-icon"),
@@ -1230,7 +1312,7 @@ mod tests {
             Some(vec![str_inline("Heads Up")]),
             vec![],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         assert_has_class(&outer_classes(&resolved), "callout-empty-content");
     }
 
@@ -1244,7 +1326,7 @@ mod tests {
             Some(vec![str_inline("Title")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             other => panic!("expected header Div, got {:?}", other),
@@ -1265,7 +1347,7 @@ mod tests {
             Some(vec![str_inline("T")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         // Expected structure: outer > [header, collapse-wrapper];
         // collapse-wrapper > body.
         assert_eq!(
@@ -1325,7 +1407,7 @@ mod tests {
             Some(vec![str_inline("T")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             other => panic!("expected header Div, got {:?}", other),
@@ -1358,7 +1440,7 @@ mod tests {
                 Some(vec![str_inline("T")]),
                 vec![para("Body")],
             );
-            let resolved = resolve_callout(&mut node, &mut 1, None);
+            let resolved = resolve_callout(&mut node, &mut 1, None, None);
             let classes = outer_classes(&resolved);
             assert_no_class(&classes, "callout-appearance-default");
             assert_no_class(&classes, "callout-appearance-simple");
@@ -1377,7 +1459,7 @@ mod tests {
             vec![para("Body")],
         );
         node.attr.0 = "mywarn".to_string();
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         assert_eq!(
             resolved.attr.0, "mywarn",
             "user-supplied id must survive resolution"
@@ -1395,7 +1477,7 @@ mod tests {
                 Some(vec![str_inline("T")]),
                 vec![para("Body")],
             );
-            let resolved = resolve_callout(&mut node, &mut 1, None);
+            let resolved = resolve_callout(&mut node, &mut 1, None, None);
             assert_has_class(&outer_classes(&resolved), &format!("callout-{}", t));
         }
     }
@@ -1416,7 +1498,7 @@ mod tests {
             Some(vec![str_inline("Watch Out")]),
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             other => panic!("expected header Div, got {:?}", other),
@@ -1475,7 +1557,7 @@ mod tests {
             None, // no user title → default-inject "Tip"
             vec![para("Body")],
         );
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             _ => panic!("expected header Div"),
@@ -1525,7 +1607,7 @@ mod tests {
             obj.insert("kind".into(), json!("Tip"));
             obj.insert("identifier".into(), json!("tip-foo"));
         }
-        let resolved = resolve_callout(&mut node, &mut 1, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
         let header = match &resolved.content[0] {
             Block::Div(d) => d,
             _ => panic!("expected header Div"),
@@ -1553,5 +1635,105 @@ mod tests {
                 );
             }
         }
+    }
+
+    // --- Crossref title prefix (GH #1020, bd-h14a4m83) -------------------
+    //
+    // Q1's `decorate_callout_title_with_crossref` (`callouts.lua:26-56`)
+    // prepends "{Kind} {n}" (untitled) or "{Kind} {n}: " (titled) to the
+    // title of every crossref-eligible callout, whatever its appearance.
+
+    /// A callout node carrying the crossref triple plus the
+    /// `plain_data.order` that `CrossrefIndexTransform` writes.
+    fn crossref_callout_node(
+        callout_type: &str,
+        ref_type: &str,
+        kind: &str,
+        appearance: Option<&str>,
+        title: Option<Vec<Inline>>,
+        order: Option<u32>,
+    ) -> CustomNode {
+        let mut node = callout_node(
+            callout_type,
+            appearance,
+            None,
+            None,
+            title,
+            vec![para("Body")],
+        );
+        let id = format!("{ref_type}-x");
+        node.attr.0 = id.clone();
+        if let Value::Object(ref mut obj) = node.plain_data {
+            obj.insert("ref_type".into(), json!(ref_type));
+            obj.insert("kind".into(), json!(kind));
+            obj.insert("identifier".into(), json!(id));
+            if let Some(n) = order {
+                obj.insert("order".into(), json!({ "section": [], "order": n }));
+            }
+        }
+        node
+    }
+
+    #[tokio::test]
+    async fn test_crossref_untitled_default_gets_numbered_title() {
+        let mut node = crossref_callout_node("note", "nte", "Note", None, None, Some(1));
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
+        assert_eq!(
+            extract_title_text(&resolved).as_deref(),
+            Some("Note\u{a0}1")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_crossref_titled_gets_prefix_and_delimiter() {
+        let mut node = crossref_callout_node(
+            "warning",
+            "wrn",
+            "Warning",
+            Some("default"),
+            Some(vec![str_inline("Careful")]),
+            Some(2),
+        );
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
+        assert_eq!(
+            extract_title_text(&resolved).as_deref(),
+            Some("Warning\u{a0}2: Careful")
+        );
+    }
+
+    /// Q1 decorates the title before the appearance check, so an untitled
+    /// `simple` crossref callout is titled ("Tip 1") rather than untitled.
+    #[tokio::test]
+    async fn test_crossref_untitled_simple_becomes_titled() {
+        let mut node = crossref_callout_node("tip", "tip", "Tip", Some("simple"), None, Some(1));
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
+        assert_has_class(&outer_classes(&resolved), "callout-titled");
+        assert_eq!(extract_title_text(&resolved).as_deref(), Some("Tip\u{a0}1"));
+    }
+
+    /// Book chapters number crossref targets `{chapter}.{n}`, the same as
+    /// the reference text (`format_crossref_number`).
+    #[tokio::test]
+    async fn test_crossref_title_uses_chapter_seed() {
+        let mut node = crossref_callout_node("note", "nte", "Note", None, None, Some(3));
+        let seed = crate::render::ChapterSeed {
+            chapter_number: 2,
+            is_appendix: false,
+        };
+        let resolved = resolve_callout(&mut node, &mut 1, None, Some(&seed));
+        assert_eq!(
+            extract_title_text(&resolved).as_deref(),
+            Some("Note\u{a0}2.3")
+        );
+    }
+
+    /// Without an `order` (the indexer skipped the target, e.g. a
+    /// duplicate id) there is no number to show; keep the plain
+    /// default title rather than inventing one.
+    #[tokio::test]
+    async fn test_crossref_without_order_keeps_default_title() {
+        let mut node = crossref_callout_node("note", "nte", "Note", None, None, None);
+        let resolved = resolve_callout(&mut node, &mut 1, None, None);
+        assert_eq!(extract_title_text(&resolved).as_deref(), Some("Note"));
     }
 }

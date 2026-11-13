@@ -87,6 +87,7 @@ pub async fn boot(files: &[(&str, &[u8])]) -> Server {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: quarto_preview::config::EnginePolicy::Off,
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
@@ -185,14 +186,22 @@ pub fn capture_of(doc: &str, output: &str, plot: Option<&str>) -> EngineCapture 
             })
             .into_iter()
             .collect(),
+        record: None,
     }
 }
 
 /// Record `captures` in the hub's sidecar for `path`, as the eager driver would.
 pub async fn record_captures(server: &Server, path: &str, captures: &[EngineCapture]) {
-    let id = quarto_preview::capture_driver::write_capture_doc(&server.ctx, path, captures)
-        .await
-        .expect("write the capture doc");
+    let id = quarto_preview::capture_driver::write_capture_doc(
+        &server.ctx,
+        path,
+        &quarto_core::engine::preview_record::CaptureRun {
+            captures: captures.to_vec(),
+            record: None,
+        },
+    )
+    .await
+    .expect("write the capture doc");
     server
         .ctx
         .index()

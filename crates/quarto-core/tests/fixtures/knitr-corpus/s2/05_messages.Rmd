@@ -1,0 +1,22 @@
+```{r conditions, error=TRUE}
+message("a message that is long enough that str_wrap at width 80 will fold it onto a second line of text")
+warning("a warning with a call")
+f <- function() warning("warning inside f")
+f()
+stop("an error with a call")
+```
+
+```{r wide_option}
+options(width = 40)
+message("a message that is long enough that str_wrap at width forty will fold it a few times")
+```
+
+```{r long_warning_80}
+options(width = 80)
+warning("a warning message that is long enough that str_wrap at width eighty will fold it onto a second line")
+```
+
+```{r long_warning_40}
+options(width = 40)
+warning("a warning message that is long enough that str_wrap at width forty will fold it a few times")
+```

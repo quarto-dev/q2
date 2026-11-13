@@ -165,11 +165,12 @@ fn try_desugar_code_block(
         // engine — no wrapper, and the label stays in the body.
         Some(label) => match registry.classify_cite_id(label) {
             Some(def) if parsed.has(&format!("{}-subcap", def.ref_type)) => {
-                // A multi-panel cell (R/knitr `fig-subcap` et al.): leave
-                // `label`/`<reftype>-cap` in the body untouched. The engine
-                // needs its own `label` option intact to synthesize each
-                // panel's id and per-panel caption (see knitr's
-                // `output_label_placeholder`/`figure_cap` in hooks.R); the
+                // A multi-panel cell (`fig-subcap` et al.): leave
+                // `label`/`<reftype>-cap` in the body untouched. The
+                // presenter needs the `label` option intact to synthesize each
+                // panel's id and per-panel caption, for every engine (knitr's
+                // `output_label_placeholder`/`figure_cap` in hooks.R; the
+                // generic plot-count path of OPR-7j for Julia and Jupyter); the
                 // resulting self-labelled `.cell` div — with its nested,
                 // individually labelled/captioned panel images — is the
                 // exact shape the all-Lua subfloat pipeline
@@ -242,12 +243,12 @@ fn try_desugar_code_block(
     if let Some(align) = fig_align {
         attr.2.insert("fig-align".to_string(), align);
     }
-    let new_code_block = Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+    let new_code_block = Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
         attr,
         text,
         source_info: cb.source_info.clone(),
         attr_source: cb.attr_source.clone(),
-    });
+    }));
 
     Some(match wrapper {
         Wrapper::Float {
@@ -262,12 +263,12 @@ fn try_desugar_code_block(
             }
             let attr_map: hashlink::LinkedHashMap<String, String> =
                 attributes.into_iter().collect();
-            Block::Div(Div {
-                attr: (label, classes, attr_map),
+            Block::Div(Box::new(Div {
+                attr: (label, classes, attr_map).into(),
                 content,
                 source_info: cb.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         }
         Wrapper::Figure { caption, short } => {
             let long = match caption_paragraph(caption, diagnostics) {
@@ -277,8 +278,8 @@ fn try_desugar_code_block(
                 })],
                 other => vec![other],
             };
-            Block::Figure(Figure {
-                attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+            Block::Figure(Box::new(Figure {
+                attr: (String::new(), Vec::new(), hashlink::LinkedHashMap::new()).into(),
                 caption: Caption {
                     short: short.map(|s| caption_inlines(s, diagnostics)),
                     long: Some(long),
@@ -287,7 +288,7 @@ fn try_desugar_code_block(
                 content: vec![new_code_block],
                 source_info: cb.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         }
         // Nothing to wrap — the cell was rewritten in place (by the
         // accessibility injection and/or the `fig-align` attribute).
@@ -644,14 +645,17 @@ pub(crate) fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String 
 /// block-span fallback. It is unreachable from the qmd parser: a fenced
 /// block with a non-empty body always contains a newline, and qmd does
 /// not produce CommonMark 4-space indented code blocks at all (the
-/// scanner raises Q-2-35 instead —
+/// scanner raises Q-2-59 instead —
 /// `tree-sitter-qmd/tree-sitter-markdown/grammar.js:1210-1220`).
 ///
 /// Falls back to the block's span when the body is not a contiguous
 /// substring of the region. That happens legitimately: a fence inside a
 /// blockquote or a list item has its continuation markers (`> `,
 /// indentation) stripped from `text` by the parser, so no contiguous
-/// range matches. Diagnostics then point at the block rather than the
+/// range matches. The same holds for a multi-line body under an
+/// *indented* fence, whose indentation the parser also strips from each
+/// line (CommonMark §4.5; pinned by
+/// `body_source_for_handles_an_indented_fence`). Diagnostics then point at the block rather than the
 /// exact key — coarser, but never *wrong*, which is the property that
 /// matters (the alternative, binding an assumed span to real content,
 /// is the failure mode `add_file_with_id` is lint-gated against).
@@ -986,12 +990,12 @@ mod tests {
     }
 
     fn code_in(language: &str, text: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec![language.into()], LinkedHashMap::new()),
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec![language.into()], LinkedHashMap::new()).into(),
             text: text.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Tests don't need real provenance — the desugar only uses it to
@@ -1163,8 +1167,8 @@ mod tests {
     /// also carries `fig-subcap` (R/knitr's multi-panel form) must be left
     /// entirely untouched pre-engine. Wrapping it the way a single-caption
     /// cell is wrapped would strip `label`/`fig-cap` from the body before
-    /// knitr runs, so knitr's own `output_label_placeholder`/`figure_cap`
-    /// (hooks.R) could no longer synthesize per-panel ids and captions —
+    /// the engine runs, so the presenter (knitr's `output_label_placeholder`/`figure_cap`
+    /// in hooks.R, and OPR-7j's generic path for Julia and Jupyter) could no longer synthesize per-panel ids and captions —
     /// the panel images would come back unlabelled, and the all-Lua
     /// subfloat pipeline (`parsefiguredivs.lua`) would have nothing to
     /// recognize as a subfloat. Leaving the cell alone preserves the
@@ -1722,12 +1726,12 @@ mod tests {
     fn desugar_recurses_into_div_content() {
         let reg = RefTypeRegistry::builtin();
         let inner = code("#| label: fig-inner\n#| fig-cap: inner cap\nprint(1)\n");
-        let outer = Block::Div(Div {
-            attr: (String::new(), vec!["wrapper".into()], LinkedHashMap::new()),
+        let outer = Block::Div(Box::new(Div {
+            attr: (String::new(), vec!["wrapper".into()], LinkedHashMap::new()).into(),
             content: vec![inner],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let mut blocks = vec![outer];
         desugar(&mut blocks, &reg);
         let Block::Div(wrapper) = &blocks[0] else {
@@ -1966,6 +1970,99 @@ mod tests {
             (12, 18),
             "body span must be the body between the fences, not the \
              `python` inside the `{{python}}` info string at 4..10"
+        );
+    }
+
+    /// EXR-4 Phase 0 (epic decision 36). After crossref sugaring strips a
+    /// `fig-cap` line from the middle of a cell's options, the stripped
+    /// `CodeBlock` keeps the original `source_info` but its text is no
+    /// longer a contiguous run of the file, so `body_source_for` on it
+    /// falls back to the **whole block** (fence lines included). The span
+    /// of a sugared block therefore cannot locate the author's text, which
+    /// is why the engine-execution stage must take the author text from the
+    /// unsugared source (see the EXR-4 plan, Phase 0).
+    #[test]
+    fn body_source_for_falls_back_to_whole_block_after_mid_body_strip() {
+        let text = "```{python}\n#| label: fig-plot\n#| fig-width: 7\n#| fig-cap: A caption\n#| fig-height: 5\nx = 1\n```\n";
+        let (mut ast, ast_context, _diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let sources = &ast_context.source_context;
+        let Block::CodeBlock(original) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock");
+        };
+        let original_body = body_source_for(original, sources);
+        let original_len = original_body.length();
+        assert!(
+            original_len < text.len(),
+            "precondition: before sugaring the body span is inside the fences"
+        );
+
+        let reg = RefTypeRegistry::builtin();
+        desugar_blocks(&mut ast.blocks, &reg, sources, &mut Vec::new());
+        let Block::Div(div) = &ast.blocks[0] else {
+            panic!("expected the float Div, got {:?}", ast.blocks[0]);
+        };
+        let Block::CodeBlock(stripped) = &div.content[0] else {
+            panic!("expected the stripped CodeBlock");
+        };
+        assert_eq!(
+            stripped.text, "#| fig-width: 7\n#| fig-height: 5\nx = 1",
+            "precondition: the fig-cap line is stripped from between two kept options"
+        );
+        let after = body_source_for(stripped, sources);
+        assert_eq!(
+            after.length(),
+            stripped.source_info.length(),
+            "stripped text is not contiguous in the file, so the span is the whole block"
+        );
+        assert!(after.length() > original_len);
+    }
+
+    /// Hull `(start, end)` byte offsets of `body_source_for` for the first
+    /// block of `text`, which must be a CodeBlock with body `expected_text`.
+    fn body_hull(text: &str, expected_text: &str) -> (usize, usize) {
+        let (ast, ast_context, _parse_diags) = pampa::readers::qmd::read(
+            text.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            false,
+            None,
+        )
+        .expect("fixture should parse");
+        let Block::CodeBlock(cb) = &ast.blocks[0] else {
+            panic!("expected a CodeBlock, got {:?}", ast.blocks[0]);
+        };
+        assert_eq!(cb.text, expected_text, "fixture precondition");
+        let sources = &ast_context.source_context;
+        let body = body_source_for(cb, sources);
+        let start = body.map_offset(0, sources).expect("start should map");
+        let end = body
+            .map_offset(body.length(), sources)
+            .expect("end should map");
+        (start.location.offset, end.location.offset)
+    }
+
+    /// bd-fenced-code-list-indent-wsirymk4: the parser strips an indented
+    /// fence's indentation from each body line (CommonMark §4.5), so a
+    /// multi-line body is no longer a contiguous substring of the source.
+    /// A one-line body still is, and is located exactly; a multi-line one
+    /// takes the whole-block fallback — coarser, never wrong.
+    #[test]
+    fn body_source_for_handles_an_indented_fence() {
+        // `  ```{python}\n  x\n  ```\n`: body `x` sits at 16..17.
+        assert_eq!(body_hull("  ```{python}\n  x\n  ```\n", "x"), (16, 17));
+        // Multi-line body `x\ny`: no contiguous match, whole block (0..28).
+        assert_eq!(
+            body_hull("  ```{python}\n  x\n  y\n  ```\n", "x\ny"),
+            (0, 28)
         );
     }
 }

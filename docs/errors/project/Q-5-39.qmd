@@ -36,7 +36,7 @@ Expected values:
 | `type` | `overlay` or `textbox` |
 | `limit` | a positive integer |
 | `collapse-after` | a positive integer, or `false` |
-| `copy-button`, `merge-navbar-crumbs` | `true` or `false` |
+| `copy-button`, `merge-navbar-crumbs`, `search-json` | `true` or `false` |
 | `keyboard-shortcut` | a key, or a list of keys |
 | `show-item-context` | `tree`, `parent`, `root`, `true`, or `false` |
 | `federate` | a list of site URLs or maps with a `url` |

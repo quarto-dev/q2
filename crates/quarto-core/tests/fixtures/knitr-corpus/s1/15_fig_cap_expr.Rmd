@@ -1,0 +1,4 @@
+```{r capexpr, fig.cap=paste("Plot of", n, "points")}
+n <- 5
+plot(seq_len(n))
+```

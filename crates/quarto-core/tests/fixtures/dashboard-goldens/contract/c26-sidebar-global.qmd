@@ -1,0 +1,33 @@
+---
+# contract: a level-1 .sidebar heading is global across pages
+title: "C26 Global Sidebar"
+format: dashboard
+---
+
+# {.sidebar}
+
+C26-SIDEBAR text.
+
+# Plots
+
+::: {.cell title="C26-PLOTS"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+# Data
+
+::: {.cell title="C26-DATA"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

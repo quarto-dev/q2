@@ -1,0 +1,9 @@
+---
+citation-location: margin
+references:
+  - id: item
+    type: webpage
+    title: A page
+---
+
+See [@item].

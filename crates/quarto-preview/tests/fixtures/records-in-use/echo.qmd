@@ -1,0 +1,9 @@
+---
+title: Records echo
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+print("echo cell output")
+```

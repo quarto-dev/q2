@@ -1,0 +1,25 @@
+{
+  "name": "stream-is-not-display",
+  "cells": [
+    [
+      {
+        "output_type": "stream",
+        "name": "stdout",
+        "text": "x"
+      },
+      {
+        "output_type": "error",
+        "ename": "E",
+        "evalue": "v",
+        "traceback": []
+      }
+    ]
+  ],
+  "expected": {
+    "javascriptWidgets": false,
+    "jupyterWidgets": false,
+    "htmlLibraries": [],
+    "hoisted": [],
+    "head": null
+  }
+}

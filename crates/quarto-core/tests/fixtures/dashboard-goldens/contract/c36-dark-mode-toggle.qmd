@@ -1,0 +1,33 @@
+---
+# contract: multi-page dashboard with light and dark themes gets a color-scheme toggle
+title: "C36 Dark Mode"
+format:
+  dashboard:
+    theme:
+      light: cosmo
+      dark: darkly
+---
+
+# Page A
+
+::: {.cell title="C36-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+# Page B
+
+::: {.cell title="C36-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

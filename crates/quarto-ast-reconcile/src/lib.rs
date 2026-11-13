@@ -21,6 +21,7 @@ mod compute;
 #[cfg(test)]
 mod generators;
 mod hash;
+mod meta;
 mod remap;
 pub mod types;
 
@@ -32,7 +33,8 @@ pub use hash::{
     find_first_divergence, structural_eq_block, structural_eq_blocks, structural_eq_inline,
     structural_eq_inlines,
 };
-pub use remap::remap_file_ids;
+pub use meta::reconcile_meta;
+pub use remap::{SourceRole, remap_file_ids, walk_source_infos};
 pub use types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
     ListItemAlignment, ReconciliationPlan, ReconciliationStats, TableCellPosition,
@@ -98,41 +100,42 @@ mod tests {
     }
 
     fn make_header(level: usize, text: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
-        quarto_pandoc_types::Block::Header(Header {
+        quarto_pandoc_types::Block::Header(Box::new(Header {
             level,
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             content: vec![quarto_pandoc_types::Inline::Str(Str {
                 text: text.to_string(),
                 source_info: source.clone(),
             })],
             source_info: source,
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_code_block(code: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
-        quarto_pandoc_types::Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec!["{r}".to_string()], LinkedHashMap::new()),
+        quarto_pandoc_types::Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec!["{r}".to_string()], LinkedHashMap::new()).into(),
             text: code.to_string(),
             source_info: source,
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn make_div(
         blocks: Vec<quarto_pandoc_types::Block>,
         source: SourceInfo,
     ) -> quarto_pandoc_types::Block {
-        quarto_pandoc_types::Block::Div(Div {
+        quarto_pandoc_types::Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["cell".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: blocks,
             source_info: source,
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// bd-205v6: two Cites whose `citations` differ (id/mode/prefix/suffix)
@@ -156,7 +159,7 @@ mod tests {
                         text: "anchor".to_string(),
                         source_info: source.clone(),
                     }),
-                    quarto_pandoc_types::Inline::Cite(Cite {
+                    quarto_pandoc_types::Inline::Cite(Box::new(Cite {
                         citations: vec![Citation {
                             id: id.to_string(),
                             prefix: vec![quarto_pandoc_types::Inline::Str(Str {
@@ -174,7 +177,7 @@ mod tests {
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
-                    }),
+                    })),
                 ],
                 source_info: source,
             })
@@ -211,7 +214,7 @@ mod tests {
                         text: "anchor".to_string(),
                         source_info: source.clone(),
                     }),
-                    quarto_pandoc_types::Inline::Cite(Cite {
+                    quarto_pandoc_types::Inline::Cite(Box::new(Cite {
                         citations: vec![Citation {
                             id: "key".to_string(),
                             prefix: vec![],
@@ -226,7 +229,7 @@ mod tests {
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
-                    }),
+                    })),
                 ],
                 source_info: source,
             })
@@ -320,7 +323,7 @@ mod tests {
         use quarto_pandoc_types::{Delete, EditComment, Highlight, Insert, QuoteType, Quoted};
         fn attr_for(changed: bool) -> quarto_pandoc_types::Attr {
             let class = if changed { "new" } else { "old" };
-            (String::new(), vec![class.to_string()], LinkedHashMap::new())
+            (String::new(), vec![class.to_string()], LinkedHashMap::new()).into()
         }
         fn content(source: &SourceInfo) -> Vec<quarto_pandoc_types::Inline> {
             vec![quarto_pandoc_types::Inline::Str(Str {
@@ -330,7 +333,7 @@ mod tests {
         }
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Quoted(Quoted {
+                quarto_pandoc_types::Inline::Quoted(Box::new(Quoted {
                     quote_type: if changed {
                         QuoteType::SingleQuote
                     } else {
@@ -338,51 +341,51 @@ mod tests {
                     },
                     content: content(&source),
                     source_info: source,
-                })
+                }))
             },
             "Quoted(quote_type)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Insert(Insert {
+                quarto_pandoc_types::Inline::Insert(Box::new(Insert {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "Insert(attr)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Delete(Delete {
+                quarto_pandoc_types::Inline::Delete(Box::new(Delete {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "Delete(attr)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::Highlight(Highlight {
+                quarto_pandoc_types::Inline::Highlight(Box::new(Highlight {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "Highlight(attr)",
         );
         assert_identity_changed_container_not_paired(
             |changed, source| {
-                quarto_pandoc_types::Inline::EditComment(EditComment {
+                quarto_pandoc_types::Inline::EditComment(Box::new(EditComment {
                     attr: attr_for(changed),
                     content: content(&source),
                     source_info: source,
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                })
+                }))
             },
             "EditComment(attr)",
         );
@@ -570,12 +573,12 @@ mod tests {
                     text: "Value: ".to_string(),
                     source_info: source_original(),
                 }),
-                quarto_pandoc_types::Inline::Code(quarto_pandoc_types::Code {
-                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                quarto_pandoc_types::Inline::Code(Box::new(quarto_pandoc_types::Code {
+                    attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                     text: "r 23 * 37".to_string(),
                     source_info: source_original(),
                     attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
-                }),
+                })),
             ],
             source_info: source_original(),
         });
@@ -762,7 +765,7 @@ mod tests {
             type_name: type_name.to_string(),
             slots,
             plain_data: serde_json::json!({"type": "note"}),
-            attr: (String::new(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()).into(),
             source_info: source,
         }
     }
@@ -772,20 +775,14 @@ mod tests {
     fn test_custom_node_identical_content_kept() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
-                "Callout",
-                "Note",
-                "This is important.",
-                source_original(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_custom_node("Callout", "Note", "This is important.", source_original()),
             ))],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
-                "Callout",
-                "Note",
-                "This is important.",
-                source_executed(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_custom_node("Callout", "Note", "This is important.", source_executed()),
             ))],
         };
 
@@ -809,20 +806,19 @@ mod tests {
     fn test_custom_node_slot_content_changed() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
-                "Callout",
-                "Note",
-                "Original content.",
-                source_original(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_custom_node("Callout", "Note", "Original content.", source_original()),
             ))],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
-                "Callout",
-                "Note",             // Title unchanged
-                "Changed content.", // Content changed
-                source_executed(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_custom_node(
+                    "Callout",
+                    "Note",             // Title unchanged
+                    "Changed content.", // Content changed
+                    source_executed(),
+                ),
             ))],
         };
 
@@ -866,20 +862,19 @@ mod tests {
     fn test_custom_node_different_type_not_reconciled() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
-                "Callout",
-                "Note",
-                "Content",
-                source_original(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_custom_node("Callout", "Note", "Content", source_original()),
             ))],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
-                "PanelTabset", // Different type!
-                "Note",
-                "Content",
-                source_executed(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_custom_node(
+                    "PanelTabset", // Different type!
+                    "Note",
+                    "Content",
+                    source_executed(),
+                ),
             ))],
         };
 
@@ -909,11 +904,11 @@ mod tests {
 
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(orig_cn)],
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(orig_cn))],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(exec_cn)],
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(exec_cn))],
         };
 
         let (result, _plan) = reconcile(original, executed);
@@ -935,12 +930,12 @@ mod tests {
             meta: Default::default(),
             blocks: vec![
                 make_para("Before callout", source_original()),
-                quarto_pandoc_types::Block::Custom(make_custom_node(
+                quarto_pandoc_types::Block::Custom(Box::new(make_custom_node(
                     "Callout",
                     "Warning",
                     "Be careful!",
                     source_original(),
-                )),
+                ))),
                 make_para("After callout", source_original()),
             ],
         };
@@ -948,12 +943,12 @@ mod tests {
             meta: Default::default(),
             blocks: vec![
                 make_para("Before callout", source_executed()),
-                quarto_pandoc_types::Block::Custom(make_custom_node(
+                quarto_pandoc_types::Block::Custom(Box::new(make_custom_node(
                     "Callout",
                     "Warning",
                     "Be careful!",
                     source_executed(),
-                )),
+                ))),
                 make_para("After callout", source_executed()),
             ],
         };
@@ -1024,27 +1019,31 @@ mod tests {
                 type_name: "Callout".to_string(),
                 slots,
                 plain_data: serde_json::json!({}),
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: source,
             }
         }
 
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_complex_callout(
-                "Important",
-                "First paragraph unchanged.",
-                "Second paragraph will change.",
-                source_original(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_complex_callout(
+                    "Important",
+                    "First paragraph unchanged.",
+                    "Second paragraph will change.",
+                    source_original(),
+                ),
             ))],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![quarto_pandoc_types::Block::Custom(make_complex_callout(
-                "Important",                  // Title unchanged
-                "First paragraph unchanged.", // First para unchanged
-                "Second paragraph CHANGED!",  // Second para changed
-                source_executed(),
+            blocks: vec![quarto_pandoc_types::Block::Custom(Box::new(
+                make_complex_callout(
+                    "Important",                  // Title unchanged
+                    "First paragraph unchanged.", // First para unchanged
+                    "Second paragraph CHANGED!",  // Second para changed
+                    source_executed(),
+                ),
             ))],
         };
 
@@ -1095,13 +1094,13 @@ mod tests {
                 })]),
             );
 
-            quarto_pandoc_types::Inline::Custom(CustomNode {
+            quarto_pandoc_types::Inline::Custom(Box::new(CustomNode {
                 type_name: "Shortcode".to_string(),
                 slots,
                 plain_data: serde_json::json!({"name": "video"}),
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 source_info: source,
-            })
+            }))
         }
 
         let original = Pandoc {
@@ -1166,7 +1165,7 @@ mod tests {
     // Slot::Blocks, custom-node Slot::Inlines.
 
     fn empty_attr() -> quarto_pandoc_types::Attr {
-        (String::new(), vec![], LinkedHashMap::new())
+        (String::new(), vec![], LinkedHashMap::new()).into()
     }
 
     /// One-column table with an optional caption and a single body cell.
@@ -1179,7 +1178,7 @@ mod tests {
             Alignment, Cell, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
         };
         let attr_source = quarto_pandoc_types::AttrSourceInfo::empty;
-        quarto_pandoc_types::Block::Table(Table {
+        quarto_pandoc_types::Block::Table(Box::new(Table {
             attr: empty_attr(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
@@ -1222,7 +1221,7 @@ mod tests {
             },
             source_info: source,
             attr_source: attr_source(),
-        })
+        }))
     }
 
     fn table_caption_long(block: &quarto_pandoc_types::Block) -> &[quarto_pandoc_types::Block] {
@@ -1250,13 +1249,13 @@ mod tests {
     ) -> quarto_pandoc_types::Block {
         let mut slots = LinkedHashMap::new();
         slots.insert("body".to_string(), Slot::Blocks(blocks));
-        quarto_pandoc_types::Block::Custom(CustomNode {
+        quarto_pandoc_types::Block::Custom(Box::new(CustomNode {
             type_name: "TestPanel".to_string(),
             slots,
             plain_data: serde_json::json!({}),
             attr: empty_attr(),
             source_info: source,
-        })
+        }))
     }
 
     /// Custom block node with a single Slot::Inlines slot named "title".
@@ -1266,13 +1265,13 @@ mod tests {
     ) -> quarto_pandoc_types::Block {
         let mut slots = LinkedHashMap::new();
         slots.insert("title".to_string(), Slot::Inlines(inlines));
-        quarto_pandoc_types::Block::Custom(CustomNode {
+        quarto_pandoc_types::Block::Custom(Box::new(CustomNode {
             type_name: "TestPanel".to_string(),
             slots,
             plain_data: serde_json::json!({}),
             attr: empty_attr(),
             source_info: source,
-        })
+        }))
     }
 
     fn blocks_slot(
@@ -1933,19 +1932,20 @@ mod list_length_tests {
             source: SourceInfo,
         ) -> quarto_pandoc_types::Block {
             quarto_pandoc_types::Block::Paragraph(Paragraph {
-                content: vec![quarto_pandoc_types::Inline::Insert(Insert {
+                content: vec![quarto_pandoc_types::Inline::Insert(Box::new(Insert {
                     attr: (
                         String::new(),
                         vec![attr_class.to_string()],
                         LinkedHashMap::new(),
-                    ),
+                    )
+                        .into(),
                     content: vec![quarto_pandoc_types::Inline::Str(Str {
                         text: text.to_string(),
                         source_info: source.clone(),
                     })],
                     source_info: source.clone(),
                     attr_source: AttrSourceInfo::empty(),
-                })],
+                }))],
                 source_info: source,
             })
         }

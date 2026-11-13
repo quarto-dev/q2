@@ -20,6 +20,7 @@
 //! WASM-safe (pure AST manipulation).
 
 use quarto_pandoc_types::block::{Block, Div};
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
@@ -59,9 +60,23 @@ impl AstTransform for RevealColumnsTransform {
 
 fn walk_blocks(blocks: &mut [Block]) {
     for block in blocks {
-        if let Block::Div(div) = block {
-            convert_column(div);
-            walk_blocks(&mut div.content);
+        match block {
+            Block::Div(div) => {
+                convert_column(div);
+                walk_blocks(&mut div.content);
+            }
+            // Custom-node block slots: since #1050 a callout is still a
+            // `Callout` custom node when this transform runs (bd-akkproqy).
+            Block::Custom(node) => {
+                for (_name, slot) in node.slots.iter_mut() {
+                    match slot {
+                        Slot::Blocks(blocks) => walk_blocks(blocks),
+                        Slot::Block(b) => walk_blocks(std::slice::from_mut(b.as_mut())),
+                        Slot::Inline(_) | Slot::Inlines(_) => {}
+                    }
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -101,7 +116,7 @@ mod tests {
             kvs.insert("style".to_string(), s.to_string());
         }
         Div {
-            attr: (String::new(), vec!["column".to_string()], kvs),
+            attr: (String::new(), vec!["column".to_string()], kvs).into(),
             content: vec![],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
@@ -134,7 +149,7 @@ mod tests {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("width".to_string(), "40%".to_string());
         let mut div = Div {
-            attr: (String::new(), vec!["notcolumn".to_string()], kvs),
+            attr: (String::new(), vec!["notcolumn".to_string()], kvs).into(),
             content: vec![],
             source_info: SourceInfo::generated(By::revealjs()),
             attr_source: AttrSourceInfo::empty(),
@@ -149,5 +164,37 @@ mod tests {
         let mut div = column_div(None, None);
         convert_column(&mut div);
         assert!(div.attr.2.get("style").is_none());
+    }
+
+    /// A `.column` inside a custom node's block slot is converted too
+    /// (bd-akkproqy): since #1050 a callout is still a `Callout` custom
+    /// node when this transform runs.
+    #[test]
+    fn column_inside_custom_node_slot_converted() {
+        use quarto_pandoc_types::custom::{CustomNode, Slot};
+        let mut callout = CustomNode::new(
+            "Callout",
+            (String::new(), vec![], LinkedHashMap::new()).into(),
+            SourceInfo::generated(By::revealjs()),
+        );
+        callout.set_slot(
+            "content",
+            Slot::Blocks(vec![Block::Div(Box::new(column_div(Some("40%"), None)))]),
+        );
+        let mut blocks = vec![Block::Custom(Box::new(callout))];
+        walk_blocks(&mut blocks);
+        let Block::Custom(node) = &blocks[0] else {
+            panic!("custom node survives");
+        };
+        let Some(Slot::Blocks(content)) = node.slots.get("content") else {
+            panic!("content slot survives");
+        };
+        let Block::Div(div) = &content[0] else {
+            panic!("column survives");
+        };
+        assert_eq!(
+            div.attr.2.get("style"),
+            Some(&"flex-basis: 40%;".to_string())
+        );
     }
 }

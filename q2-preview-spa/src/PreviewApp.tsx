@@ -73,6 +73,7 @@ import { PdfPane } from './components/PdfPane';
 import { nextNavState, readNavIndex, seedNavIndex } from './navIndex';
 import { isTypstPdf } from './pdfPage';
 import { fetchPreviewConfig, wasmRenderOptions, type RenderBlock } from './previewConfig';
+import { serverUrl, serverWsUrl } from './serverUrl';
 import { pickInitialPage } from './pickInitialPage';
 
 /**
@@ -146,7 +147,7 @@ interface PreviewAppState {
    * the iframe"; `null` means "clear the theme"; `undefined` means
    * "we have no opinion yet — keep the iframe's last-good theme".
    * Initialized as `undefined` so the pre-first-render iframe doesn't
-   * receive an unintended `UPDATE_THEME { cssUrl: null }`.
+   * receive an unintended `UPDATE_THEME { cssText: null }`.
    */
   themeFingerprint: string | null | undefined;
   /**
@@ -561,9 +562,8 @@ export function computeOverlayInputs(
  * incoming `shareRoute.indexDocId` in App.tsx for the same reason.
  * We normalize here so callers see a single consistent shape.
  */
-async function fetchIndexDocId(loc: Location = window.location): Promise<string> {
-  const healthUrl = `${loc.protocol}//${loc.host}/health`;
-  const resp = await fetch(healthUrl);
+async function fetchIndexDocId(): Promise<string> {
+  const resp = await fetch(serverUrl('/health'));
   if (!resp.ok) {
     throw new Error(`GET /health returned ${resp.status} ${resp.statusText}`);
   }
@@ -581,11 +581,10 @@ async function fetchIndexDocId(loc: Location = window.location): Promise<string>
 /**
  * Derive the websocket URL from the page location. The CLI serves the
  * SPA on the same host:port that hosts the samod ws endpoint, so we
- * just swap the scheme.
+ * just swap the scheme (under any proxy prefix, see `serverUrl.ts`).
  */
-function deriveWsUrl(loc: Location = window.location): string {
-  const wsScheme = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${wsScheme}//${loc.host}/ws`;
+function deriveWsUrl(): string {
+  return serverWsUrl('/ws');
 }
 
 
@@ -881,7 +880,7 @@ export default function PreviewApp() {
         // IndexedDB cache can never hit, and its open would otherwise
         // gate sending the WS join. See
         // claude-notes/research/2026-06-11-firefox-ws-handshake-serialization.md
-        const healthUrl = `${window.location.protocol}//${window.location.host}/health`;
+        const healthUrl = serverUrl('/health');
         const checkHealth = async (): Promise<boolean> => {
           try {
             const resp = await fetch(healthUrl);
@@ -1031,7 +1030,7 @@ export default function PreviewApp() {
     void (async () => {
       try {
         const resp = await fetch(
-          `/api/preview/deps?page=${encodeURIComponent(activePath)}`,
+          serverUrl(`/api/preview/deps?page=${encodeURIComponent(activePath)}`),
         );
         if (cancelled) return;
         if (!resp.ok) {
@@ -1082,7 +1081,7 @@ export default function PreviewApp() {
     void (async () => {
       try {
         const resp = await fetch(
-          `/api/preview/diagnostics?page=${encodeURIComponent(activePath)}`,
+          serverUrl(`/api/preview/diagnostics?page=${encodeURIComponent(activePath)}`),
         );
         if (cancelled) return;
         if (!resp.ok) {
@@ -1196,7 +1195,10 @@ export default function PreviewApp() {
           state.activeFile!,
           undefined,
           captureGzJson,
-          wasmRenderOptions(state.renderFlags),
+          {
+            ...wasmRenderOptions(state.renderFlags),
+            captureUntransformedAst: state.allowEdit,
+          },
         );
         if (cancelled) return;
         // Phase D.3 (bd-kw93.9) + bd-0mji: a test-only render
@@ -1313,7 +1315,7 @@ export default function PreviewApp() {
     return () => {
       cancelled = true;
     };
-  }, [state.activeFile, state.contentTick, state.captures, pageKind, state.renderFlags]);
+  }, [state.activeFile, state.contentTick, state.captures, pageKind, state.renderFlags, state.allowEdit]);
 
   // Entering a PDF page drops the HTML page's render state, so that going back to HTML shows the
   // boot spinner until a fresh render rather than the previous page's stale AST.
@@ -1354,17 +1356,18 @@ export default function PreviewApp() {
 
   // P3.2: gated nested buffer table. Delegates to computeNestedEditBuffers
   // (the exported pure helper) so the gating logic has a single testable
-  // source of truth. Returns EMPTY_NESTED_BUFFERS when nestingCursor is off
-  // or either render input is missing, keeping the iframe dep stable.
+  // source of truth. Returns EMPTY_NESTED_BUFFERS in read-only mode, when
+  // nestingCursor is off, or when either render input is missing, keeping the
+  // iframe dep stable.
   const nestedEditBuffers = useMemo(
     () =>
       computeNestedEditBuffers(
-        state.nestingCursor,
+        state.allowEdit && state.nestingCursor,
         state.renderedContent,
         state.untransformedAstJson,
         regenerateNestedBuffers,
       ),
-    [state.nestingCursor, state.renderedContent, state.untransformedAstJson],
+    [state.allowEdit, state.nestingCursor, state.renderedContent, state.untransformedAstJson],
   );
 
   // ── Render ────────────────────────────────────────────────────────────

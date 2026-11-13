@@ -284,17 +284,20 @@ impl<'a> EvalContext<'a> {
     }
 
     /// Check if the current reference is in English.
-    /// Returns true if: language field is missing or starts with "en".
-    /// Returns false if: language field is present and doesn't start with "en".
+    ///
+    /// A reference's own `language` field decides. Without one, the
+    /// reference is taken to be in the document's locale (CSL 1.0.2,
+    /// "Text-case"; citeproc does the same), so a Dutch document does not
+    /// title-case its titles. That is the locale actually loaded: for an
+    /// unknown language (`lang: xx`) it is en-US, and titles are
+    /// title-cased, as in Pandoc.
     fn is_english_reference(&self) -> bool {
-        match &self.reference.language {
-            Some(lang) => {
-                let lang_lower = lang.to_lowercase();
-                lang_lower.starts_with("en")
-            }
-            // No language field means assume English (default behavior)
-            None => true,
-        }
+        let lang = self
+            .reference
+            .language
+            .as_deref()
+            .unwrap_or_else(|| self.processor.locales.default_locale());
+        is_english_lang(lang)
     }
 
     /// Get a term from the locale.
@@ -389,6 +392,40 @@ pub fn evaluate_citation_to_output_no_collapse(
     evaluate_citation_to_output_impl(processor, citation, false)
 }
 
+/// The output for a cited id with no reference: the item's prefix, then the
+/// id and a question mark in bold, as Pandoc's citeproc renders it
+/// (`(see **smith2020?**)`). The suffix and locator are dropped, again as
+/// in Pandoc. The citation's own layout affixes and delimiter still apply.
+///
+/// Warning about the id is the caller's job: only the caller knows where in
+/// the source the citation came from (issue #1111).
+fn unknown_item_output(item: &CitationItem) -> Output {
+    let mut parts = Vec::new();
+    if let Some(ref prefix) = item.prefix {
+        let parsed_prefix = crate::output::parse_csl_rich_text(prefix);
+        let prefix_with_sep = if prefix.ends_with(' ') || prefix.ends_with('\t') {
+            parsed_prefix
+        } else {
+            Output::sequence(vec![parsed_prefix, Output::literal(" ")])
+        };
+        parts.push(Output::tagged(Tag::Prefix, prefix_with_sep));
+    }
+    parts.push(Output::formatted(
+        Formatting {
+            font_weight: Some(quarto_csl::FontWeight::Bold),
+            ..Formatting::default()
+        },
+        vec![Output::literal(format!("{}?", item.id))],
+    ));
+    Output::tagged(
+        Tag::Item {
+            item_type: crate::output::CitationItemType::NormalCite,
+            item_id: item.id.clone(),
+        },
+        Output::sequence(parts),
+    )
+}
+
 /// Internal implementation that optionally applies collapse logic.
 fn evaluate_citation_to_output_impl(
     processor: &mut Processor,
@@ -404,9 +441,13 @@ fn evaluate_citation_to_output_impl(
     // Merge citation-level options with style-level options (citation takes precedence)
     let name_options = layout.name_options.merge(&style_name_options);
 
-    // Assign initial citation numbers for each item (based on citation order)
+    // Assign initial citation numbers for each item (based on citation order).
+    // An unknown id gets none, as in Pandoc: it renders as a bare marker
+    // (see `unknown_item_output`) and must not shift the numbers after it.
     for item in &citation.items {
-        processor.get_initial_citation_number(&item.id);
+        if processor.get_reference(&item.id).is_some() {
+            processor.get_initial_citation_number(&item.id);
+        }
     }
 
     // Sort citation items if sort keys are defined
@@ -419,7 +460,13 @@ fn evaluate_citation_to_output_impl(
                 (item, keys)
             })
             .collect();
-        items_with_keys.sort_by(|a, b| crate::types::compare_sort_keys(&a.1, &b.1));
+        // Unknown ids have no sort keys; they go last, as in Pandoc.
+        items_with_keys.sort_by(|a, b| {
+            let unknown = |id: &str| processor.get_reference(id).is_none();
+            unknown(&a.0.id)
+                .cmp(&unknown(&b.0.id))
+                .then_with(|| crate::types::compare_sort_keys(&a.1, &b.1))
+        });
         items_with_keys.into_iter().map(|(item, _)| item).collect()
     } else {
         citation.items.iter().collect()
@@ -444,13 +491,10 @@ fn evaluate_citation_to_output_impl(
     let mut item_outputs = Vec::new();
 
     for item in sorted_items {
-        let reference = processor
-            .get_reference(&item.id)
-            .ok_or_else(|| crate::Error::ReferenceNotFound {
-                id: item.id.clone(),
-                location: None,
-            })?
-            .clone();
+        let Some(reference) = processor.get_reference(&item.id).cloned() else {
+            item_outputs.push(unknown_item_output(item));
+            continue;
+        };
 
         // Use with_citation_item to include locator/label from citation item
         // names_delimiter: layout (citation) > style
@@ -3889,6 +3933,13 @@ fn format_month_or_season(
             Some(month.to_string())
         }
     }
+}
+
+/// Whether a language value counts as English for title-casing: it starts
+/// with "en", case-insensitively (unchanged from the reference-language
+/// check this replaced).
+fn is_english_lang(lang: &str) -> bool {
+    lang.to_lowercase().starts_with("en")
 }
 
 /// Format a day value according to the specified form.

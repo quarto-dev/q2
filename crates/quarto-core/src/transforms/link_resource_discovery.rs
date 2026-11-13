@@ -48,6 +48,7 @@
 //! and targets are still source-relative (the rewrite page-relativizes
 //! them, and clamps `..` at the project root).
 
+use std::cell::OnceCell;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -218,9 +219,20 @@ struct CandidateFinder<'a> {
     output_dir: Option<PathBuf>,
     /// Canonical directory of the document being rendered.
     doc_dir: PathBuf,
+    /// Built on first use: canonicalizing every project input is O(files)
+    /// syscalls, and most documents never need it because their link
+    /// targets are other documents the project index already knows.
+    inputs: OnceCell<InputSets>,
+}
+
+/// Project inputs, canonicalized once per document (not once per link
+/// target — that loop was ~22 % of a website render).
+struct InputSets {
+    /// Canonical paths of the inputs whose canonicalize succeeded.
+    canonical: HashSet<PathBuf>,
     /// Project-relative input paths with their extension removed, for
     /// the render-output sibling check.
-    input_stems: HashSet<PathBuf>,
+    stems: HashSet<PathBuf>,
 }
 
 impl<'a> CandidateFinder<'a> {
@@ -229,34 +241,42 @@ impl<'a> CandidateFinder<'a> {
         let project_dir = canon(&ctx.project.dir);
         let output_dir = Some(canon(&ctx.project.output_dir)).filter(|o| *o != project_dir);
         let doc_dir = canon(ctx.document.input.parent().unwrap_or(Path::new(".")));
-        let mut input_stems: HashSet<PathBuf> = ctx
-            .project
-            .files
-            .iter()
-            .filter_map(|f| {
-                canon(&f.input)
-                    .strip_prefix(&project_dir)
-                    .ok()
-                    .map(Path::to_path_buf)
-            })
-            .map(|p| p.with_extension(""))
-            .collect();
-        if let Some(index) = ctx.project_index.as_ref() {
-            input_stems.extend(
-                index
-                    .profiles()
-                    .iter()
-                    .map(|p| p.source_path.with_extension("")),
-            );
-        }
         Self {
             ctx,
             runtime,
             project_dir,
             output_dir,
             doc_dir,
-            input_stems,
+            inputs: OnceCell::new(),
         }
+    }
+
+    fn inputs(&self) -> &InputSets {
+        self.inputs.get_or_init(|| {
+            let mut canonical = HashSet::new();
+            let mut stems = HashSet::new();
+            for f in &self.ctx.project.files {
+                let c = match self.runtime.canonicalize(&f.input) {
+                    Ok(c) => {
+                        canonical.insert(c.clone());
+                        c
+                    }
+                    Err(_) => f.input.clone(),
+                };
+                if let Ok(rel) = c.strip_prefix(&self.project_dir) {
+                    stems.insert(rel.with_extension(""));
+                }
+            }
+            if let Some(index) = self.ctx.project_index.as_ref() {
+                stems.extend(
+                    index
+                        .profiles()
+                        .iter()
+                        .map(|p| p.source_path.with_extension("")),
+                );
+            }
+            InputSets { canonical, stems }
+        })
     }
 
     /// The doc-relative, `/`-separated path to publish for `target`, or
@@ -305,16 +325,19 @@ impl<'a> CandidateFinder<'a> {
             .project_index
             .as_ref()
             .is_some_and(|index| index.lookup_by_source(project_rel).is_some());
-        let in_files = self.ctx.project.files.iter().any(|f| {
-            self.runtime
-                .canonicalize(&f.input)
-                .is_ok_and(|c| c == self.project_dir.join(project_rel))
-        });
-        if in_index || in_files {
+        if in_index
+            || self
+                .inputs()
+                .canonical
+                .contains(&self.project_dir.join(project_rel))
+        {
             return true;
         }
         ext.is_some_and(|e| RENDER_OUTPUT_EXTENSIONS.contains(&e.as_str()))
-            && self.input_stems.contains(&project_rel.with_extension(""))
+            && self
+                .inputs()
+                .stems
+                .contains(&project_rel.with_extension(""))
     }
 }
 

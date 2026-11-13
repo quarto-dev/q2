@@ -222,6 +222,18 @@ export interface StartOptions {
    * mode has no samod state); `dataDir` stays an empty tempdir.
    */
   staticMode?: boolean;
+  /**
+   * OPR-5: `execute: record-sources` entries (`['cache']`, `['cache', 'engine']`), passed as one
+   * `-M` argument (a comma-separated scalar). Absent leaves the command's default list
+   * (`cache,q2,engine`). A directory source goes through `recordsDir` instead.
+   */
+  records?: string[];
+  /**
+   * OPR-5: seed `recs/` inside the project with these files (Positron-format cache files) and add
+   * `./recs` as one more record source, after `records`. A directory source must be inside the
+   * project. Removed with the project on `stop()`.
+   */
+  recordsDir?: FixtureFile[];
 }
 
 /**
@@ -280,11 +292,26 @@ export async function startPreviewServer(opts: StartOptions): Promise<PreviewSer
     }
   }
 
+  if (opts.recordsDir) {
+    for (const file of opts.recordsDir) {
+      const absPath = path.join(projectDir, 'recs', file.path);
+      await mkdir(path.dirname(absPath), { recursive: true });
+      await writeFile(absPath, file.content);
+    }
+  }
+  const recordSources = [...(opts.records ?? []), ...(opts.recordsDir ? ['./recs'] : [])];
+  // The value is quoted so the commas stay inside the scalar.
+  const recordsArgs =
+    recordSources.length > 0
+      ? ['-M', `execute:{record-sources: "${recordSources.join(',')}"}`]
+      : [];
+
   const proc = spawn(
     Q2_BINARY,
     [
       'preview',
       '--no-browser',
+      ...recordsArgs,
       ...(opts.staticMode ? ['--static', '--no-watch'] : ['--data-dir', dataDir]),
       ...(opts.allowEdit ? ['--allow-edit'] : []),
       ...(opts.ui === 'editor' ? ['--ui', 'editor'] : []),

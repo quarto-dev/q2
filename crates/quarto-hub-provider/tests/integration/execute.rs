@@ -384,3 +384,525 @@ async fn a_dash_m_reaches_execution_but_not_the_staleness_key() {
     );
     assert!(captures[0].input_qmd.contains("1 + 1"));
 }
+
+// ── EXR-5: the execution record under a `-M` overlay ────────────────────────
+
+/// An engine that records every unit the stage listed, naming the languages it owns as
+/// the Jupyter engine does (a record whose entry owns nothing cannot be judged fresh) (EXR-4's `RecordBuilder` over the stage's units and author texts).
+struct RecordingEngine;
+
+impl ExecutionEngine for RecordingEngine {
+    fn name(&self) -> &str {
+        "test-recording"
+    }
+    fn execute(
+        &self,
+        input: &str,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        use quarto_core::record::{EngineEntryInput, RecordBuilder, UnitResult};
+        let mut result = ExecuteResult::passthrough(input);
+        if ctx.want_record {
+            let def = self.hash_definition();
+            let err = |e: &dyn std::fmt::Display| {
+                ExecutionError::execution_failed("test-recording", e.to_string())
+            };
+            let mut builder = RecordBuilder::new(self.name(), &def, &ctx.units, &ctx.author_texts)
+                .map_err(|e| err(&e))?;
+            for index in 0..ctx.units.len() {
+                builder
+                    .push(index, UnitResult::default())
+                    .map_err(|e| err(&e))?;
+            }
+            result.record = Some(
+                builder
+                    .finish(EngineEntryInput {
+                        owned_languages: ctx.owned_languages.clone(),
+                        document_metadata: ctx.document_metadata_json(),
+                        ..Default::default()
+                    })
+                    .map_err(|e| err(&e))?,
+            );
+        }
+        Ok(result)
+    }
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == "test-recording" {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
+    }
+}
+
+/// A `-M` reaches execution, but the stored record's hashes describe the source:
+/// after `overlay_free_run` they equal an overlay-free run's, and `quarto_overlay`
+/// notes the overlay's execution-relevant keys.
+#[test]
+fn provide_hub_with_overlay_stores_overlay_free_record_hashes() {
+    use quarto_core::engine::preview_record::{compute_source_inputs, record_capture_run};
+    use quarto_core::project::ProjectContext;
+    use quarto_hub_provider::overlay_free_run;
+    use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+
+    let tmp = tempfile::TempDir::new().unwrap();
+    let input = tmp.path().join("doc.qmd");
+    std::fs::write(
+        &input,
+        "---\nengine: test-recording\n---\n\n```{test-recording}\n1 + 1\n```\n",
+    )
+    .unwrap();
+    let registry = {
+        let mut registry = EngineRegistry::new();
+        registry.register(Arc::new(RecordingEngine));
+        Some(Arc::new(registry))
+    };
+    let overlay = quarto_core::metadata_flag::overlay_from_metadata_flags(&[
+        "params:{n: 2}".to_string(),
+        "subtitle:ZZOVERLAYSUB".to_string(),
+    ])
+    .unwrap()
+    .expect("an overlay");
+
+    let plain: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let overlaid = overlay.apply(plain.clone());
+
+    let source_project = ProjectContext::discover(&input, plain.as_ref()).unwrap();
+    let overlaid_project = ProjectContext::discover(&input, overlaid.as_ref()).unwrap();
+
+    let plain_run = pollster::block_on(record_capture_run(
+        &input,
+        &source_project,
+        plain.clone(),
+        registry.clone(),
+    ))
+    .unwrap();
+    let overlaid_run = pollster::block_on(record_capture_run(
+        &input,
+        &overlaid_project,
+        overlaid,
+        registry,
+    ))
+    .unwrap();
+    let plain_record = plain_run.record.as_ref().expect("plain record");
+    let overlaid_record = overlaid_run.record.as_ref().expect("overlaid record");
+    assert_ne!(
+        plain_record.metadata.quarto_execution_hash, overlaid_record.metadata.quarto_execution_hash,
+        "the -M params key reaches the document hash"
+    );
+    assert!(overlaid_run.captures[0].input_qmd.contains("ZZOVERLAYSUB"));
+
+    let source = pollster::block_on(compute_source_inputs(&input, &source_project, plain)).unwrap();
+    let stored = overlay_free_run(overlaid_run, &source, &overlay).unwrap();
+
+    assert!(!stored.captures[0].input_qmd.contains("ZZOVERLAYSUB"));
+    let record = stored.record.expect("record kept");
+    // A viewer with no overlay recomputes from the source and finds the record fresh
+    // (EXR-15), even though the execution ran under `params: {n: 2}`.
+    assert!(
+        !quarto_core::record::record_is_stale(
+            &record,
+            &String::from_utf8_lossy(&source.input_qmd),
+            &source.sugared_blocks,
+            &source.metadata,
+        )
+        .unwrap(),
+        "an overlay-free viewer sees the record as fresh"
+    );
+    assert_eq!(
+        record.metadata.quarto_execution_hash,
+        plain_record.metadata.quarto_execution_hash
+    );
+    assert_eq!(
+        record.metadata.quarto_engines[0].document_hash,
+        plain_record.metadata.quarto_engines[0].document_hash
+    );
+    assert_eq!(
+        record.cells, plain_record.cells,
+        "unit hashes are the same either way"
+    );
+    let noted = record
+        .metadata
+        .quarto_overlay
+        .expect("the overlay is noted");
+    assert_eq!(noted.get("params"), Some(&serde_json::json!({ "n": 2 })));
+    assert!(!noted.contains_key("subtitle"), "{noted:?}");
+}
+
+/// The provenance bytes depend on the overlay's meaning, not on how the flag was spelled,
+/// and a non-execution key never reaches them (EXR-15; moved from EXR-4).
+#[test]
+fn overlay_provenance_is_independent_of_flag_spelling() {
+    use quarto_core::metadata_flag::overlay_from_metadata_flags;
+    use quarto_core::record::overlay_difference;
+
+    let record = quarto_core::record::read_record(include_str!(
+        "../../../quarto-core/tests/fixtures/records/basic.json"
+    ))
+    .unwrap();
+    let noted = |flags: &[&str]| {
+        let flags: Vec<String> = flags.iter().map(|f| f.to_string()).collect();
+        let overlay = overlay_from_metadata_flags(&flags).unwrap().unwrap();
+        let diff = overlay_difference(overlay.metadata.as_ref().unwrap(), &record);
+        serde_json::to_string(&diff).unwrap()
+    };
+    let flow = noted(&["params:{n: 2}", "title:ZZ"]);
+    let json = noted(&["title:ZZ", "params:{\"n\": 2}"]);
+    assert_eq!(
+        flow, json,
+        "flag order and YAML flow vs JSON are not meaningful"
+    );
+    assert!(
+        !flow.contains("title"),
+        "a non-execution key is absent: {flow}"
+    );
+}
+
+/// A `jupyter` engine that claims `python` and panics if it is ever asked to run.
+struct MustNotRun;
+
+impl ExecutionEngine for MustNotRun {
+    fn name(&self) -> &str {
+        "jupyter"
+    }
+    fn execute(
+        &self,
+        _input: &str,
+        _ctx: &ExecutionContext,
+    ) -> Result<ExecuteResult, ExecutionError> {
+        panic!("publishing an imported record must never run an engine");
+    }
+    fn claims_language(&self, language: &str, _first_class: Option<&str>) -> LanguageClaim {
+        if language == "python" {
+            LanguageClaim::Primary(1)
+        } else {
+            LanguageClaim::None
+        }
+    }
+    /// Like the real `jupyter` engine: a Python kernel is the one Positron ran, so the import
+    /// gate (RFU-2) admits imported outputs for this engine's python units.
+    fn kernel_equivalence(&self, language: &str) -> Option<bool> {
+        Some(language == "python")
+    }
+}
+
+const PYTHON_QMD: &str = "---\ntitle: T\n---\n\n```{python}\nx = 1\n```\n";
+
+/// A directory holding one Positron-format cache for `x = 1`. The document the provider sees
+/// is materialized to a random temp path, so only the content-hash tier can find this file.
+fn positron_cache_dir() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let file = serde_json::json!({
+        "nbformat": 4, "nbformat_minor": 5,
+        "metadata": {"quarto_source": "file:///somewhere/else.qmd", "quarto_cache_version": 1},
+        "cells": [{
+            "cell_type": "code", "execution_count": null,
+            "metadata": {"quarto_content_hash": quarto_core::record::content_hash("x = 1")},
+            "outputs": [{"output_type": "stream", "name": "stdout", "text": ["from positron\n"]}],
+            "source": []
+        }]
+    });
+    std::fs::write(dir.path().join("cache.ipynb"), file.to_string()).unwrap();
+    dir
+}
+
+/// RIU-3a Phase D: publishing an imported record never calls an engine and never reaches the
+/// consent gate. The provider is built with `AlwaysReject` (which would refuse any engine run)
+/// and an engine that panics if run; the record still lands. With the writer gate off the seam
+/// refuses, naming the variable, and nothing is written.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn publishing_an_imported_record_needs_no_consent_and_runs_no_engine() {
+    let (server_repo, ws_url) = spawn_server().await;
+    let file_id = create_text_doc(&server_repo, PYTHON_QMD).await;
+    let (server_index, index_id) = IndexDocument::create(&server_repo).await.unwrap();
+    server_index.add_file("doc.qmd", &file_id).unwrap();
+
+    let (provider_repo, provider_index) = join(
+        JoinConfig {
+            server_ws_url: ws_url,
+            index_doc_id: index_id.clone(),
+            connect_timeout: Duration::from_secs(10),
+        },
+        Arc::new(StaticTokenSource::new("test-token")),
+    )
+    .await
+    .expect("provider joins");
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let provider = Provider::new(
+        provider_repo,
+        provider_index,
+        "provider-actor",
+        Arc::new(AlwaysReject),
+        Some(Arc::new(registry)),
+    );
+    let cache = positron_cache_dir();
+    let source = quarto_core::record::RecordSource::Dir(cache.path().to_path_buf());
+
+    // Gate off: refused, naming the variable; nothing written.
+    let err = provider
+        .publish_record_source("doc.qmd", &source, false)
+        .await
+        .unwrap_err();
+    assert!(err.contains("QUARTO_ENGINE_RECORD_WRITE"), "{err}");
+    assert!(server_index.get_capture("doc.qmd").is_none());
+
+    // Gate on: published as a record document, fresh, with no engine run.
+    let outcome = provider
+        .publish_record_source("doc.qmd", &source, true)
+        .await
+        .unwrap();
+    let ExecOutcome::Executed(doc_id) = outcome else {
+        panic!("expected the record to be published")
+    };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let cap = loop {
+        if let Some(cap) = server_index.get_capture("doc.qmd") {
+            break cap;
+        }
+        assert!(Instant::now() < deadline, "the sidecar never synced");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    assert_eq!(cap.capture_doc_id, doc_id);
+    assert_eq!(cap.staleness, Some(false));
+    assert_eq!(cap.state, Some(CaptureState::Idle));
+
+    // A document the cache does not cover has nothing to publish: an error, not an empty page.
+    let empty = tempfile::tempdir().unwrap();
+    let none = quarto_core::record::RecordSource::Dir(empty.path().to_path_buf());
+    assert!(
+        provider
+            .publish_record_source("doc.qmd", &none, true)
+            .await
+            .is_err()
+    );
+    provider.stop().await;
+}
+
+/// Join a fresh hub holding `doc.qmd` = `text`; returns the provider's repo and index plus the
+/// server's index (to read sidecars back).
+async fn join_with_doc(text: &str) -> (Repo, IndexDocument, IndexDocument) {
+    let (server_repo, ws_url) = spawn_server().await;
+    let file_id = create_text_doc(&server_repo, text).await;
+    let (server_index, index_id) = IndexDocument::create(&server_repo).await.unwrap();
+    server_index.add_file("doc.qmd", &file_id).unwrap();
+    let (repo, index) = join(
+        JoinConfig {
+            server_ws_url: ws_url,
+            index_doc_id: index_id,
+            connect_timeout: Duration::from_secs(10),
+        },
+        Arc::new(StaticTokenSource::new("test-token")),
+    )
+    .await
+    .expect("provider joins");
+    // Keep the server repo alive for the test's duration.
+    std::mem::forget(server_repo);
+    (repo, index, server_index)
+}
+
+fn records_provider(
+    repo: Repo,
+    index: IndexDocument,
+    consent: Arc<dyn quarto_hub_provider::ConsentGate>,
+    registry: EngineRegistry,
+    sources: Vec<quarto_core::record::RecordSource>,
+) -> Arc<Provider> {
+    Provider::new_with_records(
+        repo,
+        index,
+        "provider-actor",
+        consent,
+        Some(Arc::new(registry)),
+        None,
+        quarto_core::record::RecordSources::new(sources),
+        true,
+    )
+}
+
+/// RIU-4: `execute_document` with a `record-sources` directory (no `engine`) publishes the imported record
+/// through the walk without consent and never runs the engine.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn execute_document_with_an_imported_source_publishes_without_consent_or_engine() {
+    use quarto_core::record::RecordSource;
+    let (repo, index, server_index) = join_with_doc(PYTHON_QMD).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let cache = positron_cache_dir();
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysReject),
+        registry,
+        vec![RecordSource::Dir(cache.path().to_path_buf())],
+    );
+    let outcome = provider.execute_document("doc.qmd").await.unwrap();
+    let ExecOutcome::Executed(doc_id) = outcome else {
+        panic!("expected the imported record to be published")
+    };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        if let Some(cap) = server_index.get_capture("doc.qmd") {
+            assert_eq!(cap.capture_doc_id, doc_id);
+            assert_eq!(cap.staleness, Some(false));
+            break;
+        }
+        assert!(Instant::now() < deadline, "the sidecar never synced");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    provider.stop().await;
+}
+
+/// RIU-4: with `engine` absent and nothing supplying a record, the request fails and the
+/// engine (which panics if run) is never reached.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn without_engine_in_the_list_nothing_runs_when_no_source_supplies() {
+    use quarto_core::record::RecordSource;
+    let (repo, index, server_index) = join_with_doc(PYTHON_QMD).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let empty = tempfile::tempdir().unwrap();
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysAccept),
+        registry,
+        vec![RecordSource::Dir(empty.path().to_path_buf())],
+    );
+    assert!(provider.execute_document("doc.qmd").await.is_err());
+    assert!(server_index.get_capture("doc.qmd").is_none());
+    provider.stop().await;
+}
+
+/// RIU-4: with `engine` listed after a source that has nothing, the engine step still goes
+/// through the consent gate: a rejecting gate yields `Rejected` and writes nothing; an
+/// accepting one runs and publishes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn engine_after_an_empty_source_still_goes_through_consent() {
+    use quarto_core::record::RecordSource;
+    let empty = tempfile::tempdir().unwrap();
+    let sources = || {
+        vec![
+            RecordSource::Dir(empty.path().to_path_buf()),
+            RecordSource::Engine,
+        ]
+    };
+
+    let (repo, index, server_index) = join_with_doc(PASSTHROUGH_QMD).await;
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysReject),
+        passthrough_registry(),
+        sources(),
+    );
+    assert_eq!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Rejected
+    );
+    assert!(server_index.get_capture("doc.qmd").is_none());
+    provider.stop().await;
+
+    let (repo, index, _server_index) = join_with_doc(PASSTHROUGH_QMD).await;
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysAccept),
+        passthrough_registry(),
+        sources(),
+    );
+    assert!(matches!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Executed(_)
+    ));
+    provider.stop().await;
+}
+
+/// A document (as a guest's hub project would carry it) that sets `execute: record-sources`.
+fn python_qmd_with_sources(sources: &str) -> String {
+    format!(
+        "---\ntitle: T\nexecute:\n  record-sources: \"{sources}\"\n---\n\n```{{python}}\nx = 1\n```\n"
+    )
+}
+
+/// OPR-5 Part B: the host list is a ceiling. A guest key that names a source the host did not
+/// allow is ignored, and what is left (`engine`) still runs through the consent gate.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_guest_key_cannot_add_a_source_the_host_did_not_allow() {
+    let text = "---\nengine: test-passthrough\nexecute:\n  record-sources: \"positron,engine\"\n---\n\n```{test-passthrough}\n1 + 1\n```\n";
+    let (repo, index, _server_index) = join_with_doc(text).await;
+    let provider = records_provider(
+        repo,
+        index,
+        Arc::new(AlwaysAccept),
+        passthrough_registry(),
+        vec![quarto_core::record::RecordSource::Engine],
+    );
+    assert!(matches!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Executed(_)
+    ));
+    provider.stop().await;
+}
+
+/// OPR-5 Part B: a guest key that narrows the host list to nothing is an error naming the
+/// reason, and the engine (which panics if run) is never reached.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_guest_key_that_narrows_to_nothing_is_an_error_naming_the_reason() {
+    for guest in ["positron", "./recs"] {
+        let (repo, index, server_index) = join_with_doc(&python_qmd_with_sources(guest)).await;
+        let mut registry = EngineRegistry::empty();
+        registry.register(Arc::new(MustNotRun));
+        let provider = records_provider(
+            repo,
+            index,
+            Arc::new(AlwaysAccept),
+            registry,
+            vec![quarto_core::record::RecordSource::Engine],
+        );
+        let err = provider.execute_document("doc.qmd").await.unwrap_err();
+        assert!(
+            err.contains("execute: record-sources") && err.contains("allowed"),
+            "guest {guest:?}: {err}"
+        );
+        assert!(server_index.get_capture("doc.qmd").is_none());
+        provider.stop().await;
+    }
+}
+
+/// OPR-5 Part B: with a wider host list a guest may narrow it. The host allows the cache
+/// directory then the engine; the guest asks for `engine` only, so the cache is not used and
+/// the consent gate decides.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_guest_key_may_narrow_a_wider_host_list() {
+    use quarto_core::record::RecordSource;
+    let cache = positron_cache_dir();
+    let host = || {
+        vec![
+            RecordSource::Dir(cache.path().to_path_buf()),
+            RecordSource::Engine,
+        ]
+    };
+    // No guest key: the host's first source (the cache) supplies without consent.
+    let (repo, index, _s) = join_with_doc(PYTHON_QMD).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let provider = records_provider(repo, index, Arc::new(AlwaysReject), registry, host());
+    assert!(matches!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Executed(_)
+    ));
+    provider.stop().await;
+
+    // Guest narrows to `engine`: the cache is skipped and a rejecting gate refuses.
+    let (repo, index, server_index) = join_with_doc(&python_qmd_with_sources("engine")).await;
+    let mut registry = EngineRegistry::empty();
+    registry.register(Arc::new(MustNotRun));
+    let provider = records_provider(repo, index, Arc::new(AlwaysReject), registry, host());
+    assert_eq!(
+        provider.execute_document("doc.qmd").await.unwrap(),
+        ExecOutcome::Rejected
+    );
+    assert!(server_index.get_capture("doc.qmd").is_none());
+    provider.stop().await;
+}

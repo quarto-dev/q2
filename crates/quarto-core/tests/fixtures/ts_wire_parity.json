@@ -16,6 +16,82 @@
     "runningInCi": true,
     "runtimeDir": "/rt"
   },
+  "TsExecuteOptions": {
+    "cwd": "/project",
+    "dependencies": true,
+    "executeEnv": {
+      "QUARTO_DOCUMENT_FILE": "doc.qmd",
+      "QUARTO_PROFILE": "prod"
+    },
+    "format": {
+      "identifier": {
+        "base-format": "html",
+        "display-name": "HTML",
+        "target-format": "html"
+      },
+      "metadata": {}
+    },
+    "handledLanguages": [],
+    "input": "# Hello",
+    "libDir": "/project/doc_files",
+    "ownedLanguages": [],
+    "params": null,
+    "projectDir": null,
+    "quiet": false,
+    "sourceMap": [],
+    "sourcePath": "/project/doc.qmd",
+    "tempDir": "/tmp",
+    "units": [
+      {
+        "id": "3-1a2b3c4d-unlabeled",
+        "inFrontMatter": true,
+        "index": 3,
+        "kind": "cell",
+        "language": "julia",
+        "line": 12,
+        "owned": true
+      }
+    ]
+  },
+  "TsExecuteResult": {
+    "engineDependencies": null,
+    "filters": [],
+    "htmlDependencies": [],
+    "includes": null,
+    "markdown": "",
+    "metadata": null,
+    "notebook": {
+      "nbformat": 4
+    },
+    "pandoc": null,
+    "postProcess": false,
+    "preserve": {},
+    "recordInfo": {
+      "alignment": "ids",
+      "coverage": "subset",
+      "dependencyData": "jupyter-outputs",
+      "granularity": "unit",
+      "hashDefinition": {
+        "documentKeys": [],
+        "granularity": "unit",
+        "id": "julia",
+        "presentationCellOptions": [],
+        "presentationExecuteKeys": [],
+        "profiles": {
+          "p": {
+            "presentationCellOptions": [],
+            "presentationExecuteKeys": []
+          }
+        },
+        "version": 1
+      },
+      "outputKind": "raw",
+      "presentedBy": "core",
+      "version": 1
+    },
+    "resourceFiles": [],
+    "supporting": []
+  },
   "TsLanguageClaim": {
     "kind": "primary",
     "priority": 5
@@ -30,5 +106,37 @@
     "inHeader": [
       "<style></style>"
     ]
+  },
+  "TsRecordInfo": {
+    "alignment": "ids",
+    "coverage": "subset",
+    "dependencyData": "jupyter-outputs",
+    "granularity": "unit",
+    "hashDefinition": {
+      "documentKeys": [],
+      "granularity": "unit",
+      "id": "julia",
+      "presentationCellOptions": [],
+      "presentationExecuteKeys": [],
+      "profiles": {
+        "p": {
+          "presentationCellOptions": [],
+          "presentationExecuteKeys": []
+        }
+      },
+      "version": 1
+    },
+    "outputKind": "raw",
+    "presentedBy": "core",
+    "version": 1
+  },
+  "TsUnit": {
+    "id": "3-1a2b3c4d-unlabeled",
+    "inFrontMatter": true,
+    "index": 3,
+    "kind": "cell",
+    "language": "julia",
+    "line": 12,
+    "owned": true
   }
 }

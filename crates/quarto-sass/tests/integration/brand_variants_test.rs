@@ -185,3 +185,96 @@ fn single_file_brand_falls_back_to_same_file_for_dark() {
         .and_then(|c| c.foreground.clone());
     assert_eq!(dark_fg.as_deref(), Some("#333332"));
 }
+
+// ---------------------------------------------------------------------------
+// `resolve_brand_modes` (bd-8fmuyh4d): the dark half only when the brand
+// defines dark values — what code cells see as
+// `format.render.brand.{light,dark}` through `QUARTO_EXECUTE_INFO`.
+// ---------------------------------------------------------------------------
+
+/// A `{light:, dark:}` pair defines dark values: both modes are present.
+#[test]
+fn modes_include_dark_when_the_brand_defines_dark_values() {
+    let dir = tempfile::tempdir().unwrap();
+    write_brand(
+        dir.path(),
+        "_brand.yml",
+        "color:\n  background:\n    light: \"#b22221\"\n    dark: \"#22b221\"\n",
+    );
+    let config = flattened_config(vec![("brand", scalar_string("_brand.yml"))]);
+    let modes = quarto_sass::resolve_brand_modes(
+        &config,
+        &NativeRuntime::new(),
+        &brand_base_dir(dir.path()),
+    )
+    .unwrap()
+    .expect("a brand is configured");
+    assert_eq!(
+        background_of(&Some(modes.light)).as_deref(),
+        Some("#b22221")
+    );
+    assert_eq!(background_of(&modes.dark).as_deref(), Some("#22b221"));
+}
+
+/// An all-plain brand defines no dark values: no dark mode.
+#[test]
+fn modes_omit_dark_for_an_all_plain_brand() {
+    let dir = tempfile::tempdir().unwrap();
+    write_brand(
+        dir.path(),
+        "_brand.yml",
+        "color:\n  background: \"#b22221\"\n",
+    );
+    let config = flattened_config(vec![("brand", scalar_string("_brand.yml"))]);
+    let modes = quarto_sass::resolve_brand_modes(
+        &config,
+        &NativeRuntime::new(),
+        &brand_base_dir(dir.path()),
+    )
+    .unwrap()
+    .expect("a brand is configured");
+    assert!(modes.dark.is_none());
+}
+
+/// The two-file form names a dark brand: dark mode is defined even when
+/// neither file uses a `{light:, dark:}` pair.
+#[test]
+fn modes_include_dark_for_the_two_file_form() {
+    let dir = tempfile::tempdir().unwrap();
+    write_brand(
+        dir.path(),
+        "light-brand.yml",
+        "color:\n  background: \"#b22221\"\n",
+    );
+    write_brand(
+        dir.path(),
+        "dark-brand.yml",
+        "color:\n  background: \"#22b221\"\n",
+    );
+    let brand = map_config(vec![
+        ("light", scalar_string("light-brand.yml")),
+        ("dark", scalar_string("dark-brand.yml")),
+    ]);
+    let config = flattened_config(vec![("brand", brand)]);
+    let modes = quarto_sass::resolve_brand_modes(
+        &config,
+        &NativeRuntime::new(),
+        &brand_base_dir(dir.path()),
+    )
+    .unwrap()
+    .expect("a brand is configured");
+    assert_eq!(background_of(&modes.dark).as_deref(), Some("#22b221"));
+}
+
+/// No `brand:` key: no modes at all.
+#[test]
+fn modes_are_none_without_a_brand() {
+    let config = flattened_config(vec![]);
+    let modes = quarto_sass::resolve_brand_modes(
+        &config,
+        &NativeRuntime::new(),
+        &brand_base_dir(Path::new(".")),
+    )
+    .unwrap();
+    assert!(modes.is_none());
+}

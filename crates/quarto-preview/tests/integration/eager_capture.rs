@@ -91,6 +91,7 @@ async fn eager_capture_populates_index_sidecar() {
         spa_dir_override: None,
         engine_registry: Some(Arc::new(registry)),
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,
@@ -142,7 +143,8 @@ async fn eager_capture_populates_index_sidecar() {
     // doc, ungzip, parse JSON.
     let captures = capture_driver::read_capture_from_doc(&ctx, &entry.capture_doc_id)
         .await
-        .expect("capture doc round-trips");
+        .expect("capture doc round-trips")
+        .into_captures();
     assert_eq!(captures.len(), 1);
     let capture = &captures[0];
 
@@ -209,6 +211,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

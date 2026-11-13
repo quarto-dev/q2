@@ -151,7 +151,7 @@ fn sugar_block(block: &mut Block, diags: &mut Vec<DiagnosticMessage>) {
     if let Block::Div(div) = block
         && div.attr.1.iter().any(|c| c == MATCH_CLASS)
     {
-        *block = Block::Custom(sugar_embed(div, diags));
+        *block = Block::Custom(Box::new(sugar_embed(div, diags)));
     }
 }
 
@@ -224,7 +224,7 @@ fn sugar_embed(div: &Div, diags: &mut Vec<DiagnosticMessage>) -> CustomNode {
             classes.push(c.clone());
         }
     }
-    let attr: Attr = (id, classes, LinkedHashMap::new());
+    let attr: Attr = (id, classes, LinkedHashMap::new()).into();
 
     let mut node = CustomNode::new(NODE_TYPE, attr, div.source_info.clone());
     node.plain_data = Value::Object(plain_data);
@@ -304,7 +304,7 @@ fn render_block(block: &mut Block, resolve: Resolve) {
     if let Block::Custom(node) = block
         && node.type_name == NODE_TYPE
     {
-        *block = Block::Div(render_embed(node, resolve));
+        *block = Block::Div(Box::new(render_embed(node, resolve)));
     }
 }
 
@@ -361,22 +361,23 @@ fn render_embed(node: &mut CustomNode, resolve: Resolve) -> Div {
         Some(n) => with_number_label(body, kind, n, &source_info),
         None => body,
     };
-    content.push(Block::Div(Div {
+    content.push(Block::Div(Box::new(Div {
         attr: (
             String::new(),
             vec![SOURCE_CLASS.to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: caption_blocks,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    }));
+    })));
 
     // The container carries the id so `@demo-…` references jump to it.
     let mut classes = vec![CONTAINER_CLASS.to_string()];
     classes.extend(extra_classes);
     Div {
-        attr: (id, classes, LinkedHashMap::new()),
+        attr: (id, classes, LinkedHashMap::new()).into(),
         content,
         source_info,
         attr_source: AttrSourceInfo::empty(),
@@ -416,11 +417,11 @@ fn iframe_block(
         title = title,
         style = attr_escape(&style),
     );
-    Block::RawBlock(RawBlock {
+    Block::RawBlock(Box::new(RawBlock {
         format: "html".to_string(),
         text: html,
         source_info: source_info.clone(),
-    })
+    }))
 }
 
 /// Prepend a `Demo N: ` label (a styled span) to the caption body. If the
@@ -432,12 +433,13 @@ fn with_number_label(
     order: u64,
     source_info: &SourceInfo,
 ) -> Vec<Block> {
-    let label = Inline::Span(Span {
+    let label = Inline::Span(Box::new(Span {
         attr: (
             String::new(),
             vec![LABEL_CLASS.to_string()],
             LinkedHashMap::new(),
-        ),
+        )
+            .into(),
         content: vec![Inline::Str(Str {
             // Non-breaking space between kind and number, matching crossref
             // reference text ("Figure\u{a0}1").
@@ -446,7 +448,7 @@ fn with_number_label(
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
     let sep = Inline::Str(Str {
         text: ": ".to_string(),
         source_info: source_info.clone(),
@@ -628,8 +630,8 @@ mod tests {
 
     fn source_link(text: &str, href: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Link(Link {
-                attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![Inline::Link(Box::new(Link {
+                attr: (String::new(), vec![], LinkedHashMap::new()).into(),
                 content: vec![Inline::Str(Str {
                     text: text.to_string(),
                     source_info: dummy_source_info(),
@@ -638,7 +640,7 @@ mod tests {
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            })],
+            }))],
             source_info: dummy_source_info(),
         })
     }
@@ -650,26 +652,27 @@ mod tests {
         for (k, v) in kvs {
             map.insert((*k).to_string(), (*v).to_string());
         }
-        Block::Div(Div {
-            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map),
+        Block::Div(Box::new(Div {
+            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map).into(),
             content: vec![source_link("View source", "https://github.com/q/x")],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A markdown code-block, as the first child of a placeholder would parse.
     fn code_block(text: &str) -> Block {
-        Block::CodeBlock(quarto_pandoc_types::block::CodeBlock {
+        Block::CodeBlock(Box::new(quarto_pandoc_types::block::CodeBlock {
             attr: (
                 String::new(),
                 vec!["markdown".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A placeholder Div whose body is a leading code block followed by the
@@ -679,12 +682,12 @@ mod tests {
         for (k, v) in kvs {
             map.insert((*k).to_string(), (*v).to_string());
         }
-        Block::Div(Div {
-            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map),
+        Block::Div(Box::new(Div {
+            attr: (id.to_string(), vec![MATCH_CLASS.to_string()], map).into(),
             content: body,
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// The ordered top-level block kinds inside the rendered container Div.

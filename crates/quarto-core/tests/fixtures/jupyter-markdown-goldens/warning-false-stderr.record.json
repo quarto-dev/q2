@@ -1,0 +1,156 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "07e4817aae84e857",
+   "metadata": {
+    "quarto_cell_id": "0-07e4817a-unlabeled",
+    "quarto_content_hash": "07e4817aae84e857",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "f3797f6f7b2e705039d2586c07f82f3c2c8d4513ef276d6c7082b6b299f04fa7",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "to stdout\n"
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": "to stderr\n"
+    }
+   ],
+   "source": [
+    "#| warning: false\n",
+    "import sys\n",
+    "print(\"to stderr\", file=sys.stderr)\n",
+    "print(\"to stdout\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "quarto_cache_version": 1,
+  "quarto_engines": [
+   {
+    "can_freeze": true,
+    "document_hash": "1d3a507d4e8be6e16d403f9b5c96d90b53f0dc7b9e960d9585b430f5d35ea712",
+    "hash_definition": {
+     "documentKeys": [
+      "jupyter"
+     ],
+     "granularity": "unit",
+     "id": "jupyter",
+     "presentationCellOptions": [
+      "echo",
+      "output",
+      "warning",
+      "include",
+      "code-fold",
+      "code-summary",
+      "code-overflow",
+      "code-line-numbers",
+      "code-copy",
+      "fig-cap",
+      "fig-subcap",
+      "fig-scap",
+      "fig-alt",
+      "fig-align",
+      "fig-link",
+      "fig-cap-location",
+      "tbl-cap",
+      "tbl-subcap",
+      "tbl-scap",
+      "tbl-colwidths",
+      "tbl-cap-location",
+      "lst-cap",
+      "lst-label",
+      "cap-location",
+      "layout",
+      "layout-ncol",
+      "layout-nrow",
+      "layout-align",
+      "layout-valign",
+      "panel",
+      "column",
+      "keep-hidden",
+      "fig-env",
+      "fig-pos",
+      "out-width",
+      "out-height",
+      "out-extra",
+      "classes",
+      "fig-column",
+      "tbl-column",
+      "output-interleave"
+     ],
+     "presentationExecuteKeys": [
+      "echo",
+      "output",
+      "warning",
+      "include",
+      "code-fold",
+      "code-summary",
+      "code-overflow",
+      "code-line-numbers",
+      "code-copy",
+      "fig-cap",
+      "fig-subcap",
+      "fig-scap",
+      "fig-alt",
+      "fig-align",
+      "fig-link",
+      "fig-cap-location",
+      "tbl-cap",
+      "tbl-subcap",
+      "tbl-scap",
+      "tbl-colwidths",
+      "tbl-cap-location",
+      "lst-cap",
+      "lst-label",
+      "cap-location",
+      "layout",
+      "layout-ncol",
+      "layout-nrow",
+      "layout-align",
+      "layout-valign",
+      "panel",
+      "column",
+      "keep-hidden",
+      "fig-env",
+      "fig-pos",
+      "out-width",
+      "out-height",
+      "out-extra",
+      "classes",
+      "fig-column",
+      "tbl-column",
+      "output-interleave",
+      "record-sources"
+     ],
+     "version": 1
+    },
+    "name": "jupyter",
+    "needs_postprocess": false,
+    "owned_languages": [
+     "python"
+    ],
+    "provenance": {
+     "kernelspec": {
+      "language": "python",
+      "name": "python3"
+     }
+    }
+   }
+  ],
+  "quarto_execution_hash": "ed24b9e471c7bf30833fa9b319fcae01c2991132be6a6800a862a61a40f036f4",
+  "quarto_record_version": 1,
+  "quarto_source": "doc.qmd"
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

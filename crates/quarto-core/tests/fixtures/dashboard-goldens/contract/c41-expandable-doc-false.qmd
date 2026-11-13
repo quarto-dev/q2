@@ -1,0 +1,17 @@
+---
+# contract: document-level expandable: false
+title: "C41 No Expand"
+format:
+  dashboard:
+    expandable: false
+---
+
+::: {.cell title="C41-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

@@ -1,0 +1,45 @@
+---
+title: "Site Metrics"
+format: dashboard
+---
+
+## Row {height=25%}
+
+::: {.valuebox icon="people" color="primary"}
+Visitors this month
+
+41,290
+:::
+
+::: {.valuebox icon="cart" color="success"}
+Orders
+
+1,203
+:::
+
+::: {.valuebox icon="exclamation-triangle" color="danger"}
+Failed payments
+
+12
+:::
+
+::: {.valuebox icon="clock" color="#6f42c1" showcase-position="top-right"}
+Avg. session
+
+4m 12s
+:::
+
+## Row {height=75%}
+
+::: {.card title="Monthly visits"}
+![](monthly-visits.svg){fig-alt="Line chart of monthly visits rising through the year."}
+:::
+
+::: {.card title="Top pages"}
+| Page      | Views |
+|-----------|------:|
+| /pricing  | 8,412 |
+| /docs     | 6,930 |
+| /blog     | 4,105 |
+| /about    | 1,288 |
+:::

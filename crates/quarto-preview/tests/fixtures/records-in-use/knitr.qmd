@@ -1,0 +1,8 @@
+---
+title: Records knitr only
+engine: knitr
+---
+
+```{r}
+1 + 1
+```

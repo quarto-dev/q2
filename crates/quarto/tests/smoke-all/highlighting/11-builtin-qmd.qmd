@@ -1,0 +1,39 @@
+---
+title: Built-in qmd / markdown highlighting
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      dom-parity: true
+      ensureFileRegexMatches:
+        # GH #1081. `qmd` and its `markdown` / `md` aliases resolve to the
+        # built-in qmd composite: the structure maps onto styled `hl-*`
+        # classes, the front matter is highlighted as YAML, and the nested
+        # python cell is highlighted as Python with its `#|` option as YAML.
+        - ["<pre class=\"sourceCode qmd\"", "<pre class=\"sourceCode markdown\"", "<pre class=\"sourceCode md\"", "hl-markup-bold\">bold</span>", "hl-markup-link\">link</span>", "hl-property\">title</span>", "hl-comment\">#\\|</span>", "hl-property\">echo</span>", "hl-function-builtin\">print</span>"]
+---
+
+`````qmd
+---
+title: "Report"
+format: html
+---
+
+## Results
+
+Some **bold** text and a [link](https://example.com).
+
+```{python}
+#| echo: false
+print("hello")
+```
+`````
+
+````markdown
+## Results
+````
+
+```md
+# md alias
+```

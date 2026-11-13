@@ -1237,9 +1237,10 @@ export const CommentWrapper = ({
         };
     }, [selfExpanded]);
 
-    // Display-only bubbles (GH #973): a host that can't write offers no `+`,
+    // Display-only bubbles (GH #973): a host that can't write, or a render
+    // without the source baseline needed to construct an edit, offers no `+`,
     // no input, and no ✓ — anything typed there would be silently lost.
-    const readOnly = !!previewCtx?.commentingDisabled;
+    const readOnly = !!previewCtx?.commentingDisabled || !previewCtx?.sourceIndex;
     const chromeVisible = comments.length > 0 || (!readOnly && (isHovered || selfExpanded));
 
     // Register this bubble with the force layout while visible. Mounts
@@ -1591,7 +1592,7 @@ export const CommentWrapper = ({
                                         </div>
                                     );
                                 })}
-                                {showInlineInput && (
+                                {showInlineInput && !readOnly && (
                                     <div style={{
                                         borderTop: comments.length > 0 ? DIVIDER : 'none',
                                         marginTop: comments.length > 0 ? '4px' : 0,

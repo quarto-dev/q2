@@ -16,7 +16,7 @@ use quarto_system_runtime::SystemRuntime;
 
 use super::types::{
     ClaimKind, Contributes, EngineContribution, Extension, ExtensionFilter, ExtensionId, FileClaim,
-    ProcessorSpec, StaticLanguageClaim,
+    KernelEquivalence, ProcessorSpec, StaticLanguageClaim,
 };
 use crate::error::Result;
 
@@ -447,6 +447,22 @@ fn parse_external_engine(
         .map(parse_file_claims)
         .transpose()?;
 
+    // Optional: `kernel-equivalence` — `true` (any plain language), `false` (none), or a
+    // list of language tokens. Absent = undeclared.
+    let kernel_equivalence =
+        item.get("kernel-equivalence")
+            .and_then(|v| match (v.as_bool(), v.as_array()) {
+                (Some(true), _) => Some(KernelEquivalence::Any),
+                (Some(false), _) => Some(KernelEquivalence::Languages(Vec::new())),
+                (_, Some(items)) => Some(KernelEquivalence::Languages(
+                    items
+                        .iter()
+                        .filter_map(|i| i.as_str().map(str::to_string))
+                        .collect(),
+                )),
+                _ => None,
+            });
+
     Ok(EngineContribution::External {
         path: resolved_path,
         extension_yml_path: extension_file.to_path_buf(),
@@ -454,6 +470,7 @@ fn parse_external_engine(
         claims,
         file_extensions,
         claims_files,
+        kernel_equivalence,
     })
 }
 
@@ -1926,6 +1943,45 @@ contributes:
         );
     }
 
+    /// RFU-2: `kernel-equivalence:` is `true` (any language), a list of tokens, `false`
+    /// (none), or absent (undeclared).
+    #[test]
+    fn test_engine_kernel_equivalence_parse() {
+        let parse = |decl: &str| {
+            let tmp = TempDir::new().unwrap();
+            let ext_dir = tmp.path().join("_extensions/my-ext");
+            let file = write_extension(
+                &ext_dir,
+                &format!(
+                    "title: E\ncontributes:\n  engines:\n    - path: engine.js\n      name: e\n{decl}"
+                ),
+            );
+            let ext = read_extension(&file, &make_runtime()).unwrap();
+            match &ext.contributes.engines[0] {
+                EngineContribution::External {
+                    kernel_equivalence, ..
+                } => kernel_equivalence.clone(),
+                _ => panic!("expected External"),
+            }
+        };
+        assert_eq!(parse(""), None);
+        assert_eq!(
+            parse("      kernel-equivalence: true\n"),
+            Some(KernelEquivalence::Any)
+        );
+        assert_eq!(
+            parse("      kernel-equivalence: [julia, r]\n"),
+            Some(KernelEquivalence::Languages(vec![
+                "julia".into(),
+                "r".into()
+            ]))
+        );
+        assert_eq!(
+            parse("      kernel-equivalence: false\n"),
+            Some(KernelEquivalence::Languages(vec![]))
+        );
+    }
+
     /// Happy parse: full External engine + a bare Reorder string alongside it.
     #[test]
     fn test_engine_external_happy_parse() {
@@ -1964,6 +2020,7 @@ contributes:
                 claims,
                 file_extensions,
                 claims_files,
+                ..
             } => {
                 assert!(path.is_absolute(), "path should be absolute");
                 assert!(

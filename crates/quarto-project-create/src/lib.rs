@@ -828,6 +828,28 @@ mod render_tests {
         }
     }
 
+    #[test]
+    fn hub_only_choices_render_markdown_files_by_default() {
+        // The hub's WASM preview only previews .md files when the project
+        // opts them into rendering, so every hub-only scaffold must.
+        for choice in available_choices()
+            .into_iter()
+            .filter(|c| c.implemented && !c.available_on(Surface::Cli))
+        {
+            let files =
+                create_project_from_choice(CreateFromChoiceOptions::new(&choice.id, "Hub Title"))
+                    .unwrap();
+            let yml = parse_yaml(file_content(&files, "_quarto.yml"));
+            let render: Vec<&str> = yml["project"]["render"]
+                .as_sequence()
+                .unwrap_or_else(|| panic!("{}: project.render missing", choice.id))
+                .iter()
+                .filter_map(|v| v.as_str())
+                .collect();
+            assert_eq!(render, ["**/*.qmd", "**/*.md"], "{}", choice.id);
+        }
+    }
+
     // ----------------------------------------------------------------
     // Presentation skeleton (bd-q33ylfxf)
     // ----------------------------------------------------------------

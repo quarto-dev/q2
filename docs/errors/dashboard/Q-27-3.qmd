@@ -1,0 +1,54 @@
+---
+title: "Unknown Nav-Button"
+description: "An entry in `nav-buttons` is not a known alias, so it was left out of the navbar."
+code: Q-27-3
+subsystem: dashboard
+status: stub
+since: "99.9.9"
+categories:
+  - dashboard
+---
+
+# `Q-27-3` — Unknown Nav-Button
+
+> An entry in `nav-buttons` is not a known alias, so it was left out of the navbar.
+
+## What this means
+
+A dashboard's `nav-buttons` option adds links to the navbar. Each entry
+is either a map describing the link or the name of a share-link alias:
+
+```yaml
+format:
+  dashboard:
+    nav-buttons:
+      - twitter
+      - icon: gitlab
+        href: https://gitlab.com/
+```
+
+The aliases are `linkedin`, `facebook`, `reddit` and `twitter`. Quarto
+warns with this code when an entry is a name that is not one of them.
+The rest of the navbar renders without it.
+
+## Why this happens
+
+- The name is misspelled, or is not one of the aliases.
+- The entry is `github`. Quarto 1 found the repository URL itself; Quarto
+  2 does not support that alias yet.
+
+## How to fix
+
+Use one of the aliases, or describe the link as a map with an `href`
+and, optionally, `icon` (a Bootstrap icon name), `text`, `title`,
+`rel`, `target` and `aria-label`:
+
+```yaml
+nav-buttons:
+  - icon: github
+    href: https://github.com/<owner>/<repo>
+```
+
+## Related
+
+- [`Q-27-2`](Q-27-2.qmd): card toolbar or sidebar could not be placed.

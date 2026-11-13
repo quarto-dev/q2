@@ -1,0 +1,52 @@
+---
+title: "Lightbox: code cell options"
+# bd-kcpkgftw. Port of the computational part of Q1 smoke-all/lightbox/
+# example.qmd. knitr forwards an unknown chunk option such as `lightbox:`
+# to the cell Div as a JSON-encoded attribute (hooks.R "forward any other
+# unknown attributes"); these cells are written in that executed shape so
+# the fixture needs no R. `group` and `description` reach the images, a
+# list is indexed per plot, and `lightbox: false` opts a cell out of
+# automatic mode.
+lightbox: auto
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'div.cell a.lightbox[data-gallery="r-graph"][href="images/mv-0.png"] > img'
+          - 'div.cell a.lightbox[data-gallery="cars"][href="images/mv-1.png"] > img'
+          - 'div.cell a.lightbox[data-gallery="cars"][href="images/mv-2.png"] > img'
+          - 'div.cell img.nolightbox'
+          - 'div.glightbox-desc.lightbox-desc-1'
+          - 'div.glightbox-desc.lightbox-desc-2'
+          - 'div.glightbox-desc.lightbox-desc-3'
+        - - 'div.cell[data-lightbox]'
+          - 'div.cell[lightbox]'
+          - 'a.lightbox[href="images/mv-3.png"]'
+      ensureFileRegexMatches:
+        - - "This is 1 to 10 plot"
+          - "First description"
+          - "Second description"
+        - []
+---
+
+::: {.cell lightbox='{"group":"r-graph","description":"This is 1 to 10 plot"}'}
+::: {.cell-output-display}
+![Simple demo R plot](images/mv-0.png)
+:::
+:::
+
+::: {.cell lightbox='{"group":"cars","description":["First description","Second description"]}'}
+::: {.cell-output-display}
+![](images/mv-1.png)
+:::
+
+::: {.cell-output-display}
+![](images/mv-2.png)
+:::
+:::
+
+::: {.cell lightbox='false'}
+::: {.cell-output-display}
+![mtcars](images/mv-3.png)
+:::
+:::

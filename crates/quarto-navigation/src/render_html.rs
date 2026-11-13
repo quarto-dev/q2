@@ -26,8 +26,9 @@ use quarto_pandoc_types::inline::{Inline, Inlines};
 use quarto_source_map::{By, SourceInfo};
 
 use crate::announcement::Announcement;
+use crate::breakpoint::{Breakpoint, range_classes};
 use crate::footer::{FooterBorder, FooterRegion, PageFooter};
-use crate::item::NavigationItem;
+use crate::item::{NavigationItem, is_blank_text};
 use crate::navbar::{LogoVariant, Navbar, NavbarTitle};
 use crate::page_nav::PageNavigation;
 use crate::sidebar::{Crumb, Sidebar, SidebarEntry, SidebarStyle, SidebarTitle};
@@ -137,7 +138,7 @@ pub fn navbar_to_html(
     if !navbar.left.is_empty() {
         html.push_str("      <ul class=\"navbar-nav me-auto\">\n");
         for item in &navbar.left {
-            html.push_str(&render_navbar_item(item, 4));
+            html.push_str(&render_navbar_item(item, 4, false));
         }
         html.push_str("      </ul>\n");
     } else {
@@ -148,7 +149,7 @@ pub fn navbar_to_html(
     if !navbar.right.is_empty() {
         html.push_str("      <ul class=\"navbar-nav ms-auto\">\n");
         for item in &navbar.right {
-            html.push_str(&render_navbar_item(item, 4));
+            html.push_str(&render_navbar_item(item, 4, true));
         }
         html.push_str("      </ul>\n");
     }
@@ -159,13 +160,26 @@ pub fn navbar_to_html(
     // here later (bd-fod3 / bd-ld-toggle-into-tools-hpae7m9r). Markup
     // mirrors Q1's `navdarktoggle.ejs`: the `.alternate` class (synced
     // by the color-mode runtime) drives the on/off icon via CSS.
+    //
+    // It is a `<button role="switch">`, not Q1's former `<a href="">`
+    // (quarto-cli #14739, bd-kwgtllvn): a link role made Space inert and
+    // the state never reached assistive tech. The runtime keeps
+    // `aria-checked` in sync; it starts `false` like Q1's template. Both
+    // `title` (hover tooltip) and `aria-label` carry the label, as in Q1.
     if navbar.dark_mode_toggle {
-        html.push_str("      <div class=\"quarto-navbar-tools\">\n");
-        html.push_str(
-            "        <a href=\"\" class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
-             onclick=\"window.quartoToggleColorScheme(); return false;\" \
-             title=\"Toggle dark mode\"><i class=\"bi\"></i></a>\n",
+        let label = escape_attr(
+            navbar
+                .dark_toggle_label
+                .as_deref()
+                .unwrap_or(DEFAULT_TOGGLE_DARK_MODE_LABEL),
         );
+        html.push_str("      <div class=\"quarto-navbar-tools\">\n");
+        html.push_str(&format!(
+            "        <button type=\"button\" role=\"switch\" aria-checked=\"false\" \
+             class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
+             onclick=\"window.quartoToggleColorScheme(); return false;\" \
+             title=\"{label}\" aria-label=\"{label}\"><i class=\"bi\"></i></button>\n",
+        ));
         html.push_str("      </div>\n");
     }
     html.push_str("    </div>\n");
@@ -393,18 +407,20 @@ pub enum SecondaryNavContent<'a> {
 /// navigation bar (bd-26bf3j1y). Hidden at `lg`+ by SCSS.
 ///
 /// Ported from Q1 `nav-before-body.ejs:64-93`, checked against the
-/// rendered output of a Q1 site rather than the template alone. Two
-/// deliberate differences, each recorded in the plan (the third — no
-/// `quartoToggleHeadroom` onclick hooks — was closed by bd-ersobfbt,
+/// rendered output of a Q1 site rather than the template alone. The
+/// differences recorded when it was ported, and their status (a third —
+/// no `quartoToggleHeadroom` onclick hooks — was closed by bd-ersobfbt,
 /// which ships headroom):
 ///
 /// - **No search button.** Q1's calls `window.quartoOpenSearch()`
 ///   unguarded; q2 has no search yet (bd-6cme), so the button would
 ///   throw on click.
-/// - **`role="navigation"` only.** Q1's template sets both
-///   `role="navigation"` and `role="link"` on the same anchor; its own
-///   DOM postprocessor drops the duplicate, so one attribute is
-///   byte-parity with Q1's *output*.
+/// - *(Resolved, bd-3bg8h1rx.)* The click-anywhere `a.flex-grow-1`
+///   carries no `role` and no `aria-*`, as in Q1 since quarto-cli
+///   #14826. It is a pointer convenience, not a focusable control
+///   (no `href`); `role="navigation"` made it an unnamed landmark,
+///   and the duplicated `aria-controls`/`aria-label` described a
+///   control that the button beside it already is.
 ///
 /// The toggle targets `.quarto-sidebar-collapse-item`, which
 /// [`sidebar_to_html`] puts on `nav#quarto-sidebar` and on the glass
@@ -422,16 +438,19 @@ pub fn secondary_nav_to_html(
     // sidebar drawer is open so the header can't slide away from under
     // it (Q1 `nav-before-body.ejs:66-84`, bd-ersobfbt). The `onclick` is
     // guarded — inert when headroom.min.js isn't shipped (`pinned:`).
-    let collapse_attrs = format!(
-        "data-bs-toggle=\"collapse\" data-bs-target=\".quarto-sidebar-collapse-item\" \
-         aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\" \
-         onclick=\"if (window.quartoToggleHeadroom) {{ window.quartoToggleHeadroom(); }}\""
-    );
+    // Only the button is the accessible control, so only it carries
+    // the `aria-*` attributes (Q1 #14826, bd-3bg8h1rx).
+    let collapse_attrs = "data-bs-toggle=\"collapse\" \
+         data-bs-target=\".quarto-sidebar-collapse-item\" \
+         onclick=\"if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }\"";
+    let button_aria =
+        format!("aria-controls=\"quarto-sidebar\" aria-expanded=\"false\" aria-label=\"{label}\"");
 
     let mut html = String::from("<nav class=\"quarto-secondary-nav\">\n");
     html.push_str("  <div class=\"container-fluid d-flex\">\n");
     html.push_str(&format!(
-        "    <button type=\"button\" class=\"quarto-btn-toggle btn\" role=\"button\" {collapse_attrs}>\n      \
+        "    <button type=\"button\" class=\"quarto-btn-toggle btn\" role=\"button\" \
+         {collapse_attrs} {button_aria}>\n      \
          <i class=\"bi bi-layout-text-sidebar-reverse\"></i>\n    </button>\n"
     ));
 
@@ -443,12 +462,12 @@ pub fn secondary_nav_to_html(
             // Q1 follows the trail with a full-width link so tapping
             // the empty space in the bar also opens the sidebar.
             html.push_str(&format!(
-                "    <a class=\"flex-grow-1\" role=\"navigation\" {collapse_attrs}></a>\n"
+                "    <a class=\"flex-grow-1\" {collapse_attrs}></a>\n"
             ));
         }
         SecondaryNavContent::CollapsedTitle(title) => {
             html.push_str(&format!(
-                "    <a class=\"flex-grow-1 no-decor\" role=\"navigation\" {collapse_attrs}>\n      \
+                "    <a class=\"flex-grow-1 no-decor\" {collapse_attrs}>\n      \
                  <h1 class=\"quarto-secondary-nav-title\">{}</h1>\n    </a>\n",
                 render_text(title)
             ));
@@ -501,6 +520,7 @@ pub fn sidebar_to_html(sidebar: &Sidebar, home_url: &str) -> String {
             appended_html: None,
             has_navbar: false,
             search: None,
+            toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
         },
     )
 }
@@ -533,7 +553,20 @@ pub struct SidebarRenderOptions<'a> {
     /// The search box to render in the sidebar, when search lives
     /// there (bd-6cme). `None` emits nothing.
     pub search: Option<SidebarSearch<'a>>,
+    /// Localized `toggle-section` term. A linked section's chevron
+    /// button is named `"{toggle_section_label}: {section text}"`
+    /// (Q1 `sidebaritem.ejs`, bd-3bg8h1rx). Callers without a language
+    /// table pass [`DEFAULT_TOGGLE_SECTION_LABEL`].
+    pub toggle_section_label: &'a str,
 }
+
+/// English `toggle-dark-mode` term (`resources/language/_language.yml`),
+/// the fallback for [`Navbar::dark_toggle_label`].
+pub const DEFAULT_TOGGLE_DARK_MODE_LABEL: &str = "Toggle dark mode";
+
+/// English `toggle-section` term (`resources/language/_language.yml`),
+/// the fallback for [`SidebarRenderOptions::toggle_section_label`].
+pub const DEFAULT_TOGGLE_SECTION_LABEL: &str = "Toggle section";
 
 /// How the sidebar's search box renders (Quarto 1 `sidebar.ejs:68-75`
 /// and `navtools.ejs:54-56`).
@@ -648,7 +681,16 @@ pub fn sidebar_to_html_with_options(sidebar: &Sidebar, opts: &SidebarRenderOptio
         html.push_str("  <div class=\"sidebar-menu-container\">\n");
         html.push_str("    <ul class=\"list-unstyled mt-1\">\n");
         for (idx, entry) in sidebar.contents.iter().enumerate() {
-            render_sidebar_entry(&mut html, entry, 1, &[idx], sidebar.collapse_level);
+            render_sidebar_entry(
+                &mut html,
+                entry,
+                1,
+                &[idx],
+                &SectionRenderCtx {
+                    collapse_level: sidebar.collapse_level,
+                    toggle_section_label: opts.toggle_section_label,
+                },
+            );
         }
         html.push_str("    </ul>\n");
         html.push_str("  </div>\n");
@@ -863,25 +905,35 @@ fn render_brand(navbar: &Navbar, fallback: Option<&ConfigValue>, home_url: &str)
     ))
 }
 
-fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
+/// `align_end` adds Bootstrap's `dropdown-menu-end` to dropdown menus, as Q1
+/// does for the right navbar section, so they don't overflow the page edge.
+fn render_navbar_item(item: &NavigationItem, indent: usize, align_end: bool) -> String {
     let pad = " ".repeat(indent);
 
     // Dropdown submenu: item has a menu and (typically) no direct href.
     if !item.menu.is_empty() {
-        let label = item
-            .text
+        let text = navbar_text(item);
+        let label = text
             .as_ref()
-            .map(render_text)
+            .map(|t| t.html.clone())
             .or_else(|| item.icon.as_deref().map(render_icon))
+            .unwrap_or_default();
+        let aria = navbar_aria_fallback(item, text.as_ref())
+            .map(|a| format!(" {}", a))
             .unwrap_or_default();
         let mut out = String::new();
         out.push_str(&format!("{}<li class=\"nav-item dropdown\">\n", pad));
         out.push_str(&format!(
             "{}  <a class=\"nav-link dropdown-toggle\" href=\"#\" role=\"button\" \
-             data-bs-toggle=\"dropdown\" aria-expanded=\"false\">{}</a>\n",
-            pad, label
+             data-bs-toggle=\"dropdown\" aria-expanded=\"false\"{}>{}</a>\n",
+            pad, aria, label
         ));
-        out.push_str(&format!("{}  <ul class=\"dropdown-menu\">\n", pad));
+        let menu_class = if align_end {
+            "dropdown-menu dropdown-menu-end"
+        } else {
+            "dropdown-menu"
+        };
+        out.push_str(&format!("{}  <ul class=\"{}\">\n", pad, menu_class));
         for sub in &item.menu {
             out.push_str(&render_dropdown_item(sub, indent + 4));
         }
@@ -891,12 +943,14 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
     }
 
     // Plain link.
-    let mut anchor_attrs = link_attrs(item);
-    let label = render_item_label(item);
+    let mut anchor_attrs = navbar_link_attrs(item);
+    let label = render_navbar_label(item);
 
     let href = item.href.as_deref().unwrap_or("#");
+    // Q1 parity: the active link also carries `aria-current="page"`
+    // (GH #1064).
     let class = if item.active {
-        "class=\"nav-link active\""
+        "class=\"nav-link active\" aria-current=\"page\""
     } else {
         "class=\"nav-link\""
     };
@@ -913,8 +967,8 @@ fn render_navbar_item(item: &NavigationItem, indent: usize) -> String {
 
 fn render_dropdown_item(item: &NavigationItem, indent: usize) -> String {
     let pad = " ".repeat(indent);
-    let mut attrs = link_attrs(item);
-    let label = render_item_label(item);
+    let mut attrs = navbar_link_attrs(item);
+    let label = render_navbar_label(item);
     let href = item.href.as_deref().unwrap_or("#");
     let class = if item.active {
         "class=\"dropdown-item active\""
@@ -924,6 +978,108 @@ fn render_dropdown_item(item: &NavigationItem, indent: usize) -> String {
     attrs.insert(0, format!("href=\"{}\"", escape_attr(href)));
     attrs.insert(1, class.to_string());
     format!("{}<li><a {}>{}</a></li>\n", pad, attrs.join(" "), label)
+}
+
+/// A navbar item's rendered text, plus whether some viewport range
+/// shows no text at all (a blank variant).
+struct NavbarText {
+    html: String,
+    has_blank_range: bool,
+}
+
+/// Render a navbar item's text. Scalar text renders as today. With
+/// breakpoint variants (bd-navbar-responsive-text-am98rw95), each
+/// distinct run of variants becomes a `<span class="menu-text">`
+/// carrying Bootstrap display utilities that show it only within its
+/// breakpoint range; the lowest variant also covers every narrower
+/// width. Blank ranges emit no span. Adjacent variants that render
+/// identically merge, and a single remaining run renders exactly like
+/// scalar text. `None` when there is no text to show.
+fn navbar_text(item: &NavigationItem) -> Option<NavbarText> {
+    if item.text_variants.is_empty() {
+        return item.text.as_ref().map(|cv| NavbarText {
+            html: render_text(cv),
+            has_blank_range: false,
+        });
+    }
+
+    // (start breakpoint, html); blank variants render as "".
+    let mut runs: Vec<(Breakpoint, String)> = Vec::new();
+    for (bp, cv) in &item.text_variants {
+        let html = if is_blank_text(cv) {
+            String::new()
+        } else {
+            render_text(cv)
+        };
+        if runs.last().is_some_and(|(_, prev)| *prev == html) {
+            continue;
+        }
+        runs.push((*bp, html));
+    }
+
+    let has_blank_range = runs.iter().any(|(_, html)| html.is_empty());
+    if runs.len() == 1 {
+        let html = runs.pop().map(|(_, html)| html).unwrap_or_default();
+        return (!html.is_empty()).then_some(NavbarText {
+            html,
+            has_blank_range: false,
+        });
+    }
+
+    let mut html = String::new();
+    for (i, (bp, run_html)) in runs.iter().enumerate() {
+        if run_html.is_empty() {
+            continue;
+        }
+        let from = if i == 0 { Breakpoint::Xs } else { *bp };
+        let until = runs.get(i + 1).map(|(next, _)| *next);
+        let mut classes = vec!["menu-text".to_string()];
+        classes.extend(range_classes(from, until));
+        html.push_str(&format!(
+            "<span class=\"{}\">{}</span>",
+            classes.join(" "),
+            run_html
+        ));
+    }
+    Some(NavbarText {
+        html,
+        has_blank_range,
+    })
+}
+
+/// `aria-label` to add when some viewport range shows no text and the
+/// author gave none: the canonical (widest) text, so the link keeps an
+/// accessible name at every width. Hidden variants are `display: none`
+/// and therefore already absent from the accessibility tree.
+fn navbar_aria_fallback(item: &NavigationItem, text: Option<&NavbarText>) -> Option<String> {
+    if item.aria_label.is_some() || !text.is_some_and(|t| t.has_blank_range) {
+        return None;
+    }
+    let label = item.text.as_ref()?.as_plain_text()?;
+    let label = label.trim();
+    (!label.is_empty()).then(|| format!("aria-label=\"{}\"", escape_attr(label)))
+}
+
+/// [`link_attrs`] plus the navbar's responsive-text `aria-label`
+/// fallback.
+fn navbar_link_attrs(item: &NavigationItem) -> Vec<String> {
+    let mut attrs = link_attrs(item);
+    if let Some(aria) = navbar_aria_fallback(item, navbar_text(item).as_ref()) {
+        attrs.insert(0, aria);
+    }
+    attrs
+}
+
+/// Icon plus text for a navbar link or dropdown entry.
+fn render_navbar_label(item: &NavigationItem) -> String {
+    let mut parts = Vec::new();
+    if let Some(ref icon) = item.icon {
+        parts.push(render_icon(icon));
+    }
+    if let Some(text) = navbar_text(item) {
+        parts.push(text.html);
+    }
+    parts.join(" ")
 }
 
 fn render_item_label(item: &NavigationItem) -> String {
@@ -945,6 +1101,12 @@ fn render_icon(icon: &str) -> String {
     format!("<i class=\"bi bi-{}\"></i>", escape_attr(icon))
 }
 
+/// Sidebar-wide settings every nested section render needs.
+struct SectionRenderCtx<'a> {
+    collapse_level: u32,
+    toggle_section_label: &'a str,
+}
+
 /// Render one sidebar entry. `path` is the 0-based tree-path used to
 /// derive stable section anchors for the Bootstrap collapse targets.
 fn render_sidebar_entry(
@@ -952,7 +1114,7 @@ fn render_sidebar_entry(
     entry: &SidebarEntry,
     depth: u32,
     path: &[usize],
-    collapse_level: u32,
+    ctx: &SectionRenderCtx,
 ) {
     match entry {
         SidebarEntry::Link { item } => {
@@ -965,6 +1127,7 @@ fn render_sidebar_entry(
             id,
             contents,
             expanded,
+            active,
         } => {
             render_sidebar_section(
                 html,
@@ -973,9 +1136,10 @@ fn render_sidebar_entry(
                 id.as_deref(),
                 contents,
                 *expanded,
+                *active,
                 depth,
                 path,
-                collapse_level,
+                ctx,
             );
         }
         SidebarEntry::Separator => {
@@ -1030,6 +1194,21 @@ fn render_sidebar_leaf(html: &mut String, item: &NavigationItem, active: bool, _
     html.push_str("      </li>\n");
 }
 
+/// Render a collapsible sidebar section (Q1 `sidebaritem.ejs`, as of
+/// quarto-cli #14826 / bd-3bg8h1rx).
+///
+/// The disclosure control is always a `<button>`, so it is reachable by
+/// keyboard and exposes the button role:
+///
+/// - **With `href`**: the header stays an `<a>` link, and a separate
+///   chevron `<button>` beside it is named
+///   `"{toggle-section}: {plain text}"` (the visible chevron says
+///   nothing).
+/// - **Without `href`**: one `<button>` holds both the label and the
+///   chevron — a single tab stop, named by its visible text.
+///
+/// Either way the label `<span>` carries `{id}-label`, which names the
+/// disclosed `<ul>` via `aria-labelledby`.
 #[allow(clippy::too_many_arguments)]
 fn render_sidebar_section(
     html: &mut String,
@@ -1038,67 +1217,79 @@ fn render_sidebar_section(
     explicit_id: Option<&str>,
     contents: &[SidebarEntry],
     expanded: bool,
+    active: bool,
     depth: u32,
     path: &[usize],
-    collapse_level: u32,
+    ctx: &SectionRenderCtx,
 ) {
     let section_id = explicit_id.map_or_else(|| default_section_id(path), |s| s.to_string());
+    let section_id_attr = escape_attr(&section_id);
     let label = text.map(render_text).unwrap_or_default();
+    let label_span =
+        format!("<span class=\"menu-text\" id=\"{section_id_attr}-label\">{label}</span>");
     // A section is collapsed by default when its depth is at or below
     // the user's `collapse-level`, unless `expanded: true` was set
     // (either by YAML or by the active-state expander).
-    let is_collapsed = !expanded && depth >= collapse_level;
+    let is_collapsed = !expanded && depth >= ctx.collapse_level;
+    let collapsed_class = if is_collapsed { " collapsed" } else { "" };
+    // Shared by both button forms: Bootstrap's collapse plugin keeps
+    // `aria-expanded` in sync, which also drives the chevron rotation
+    // in `_bootstrap-rules.scss`.
+    let disclosure_attrs = format!(
+        "data-bs-toggle=\"collapse\" data-bs-target=\"#{section_id_attr}\" \
+         aria-controls=\"{section_id_attr}\" aria-expanded=\"{}\"",
+        if is_collapsed { "false" } else { "true" }
+    );
 
     html.push_str("      <li class=\"sidebar-item sidebar-item-section\">\n");
     html.push_str("        <div class=\"sidebar-item-container\">\n");
 
-    // Header row: either a link (if href) or a data-toggle anchor.
     if let Some(href) = href {
+        // `active` marks the section's own page as current
+        // (bd-gtpwby98); only a linked header can be the current page.
+        let active_class = if active { " active" } else { "" };
         html.push_str(&format!(
-            "          <a href=\"{}\" class=\"sidebar-item-text sidebar-link\">{}</a>\n",
+            "          <a href=\"{}\" class=\"sidebar-item-text sidebar-link{}\">{}</a>\n",
             escape_attr(href),
-            label
+            active_class,
+            label_span
         ));
-    } else {
-        let collapsed_class = if is_collapsed { " collapsed" } else { "" };
+        // Attributes don't parse markup: name the button with the
+        // plain text of a formatted title (Q1 `item.plainText`).
+        let plain = text.and_then(|t| t.as_plain_text()).unwrap_or_default();
         html.push_str(&format!(
-            "          <a class=\"sidebar-item-text sidebar-link text-start{}\" \
-             data-bs-toggle=\"collapse\" data-bs-target=\"#{}\" role=\"navigation\" \
-             aria-expanded=\"{}\">{}</a>\n",
+            "          <button type=\"button\" class=\"sidebar-item-toggle text-start{}\" \
+             {} aria-label=\"{}: {}\">\n",
             collapsed_class,
-            escape_attr(&section_id),
-            if is_collapsed { "false" } else { "true" },
-            label
+            disclosure_attrs,
+            escape_attr(ctx.toggle_section_label),
+            escape_attr(&plain)
+        ));
+        html.push_str(
+            "            <i class=\"bi bi-chevron-right ms-2\" aria-hidden=\"true\"></i>\n",
+        );
+        html.push_str("          </button>\n");
+    } else {
+        html.push_str(&format!(
+            "          <button type=\"button\" class=\"sidebar-item-text sidebar-item-toggle \
+             sidebar-link text-start{}\" {}>{}<i class=\"bi bi-chevron-right\" \
+             aria-hidden=\"true\"></i></button>\n",
+            collapsed_class, disclosure_attrs, label_span
         ));
     }
-
-    // Toggle chevron (always emitted so the user has a click target
-    // for the collapse; inert in Phase 2, interactive in Phase 5).
-    let collapsed_class = if is_collapsed { " collapsed" } else { "" };
-    html.push_str(&format!(
-        "          <a class=\"sidebar-item-toggle text-start{}\" \
-         data-bs-toggle=\"collapse\" data-bs-target=\"#{}\" role=\"navigation\" \
-         aria-expanded=\"{}\" aria-label=\"Toggle section\">\n",
-        collapsed_class,
-        escape_attr(&section_id),
-        if is_collapsed { "false" } else { "true" }
-    ));
-    html.push_str("            <i class=\"bi bi-chevron-right ms-2\"></i>\n");
-    html.push_str("          </a>\n");
     html.push_str("        </div>\n");
 
     // Children.
     let show_class = if is_collapsed { "" } else { " show" };
     html.push_str(&format!(
-        "        <ul id=\"{}\" class=\"collapse list-unstyled sidebar-section depth{}{}\">\n",
-        escape_attr(&section_id),
-        depth,
-        show_class
+        "        <ul id=\"{section_id_attr}\" aria-labelledby=\"{section_id_attr}-label\" \
+         class=\"collapse list-unstyled sidebar-section depth{}{}\">\n",
+        depth, show_class
     ));
     for (child_idx, child) in contents.iter().enumerate() {
         let mut child_path = path.to_vec();
         child_path.push(child_idx);
-        render_sidebar_entry(html, child, depth + 1, &child_path, collapse_level);
+        render_sidebar_entry(html, child, depth + 1, &child_path, ctx);
     }
     html.push_str("        </ul>\n");
     html.push_str("      </li>\n");
@@ -1161,9 +1352,11 @@ fn render_footer_region(
         FooterRegion::Empty => String::new(),
         FooterRegion::Text(cv) => render_text(cv),
         FooterRegion::Items(items) => {
-            // `.footer-items` is the class Quarto 1's SCSS targets for
-            // inline-flex alignment of links within a region.
-            let mut s = String::from("\n      <ul class=\"nav footer-items\">\n");
+            // Quarto 1's class list. `.footer-items` is what the footer SCSS
+            // targets for inline-flex alignment within a region. No `.nav`:
+            // it sets `flex-wrap: wrap`, which splits e.g. a logo and a
+            // copyright line onto separate lines (GH #1066).
+            let mut s = String::from("\n      <ul class=\"footer-items list-unstyled\">\n");
             for item in items {
                 s.push_str(&render_footer_item(item, 8));
             }
@@ -1269,7 +1462,7 @@ fn push_attr_html(
     attr: &quarto_pandoc_types::attr::Attr,
     suppress_title_kv: bool,
 ) {
-    let (id, classes, kvs) = attr;
+    let (id, classes, kvs) = &**attr;
     if !id.is_empty() {
         out.push_str(" id=\"");
         out.push_str(&escape_attr(id));
@@ -1498,9 +1691,10 @@ fn theme_for_background(bg: Option<&str>) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::footer::PageFooter;
+    use crate::footer::{FooterRegion, PageFooter};
     use crate::item::NavigationItem;
     use crate::navbar::{CollapseBelow, LogoVariant, Navbar, NavbarLogo, TogglePosition};
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::config_value::ConfigValue;
     use quarto_pandoc_types::inline::{Inline, Str, Strong};
     use quarto_source_map::SourceInfo;
@@ -1529,16 +1723,16 @@ mod tests {
         use quarto_pandoc_types::config_value::ConfigValueKind;
         use quarto_pandoc_types::inline::Image;
 
-        let image = Inline::Image(Image {
+        let image = Inline::Image(Box::new(Image {
             attr: Default::default(),
             content: vec![str_inline("cap")],
             target: ("images/logo.svg".to_string(), String::new()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        });
+        }));
         let cv = ConfigValue {
-            value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Figure {
+            value: ConfigValueKind::PandocBlocks(vec![Block::Figure(Box::new(Figure {
                 attr: Default::default(),
                 caption: Caption {
                     short: None,
@@ -1554,7 +1748,7 @@ mod tests {
                 })],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })]),
+            }))]),
             source_info: SourceInfo::for_test(),
             merge_op: Default::default(),
         };
@@ -1577,6 +1771,7 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
         )
+            .into()
     }
 
     fn link_inline(
@@ -1587,14 +1782,14 @@ mod tests {
     ) -> Inline {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         use quarto_pandoc_types::inline::Link;
-        Inline::Link(Link {
+        Inline::Link(Box::new(Link {
             attr,
             content: vec![str_inline(text)],
             target: (url.to_string(), target_title.to_string()),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
-        })
+        }))
     }
 
     /// A link's id/class/kv attributes reach the emitted `<a>`
@@ -1640,20 +1835,20 @@ mod tests {
     fn attributed_span_keeps_wrapper_attrless_span_unwrapped() {
         use quarto_pandoc_types::attr::AttrSourceInfo;
         use quarto_pandoc_types::inline::Span;
-        let attributed = inlines_to_html(&[Inline::Span(Span {
+        let attributed = inlines_to_html(&[Inline::Span(Box::new(Span {
             attr: test_attr("spid", &["scls"], &[]),
             content: vec![str_inline("sp")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })]);
+        }))]);
         assert_eq!(attributed, "<span id=\"spid\" class=\"scls\">sp</span>");
 
-        let attrless = inlines_to_html(&[Inline::Span(Span {
+        let attrless = inlines_to_html(&[Inline::Span(Box::new(Span {
             attr: Default::default(),
             content: vec![str_inline("plain")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })]);
+        }))]);
         assert_eq!(attrless, "plain");
     }
 
@@ -1663,12 +1858,12 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
         use quarto_pandoc_types::inline::Code;
         let code = |attr| {
-            Inline::Code(Code {
+            Inline::Code(Box::new(Code {
                 attr,
                 text: "x".to_string(),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         };
         assert_eq!(
             inlines_to_html(&[code(test_attr("", &["numberLines"], &[]))]),
@@ -1984,6 +2179,34 @@ mod tests {
     }
 
     #[test]
+    fn navbar_right_dropdown_menu_is_end_aligned() {
+        let menu_item = |text: &str| NavigationItem {
+            text: Some(s(text)),
+            menu: vec![NavigationItem {
+                href: Some("a.qmd".to_string()),
+                text: Some(s("A")),
+                ..NavigationItem::default()
+            }],
+            ..NavigationItem::default()
+        };
+        let navbar = Navbar {
+            title: NavbarTitle::Text(s("Site")),
+            left: vec![menu_item("Docs")],
+            right: vec![menu_item("Help")],
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert_eq!(
+            html.matches("<ul class=\"dropdown-menu dropdown-menu-end\">")
+                .count(),
+            1
+        );
+        assert_eq!(html.matches("<ul class=\"dropdown-menu\">").count(), 1);
+        let end = html.find("dropdown-menu-end").unwrap();
+        assert!(end > html.find("navbar-nav ms-auto").unwrap());
+    }
+
+    #[test]
     fn navbar_search_emits_box_before_toggler_when_collapsing() {
         let navbar = Navbar {
             search: Some(true),
@@ -2022,6 +2245,68 @@ mod tests {
         assert!(html.contains("title=\"Buscar\""));
     }
 
+    // --- Color-scheme toggle (bd-kwgtllvn, Q1 #14739) ----------------
+
+    /// The navbar dark-mode toggle is a switch, not a link: `<a
+    /// href="">` had a link role (Space did nothing) and conveyed its
+    /// state only through an icon swap. `aria-checked` starts `false`;
+    /// the color-mode runtime syncs it on load and on every toggle.
+    #[test]
+    fn navbar_dark_toggle_is_a_labelled_switch() {
+        let navbar = Navbar {
+            dark_mode_toggle: true,
+            dark_toggle_label: Some("Basculer le mode sombre".to_string()),
+            ..Navbar::with_defaults()
+        };
+        let html = navbar_to_html(&navbar, None, "./");
+        assert!(
+            html.contains(
+                "<button type=\"button\" role=\"switch\" aria-checked=\"false\" \
+                 class=\"quarto-color-scheme-toggle quarto-navigation-tool px-1\" \
+                 onclick=\"window.quartoToggleColorScheme(); return false;\" \
+                 title=\"Basculer le mode sombre\" aria-label=\"Basculer le mode sombre\">\
+                 <i class=\"bi\"></i></button>"
+            ),
+            "toggle must be a localized switch button; got: {html}"
+        );
+        assert!(
+            !html.contains("<a href=\"\" class=\"quarto-color-scheme-toggle"),
+            "toggle must not be a link; got: {html}"
+        );
+    }
+
+    /// Without a resolved term (standalone renders) the label falls back
+    /// to the English default, and a localized label is attribute-escaped.
+    #[test]
+    fn navbar_dark_toggle_label_defaults_and_escapes() {
+        let html = navbar_to_html(
+            &Navbar {
+                dark_mode_toggle: true,
+                ..Navbar::with_defaults()
+            },
+            None,
+            "./",
+        );
+        assert!(
+            html.contains("title=\"Toggle dark mode\" aria-label=\"Toggle dark mode\""),
+            "English fallback expected; got: {html}"
+        );
+
+        let html = navbar_to_html(
+            &Navbar {
+                dark_mode_toggle: true,
+                dark_toggle_label: Some("Mode \"sombre\"".to_string()),
+                ..Navbar::with_defaults()
+            },
+            None,
+            "./",
+        );
+        assert!(
+            html.contains("aria-label=\"Mode &quot;sombre&quot;\""),
+            "label must be attribute-escaped; got: {html}"
+        );
+    }
+
     #[test]
     fn navbar_search_unset_or_false_emits_nothing() {
         for search in [None, Some(false)] {
@@ -2032,6 +2317,166 @@ mod tests {
             let html = navbar_to_html(&navbar, None, "./");
             assert!(!html.contains("quarto-search"), "{search:?}: {html}");
         }
+    }
+
+    // bd-navbar-responsive-text-am98rw95 — breakpoint-keyed text.
+
+    /// A navbar item parsed from `text: {k: v, …}`, so the tests exercise
+    /// the same parse → canonical-text path as real config.
+    fn responsive_item(href: Option<&str>, variants: &[(&str, &str)]) -> NavigationItem {
+        let info = SourceInfo::for_test();
+        let text = ConfigValue::new_map(
+            variants
+                .iter()
+                .map(|(k, v)| ConfigMapEntry {
+                    key: k.to_string(),
+                    key_source: info.clone(),
+                    value: s(v),
+                })
+                .collect(),
+            info.clone(),
+        );
+        let mut entries = vec![ConfigMapEntry {
+            key: "text".to_string(),
+            key_source: info.clone(),
+            value: text,
+        }];
+        if let Some(href) = href {
+            entries.push(ConfigMapEntry {
+                key: "href".to_string(),
+                key_source: info.clone(),
+                value: s(href),
+            });
+        }
+        NavigationItem::from_config_value(&ConfigValue::new_map(entries, info)).unwrap()
+    }
+
+    fn render_left(item: NavigationItem) -> String {
+        let navbar = Navbar {
+            left: vec![item],
+            ..Navbar::with_defaults()
+        };
+        navbar_to_html(&navbar, None, "./")
+    }
+
+    #[test]
+    fn navbar_responsive_text_emits_one_span_per_range() {
+        let html = render_left(responsive_item(
+            Some("docs.html"),
+            &[
+                ("xs", "Documentation"),
+                ("lg", "Docs"),
+                ("xl", "Documentation"),
+            ],
+        ));
+        assert!(
+            html.contains(
+                "<a href=\"docs.html\" class=\"nav-link\">\
+                 <span class=\"menu-text d-lg-none\">Documentation</span>\
+                 <span class=\"menu-text d-none d-lg-inline d-xl-none\">Docs</span>\
+                 <span class=\"menu-text d-none d-xl-inline\">Documentation</span></a>"
+            ),
+            "{html}"
+        );
+        // No blank range, so no synthesized aria-label on the link.
+        assert!(!html.contains("aria-label=\"Documentation\""), "{html}");
+    }
+
+    #[test]
+    fn navbar_responsive_lowest_variant_covers_narrow_widths() {
+        let html = render_left(responsive_item(
+            Some("ref.html"),
+            &[("lg", "API"), ("xxl", "API Reference")],
+        ));
+        assert!(
+            html.contains("<span class=\"menu-text d-xxl-none\">API</span>"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<span class=\"menu-text d-none d-xxl-inline\">API Reference</span>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_responsive_single_run_renders_like_scalar_text() {
+        let responsive = render_left(responsive_item(
+            Some("a.html"),
+            &[("md", "About"), ("xl", "About")],
+        ));
+        let scalar = render_left(NavigationItem {
+            href: Some("a.html".to_string()),
+            text: Some(s("About")),
+            ..NavigationItem::default()
+        });
+        assert_eq!(responsive, scalar);
+    }
+
+    #[test]
+    fn navbar_responsive_blank_range_omits_span_and_adds_aria_label() {
+        let mut item = responsive_item(
+            Some("https://github.com/"),
+            &[("xs", "GitHub"), ("lg", ""), ("xxl", "GitHub")],
+        );
+        item.icon = Some("github".to_string());
+        let html = render_left(item);
+        assert!(
+            html.contains(
+                "<a href=\"https://github.com/\" class=\"nav-link\" aria-label=\"GitHub\">\
+                 <i class=\"bi bi-github\"></i> \
+                 <span class=\"menu-text d-lg-none\">GitHub</span>\
+                 <span class=\"menu-text d-none d-xxl-inline\">GitHub</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn navbar_responsive_authored_aria_label_wins() {
+        let mut item = responsive_item(Some("g.html"), &[("xs", "GitHub"), ("lg", "")]);
+        item.aria_label = Some("Source code".to_string());
+        let html = render_left(item);
+        assert!(html.contains("aria-label=\"Source code\""), "{html}");
+        assert!(!html.contains("aria-label=\"GitHub\""), "{html}");
+    }
+
+    #[test]
+    fn navbar_responsive_dropdown_toggle_and_menu_items() {
+        let mut parent = responsive_item(None, &[("xs", "Resources"), ("lg", "")]);
+        parent.icon = Some("book".to_string());
+        parent.menu = vec![responsive_item(
+            Some("guide.html"),
+            &[("xs", "Guide"), ("xl", "User Guide")],
+        )];
+        let html = render_left(parent);
+        assert!(
+            html.contains(
+                "data-bs-toggle=\"dropdown\" aria-expanded=\"false\" aria-label=\"Resources\">\
+                 <span class=\"menu-text d-lg-none\">Resources</span></a>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "class=\"dropdown-item\"><span class=\"menu-text d-xl-none\">Guide</span>\
+                 <span class=\"menu-text d-none d-xl-inline\">User Guide</span></a>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn footer_items_render_canonical_text_only() {
+        let footer = PageFooter {
+            center: FooterRegion::Items(vec![responsive_item(
+                Some("docs.html"),
+                &[("xs", "Docs"), ("xl", "Documentation")],
+            )]),
+            ..PageFooter::default()
+        };
+        let html = page_footer_to_html(&footer);
+        assert!(html.contains(">Documentation</a>"), "{html}");
+        assert!(!html.contains("menu-text"), "{html}");
     }
 
     #[test]
@@ -2198,7 +2643,7 @@ mod tests {
     }
 
     #[test]
-    fn footer_items_render_as_nav_list() {
+    fn footer_items_render_as_unstyled_list() {
         let footer = PageFooter {
             right: FooterRegion::Items(vec![
                 NavigationItem {
@@ -2215,7 +2660,10 @@ mod tests {
             ..PageFooter::default()
         };
         let html = page_footer_to_html(&footer);
-        assert!(html.contains("<ul class=\"nav footer-items\">"));
+        assert!(html.contains("<ul class=\"footer-items list-unstyled\">"));
+        // `.nav` sets `flex-wrap: wrap`, which splits a region onto several
+        // lines; Quarto 1 does not use it here (GH #1066).
+        assert!(!html.contains("class=\"nav footer-items"));
         assert!(html.contains("bi-github"));
         assert!(html.contains("href=\"/privacy\""));
         assert!(html.contains(">Privacy</a>"));
@@ -2320,11 +2768,11 @@ mod tests {
     fn footer_item_with_own_anchor_does_not_nest_anchors() {
         use quarto_pandoc_types::inline::RawInline;
         let raw = |t: &str| {
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: t.to_string(),
                 source_info: SourceInfo::for_test(),
-            })
+            }))
         };
         let text = ConfigValue::new_inlines(
             vec![
@@ -2383,23 +2831,23 @@ mod tests {
     fn inlines_to_html_link_and_code() {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
         let inlines = vec![
-            Inline::Link(quarto_pandoc_types::inline::Link {
-                attr: (String::new(), vec![], Default::default()),
+            Inline::Link(Box::new(quarto_pandoc_types::inline::Link {
+                attr: (String::new(), vec![], Default::default()).into(),
                 content: vec![str_inline("site")],
                 target: ("https://example.com".to_string(), String::new()),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
                 target_source: TargetSourceInfo::empty(),
-            }),
+            })),
             Inline::Space(quarto_pandoc_types::inline::Space {
                 source_info: SourceInfo::for_test(),
             }),
-            Inline::Code(quarto_pandoc_types::inline::Code {
-                attr: (String::new(), vec![], Default::default()),
+            Inline::Code(Box::new(quarto_pandoc_types::inline::Code {
+                attr: (String::new(), vec![], Default::default()).into(),
                 text: "x & y".to_string(),
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ];
         let out = inlines_to_html(&inlines);
         assert!(out.contains("<a href=\"https://example.com\">site</a>"));
@@ -2420,14 +2868,16 @@ mod tests {
         attr.0 = "brand-img".to_string();
         attr.1.push("footer-logo".to_string());
         attr.2.insert("width".to_string(), "32".to_string());
-        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
-            attr,
-            content: vec![str_inline("Posit logo")],
-            target: ("../../images/logo.svg".to_string(), "The title".to_string()),
-            source_info: SourceInfo::for_test(),
-            attr_source: AttrSourceInfo::empty(),
-            target_source: TargetSourceInfo::empty(),
-        })];
+        let inlines = vec![Inline::Image(Box::new(
+            quarto_pandoc_types::inline::Image {
+                attr,
+                content: vec![str_inline("Posit logo")],
+                target: ("../../images/logo.svg".to_string(), "The title".to_string()),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            },
+        ))];
         let out = inlines_to_html(&inlines);
         assert_eq!(
             out,
@@ -2442,14 +2892,16 @@ mod tests {
     #[test]
     fn inlines_to_html_image_minimal_and_escaped() {
         use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
-        let inlines = vec![Inline::Image(quarto_pandoc_types::inline::Image {
-            attr: Default::default(),
-            content: vec![str_inline("a & b")],
-            target: ("x\"y.svg".to_string(), String::new()),
-            source_info: SourceInfo::for_test(),
-            attr_source: AttrSourceInfo::empty(),
-            target_source: TargetSourceInfo::empty(),
-        })];
+        let inlines = vec![Inline::Image(Box::new(
+            quarto_pandoc_types::inline::Image {
+                attr: Default::default(),
+                content: vec![str_inline("a & b")],
+                target: ("x\"y.svg".to_string(), String::new()),
+                source_info: SourceInfo::for_test(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            },
+        ))];
         let out = inlines_to_html(&inlines);
         assert_eq!(out, "<img src=\"x&quot;y.svg\" alt=\"a &amp; b\">");
     }
@@ -2471,8 +2923,8 @@ mod tests {
         };
         let html = navbar_to_html(&navbar, None, "./");
         assert!(
-            html.contains("class=\"nav-link active\""),
-            "expected nav-link active class; got: {}",
+            html.contains("class=\"nav-link active\" aria-current=\"page\""),
+            "expected nav-link active class and aria-current; got: {}",
             html
         );
     }
@@ -2496,6 +2948,7 @@ mod tests {
             "inactive item should not carry active class; got: {}",
             html
         );
+        assert!(!html.contains("aria-current"));
     }
 
     /// Phase 3 test 11 — active propagates into dropdown leaves:
@@ -2596,6 +3049,7 @@ mod tests {
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: false,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -2623,12 +3077,45 @@ mod tests {
                 id: None,
                 contents: vec![link("start.html", "Start")],
                 expanded: true,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
         let html = sidebar_to_html(&sb, "./");
         assert!(html.contains("aria-expanded=\"true\""));
         assert!(html.contains("class=\"collapse list-unstyled sidebar-section depth1 show\""));
+    }
+
+    /// bd-gtpwby98 — an active section header (the current page is the
+    /// section's own `href`) carries `active` on its header anchor; an
+    /// inactive one does not.
+    #[test]
+    fn sidebar_render_active_section_header() {
+        let section = |href: &str, active: bool| SidebarEntry::Section {
+            text: Some(s("Groups")),
+            href: Some(href.to_string()),
+            href_source: SourceInfo::for_test(),
+            id: None,
+            contents: vec![link("a.html", "A")],
+            expanded: true,
+            active,
+        };
+        let sb = Sidebar {
+            contents: vec![section("groups.html", true), section("other.html", false)],
+            ..Sidebar::with_defaults()
+        };
+        let html = sidebar_to_html(&sb, "./");
+        assert!(
+            html.contains("href=\"groups.html\" class=\"sidebar-item-text sidebar-link active\""),
+            "active section header should have active class; html: {}",
+            html
+        );
+        assert!(
+            html.contains("href=\"other.html\" class=\"sidebar-item-text sidebar-link\""),
+            "inactive section header should render without active class; html: {}",
+            html
+        );
+        assert_eq!(html.matches("sidebar-link active").count(), 1);
     }
 
     /// Test 11 — active leaf has the `active` class on its anchor.
@@ -2729,6 +3216,7 @@ mod tests {
                 id: None,
                 contents: vec![link("guides/a.html", "A")],
                 expanded: true,
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -2739,6 +3227,167 @@ mod tests {
         );
         // The chevron/toggle anchor is still present for the children.
         assert!(html.contains("sidebar-item-toggle"));
+    }
+
+    // --- Section disclosure controls (bd-3bg8h1rx, Q1 #14826) ----------
+
+    fn section(text: &str, href: Option<&str>, expanded: bool) -> SidebarEntry {
+        SidebarEntry::Section {
+            text: Some(s(text)),
+            href: href.map(str::to_string),
+            href_source: SourceInfo::for_test(),
+            id: None,
+            contents: vec![link("child.html", "Child")],
+            expanded,
+            active: false,
+        }
+    }
+
+    fn render_sections(contents: Vec<SidebarEntry>, toggle_section_label: &str) -> String {
+        let sb = Sidebar {
+            collapse_level: 1,
+            contents,
+            ..Sidebar::with_defaults()
+        };
+        sidebar_to_html_with_options(
+            &sb,
+            &SidebarRenderOptions {
+                home_url: "./",
+                appended_html: None,
+                has_navbar: false,
+                search: None,
+                toggle_section_label,
+            },
+        )
+    }
+
+    /// A linked section keeps its `<a>` header and gets a separate
+    /// `<button>` chevron named after the section (Q1 `sidebaritem.ejs`).
+    #[test]
+    fn sidebar_section_with_href_toggle_is_named_button() {
+        let html = render_sections(
+            vec![section("Groups", Some("groups.html"), true)],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        assert!(
+            html.contains(
+                "<a href=\"groups.html\" class=\"sidebar-item-text sidebar-link\">\
+                 <span class=\"menu-text\" id=\"quarto-sidebar-section-0-label\">Groups</span></a>"
+            ),
+            "header link must wrap a labelled menu-text span; got: {html}"
+        );
+        assert!(
+            html.contains(
+                "<button type=\"button\" class=\"sidebar-item-toggle text-start\" \
+                 data-bs-toggle=\"collapse\" data-bs-target=\"#quarto-sidebar-section-0\" \
+                 aria-controls=\"quarto-sidebar-section-0\" aria-expanded=\"true\" \
+                 aria-label=\"Toggle section: Groups\">"
+            ),
+            "chevron must be a named button controlling the section; got: {html}"
+        );
+        assert!(
+            html.contains("<i class=\"bi bi-chevron-right ms-2\" aria-hidden=\"true\"></i>"),
+            "chevron icon must be hidden from assistive tech; got: {html}"
+        );
+    }
+
+    /// An unlinked section is ONE button holding the label and the
+    /// chevron, so it is a single tab stop; its visible text names it.
+    #[test]
+    fn sidebar_section_without_href_is_single_button() {
+        let html = render_sections(
+            vec![section("Groups", None, false)],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        assert!(
+            html.contains(
+                "<button type=\"button\" class=\"sidebar-item-text sidebar-item-toggle \
+                 sidebar-link text-start collapsed\" data-bs-toggle=\"collapse\" \
+                 data-bs-target=\"#quarto-sidebar-section-0\" \
+                 aria-controls=\"quarto-sidebar-section-0\" aria-expanded=\"false\">\
+                 <span class=\"menu-text\" id=\"quarto-sidebar-section-0-label\">Groups</span>\
+                 <i class=\"bi bi-chevron-right\" aria-hidden=\"true\"></i></button>"
+            ),
+            "unlinked section must render one label+chevron button; got: {html}"
+        );
+        assert_eq!(
+            html.matches("sidebar-item-toggle").count(),
+            1,
+            "no separate chevron control for an unlinked section; got: {html}"
+        );
+    }
+
+    /// Every disclosed list is named by its own section label, and no
+    /// sidebar control is an `<a>` or a navigation landmark.
+    #[test]
+    fn sidebar_section_lists_are_labelled_and_no_anchor_toggles() {
+        let html = render_sections(
+            vec![
+                section("Linked", Some("l.html"), true),
+                section("Plain", None, true),
+            ],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        for id in ["quarto-sidebar-section-0", "quarto-sidebar-section-1"] {
+            assert!(
+                html.contains(&format!("<ul id=\"{id}\" aria-labelledby=\"{id}-label\"")),
+                "list {id} must be labelled by its section; got: {html}"
+            );
+        }
+        assert!(
+            !html.contains("role=\"navigation\""),
+            "toggles are not landmarks; got: {html}"
+        );
+        assert!(
+            !html.contains("<a class="),
+            "no href-less anchors may remain in the sidebar; got: {html}"
+        );
+    }
+
+    /// Formatted section titles feed the aria-label as plain text (Q1
+    /// uses `item.plainText`): attributes don't parse markup.
+    #[test]
+    fn sidebar_section_toggle_label_uses_plain_text() {
+        let text = ConfigValue::new_inlines(
+            vec![Inline::Strong(Strong {
+                content: vec![str_inline("Bold")],
+                source_info: SourceInfo::for_test(),
+            })],
+            SourceInfo::for_test(),
+        );
+        let html = render_sections(
+            vec![SidebarEntry::Section {
+                text: Some(text),
+                href: Some("b.html".to_string()),
+                href_source: SourceInfo::for_test(),
+                id: None,
+                contents: vec![link("child.html", "Child")],
+                expanded: true,
+                active: false,
+            }],
+            DEFAULT_TOGGLE_SECTION_LABEL,
+        );
+        assert!(
+            html.contains("aria-label=\"Toggle section: Bold\""),
+            "aria-label must be plain text; got: {html}"
+        );
+        assert!(
+            html.contains("<strong>Bold</strong>"),
+            "visible label keeps its formatting; got: {html}"
+        );
+    }
+
+    /// The `toggle-section` term is localized and attribute-escaped.
+    #[test]
+    fn sidebar_section_toggle_label_is_localized() {
+        let html = render_sections(
+            vec![section("Gruppen", Some("g.html"), true)],
+            "Abschnitt \"umschalten\"",
+        );
+        assert!(
+            html.contains("aria-label=\"Abschnitt &quot;umschalten&quot;: Gruppen\""),
+            "localized, escaped toggle label expected; got: {html}"
+        );
     }
 
     /// Active-state ancestor expansion is rendered correctly: an
@@ -2755,6 +3404,7 @@ mod tests {
                 id: None,
                 contents: vec![active_link("guide.html", "Guide")],
                 expanded: true, // set by active-state expansion
+                active: false,
             }],
             ..Sidebar::with_defaults()
         };
@@ -2872,6 +3522,7 @@ mod tests {
                 appended_html: None,
                 has_navbar: true,
                 search: None,
+                toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
             },
         );
         assert!(
@@ -2909,6 +3560,7 @@ mod tests {
                 appended_html: None,
                 has_navbar: false,
                 search: None,
+                toggle_section_label: DEFAULT_TOGGLE_SECTION_LABEL,
             },
         );
         assert!(
@@ -3405,6 +4057,41 @@ mod secondary_nav_tests {
             html.contains("<a class=\"flex-grow-1\""),
             "Q1 follows the trail with a flex-grow-1 toggle link; got: {html}"
         );
+    }
+
+    /// bd-3bg8h1rx (Q1 #14826): the click-anywhere `a.flex-grow-1` is
+    /// not a landmark and not a named control — only the real toggle
+    /// button carries the role/aria attributes.
+    #[test]
+    fn secondary_nav_flex_link_carries_no_role_or_aria() {
+        let title = s("Page");
+        for content in [
+            SecondaryNavContent::Breadcrumbs("<nav></nav>"),
+            SecondaryNavContent::CollapsedTitle(&title),
+        ] {
+            let html = secondary_nav_to_html(content, "Toggle sidebar navigation", None);
+            assert!(
+                !html.contains("role=\"navigation\""),
+                "flex-grow link must not be a navigation landmark; got: {html}"
+            );
+            let link_start = html.find("<a class=\"flex-grow-1").expect("flex-grow link");
+            let link_tag = &html[link_start..link_start + html[link_start..].find('>').unwrap()];
+            for attr in ["aria-controls", "aria-expanded", "aria-label", "role="] {
+                assert!(
+                    !link_tag.contains(attr),
+                    "flex-grow link must not carry {attr}; got: {link_tag}"
+                );
+            }
+            assert!(
+                link_tag.contains("data-bs-target=\".quarto-sidebar-collapse-item\""),
+                "flex-grow link still toggles the sidebar; got: {link_tag}"
+            );
+            assert_eq!(
+                html.matches("aria-controls=\"quarto-sidebar\"").count(),
+                1,
+                "only the button names what it controls; got: {html}"
+            );
+        }
     }
 
     /// `bread-crumbs: false` swaps the trail for Q1's collapsed page

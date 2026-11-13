@@ -110,7 +110,7 @@ fn preview_theme_css(content: &[u8]) -> (String, String) {
         &mut ctx,
         fresh_runtime(),
         None,
-        vec![],
+        vec![].into(),
     ))
     .expect("q2-preview pipeline render");
     theme_css_artifact(&ctx, "q2-preview pipeline")

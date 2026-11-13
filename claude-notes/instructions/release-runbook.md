@@ -62,6 +62,12 @@ Connect satellite editor builds:
   signature (same minisign key as the binaries; its `.sha256` is also
   folded into `checksums.sha256`).
 
+Plus, after the GitHub Release is published, the **`quarto2` package on
+PyPI** (bd-2p7dwmqe): an sdist of a few KB that holds no binary, only the
+release's per-platform SHA-256 pins. `pip install quarto2` builds it on the
+user's machine, downloading and verifying the matching `q2` archive from
+this GitHub Release. See § PyPI below.
+
 Released binaries carry the bundled quarto-hub.com OAuth defaults, so
 `q2 mcp` connects with zero configuration. Users install with the
 one-liner in the README / release notes.
@@ -77,6 +83,8 @@ These live in repo settings and rarely change. Verify with
 | `QUARTO_HUB_MCP_CLIENT_ID` | secret | Bundled Google OAuth client id (public client; secret only to dodge `GOCSPX-` scanners). |
 | `QUARTO_HUB_MCP_CLIENT_SECRET` | secret | Bundled client secret (same). |
 | `QUARTO_HUB_SERVER` | variable | `wss://quarto-hub.com/ws`. |
+| PyPI trusted publisher | pypi.org / test.pypi.org | Project `quarto2`, repo `quarto-dev/q2`, workflow `publish-pypi.yml`, environments `pypi` / `testpypi`. No token or secret exists; uploads authenticate through GitHub OIDC. |
+| `pypi`, `testpypi` | GitHub environments | Targets of the upload job in `publish-pypi.yml`. `pypi` has a required reviewer for now. |
 
 The signing **secret key** lives only in the repo secret and the team
 password manager. If it is ever rotated: regenerate with
@@ -280,6 +288,12 @@ cargo nextest run -p quarto -E 'test(resolves_latest_version_from_github)' \
   --run-ignored ignored-only
 ```
 
+Then approve the PyPI upload (§ PyPI) and check it:
+
+```bash
+uvx --no-cache --from quarto2==X.Y.Z q2 --version   # → q2 (quarto 2) X.Y.Z
+```
+
 For a thorough release, also drive a real `q2 mcp` session against
 quarto-hub.com (`connect_project` + `read_file`) and spot-check the
 `darwin_amd64` artifact runs under Rosetta with both darwin keyring
@@ -300,6 +314,50 @@ nothing shipped.
 Update the release strand, note the release URL, and (if the release
 introduced user-facing changes) make sure the README install snippet
 still matches.
+
+## PyPI (bd-2p7dwmqe)
+
+Nothing to bump by hand: the package version comes from the tag. Once the
+`Release` run has published the GitHub Release, its last job (`pypi`)
+dispatches `.github/workflows/publish-pypi.yml` with `target=pypi`. That
+workflow builds the sdist from the release's `checksums.sha256`, installs it
+with pip and uv on all five runner platforms (`q2 --version` must match),
+then **waits for a reviewer on the `pypi` environment** before uploading. To
+approve: open the `Publish PyPI package` run in the Actions UI and click
+*Review deployments*, or
+
+```bash
+gh run list --repo quarto-dev/q2 --workflow=publish-pypi.yml --limit 1
+gh run watch <run-id> --repo quarto-dev/q2
+```
+
+Its `check-published` job then installs `quarto2==X.Y.Z` back from PyPI.
+The reviewer gate is temporary; once a few releases have gone through
+cleanly, remove the required reviewer from the `pypi` environment and the
+upload becomes fully automatic.
+
+- **Retry / manual run.** If the dispatch or a smoke leg failed for
+  infrastructure reasons: `gh workflow run publish-pypi.yml --repo
+  quarto-dev/q2 --ref main -f tag=vX.Y.Z -f target=pypi`.
+- **Rehearsal.** `-f target=testpypi` uploads to test.pypi.org instead;
+  install with `pip install --index-url https://test.pypi.org/simple/
+  quarto2==X.Y.Z`.
+- **PyPI versions are immutable.** A version can be uploaded once, ever
+  (even after deletion). A packaging-only fix for a version already on PyPI
+  ships as `-f post=1`, which publishes `X.Y.Z.post1` pointing at the same
+  binaries.
+- **Never rebuild a release's archives after its sdist is on PyPI.** The
+  sdist pins their SHA-256; new bytes under the same tag make every install
+  of that version fail with a checksum mismatch. Moving a tag (§ 5) is only
+  safe *before* the release, and hence the PyPI upload, exists.
+- **Prereleases** (`vX.Y.Z-rcN`) publish as PEP 440 `X.Y.ZrcN`, which pip
+  installs only on request (`--pre` or an exact pin). Nightlies are never
+  published to PyPI.
+- **Installs need github.com.** The sdist downloads at install time;
+  `QUARTO2_DOWNLOAD_BASE` points it at a mirror laid out as
+  `<base>/vX.Y.Z/<archive>`.
+
+Package sources and maintainer notes: `packaging/pypi/` (`README.dev.md`).
 
 ## Nightlies (bd-p4ljdp2e)
 
@@ -358,6 +416,56 @@ section is what to know when the two interact.
 - **Cache interplay is a bonus.** The pipeline's `rust-cache` keys are
   shared, and caches saved on `main` are readable by tag runs, so a
   nightly the night before a release keeps the release's caches warm.
+
+## Engine-record writer gate (EXR-13b, RIU-1)
+
+**The rule: never hand a record to a reader that cannot parse it.** It is stated per
+writer and reader pair, not per release. (The earlier wording, "do not flip it in the same
+release that first ships the reader", was a stricter stand-in for this rule.) The gate
+decides only the **form of the hub document payload** (a record document or the legacy
+capture array); it does not decide whether the local cache writes `<key>.record.bin`, and
+a plain `q2 render` never consults it. The default is per surface
+(`WriterSurface` in `crates/quarto-core/src/engine/capture_files.rs`), and
+`QUARTO_ENGINE_RECORD_WRITE` (`1`/`true`/`on`/`yes`, `0`/`false`/`off`/`no`) overrides both.
+
+| Surface | Can a record be stranded? | Default |
+|---|---|---|
+| Local `q2 preview`, and `--share` | No, by version: writer and reader are one binary, the SPA and WASM are embedded in it, and the store is a temp directory deleted on exit. A guest on another binary tunnels the host UI. | **On**, in the first release that carries the reader |
+| `q2 provide-hub` to a remote hub | Yes: the reader is whatever hub-client that hub deployed | **Off** until the hosted hub runs a `q2_ref` that contains the reader |
+| A persisted `--data-dir` opened by an older binary after a downgrade | Yes, observed | On (documented, not gated) |
+
+What strands, observed: an older `q2 preview` pointed at a store holding a record document
+replaces the whole page with "Render Error: Failed to parse capture: JSON parse failed:
+invalid type: map, expected a sequence". It is not shown as source. The one local-preview
+case that strands is a kept `--data-dir` opened by an older binary, and the release notes
+that carry the flip say so. `v0.39.0` has no `CapturePayload::Record`, so the flip waits
+for the next release that carries the epic branches.
+
+The hub exposes no version or capability a writer can read, so for `provide-hub` the rule
+is operational. The hosted hub is not deployed by release number: the `quarto-hub` binary
+and hub-client are built from a `q2_ref` input and deployed by hand, so "the hub has the
+reader" means "the deployed `q2_ref` contains the reader commits" (`cat
+/etc/quarto-hub/version.json` on the instance says which). An operator can opt in earlier
+with `QUARTO_ENGINE_RECORD_WRITE=1`. Flipping the `provide-hub` default is a separate,
+later change (RIU-7).
+
+**Rollback.** Reverting the flip is one commit and changes what new runs write; it does
+not change what is stored. Hub documents already written stay record documents, so a
+revert, or a `quarto-hub-rollback` of the hosted hub to a build without the reader,
+strands them: turn the gate off first, then provide the documents again. A persisted
+`--data-dir` keeps its record documents and its cache files, so an older binary opening it
+shows the Render Error above (observed 2026-11-06 with 0.39.0: "Failed to parse capture: JSON
+parse failed: invalid type: map, expected a sequence"). Recovery, also observed: a new
+`--data-dir` renders the page, and so does deleting the old one (the older binary records
+the file again and writes only `<key>.bin`). Deleting `captures/` alone is not enough: the
+capture refs live in `automerge/`. The default local preview has nothing to clean up.
+
+**Engines that build no record.** A document that uses an engine that builds no execution
+record is stored whole in the legacy capture format and gets the warning `Q-18-15`, with
+every output still shown. This holds until EXR-17 deletes the legacy path.
+
+Plans: `claude-notes/plans/2026-10-28-exr-13-hub-wire.md` (Phase D) and
+`claude-notes/plans/2026-11-02-riu-01-enablement-and-writer-flip.md`.
 
 ## Gotchas (learned the hard way in the v0.1.0 dry-run)
 
@@ -475,6 +583,9 @@ section is what to know when the two interact.
 | `.github/workflows/release.yml` | the release trigger + preflight; calls the pipeline |
 | `.github/workflows/release-pipeline.yml` | the reusable build/verify/sign/publish pipeline (both channels) |
 | `.github/workflows/nightly.yml` | the nightly trigger + gate + install smoke; calls the pipeline |
+| `.github/workflows/publish-pypi.yml` | builds, smoke-tests and uploads the `quarto2` sdist for a published tag |
+| `.github/workflows/pypi-package.yml` | PR tests for `packaging/pypi/` |
+| `packaging/pypi/` | the `quarto2` PyPI package (in-tree PEP 517 backend) |
 | `scripts/nightly-gate.sh` | "does main have unreleased changes?" + the nightly version |
 | `crates/quarto/tests/integration/nightly_gate.rs` | tests for the gate script |
 | `Cargo.toml` `[workspace.package].version` | source of truth for the version |

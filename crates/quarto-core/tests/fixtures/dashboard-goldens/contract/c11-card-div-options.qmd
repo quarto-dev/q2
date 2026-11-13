@@ -1,0 +1,23 @@
+---
+# contract: .card div options: title, padding, height, min/max-height, expandable, fill
+title: "C11 Card Options"
+format: dashboard
+---
+
+## Row
+
+::: {.card title="C11-PADDED" padding="0px" height="200px"}
+Padded card.
+:::
+
+::: {.card title="C11-MINMAX" min-height="100px" max-height="300px"}
+Min max card.
+:::
+
+::: {.card title="C11-NOEXPAND" expandable="false"}
+Not expandable.
+:::
+
+::: {.card title="C11-NOFILL" fill="false"}
+Not filling.
+:::

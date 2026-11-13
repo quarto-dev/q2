@@ -15,6 +15,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
+import { ImmutableString } from '@automerge/automerge';
+import type { DocumentId } from '@automerge/automerge-repo';
 
 import {
   startInMemoryMcp,
@@ -296,6 +298,64 @@ describe('binary read (CAP-4)', () => {
       await f.close();
     }
   });
+
+  it('accepts Rust-style scalar MIME metadata across all binary read surfaces', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedBinary(f, 'logo.png', PNG);
+      const index = await f.hub.repo.find<{ files: Record<string, string> }>(
+        seed.indexDocId as DocumentId,
+      );
+      const docId = index.doc()?.files['logo.png'];
+      expect(docId).toBeDefined();
+      const binary = await f.hub.repo.find<{
+        content: Uint8Array;
+        mimeType: string | ImmutableString;
+        hash: string | ImmutableString;
+      }>(docId as DocumentId);
+      binary.change((doc) => {
+        doc.mimeType = new ImmutableString('image/png');
+        doc.hash = new ImmutableString(createHash('sha256').update(PNG).digest('hex'));
+      });
+      expect(binary.doc()?.mimeType).toBeInstanceOf(ImmutableString);
+
+      // Force a cold connect so the manager ingests the Rust-style scalar
+      // instead of retaining the primitive from the TypeScript write.
+      await f.manager.disconnect(seed.indexDocId, { drainMs: 0 });
+      const connected = await callTool(f, 'project', { action: 'connect',
+        project: seed.indexDocId,
+      });
+      const listed = await callTool(f, 'read', { action: 'list', project: seed.indexDocId });
+      const read = await callTool(f, 'read', { action: 'read',
+        project: seed.indexDocId,
+        path: 'logo.png',
+      });
+      const metadata = await callTool(f, 'read', { action: 'read',
+        project: seed.indexDocId,
+        path: 'logo.png',
+        metadata_only: true,
+      });
+
+      expect([connected, listed, read, metadata].map((result) => result.isError ?? false)).toEqual([
+        false,
+        false,
+        false,
+        false,
+      ]);
+      const listedFile = { path: 'logo.png', type: 'binary', mimeType: 'image/png' };
+      expect(structuredOf(connected)).toMatchObject({ files: [listedFile] });
+      expect(structuredOf(listed)).toMatchObject({ files: [listedFile] });
+      expect(structuredOf(read)).toMatchObject(listedFile);
+      expect(structuredOf(metadata)).toMatchObject(listedFile);
+      expect(read.content.find((block) => block.type === 'image')).toMatchObject({
+        type: 'image',
+        mimeType: 'image/png',
+      });
+      expect(metadata.content.find((block) => block.type === 'image')).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  }, 30000);
 
   it('metadata_only on a text file is an actionable error', async () => {
     const f = await startInMemoryMcp();

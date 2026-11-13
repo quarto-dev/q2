@@ -8,9 +8,29 @@
 //! In-process daemon for managing Jupyter kernel sessions.
 //!
 //! The `JupyterDaemon` manages kernel lifecycle:
-//! - Starting kernels on demand
-//! - Reusing existing kernels for the same (kernel, working_dir) pair
+//! - Starting kernels on demand, one per document (bd-i7yz08uh)
+//! - Giving a document exclusive use of its kernel for its whole run
+//! - Shutting a document's kernel down when the document finishes, or
+//!   keeping it warm for the next render of that document
 //! - Cleaning up on shutdown
+//!
+//! # One kernel per document (bd-i7yz08uh)
+//!
+//! Sessions are keyed by (kernel name, working directory, document). Keyed
+//! without the document, every document of a project shared one kernel (the
+//! working directory is the project directory): a parallel render interleaved
+//! two documents' cells on it, and even a serial render let one document read
+//! another's globals. Quarto 1 never shares a kernel between documents.
+//!
+//! A document takes a [`SessionLease`] on its session with
+//! [`JupyterDaemon::acquire`] and holds it until it has run every cell, so
+//! another render of the same document (a preview re-render) waits for it. Each
+//! session has its own lock: documents on different kernels run in parallel.
+//! When the document is done, [`JupyterDaemon::finish`] applies the
+//! [`Retention`] its caller chose: `q2 render` shuts the kernel down at once
+//! (at most `QUARTO_JOBS` kernels are alive), `q2 preview` keeps it warm for
+//! the next render of that document, with its state, as Quarto 1's keepalive
+//! daemon does.
 //!
 //! # Kernel scopes (bd-hxhnnlzs)
 //!
@@ -23,120 +43,298 @@
 //! scopes**: every execution path that can spawn a kernel holds a
 //! [`KernelScope`] (the jupyter engine's `execute_qmd` acquires one
 //! around each engine run, so no caller can leak by accident), and
-//! long-lived callers that want kernel reuse across engine runs — a
-//! `q2 render` project invocation, the `q2 preview` server — hold an
-//! outer scope for their own lifetime. When the last scope drops, all
-//! sessions are shut down: `shutdown_request`, kill backstop,
-//! connection-file removal.
+//! long-lived callers hold an outer scope for their own lifetime: a
+//! `q2 render` invocation a releasing one ([`kernel_scope`]), the
+//! `q2 preview` server a retaining one ([`kernel_scope_retaining`]), which
+//! is what keeps documents' kernels warm across renders. When the last
+//! scope drops, all sessions are shut down: `shutdown_request`, kill
+//! backstop, connection-file removal.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr};
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jupyter_protocol::ConnectionInfo;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use uuid::Uuid;
 
 use super::error::{JupyterError, Result};
 use super::kernelspec;
 use super::session::{KernelSession, SessionKey};
 
+/// How many times a kernel start is tried when the kernel keeps losing
+/// a port it was handed (see [`JupyterDaemon::start_kernel`]).
+const KERNEL_START_ATTEMPTS: usize = 3;
+
+/// One session's slot: `None` until its kernel has started, and again once a
+/// releasing [`JupyterDaemon::finish`] has shut it down.
+type Slot = AsyncMutex<Option<KernelSession>>;
+
+/// What happens to a document's kernel when the document finishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Retention {
+    /// Shut the kernel down (`q2 render`).
+    Release,
+    /// Keep the kernel, and its state, for the next render of the same
+    /// document (`q2 preview`).
+    Retain,
+}
+
 /// In-process daemon managing Jupyter kernel sessions.
 ///
-/// The daemon maintains a pool of running kernels, indexed by
-/// (kernel_name, working_dir). This allows kernel reuse across
-/// multiple render operations on documents in the same directory.
+/// The daemon maintains a pool of running kernels, one per
+/// (kernel, working directory, document); see the module docs.
 pub struct JupyterDaemon {
-    /// Active kernel sessions.
-    sessions: RwLock<HashMap<SessionKey, KernelSession>>,
-    /// Serializes kernel startup. Starting a kernel takes seconds and
-    /// many await points; without this lock two concurrent renders of
-    /// documents sharing a session key would both miss the sessions
-    /// map and both spawn, with the loser's kernel evicted on insert
-    /// (observed as duplicate ipykernel processes under project
-    /// renders, bd-hxhnnlzs). Also keeps concurrent port allocations
-    /// (`peek_ports`) from racing each other.
-    start_lock: Mutex<()>,
+    /// Every known session. Only held for a lookup or an insert, never
+    /// across an await: a document holds its own session's lock instead.
+    sessions: std::sync::Mutex<HashMap<SessionKey, Arc<Slot>>>,
+    /// Ports handed to kernels that are still starting. Kernels start
+    /// concurrently, and a port `peek_ports` found free is only bound once
+    /// the kernel is up, so without this two starting kernels could be
+    /// handed the same port. (Before bd-i7yz08uh one lock serialized every
+    /// startup, which with a kernel per document would serialize a project
+    /// render's startups.)
+    reserved_ports: std::sync::Mutex<HashSet<u16>>,
+}
+
+/// A document's exclusive use of its kernel session, from
+/// [`JupyterDaemon::acquire`] until [`JupyterDaemon::finish`] (or drop).
+///
+/// Dereferences to the [`KernelSession`].
+pub struct SessionLease {
+    key: SessionKey,
+    slot: Arc<Slot>,
+    guard: OwnedMutexGuard<Option<KernelSession>>,
+}
+
+impl SessionLease {
+    /// The key of the leased session.
+    pub fn key(&self) -> &SessionKey {
+        &self.key
+    }
+}
+
+impl std::ops::Deref for SessionLease {
+    type Target = KernelSession;
+
+    fn deref(&self) -> &KernelSession {
+        self.guard
+            .as_ref()
+            .expect("a lease always holds a started session")
+    }
+}
+
+impl std::ops::DerefMut for SessionLease {
+    fn deref_mut(&mut self) -> &mut KernelSession {
+        self.guard
+            .as_mut()
+            .expect("a lease always holds a started session")
+    }
+}
+
+/// Ports reserved for one starting kernel; returned to the pool on drop.
+struct PortReservation<'a> {
+    daemon: &'a JupyterDaemon,
+    ports: Vec<u16>,
+}
+
+impl Drop for PortReservation<'_> {
+    fn drop(&mut self) {
+        let mut reserved = self.daemon.lock_reserved_ports();
+        for port in &self.ports {
+            reserved.remove(port);
+        }
+    }
 }
 
 impl JupyterDaemon {
     /// Create a new daemon with default settings.
     pub fn new() -> Self {
         Self {
-            sessions: RwLock::new(HashMap::new()),
-            start_lock: Mutex::new(()),
+            sessions: std::sync::Mutex::new(HashMap::new()),
+            reserved_ports: std::sync::Mutex::new(HashSet::new()),
         }
     }
 
-    /// Get or start a kernel session for the given key.
+    fn lock_sessions(&self) -> std::sync::MutexGuard<'_, HashMap<SessionKey, Arc<Slot>>> {
+        // A panic while the map lock is held cannot leave the map half
+        // updated (every critical section is a single insert/remove/read).
+        self.sessions.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn lock_reserved_ports(&self) -> std::sync::MutexGuard<'_, HashSet<u16>> {
+        self.reserved_ports
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Whether `slot` is still the map's slot for `key` (a releasing
+    /// `finish` removes it while a waiter may still hold a clone).
+    fn is_current(&self, key: &SessionKey, slot: &Arc<Slot>) -> bool {
+        self.lock_sessions()
+            .get(key)
+            .is_some_and(|current| Arc::ptr_eq(current, slot))
+    }
+
+    fn remove_if_current(&self, key: &SessionKey, slot: &Arc<Slot>) {
+        let mut sessions = self.lock_sessions();
+        if sessions
+            .get(key)
+            .is_some_and(|current| Arc::ptr_eq(current, slot))
+        {
+            sessions.remove(key);
+        }
+    }
+
+    /// Lease the kernel session of `document`, starting its kernel if it has
+    /// none.
     ///
-    /// If a session already exists for this (kernel, working_dir) pair,
-    /// it is reused. Otherwise, a new kernel is started with
-    /// `extra_env` applied on top of the inherited environment —
-    /// project `_environment` pairs pre-filtered so the real
-    /// environment wins. `extra_env` is a **spawn-time** input only:
-    /// the session key deliberately excludes it, so a reused session
-    /// keeps the env it was started with (sessions are keyed per
-    /// working dir, and a render/preview serves one project, so the
-    /// env is stable for a key's lifetime).
-    pub async fn get_or_start_session(
+    /// The lease is exclusive: another `acquire` for the same document waits
+    /// until this one is finished or dropped. Leases of different documents
+    /// never wait on each other.
+    ///
+    /// A new kernel is started in `working_dir` with `extra_env` applied on
+    /// top of the inherited environment — project `_environment` pairs
+    /// pre-filtered so the real environment wins. `extra_env` is a
+    /// **spawn-time** input only: the key excludes it, so a retained session
+    /// keeps the env it was started with (a preview serves one project, so
+    /// the env is stable for a key's lifetime).
+    pub async fn acquire(
         &self,
         kernel_name: &str,
-        working_dir: &PathBuf,
+        working_dir: &Path,
+        document: &Path,
         extra_env: &[(String, String)],
-    ) -> Result<SessionKey> {
-        let key = SessionKey::new(kernel_name, working_dir.clone());
-
-        // Check if we have an existing session
-        {
-            let sessions = self.sessions.read().await;
-            if sessions.contains_key(&key) {
-                return Ok(key);
+    ) -> Result<SessionLease> {
+        let key = SessionKey::new(kernel_name, working_dir, document);
+        loop {
+            let slot = self
+                .lock_sessions()
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(AsyncMutex::new(None)))
+                .clone();
+            let mut guard = slot.clone().lock_owned().await;
+            // While we waited, the previous holder may have finished with
+            // `Release`, which shuts the kernel down and retires this slot.
+            // Start over on the map's current slot.
+            if !self.is_current(&key, &slot) {
+                continue;
             }
-        }
-
-        if active_scopes() == 0 {
-            // Not fatal — but this kernel will live until the process
-            // exits (or until some other scope closes), which is
-            // exactly the leak bd-hxhnnlzs is about. Callers should
-            // hold a `kernel_scope()`.
-            tracing::warn!(
-                kernel = %key.kernel_name,
-                "starting a Jupyter kernel outside any kernel scope; \
-                 nothing will shut it down automatically"
-            );
-        }
-
-        // Serialize startup and re-check: a concurrent caller may have
-        // finished starting this very session while we awaited the
-        // lock (the read-check/spawn/insert sequence is not atomic).
-        let _starting = self.start_lock.lock().await;
-        {
-            let sessions = self.sessions.read().await;
-            if sessions.contains_key(&key) {
-                return Ok(key);
+            if guard.is_none() {
+                if active_scopes() == 0 {
+                    // Not fatal — but this kernel will live until the process
+                    // exits (or until some other scope closes), which is
+                    // exactly the leak bd-hxhnnlzs is about. Callers should
+                    // hold a `kernel_scope()`.
+                    tracing::warn!(
+                        kernel = %key.kernel_name,
+                        "starting a Jupyter kernel outside any kernel scope; \
+                         nothing will shut it down automatically"
+                    );
+                }
+                match self.start_kernel(&key, extra_env).await {
+                    Ok(session) => *guard = Some(session),
+                    Err(e) => {
+                        self.remove_if_current(&key, &slot);
+                        return Err(e);
+                    }
+                }
             }
+            return Ok(SessionLease { key, slot, guard });
         }
-        self.start_kernel(&key, extra_env).await?;
-
-        Ok(key)
     }
 
-    /// Start a new kernel for the given key.
-    async fn start_kernel(&self, key: &SessionKey, extra_env: &[(String, String)]) -> Result<()> {
+    /// End a document's lease: shut its kernel down (`Release`) or keep it
+    /// warm for the document's next render (`Retain`).
+    pub async fn finish(&self, lease: SessionLease, retention: Retention) -> Result<()> {
+        match retention {
+            Retention::Retain => Ok(()),
+            Retention::Release => self.shutdown_lease(lease).await,
+        }
+    }
+
+    /// Shut the leased kernel down and forget its session.
+    pub async fn shutdown_lease(&self, mut lease: SessionLease) -> Result<()> {
+        // Retire the slot first, while still holding it: a waiter for the
+        // same document then starts a fresh kernel on a new slot.
+        self.remove_if_current(&lease.key, &lease.slot);
+        match lease.guard.take() {
+            Some(mut session) => {
+                tracing::info!(kernel = %lease.key.kernel_name,
+                    document = %lease.key.document.display(), "Shutting down kernel");
+                session.shutdown().await
+            }
+            None => Ok(()),
+        }
+    }
+
+    /// Reserve five ports no other starting kernel was handed.
+    async fn reserve_ports(&self, ip: IpAddr) -> Result<PortReservation<'_>> {
+        const ATTEMPTS: usize = 8;
+        for _ in 0..ATTEMPTS {
+            let ports = runtimelib::peek_ports(ip, 5)
+                .await
+                .map_err(|e| JupyterError::PortAllocationFailed(e.to_string()))?;
+            let mut reserved = self.lock_reserved_ports();
+            if ports.iter().all(|p| !reserved.contains(p)) {
+                reserved.extend(ports.iter().copied());
+                return Ok(PortReservation {
+                    daemon: self,
+                    ports,
+                });
+            }
+        }
+        Err(JupyterError::PortAllocationFailed(format!(
+            "no five free ports outside those of kernels still starting after {ATTEMPTS} attempts"
+        )))
+    }
+
+    /// Start a new kernel for the given key, retrying on fresh ports when
+    /// the kernel exits because one of its ports was taken (bd-e87d5tmn).
+    ///
+    /// Ports are only peeked (bound to port 0, then released) before the
+    /// kernel is spawned, so a port can be taken before the kernel binds it:
+    /// by a concurrently starting kernel's client sockets, whose connect
+    /// retries draw ephemeral ports from the same range, or by another
+    /// process. No reservation closes that gap, since the kernel must bind
+    /// the ports itself, so the start is retried instead.
+    async fn start_kernel(
+        &self,
+        key: &SessionKey,
+        extra_env: &[(String, String)],
+    ) -> Result<KernelSession> {
+        let mut attempt = 1;
+        loop {
+            match self.start_kernel_once(key, extra_env).await {
+                Err(e) if e.is_port_conflict() && attempt < KERNEL_START_ATTEMPTS => {
+                    tracing::warn!(kernel = %key.kernel_name, attempt,
+                        "kernel could not bind a port it was handed; retrying on fresh ports");
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    /// One attempt at starting a new kernel for the given key.
+    async fn start_kernel_once(
+        &self,
+        key: &SessionKey,
+        extra_env: &[(String, String)],
+    ) -> Result<KernelSession> {
         tracing::info!(kernel = %key.kernel_name, dir = %key.working_dir.display(),
-            "Starting Jupyter kernel");
+            document = %key.document.display(), "Starting Jupyter kernel");
 
         // 1. Find kernelspec
         let kernel = kernelspec::find_kernelspec(&key.kernel_name).await?;
 
-        // 2. Allocate ports for ZeroMQ channels
+        // 2. Allocate ports for ZeroMQ channels, held until the kernel has
+        //    bound them (it is ready).
         let ip = IpAddr::V4(Ipv4Addr::LOCALHOST);
-        let ports = runtimelib::peek_ports(ip, 5)
-            .await
-            .map_err(|e| JupyterError::PortAllocationFailed(e.to_string()))?;
+        let reservation = self.reserve_ports(ip).await?;
+        let ports = &reservation.ports;
 
         // 3. Build connection info
         let connection_info = ConnectionInfo {
@@ -173,7 +371,7 @@ impl JupyterDaemon {
         // 5. Spawn kernel process
         let mut spec = kernel.spec.clone();
         expand_resource_dir(&mut spec);
-        let process = spec
+        let mut process = spec
             .command(&connection_file, None, None)
             .map_err(|e| JupyterError::ProcessSpawnError {
                 kernel: key.kernel_name.clone(),
@@ -200,16 +398,24 @@ impl JupyterDaemon {
                 message: e.to_string(),
             }
         })?;
-        let shell_socket = runtimelib::create_client_shell_connection_with_identity(
-            &connection_info,
-            &session_id,
-            peer_identity,
-        )
-        .await
-        .map_err(|e| JupyterError::SocketError {
-            socket_type: "shell".to_string(),
-            message: e.to_string(),
-        })?;
+        // The connect retries until the kernel binds its shell port, for up
+        // to 30s. A kernel that dies first (a port taken, a failed import)
+        // would only surface as that timeout, so race the connect against
+        // the process exiting and report what the kernel said.
+        let shell_socket = tokio::select! {
+            connected = runtimelib::create_client_shell_connection_with_identity(
+                &connection_info,
+                &session_id,
+                peer_identity,
+            ) => connected.map_err(|e| JupyterError::SocketError {
+                socket_type: "shell".to_string(),
+                message: e.to_string(),
+            })?,
+            status = process.wait() => {
+                let _ = std::fs::remove_file(&connection_file);
+                return Err(exited_during_startup(&key.kernel_name, status, &mut process).await);
+            }
+        };
 
         let iopub_socket =
             runtimelib::create_client_iopub_connection(&connection_info, "", &session_id)
@@ -220,7 +426,7 @@ impl JupyterDaemon {
                 })?;
 
         // 7. Create session
-        let session = KernelSession {
+        let mut session = KernelSession {
             kernel,
             process,
             connection_info,
@@ -232,85 +438,39 @@ impl JupyterDaemon {
             working_dir: key.working_dir.clone(),
         };
 
-        // 8. Store session
-        {
-            let mut sessions = self.sessions.write().await;
-            sessions.insert(key.clone(), session);
-        }
-
-        // 9. Wait for kernel to become ready
-        {
-            let mut sessions = self.sessions.write().await;
-            if let Some(session) = sessions.get_mut(key) {
-                match session.wait_for_ready().await {
-                    Ok(info) => {
-                        tracing::info!(
-                            kernel = %key.kernel_name,
-                            language = %info.language,
-                            "Kernel is ready"
-                        );
-                    }
-                    Err(e) => {
-                        // If kernel fails to become ready, remove the session
-                        tracing::error!(kernel = %key.kernel_name, error = %e, "Kernel failed to start");
-                        if let Some(mut session) = sessions.remove(key) {
-                            let _ = session.shutdown().await;
-                        }
-                        return Err(e);
-                    }
-                }
+        // 8. Wait for kernel to become ready. Nothing else can reach this
+        //    session yet, so no lock is held while waiting.
+        match session.wait_for_ready().await {
+            Ok(info) => {
+                tracing::info!(
+                    kernel = %key.kernel_name,
+                    language = %info.language,
+                    "Kernel is ready"
+                );
+            }
+            Err(e) => {
+                tracing::error!(kernel = %key.kernel_name, error = %e, "Kernel failed to start");
+                let _ = session.shutdown().await;
+                return Err(e);
             }
         }
+        drop(reservation);
 
         tracing::info!(kernel = %key.kernel_name, "Kernel started successfully");
 
-        Ok(())
-    }
-
-    /// Get mutable access to a session.
-    ///
-    /// Returns None if no session exists for the key.
-    pub async fn with_session<F, R>(&self, key: &SessionKey, f: F) -> Option<R>
-    where
-        F: FnOnce(&mut KernelSession) -> R,
-    {
-        let mut sessions = self.sessions.write().await;
-        sessions.get_mut(key).map(f)
-    }
-
-    /// Execute code in a kernel session.
-    ///
-    /// This is a convenience method that handles the async execution properly.
-    /// Returns None if no session exists for the key.
-    pub async fn execute_in_session(
-        &self,
-        key: &SessionKey,
-        code: &str,
-    ) -> Option<Result<super::execute::ExecuteResult>> {
-        let mut sessions = self.sessions.write().await;
-        if let Some(session) = sessions.get_mut(key) {
-            Some(session.execute(code).await)
-        } else {
-            None
-        }
-    }
-
-    /// Shutdown a specific kernel session.
-    pub async fn shutdown_session(&self, key: &SessionKey) -> Result<()> {
-        let mut sessions = self.sessions.write().await;
-        if let Some(mut session) = sessions.remove(key) {
-            tracing::info!(kernel = %key.kernel_name, "Shutting down kernel");
-            session.shutdown().await?;
-        }
-        Ok(())
+        Ok(session)
     }
 
     /// Shutdown all kernel sessions.
+    ///
+    /// Waits for any outstanding lease to end first.
     pub async fn shutdown_all(&self) -> Result<()> {
-        let mut sessions = self.sessions.write().await;
-        for (key, mut session) in sessions.drain() {
-            tracing::info!(kernel = %key.kernel_name, "Shutting down kernel");
-            let _ = session.shutdown().await;
+        let slots: Vec<(SessionKey, Arc<Slot>)> = self.lock_sessions().drain().collect();
+        for (key, slot) in slots {
+            if let Some(mut session) = slot.lock().await.take() {
+                tracing::info!(kernel = %key.kernel_name, "Shutting down kernel");
+                let _ = session.shutdown().await;
+            }
         }
         Ok(())
     }
@@ -318,33 +478,37 @@ impl JupyterDaemon {
     /// Shutdown all kernel sessions without needing an async context.
     ///
     /// This is the teardown path of the last [`KernelScope`] (which
-    /// runs in `Drop`, hence sync). `try_write` cannot fail there in
-    /// practice — a held write lock would mean a kernel is mid-execute,
-    /// and scopes outlive the executions they cover — but if it ever
-    /// does, warn rather than block or panic; the per-`Child`
-    /// `kill_on_drop` remains as the final backstop.
+    /// runs in `Drop`, hence sync). A session can only be leased there
+    /// if a document is mid-run while its scope closes, which scopes
+    /// prevent by outliving the executions they cover; if it ever
+    /// happens, warn rather than block or panic — the per-`Child`
+    /// `kill_on_drop` remains as the final backstop when the lease drops.
     pub fn shutdown_all_blocking(&self) {
-        let Ok(mut sessions) = self.sessions.try_write() else {
-            tracing::warn!(
-                "kernel sessions locked during scope teardown; \
-                 skipping shutdown (kill-on-drop remains as backstop)"
-            );
-            return;
-        };
-        for (key, mut session) in sessions.drain() {
-            tracing::info!(kernel = %key.kernel_name, "Shutting down kernel");
-            session.shutdown_blocking();
+        let slots: Vec<(SessionKey, Arc<Slot>)> = self.lock_sessions().drain().collect();
+        for (key, slot) in slots {
+            let Ok(mut guard) = slot.try_lock() else {
+                tracing::warn!(
+                    kernel = %key.kernel_name,
+                    "kernel session leased during scope teardown; \
+                     skipping shutdown (kill-on-drop remains as backstop)"
+                );
+                continue;
+            };
+            if let Some(mut session) = guard.take() {
+                tracing::info!(kernel = %key.kernel_name, "Shutting down kernel");
+                session.shutdown_blocking();
+            }
         }
     }
 
-    /// Get the number of active sessions.
-    pub async fn session_count(&self) -> usize {
-        self.sessions.read().await.len()
+    /// The number of sessions the daemon knows (started, or starting).
+    pub fn session_count(&self) -> usize {
+        self.lock_sessions().len()
     }
 
     /// Check if a session exists for the given key.
-    pub async fn has_session(&self, key: &SessionKey) -> bool {
-        self.sessions.read().await.contains_key(key)
+    pub fn has_session(&self, key: &SessionKey) -> bool {
+        self.lock_sessions().contains_key(key)
     }
 }
 
@@ -377,10 +541,11 @@ pub fn daemon() -> Arc<JupyterDaemon> {
 /// startup race — every "reuse" actually re-spawned a fresh kernel and
 /// evicted (killed) the old one.
 ///
-/// One worker thread is plenty: engine executions serialize on the
-/// sessions lock anyway. Being a static, the runtime is never dropped;
-/// kernels are shut down by the [`KernelScope`] machinery, not by
-/// runtime teardown.
+/// Engine runs drive their futures with `block_on` from their own
+/// (rayon) threads, so documents run concurrently without needing more
+/// than one worker here; the worker serves the I/O and timer drivers.
+/// Being a static, the runtime is never dropped; kernels are shut down
+/// by leases and the [`KernelScope`] machinery, not by runtime teardown.
 static ENGINE_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> = std::sync::OnceLock::new();
 
 /// The shared engine runtime. All daemon session operations —
@@ -399,8 +564,22 @@ pub(crate) fn engine_runtime() -> &'static tokio::runtime::Runtime {
 /// Number of currently-open [`KernelScope`]s.
 static ACTIVE_SCOPES: AtomicUsize = AtomicUsize::new(0);
 
+/// Number of currently-open retaining [`KernelScope`]s.
+static RETAINING_SCOPES: AtomicUsize = AtomicUsize::new(0);
+
 fn active_scopes() -> usize {
     ACTIVE_SCOPES.load(Ordering::SeqCst)
+}
+
+/// What a document's kernel should do when the document finishes: kept
+/// warm while any retaining scope is open (`q2 preview`), shut down
+/// otherwise (`q2 render`, tests, any other caller).
+pub(crate) fn retention() -> Retention {
+    if RETAINING_SCOPES.load(Ordering::SeqCst) > 0 {
+        Retention::Retain
+    } else {
+        Retention::Release
+    }
 }
 
 /// RAII handle keeping the global kernel pool alive (bd-hxhnnlzs).
@@ -408,9 +587,11 @@ fn active_scopes() -> usize {
 /// When the last open scope drops, every session in the global daemon
 /// is shut down ([`JupyterDaemon::shutdown_all_blocking`]). The
 /// jupyter engine acquires one around each engine run, so kernels
-/// never outlive the work that spawned them; callers that want kernel
-/// reuse *across* engine runs (a project render, a preview server)
-/// hold an additional scope for their own lifetime.
+/// never outlive the work that spawned them. A scope also states a
+/// policy (bd-i7yz08uh): while a *retaining* scope
+/// ([`kernel_scope_retaining`]) is open, a document's kernel stays warm
+/// for the next render of that document; otherwise it is shut down as
+/// soon as the document finishes.
 ///
 /// Scope drops must happen on the normal return path — `Drop` does not
 /// run across `std::process::exit`, so hold scopes tightly around the
@@ -418,19 +599,30 @@ fn active_scopes() -> usize {
 #[must_use = "the kernel pool shuts down when the last scope drops; \
               bind to a named guard for the intended lifetime"]
 pub struct KernelScope {
-    _not_send_sync_constructible: (),
+    retaining: bool,
 }
 
-/// Open a [`KernelScope`].
+/// Open a [`KernelScope`] that shuts each document's kernel down when
+/// the document finishes (`q2 render`).
 pub fn kernel_scope() -> KernelScope {
     ACTIVE_SCOPES.fetch_add(1, Ordering::SeqCst);
-    KernelScope {
-        _not_send_sync_constructible: (),
-    }
+    KernelScope { retaining: false }
+}
+
+/// Open a [`KernelScope`] that keeps each document's kernel warm, with
+/// its state, for the next render of that document (`q2 preview`, as
+/// Quarto 1's keepalive daemon).
+pub fn kernel_scope_retaining() -> KernelScope {
+    ACTIVE_SCOPES.fetch_add(1, Ordering::SeqCst);
+    RETAINING_SCOPES.fetch_add(1, Ordering::SeqCst);
+    KernelScope { retaining: true }
 }
 
 impl Drop for KernelScope {
     fn drop(&mut self) {
+        if self.retaining {
+            RETAINING_SCOPES.fetch_sub(1, Ordering::SeqCst);
+        }
         let was = ACTIVE_SCOPES.fetch_sub(1, Ordering::SeqCst);
         debug_assert!(was > 0, "KernelScope refcount underflow");
         // Last scope out shuts down the pool. A concurrent
@@ -443,6 +635,33 @@ impl Drop for KernelScope {
         {
             daemon.shutdown_all_blocking();
         }
+    }
+}
+
+/// The error for a kernel process that exited before its shell channel came
+/// up, with what it wrote to stderr (bounded, so a kernel that left a
+/// grandchild holding the pipe cannot stall the error).
+async fn exited_during_startup(
+    kernel: &str,
+    status: std::io::Result<std::process::ExitStatus>,
+    process: &mut tokio::process::Child,
+) -> JupyterError {
+    use tokio::io::AsyncReadExt;
+    let mut stderr = String::new();
+    if let Some(mut pipe) = process.stderr.take() {
+        let mut bytes = Vec::new();
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            pipe.read_to_end(&mut bytes),
+        )
+        .await;
+        stderr = String::from_utf8_lossy(&bytes).into_owned();
+    }
+    tracing::error!(kernel, ?status, %stderr, "kernel exited while starting");
+    JupyterError::ExitedDuringStartup {
+        kernel: kernel.to_string(),
+        code: status.ok().and_then(|s| s.code()),
+        stderr,
     }
 }
 
@@ -509,7 +728,7 @@ mod tests {
     #[tokio::test]
     async fn test_daemon_initial_state() {
         let daemon = JupyterDaemon::new();
-        assert_eq!(daemon.session_count().await, 0);
+        assert_eq!(daemon.session_count(), 0);
     }
 
     #[test]

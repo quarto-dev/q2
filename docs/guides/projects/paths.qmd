@@ -78,6 +78,15 @@ Quarto finds the file by dropping any `?query` or `#fragment` from the
 link and decoding `%20`-style escapes. Links produced by shortcodes
 and by filters that run before Quarto's own processing are found too.
 
+A file name that contains spaces can be written with `%20`, or wrapped
+in angle brackets, which Quarto encodes for you:
+
+``` markdown
+- [Data](my%20data.csv)
+- [Data](<my data.csv>)
+![A chart](<figures/sales chart.png>)
+```
+
 A link is left alone, and nothing is copied, when its target:
 
 - is not a file in the project: a URL, a `#section` anchor, a

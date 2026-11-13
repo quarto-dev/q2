@@ -17,6 +17,7 @@
 
 import 'fake-indexeddb/auto';
 import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import {
   createSyncClient,
@@ -56,6 +57,7 @@ export function getServerUrl(): string {
 export async function createProjectOnServer(
   serverUrl: string,
   files: ProjectFile[],
+  captures?: Record<string, EnginePayload>,
 ): Promise<string> {
   const callbacks: SyncClientCallbacks = {
     onFileAdded(_path: string, _file: FilePayload) {},
@@ -83,10 +85,14 @@ export async function createProjectOnServer(
     peerTimeoutMs: 10000,
   });
 
+  // Record engine payloads the way `q2 provide-hub` does: one binary doc per payload, named
+  // by a `captures[path]` sidecar entry in the index doc (never a `files` entry).
+  const captureDocIds = captures ? await seedEnginePayloads(client, captures) : [];
+
   // Wait for the server to acknowledge all documents (index + every file).
   // This replaces a fixed 2s sleep with an active readiness check.
   const httpUrl = serverUrl.replace(/^ws/, 'http');
-  const allDocIds = [result.indexDocId, ...result.files.map((f) => f.docId)];
+  const allDocIds = [result.indexDocId, ...result.files.map((f) => f.docId), ...captureDocIds];
   await waitForServerDocuments(httpUrl, allDocIds);
 
   // Presence is not delivery: even online, a client's changes go out
@@ -97,6 +103,45 @@ export async function createProjectOnServer(
   await client.disconnect({ drainMs: 5000 });
 
   return result.indexDocId;
+}
+
+/** A gzipped engine payload for one document: a record or a legacy `EngineCapture[]`. */
+export interface EnginePayload {
+  /** The gzipped JSON, exactly as a capture doc's `content` holds it. */
+  gzipped: Uint8Array;
+  /** `'record'` (EXR-13) or `'capture'` (legacy); picks the doc's MIME type. */
+  kind: 'record' | 'capture';
+}
+
+// Mirror `RECORD_MIME_TYPE` / `CAPTURE_MIME_TYPE` in quarto-hub's resource.rs.
+const MIME_BY_KIND = {
+  record: 'application/x-engine-record+gzip',
+  capture: 'application/x-engine-capture+gzip',
+} as const;
+
+/** Create each payload's binary doc and its `captures` sidecar entry; returns the doc ids. */
+async function seedEnginePayloads(
+  client: ReturnType<typeof createSyncClient>,
+  payloads: Record<string, EnginePayload>,
+): Promise<string[]> {
+  const repo = client.getRepo();
+  const indexHandle = client.getIndexHandle();
+  if (!repo || !indexHandle) throw new Error('seedEnginePayloads: client is not connected');
+  const ids: Record<string, string> = {};
+  for (const [path, payload] of Object.entries(payloads)) {
+    const handle = repo.create<{ content: Uint8Array; mimeType: string; hash: string }>();
+    handle.change((doc) => {
+      doc.content = payload.gzipped;
+      doc.mimeType = MIME_BY_KIND[payload.kind];
+      doc.hash = createHash('sha256').update(payload.gzipped).digest('hex');
+    });
+    ids[path] = handle.documentId;
+  }
+  indexHandle.change((doc) => {
+    doc.captures ??= {};
+    for (const [path, captureDocId] of Object.entries(ids)) doc.captures[path] = { captureDocId };
+  });
+  return Object.values(ids);
 }
 
 /**

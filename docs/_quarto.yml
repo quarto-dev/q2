@@ -40,6 +40,8 @@ website:
       - guides/index.qmd
       - href: presentations/revealjs/index.qmd
         text: Presentations
+      - href: dashboards/index.qmd
+        text: Dashboards
       - href: errors/index.qmd
         text: Errors
   sidebar:
@@ -55,9 +57,11 @@ website:
             - guides/projects/preview.qmd
             - guides/projects/render-options.qmd
             - guides/projects/paths.qmd
+            - guides/projects/directory-metadata.qmd
             - guides/projects/listings.qmd
             - guides/projects/listing-templates.qmd
             - guides/projects/navbar-logo.qmd
+            - guides/projects/navbar-responsive-text.qmd
             - guides/projects/header-scrolling.qmd
             - guides/projects/announcement.qmd
             - guides/projects/breadcrumbs.qmd
@@ -74,7 +78,9 @@ website:
             - guides/hub/unix-socket.qmd
             - guides/extensions/ts-engines-node.qmd
             - guides/publishing/index.qmd
+            - guides/formats/html/anchor-sections.qmd
             - guides/formats/html/external-links.qmd
+            - guides/formats/html/lightbox.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd
             - guides/formats/pandoc/index.qmd
@@ -90,6 +96,7 @@ website:
             - guides/authoring/tables.qmd
             - guides/authoring/cross-references.qmd
             - guides/authoring/diagrams.qmd
+            - guides/authoring/code-highlighting.qmd
             - guides/authoring/shortcodes.qmd
             - guides/authoring/lmd.qmd
             - guides/authoring/lua-filters.qmd
@@ -101,8 +108,13 @@ website:
             - guides/authoring/scholarly-writing.qmd
             - guides/authoring/document-language.qmd
             - guides/authoring/computations.qmd
+            - guides/authoring/execution-context.qmd
             - guides/authoring/notebooks.qmd
             - guides/authoring/engines.qmd
+            - guides/authoring/jupyter-kernels.qmd
+            - guides/authoring/knitr.qmd
+            - guides/authoring/execution-records.qmd
+            - guides/authoring/convert.qmd
             - guides/authoring/navigation.qmd
             - guides/authoring/extensions.qmd
             - guides/authoring/components.qmd
@@ -112,6 +124,7 @@ website:
       title: "Tools"
       contents:
         - tools/q2-mcp.qmd
+        - tools/terminal-output.qmd
     - id: guide
       collapse-level: 1
       contents:
@@ -124,6 +137,10 @@ website:
           href: presentations/revealjs/index.qmd
           contents:
             - presentations/revealjs/index.qmd
+    - id: dashboards
+      title: "Dashboards"
+      contents:
+        - dashboards/index.qmd
     - id: errors
       title: "Error reference"
       contents:
@@ -211,6 +228,9 @@ website:
             - errors/markdown/Q-2-55.qmd
             - errors/markdown/Q-2-56.qmd
             - errors/markdown/Q-2-57.qmd
+            - errors/markdown/Q-2-58.qmd
+            - errors/markdown/Q-2-59.qmd
+            - errors/markdown/Q-2-60.qmd
         - section: "writer"
           contents:
             - errors/writer/Q-3-1.qmd
@@ -311,6 +331,8 @@ website:
             - errors/navigation/Q-13-15.qmd
             - errors/navigation/Q-13-16.qmd
             - errors/navigation/Q-13-17.qmd
+            - errors/navigation/Q-13-18.qmd
+            - errors/navigation/Q-13-19.qmd
         - section: "template"
           contents:
             - errors/template/Q-10-1.qmd
@@ -396,6 +418,7 @@ website:
             - errors/theme/Q-14-9.qmd
             - errors/theme/Q-14-10.qmd
             - errors/theme/Q-14-11.qmd
+            - errors/theme/Q-14-12.qmd
         - section: "lua"
           contents:
             - errors/lua/Q-11-1.qmd
@@ -423,17 +446,29 @@ website:
             - errors/extension/Q-16-10.qmd
             - errors/extension/Q-16-11.qmd
             - errors/extension/Q-16-12.qmd
+            - errors/extension/Q-16-13.qmd
         - section: "engine"
           contents:
             - errors/engine/Q-18-1.qmd
             - errors/engine/Q-18-2.qmd
             - errors/engine/Q-18-3.qmd
+            - errors/engine/Q-18-4.qmd
+            - errors/engine/Q-18-5.qmd
+            - errors/engine/Q-18-10.qmd
+            - errors/engine/Q-18-11.qmd
+            - errors/engine/Q-18-12.qmd
+            - errors/engine/Q-18-13.qmd
+            - errors/engine/Q-18-14.qmd
+            - errors/engine/Q-18-15.qmd
+            - errors/engine/Q-18-16.qmd
+            - errors/engine/Q-18-17.qmd
         - section: "image"
           contents:
             - errors/image/Q-19-1.qmd
             - errors/image/Q-19-2.qmd
             - errors/image/Q-19-3.qmd
             - errors/image/Q-19-4.qmd
+            - errors/image/Q-19-5.qmd
         - section: "pandoc"
           contents:
             - errors/pandoc/Q-20-1.qmd
@@ -451,6 +486,8 @@ website:
             - errors/typst/Q-21-2.qmd
             - errors/typst/Q-21-3.qmd
             - errors/typst/Q-21-4.qmd
+            - errors/typst/Q-21-5.qmd
+            - errors/typst/Q-21-6.qmd
         - section: "math"
           contents:
             - errors/math/Q-22-1.qmd
@@ -469,6 +506,7 @@ website:
         - section: "citeproc"
           contents:
             - errors/citeproc/Q-23-1.qmd
+            - errors/citeproc/Q-23-2.qmd
         - section: "import"
           contents:
             - errors/import/Q-24-1.qmd
@@ -507,6 +545,11 @@ website:
             - errors/lmd/Q-26-7.qmd
             - errors/lmd/Q-26-8.qmd
             - errors/lmd/Q-26-9.qmd
+        - section: "dashboard"
+          contents:
+            - errors/dashboard/Q-27-1.qmd
+            - errors/dashboard/Q-27-2.qmd
+            - errors/dashboard/Q-27-3.qmd
 
 format:
   html:

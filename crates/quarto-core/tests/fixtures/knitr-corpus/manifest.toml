@@ -1,0 +1,914 @@
+# KNR-1 Phase 1D: the knitr corpus manifest.
+#
+# Read by `tests/integration/knitr_corpus_support.rs`. Nothing here is rendered text: the
+# generator turns each entry into fixture documents, deterministically.
+#
+#   [[sweep]]    one fixture per (value x form) of one chunk option.
+#                  option   chunk option name (header form `opt=value`, YAML form `#| opt: value`)
+#                  values   R literals, or { r = "...", yaml = "..." } when the YAML form differs
+#                           (`yaml = ""` drops the YAML form for that value)
+#                  forms    "header", "yaml" (default both)
+#                  body     the chunk's R code (default: a printing/message/warning chunk, which has
+#                           two source groups); body_ref = "single_body" (one source group) or
+#                           "plot_body" names a shared body
+#                  formats  target formats to run (default ["html"])
+#                  fixed    options set to one R literal in every fixture of the sweep
+#   [[document]] one verbatim fixture (`text`), for anything a single option cannot express.
+#   [[handwritten]] a directory of committed fixtures next to this file (S1 to S9);
+#                  `expect = "abort"` lists stems whose render aborts by design.
+#
+# Every generated fixture gets one trailing `Filler:` paragraph of seeded words; that line and
+# the seed-sampled subset are the only seed-dependent things (see `corpus_generator_is_deterministic`).
+# Fixtures call set.seed() and avoid Sys.time() and temp paths in their output.
+
+[defaults]
+body = '''
+x <- 1:3
+x
+message("a message")
+warning("a warning")
+'''
+single_body = '''
+x <- 1:3
+x
+'''
+plot_body = '''
+set.seed(1)
+plot(1:3)
+plot(3:1)
+'''
+
+# ---------------------------------------------------------------------------------------------
+# Options
+# ---------------------------------------------------------------------------------------------
+
+[[sweep]]
+group = "options"
+option = "echo"
+body_ref = "single_body"
+values = ["TRUE", "FALSE", "1", "2", "-1"]
+
+[[sweep]]
+group = "options"
+option = "output"
+body_ref = "single_body"
+values = ["TRUE", "FALSE", '"asis"']
+
+[[sweep]]
+group = "options"
+option = "warning"
+values = ["TRUE", "FALSE", { r = "NA", yaml = "" }, "1"]
+
+[[sweep]]
+group = "options"
+option = "message"
+values = ["TRUE", "FALSE", { r = "NA", yaml = "" }, "1"]
+
+[[sweep]]
+group = "options"
+option = "include"
+body_ref = "single_body"
+values = ["TRUE", "FALSE"]
+
+[[sweep]]
+group = "options"
+option = "eval"
+body_ref = "single_body"
+values = ["TRUE", "FALSE", "1", "-1"]
+
+[[sweep]]
+group = "options"
+option = "error"
+values = ["TRUE"]
+body = '''
+stop("boom")
+'''
+
+[[sweep]]
+group = "options"
+option = "collapse"
+values = ["TRUE", "FALSE"]
+
+[[sweep]]
+group = "options"
+option = "prompt"
+body_ref = "single_body"
+values = ["TRUE", "FALSE"]
+
+[[sweep]]
+group = "options"
+option = "comment"
+body_ref = "single_body"
+values = ['"#>"', '""', '"##"']
+
+[[sweep]]
+group = "options"
+option = "results"
+values = ['"markup"', '"asis"', '"hide"', '"hold"']
+body = '''
+x <- 1
+x
+cat("*emphasized*\n")
+y <- 2
+y
+'''
+
+[[sweep]]
+group = "options"
+option = "fig.cap"
+values = ['"A caption"', '"A *marked up* caption"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.subcap"
+values = [{ r = 'c("first", "second")', yaml = '["first", "second"]' }]
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.alt"
+values = ['"Alt text"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.keep"
+values = ['"none"', '"high"', '"all"', '"first"', '"last"']
+body = '''
+set.seed(1)
+plot(1:3)
+lines(c(1, 3, 2))
+plot(3:1)
+'''
+
+[[sweep]]
+group = "options"
+option = "fig.show"
+values = ['"asis"', '"hold"', '"animate"', '"hide"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.beforecode"
+values = ["TRUE", "FALSE"]
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.ncol"
+values = ["2"]
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.sep"
+values = ['c("", "\n")', '"\n"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.valign"
+values = ['"top"', '"default"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "fig.width"
+values = ["4", "8"]
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "dev"
+values = ['"png"', '"svg"', '"pdf"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "options"
+option = "class.output"
+body_ref = "single_body"
+values = ['"foo"', '"foo bar"']
+
+[[sweep]]
+group = "options"
+option = "class.message"
+values = ['"foo"']
+
+[[sweep]]
+group = "options"
+option = "class.warning"
+values = ['"foo"']
+
+[[sweep]]
+group = "options"
+option = "class.error"
+values = ['"foo"']
+fixed = { error = "TRUE" }
+body = '''
+stop("boom")
+'''
+
+[[sweep]]
+group = "options"
+option = "class.source"
+body_ref = "single_body"
+values = ['"foo"', '"numberLines"']
+
+[[sweep]]
+group = "options"
+option = "attr.output"
+body_ref = "single_body"
+values = ["'.myclass key=\"value\"'"]
+
+[[sweep]]
+group = "options"
+option = "attr.source"
+body_ref = "single_body"
+values = ["'.numberLines startFrom=\"5\"'"]
+
+[[sweep]]
+group = "options"
+option = "fenced.echo"
+body_ref = "single_body"
+values = ["TRUE", "FALSE"]
+
+[[sweep]]
+group = "options"
+option = "foo.unknown"
+body_ref = "single_body"
+values = ["1", '"text"']
+
+# ---------------------------------------------------------------------------------------------
+# Quarto cell options (YAML form only)
+# ---------------------------------------------------------------------------------------------
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "code-fold"
+body_ref = "single_body"
+values = ["true", "false", '"show"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "code-summary"
+body_ref = "single_body"
+values = ['"Show the code"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "code-line-numbers"
+body_ref = "single_body"
+values = ["true"]
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "lst-label"
+body_ref = "single_body"
+values = ['"lst-code"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "lst-cap"
+body_ref = "single_body"
+values = ['"A listing"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "panel"
+values = ['"tabset"', '"input"']
+body_ref = "plot_body"
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "column"
+body_ref = "single_body"
+values = ['"page"', '"margin"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "layout-ncol"
+values = ["2"]
+body_ref = "plot_body"
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "keep-hidden"
+body_ref = "single_body"
+values = ["true"]
+
+# ---------------------------------------------------------------------------------------------
+# Setup-chunk state
+# ---------------------------------------------------------------------------------------------
+
+[[document]]
+group = "setup-state"
+name = "opts_chunk_set"
+text = '''
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, comment = "#>")
+```
+
+```{r use}
+x <- 1:3
+x
+```
+'''
+
+[[document]]
+group = "setup-state"
+name = "opts_template"
+text = '''
+```{r setup, include=FALSE}
+knitr::opts_template$set(quiet = list(echo = FALSE, message = FALSE))
+```
+
+```{r use, opts.label="quiet"}
+x <- 1:3
+x
+message("hidden")
+```
+'''
+
+[[document]]
+group = "setup-state"
+name = "ref_label"
+text = '''
+```{r source_chunk, include=FALSE}
+y <- 5
+y
+```
+
+```{r use_ref, ref.label="source_chunk"}
+```
+'''
+
+[[document]]
+group = "setup-state"
+name = "opts_hooks"
+text = '''
+```{r setup, include=FALSE}
+knitr::opts_hooks$set(fig.width = function(options) {
+  options$fig.height <- options$fig.width / 2
+  options
+})
+```
+
+```{r use, fig.width=6}
+plot(1:3)
+```
+'''
+
+[[document]]
+group = "setup-state"
+name = "knit_hooks_override"
+text = '''
+```{r setup, include=FALSE}
+knitr::knit_hooks$set(source = function(x, options) paste0("SOURCE-HOOK\n", paste(x, collapse = "\n"), "\n"))
+```
+
+```{r use}
+x <- 1:3
+x
+```
+'''
+
+# ---------------------------------------------------------------------------------------------
+# Content that stresses the markdown writer
+# ---------------------------------------------------------------------------------------------
+
+[[document]]
+group = "markdown-stress"
+name = "backtick_runs"
+text = '''
+```{r}
+cat("a ``` fence inside output\n")
+cat("and ```` four\n")
+```
+'''
+
+[[document]]
+group = "markdown-stress"
+name = "block_start_lines"
+text = '''
+```{r}
+cat("::: not a div\n")
+cat("---\n")
+cat("# not a heading\n")
+cat("> not a quote\n")
+cat("- not a list\n")
+cat("1. not a list\n")
+```
+'''
+
+[[document]]
+group = "markdown-stress"
+name = "whitespace"
+text = '''
+```{r}
+cat("trailing spaces   \n")
+cat("a\ttab\n")
+cat("\n\n\nblank lines above\n")
+```
+'''
+
+[[document]]
+group = "markdown-stress"
+name = "ansi_and_unicode"
+text = '''
+```{r}
+cat("\033[31mred\033[0m\n")
+cat("café 中文 \U0001F600\n")
+```
+'''
+
+[[document]]
+group = "markdown-stress"
+name = "empty_output"
+text = '''
+```{r}
+invisible(1)
+```
+
+```{r}
+```
+
+```{r}
+cat("")
+```
+'''
+
+[[document]]
+group = "markdown-stress"
+name = "long_line"
+text = '''
+```{r}
+cat(strrep("word ", 400), "\n")
+```
+'''
+
+[[document]]
+group = "markdown-stress"
+name = "final_newline"
+text = '''
+```{r}
+cat("no final newline")
+```
+
+```{r}
+cat("with final newline\n")
+```
+'''
+
+# ---------------------------------------------------------------------------------------------
+# Structure
+# ---------------------------------------------------------------------------------------------
+
+[[document]]
+group = "structure"
+name = "chunk_in_list"
+text = '''
+- item one
+
+  ```{r}
+  1 + 1
+  ```
+
+- item two
+'''
+
+[[document]]
+group = "structure"
+name = "chunk_in_blockquote"
+text = '''
+> quoted prose
+>
+> ```{r}
+> 2 + 2
+> ```
+'''
+
+[[document]]
+group = "structure"
+name = "adjacent_chunks"
+text = '''
+```{r}
+a <- 1
+a
+```
+```{r}
+b <- 2
+b
+```
+'''
+
+[[document]]
+group = "structure"
+name = "first_and_last"
+text = '''
+```{r}
+"first"
+```
+
+Prose in the middle.
+
+```{r}
+"last"
+```
+'''
+
+[[document]]
+group = "structure"
+name = "several_figures"
+text = '''
+```{r}
+set.seed(1)
+plot(1:3)
+plot(3:1)
+hist(rnorm(20))
+```
+'''
+
+# ---------------------------------------------------------------------------------------------
+# Rich output (the formats are where kable and df_print change)
+# ---------------------------------------------------------------------------------------------
+
+[[document]]
+group = "rich-output"
+name = "kable"
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub", "pptx"]
+text = '''
+```{r}
+knitr::kable(head(data.frame(a = 1:3, b = c("x", "y", "z"))))
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "df_print_default"
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub", "pptx"]
+text = '''
+```{r}
+data.frame(a = 1:3, b = c("x", "y", "z"))
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "prefer_html"
+formats = ["html", "gfm"]
+text = '''
+---
+prefer-html: true
+---
+
+```{r}
+knitr::kable(head(data.frame(a = 1:3, b = c("x", "y", "z"))))
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "knit_asis"
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub", "pptx"]
+text = '''
+```{r}
+knitr::asis_output("**bold from asis_output**")
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "fig_label_cap_subcap"
+text = '''
+```{r fig-pair, fig.cap="Both figures", fig.subcap=c("First", "Second")}
+set.seed(1)
+plot(1:3)
+plot(3:1)
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "fig_label_cap_one"
+text = '''
+```{r fig-one, fig.cap="One figure"}
+set.seed(1)
+plot(1:3)
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "fig_label_cap_two"
+text = '''
+```{r fig-two, fig.cap="Two figures"}
+set.seed(1)
+plot(1:3)
+plot(3:1)
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "knit_asis_backticks"
+text = '''
+```{r asis_ticks}
+knitr::asis_output("<div>\n```\nfenced inside html\n```\n</div>")
+```
+
+```{r asis_four}
+knitr::asis_output("<div>\n````\nfour\n````\n</div>")
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "include_graphics"
+formats = ["html", "typst", "docx", "gfm", "revealjs", "epub", "pptx"]
+text = '''
+```{r make_png}
+set.seed(1)
+png("made.png", width = 200, height = 200)
+plot(1:3)
+invisible(dev.off())
+```
+
+```{r incl}
+knitr::include_graphics("made.png")
+```
+'''
+
+[[document]]
+group = "rich-output"
+name = "plots_two_devices"
+text = '''
+```{r devs, dev=c("png", "svg")}
+set.seed(1)
+plot(1:3)
+```
+'''
+
+# ---------------------------------------------------------------------------------------------
+# Engines and edges
+# ---------------------------------------------------------------------------------------------
+
+[[document]]
+group = "engines"
+name = "shell_chunk"
+text = '''
+```{bash}
+echo "from the shell"
+```
+'''
+
+[[document]]
+group = "engines"
+name = "handled_languages"
+text = '''
+```{ojs}
+1 + 1
+```
+
+```{mermaid}
+graph LR; A-->B
+```
+
+```{dot}
+digraph G { a -> b }
+```
+'''
+
+[[document]]
+group = "engines"
+name = "execute_cache_front_matter"
+text = '''
+---
+execute:
+  cache: true
+---
+
+```{r}
+set.seed(1)
+x <- 1:3
+x
+```
+'''
+
+# ---------------------------------------------------------------------------------------------
+# Committed fixtures
+# ---------------------------------------------------------------------------------------------
+
+[[handwritten]]
+dir = "s1"
+expect = { abort = ["07_error_true_include_false", "08_error_false"] }
+
+[[handwritten]]
+dir = "s2"
+
+[[handwritten]]
+dir = "s5"
+skip = ["child"]
+
+[[handwritten]]
+dir = "s7"
+
+[[handwritten]]
+dir = "s8"
+
+[[handwritten]]
+dir = "s9"
+
+# ---------------------------------------------------------------------------------------------
+# KNR-3 slice 6: options the splice-level option sweep found neither hashed nor presented, so the
+# live oracle decides whether each one really has no effect on the page.
+# ---------------------------------------------------------------------------------------------
+
+[[sweep]]
+group = "options"
+option = "indent"
+body_ref = "single_body"
+values = ["'  '"]
+
+[[sweep]]
+group = "options"
+option = "fig.link"
+body_ref = "plot_body"
+# The first value carries literal quote characters (live copies them into the link target); the
+# second is a normal URL in both forms, a single-quoted R string and a single-quoted YAML
+# string (KNR-3 slice 7, Phase 7c).
+values = ["'\"http://example.com\"'", "'http://example.com'"]
+
+[[sweep]]
+group = "options"
+option = "attr.message"
+values = ["'.myclass key=\"value\"'"]
+
+[[sweep]]
+group = "options"
+option = "attr.warning"
+values = ["'.myclass key=\"value\"'"]
+
+[[sweep]]
+group = "options"
+option = "fig.align"
+body_ref = "plot_body"
+values = ['"center"', '"right"']
+
+[[sweep]]
+group = "options"
+option = "out.width"
+body_ref = "plot_body"
+values = ['"50%"']
+
+[[sweep]]
+group = "options"
+option = "out.height"
+body_ref = "plot_body"
+values = ['"50%"']
+
+[[sweep]]
+group = "options"
+option = "out.extra"
+body_ref = "plot_body"
+values = ['"style=\"border: 1px\""']
+
+[[sweep]]
+group = "options"
+option = "fig.scap"
+body_ref = "plot_body"
+values = ['"short"']
+
+[[sweep]]
+group = "options"
+option = "fig.env"
+body_ref = "plot_body"
+values = ['"figure*"']
+
+[[sweep]]
+group = "options"
+option = "fig.pos"
+body_ref = "plot_body"
+values = ['"h"']
+
+[[sweep]]
+group = "options"
+option = "fig.lp"
+body_ref = "plot_body"
+values = ['"fig:"']
+
+[[sweep]]
+group = "options"
+option = "strip.white"
+body_ref = "single_body"
+values = ["FALSE"]
+
+[[sweep]]
+group = "options"
+option = "highlight"
+body_ref = "single_body"
+values = ["FALSE"]
+
+[[sweep]]
+group = "options"
+option = "size"
+body_ref = "single_body"
+values = ['"small"']
+
+[[sweep]]
+group = "options"
+option = "background"
+body_ref = "single_body"
+values = ['"#ff0000"']
+
+[[sweep]]
+group = "options"
+option = "chunk.echo"
+body_ref = "single_body"
+values = ["FALSE"]
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "classes"
+body_ref = "single_body"
+values = ['"foo"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "cap-location"
+body_ref = "plot_body"
+values = ['"top"', '"margin"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-cap-location"
+body_ref = "plot_body"
+values = ['"top"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "tbl-cap-location"
+body_ref = "single_body"
+values = ['"top"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "code-overflow"
+body_ref = "single_body"
+values = ['"wrap"', '"scroll"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-column"
+body_ref = "plot_body"
+values = ['"margin"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "tbl-column"
+body_ref = "single_body"
+values = ['"margin"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "html-table-processing"
+body_ref = "single_body"
+values = ['"none"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-align"
+body_ref = "plot_body"
+values = ['"center"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-alt"
+body_ref = "plot_body"
+values = ['"Alt"']
+
+[[sweep]]
+group = "quarto-cell-options"
+forms = ["yaml"]
+option = "fig-cap"
+body_ref = "plot_body"
+values = ['"Cap"']

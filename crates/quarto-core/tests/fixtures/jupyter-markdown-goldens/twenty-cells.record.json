@@ -1,0 +1,604 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6316562b33293d59",
+   "metadata": {
+    "quarto_cell_id": "0-6316562b-unlabeled",
+    "quarto_content_hash": "6316562b33293d59",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "ccad5f31280b2f24cfef568921c5a94610b1fec86e07eb0e24dfc160a05ddd4d",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 1\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 1\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ae0f49fef75b7e3e",
+   "metadata": {
+    "quarto_cell_id": "1-ae0f49fe-unlabeled",
+    "quarto_content_hash": "ae0f49fef75b7e3e",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "914b024716590179fa1bd0830f29e1cc56e12ddc60a5a04400ee993feeca90dc",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 2\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 2\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "ef9ca64de26d6e7e",
+   "metadata": {
+    "quarto_cell_id": "2-ef9ca64d-unlabeled",
+    "quarto_content_hash": "ef9ca64de26d6e7e",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "b4bd8670865dc2e6555fe91c8c61e1365c90e1fed70c9f09529108da4d7daa76",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 3\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 3\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "0e29c4a181819186",
+   "metadata": {
+    "quarto_cell_id": "3-0e29c4a1-unlabeled",
+    "quarto_content_hash": "0e29c4a181819186",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "1669951336a9e6406c5ecc16e5b71c73e26f567bf6335de526c21326ba0e96bb",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 4\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 4\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "415fd3ddc8d1d886",
+   "metadata": {
+    "quarto_cell_id": "4-415fd3dd-unlabeled",
+    "quarto_content_hash": "415fd3ddc8d1d886",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "e9232c4e1583d7b939486036a60a0a93203b41d00ff046aa663520e008640366",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 5\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 5\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "be7549d9bd1c1119",
+   "metadata": {
+    "quarto_cell_id": "5-be7549d9-unlabeled",
+    "quarto_content_hash": "be7549d9bd1c1119",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "06ad3b3f72e42a65e6c063c0c8303474f010eb308cfe882289d7ae4fa675b7ff",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 6\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 6\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "172c5e26c803cc9e",
+   "metadata": {
+    "quarto_cell_id": "6-172c5e26-unlabeled",
+    "quarto_content_hash": "172c5e26c803cc9e",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "f31cd69c7985f3a9282b3e2d3f8bfe73c479508837b50fdf01cf19886bf1aab6",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 7\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 7\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "5f2fbba827ff7590",
+   "metadata": {
+    "quarto_cell_id": "7-5f2fbba8-unlabeled",
+    "quarto_content_hash": "5f2fbba827ff7590",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "f39f671e9b6afb61587acbd067ba0160027e2797ef09a3b2a7ae38bd8a3c2d65",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 8\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 8\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "212d55d6f473bc64",
+   "metadata": {
+    "quarto_cell_id": "8-212d55d6-unlabeled",
+    "quarto_content_hash": "212d55d6f473bc64",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "6bbc424dc983fd294453cd07d2c07e823df168d254628733078561938867bd38",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 9\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 9\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "5188fac686e2dabd",
+   "metadata": {
+    "quarto_cell_id": "9-5188fac6-unlabeled",
+    "quarto_content_hash": "5188fac686e2dabd",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "44d665fe06947ab7d15079d5f8f192386a7ae335433e18d15a680d8925c8cb10",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 10\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 10\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6bebf986a4afbbe1",
+   "metadata": {
+    "quarto_cell_id": "10-6bebf986-unlabeled",
+    "quarto_content_hash": "6bebf986a4afbbe1",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "4327ee489b6ac43faf8b71aa9ad1005a93bf24b9cc415a3d01c12f6047180d7a",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 11\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 11\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "c0f59995f9c7c561",
+   "metadata": {
+    "quarto_cell_id": "11-c0f59995-unlabeled",
+    "quarto_content_hash": "c0f59995f9c7c561",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "27e8beb6a80291bab4406a9912465c632bcccebbd497f630dc15eef6e70b00f4",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 12\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 12\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7508ec18e4f6758f",
+   "metadata": {
+    "quarto_cell_id": "12-7508ec18-unlabeled",
+    "quarto_content_hash": "7508ec18e4f6758f",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "dd93b6741f48a9d9e32854486f0993f0f70f4f88d3433e14c8b41b34b0f560b0",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 13\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 13\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "fd04f94685ecf7bd",
+   "metadata": {
+    "quarto_cell_id": "13-fd04f946-unlabeled",
+    "quarto_content_hash": "fd04f94685ecf7bd",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "09e03f61620341643d82b5e237043b87a408090f250ad966fdb40e3abcb1bc33",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 14\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 14\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "68d37a0f8b305f24",
+   "metadata": {
+    "quarto_cell_id": "14-68d37a0f-unlabeled",
+    "quarto_content_hash": "68d37a0f8b305f24",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "f82dadad571545a918a952700000041aac9bc2865b127b21d6325cf19537e8d4",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 15\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 15\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "35acbf0bf83e67b4",
+   "metadata": {
+    "quarto_cell_id": "15-35acbf0b-unlabeled",
+    "quarto_content_hash": "35acbf0bf83e67b4",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "8314c86e5b7d5f9c22e7a6ca295648482711ba57604aa432393921775af912d6",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 16\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 16\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "35943310ae49426c",
+   "metadata": {
+    "quarto_cell_id": "16-35943310-unlabeled",
+    "quarto_content_hash": "35943310ae49426c",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "e7ff4aaa40298e41dc1604b5c8c12d0184177ee6bf067d2d7b66da3195f561e0",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 17\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 17\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "85231527df9d5fd3",
+   "metadata": {
+    "quarto_cell_id": "17-85231527-unlabeled",
+    "quarto_content_hash": "85231527df9d5fd3",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "459df392883fab862912058b195fe4550c3a69074cefe1e59a9a7b23351825b9",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 18\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 18\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "f708f27dde638d3d",
+   "metadata": {
+    "quarto_cell_id": "18-f708f27d-unlabeled",
+    "quarto_content_hash": "f708f27dde638d3d",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "42f3b11ee64968e2dd0ff68d14498c096a31204012ed5f1f7ab0c38f59e151b6",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 19\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 19\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d9ef25ee02832707",
+   "metadata": {
+    "quarto_cell_id": "19-d9ef25ee-unlabeled",
+    "quarto_content_hash": "d9ef25ee02832707",
+    "quarto_engine": "jupyter",
+    "quarto_exec_hash": "4a10b5489448079571067ab6ca9ac19d84b6c24c0224c1e4bbb55d5a3dd2e379",
+    "quarto_kernel": "python3",
+    "quarto_kind": "cell",
+    "quarto_lang": "python"
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": "cell 20\n"
+    }
+   ],
+   "source": [
+    "print(\"cell 20\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "quarto_cache_version": 1,
+  "quarto_engines": [
+   {
+    "can_freeze": true,
+    "document_hash": "b3c2d1d6f688db7fe604bd2aa27b4b42bcaa777917ceed338954ad4d4e1415f7",
+    "hash_definition": {
+     "documentKeys": [
+      "jupyter"
+     ],
+     "granularity": "unit",
+     "id": "jupyter",
+     "presentationCellOptions": [
+      "echo",
+      "output",
+      "warning",
+      "include",
+      "code-fold",
+      "code-summary",
+      "code-overflow",
+      "code-line-numbers",
+      "code-copy",
+      "fig-cap",
+      "fig-subcap",
+      "fig-scap",
+      "fig-alt",
+      "fig-align",
+      "fig-link",
+      "fig-cap-location",
+      "tbl-cap",
+      "tbl-subcap",
+      "tbl-scap",
+      "tbl-colwidths",
+      "tbl-cap-location",
+      "lst-cap",
+      "lst-label",
+      "cap-location",
+      "layout",
+      "layout-ncol",
+      "layout-nrow",
+      "layout-align",
+      "layout-valign",
+      "panel",
+      "column",
+      "keep-hidden",
+      "fig-env",
+      "fig-pos",
+      "out-width",
+      "out-height",
+      "out-extra",
+      "classes",
+      "fig-column",
+      "tbl-column",
+      "output-interleave"
+     ],
+     "presentationExecuteKeys": [
+      "echo",
+      "output",
+      "warning",
+      "include",
+      "code-fold",
+      "code-summary",
+      "code-overflow",
+      "code-line-numbers",
+      "code-copy",
+      "fig-cap",
+      "fig-subcap",
+      "fig-scap",
+      "fig-alt",
+      "fig-align",
+      "fig-link",
+      "fig-cap-location",
+      "tbl-cap",
+      "tbl-subcap",
+      "tbl-scap",
+      "tbl-colwidths",
+      "tbl-cap-location",
+      "lst-cap",
+      "lst-label",
+      "cap-location",
+      "layout",
+      "layout-ncol",
+      "layout-nrow",
+      "layout-align",
+      "layout-valign",
+      "panel",
+      "column",
+      "keep-hidden",
+      "fig-env",
+      "fig-pos",
+      "out-width",
+      "out-height",
+      "out-extra",
+      "classes",
+      "fig-column",
+      "tbl-column",
+      "output-interleave",
+      "record-sources"
+     ],
+     "version": 1
+    },
+    "name": "jupyter",
+    "needs_postprocess": false,
+    "owned_languages": [
+     "python"
+    ],
+    "provenance": {
+     "kernelspec": {
+      "language": "python",
+      "name": "python3"
+     }
+    }
+   }
+  ],
+  "quarto_execution_hash": "5a103a395a358ce6841288b990d9477879ce48b1d0f52a20ffeae057ff109701",
+  "quarto_record_version": 1,
+  "quarto_source": "doc.qmd"
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

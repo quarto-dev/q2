@@ -59,6 +59,7 @@ use std::collections::HashMap;
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::{Block, Div, OrderedList};
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::{Inline, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, ListNumberDelim, ListNumberStyle};
@@ -145,7 +146,7 @@ fn extract_footnotes_section(blocks: &mut Vec<Block>) -> HashMap<String, Blocks>
                     if let Block::Div(d) = b {
                         let mut content = d.content;
                         strip_backlinks(&mut content);
-                        defs.insert(d.attr.0, content);
+                        defs.insert(d.attr.into_tuple().0, content);
                     }
                 }
             }
@@ -217,11 +218,11 @@ fn coalesce_one_slide(slide: &mut Div, defs: &HashMap<String, Blocks>) {
             .iter()
             .map(|fn_id| defs.get(fn_id).cloned().unwrap_or_default())
             .collect();
-        let ol = Block::OrderedList(OrderedList {
+        let ol = Block::OrderedList(Box::new(OrderedList {
             attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
             content: items,
             source_info: SourceInfo::generated(By::revealjs()),
-        });
+        }));
         aside_content.push(classed_div("aside-footnotes", vec![ol]));
     }
     slide.content.push(classed_div("aside", aside_content));
@@ -229,22 +230,22 @@ fn coalesce_one_slide(slide: &mut Div, defs: &HashMap<String, Blocks>) {
 
 /// A `<div>` with no attributes wrapping `content`.
 fn plain_div(content: Blocks) -> Block {
-    Block::Div(Div {
-        attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+    Block::Div(Box::new(Div {
+        attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// A `<div class="{class}">` wrapping `content`.
 fn classed_div(class: &str, content: Blocks) -> Block {
-    Block::Div(Div {
-        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()),
+    Block::Div(Box::new(Div {
+        attr: (String::new(), vec![class.to_string()], LinkedHashMap::new()).into(),
         content,
         source_info: SourceInfo::generated(By::revealjs()),
         attr_source: AttrSourceInfo::empty(),
-    })
+    }))
 }
 
 /// Remove footnote backlinks (`<a class="footnote-back">`) from a definition's
@@ -307,6 +308,20 @@ fn renumber_refs_block(
             }
         }
         Block::Div(div) => renumber_refs_blocks(&mut div.content, defs, order, numbering),
+        // Custom-node slots: since #1050 a callout is still a `Callout`
+        // custom node when this transform runs (bd-akkproqy).
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                match slot {
+                    Slot::Blocks(blocks) => renumber_refs_blocks(blocks, defs, order, numbering),
+                    Slot::Block(b) => renumber_refs_block(b, defs, order, numbering),
+                    Slot::Inlines(inlines) => {
+                        renumber_refs_inlines(inlines, defs, order, numbering)
+                    }
+                    Slot::Inline(_) => {}
+                }
+            }
+        }
         Block::Figure(fig) => {
             renumber_refs_blocks(&mut fig.content, defs, order, numbering);
             if let Some(ref mut long) = fig.caption.long {

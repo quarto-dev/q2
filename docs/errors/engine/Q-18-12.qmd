@@ -1,0 +1,41 @@
+---
+title: "knitr Cache Is Off While Recording"
+description: "A knitr chunk asked for the cache, and Quarto turned it off for this run."
+code: Q-18-12
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-12` — knitr Cache Is Off While Recording
+
+> A knitr chunk asked for the cache, and Quarto turned it off for this run.
+
+## What this means
+
+**This note is no longer emitted.** A chunk that asks for knitr's cache now keeps it and is not
+recorded; its finished markdown stays in the document.
+
+The text below describes the earlier behavior.
+
+Quarto records what each knitr chunk produced, so it can present the document without
+running the chunks again. A chunk that hits knitr's cache is not run, so there would be
+nothing to record. For that reason Quarto turns knitr's cache off for the run that records
+the document, for every chunk that asked for it with `cache: true`.
+
+The output is the same. The cost is time: a document that relies on `cache: true` runs those
+chunks every time it is executed, and results that depend on state outside the document are
+computed again. Existing cache directories are neither read nor deleted.
+
+This is a note, not a problem: nothing needs fixing.
+
+## How to change it
+
+If a chunk is slow, keep its result in a file yourself (for example with `saveRDS()` and
+`readRDS()`), or give the document a `freeze:` so it is not executed on every render.
+
+## Related errors
+
+- [`Q-18-13`](Q-18-13.qmd) — the document replaced a knitr hook.

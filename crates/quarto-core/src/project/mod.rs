@@ -103,10 +103,11 @@ fn default_output_dir(dir: &Path, config: Option<&ProjectConfig>) -> PathBuf {
 ///
 /// # Behavior
 ///
-/// - Walks directories between project root and document's parent directory
-/// - Does NOT include the project root directory itself (matches TS Quarto behavior)
-/// - Returns empty vec for single-file projects (no project config)
-/// - Returns empty vec if document is directly in project root
+/// - Walks directories from the project root to the document's parent directory
+/// - Includes the project root itself, for documents anywhere in the project
+///   (Quarto 1 includes it only for documents directly in the root)
+/// - For a single-file project (no `_quarto.yml`), which is rooted at the
+///   document's directory, that is the document's own directory only
 ///
 /// # Errors
 ///
@@ -120,15 +121,15 @@ fn default_output_dir(dir: &Path, config: Option<&ProjectConfig>) -> PathBuf {
 /// ```text
 /// project/
 ///   _quarto.yml
-///   _metadata.yml          # NOT included (project root)
+///   _metadata.yml          # Layer 0: { theme: cosmo }
 ///   chapters/
-///     _metadata.yml        # Layer 0: { toc: true }
+///     _metadata.yml        # Layer 1: { toc: true }
 ///     intro/
-///       _metadata.yml      # Layer 1: { toc-depth: 2 }
+///       _metadata.yml      # Layer 2: { toc-depth: 2 }
 ///       chapter1.qmd       # Document being rendered
 /// ```
 ///
-/// Returns: [layer0, layer1] - deeper directories later in vec.
+/// Returns: [layer0, layer1, layer2] - deeper directories later in vec.
 /// Each layer carries the path of the `_metadata.yml` it was parsed
 /// from — the exact `PathBuf` whose string form was hashed into the
 /// layer's `FileId`s by `quarto_yaml::parse_file`, so callers
@@ -142,11 +143,6 @@ pub fn directory_metadata_for_document(
     use pampa::pandoc::yaml_to_config_value;
     use pampa::utils::diagnostic_collector::DiagnosticCollector;
     use quarto_config::InterpretationContext;
-
-    // Single-file projects don't have directory metadata
-    if project.is_single_file {
-        return Ok(Vec::new());
-    }
 
     let document_path = runtime
         .canonicalize(document_path)
@@ -184,8 +180,8 @@ pub fn directory_metadata_for_document(
 /// [`directory_metadata_for_document`] (the spelling is what
 /// `quarto_yaml::parse_file` hashed into each layer's FileId, so
 /// diagnostic assembly re-derives layer ids from these exact paths;
-/// bd-x113wg9v). Returns an empty list for single-file projects and
-/// for documents outside the project directory.
+/// bd-x113wg9v). Returns an empty list for documents outside the
+/// project directory.
 ///
 /// Callers that already canonicalized `document_path` (as
 /// [`directory_metadata_for_document`] does) pass it through; the
@@ -195,9 +191,10 @@ pub fn directory_metadata_paths_for_document(
     document_path: &Path,
     runtime: &dyn SystemRuntime,
 ) -> Vec<PathBuf> {
-    if project.is_single_file {
-        return Vec::new();
-    }
+    // A single-file project is rooted at the document's own directory, so
+    // a lone document gets the `_metadata.yml` beside it and no other (as
+    // in Quarto 1).
+    //
     // Canonicalize so strip_prefix works reliably. project.dir is always
     // canonical (from ProjectContext::discover), but callers may pass
     // relative paths (e.g., WASM render_qmd with VFS paths).
@@ -213,10 +210,14 @@ pub fn directory_metadata_paths_for_document(
         return Vec::new();
     };
 
-    let mut paths = Vec::new();
+    // The project root's own `_metadata.yml` comes first. Quarto 1 reads it
+    // only for documents directly in the root (an accident of splitting ""
+    // into [""]); q2 applies it to the whole project, like any directory's.
+    let mut paths: Vec<PathBuf> = find_metadata_file(project_dir, runtime)
+        .into_iter()
+        .collect();
     let mut current_dir = project_dir.clone();
-    // Walk through each directory from project root toward document
-    // (but not including project root itself - we start from first subdir)
+    // Walk through each directory below the project root toward the document
     for component in relative_path.components() {
         current_dir = current_dir.join(component);
         if let Some(path) = find_metadata_file(&current_dir, runtime) {
@@ -1645,6 +1646,7 @@ fn build_engine_registry(
                         claims,
                         file_extensions,
                         claims_files,
+                        kernel_equivalence,
                     } => {
                         // Step 4a: Bundle-exists check
                         if !path.exists() {
@@ -1695,6 +1697,8 @@ fn build_engine_registry(
                         // `_extension.yml` path for the fall-through warning
                         // and the Pass-1 cache key.
                         engine.set_extension_yml_path(extension_yml_path.clone());
+                        // RFU-2: the manifest's `kernel-equivalence:` declaration.
+                        engine.set_kernel_equivalence(kernel_equivalence.clone());
                         registry.register(Arc::new(engine));
                         key_to_contributor.insert(key.clone(), ext_label.clone());
 
@@ -3421,6 +3425,7 @@ mod tests {
                 claims: Some(HashMap::new()),
                 file_extensions: Some(vec![]),
                 claims_files: Some(vec![]),
+                kernel_equivalence: None,
             }]);
             assert!(any_external_engine(&[ext]));
         }
@@ -3439,6 +3444,7 @@ mod tests {
                     claims: None,
                     file_extensions: None,
                     claims_files: None,
+                    kernel_equivalence: None,
                 },
             ]);
             assert!(any_external_engine(&[ext]));
@@ -3717,8 +3723,6 @@ mod tests {
             // Returns: [{ theme }, { toc }, { toc-depth }] in order
             let temp = TempDir::new().unwrap();
 
-            // Root _metadata.yml - NOTE: TS Quarto walks from first subdir, not root
-            // But we should include root if document is in subdir
             fs::write(temp.path().join("_metadata.yml"), "theme: cosmo\n").unwrap();
 
             // chapters/_metadata.yml
@@ -3738,35 +3742,28 @@ mod tests {
             let result =
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
-            // Should have 3 layers (root is NOT included based on TS behavior)
-            // Actually, re-reading TS code: it walks from projectDir to inputDir
-            // using relativePath.split(SEP_PATTERN), so if doc is in chapters/intro,
-            // relativePath is "chapters/intro", split gives ["chapters", "intro"]
-            // and it joins from projectDir: project/chapters, project/chapters/intro
-            // So root is NOT included. Let me verify this...
-            //
-            // Wait, the TS code starts with currentDir = projectDir, then does:
-            //   currentDir = join(currentDir, dir) for each dir in dirs
-            // So if dirs = ["chapters", "intro"], it processes:
-            //   project/chapters, project/chapters/intro
-            // Root (project/) is NOT processed.
-            //
-            // So our test should expect 2 layers, not 3.
-            assert_eq!(result.len(), 2);
-            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
-            assert_eq!(result[1].1.get("toc-depth").unwrap().as_int(), Some(2));
+            // The root `_metadata.yml` is a layer like any other directory's.
+            // Quarto 1 skips it for documents below the root (an accident of
+            // its path split); q2 deliberately does not.
+            assert_eq!(result.len(), 3);
+            assert_eq!(
+                result[0].1.get("theme").unwrap().as_plain_text().as_deref(),
+                Some("cosmo")
+            );
+            assert_eq!(result[1].1.get("toc").unwrap().as_bool(), Some(true));
+            assert_eq!(result[2].1.get("toc-depth").unwrap().as_int(), Some(2));
         }
 
         #[test]
         fn test_directory_metadata_skips_missing() {
             // project/
-            //   _metadata.yml     { theme: "cosmo" } -- not included (root)
+            //   _metadata.yml     { theme: "cosmo" }
             //   chapters/
             //     intro/          # No _metadata.yml here
             //       deep/
             //         _metadata.yml { toc: true }
             //         doc.qmd
-            // Returns: [{ toc }] - skips chapters/ and intro/
+            // Returns: [{ theme }, { toc }] - skips chapters/ and intro/
             let temp = TempDir::new().unwrap();
 
             fs::write(temp.path().join("_metadata.yml"), "theme: cosmo\n").unwrap();
@@ -3790,9 +3787,13 @@ mod tests {
             let result =
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
-            // Only the deep/_metadata.yml should be found
-            assert_eq!(result.len(), 1);
-            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
+            // The root and deep/ files are found; chapters/ and intro/ have none
+            assert_eq!(result.len(), 2);
+            assert_eq!(
+                result[0].1.get("theme").unwrap().as_plain_text().as_deref(),
+                Some("cosmo")
+            );
+            assert_eq!(result[1].1.get("toc").unwrap().as_bool(), Some(true));
         }
 
         #[test]
@@ -3840,8 +3841,8 @@ mod tests {
 
         #[test]
         fn test_directory_metadata_document_at_root() {
-            // Document directly in project root should return empty vec
-            // (no directories to walk)
+            // A document directly in the project root gets the root
+            // `_metadata.yml` (Quarto 1 does the same for root documents)
             let temp = TempDir::new().unwrap();
             fs::write(temp.path().join("_metadata.yml"), "toc: true\n").unwrap();
             fs::write(temp.path().join("doc.qmd"), "# Test\n").unwrap();
@@ -3852,36 +3853,78 @@ mod tests {
             let result =
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
-            // Document at root means relativePath is "", dirs is empty or [""]
-            // TS behavior: no directories to process, returns empty config
-            assert!(result.is_empty());
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].0, project.dir.join("_metadata.yml"));
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
         }
 
         #[test]
-        fn test_directory_metadata_single_file_project() {
-            // Single-file project (default config) should return empty vec
+        fn test_directory_metadata_document_at_root_yaml_extension() {
             let temp = TempDir::new().unwrap();
-            let chapters = temp.path().join("chapters");
-            fs::create_dir(&chapters).unwrap();
-            fs::write(chapters.join("_metadata.yml"), "toc: true\n").unwrap();
-            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+            fs::write(temp.path().join("_metadata.yaml"), "toc: true\n").unwrap();
+            fs::write(temp.path().join("doc.qmd"), "# Test\n").unwrap();
 
-            // Single-file project has default config
-            let project = ProjectContext {
-                dir: temp.path().to_path_buf(),
-                config: ProjectConfig::default(),
-                is_single_file: true,
-                files: vec![],
-                output_dir: temp.path().to_path_buf(),
-
-                ..Default::default()
-            };
-            let doc_path = chapters.join("doc.qmd");
+            let project = test_project_context(temp.path());
+            let doc_path = temp.path().join("doc.qmd");
 
             let result =
                 directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
 
-            // Per TS behavior: directory metadata requires project context
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
+        }
+
+        #[test]
+        fn test_directory_metadata_document_at_root_without_file() {
+            let temp = TempDir::new().unwrap();
+            fs::write(temp.path().join("doc.qmd"), "# Test\n").unwrap();
+
+            let project = test_project_context(temp.path());
+            let doc_path = temp.path().join("doc.qmd");
+
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
+
+            assert!(result.is_empty());
+        }
+
+        #[test]
+        fn test_directory_metadata_single_file_reads_its_own_directory() {
+            // A lone document (no `_quarto.yml` anywhere above it) gets the
+            // `_metadata.yml` in its own directory, as in Quarto 1: its
+            // stand-in project is rooted at that directory.
+            let temp = TempDir::new().unwrap();
+            fs::write(temp.path().join("_metadata.yml"), "toc: true\n").unwrap();
+            fs::write(temp.path().join("doc.qmd"), "# Test\n").unwrap();
+            let doc_path = temp.path().join("doc.qmd");
+
+            let project = ProjectContext::discover(&doc_path, &native_runtime()).unwrap();
+            assert!(project.is_single_file);
+
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].1.get("toc").unwrap().as_bool(), Some(true));
+        }
+
+        #[test]
+        fn test_directory_metadata_single_file_ignores_parent_directories() {
+            // Only the lone document's own directory counts; a
+            // `_metadata.yml` further up is outside its stand-in project.
+            let temp = TempDir::new().unwrap();
+            fs::write(temp.path().join("_metadata.yml"), "toc: true\n").unwrap();
+            let chapters = temp.path().join("chapters");
+            fs::create_dir(&chapters).unwrap();
+            fs::write(chapters.join("doc.qmd"), "# Test\n").unwrap();
+            let doc_path = chapters.join("doc.qmd");
+
+            let project = ProjectContext::discover(&doc_path, &native_runtime()).unwrap();
+            assert!(project.is_single_file);
+
+            let result =
+                directory_metadata_for_document(&project, &doc_path, &native_runtime()).unwrap();
+
             assert!(result.is_empty());
         }
 

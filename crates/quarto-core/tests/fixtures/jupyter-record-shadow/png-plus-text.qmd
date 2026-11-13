@@ -1,0 +1,10 @@
+---
+title: Shadow
+jupyter: python3
+---
+
+```{python}
+import base64
+from IPython.display import Image
+Image(data=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), format="png")
+```

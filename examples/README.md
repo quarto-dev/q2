@@ -48,6 +48,7 @@ Examples that exercise the website-projects feature surface
 | [`websites/08-hub-preview`](websites/08-hub-preview/) | Hub-client live preview against a website project (manual browser recipe) |
 | [`websites/09-interactive-listing`](websites/09-interactive-listing/) | A `type: metadata` listing, an `{lmd}` cell that writes the page from its items, and a TypeScript React component that filters the posts by tag (bd-react-components-a8flgldm) |
 | [`websites/10-federated-search`](websites/10-federated-search/) | One search box over three websites: an umbrella site whose `website.search.federate` list pulls in two product sites, all rendered into one served tree |
+| [`websites/11-responsive-navbar`](websites/11-responsive-navbar/) | Navbar item `text:` keyed by breakpoint: full labels on wide screens and in the collapsed menu, short ones where the expanded bar is cramped, icon-only ranges |
 
 ## Presentation examples
 
@@ -55,6 +56,24 @@ Minimal `format: revealjs` decks, one per authoring feature, under
 [`presentations/`](presentations/). Each is a `type: default` project
 with a single `slides.qmd`. They back the reveal.js documentation page
 (`docs/presentations/revealjs/index.qmd`).
+
+## Dashboard examples
+
+Minimal `format: dashboard` projects, one per feature, under
+[`dashboards/`](dashboards/). Each is a `type: default` project with a single
+`dashboard.qmd` (07 is a website). They are engine-free: charts are small SVG
+files and tables are markdown, so they render without R or Python. They back
+the dashboard documentation page (`docs/dashboards/index.qmd`).
+
+| Example | Demonstrates |
+|---|---|
+| [`dashboards/01-basic-layout`](dashboards/01-basic-layout/) | Rows and columns from headings, `height` / `width`, `.card` divs |
+| [`dashboards/02-pages`](dashboards/02-pages/) | Level-1 headings as pages, a page with its own `orientation` |
+| [`dashboards/03-value-boxes`](dashboards/03-value-boxes/) | `.valuebox` divs with icons, theme and custom colors, `showcase-position` |
+| [`dashboards/04-sidebars-toolbars`](dashboards/04-sidebars-toolbars/) | A collapsible page sidebar with a `width`, a page toolbar |
+| [`dashboards/05-tabsets`](dashboards/05-tabsets/) | A `.tabset` column, a `.card-toolbar` in a card's header |
+| [`dashboards/06-navigation`](dashboards/06-navigation/) | Navbar title block, `logo`, `nav-buttons`, light/dark themes with a toggle |
+| [`dashboards/07-website`](dashboards/07-website/) | A dashboard page inside a website: site navbar, footer and theme |
 
 ## Plot examples
 
@@ -86,6 +105,16 @@ their rendered output.
 | [`lmd/08-echo`](lmd/08-echo/) | `--| echo: true`, showing the desugared Lua above the result |
 | [`lmd/09-modules`](lmd/09-modules/) | `require` of a module written in lmd (`components/cards.lmd`), used by two cells |
 | [`lmd/10-project`](lmd/10-project/) | Modules across a project: `lmd: modules:` autoload from `_quarto.yml`, a project-root `require("/…")`, an extension's module by name, and `quarto.include` of two partials |
+
+## Highlighting examples
+
+Syntax highlighting beyond the built-in languages, under
+[`highlighting/`](highlighting/). They back the code-highlighting page of
+the documentation (`docs/guides/authoring/code-highlighting.qmd`).
+
+| Example | Demonstrates |
+|---|---|
+| [`highlighting/01-user-grammar`](highlighting/01-user-grammar/) | A tree-sitter grammar (TOML) shipped in `_quarto/grammars/toml/`, highlighting blocks and inline code, and a CSS rule on one `hl-*` capture class |
 
 ## Other example categories
 

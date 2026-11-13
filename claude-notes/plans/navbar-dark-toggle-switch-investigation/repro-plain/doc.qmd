@@ -1,0 +1,10 @@
+---
+title: Plain document
+format:
+  html:
+    theme:
+      light: cosmo
+      dark: darkly
+---
+
+No navbar: the color-mode runtime floats a fallback toggle.

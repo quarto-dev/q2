@@ -38,7 +38,8 @@ use crate::pandoc::treesitter_utils::shortcode::{
     process_shortcode_string, process_shortcode_string_arg,
 };
 use crate::pandoc::treesitter_utils::span_link_helpers::{
-    process_content_node, process_pandoc_image, process_pandoc_span, process_target,
+    ANGLE_BRACKET_URL_FIELD, decode_angle_bracket_destination, process_content_node,
+    process_pandoc_image, process_pandoc_span, process_target,
 };
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
@@ -102,37 +103,56 @@ fn parse_anchor_shorthand(text: &str) -> Option<&str> {
 fn process_list(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    input_bytes: &[u8],
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    // a list is loose if it has at least one loose item
-    // an item is loose if
-    //   - it has more than one paragraph in the list
-    //   - it is a single paragraph with space between it and the next
-    //     beginning of list item. There must be a next item for this to be true
-    //     but the next item might not itself be a paragraph.
+    // CommonMark (https://spec.commonmark.org/0.31.2/#lists): a list is loose
+    // if any two of its items are separated by a blank line, or if any item
+    // directly contains two block-level elements with a blank line between
+    // them; otherwise it is tight. Both clauses reduce to "is the source row
+    // above this item / this block blank?" (`row_above_is_blank`): the row
+    // above a block's first row is the previous block's last content row, a
+    // blank line, or the list marker row. Blank lines inside a fenced code
+    // block, a block quote or a sublist never sit directly above a sibling
+    // block or item, so they do not count, as the spec requires (examples
+    // 320-323).
+    //
+    // The grammar does not distinguish loose from tight; the blank lines
+    // reach the tree as `block_continuation` tokens whose shape varies with
+    // the surrounding blocks (bd-25ezfgs8), so the decision is made here on
+    // the source rows, not on the token structure. Clause 2 is computed per
+    // item by `process_list_item` (`list_item_has_blank_line_between_blocks`).
+    let quote_depth = enclosing_block_quote_depth(node);
+    let mut items_separated_by_blank = false;
+    let mut seen_first_item = false;
+    let child_count = u32::try_from(node.named_child_count()).unwrap();
+    for i in 0..child_count {
+        let child = node.named_child(i).unwrap();
+        if child.kind() != "list_item" {
+            continue;
+        }
+        if seen_first_item && row_above_is_blank(input_bytes, &child, quote_depth) {
+            items_separated_by_blank = true;
+            break;
+        }
+        seen_first_item = true;
+    }
 
-    let mut has_loose_item = false;
-    let mut last_para_end_row: Option<usize> = None;
-    let mut last_item_end_row: Option<usize> = None;
+    let mut has_loose_item = items_separated_by_blank;
     let mut list_items: Vec<Blocks> = Vec::new();
     let mut is_ordered_list: Option<ListAttributes> = None;
 
-    for (node, child) in children {
-        if node == "block_continuation" {
-            // this is a marker node, we don't need to do anything with it
-            continue;
-        }
-
+    for (_, child) in children {
         // List markers are processed by native_visitor before reaching here,
-        // so children are always IntermediateListItem values
+        // so the children are IntermediateListItem values plus
+        // block_continuation markers, which carry nothing.
         let PandocNativeIntermediate::IntermediateListItem(
             blocks,
-            child_range,
+            _range,
             ordered_list,
             item_has_blank_line_between_blocks,
         ) = child
         else {
-            // Skip non-list-item intermediates (shouldn't happen in practice)
             continue;
         };
         if is_ordered_list.is_none()
@@ -140,126 +160,36 @@ fn process_list(
         {
             is_ordered_list = attr
         }
-
-        // is the last item loose? Check the last paragraph end row
-        if let Some(last_para_end) = last_para_end_row
-            && last_para_end != child_range.start.row
-        {
-            // if the last paragraph ends on a different line than the current item starts,
-            // then the last item was loose, mark it
+        if item_has_blank_line_between_blocks {
             has_loose_item = true;
         }
-
-        // Check if there's a blank line between the last item and this item
-        if let Some(last_end) = last_item_end_row
-            && child_range.start.row > last_end
-        {
-            // There's at least one blank line between items
-            has_loose_item = true;
-        }
-
-        // is this item definitely loose?
-        if blocks
-            .iter()
-            .filter(|block| {
-                if let Block::Paragraph(_) = block {
-                    true
-                } else {
-                    false
-                }
-            })
-            .count()
-            > 1
-        {
-            has_loose_item = true;
-
-            // technically, we don't need to worry about
-            // last paragraph end row after setting has_loose_item,
-            // but we do it in case we want to use it later
-            last_para_end_row = None;
-            last_item_end_row = blocks.last().and_then(|b| {
-                let source_info = b.source_info();
-                source_info
-                    .map_offset(source_info.length(), &context.source_context)
-                    .map(|mapped| mapped.location.row)
-            });
-            list_items.push(blocks);
-            continue;
-        }
-
-        // Check if this item has multiple blocks with a blank line between them.
-        // Per the CommonMark spec (https://spec.commonmark.org/0.31.2/#lists),
-        // a list is loose only if items are separated by blank lines or contain
-        // "two block-level elements with a blank line between them."
-        // A nested sublist immediately following content (no blank line) does NOT
-        // make the list loose. The blank line detection is done in process_list_item
-        // by examining tree-sitter block_continuation nodes.
-        if blocks.len() > 1
-            && blocks
-                .iter()
-                .any(|block| matches!(block, Block::Paragraph(_)))
-            && item_has_blank_line_between_blocks
-        {
-            has_loose_item = true;
-        }
-
-        // is this item possibly loose?
-        if blocks.len() == 1 {
-            if let Some(Block::Paragraph(para)) = blocks.first() {
-                // yes, so store the end row and wait to finish the check on
-                // next item
-                last_para_end_row = para
-                    .source_info
-                    .map_offset(para.source_info.length(), &context.source_context)
-                    .map(|mapped| mapped.location.row);
-            } else {
-                // if the first block is not a paragraph, it's not loose
-                last_para_end_row = None;
-            }
-        } else {
-            // if the item has multiple blocks (but not multiple paragraphs,
-            // which would have been caught above), we need to reset the
-            // last_para_end_row since this item can't participate in loose detection
-            last_para_end_row = None;
-        }
-        last_item_end_row = blocks.last().and_then(|b| {
-            let source_info = b.source_info();
-            source_info
-                .map_offset(source_info.length(), &context.source_context)
-                .map(|mapped| mapped.location.row)
-        });
         list_items.push(blocks);
     }
 
     let content = if has_loose_item {
-        // the AST representation of a loose bullet list is
-        // the same as what we've been building, so just return it
+        // the AST representation of a loose list is the same as what we've
+        // been building, so just return it
         list_items
     } else {
-        // turn list into tight list by replacing eligible Paragraph nodes
-        // Plain nodes.
+        // In a tight list every Paragraph that is a direct child of an item
+        // becomes a Plain (pandoc's commonmark reader and comrak agree), not
+        // only the first one: `- a\n  # h\n  b` is Plain, Header, Plain.
         list_items
             .into_iter()
-            .map(|mut blocks| {
-                if blocks.is_empty() {
-                    return blocks;
-                }
-                // Convert the first block if it's a Paragraph
-                let first = blocks.remove(0);
-                let Block::Paragraph(Paragraph {
-                    content,
-                    source_info,
-                }) = first
-                else {
-                    blocks.insert(0, first);
-                    return blocks;
-                };
-                let mut result = vec![Block::Plain(Plain {
-                    content,
-                    source_info,
-                })];
-                result.extend(blocks);
-                result
+            .map(|blocks| {
+                blocks
+                    .into_iter()
+                    .map(|block| match block {
+                        Block::Paragraph(Paragraph {
+                            content,
+                            source_info,
+                        }) => Block::Plain(Plain {
+                            content,
+                            source_info,
+                        }),
+                        other => other,
+                    })
+                    .collect()
             })
             .collect()
     };
@@ -273,11 +203,11 @@ fn process_list(
                 // Increment counter by the number of items in this list
                 context.example_list_counter.set(start_num + content.len());
             }
-            PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(OrderedList {
+            PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(Box::new(OrderedList {
                 attr,
                 content,
                 source_info: node_source_info_with_context(node, context),
-            }))
+            })))
         }
         None => PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
             content,
@@ -289,6 +219,7 @@ fn process_list(
 fn process_list_item(
     list_item_node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    input_bytes: &[u8],
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut list_attr: Option<ListAttributes> = None;
@@ -344,13 +275,13 @@ fn process_list_item(
             PandocNativeIntermediate::IntermediateSection(section) => blocks.extend(section),
             PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
                 // for now we assume it's metadata and emit it as a rawblock
-                blocks.push(Block::RawBlock(RawBlock {
+                blocks.push(Block::RawBlock(Box::new(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     source_info: crate::pandoc::location::range_to_source_info_with_context(
                         &range, context,
                     ),
-                }));
+                })));
             }
             // Tokens with no AST-level meaning: tree-sitter ERROR nodes from
             // error recovery, fence delimiters, etc. all dispatch to
@@ -373,15 +304,16 @@ fn process_list_item(
             row: range.start.row,
             column: range.start.column + 3,
         };
+        let marker_source_info = crate::pandoc::location::range_to_source_info_with_context(
+            &quarto_source_map::Range {
+                start: range.start,
+                end: bracket_end,
+            },
+            context,
+        );
         let marker_str = Inline::Str(Str {
             text: if checked { "☒" } else { "☐" }.to_string(),
-            source_info: crate::pandoc::location::range_to_source_info_with_context(
-                &quarto_source_map::Range {
-                    start: range.start,
-                    end: bracket_end,
-                },
-                context,
-            ),
+            source_info: marker_source_info.clone(),
         });
         let marker_space = Inline::Space(Space {
             source_info: crate::pandoc::location::range_to_source_info_with_context(
@@ -399,6 +331,16 @@ fn process_list_item(
             Some(Block::Plain(p)) => {
                 p.content.splice(0..0, [marker_str, marker_space]);
             }
+            None => {
+                // Empty task item (`- [ ] ` with nothing after the marker,
+                // bd-2ydvebkc): Pandoc reads it as `Plain [Str "☐"]` — no
+                // Space, since nothing follows. The Plain spans the bracket
+                // bytes only, like the Str.
+                blocks.push(Block::Plain(crate::pandoc::Plain {
+                    content: vec![marker_str],
+                    source_info: marker_source_info,
+                }));
+            }
             _ => {
                 // The grammar only produces the marker before a paragraph;
                 // if that invariant ever breaks, drop the marker rather
@@ -406,7 +348,7 @@ fn process_list_item(
             }
         }
     }
-    let has_blank_line = list_item_has_blank_line_between_blocks(list_item_node);
+    let has_blank_line = list_item_has_blank_line_between_blocks(list_item_node, input_bytes);
     PandocNativeIntermediate::IntermediateListItem(
         blocks,
         node_location(list_item_node),
@@ -602,31 +544,107 @@ fn extract_inline_math_text(
     (text, builder.finish())
 }
 
-/// Detect whether a list item's tree-sitter node contains a blank line between
-/// its block-level children. This is done by checking whether any `pandoc_paragraph`
-/// child that precedes another block-level sibling contains a `block_continuation`
-/// spanning multiple rows. In tree-sitter's QMD grammar, a `block_continuation`
-/// that spans multiple rows indicates it absorbed a blank line.
-fn list_item_has_blank_line_between_blocks(list_item_node: &tree_sitter::Node) -> bool {
-    let child_count = u32::try_from(list_item_node.named_child_count()).unwrap();
+/// Clause 2 of the CommonMark looseness rule for one item: is there a blank
+/// line between two of the item's direct block children? Checks the source
+/// row above every block after the first (`row_above_is_blank`); the first
+/// block shares the marker's row or follows it directly. `section` wrappers
+/// (an item that contains a heading) are flattened, as `process_list_item`
+/// flattens them into the item's blocks.
+fn list_item_has_blank_line_between_blocks(
+    list_item_node: &tree_sitter::Node,
+    input_bytes: &[u8],
+) -> bool {
+    let quote_depth = enclosing_block_quote_depth(list_item_node);
+    let mut blocks = Vec::new();
+    collect_list_item_blocks(list_item_node, &mut blocks);
+    blocks
+        .iter()
+        .skip(1)
+        .any(|block| row_above_is_blank(input_bytes, block, quote_depth))
+}
+
+/// The block-level children of a `list_item` node, in order, without the
+/// marker and continuation tokens and with `section` wrappers flattened.
+fn collect_list_item_blocks<'tree>(
+    node: &tree_sitter::Node<'tree>,
+    out: &mut Vec<tree_sitter::Node<'tree>>,
+) {
+    let child_count = u32::try_from(node.named_child_count()).unwrap();
     for i in 0..child_count {
-        let child = list_item_node.named_child(i).unwrap();
-        if child.kind() == "pandoc_paragraph" && i + 1 < child_count {
-            // This paragraph is followed by another block-level sibling.
-            // Check if the paragraph has a block_continuation that spans
-            // multiple rows (which means it absorbed a blank line).
-            let para_child_count = u32::try_from(child.named_child_count()).unwrap();
-            for j in 0..para_child_count {
-                let para_child = child.named_child(j).unwrap();
-                if para_child.kind() == "block_continuation"
-                    && para_child.end_position().row > para_child.start_position().row
-                {
-                    return true;
-                }
-            }
+        let child = node.named_child(i).unwrap();
+        match child.kind() {
+            "block_continuation"
+            | "list_marker_minus"
+            | "list_marker_star"
+            | "list_marker_plus"
+            | "list_marker_dot"
+            | "list_marker_parenthesis"
+            | "list_marker_example"
+            | "task_list_marker_checked"
+            | "task_list_marker_unchecked" => {}
+            "section" => collect_list_item_blocks(&child, out),
+            _ => out.push(child),
         }
     }
-    false
+}
+
+/// How many `pandoc_block_quote` nodes enclose `node`. Each one contributes a
+/// `>` prefix that a blank line inside it still carries (`>` alone on a line
+/// is a blank line of the quote's content, spec example 322).
+fn enclosing_block_quote_depth(node: &tree_sitter::Node) -> usize {
+    let mut depth = 0;
+    let mut current = node.parent();
+    while let Some(parent) = current {
+        if parent.kind() == "pandoc_block_quote" {
+            depth += 1;
+        }
+        current = parent.parent();
+    }
+    depth
+}
+
+/// Is the source row immediately above `node`'s first row a blank line, once
+/// `quote_depth` enclosing block-quote prefixes are stripped?
+///
+/// A blank line is whitespace only (spaces, tabs, a stray `\r`), so an
+/// indentation-only separator counts (bd-25ezfgs8, bd-i4xrcdqx). A `>`
+/// belonging to an enclosing quote is stripped before the test; a `>` beyond
+/// `quote_depth` is content (a block quote inside the item whose last line
+/// is empty), and keeps the line non-blank.
+fn row_above_is_blank(input_bytes: &[u8], node: &tree_sitter::Node, quote_depth: usize) -> bool {
+    let start = node.start_position();
+    if start.row == 0 {
+        return false;
+    }
+    // tree-sitter columns are byte offsets, so this is the row's first byte
+    // and the byte before it is the previous row's newline.
+    let row_start = node.start_byte() - start.column;
+    let Some(newline) = row_start.checked_sub(1) else {
+        return false;
+    };
+    let prev_start = input_bytes[..newline]
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map_or(0, |i| i + 1);
+    is_blank_after_quote_prefixes(&input_bytes[prev_start..newline], quote_depth)
+}
+
+/// `line` is blank after skipping whitespace and up to `quote_depth` `>`
+/// markers (each optionally surrounded by whitespace).
+fn is_blank_after_quote_prefixes(line: &[u8], mut quote_depth: usize) -> bool {
+    let mut i = 0;
+    loop {
+        while i < line.len() && matches!(line[i], b' ' | b'\t' | b'\r') {
+            i += 1;
+        }
+        if quote_depth > 0 && i < line.len() && line[i] == b'>' {
+            i += 1;
+            quote_depth -= 1;
+            continue;
+        }
+        break;
+    }
+    i == line.len()
 }
 
 // Standalone function to process intermediate inline elements into Inline objects
@@ -652,16 +670,12 @@ fn process_native_inline<T: Write>(
                 // Multiple inlines need to be wrapped in a Span
                 // This shouldn't normally happen in practice, but handle it gracefully
                 use crate::pandoc::attr::{AttrSourceInfo, empty_attr};
-                Inline::Span(crate::pandoc::inline::Span {
+                Inline::Span(Box::new(crate::pandoc::inline::Span {
                     attr: empty_attr(),
-                    attr_source: AttrSourceInfo {
-                        id: None,
-                        classes: Vec::new(),
-                        attributes: Vec::new(),
-                    },
+                    attr_source: AttrSourceInfo::new(None, Vec::new(), Vec::new()),
                     content: inlines,
                     source_info: node_source_info_fn(),
-                })
+                }))
             }
         }
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
@@ -687,7 +701,7 @@ fn process_native_inline<T: Write>(
         // see tests/cursed/002.qmd for why this cannot be parsed directly in
         // the block grammar.
         PandocNativeIntermediate::IntermediateAttr(attr, attr_source, source_info) => {
-            Inline::Attr(InlineAttr::new(attr, attr_source, source_info))
+            Inline::Attr(Box::new(InlineAttr::new(attr, attr_source, source_info)))
         }
         PandocNativeIntermediate::IntermediateUnknown(range) => {
             writeln!(
@@ -698,11 +712,11 @@ fn process_native_inline<T: Write>(
                 node_name
             )
             .unwrap();
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: node_source_info_fn(),
-            })
+            }))
         }
         other => {
             writeln!(
@@ -711,11 +725,11 @@ fn process_native_inline<T: Write>(
                 other
             )
             .unwrap();
-            Inline::RawInline(RawInline {
+            Inline::RawInline(Box::new(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: node_source_info_fn(),
-            })
+            }))
         }
     }
 }
@@ -819,12 +833,12 @@ fn native_visitor<T: Write>(
             // collapse each pandoc_soft_break range to a single `\n`.
             let (text, text_source) = extract_inline_math_text(node, input_bytes, context);
 
-            PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
+            PandocNativeIntermediate::IntermediateInline(Inline::Math(Box::new(Math {
                 math_type: MathType::InlineMath,
                 text,
                 source_info: node_source_info_with_context(node, context),
                 text_source: Some(text_source),
-            }))
+            })))
         }
         "pandoc_display_math" => {
             // Extract display math content (text between $$ delimiters)
@@ -848,12 +862,12 @@ fn native_visitor<T: Write>(
             let mut builder = provenance_builder_with_context(context, content_start);
             let text = strip_continuation_prefix(content, content_start, start_col, &mut builder);
 
-            PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
+            PandocNativeIntermediate::IntermediateInline(Inline::Math(Box::new(Math {
                 math_type: MathType::DisplayMath,
                 text,
                 source_info: node_source_info_with_context(node, context),
                 text_source: Some(builder.finish()),
-            }))
+            })))
         }
         "pandoc_str" => {
             // Tree-sitter may include leading ASCII whitespace in the
@@ -1376,7 +1390,7 @@ fn native_visitor<T: Write>(
             let mut attr_source = AttrSourceInfo::empty();
             attr_source.classes.push(Some(span.clone()));
 
-            PandocNativeIntermediate::IntermediateAttr(attr, attr_source, span)
+            PandocNativeIntermediate::IntermediateAttr(attr.into(), attr_source, span)
         }
         "attribute_specifier" => {
             // Filter out delimiter nodes and pass through the relevant child result
@@ -1396,7 +1410,7 @@ fn native_visitor<T: Write>(
             // If no commonmark_specifier or raw_specifier found, return empty attr
             use hashlink::LinkedHashMap;
             PandocNativeIntermediate::IntermediateAttr(
-                (String::new(), vec![], LinkedHashMap::new()),
+                (String::new(), vec![], LinkedHashMap::new()).into(),
                 AttrSourceInfo::empty(),
                 node_source_info_with_context(node, context),
             )
@@ -1407,9 +1421,31 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
         "url" => {
-            // Extract URL text directly
-            let text = node.utf8_text(input_bytes).unwrap().to_string();
-            PandocNativeIntermediate::IntermediateBaseText(text, node_location(node))
+            let text = node.utf8_text(input_bytes).unwrap();
+            if node
+                .parent()
+                .and_then(|p| p.child_by_field_name(ANGLE_BRACKET_URL_FIELD))
+                .is_some_and(|n| n.id() == node.id())
+            {
+                // `[x](<a b.png>)` (bd-angle-link-dest-qkqkegqo): decode as
+                // Pandoc does, and narrow the range to the bracket contents.
+                // The token cannot span lines, so column arithmetic is safe.
+                let mut range = node_location(node);
+                range.start.offset += 1;
+                range.start.column += 1;
+                range.end.offset -= 1;
+                range.end.column -= 1;
+                PandocNativeIntermediate::IntermediateBaseText(
+                    decode_angle_bracket_destination(text),
+                    range,
+                )
+            } else {
+                // Bare URL: extract text directly
+                PandocNativeIntermediate::IntermediateBaseText(
+                    text.to_string(),
+                    node_location(node),
+                )
+            }
         }
         "title" => {
             // Extract title text, strip quotes. As with `key_value_value`,
@@ -1437,8 +1473,8 @@ fn native_visitor<T: Write>(
         "block_quote_marker" | "list_marker_minus" | "list_marker_star" | "list_marker_plus" => {
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "pandoc_list" => process_list(node, children, context),
-        "list_item" => process_list_item(node, children, context),
+        "pandoc_list" => process_list(node, children, input_bytes, context),
+        "list_item" => process_list_item(node, children, input_bytes, context),
         "info_string" => process_info_string(node, input_bytes, context),
         "language_specifier" => process_language_specifier(node, children, input_bytes, context),
         "raw_specifier" => {
@@ -1467,7 +1503,7 @@ fn native_visitor<T: Write>(
             // Pandoc class form {.r echo=FALSE} is intentionally still valid
             // and is excluded by the literal-braces check on classes[0].
             if let PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(ref cb)) = result {
-                let (ref _id, ref classes, ref attrs) = cb.attr;
+                let (ref _id, ref classes, ref attrs) = *cb.attr;
 
                 let has_only_braced_language =
                     classes.len() == 1 && classes[0].starts_with('{') && classes[0].ends_with('}');
@@ -1632,11 +1668,11 @@ fn native_visitor<T: Write>(
             let msg = builder.build();
             error_collector.add(msg);
 
-            PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
+            PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(Box::new(RawBlock {
                 format: "qmd-grid-table".to_string(),
                 text: raw_text.to_string(),
                 source_info: node_source_info_with_context(node, context),
-            }))
+            })))
         }
         "comment" => {
             // HTML comments (<!-- ... -->) are preserved as RawInline(html)
@@ -1648,11 +1684,11 @@ fn native_visitor<T: Write>(
             // maintain correct spacing (e.g., "Hello <!-- comment --> world"
             // — the space before <!-- is part of the comment node).
             let text = node.utf8_text(input_bytes).unwrap().to_string();
-            PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+            PandocNativeIntermediate::IntermediateInline(Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text,
                 source_info: node_source_info_with_context(node, context),
-            }))
+            })))
         }
         "html_element" => {
             // Extract the text from the HTML element node
@@ -1709,12 +1745,13 @@ fn native_visitor<T: Write>(
                     context,
                 );
 
-                result.push(Inline::Link(Link {
+                result.push(Inline::Link(Box::new(Link {
                     attr: (
                         String::new(),
                         vec!["anchor".to_string()],
                         LinkedHashMap::new(),
-                    ),
+                    )
+                        .into(),
                     content: vec![Inline::Str(Str {
                         text: anchor_id.to_string(),
                         source_info: source_info.clone(),
@@ -1723,13 +1760,9 @@ fn native_visitor<T: Write>(
                     source_info,
                     // The `anchor` class is synthesized; a `None` placeholder
                     // keeps the sidecar aligned with attr.1 (bd-nq3ed2im).
-                    attr_source: AttrSourceInfo {
-                        id: None,
-                        classes: vec![None],
-                        attributes: Vec::new(),
-                    },
+                    attr_source: AttrSourceInfo::new(None, vec![None], Vec::new()),
                     target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
-                }));
+                })));
 
                 if trailing_ws > 0 {
                     let space_range = quarto_source_map::Range {
@@ -1815,11 +1848,11 @@ fn native_visitor<T: Write>(
                     }));
                 }
 
-                result.push(Inline::RawInline(RawInline {
+                result.push(Inline::RawInline(Box::new(RawInline {
                     format: "html".to_string(),
                     text,
                     source_info: trimmed_source_info,
-                }));
+                })));
 
                 if trailing_ws > 0 {
                     let space_range = quarto_source_map::Range {
@@ -1921,4 +1954,45 @@ pub fn treesitter_to_pandoc<T: Write>(
     };
     let result = merge_strs(result);
     Ok(result)
+}
+
+#[cfg(test)]
+mod list_looseness_tests {
+    use super::is_blank_after_quote_prefixes;
+
+    #[test]
+    fn whitespace_only_lines_are_blank_at_any_depth() {
+        for line in ["", " ", "\t", " \t ", "\r", "   \r"] {
+            assert!(
+                is_blank_after_quote_prefixes(line.as_bytes(), 0),
+                "{line:?}"
+            );
+            assert!(
+                is_blank_after_quote_prefixes(line.as_bytes(), 2),
+                "{line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn quote_prefixes_are_stripped_up_to_the_enclosing_depth() {
+        // One enclosing quote: `>` alone is its blank line.
+        assert!(is_blank_after_quote_prefixes(b">", 1));
+        assert!(is_blank_after_quote_prefixes(b"> ", 1));
+        assert!(is_blank_after_quote_prefixes(b"  >  \t", 1));
+        // Two enclosing quotes.
+        assert!(is_blank_after_quote_prefixes(b"> >", 2));
+        assert!(is_blank_after_quote_prefixes(b">>", 2));
+        // A `>` beyond the enclosing depth is content: a block quote inside
+        // the item whose last line is empty (spec example 322).
+        assert!(!is_blank_after_quote_prefixes(b"  >", 0));
+        assert!(!is_blank_after_quote_prefixes(b"> >", 1));
+    }
+
+    #[test]
+    fn text_is_never_blank() {
+        assert!(!is_blank_after_quote_prefixes(b"- a", 0));
+        assert!(!is_blank_after_quote_prefixes(b"> a", 1));
+        assert!(!is_blank_after_quote_prefixes(b"  x", 3));
+    }
 }

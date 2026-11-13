@@ -1,0 +1,5 @@
+@mixin accent-box($colour) {
+  .accent-box {
+    color: $colour;
+  }
+}

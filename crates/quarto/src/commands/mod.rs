@@ -29,6 +29,7 @@ pub mod remove;
 pub mod render;
 pub mod run;
 pub mod serve;
+pub mod terminal_style;
 pub mod tools;
 pub mod trace;
 pub mod typst;

@@ -88,6 +88,20 @@ function normalizeDocId(docId: string): string {
 }
 
 /**
+ * Copy a binary document into the primitive-string shape exposed by this
+ * client. Rust-authored Automerge scalar strings surface as ImmutableString
+ * objects, while TypeScript-authored values are already primitive strings.
+ * String(...) accepts both without changing their contents.
+ */
+function normalizeBinaryDocument(doc: BinaryDocumentContent): BinaryDocumentContent {
+  return {
+    content: doc.content,
+    mimeType: String(doc.mimeType),
+    hash: String(doc.hash),
+  };
+}
+
+/**
  * True for the "document is unavailable" error shape thrown by
  * `repo.find()` (and re-thrown by `findDoc`) when a document cannot
  * be fetched. Used to tell dangling-entry failures (tolerated,
@@ -1169,10 +1183,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
       if (docType === 'binary' && isBinaryDocument(doc)) {
         state.binaryFiles.add(path);
+        const normalized = normalizeBinaryDocument(doc);
         callbacks.onFileAdded(path, {
           type: 'binary',
-          data: doc.content,
-          mimeType: doc.mimeType,
+          data: normalized.content,
+          mimeType: normalized.mimeType,
         });
       } else if (docType === 'text' && isTextDocument(doc)) {
         const text = doc.text || '';
@@ -1201,7 +1216,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
       if (docType === 'binary' && isBinaryDocument(changedDoc)) {
         state.binaryFiles.add(path);
-        callbacks.onBinaryChanged(path, changedDoc.content, changedDoc.mimeType);
+        const normalized = normalizeBinaryDocument(changedDoc);
+        callbacks.onBinaryChanged(path, normalized.content, normalized.mimeType);
       } else if (docType === 'text' && isTextDocument(changedDoc)) {
         state.binaryFiles.delete(path);
         const text = changedDoc.text || '';
@@ -1228,7 +1244,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
       if (docType === 'binary' && isBinaryDocument(changedDoc)) {
         state.binaryFiles.add(path);
-        callbacks.onBinaryChanged(path, changedDoc.content, changedDoc.mimeType);
+        const normalized = normalizeBinaryDocument(changedDoc);
+        callbacks.onBinaryChanged(path, normalized.content, normalized.mimeType);
       } else if (docType === 'text' && isTextDocument(changedDoc)) {
         state.binaryFiles.delete(path);
         const text = changedDoc.text || '';
@@ -1787,7 +1804,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
     const doc = handle.doc();
     if (!doc || !isBinaryDocument(doc)) return null;
-    return { content: doc.content, mimeType: doc.mimeType };
+    const { content, mimeType } = normalizeBinaryDocument(doc);
+    return { content, mimeType };
   }
 
   /**
@@ -1813,7 +1831,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const handle = await findDoc<BinaryDocumentContent>(normalized as DocumentId);
       const doc = handle.doc();
       if (!doc || !isBinaryDocument(doc)) return null;
-      return { content: doc.content, mimeType: doc.mimeType };
+      const { content, mimeType } = normalizeBinaryDocument(doc);
+      return { content, mimeType };
     } catch {
       return null;
     }
@@ -1954,7 +1973,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const existingHandle = state.fileHandles.get(path);
       if (existingHandle) {
         const existingDoc = existingHandle.doc();
-        if (existingDoc && isBinaryDocument(existingDoc) && existingDoc.hash === hash) {
+        if (
+          existingDoc &&
+          isBinaryDocument(existingDoc) &&
+          normalizeBinaryDocument(existingDoc).hash === hash
+        ) {
           return { docId: existingDocId, path, deduplicated: true };
         }
       }

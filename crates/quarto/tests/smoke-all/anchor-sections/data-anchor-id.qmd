@@ -1,0 +1,33 @@
+---
+title: Heading anchor targets
+_quarto:
+  tests:
+    html:
+      dom-parity: true
+      noErrors: true
+      ensureHtmlElements:
+        -
+          # sectionize moves the id to the <section>; the heading names it
+          # in `data-anchor-id` so AnchorJS links to `#overview`, not an
+          # invented `#overview-1` (bd-d5gss9pz; Q1
+          # format-html-bootstrap.ts:534-544).
+          - 'section#overview > h2.anchored[data-anchor-id="overview"]'
+          - 'section#custom-id > h3.anchored[data-anchor-id="custom-id"]'
+          # `.no-anchor` opts out of the link, not the attribute (as Q1).
+          - 'section#quiet > h2.no-anchor[data-anchor-id="quiet"]'
+        -
+          - 'h2.anchored:not([data-anchor-id])'
+          - 'h2[id]'
+---
+
+## Overview
+
+Intro text.
+
+### Details {#custom-id}
+
+More text.
+
+## Quiet {.no-anchor}
+
+No hover link here.

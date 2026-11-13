@@ -1,0 +1,21 @@
+---
+# contract: a sidebar after content goes on the right
+title: "C25 Sidebar Right"
+format: dashboard
+---
+
+## Column
+
+::: {.cell title="C25-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## {.sidebar}
+
+C25-SIDEBAR text.

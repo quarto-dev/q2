@@ -37,8 +37,33 @@ struct Cli {
     #[arg(short = 'v', long = "verbose", global = true, action = clap::ArgAction::Count)]
     verbose: u8,
 
+    /// When to color messages and make file locations clickable.
+    /// `auto` (the default) decides from the terminal and the
+    /// `NO_COLOR` / `CLICOLOR` / `CLICOLOR_FORCE` / `FORCE_COLOR`
+    /// environment variables; this flag overrides them all.
+    #[arg(long, global = true, value_enum, default_value_t = ColorArg::Auto, value_name = "WHEN")]
+    color: ColorArg,
+
     #[command(subcommand)]
     command: Commands,
+}
+
+/// clap's view of [`quarto_util::output_style::ColorFlag`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ColorArg {
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<ColorArg> for quarto_util::output_style::ColorFlag {
+    fn from(arg: ColorArg) -> Self {
+        match arg {
+            ColorArg::Auto => Self::Auto,
+            ColorArg::Always => Self::Always,
+            ColorArg::Never => Self::Never,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -279,7 +304,9 @@ enum Commands {
 
         /// Share this preview session over an end-to-end encrypted
         /// peer-to-peer tunnel (via iroh). Prints a join string;
-        /// anyone who has it can VIEW the project and RE-RUN its code
+        /// anyone who has it can VIEW the project and, if `engine` is in the
+        /// record sources (`execute: record-sources`) and `preview.engine` is not
+        /// `off`, RE-RUN its code
         /// on this machine (and EDIT the files if --allow-edit is also
         /// set), so treat the string like a password.
         #[arg(long)]
@@ -501,14 +528,49 @@ enum Commands {
         target: Vec<String>,
     },
 
-    /// Convert documents to alternate representations
+    /// Convert a document to another representation.
+    ///
+    /// The output format is always explicit (`--to`); the input format is inferred
+    /// from the extension (`.qmd` and `.md` are qmd) unless `--from` is given.
+    /// Supported: `--from qmd --to positron-ipynb`, a Positron output-cache
+    /// notebook built from the document's execution record. `--to ipynb` and
+    /// `--from ipynb` are reserved and not implemented yet.
+    ///
+    /// For `positron-ipynb`: `-o <path>` is required (`-o -` writes the notebook
+    /// to stdout and the JSON report to stderr; otherwise the report is one JSON
+    /// line on stdout, and an existing file is overwritten). The record is the
+    /// `.quarto` copy if there is one, else the document is RUN to produce one,
+    /// so this command may execute code. Exit codes: 0 success; 2 usage error; 10
+    /// no record and execution is forbidden; 11 no exportable cells; 12 unreadable
+    /// or invalid record; 13 engine run failed.
     Convert {
         /// Input file to convert
-        input: String,
+        input: PathBuf,
 
-        /// Output format
+        /// Output format: `positron-ipynb`
         #[arg(long)]
-        output: Option<String>,
+        to: String,
+
+        /// Input format (default: from the extension): `qmd`
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Where to write the result (`-` for stdout). Required for
+        /// `positron-ipynb`.
+        #[arg(short = 'o', long, value_name = "PATH")]
+        output: Option<PathBuf>,
+
+        /// Metadata value (KEY:VALUE, or KEY=VALUE; repeatable), as
+        /// `q2 render -M`, for the document run that produces a record. The value
+        /// is parsed as YAML; the first `=` or `:` separates key and value, and
+        /// dotted keys are not expanded.
+        #[arg(short = 'M', long)]
+        metadata: Vec<String>,
+
+        /// `positron-ipynb` only: written to the notebook's `quarto_source` as given
+        /// (default: the document's absolute path, with forward slashes).
+        #[arg(long, value_name = "URI")]
+        source_uri: Option<String>,
     },
 
     /// Run the version of Pandoc embedded within Quarto
@@ -1319,6 +1381,33 @@ mod cli_parse_tests {
         }
     }
 
+    /// The record source list moved into the `execute: record-sources` key (set with
+    /// `-M`); the option is gone with no alias.
+    #[test]
+    fn preview_and_provide_hub_reject_the_removed_records_option() {
+        for args in [
+            &["preview", "--records", "positron,engine"][..],
+            &[
+                "provide-hub",
+                "id",
+                "--file",
+                "a.qmd",
+                "--records",
+                "engine",
+            ][..],
+        ] {
+            let err = match try_parse(args) {
+                Ok(_) => panic!("must be refused: {args:?}"),
+                Err(e) => e,
+            };
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "args: {args:?}"
+            );
+        }
+    }
+
     #[test]
     fn preview_share_flag_parses() {
         let Commands::Preview { share, .. } = parse_preview(&["preview", "--share"]) else {
@@ -1723,7 +1812,22 @@ mod cli_parse_tests {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(err) = run() {
+        // A structured parse error reaching here prints its diagnostic
+        // decorated per the resolved stderr style (bd-be8ve52f): its
+        // `Display` is plain by design. Anything else prints exactly as
+        // returning the error from `main` would (`Error: {err:?}`).
+        let opts = commands::terminal_style::stderr_text_options();
+        match commands::terminal_style::format_error_report(&err, &opts) {
+            Some(report) => eprintln!("{report}"),
+            None => eprintln!("Error: {err:?}"),
+        }
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     // Install Quarto's `Q-*` error catalog into the catalog-agnostic
     // `quarto-error-reporting` host, so diagnostics can resolve docs URLs and
     // catalog metadata. Must run before any diagnostic is rendered; idempotent.
@@ -1737,6 +1841,12 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Decide color and hyperlinks for stdout/stderr once, here on the
+    // main thread before any runtime, thread, or output exists
+    // (bd-be8ve52f). Every sink reads it back via
+    // `quarto_util::output_style::get()`.
+    let output_style = quarto_util::output_style::init(cli.color.into());
+
     // Initialize logging. The `-v` flag chooses a default filter
     // directive (see `quarto_util::verbose_to_filter`); `RUST_LOG`,
     // when set, takes precedence and is parsed directly by
@@ -1749,7 +1859,11 @@ fn main() -> Result<()> {
         )
         // Logs go to stderr like every other q2 diagnostic — stdout
         // stays reserved for command output (`get-config` JSON, etc.).
-        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(output_style.stderr.color),
+        )
         .init();
 
     match cli.command {
@@ -1912,7 +2026,24 @@ fn main() -> Result<()> {
         }),
         Commands::Update { .. } => commands::update::execute(),
         Commands::Remove { .. } => commands::remove::execute(),
-        Commands::Convert { .. } => commands::convert::execute(),
+        Commands::Convert {
+            input,
+            to,
+            from,
+            output,
+            metadata,
+            source_uri,
+        } => {
+            let code = commands::convert::execute(commands::convert::ConvertArgs {
+                input,
+                from,
+                to,
+                output,
+                metadata,
+                source_uri,
+            });
+            std::process::exit(code)
+        }
         Commands::Pandoc { .. } => commands::pandoc::execute(),
         Commands::Typst { .. } => commands::typst::execute(),
         Commands::Run { .. } => commands::run::execute(),

@@ -151,7 +151,9 @@ fn toc_entry_keeps_quote_glyphs() {
     let html = render_index_with_toc("## Using a \"raw\" volume\n\nBody.\n", "", None);
 
     assert!(
-        html.contains("<h2>Using a \u{201C}raw\u{201D} volume</h2>"),
+        html.contains(
+            "<h2 class=\"anchored\" data-anchor-id=\"using-a-raw-volume\">Using a \u{201C}raw\u{201D} volume</h2>"
+        ),
         "precondition: the heading itself should already render curly quotes; got:\n{}",
         toc_nav(&html)
     );

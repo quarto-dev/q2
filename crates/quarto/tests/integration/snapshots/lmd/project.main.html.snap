@@ -16,18 +16,18 @@ expression: main
 
 <p>Autoloaded from <code>_quarto.yml</code>:</p>
 <section id="from-the-project" class="section level3 card">
-<h3>From the project</h3>
+<h3 class="anchored" data-anchor-id="from-the-project">From the project</h3>
 <p>a module at the project root</p>
 </section>
 <p>An extension’s module, autoloaded by the extension’s name:</p>
 <p><span class="badge">new</span></p>
 <p>An explicit project-root <code>require</code>, whose module requires its neighbour:</p>
 <section id="one" class="section level3 card">
-<h3>one</h3>
+<h3 class="anchored" data-anchor-id="one">one</h3>
 <p>in the deck</p>
 </section>
 <section id="two" class="section level3 card">
-<h3>two</h3>
+<h3 class="anchored" data-anchor-id="two">two</h3>
 <p>in the deck</p>
 </section>
 <p>A parameterised include:</p>

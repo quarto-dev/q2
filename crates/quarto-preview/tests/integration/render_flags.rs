@@ -38,6 +38,7 @@ async fn config_body(render: RenderFlags) -> serde_json::Value {
         spa_dir_override: None,
         engine_registry: None,
         engine_policy: Default::default(),
+        record_sources: quarto_core::record::RecordSources::preview_default(),
         resource_html_files: Vec::new(),
         cache_dir: None,
         allow_edit: false,

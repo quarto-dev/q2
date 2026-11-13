@@ -240,7 +240,7 @@ fn resolve_inline(
     if let Inline::Cite(cite) = inline
         && let Some(replacement) = classify_cite(cite, reg, index, chapter_seed, diags)
     {
-        *inline = Inline::Custom(replacement);
+        *inline = Inline::Custom(Box::new(replacement));
     }
 }
 
@@ -359,7 +359,11 @@ fn build_resolved_ref(
 ) -> CustomNode {
     use hashlink::LinkedHashMap;
     let attr = (String::new(), Vec::new(), LinkedHashMap::new());
-    let mut node = CustomNode::new(CROSSREF_RESOLVED_REF, attr, original.source_info.clone());
+    let mut node = CustomNode::new(
+        CROSSREF_RESOLVED_REF,
+        attr.into(),
+        original.source_info.clone(),
+    );
     let mut data = serde_json::Map::new();
     data.insert("identifier".into(), json!(identifier));
     data.insert("ref_type".into(), json!(def.ref_type));
@@ -462,11 +466,11 @@ mod tests {
     }
 
     fn _attr_id(id: &str) -> Attr {
-        (id.to_string(), Vec::new(), LinkedHashMap::new())
+        (id.to_string(), Vec::new(), LinkedHashMap::new()).into()
     }
 
     fn make_cite(id: &str) -> Inline {
-        Inline::Cite(Cite {
+        Inline::Cite(Box::new(Cite {
             citations: vec![Citation {
                 id: id.to_string(),
                 prefix: vec![],
@@ -481,7 +485,7 @@ mod tests {
                 source_info: si(),
             })],
             source_info: si(),
-        })
+        }))
     }
 
     fn make_multi_cite(ids: &[&str]) -> Inline {
@@ -497,11 +501,11 @@ mod tests {
                 id_source: None,
             })
             .collect();
-        Inline::Cite(Cite {
+        Inline::Cite(Box::new(Cite {
             citations,
             content: vec![],
             source_info: si(),
-        })
+        }))
     }
 
     fn make_index_with(ids: &[(&str, &str)]) -> CrossrefIndex {

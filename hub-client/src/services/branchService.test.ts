@@ -22,6 +22,7 @@ import {
   setActiveBranch,
   createBranch,
   getBranchText,
+  getBranchDoc,
   applyBranchEdits,
   mergeBranchToMain,
   deleteBranch,
@@ -107,6 +108,18 @@ describe('branchService', () => {
     applyBranchEdits(PATH, meta.id, [{ rangeOffset: 6, rangeLength: 5, text: 'branch' }]);
     expect(getBranchText(PATH, meta.id)).toBe('hello branch');
     expect((handle.doc() as TextDoc).text).toBe('hello world');
+  });
+
+  it('getBranchDoc returns the current branch doc, with main history plus branch edits', () => {
+    const meta = createBranch(PATH)!;
+    const mainChanges = A.getAllChanges(handle.doc() as A.Doc<TextDoc>).length;
+    applyBranchEdits(PATH, meta.id, [{ rangeOffset: 0, rangeLength: 0, text: 'A: ' }]);
+
+    const doc = getBranchDoc(PATH, meta.id)!;
+    expect((doc as TextDoc).text).toBe('A: hello world');
+    expect(A.getAllChanges(doc)).toHaveLength(mainChanges + 1);
+    expect(getBranchDoc(PATH, 'no-such-branch')).toBeNull();
+    expect(getBranchDoc('nonexistent.qmd', meta.id)).toBeNull();
   });
 
   it('forking while a branch is active forks that branch state', () => {

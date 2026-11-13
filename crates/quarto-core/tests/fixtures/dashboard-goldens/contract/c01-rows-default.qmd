@@ -1,0 +1,39 @@
+---
+# contract: level-2 headings are rows; height percentages; cells become cards laid out in columns
+title: "C01 Rows"
+format: dashboard
+---
+
+## Row {height=70%}
+
+::: {.cell title="C01-TOP"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Row {height=30%}
+
+::: {.cell title="C01-LEFT"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C01-RIGHT"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

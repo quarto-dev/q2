@@ -45,12 +45,13 @@ use quarto_core::{ProjectContext, metadata_flag};
 use quarto_hub::watch::{FileWatcher, WatchConfig, WatchEvent, WatchFilter};
 use quarto_preview::EnginePolicy;
 use quarto_preview::config::{
-    read_engine_policy_from_project, read_static_preview_defaults_from_project,
+    engine_policy_with_overlay, read_engine_policy_from_project,
+    read_static_preview_defaults_from_project,
 };
 use quarto_preview::render_flags::native_runtime_for;
 use quarto_preview::static_mode::{
     Action, ContentTracker, ReloadEvent, ReloadHub, StaticServerConfig, WatchContext, build_router,
-    classify, is_config_like, is_input_extension, serve,
+    classify, encode_path, is_config_like, is_input_extension, serve,
 };
 use quarto_system_runtime::SystemRuntime;
 use tracing::{debug, info, warn};
@@ -105,7 +106,7 @@ impl StaticArgs {
     }
 }
 
-/// Formats a static server can usefully show: html and revealjs pages,
+/// Formats a static server can usefully show: html, revealjs and dashboard pages,
 /// and typst's PDF (in the bundled pdf.js viewer, hub-parity Plan 8).
 /// `docx`/`pptx`/`epub` render fine but produce nothing to browse, so
 /// they are refused up front, before any render (plan § CLI). A key that
@@ -116,12 +117,15 @@ fn check_servable_format(key: &str) -> Result<()> {
     };
     if matches!(
         format.identifier,
-        FormatIdentifier::Html | FormatIdentifier::Revealjs | FormatIdentifier::Typst
+        FormatIdentifier::Html
+            | FormatIdentifier::Revealjs
+            | FormatIdentifier::Dashboard
+            | FormatIdentifier::Typst
     ) {
         return Ok(());
     }
     anyhow::bail!(
-        "Format '{}' is not supported with --static (only html, revealjs and typst can be served)",
+        "Format '{}' is not supported with --static (only html, revealjs, dashboard and typst can be served)",
         format.identifier
     );
 }
@@ -311,17 +315,27 @@ impl LastRender {
 /// The URL path of `input`'s output, relative to the served root
 /// (`/posts/foo.html`), when this render produced one.
 fn output_url_for(report: &RenderReport, input: &Path) -> Option<String> {
+    output_of(report, input).and_then(|output| output_url(&report.output_dir, &output))
+}
+
+/// The output this render wrote for `input`, if any.
+fn output_of(report: &RenderReport, input: &Path) -> Option<PathBuf> {
     report
         .outputs()
         .into_iter()
         .find(|(i, _)| i == input)
-        .and_then(|(_, output)| output_rel(report, &output))
-        .map(|rel| format!("/{rel}"))
+        .map(|(_, output)| output)
+}
+
+/// The URL path of `output` under `output_dir`, percent-encoded so a `#`
+/// or `?` in a file name stays part of the path (`/posts/C%23.html`).
+fn output_url(output_dir: &Path, output: &Path) -> Option<String> {
+    output_rel(output_dir, output).map(|rel| format!("/{}", encode_path(&rel)))
 }
 
 /// `output` relative to the served root, with forward slashes.
-fn output_rel(report: &RenderReport, output: &Path) -> Option<String> {
-    let rel = output.strip_prefix(&report.output_dir).ok()?;
+fn output_rel(output_dir: &Path, output: &Path) -> Option<String> {
+    let rel = output.strip_prefix(output_dir).ok()?;
     Some(
         rel.components()
             .map(|c| c.as_os_str().to_string_lossy().into_owned())
@@ -431,10 +445,15 @@ async fn run(args: StaticArgs) -> Result<()> {
             .parent()
             .map_or_else(|| full_input.clone(), Path::to_path_buf)
     };
-    let engine_off = matches!(
-        read_engine_policy_from_project(&policy_root, &native_runtime_for(&args.profile), profile),
-        EnginePolicy::Off
-    );
+    // `-M 'preview: {engine: off}'` wins over `_quarto.yml`, as in the live preview; an unknown
+    // value is refused before anything is served.
+    let project_policy =
+        read_engine_policy_from_project(&policy_root, &native_runtime_for(&args.profile), profile);
+    let overlay =
+        metadata_flag::parse_metadata_flags(&base_args.metadata).map_err(|e| anyhow::anyhow!(e))?;
+    let engine_off = engine_policy_with_overlay(project_policy, overlay.as_ref())
+        .map_err(|e| anyhow::anyhow!(e))?
+        == EnginePolicy::Off;
     // Q1's `project: preview:` keys are the defaults; CLI flags win
     // (plan Phase 4). `--no-watch` / `--no-navigate` / `--no-browser`
     // only ever turn things off, so a config `false` cannot be undone
@@ -534,14 +553,14 @@ async fn run(args: StaticArgs) -> Result<()> {
     // was named, else the root (which serves index.html or, failing
     // that, redirects to the first rendered page).
     let requested_page = if path.is_file() {
-        output_url_for(&report, &path).map(|url| url.trim_start_matches('/').to_string())
+        output_of(&report, &path).and_then(|output| output_rel(&report.output_dir, &output))
     } else {
         None
     };
     let first_output = report
         .outputs()
         .first()
-        .and_then(|(_, o)| output_rel(&report, o));
+        .and_then(|(_, o)| output_rel(&report.output_dir, o));
     let default_file = requested_page.clone().or(first_output);
     let hub = ReloadHub::new();
     record_failure(&hub, &report);
@@ -560,7 +579,8 @@ async fn run(args: StaticArgs) -> Result<()> {
         requested_page
             .as_deref()
             .filter(|p| *p != "index.html")
-            .unwrap_or("")
+            .map(encode_path)
+            .unwrap_or_default()
     );
     info!(%url, "starting q2 preview --static server");
     println!();
@@ -812,7 +832,7 @@ fn record_failure(hub: &ReloadHub, report: &RenderReport) {
         hub.set_failure(None);
         return;
     }
-    let text = report.diagnostics_text(false);
+    let text = report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN);
     hub.set_failure(Some(if text.trim().is_empty() {
         "The render produced no output.".to_string()
     } else {
@@ -837,7 +857,7 @@ fn finish_render(
                 ok,
                 errors: counts.errors,
                 warnings: counts.warnings,
-                text: report.diagnostics_text(false),
+                text: report.diagnostics_text(quarto_util::output_style::StreamStyle::PLAIN),
             });
             if ok {
                 let target = match ran {
@@ -853,14 +873,22 @@ fn finish_render(
             *last = LastRender::from_report(&report);
         }
         RenderOutcome::Abort(abort) => {
-            let message = abort.user_message();
-            eprintln!("{message}");
-            hub.set_failure(Some(strip_ansi_escapes(&message)));
+            eprintln!(
+                "{}",
+                abort.user_message(&crate::commands::terminal_style::stderr_text_options())
+            );
+            // The browser gets the plain form. Still sanitized: an
+            // `Other` abort can quote external tool output (a pandoc or
+            // engine error) that carries its own escapes.
+            let message = strip_ansi_escapes(
+                &abort.user_message(&quarto_error_reporting::TextRenderOptions::plain()),
+            );
+            hub.set_failure(Some(message.clone()));
             hub.send(ReloadEvent::RenderStop {
                 ok: false,
                 errors: 1,
                 warnings: 0,
-                text: strip_ansi_escapes(&message),
+                text: message,
             });
         }
         RenderOutcome::Panicked(message) => {
@@ -905,8 +933,28 @@ mod tests {
     }
 
     #[test]
+    fn output_urls_are_percent_encoded() {
+        let dir = Path::new("/site");
+        assert_eq!(
+            output_url(dir, &dir.join("posts").join("C#-notes?.html")).as_deref(),
+            Some("/posts/C%23-notes%3F.html")
+        );
+        assert_eq!(
+            output_url(dir, &dir.join("my page.html")).as_deref(),
+            Some("/my%20page.html")
+        );
+        assert_eq!(output_url(dir, Path::new("/elsewhere/a.html")), None);
+    }
+
+    #[test]
     fn servable_formats_pass_the_gate() {
-        for key in ["html", "revealjs", "typst", "my-extension-format"] {
+        for key in [
+            "html",
+            "revealjs",
+            "dashboard",
+            "typst",
+            "my-extension-format",
+        ] {
             assert!(check_servable_format(key).is_ok(), "{key}");
         }
     }

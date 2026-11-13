@@ -149,16 +149,16 @@ mod tests {
     #[test]
     fn an_empty_id_is_filled_whatever_the_headings_origin() {
         let mut doc = parse("## Intro\n");
-        doc.blocks.push(Block::Header(Header {
+        doc.blocks.push(Block::Header(Box::new(Header {
             level: 2,
-            attr: (String::new(), vec![], Default::default()),
+            attr: (String::new(), vec![], Default::default()).into(),
             content: vec![Inline::Str(Str {
                 text: "Built".to_string(),
                 source_info: SourceInfo::generated(By::unknown()),
             })],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        }));
+        })));
         let after = rederive_stale_heading_ids(doc);
         assert_eq!(header_ids(&after), vec!["intro", "built"]);
     }
@@ -176,16 +176,16 @@ mod tests {
         // pandoc.Header(2, "x", pandoc.Attr("intro")) from Lua: no source
         // location on the id, but a generated source_info.
         let mut doc = parse("## Alpha\n");
-        doc.blocks.push(Block::Header(Header {
+        doc.blocks.push(Block::Header(Box::new(Header {
             level: 2,
-            attr: ("intro".to_string(), vec![], Default::default()),
+            attr: ("intro".to_string(), vec![], Default::default()).into(),
             content: vec![Inline::Str(Str {
                 text: "x".to_string(),
                 source_info: SourceInfo::generated(By::unknown()),
             })],
             source_info: SourceInfo::generated(By::unknown()),
             attr_source: AttrSourceInfo::empty(),
-        }));
+        })));
         let after = rederive_stale_heading_ids(doc);
         assert_eq!(header_ids(&after), vec!["alpha", "intro"]);
     }

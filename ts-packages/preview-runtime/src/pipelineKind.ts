@@ -9,8 +9,9 @@
  * should land together.
  *
  * Used today by `ReactPreview.tsx::doRender` to choose between the
- * AST-only entry point (`parseQmdToAst`, for q2-debug / q2-slides)
- * and the full pipeline (`renderPageInProject`, for q2-preview).
+ * AST-only entry point (`parseQmdToAstWithAttribution`, for q2-debug /
+ * q2-slides) and the full pipeline (`renderPageInProject`, for
+ * q2-preview).
  * Plan 7 will extend it for the edit-back path: when q2-preview
  * round-trip lands, the writer wrapper takes a `pipelineKind`
  * argument that flows through this helper.
@@ -32,6 +33,10 @@ export function pipelineKindForFormat(format: string): PipelineKind | undefined 
     // the same post-pipeline AST as q2-preview. Mirrors
     // `builtin_pseudo_format` in crates/quarto-core/src/format.rs.
     case 'q2-sandboxed-preview':
+      return 'preview';
+    // `format: dashboard` previews as `q2-dashboard` (base format
+    // `dashboard`, kind `preview`; dashboard plan Phase 8).
+    case 'q2-dashboard':
       return 'preview';
     default:
       return undefined;

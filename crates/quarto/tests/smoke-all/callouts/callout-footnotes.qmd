@@ -1,0 +1,38 @@
+---
+title: Footnotes inside callouts
+format: html
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      ensureHtmlElements:
+        - [
+            # Numbered in document order: title, body ref, inline note,
+            # then the paragraph after the callout.
+            'div.callout-title-container a.footnote-ref[href="#fn1"]',
+            'div.callout-body-container a.footnote-ref[href="#fn2"]',
+            'div.callout-body-container a.footnote-ref[href="#fn3"]',
+            'section#footnotes div#fn4',
+          ]
+        - [
+            'span.quarto-note-reference',
+            'section#footnotes div#fn5',
+          ]
+---
+
+Regression fixture for bd-akkproqy. Since #1050 a callout stays a `Callout`
+custom node until the crossref phase, so the footnote transforms that run
+earlier must walk into its slots. Related cases: `callout-tabset-footnote.qmd`
+(tabset in a callout) and `callout-code-filename.qmd` (code-block scaffold).
+
+::: {#nte-x .callout-note}
+## Title with a note[^t]
+
+Body reference.[^b] Inline^[An inline note.].
+:::
+
+After the callout.[^a]
+
+[^t]: Note T.
+[^b]: Note B.
+[^a]: Note A.

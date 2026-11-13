@@ -26,7 +26,7 @@ use quarto_pandoc_types::inline::Inline;
 use quarto_source_map::SourceInfo;
 
 use crate::ast_walk::{for_each_block_list_mut, for_each_inline_list_mut};
-use crate::engine::capture_splice::engine_cell_lang;
+use crate::engine::cell_lang::engine_cell_lang;
 use crate::lmd::{
     Anchor, DesugarOptions, EmitMode, LMD_LANG, LMD_PENDING_ATTR, LMD_PENDING_VALUE, LmdError,
     desugar_lua_expr_with, desugar_lua_with, inline_lmd_source,
@@ -316,7 +316,7 @@ mod tests {
             .content
             .iter()
             .filter_map(|i| match i {
-                Inline::Code(c) => Some(c),
+                Inline::Code(c) => Some(&**c),
                 _ => None,
             })
             .collect();

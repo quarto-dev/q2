@@ -134,7 +134,8 @@ async fn render_chapter_paused(
     ctx.engine_registry_override = render_options.engine_registry_override.clone();
     ctx.execution_policy = render_options.execution_policy.clone();
 
-    let (paused, diagnostics) = render_qmd_to_ast_partial(
+    let record_sources_notice = record_sources_not_honored(project, document, content, &runtime);
+    let (paused, mut diagnostics) = render_qmd_to_ast_partial(
         content,
         source_name,
         &mut ctx,
@@ -145,7 +146,45 @@ async fn render_chapter_paused(
     .await?;
 
     state = ChapterPauseState::extract_from(&mut ctx);
+    diagnostics.extend(record_sources_notice);
     Ok((paused.ast, state, diagnostics, paused.source_context))
+}
+
+/// OPR-6: the merged single-file book builds its own per-chapter pipeline, which has no seam for a
+/// stored execution record, so a chapter that sets `execute: record-sources` (anything but the
+/// default `engine`) is told so rather than silently executing. Carrying a record through this
+/// path is a follow-up.
+fn record_sources_not_honored(
+    project: &ProjectContext,
+    document: &DocumentInfo,
+    content: &[u8],
+    runtime: &Arc<dyn SystemRuntime>,
+) -> Option<DiagnosticMessage> {
+    use crate::record::{CommandSources, RecordSource, Trust, resolve_record_sources};
+    let text = String::from_utf8_lossy(content);
+    let resolved = resolve_record_sources(
+        project,
+        &document.input,
+        Some(&text),
+        runtime.as_ref(),
+        &CommandSources::RENDER,
+        Trust::Override,
+    )
+    .ok()?;
+    (resolved.origin.is_some() && resolved.sources.as_slice() != [RecordSource::Engine]).then(
+        || {
+            quarto_error_reporting::DiagnosticMessageBuilder::warning(
+                "`execute: record-sources` is not honored in a single-file book",
+            )
+            .problem(
+                "A book rendered to one file runs each chapter through its own pipeline, which \
+                 does not read stored execution records, so this chapter's code runs with the \
+                 engine as usual. Render the book as separate files, or render the chapter \
+                 alone, to use a record.",
+            )
+            .build()
+        },
+    )
 }
 
 /// Book-level fields carried forward from the first rendered chapter
@@ -882,6 +921,29 @@ Some chapter text.\n";
     /// `UserFiltersStage::pre()` strips `"citeproc"` from the chapter's
     /// resolved filters, so `load_bibliography` is never called at all.
     #[test]
+    fn a_chapter_key_other_than_engine_is_flagged_as_not_honored() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().canonicalize().unwrap();
+        let doc = dir.join("ch.qmd");
+        let runtime = make_test_runtime();
+        let flagged = |front: &str| {
+            let text = format!("---\n{front}---\n\nbody\n");
+            std::fs::write(&doc, &text).unwrap();
+            let project = ProjectContext::discover(&doc, runtime.as_ref()).unwrap();
+            record_sources_not_honored(
+                &project,
+                &DocumentInfo::from_path(&doc),
+                text.as_bytes(),
+                &runtime,
+            )
+            .is_some()
+        };
+        assert!(flagged("execute:\n  record-sources: q2\n"));
+        assert!(!flagged("execute:\n  record-sources: engine\n"));
+        assert!(!flagged("title: T\n"));
+    }
+
+    #[test]
     fn citeproc_is_deferred_past_the_per_chapter_pause() {
         let project = make_test_project();
         let document = DocumentInfo::from_path("/project/chapter.qmd");
@@ -1187,7 +1249,7 @@ Some chapter text.\n";
             &mut |_| {
                 (
                     PartialKind::Request {
-                        captures: Vec::new(),
+                        captures: Default::default(),
                     },
                     Vec::new(),
                 )

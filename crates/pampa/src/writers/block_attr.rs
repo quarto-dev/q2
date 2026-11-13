@@ -61,7 +61,7 @@ pub(crate) fn split_trailing_block_attr(inlines: &[Inline]) -> (&[Inline], Attr)
     let mut kvs: LinkedHashMap<String, String> = LinkedHashMap::new();
     for inline in &inlines[run_start..] {
         if let Inline::Attr(a) = inline {
-            let (a_id, a_classes, a_kvs) = &a.attr;
+            let (a_id, a_classes, a_kvs) = &*a.attr;
             if !a_id.is_empty() {
                 id = a_id.clone();
             }
@@ -76,7 +76,7 @@ pub(crate) fn split_trailing_block_attr(inlines: &[Inline]) -> (&[Inline], Attr)
         }
     }
 
-    (&inlines[..run_start], (id, classes, kvs))
+    (&inlines[..run_start], (id, classes, kvs).into())
 }
 
 /// Collect a block-level attribute for a **list item** (`&[Block]`) so a writer
@@ -161,8 +161,13 @@ mod tests {
             id.to_string(),
             classes.iter().map(|s| s.to_string()).collect(),
             m,
-        );
-        Inline::Attr(InlineAttr::new(attr, AttrSourceInfo::empty(), si()))
+        )
+            .into();
+        Inline::Attr(Box::new(InlineAttr::new(
+            attr,
+            AttrSourceInfo::empty(),
+            si(),
+        )))
     }
 
     fn texts(inlines: &[Inline]) -> Vec<String> {

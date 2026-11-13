@@ -1,0 +1,40 @@
+---
+title: "Reserved Chunk Option"
+description: "A knitr chunk sets the option quarto-unit-id, which Quarto reserves for its own use."
+code: Q-18-17
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-17` — Reserved Chunk Option
+
+> A knitr chunk sets the option `quarto-unit-id`, which Quarto reserves for
+> its own use.
+
+## What this means
+
+When Quarto records what a document ran, it gives every knitr chunk an id by
+adding a `quarto-unit-id` option line to the chunk. If the chunk already has
+that option, knitr receives it twice and stops with `Duplicate map key`.
+Quarto reports this error instead, and does not run the chunk.
+
+## How to fix
+
+Remove the `quarto-unit-id` line from the chunk's options:
+
+````markdown
+```{r}
+#| echo: false
+#| quarto-unit-id: abc123
+1 + 1
+```
+````
+
+Delete the `#| quarto-unit-id: abc123` line. Quarto picks the id itself.
+
+## Related errors
+
+- [`Q-18-16`](Q-18-16.qmd) — a code cell shows an interactive widget that Quarto cannot draw yet.

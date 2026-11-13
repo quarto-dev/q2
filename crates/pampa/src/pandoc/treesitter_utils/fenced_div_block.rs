@@ -19,7 +19,7 @@ pub fn process_fenced_div_block(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new());
+    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new()).into();
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut content: Vec<Block> = Vec::new();
     for (node, child) in children {
@@ -39,7 +39,7 @@ pub fn process_fenced_div_block(
             }
             PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
                 // for now we assume it's metadata and emit it as a rawblock
-                content.push(Block::RawBlock(RawBlock {
+                content.push(Block::RawBlock(Box::new(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     // Was hardcoded to `FileId(0)` — wrong even outside a
@@ -49,17 +49,17 @@ pub fn process_fenced_div_block(
                     // `document.rs`'s identical fix for the top-level
                     // metadata block.
                     source_info: range_to_source_info_with_context(&range, context),
-                }));
+                })));
             }
             _ => {
                 // Skip unexpected intermediates (shouldn't happen in practice)
             }
         }
     }
-    PandocNativeIntermediate::IntermediateBlock(Block::Div(Div {
+    PandocNativeIntermediate::IntermediateBlock(Block::Div(Box::new(Div {
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
         attr_source,
-    }))
+    })))
 }

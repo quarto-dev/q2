@@ -59,6 +59,110 @@ ${message}`
   }
 }
 
+// src/record-wire.ts
+var DISPLAY_ONLY_KEYS = [
+  // Visibility.
+  "echo",
+  "output",
+  "warning",
+  "include",
+  // Code display.
+  "code-fold",
+  "code-summary",
+  "code-overflow",
+  "code-line-numbers",
+  "code-copy",
+  // Captions, listing and layout.
+  "fig-cap",
+  "fig-subcap",
+  "fig-scap",
+  "fig-alt",
+  "fig-align",
+  "fig-link",
+  "fig-cap-location",
+  "tbl-cap",
+  "tbl-subcap",
+  "tbl-scap",
+  "tbl-colwidths",
+  "tbl-cap-location",
+  "lst-cap",
+  "lst-label",
+  "cap-location",
+  "layout",
+  "layout-ncol",
+  "layout-nrow",
+  "layout-align",
+  "layout-valign",
+  // Cell wrapper attributes the presenter writes (KNR-3 slice 7, D10).
+  "panel",
+  "column",
+  "keep-hidden",
+  // Image attributes the presenter writes (KNR-3 slice 7, D6, D10).
+  "fig-env",
+  "fig-pos",
+  "out-width",
+  "out-height",
+  "out-extra",
+  // Cell classes the presenter writes (KNR-3 slice 7, D10).
+  "classes",
+  "fig-column",
+  "tbl-column",
+  // Engine-neutral: whether core's presenter interleaves source and output. Julia does not
+  // declare interleaving, so a cell is held unless the author sets this to true.
+  "output-interleave"
+];
+var JULIA_HASH_DEFINITION = {
+  id: "julia",
+  version: 2,
+  granularity: "document",
+  presentationCellOptions: [...DISPLAY_ONLY_KEYS],
+  // `execute: record-sources` (OPR-5) says where a record comes from, so it is not an input.
+  presentationExecuteKeys: [...DISPLAY_ONLY_KEYS, "record-sources"],
+  documentKeys: [
+    "julia",
+    "format",
+    "fig-width",
+    "fig-height",
+    "fig-format",
+    "fig-dpi"
+  ]
+};
+function qnrRunOptions(options) {
+  const { executeEnv, ...rest } = options;
+  const hasUnits = Array.isArray(rest.units);
+  const hasEnv = executeEnv !== void 0 && Object.keys(executeEnv).length > 0;
+  return {
+    ...rest,
+    ...hasUnits ? { emitUnits: true } : {},
+    ...hasEnv ? { env: { ...executeEnv } } : {}
+  };
+}
+function buildRecordResult(nb, units, options) {
+  if (!Array.isArray(units)) {
+    return {};
+  }
+  const presents = options !== void 0 && coreWillPresent(options);
+  const presentedBy = presents ? { presentedBy: "core" } : {};
+  const dependencyData = presents ? { dependencyData: "jupyter-outputs" } : {};
+  return {
+    notebook: structuredClone(nb),
+    recordInfo: {
+      version: 1,
+      granularity: "unit",
+      outputKind: "raw",
+      // QNR's index is positional; it never sees core's unit ids.
+      alignment: "positional",
+      hashDefinition: JULIA_HASH_DEFINITION,
+      ...presentedBy,
+      ...dependencyData
+    }
+  };
+}
+function coreWillPresent(options) {
+  const o = options;
+  return Array.isArray(o.units) && o.presentedBy === "core";
+}
+
 // src/constants.ts
 var kJuliaEngine = "julia";
 var kExecuteDaemon = "daemon";
@@ -347,7 +451,7 @@ var juliaEngineDiscovery = {
         };
         const juliaExecOptions = {
           oneShot: !executeDaemon,
-          ...execOptions
+          ...qnrRunOptions(execOptions)
         };
         const nb = await executeJulia(juliaExecOptions);
         if (!nb) {
@@ -367,6 +471,20 @@ var juliaEngineDiscovery = {
           const stem = options.target.source.replace(/\.[^.]+$/, "");
           const ipynbPath = stem + ".ipynb";
           writeFileSync(ipynbPath, JSON.stringify(nb, null, 2));
+        }
+        const record = buildRecordResult(
+          nb,
+          options.units,
+          options
+        );
+        if (coreWillPresent(options)) {
+          return {
+            engine: kJuliaEngine,
+            markdown: "",
+            supporting: [join(assets.base_dir, assets.supporting_dir)],
+            filters: [],
+            ...record
+          };
         }
         const result = await quarto.jupyter.toMarkdown(
           nb,
@@ -426,7 +544,8 @@ var juliaEngineDiscovery = {
           includes,
           engineDependencies,
           preserve: result.htmlPreserve,
-          postProcess: result.htmlPreserve && Object.keys(result.htmlPreserve).length > 0
+          postProcess: result.htmlPreserve && Object.keys(result.htmlPreserve).length > 0,
+          ...record
         };
       },
       target: (file, _quiet, markdown) => {

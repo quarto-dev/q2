@@ -18,52 +18,33 @@
 //! server is bound to 127.0.0.1.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::{
-    Json,
+    Extension, Json,
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use quarto_core::engine::EngineRegistry;
+use quarto_core::engine::preview_record::{compute_source_inputs, record_capture_run};
 use quarto_core::project::ProjectContext;
+use quarto_core::record::RecordSource;
 use quarto_error_reporting::DiagnosticMessageBuilder;
-use quarto_hub::HubContext;
 use quarto_hub::context::SharedContext;
 use quarto_hub::index::{CaptureRef, CaptureState};
 use quarto_system_runtime::SystemRuntime;
-use quarto_trace::EngineCapture;
 use serde::{Deserialize, Serialize};
 
-use crate::cache::record_capture_cached;
+use crate::cache::{lookup_cached_run, session_cache_key, store_run};
+use crate::config::ReExecuteConfig;
 use crate::diagnostics;
+use crate::record_lookup::overlay_free;
 
 /// Process-wide set of paths currently being re-executed. Used to
 /// detect concurrent POSTs for the same path (→ 409). Lazy because
 /// the handler may never be called.
 static IN_FLIGHT: OnceLock<Arc<Mutex<HashSet<String>>>> = OnceLock::new();
-
-/// Process-wide cache directory for the Phase C.7 filesystem cache.
-/// Set once by `lib.rs::run_with_on_ready` and read by the HTTP
-/// `re_execute_handler` (axum can't extract user data from the
-/// router state without re-typing the State across the whole
-/// `extend_with_preview` surface; OnceLock matches the existing
-/// `SPA_DIR_OVERRIDE` pattern). Tests bypass this via the
-/// `re_execute_with_registry_and_cache` entry point.
-static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
-
-/// Set the process-wide cache directory used by the HTTP handler.
-/// Idempotent (first writer wins); subsequent calls in the same
-/// process are ignored. Called by [`crate::run_with_on_ready`].
-pub fn set_cache_dir(dir: PathBuf) {
-    let _ = CACHE_DIR.set(dir);
-}
-
-fn handler_cache_dir() -> Option<&'static Path> {
-    CACHE_DIR.get().map(|p| p.as_path())
-}
 
 fn in_flight() -> Arc<Mutex<HashSet<String>>> {
     IN_FLIGHT
@@ -71,11 +52,25 @@ fn in_flight() -> Arc<Mutex<HashSet<String>>> {
         .clone()
 }
 
+/// Paths whose automatic re-execute was requested while a run for them was in flight. When the
+/// run ends, the path's staleness is recomputed once, so a save that arrived during a run is
+/// not lost (the run read the file before the save). Always locked after [`IN_FLIGHT`], and
+/// only while that guard is held, so a request cannot slip in between a run's end and its
+/// check.
+static PENDING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+fn pending() -> &'static Mutex<HashSet<String>> {
+    PENDING.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
 /// Test seam: clear the in-flight tracker. Called between tests so
 /// state from one test doesn't leak into another.
 #[cfg(test)]
 pub(crate) fn reset_in_flight_for_tests() {
     if let Some(set) = IN_FLIGHT.get() {
+        set.lock().unwrap().clear();
+    }
+    if let Some(set) = PENDING.get() {
         set.lock().unwrap().clear();
     }
 }
@@ -96,20 +91,23 @@ pub struct ReExecuteAccepted {
 }
 
 /// Axum handler for `POST /api/preview/re-execute`.
+///
+/// The [`ReExecuteConfig`] arrives as an axum `Extension` layered on by `lib.rs`.
 pub async fn re_execute_handler(
     State(ctx): State<SharedContext>,
+    cfg: Option<Extension<ReExecuteConfig>>,
     Json(body): Json<ReExecuteRequest>,
 ) -> Response {
-    // The handler reads the process-wide cache directory set at server
-    // startup. If it isn't set (server-less context, e.g. a unit test
-    // calling the handler directly), fall back to a temp dir under
-    // `data_dir/captures` — but production routes through `set_cache_dir`
-    // in `run_with_on_ready`, so this branch is unusual.
-    let cache_dir = handler_cache_dir().map_or_else(
-        || std::env::temp_dir().join("q2-preview-captures-unset"),
-        Path::to_path_buf,
-    );
-    re_execute_with_registry_and_cache(ctx, body, None, &cache_dir).await
+    // Fail closed: without the config the handler cannot know whether the engine may run, and
+    // it must not guess (it used to fall back to a temp directory and run anyway).
+    let Some(Extension(cfg)) = cfg else {
+        return (
+            StatusCode::FORBIDDEN,
+            "Re-execute is not configured on this server".to_string(),
+        )
+            .into_response();
+    };
+    re_execute_with_registry_and_cache(ctx, body, None, &cfg).await
 }
 
 /// Internal entry point that takes an engine_registry override.
@@ -117,13 +115,13 @@ pub async fn re_execute_handler(
 /// passthrough engine to exercise the full path without a real
 /// jupyter/knitr runtime.
 ///
-/// `cache_dir` is the Phase C.7 capture cache root (typically
-/// `<data_dir>/captures/`).
+/// `cfg` carries the policy, the record sources, the writer gate and the Phase C.7 capture
+/// cache root (typically `<data_dir>/captures/`).
 pub(crate) async fn re_execute_with_registry_and_cache(
     ctx: SharedContext,
     body: ReExecuteRequest,
     registry: Option<Arc<EngineRegistry>>,
-    cache_dir: &Path,
+    cfg: &ReExecuteConfig,
 ) -> Response {
     let rel_path = body.path;
 
@@ -143,7 +141,7 @@ pub(crate) async fn re_execute_with_registry_and_cache(
         .get_capture(&rel_path)
         .map(|c| c.capture_doc_id.clone());
 
-    match claim_and_spawn(ctx, rel_path.clone(), registry, cache_dir.to_path_buf()) {
+    match claim_and_spawn(ctx, rel_path.clone(), registry, cfg.clone(), false) {
         ClaimOutcome::Spawned => (
             StatusCode::ACCEPTED,
             Json(ReExecuteAccepted {
@@ -161,6 +159,18 @@ pub(crate) async fn re_execute_with_registry_and_cache(
             format!("Failed to mark capture as running: {e}"),
         )
             .into_response(),
+        ClaimOutcome::Refused => (StatusCode::FORBIDDEN, refusal_message(cfg)).into_response(),
+    }
+}
+
+/// Why a re-execute was refused, naming the setting the user would change.
+fn refusal_message(cfg: &ReExecuteConfig) -> String {
+    if cfg.policy == crate::config::EnginePolicy::Off {
+        "Re-execute is disabled: preview.engine is off".to_string()
+    } else {
+        "Re-execute is disabled: `engine` is not in this document's `execute: record-sources`, \
+         so this preview never runs its code"
+            .to_string()
     }
 }
 
@@ -170,24 +180,31 @@ pub(crate) async fn re_execute_with_registry_and_cache(
 /// claim the in-flight slot and spawn the worker.
 ///
 /// This is the same machinery as the HTTP handler minus the response
-/// shape — if a run is already in flight for this path, we silently
-/// skip (a debounced flurry of edits collapses to one engine run at
-/// a time per doc, which is what users want).
+/// shape. If a run is already in flight for this path the request is
+/// remembered rather than dropped: a debounced flurry of edits collapses
+/// to one engine run at a time per doc, and when that run ends the path's
+/// staleness is recomputed once, so the newest edit still runs.
 pub(crate) fn trigger_auto_re_execute(
     ctx: SharedContext,
     rel_path: String,
     registry: Option<Arc<EngineRegistry>>,
-    cache_dir: PathBuf,
+    cfg: ReExecuteConfig,
 ) {
-    match claim_and_spawn(ctx, rel_path.clone(), registry, cache_dir) {
+    match claim_and_spawn(ctx, rel_path.clone(), registry, cfg, true) {
         ClaimOutcome::Spawned => {
             tracing::debug!(rel_path = %rel_path, "auto re-execute kicked off");
         }
         ClaimOutcome::AlreadyInFlight => {
-            tracing::debug!(rel_path = %rel_path, "auto re-execute skipped: already in flight");
+            tracing::debug!(
+                rel_path = %rel_path,
+                "auto re-execute deferred: already in flight, will re-check when it ends"
+            );
         }
         ClaimOutcome::MarkRunningFailed(e) => {
             tracing::warn!(rel_path = %rel_path, error = %e, "auto re-execute failed to mark running");
+        }
+        ClaimOutcome::Refused => {
+            tracing::debug!(rel_path = %rel_path, "auto re-execute refused: the engine may not run");
         }
     }
 }
@@ -196,22 +213,47 @@ enum ClaimOutcome {
     Spawned,
     AlreadyInFlight,
     MarkRunningFailed(String),
+    /// The policy is `off` or `engine` is not in the record sources (epic decision 5).
+    Refused,
 }
 
 /// Shared claim-and-spawn: validates that the in-flight slot is
 /// available, marks the sidecar `state: running`, and spawns the
 /// blocking engine worker. Returns the outcome so the caller can
 /// shape the response (HTTP handler) or log (auto path).
+///
+/// `remember_if_busy` is the automatic path: a request that loses to a run in flight is put in
+/// [`PENDING`] for the run's end to re-check. The HTTP handler answers 409 instead.
 fn claim_and_spawn(
     ctx: SharedContext,
     rel_path: String,
     registry: Option<Arc<EngineRegistry>>,
-    cache_dir: PathBuf,
+    cfg: ReExecuteConfig,
+    remember_if_busy: bool,
 ) -> ClaimOutcome {
+    // The one guard every kernel start passes through: the HTTP handler (a share guest reaches
+    // it through the tunnel) and the automatic path both come here. It sits before the in-flight
+    // insert, so a refusal cannot leak the slot and answer 409 to every later POST.
+    // Per document: its `execute: record-sources` (bounded by the host list under `--share`)
+    // decides whether `engine` is in play. With no project root (standalone mode) only the
+    // host list is known.
+    let allowed = match ctx.storage().project_root() {
+        Some(root) => cfg.allows_engine_for(&root.join(&rel_path)),
+        None => cfg.allows_engine(),
+    };
+    if !allowed {
+        return ClaimOutcome::Refused;
+    }
     let in_flight_set = in_flight();
     {
         let mut guard = in_flight_set.lock().expect("in-flight mutex poisoned");
         if !guard.insert(rel_path.clone()) {
+            if remember_if_busy {
+                pending()
+                    .lock()
+                    .expect("pending mutex poisoned")
+                    .insert(rel_path.clone());
+            }
             return ClaimOutcome::AlreadyInFlight;
         }
     }
@@ -235,17 +277,25 @@ fn claim_and_spawn(
     let ctx_for_task = ctx.clone();
     let rel_path_for_task = rel_path.clone();
     let in_flight_for_task = in_flight_set.clone();
+    let registry_for_recheck = registry.clone();
+    let cfg_for_recheck = cfg.clone();
     tokio::task::spawn_blocking(move || {
         let result = pollster::block_on(perform_re_execute(
             ctx_for_task.clone(),
             &rel_path_for_task,
             registry,
-            &cache_dir,
+            &cfg,
         ));
-        in_flight_for_task
-            .lock()
-            .expect("in-flight mutex poisoned")
-            .remove(&rel_path_for_task);
+        // End of the run: release the slot and take any request that lost to it, under one
+        // guard (see [`PENDING`]).
+        let rerun = {
+            let mut guard = in_flight_for_task.lock().expect("in-flight mutex poisoned");
+            guard.remove(&rel_path_for_task);
+            pending()
+                .lock()
+                .expect("pending mutex poisoned")
+                .remove(&rel_path_for_task)
+        };
 
         if let Err(e) = result {
             let msg = e.clone();
@@ -278,6 +328,23 @@ fn claim_and_spawn(
                 tracing::warn!(rel_path = %rel_path_for_task, error = %msg, "re-execute failed");
             }
         }
+
+        // A save arrived during the run, which read the file before it: check the document
+        // once more. Under `auto` this re-runs it when it is stale (after a failed run too,
+        // since the failed run's input was the older text); a request that was not made, no
+        // re-check, so a failing document does not retry itself.
+        if rerun {
+            let runtime: Arc<dyn SystemRuntime> = Arc::new(crate::render_flags::native_runtime());
+            if let Err(e) = pollster::block_on(crate::capture_driver::recompute_staleness(
+                ctx_for_task,
+                runtime,
+                &rel_path_for_task,
+                registry_for_recheck,
+                &cfg_for_recheck,
+            )) {
+                tracing::warn!(rel_path = %rel_path_for_task, error = %e, "staleness re-check after re-execute failed");
+            }
+        }
     });
 
     ClaimOutcome::Spawned
@@ -289,7 +356,7 @@ async fn perform_re_execute(
     ctx: SharedContext,
     rel_path: &str,
     registry: Option<Arc<EngineRegistry>>,
-    cache_dir: &Path,
+    cfg: &ReExecuteConfig,
 ) -> Result<(), String> {
     let project_root = ctx
         .storage()
@@ -298,21 +365,47 @@ async fn perform_re_execute(
         .ok_or_else(|| "no project root (standalone mode?)".to_string())?;
     let abs_path = project_root.join(rel_path);
 
+    // The source side (project, inputs, cache key) is overlay-free, like staleness; the engine
+    // runs under the session's `-M` overlay, and the run is made to describe the source again.
     let runtime: Arc<dyn SystemRuntime> = Arc::new(crate::render_flags::native_runtime());
+    let engine_runtime = crate::render_flags::runtime_with_overlay();
 
     let project = ProjectContext::discover(&abs_path, runtime.as_ref())
         .map_err(|e| format!("project discovery failed: {e}"))?;
 
-    let captures = record_capture_cached(cache_dir, &abs_path, &project, runtime.clone(), registry)
+    let sources = cfg.document_sources(&abs_path, None)?.sources;
+    let source = compute_source_inputs(&abs_path, &project, runtime.clone())
         .await
         .map_err(|e| format!("engine pipeline failed: {e}"))?;
-    if captures.is_empty() {
+    let key = session_cache_key(&source.input_qmd);
+
+    // The cache answers a re-execute only when `cache` is one of this document's record sources.
+    // Under `engine` alone a re-execute must run the engine: a cache hit (edit, save, undo,
+    // save) would skip the run and leave the `.quarto` copy holding the undone outputs.
+    let cached = if sources.iter().any(|s| matches!(s, RecordSource::Cache)) {
+        lookup_cached_run(&cfg.cache_dir, &key)
+    } else {
+        None
+    };
+    let run = match cached {
+        Some(run) => run,
+        None => {
+            let run = record_capture_run(&abs_path, &project, engine_runtime, registry)
+                .await
+                .map_err(|e| format!("engine pipeline failed: {e}"))?;
+            let run = overlay_free(run, &source)?;
+            store_run(&cfg.cache_dir, &key, &run);
+            run
+        }
+    };
+    if !run.has_content() {
         return Err("engine produced no capture (no code cells?)".to_string());
     }
 
-    let new_doc_id = write_capture_doc(&ctx, rel_path, &captures)
-        .await
-        .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
+    let new_doc_id =
+        crate::capture_driver::write_capture_doc_gated(&ctx, rel_path, &run, cfg.record_gate)
+            .await
+            .map_err(|e| format!("failed to store capture binary doc: {e}"))?;
 
     let updated = CaptureRef {
         capture_doc_id: new_doc_id,
@@ -325,33 +418,6 @@ async fn perform_re_execute(
         .map_err(|e| format!("failed to update sidecar: {e}"))?;
 
     Ok(())
-}
-
-/// Mirror of `capture_driver::write_capture_doc` (private there).
-/// Duplicated here to avoid widening that module's public surface
-/// for the C.5-only handler. Both call sites stay in sync via the
-/// shared `CAPTURE_MIME_TYPE` constant and the shared wire-format
-/// helper `gzip_captures` (serialize + gzip + 10MB size warning,
-/// bd-qbhp2cvv).
-async fn write_capture_doc(
-    ctx: &Arc<HubContext>,
-    rel_path: &str,
-    captures: &[EngineCapture],
-) -> Result<String, String> {
-    let gzipped = quarto_core::engine::capture_files::gzip_captures(captures)
-        .map_err(|e| format!("serialize/gzip: {e}"))?;
-    let meta = quarto_hub::resource::CaptureDocMeta {
-        source_path: rel_path.to_string(),
-        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
-    };
-    let doc = quarto_hub::resource::create_capture_document(&gzipped, &meta)
-        .map_err(|e| format!("binary doc: {e}"))?;
-    let handle = ctx
-        .repo()
-        .create(doc)
-        .await
-        .map_err(|_| "samod repo stopped".to_string())?;
-    Ok(handle.document_id().to_string())
 }
 
 #[cfg(test)]
@@ -415,18 +481,326 @@ mod tests {
     /// Spin up the eager-capture driver so the sidecar has a
     /// captureRef to operate on. (Some C.5 paths require an
     /// existing capture; others test the no-capture branch.)
-    async fn seed_capture(ctx: SharedContext, cache_dir: &Path) {
+    async fn seed_capture(ctx: SharedContext, cache_dir: &std::path::Path) {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let count = crate::capture_driver::record_eager_captures(
             ctx,
             runtime,
             Some(make_registry()),
-            crate::config::EnginePolicy::Manual,
-            cache_dir,
+            &crate::config::ReExecuteConfig::new(
+                crate::config::EnginePolicy::Manual,
+                cache_dir.to_path_buf(),
+            ),
         )
         .await
         .unwrap();
         assert_eq!(count, 1, "fixture must seed a capture");
+    }
+
+    // ── RIU-2 Phase B3: the execution guard ───────────────────────────────
+
+    const GUARD_DOC: &str = "---\nengine: test-passthrough\n---\n\n```{test-passthrough}\n1\n```\n";
+
+    /// A passthrough engine that counts executions, to prove no engine ran.
+    struct CountingEngine {
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+    }
+    impl ExecutionEngine for CountingEngine {
+        fn name(&self) -> &str {
+            "test-passthrough"
+        }
+        fn execute(
+            &self,
+            input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<ExecuteResult, ExecutionError> {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(ExecuteResult::passthrough(input))
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> quarto_core::engine::LanguageClaim {
+            if language == "test-passthrough" {
+                quarto_core::engine::LanguageClaim::Primary(1)
+            } else {
+                quarto_core::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    fn counting_registry() -> (Arc<EngineRegistry>, Arc<std::sync::atomic::AtomicUsize>) {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut r = EngineRegistry::new();
+        r.register(Arc::new(CountingEngine {
+            calls: calls.clone(),
+        }));
+        (Arc::new(r), calls)
+    }
+
+    fn cfg_with(
+        policy: crate::config::EnginePolicy,
+        sources: Vec<quarto_core::record::RecordSource>,
+        cache: &TempDir,
+    ) -> ReExecuteConfig {
+        let mut c = ReExecuteConfig::new(policy, cache.path().to_path_buf());
+        c.sources = quarto_core::record::RecordSources::new(sources);
+        c
+    }
+
+    async fn body_text(response: Response) -> String {
+        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    /// Wait for the spawned re-execute to finish, yielding so the runtime can drive the samod
+    /// repo the blocking worker writes to. A test that returns first deadlocks at runtime
+    /// teardown: the worker needs the runtime the test body is shutting down.
+    async fn wait_until_idle() {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !in_flight().lock().unwrap().is_empty() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "re-execute never finished"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+    }
+
+    async fn post(
+        ctx: &SharedContext,
+        registry: Arc<EngineRegistry>,
+        cfg: &ReExecuteConfig,
+    ) -> Response {
+        re_execute_with_registry_and_cache(
+            ctx.clone(),
+            ReExecuteRequest {
+                path: "doc.qmd".to_string(),
+            },
+            Some(registry),
+            cfg,
+        )
+        .await
+    }
+
+    /// Re-execute runs the engine and does not consult the other sources: a `.quarto` record that
+    /// would be chosen at start-up never replaces the fresh engine result.
+    #[tokio::test]
+    async fn re_execute_runs_the_engine_and_ignores_a_q2_record() {
+        reset_in_flight_for_tests();
+        let (tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
+        let root = tmp.path().canonicalize().unwrap();
+        let cache = TempDir::with_prefix("riu2-reexec-").unwrap();
+        seed_capture(ctx.clone(), cache.path()).await;
+        let initial = ctx.index().get_capture("doc.qmd").unwrap().capture_doc_id;
+
+        // A `.quarto` record sits there, and the code changed, so the engine must run.
+        let file = quarto_core::record::execution_record_path(&root, &root.join("doc.qmd"));
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let record = quarto_core::record::read_record(include_str!(
+            "../../quarto-core/tests/fixtures/records/basic.json"
+        ))
+        .unwrap();
+        std::fs::write(&file, quarto_core::record::write_record(&record).unwrap()).unwrap();
+        std::fs::write(root.join("doc.qmd"), GUARD_DOC.replace("\n1\n", "\n2\n")).unwrap();
+
+        let (registry, calls) = counting_registry();
+        let cfg = ReExecuteConfig::new(
+            crate::config::EnginePolicy::Manual,
+            cache.path().to_path_buf(),
+        );
+        assert_eq!(
+            post(&ctx, registry, &cfg).await.status(),
+            StatusCode::ACCEPTED
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let e = ctx.index().get_capture("doc.qmd").unwrap();
+            if e.state == Some(CaptureState::Idle) && e.capture_doc_id != initial {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "sidecar never updated"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        wait_until_idle().await;
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let id = ctx.index().get_capture("doc.qmd").unwrap().capture_doc_id;
+        let payload = crate::capture_driver::read_capture_from_doc(&ctx, &id)
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                payload,
+                quarto_core::pandoc_request::captures::CapturePayload::Legacy(_)
+            ),
+            "the engine's own result is published, not the q2 record"
+        );
+    }
+
+    /// The sidecar is untouched by a refused request, and the in-flight slot was not claimed
+    /// (a refusal after the insert would leak it and every later POST would answer 409).
+    fn assert_untouched(ctx: &SharedContext, before: &CaptureRef) {
+        let now = ctx.index().get_capture("doc.qmd").unwrap();
+        assert_eq!(now.capture_doc_id, before.capture_doc_id);
+        assert_ne!(now.state, Some(CaptureState::Running));
+        assert!(
+            in_flight().lock().unwrap().is_empty(),
+            "a refusal must not claim the in-flight slot"
+        );
+    }
+
+    #[tokio::test]
+    async fn re_execute_post_is_refused_under_policy_off() {
+        reset_in_flight_for_tests();
+        let (_tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
+        let cache = TempDir::with_prefix("riu2-guard-").unwrap();
+        seed_capture(ctx.clone(), cache.path()).await;
+        let before = ctx.index().get_capture("doc.qmd").unwrap();
+        let (registry, calls) = counting_registry();
+
+        let cfg = cfg_with(
+            crate::config::EnginePolicy::Off,
+            quarto_core::record::RecordSources::preview_default()
+                .iter()
+                .cloned()
+                .collect(),
+            &cache,
+        );
+        let response = post(&ctx, registry, &cfg).await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let msg = body_text(response).await;
+        assert!(msg.contains("preview.engine"), "{msg}");
+        assert_untouched(&ctx, &before);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn re_execute_post_is_refused_when_engine_is_not_in_the_source_list() {
+        use quarto_core::record::RecordSource;
+        reset_in_flight_for_tests();
+        let (_tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
+        let cache = TempDir::with_prefix("riu2-guard-").unwrap();
+        seed_capture(ctx.clone(), cache.path()).await;
+        let before = ctx.index().get_capture("doc.qmd").unwrap();
+        let (registry, calls) = counting_registry();
+
+        let cfg = cfg_with(
+            crate::config::EnginePolicy::Manual,
+            vec![RecordSource::Cache, RecordSource::Q2],
+            &cache,
+        );
+        let response = post(&ctx, registry, &cfg).await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let msg = body_text(response).await;
+        assert!(msg.contains("`execute: record-sources`"), "{msg}");
+        assert_untouched(&ctx, &before);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// The automatic path reaches `claim_and_spawn` without the handler, so the guard must be
+    /// there. With `engine` absent from the list no kernel starts after a staleness flip.
+    #[tokio::test]
+    async fn auto_re_execute_starts_nothing_without_engine_in_the_list() {
+        use quarto_core::record::RecordSource;
+        reset_in_flight_for_tests();
+        let (_tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
+        let cache = TempDir::with_prefix("riu2-guard-").unwrap();
+        seed_capture(ctx.clone(), cache.path()).await;
+        let before = ctx.index().get_capture("doc.qmd").unwrap();
+        let (registry, calls) = counting_registry();
+
+        let cfg = cfg_with(
+            crate::config::EnginePolicy::Auto,
+            vec![RecordSource::Cache],
+            &cache,
+        );
+        trigger_auto_re_execute(ctx.clone(), "doc.qmd".to_string(), Some(registry), cfg);
+        // A spawned worker would have flipped the sidecar and run the engine well inside this.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        assert_untouched(&ctx, &before);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    /// With `engine` in the list, `manual` still runs the engine.
+    #[tokio::test]
+    async fn re_execute_runs_when_the_policy_and_list_allow_it() {
+        reset_in_flight_for_tests();
+        let (tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
+        let cache = TempDir::with_prefix("riu2-guard-").unwrap();
+        seed_capture(ctx.clone(), cache.path()).await;
+        // Change the code so the content-keyed cache misses; an identical document is a cache
+        // hit and would (correctly) run no engine.
+        std::fs::write(
+            tmp.path().canonicalize().unwrap().join("doc.qmd"),
+            GUARD_DOC.replace("\n1\n", "\n2\n"),
+        )
+        .unwrap();
+        let (registry, calls) = counting_registry();
+        let cfg = ReExecuteConfig::new(
+            crate::config::EnginePolicy::Manual,
+            cache.path().to_path_buf(),
+        );
+        let response = post(&ctx, registry, &cfg).await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while calls.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+            assert!(std::time::Instant::now() < deadline, "engine never ran");
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        wait_until_idle().await;
+    }
+
+    /// Two configs in one process each follow their own; the old process-wide static made the
+    /// first writer win for everyone.
+    #[tokio::test]
+    async fn two_configs_in_one_process_each_follow_their_own() {
+        reset_in_flight_for_tests();
+        let (_tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
+        let cache = TempDir::with_prefix("riu2-guard-").unwrap();
+        seed_capture(ctx.clone(), cache.path()).await;
+        let (registry, _) = counting_registry();
+        let off =
+            ReExecuteConfig::new(crate::config::EnginePolicy::Off, cache.path().to_path_buf());
+        let manual = ReExecuteConfig::new(
+            crate::config::EnginePolicy::Manual,
+            cache.path().to_path_buf(),
+        );
+        assert_eq!(
+            post(&ctx, registry.clone(), &off).await.status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            post(&ctx, registry, &manual).await.status(),
+            StatusCode::ACCEPTED
+        );
+        wait_until_idle().await;
+    }
+
+    /// A request that reaches the handler with no config extension is refused: it fails closed
+    /// and never falls back to a temp directory.
+    #[tokio::test]
+    async fn the_handler_fails_closed_with_no_config() {
+        reset_in_flight_for_tests();
+        let (_tmp, ctx) = build_ctx_with_file(GUARD_DOC).await;
+        let cache = TempDir::with_prefix("riu2-guard-").unwrap();
+        seed_capture(ctx.clone(), cache.path()).await;
+        let before = ctx.index().get_capture("doc.qmd").unwrap();
+        let response = re_execute_handler(
+            State(ctx.clone()),
+            None,
+            Json(ReExecuteRequest {
+                path: "doc.qmd".to_string(),
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_untouched(&ctx, &before);
     }
 
     #[tokio::test]
@@ -444,7 +818,10 @@ mod tests {
                 path: "nonexistent.qmd".to_string(),
             },
             Some(make_registry()),
-            cache_tmp.path(),
+            &ReExecuteConfig::new(
+                crate::config::EnginePolicy::Manual,
+                cache_tmp.path().to_path_buf(),
+            ),
         )
         .await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -469,7 +846,10 @@ mod tests {
                 path: "doc.qmd".to_string(),
             },
             Some(make_registry()),
-            cache_tmp.path(),
+            &ReExecuteConfig::new(
+                crate::config::EnginePolicy::Manual,
+                cache_tmp.path().to_path_buf(),
+            ),
         )
         .await;
         assert_eq!(response.status(), StatusCode::ACCEPTED);
@@ -577,7 +957,10 @@ mod tests {
                 path: "doc.qmd".to_string(),
             },
             Some(make_failing_registry()),
-            re_execute_cache.path(),
+            &ReExecuteConfig::new(
+                crate::config::EnginePolicy::Manual,
+                re_execute_cache.path().to_path_buf(),
+            ),
         )
         .await;
         assert_eq!(response.status(), StatusCode::ACCEPTED);
@@ -639,7 +1022,10 @@ mod tests {
                 path: "doc.qmd".to_string(),
             },
             Some(make_registry()),
-            cache_tmp.path(),
+            &ReExecuteConfig::new(
+                crate::config::EnginePolicy::Manual,
+                cache_tmp.path().to_path_buf(),
+            ),
         )
         .await;
         assert_eq!(response.status(), StatusCode::CONFLICT);

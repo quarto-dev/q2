@@ -24,26 +24,40 @@ use crate::captures::{captures_from_tree, flatten_spans};
 use crate::encoding::{self, HighlightSpan};
 use crate::error::HighlightError;
 
-/// A single registered language: the `HighlightConfiguration` and the
-/// list of capture names the configuration was configured with (we use
-/// the identity mapping — see [`LanguageEntry::build`]).
-pub(crate) struct LanguageEntry {
-    build_config: fn() -> Result<(HighlightConfiguration, Vec<String>), HighlightError>,
-    cached: OnceCell<(HighlightConfiguration, Vec<String>)>,
+/// A single registered language: either one grammar
+/// ([`LanguageEntry::Grammar`]) or a composite ([`LanguageEntry::Composite`])
+/// that stitches several grammars together in code, as qmd does for its
+/// front matter and code cells.
+pub(crate) enum LanguageEntry {
+    Grammar {
+        build_config: fn() -> Result<(HighlightConfiguration, Vec<String>), HighlightError>,
+        cached: OnceCell<(HighlightConfiguration, Vec<String>)>,
+    },
+    /// Produces flat (already non-overlapping) spans for a source string.
+    Composite(fn(&str) -> Result<Vec<HighlightSpan>, HighlightError>),
 }
 
 impl LanguageEntry {
-    const fn new(
+    const fn grammar(
         build_config: fn() -> Result<(HighlightConfiguration, Vec<String>), HighlightError>,
     ) -> Self {
-        LanguageEntry {
+        LanguageEntry::Grammar {
             build_config,
             cached: OnceCell::new(),
         }
     }
 
-    fn config(&self) -> Result<&(HighlightConfiguration, Vec<String>), HighlightError> {
-        self.cached.get_or_try_init(self.build_config)
+    fn captures(&self, source: &str) -> Result<Vec<HighlightSpan>, HighlightError> {
+        match self {
+            LanguageEntry::Grammar {
+                build_config,
+                cached,
+            } => {
+                let (config, _names) = cached.get_or_try_init(*build_config)?;
+                extract_builtin_captures(config, source)
+            }
+            LanguageEntry::Composite(extract) => extract(source),
+        }
     }
 }
 
@@ -77,14 +91,24 @@ impl Registry {
         }
 
         for (key, builder) in BUILTIN_BUILDERS {
-            entries.insert(key, LanguageEntry::new(*builder));
+            entries.insert(key, LanguageEntry::grammar(*builder));
+        }
+        for (key, extract) in BUILTIN_COMPOSITES {
+            entries.insert(key, LanguageEntry::Composite(*extract));
         }
 
         Registry { aliases, entries }
     }
 
+    /// Resolve a class to its entry, case-insensitively (GH #1080): Pandoc
+    /// matches language names that way, so ```` ```R ```` highlights as `r`.
+    /// Every built-in key and alias is lowercase, so we try the class as
+    /// written (no allocation in the common case) and then lowercased.
     pub(crate) fn resolve(&self, class: &str) -> Option<&LanguageEntry> {
-        let canonical = self.aliases.get(class)?;
+        let canonical = match self.aliases.get(class) {
+            Some(c) => c,
+            None => self.aliases.get(class.to_ascii_lowercase().as_str())?,
+        };
         self.entries.get(canonical)
     }
 
@@ -115,8 +139,7 @@ impl Registry {
         let Some(entry) = self.resolve(class) else {
             return Ok(None);
         };
-        let (config, _names) = entry.config()?;
-        Ok(Some(extract_builtin_captures(config, source)?))
+        Ok(Some(entry.captures(source)?))
     }
 }
 
@@ -159,6 +182,9 @@ static BUILTIN_ALIASES: &[(&str, &[&str])] = &[
     ("lmd", &[]),
     ("lua", &[]),
     ("python", &["py"]),
+    // Quarto markdown (GH #1081). tree-sitter-qmd parses a superset of
+    // Pandoc markdown, so plain `markdown` / `md` blocks use it too.
+    ("qmd", &["markdown", "md"]),
     ("r", &[]),
     ("rust", &["rs"]),
     ("sql", &[]),
@@ -166,6 +192,13 @@ static BUILTIN_ALIASES: &[(&str, &[&str])] = &[
     ("typescript", &["ts"]),
     ("yaml", &["yml"]),
 ];
+
+/// Composite languages: `(canonical_key, extractor)`. These stitch several
+/// grammars together in code instead of through an injection query, so they
+/// are not in [`BUILTIN_BUILDERS`] (see
+/// `builtin_configs_have_no_injection_or_locals`).
+static BUILTIN_COMPOSITES: &[(&str, fn(&str) -> Result<Vec<HighlightSpan>, HighlightError>)] =
+    &[("qmd", crate::qmd::render_spans)];
 
 /// List of `(canonical_key, builder)` pairs. Populated by each per-
 /// language module under `src/langs/`.
@@ -245,6 +278,25 @@ mod tests {
         }
     }
 
+    /// qmd and its aliases (GH #1081) resolve to the composite.
+    #[test]
+    fn highlight_captures_for_qmd_aliases() {
+        let source = "## Hi\n\n```{r}\nx <- 1\n```\n";
+        for class in ["qmd", "markdown", "md"] {
+            let spans = highlight_captures(class, source)
+                .expect("qmd highlight succeeds")
+                .unwrap_or_else(|| panic!("`{class}` is registered"));
+            assert!(
+                spans.iter().any(|s| s.capture == "markup.heading"),
+                "`{class}`: expected a heading, got {spans:?}"
+            );
+            assert!(
+                spans.iter().any(|s| s.capture == "operator"),
+                "`{class}`: expected the R cell's `<-`, got {spans:?}"
+            );
+        }
+    }
+
     #[test]
     fn highlight_captures_unsupported_language() {
         assert!(
@@ -303,6 +355,8 @@ mod tests {
         // concatenates injection + locals + highlights into the one
         // `config.query`, so a non-empty injection/locals query would surface
         // its sentinel capture names here. Fail loudly if one ever does.
+        // A language that embeds others (qmd) does it in code instead, as a
+        // BUILTIN_COMPOSITES entry, so it needs no injection query.
         const SENTINELS: &[&str] = &[
             "injection.content",
             "injection.language",

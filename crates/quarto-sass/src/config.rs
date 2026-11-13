@@ -96,6 +96,17 @@ pub struct ThemeConfig {
     /// is dropped.
     pub title_block_layer: bool,
 
+    /// Include the dashboard Sass layer and bslib's component SCSS
+    /// (dashboard plan D4). `false` by default; set by the render
+    /// pipeline for `format: dashboard`, never from document metadata.
+    pub dashboard_layer: bool,
+
+    /// Include the listing Sass layer (`quarto-listing.scss`). `true` by
+    /// default; the render pipeline clears it for a dashboard outside a
+    /// website, as Q1 compiles the listing bundle only into website pages
+    /// (its `$card-cap-bg` default would otherwise darken every card).
+    pub listing_layer: bool,
+
     /// Unresolved reference to a `_brand.yml` (path or inline block),
     /// or `None` if no brand was configured.
     ///
@@ -238,6 +249,8 @@ impl ThemeConfig {
             minified,
             suppress_bootstrap: false,
             title_block_layer: true,
+            dashboard_layer: false,
+            listing_layer: true,
             brand_ref: None,
             dark: None,
             highlight_style: None,
@@ -256,6 +269,8 @@ impl ThemeConfig {
             minified: true,
             suppress_bootstrap: false,
             title_block_layer: true,
+            dashboard_layer: false,
+            listing_layer: true,
             brand_ref: None,
             dark: None,
             highlight_style: None,
@@ -452,6 +467,8 @@ impl ThemeConfig {
                 minified: true,
                 suppress_bootstrap: true,
                 title_block_layer: true,
+                dashboard_layer: false,
+                listing_layer: true,
                 brand_ref: None,
                 dark: None,
                 highlight_style: None,
@@ -469,6 +486,8 @@ impl ThemeConfig {
             minified: true,
             suppress_bootstrap: false,
             title_block_layer: true,
+            dashboard_layer: false,
+            listing_layer: true,
             brand_ref: None,
             dark: None,
             highlight_style: None,
@@ -576,6 +595,8 @@ impl ThemeConfig {
             minified: self.minified,
             suppress_bootstrap: d.suppress_bootstrap,
             title_block_layer: self.title_block_layer,
+            dashboard_layer: self.dashboard_layer,
+            listing_layer: self.listing_layer,
             brand_ref: d.brand_ref.clone(),
             dark: None,
             highlight_style: d.highlight_style.clone(),
@@ -660,9 +681,63 @@ pub fn resolve_brand_variants(
     runtime: &dyn SystemRuntime,
     resolve_path: &BrandPathResolver<'_>,
 ) -> Result<(Option<ResolvedBrand>, Option<ResolvedBrand>), SassError> {
+    Ok(match resolve_both_halves(config, runtime, resolve_path)? {
+        Some(halves) => (Some(halves.light), Some(halves.dark)),
+        None => (None, None),
+    })
+}
+
+/// A brand resolved for consumers that report *which modes the brand
+/// defines* — code cells reading `format.render.brand` through
+/// `QUARTO_EXECUTE_INFO` (bd-8fmuyh4d).
+#[derive(Debug, Clone)]
+pub struct BrandModes {
+    /// The light half.
+    pub light: ResolvedBrand,
+    /// The dark half, present only when the brand defines dark values:
+    /// a `{light:, dark:}` pair with a `dark:` side, or the two-file
+    /// `brand: {light:, dark:}` form.
+    pub dark: Option<ResolvedBrand>,
+}
+
+/// Resolve the `brand:` key into the modes the brand defines.
+///
+/// Like [`resolve_brand_variants`], but the dark half is returned only when
+/// the brand defines dark values. This differs from Quarto 1 in one way:
+/// Quarto 1 also reports a dark half when the document's own metadata turns
+/// dark mode on for a brand with no dark values. That half equals the light
+/// half, so leaving it out loses no information.
+///
+/// `resolve_path` resolves a relative `brand:` path, as in [`resolve_brand`].
+pub fn resolve_brand_modes(
+    config: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    resolve_path: &BrandPathResolver<'_>,
+) -> Result<Option<BrandModes>, SassError> {
+    Ok(
+        resolve_both_halves(config, runtime, resolve_path)?.map(|halves| BrandModes {
+            light: halves.light,
+            dark: halves.defines_dark.then_some(halves.dark),
+        }),
+    )
+}
+
+/// Both halves of a configured brand, and whether the brand defines dark
+/// values (shared by [`resolve_brand_variants`] and [`resolve_brand_modes`]).
+struct BrandHalves {
+    light: ResolvedBrand,
+    dark: ResolvedBrand,
+    defines_dark: bool,
+}
+
+fn resolve_both_halves(
+    config: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    resolve_path: &BrandPathResolver<'_>,
+) -> Result<Option<BrandHalves>, SassError> {
     let brand_refs = extract_brand_refs(config.get("brand"))?;
     let Some(light_ref) = brand_refs.light else {
-        return Ok((None, None));
+        return Ok(None);
     };
     let (light_split, light_file) = load_split_brand(&light_ref, runtime, resolve_path)?;
     let light = resolved_brand(light_split.light.clone(), light_file.clone());
@@ -671,14 +746,21 @@ pub fn resolve_brand_variants(
     // file; the single-file form (or a `dark:`-less two-file form)
     // falls back to the light file's own dark half.
     let dark_ref = brand_refs.dark.unwrap_or_else(|| light_ref.clone());
-    let dark = if dark_ref == light_ref {
-        resolved_brand(light_split.dark, light_file)
+    let (dark, defines_dark) = if dark_ref == light_ref {
+        (
+            resolved_brand(light_split.dark, light_file),
+            light_split.enables_dark_mode,
+        )
     } else {
         let (dark_split, dark_file) = load_split_brand(&dark_ref, runtime, resolve_path)?;
-        resolved_brand(dark_split.dark, dark_file)
+        (resolved_brand(dark_split.dark, dark_file), true)
     };
 
-    Ok((Some(light), Some(dark)))
+    Ok(Some(BrandHalves {
+        light,
+        dark,
+        defines_dark,
+    }))
 }
 
 /// A [`ResolvedBrand`] for a half of a split brand: anchored at its
@@ -1224,6 +1306,63 @@ fn light_dark_pair(value: &ConfigValue) -> Option<LightDarkPair<'_>> {
     })
 }
 
+/// Quarto 1 theme names that contribute no Bootswatch layer and are
+/// skipped by [`extract_theme_specs`] (GH #1036):
+///
+/// - `default` — plain Bootstrap, exactly what an absent `theme:`
+///   compiles.
+/// - `pandoc` — in Quarto 1, a Pandoc-style page without Bootstrap.
+///   Quarto 2 does not implement that page yet (it needs a different
+///   HTML pipeline), so the entry is ignored and the page gets plain
+///   Bootstrap; [`ignored_pandoc_themes`] reports the entries so
+///   quarto-core can warn (Q-14-12).
+fn is_layerless_theme_name(s: &str) -> bool {
+    s.eq_ignore_ascii_case("default") || is_pandoc_theme_name(s)
+}
+
+fn is_pandoc_theme_name(s: &str) -> bool {
+    s.eq_ignore_ascii_case("pandoc")
+}
+
+/// Locations of every `pandoc` entry in the format-flattened `theme:`
+/// value: the scalar, array items, and either half of a
+/// `light:`/`dark:` pair. Those entries are ignored when the theme is
+/// compiled (see [`is_layerless_theme_name`]); quarto-sass only
+/// reports them, and `CompileThemeCssStage` turns each one into a
+/// Q-14-12 warning (the same split as Q-14-5).
+pub fn ignored_pandoc_themes(config: &ConfigValue) -> Vec<SourceInfo> {
+    fn collect(value: &ConfigValue, out: &mut Vec<SourceInfo>) {
+        if let Some(s) = config_value_as_text(value) {
+            if is_pandoc_theme_name(&s) {
+                out.push(value.source_info.clone());
+            }
+        } else if let Some(items) = value.as_array() {
+            for item in items {
+                if config_value_as_text(item).is_some_and(|s| is_pandoc_theme_name(&s)) {
+                    out.push(item.source_info.clone());
+                }
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    let Some(value) = config.get("theme") else {
+        return out;
+    };
+    match light_dark_pair(value) {
+        Some(pair) => {
+            if let Some(light) = pair.light {
+                collect(light, &mut out);
+            }
+            if let Some((dark, _)) = pair.dark {
+                collect(dark, &mut out);
+            }
+        }
+        None => collect(value, &mut out),
+    }
+    out
+}
+
 /// Extract theme specifications from a ConfigValue.
 ///
 /// Handles both string and array formats. Theme values from document
@@ -1233,6 +1372,9 @@ fn light_dark_pair(value: &ConfigValue) -> Option<LightDarkPair<'_>> {
 fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<(ThemeSpec, SourceInfo)>, SassError> {
     // Handle string value (single theme) — covers both Scalar and PandocInlines
     if let Some(s) = config_value_as_text(value) {
+        if is_layerless_theme_name(&s) {
+            return Ok(Vec::new());
+        }
         let spec = ThemeSpec::parse(&s).map_err(|e| e.with_location(value.source_info.clone()))?;
         return Ok(vec![(spec, value.source_info.clone())]);
     }
@@ -1242,6 +1384,9 @@ fn extract_theme_specs(value: &ConfigValue) -> Result<Vec<(ThemeSpec, SourceInfo
         let mut specs = Vec::with_capacity(items.len());
         for item in items {
             if let Some(s) = config_value_as_text(item) {
+                if is_layerless_theme_name(&s) {
+                    continue;
+                }
                 specs.push((
                     ThemeSpec::parse(&s).map_err(|e| e.with_location(item.source_info.clone()))?,
                     item.source_info.clone(),
@@ -1834,7 +1979,7 @@ mod tests {
         let theme_source = SourceInfo::original(quarto_source_map::FileId(7), 500, 510);
 
         let theme_value = ConfigValue {
-            value: ConfigValueKind::scalar(Yaml::String("default".to_string())),
+            value: ConfigValueKind::scalar(Yaml::String("nosuchtheme".to_string())),
             source_info: theme_source.clone(),
             merge_op: quarto_pandoc_types::MergeOp::Concat,
         };
@@ -1851,7 +1996,7 @@ mod tests {
 
         match ThemeConfig::from_config_value(&config) {
             Err(SassError::UnknownTheme { name, location }) => {
-                assert_eq!(name, "default");
+                assert_eq!(name, "nosuchtheme");
                 assert_eq!(
                     location.as_ref(),
                     Some(&theme_source),
@@ -1905,6 +2050,84 @@ mod tests {
             }
             other => panic!("expected UnknownTheme error, got: {:?}", other),
         }
+    }
+
+    // === Quarto 1's `default` / `pandoc` theme names (GH #1036) ===
+
+    #[test]
+    fn test_default_and_pandoc_themes_contribute_no_layer() {
+        // `default` is plain Bootstrap; `pandoc` is ignored (with a
+        // Q-14-12 warning from quarto-core). Either way the compile
+        // sees no theme layer and Bootstrap stays on.
+        for name in ["default", "Default", "pandoc", "PANDOC"] {
+            let config = ThemeConfig::from_config_value(&flattened_config_with_theme_string(name))
+                .unwrap_or_else(|e| panic!("theme: {name} should parse, got {e:?}"));
+            assert!(config.themes.is_empty(), "theme: {name}");
+            assert!(config.theme_locations.is_empty(), "theme: {name}");
+            assert!(!config.suppress_bootstrap, "theme: {name}");
+        }
+    }
+
+    #[test]
+    fn test_default_and_pandoc_skipped_in_arrays_and_pairs() {
+        let config = ThemeConfig::from_config_value(&config_with_theme_value(array_value(&[
+            "default",
+            "custom.scss",
+            "pandoc",
+        ])))
+        .unwrap();
+        assert_eq!(
+            config.themes,
+            vec![ThemeSpec::Custom(PathBuf::from("custom.scss"))]
+        );
+        assert_eq!(config.theme_locations.len(), 1);
+
+        let config = ThemeConfig::from_config_value(&config_with_theme_value(map_value(vec![
+            map_entry("light", scalar_value("default")),
+            map_entry("dark", scalar_value("darkly")),
+        ])))
+        .unwrap();
+        assert!(config.themes.is_empty());
+        let dark = config.dark.expect("dark variant");
+        assert_eq!(
+            dark.themes,
+            vec![ThemeSpec::BuiltIn(crate::themes::BuiltInTheme::Darkly)]
+        );
+    }
+
+    #[test]
+    fn test_ignored_pandoc_themes_reports_each_entry() {
+        let loc = |n| SourceInfo::original(quarto_source_map::FileId(3), n, n + 6);
+        let at = |s: &str, n| ConfigValue {
+            source_info: loc(n),
+            ..scalar_value(s)
+        };
+
+        assert_eq!(
+            ignored_pandoc_themes(&config_with_theme_value(at("pandoc", 10))),
+            vec![loc(10)]
+        );
+        let array = ConfigValue {
+            value: ConfigValueKind::Array(vec![at("cosmo", 20), at("pandoc", 30)]),
+            ..scalar_value("")
+        };
+        assert_eq!(
+            ignored_pandoc_themes(&config_with_theme_value(array)),
+            vec![loc(30)]
+        );
+        let pair = map_value(vec![
+            map_entry("light", at("pandoc", 40)),
+            map_entry("dark", at("Pandoc", 50)),
+        ]);
+        assert_eq!(
+            ignored_pandoc_themes(&config_with_theme_value(pair)),
+            vec![loc(40), loc(50)]
+        );
+
+        assert!(
+            ignored_pandoc_themes(&config_with_theme_value(scalar_value("default"))).is_empty()
+        );
+        assert!(ignored_pandoc_themes(&empty_config()).is_empty());
     }
 
     // === Light/dark theme map tests (bd-0pic6 epic, phase A1) ===

@@ -1,0 +1,26 @@
+---
+# contract: content: valuebox cell whose printed R list supplies options
+title: "C22 VB R"
+format: dashboard
+---
+
+## Row
+
+::: {.cell content="valuebox" title="C22-R"}
+
+::: {.cell-output .cell-output-stdout}
+
+```
+$icon
+[1] "trash"
+
+$color
+[1] "danger"
+
+$value
+[1] 50
+```
+
+:::
+
+:::

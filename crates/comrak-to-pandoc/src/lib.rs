@@ -67,7 +67,7 @@ pub(crate) fn empty_source_info() -> SourceInfo {
 
 /// Create an empty attribute tuple.
 pub(crate) fn empty_attr() -> Attr {
-    (String::new(), vec![], LinkedHashMap::new())
+    (String::new(), vec![], LinkedHashMap::new()).into()
 }
 
 #[cfg(test)]

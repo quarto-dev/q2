@@ -1,0 +1,34 @@
+---
+title: What the plain route stamps on Julia cells
+engine: julia
+---
+
+A prose block first, so the raw notebook index and the code-cell ordinal differ.
+
+```{julia}
+using Base64
+png = base64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+display(MIME("image/png"), png)
+```
+
+Between the cells.
+
+```{julia}
+#| label: fig-b
+#| fig-cap: A labeled figure.
+display(MIME("image/png"), png)
+```
+
+```{julia}
+display(MIME("image/png"), png)
+display(MIME("image/png"), png)
+```
+
+```{julia}
+println("printed before the figure")
+display(MIME("image/png"), png)
+```
+
+```{julia}
+1 + 1
+```

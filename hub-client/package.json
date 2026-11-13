@@ -73,7 +73,7 @@
     "@automerge/automerge-repo-storage-nodefs": "2.6.0-alpha.5",
     "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.39.1",
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.65.0",
     "@quarto/preview-e2e-helpers": "*",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",

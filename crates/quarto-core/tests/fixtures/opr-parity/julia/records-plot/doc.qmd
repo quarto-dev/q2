@@ -1,0 +1,22 @@
+---
+title: Julia in Positron
+engine: julia
+---
+
+```{julia}
+1 + 1
+```
+
+```{julia}
+println("hello from julia")
+[10, 20, 30]
+```
+
+```{julia}
+using Plots
+plot(1:10, (1:10) .^ 2, label = "x squared", title = "A Julia plot")
+```
+
+```{julia}
+HTML("<b>bold html</b>")
+```

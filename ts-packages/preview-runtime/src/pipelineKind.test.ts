@@ -16,6 +16,10 @@ describe('pipelineKindForFormat', () => {
     expect(pipelineKindForFormat('q2-sandboxed-preview')).toBe('preview');
   });
 
+  it('returns "preview" for q2-dashboard (format: dashboard\'s preview)', () => {
+    expect(pipelineKindForFormat('q2-dashboard')).toBe('preview');
+  });
+
   it('returns undefined for q2-debug (parser-only path, not the q2-preview pipeline)', () => {
     expect(pipelineKindForFormat('q2-debug')).toBeUndefined();
   });

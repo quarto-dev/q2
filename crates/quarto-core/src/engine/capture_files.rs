@@ -229,15 +229,191 @@ pub fn capture_doc_size_warning(gzipped_len: usize) -> Option<String> {
 /// duplicated the gzip block. Logs [`capture_doc_size_warning`] when
 /// the result is oversized.
 pub fn gzip_captures(captures: &[quarto_trace::EngineCapture]) -> std::io::Result<Vec<u8>> {
+    gzip_json(&serde_json::to_vec(captures)?)
+}
+
+/// Gzip a coalesced execution record in its canonical writer bytes — the
+/// payload of the record binary doc (`application/x-engine-record+gzip`,
+/// EXR-13). Shares [`gzip_json`] (and so the size warning) with
+/// [`gzip_captures`]; byte-for-byte deterministic for equal records.
+pub fn gzip_record(record: &crate::record::Record) -> std::io::Result<Vec<u8>> {
+    let text = crate::record::write_record(record)?;
+    gzip_json(text.as_bytes())
+}
+
+/// The one gzip body behind [`gzip_captures`] and [`gzip_record`].
+fn gzip_json(json: &[u8]) -> std::io::Result<Vec<u8>> {
     use std::io::Write as _;
-    let json = serde_json::to_vec(captures)?;
     let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    enc.write_all(&json)?;
+    enc.write_all(json)?;
     let gzipped = enc.finish()?;
     if let Some(msg) = capture_doc_size_warning(gzipped.len()) {
         tracing::warn!("{msg}");
     }
     Ok(gzipped)
+}
+
+/// A surface that writes capture payloads to a hub document. The writer gate's
+/// default differs per surface because they differ in whether an older reader can
+/// be handed the result (RIU-1, epic decision 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriterSurface {
+    /// `q2 preview`: writer and reader are one binary and the store is a temp
+    /// directory, so a record cannot be stranded by version.
+    Preview,
+    /// `q2 provide-hub`: the reader is whatever hub-client the remote hub
+    /// deployed. Off until the hosted hub runs a `q2_ref` that contains the
+    /// record reader.
+    Provider,
+}
+
+impl WriterSurface {
+    /// Build-time default of the gate for this surface.
+    pub const fn default_gate(self) -> bool {
+        match self {
+            WriterSurface::Preview => true,
+            WriterSurface::Provider => false,
+        }
+    }
+}
+
+/// Environment override of the per-surface default, applying to both surfaces:
+/// `1`/`true`/`on`/`yes` enables, `0`/`false`/`off`/`no` disables, anything else
+/// keeps the surface default.
+pub const RECORD_WRITING_ENV: &str = "QUARTO_ENGINE_RECORD_WRITE";
+
+/// The writer gate for `surface`. It decides only the **form of the hub document
+/// payload** (record document or legacy capture array). It does not decide whether
+/// the local cache writes `<key>.record.bin`, and `q2 render` never consults it.
+pub fn record_writing_enabled(surface: WriterSurface) -> bool {
+    record_writing_from(std::env::var(RECORD_WRITING_ENV).ok().as_deref(), surface)
+}
+
+/// Pure body of [`record_writing_enabled`] so the parsing is unit-testable
+/// without touching the process environment.
+pub fn record_writing_from(value: Option<&str>, surface: WriterSurface) -> bool {
+    match value.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        Some("1" | "true" | "on" | "yes") => true,
+        Some("0" | "false" | "off" | "no") => false,
+        _ => surface.default_gate(),
+    }
+}
+
+/// A capture payload ready to become a hub binary doc.
+#[derive(Debug, Clone)]
+pub struct EncodedCapturePayload {
+    /// The gzipped bytes (`content` of the doc).
+    pub gzipped: Vec<u8>,
+    /// `true` for a record doc (`RECORD_MIME_TYPE`, `meta.kind: engine-record`),
+    /// `false` for a legacy capture doc.
+    pub is_record: bool,
+    /// The `meta.engines` list: the record's `quarto_engines` names for a record,
+    /// the captures' `engine_name`s for a legacy payload.
+    pub engines: Vec<String>,
+    /// Engines that ran in this document but are not in the record, because they
+    /// build no execution record. Non-empty only when the writer chose the legacy
+    /// payload *because of them*: the record would have dropped their output
+    /// (RIU-1, option A). Callers report it with `Q-18-15`.
+    pub engines_without_record: Vec<String>,
+}
+
+/// Choose and encode the payload a capture writer stores. A record is written
+/// only when `record_gate` is on **and** the run produced one that describes
+/// something (a preview cache hit has none, and an engine that builds no record
+/// leaves an engineless one); otherwise the legacy capture array is written, byte-identical
+/// to what the writers produced before EXR-13b.
+///
+/// **Record-less engines (RIU-1).** When the record names engines but a capture
+/// belongs to an engine that is not among them, the record cannot stand for the
+/// document (it would replace the legacy captures that hold that engine's output),
+/// so the whole document is stored in the legacy format and the engine names are
+/// returned in [`EncodedCapturePayload::engines_without_record`]. This holds until
+/// EXR-17 deletes the legacy path.
+pub fn encode_capture_payload(
+    captures: &[quarto_trace::EngineCapture],
+    record: Option<&crate::record::Record>,
+    record_gate: bool,
+) -> std::io::Result<EncodedCapturePayload> {
+    let candidate = record.filter(|r| record_gate && r.describes_something());
+    if let Some(record) = candidate {
+        let in_record = |name: &str| {
+            record
+                .metadata
+                .quarto_engines
+                .iter()
+                .any(|e| e.name == name)
+        };
+        let mut outside: Vec<String> = Vec::new();
+        for c in captures {
+            if !in_record(&c.engine_name) && !outside.contains(&c.engine_name) {
+                outside.push(c.engine_name.clone());
+            }
+        }
+        if outside.is_empty() {
+            return Ok(EncodedCapturePayload {
+                gzipped: gzip_record(record)?,
+                is_record: true,
+                engines: record
+                    .metadata
+                    .quarto_engines
+                    .iter()
+                    .map(|e| e.name.clone())
+                    .collect(),
+                engines_without_record: Vec::new(),
+            });
+        }
+        return Ok(EncodedCapturePayload {
+            gzipped: gzip_captures(captures)?,
+            is_record: false,
+            engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+            engines_without_record: outside,
+        });
+    }
+    Ok(EncodedCapturePayload {
+        gzipped: gzip_captures(captures)?,
+        is_record: false,
+        engines: captures.iter().map(|c| c.engine_name.clone()).collect(),
+        engines_without_record: Vec::new(),
+    })
+}
+
+/// Whether a run has no form the gate-off writer can publish: a record that describes something,
+/// no legacy captures, and the gate off. The legacy form would be an empty list and the page
+/// would silently show nothing. This is the one statement of the rule: [`encode_for_publish`]
+/// and the record-source walk both call it.
+pub fn record_has_no_legacy_form(
+    record_gate: bool,
+    captures: &[quarto_trace::EngineCapture],
+    record: Option<&crate::record::Record>,
+) -> bool {
+    !record_gate && captures.is_empty() && record.is_some_and(|r| r.describes_something())
+}
+
+/// Why a run could not be encoded for publishing.
+#[derive(Debug, thiserror::Error)]
+pub enum PublishError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    /// The run is a record with no legacy form and the writer gate is off.
+    #[error(
+        "this record source needs the record writer on: set {RECORD_WRITING_ENV}=1 \
+         (the record has no legacy capture form to publish)"
+    )]
+    RecordWriterOff,
+}
+
+/// [`encode_capture_payload`] for a publish seam: the same encoding, except that a run with no
+/// legacy form under a gate that is off is refused ([`record_has_no_legacy_form`]) instead of
+/// being written as an empty legacy list.
+pub fn encode_for_publish(
+    captures: &[quarto_trace::EngineCapture],
+    record: Option<&crate::record::Record>,
+    record_gate: bool,
+) -> Result<EncodedCapturePayload, PublishError> {
+    if record_has_no_legacy_form(record_gate, captures, record) {
+        return Err(PublishError::RecordWriterOff);
+    }
+    Ok(encode_capture_payload(captures, record, record_gate)?)
 }
 
 /// A capture file path is safe when it is relative and contains no
@@ -249,6 +425,281 @@ fn is_safe_relative_path(path: &str) -> bool {
     !path.is_empty()
         && p.components()
             .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+}
+
+#[cfg(test)]
+mod writer_tests {
+    use super::*;
+    use crate::record::read_record;
+    use quarto_trace::EngineCapture;
+    use std::io::Read as _;
+
+    fn record() -> crate::record::Record {
+        read_record(include_str!("../../tests/fixtures/records/basic.json")).unwrap()
+    }
+
+    fn gunzip(bytes: &[u8]) -> String {
+        let mut out = String::new();
+        flate2::read::GzDecoder::new(bytes)
+            .read_to_string(&mut out)
+            .unwrap();
+        out
+    }
+
+    #[test]
+    fn gzip_record_is_deterministic_and_round_trips() {
+        let r = record();
+        let a = gzip_record(&r).unwrap();
+        assert_eq!(a, gzip_record(&r).unwrap());
+        assert_eq!(read_record(&gunzip(&a)).unwrap(), r);
+    }
+
+    #[test]
+    fn gzip_record_carries_the_canonical_writer_bytes() {
+        let r = record();
+        assert_eq!(
+            gunzip(&gzip_record(&r).unwrap()),
+            crate::record::write_record(&r).unwrap()
+        );
+    }
+
+    #[test]
+    fn gzip_helpers_share_one_gzip_and_warning_body() {
+        // The warning decision is `capture_doc_size_warning`, called from the one
+        // private `gzip_json` that both wrappers use.
+        let src = include_str!("capture_files.rs");
+        let body = src.split("#[cfg(test)]").next().unwrap();
+        assert_eq!(body.matches("GzEncoder::new").count(), 1, "one gzip body");
+        assert_eq!(
+            body.matches("capture_doc_size_warning(gzipped.len())")
+                .count(),
+            1,
+            "one warning call"
+        );
+    }
+
+    #[test]
+    fn gate_default_is_per_surface_and_overrides_apply_to_both() {
+        // Preview is on by default, provide-hub stays off until the hosted hub
+        // reads records (RIU-1).
+        for v in [None, Some(""), Some("garbage")] {
+            assert!(record_writing_from(v, WriterSurface::Preview), "{v:?}");
+            assert!(!record_writing_from(v, WriterSurface::Provider), "{v:?}");
+        }
+        for on in ["1", "true", "TRUE", "on", "yes"] {
+            for s in [WriterSurface::Preview, WriterSurface::Provider] {
+                assert!(record_writing_from(Some(on), s), "{on}");
+            }
+        }
+        for off in ["0", "false", "off", "no"] {
+            for s in [WriterSurface::Preview, WriterSurface::Provider] {
+                assert!(!record_writing_from(Some(off), s), "{off}");
+            }
+        }
+    }
+
+    fn capture(engine: &str) -> EngineCapture {
+        serde_json::from_value(serde_json::json!({
+            "engine_name": engine, "input_qmd": "x", "result": {}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn gate_off_encodes_legacy_even_with_a_record() {
+        let caps = vec![capture("jupyter")];
+        let r = record();
+        let enc = encode_capture_payload(&caps, Some(&r), false).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.gzipped, gzip_captures(&caps).unwrap());
+        assert_eq!(enc.engines, vec!["jupyter".to_string()]);
+    }
+
+    #[test]
+    fn gate_on_encodes_the_record_with_its_engines() {
+        let caps = vec![capture("jupyter")];
+        let r = record();
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert!(enc.is_record);
+        assert_eq!(enc.gzipped, gzip_record(&r).unwrap());
+        let want: Vec<String> = r
+            .metadata
+            .quarto_engines
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
+        assert_eq!(enc.engines, want);
+    }
+
+    #[test]
+    fn gate_on_without_a_record_falls_back_to_legacy() {
+        let caps = vec![capture("jupyter")];
+        let enc = encode_capture_payload(&caps, None, true).unwrap();
+        assert!(!enc.is_record);
+    }
+
+    /// An engine that builds no record (a passthrough or an extension engine without one)
+    /// leaves the coalesced record with no engine entries. It describes nothing, so storing it
+    /// would replace the legacy captures with an empty document and lose the outputs.
+    #[test]
+    fn gate_on_with_an_engineless_record_falls_back_to_legacy() {
+        let mut empty = record();
+        empty.metadata.quarto_engines.clear();
+        empty.cells.clear();
+        let caps = vec![capture("test-passthrough")];
+        let enc = encode_capture_payload(&caps, Some(&empty), true).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.engines, vec!["test-passthrough".to_string()]);
+        assert!(enc.engines_without_record.is_empty());
+    }
+
+    fn record_engines() -> Vec<String> {
+        record()
+            .metadata
+            .quarto_engines
+            .iter()
+            .map(|e| e.name.clone())
+            .collect()
+    }
+
+    /// RIU-1 record-less-engine rule: a capture whose engine is not in the
+    /// record means the record cannot stand for the document, so the whole
+    /// document is stored in the legacy format and the engine is reported.
+    #[test]
+    fn a_capture_from_an_engine_outside_the_record_gives_legacy_and_reports_it() {
+        let r = record();
+        let first = record_engines().remove(0);
+        let caps = vec![capture(&first), capture("echo")];
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.gzipped, gzip_captures(&caps).unwrap());
+        assert_eq!(enc.engines_without_record, vec!["echo".to_string()]);
+    }
+
+    #[test]
+    fn two_captures_of_one_recordless_engine_report_it_once() {
+        let r = record();
+        let first = record_engines().remove(0);
+        let caps = vec![capture("echo"), capture(&first), capture("echo")];
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert_eq!(enc.engines_without_record, vec!["echo".to_string()]);
+    }
+
+    #[test]
+    fn captures_all_in_the_record_give_a_record_and_report_none() {
+        let r = record();
+        let caps: Vec<_> = record_engines().iter().map(|e| capture(e)).collect();
+        let enc = encode_capture_payload(&caps, Some(&r), true).unwrap();
+        assert!(enc.is_record);
+        assert!(enc.engines_without_record.is_empty());
+    }
+
+    #[test]
+    fn a_record_and_no_captures_gives_a_record_and_reports_none() {
+        // An imported record (RIU-3) has no captures to compare.
+        let r = record();
+        let enc = encode_capture_payload(&[], Some(&r), true).unwrap();
+        assert!(enc.is_record);
+        assert!(enc.engines_without_record.is_empty());
+    }
+
+    #[test]
+    fn gate_off_reports_no_recordless_engines() {
+        let r = record();
+        let caps = vec![capture("echo")];
+        let enc = encode_capture_payload(&caps, Some(&r), false).unwrap();
+        assert!(!enc.is_record);
+        assert!(enc.engines_without_record.is_empty());
+    }
+
+    /// What RIU-3 imports: no engines, but cells. It describes something, so with the gate on it
+    /// is stored as a record (EXR-15's rule is extended, not reversed).
+    #[test]
+    fn gate_on_with_an_engineless_record_with_cells_encodes_a_record() {
+        let mut imported = record();
+        imported.metadata.quarto_engines.clear();
+        assert!(!imported.cells.is_empty());
+        let enc = encode_capture_payload(&[], Some(&imported), true).unwrap();
+        assert!(enc.is_record);
+        assert_eq!(enc.gzipped, gzip_record(&imported).unwrap());
+        assert!(enc.engines.is_empty());
+    }
+
+    fn imported() -> crate::record::Record {
+        let mut r = record();
+        r.metadata.quarto_engines.clear();
+        r
+    }
+
+    fn nothing() -> crate::record::Record {
+        let mut r = imported();
+        r.cells.clear();
+        r
+    }
+
+    /// The refusal predicate: a record that describes something, no captures, gate off.
+    #[test]
+    fn refusal_predicate_covers_every_combination() {
+        let caps = [capture("jupyter")];
+        let full = record();
+        for (gate, captures, rec, want) in [
+            (false, &[][..], Some(&full), true),
+            (false, &[][..], Some(&imported()), true),
+            (false, &caps[..], Some(&full), false),
+            (true, &[][..], Some(&full), false),
+            (true, &caps[..], Some(&full), false),
+            (false, &[][..], Some(&nothing()), false),
+            (false, &[][..], None, false),
+            (false, &caps[..], None, false),
+        ] {
+            assert_eq!(
+                record_has_no_legacy_form(gate, captures, rec),
+                want,
+                "gate={gate} captures={} record={:?}",
+                captures.len(),
+                rec.map(|r| r.describes_something())
+            );
+        }
+    }
+
+    #[test]
+    fn publish_refuses_a_record_with_no_legacy_form_naming_the_variable() {
+        let err = encode_for_publish(&[], Some(&imported()), false).unwrap_err();
+        assert!(matches!(err, PublishError::RecordWriterOff));
+        assert!(err.to_string().contains(RECORD_WRITING_ENV), "{err}");
+    }
+
+    #[test]
+    fn publish_gate_off_with_captures_gives_the_legacy_form() {
+        let caps = vec![capture("jupyter")];
+        let enc = encode_for_publish(&caps, Some(&record()), false).unwrap();
+        assert!(!enc.is_record);
+        assert_eq!(enc.gzipped, gzip_captures(&caps).unwrap());
+    }
+
+    /// `encode_for_publish` and `encode_capture_payload` take the same decision for each
+    /// combination, so the rule cannot drift between them.
+    #[test]
+    fn publish_and_encoder_agree_wherever_publish_does_not_refuse() {
+        let caps = [capture("jupyter")];
+        let full = record();
+        let imp = imported();
+        let none = nothing();
+        for gate in [false, true] {
+            for captures in [&[][..], &caps[..]] {
+                for rec in [None, Some(&full), Some(&imp), Some(&none)] {
+                    let refused = record_has_no_legacy_form(gate, captures, rec);
+                    let published = encode_for_publish(captures, rec, gate);
+                    assert_eq!(published.is_err(), refused);
+                    if let Ok(p) = published {
+                        let e = encode_capture_payload(captures, rec, gate).unwrap();
+                        assert_eq!(p.is_record, e.is_record);
+                        assert_eq!(p.gzipped, e.gzipped);
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -401,6 +852,7 @@ mod tests {
             engine_name: "knitr".into(),
             input_qmd: "```{r}\n1\n```\n".into(),
             result: serde_json::json!({"markdown": "out"}),
+            record: None,
             files: vec![CaptureFile {
                 path: "f.png".into(),
                 contents_base64: BASE64.encode(b"PNG"),

@@ -74,6 +74,8 @@ fn hex_prefix(bytes: &[u8], n: usize) -> String {
 fn compute_scss_resources_hash() -> String {
     let scss_dir = Path::new("../../resources/scss");
     let mut files: Vec<_> = collect_files_with_ext(scss_dir, "scss");
+    // Plain CSS compiled into a bundle (bslib's htmltools `fill.css`).
+    files.extend(collect_files_with_ext(scss_dir, "css"));
     files.extend(collect_files_with_ext(
         Path::new("../../resources/pandoc/highlight-styles"),
         "theme",

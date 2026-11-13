@@ -1,0 +1,16 @@
+project:
+  type: website
+  output-dir: .
+
+website:
+  title: "Typst Margin Layout Tests"
+  sidebar:
+    contents: "*.qmd"
+
+bibliography: borges-refs.bib
+
+format:
+  html:
+    toc: true
+  typst:
+    keep-typ: true

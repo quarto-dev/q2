@@ -17,8 +17,14 @@ path = "src/bin/parse_corpus.rs"
 name = "vfs-flush"
 path = "src/bin/vfs_flush.rs"
 
+[[bin]]
+name = "ast-memory"
+path = "src/bin/ast_memory.rs"
+
 [dependencies]
 pampa = { path = "../pampa" }
+quarto-pandoc-types = { workspace = true }
+quarto-source-map = { workspace = true }
 quarto-core = { path = "../quarto-core" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }
 pollster = { workspace = true }

@@ -1,0 +1,21 @@
+---
+format: html
+---
+
+```{python}
+import os
+
+for name in ("QUARTO_EXECUTE_INFO", "QUARTO_PROJECT_ROOT", "QUARTO_DOCUMENT_PATH", "QUARTO_DOCUMENT_FILE"):
+    print(name, "=", os.environ.get(name))
+
+info = os.environ.get("QUARTO_EXECUTE_INFO")
+if info:
+    import json
+    raw = open(info).read()
+    data = json.loads(raw)
+    print("execute-info bytes:", len(raw))
+    print("format keys:", sorted(data["format"].keys()))
+    print("bytes per format bin:", {k: len(json.dumps(v)) for k, v in data["format"].items()})
+    brand = data["format"]["render"].get("brand")
+    print("brand modes:", None if brand is None else {k: (v is not None) for k, v in brand.items()})
+```

@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PANDOC_VERSION: "3.12.1"
+  PANDOC_VERSION: "3.13"
   # Typst — the Pandoc-hybrid typst leg's `L`-tier tests (typst_compile.rs)
   # require a real `typst` binary on PATH (TYPST_VERSION_FLOOR is 0.8+).
   TYPST_VERSION: "0.15.1"
@@ -91,7 +91,8 @@ jobs:
         with:
           tool: cargo-insta
 
-      # Pandoc setup (pinned to match Quarto 1.9)
+      # Pandoc setup: PANDOC_VERSION must equal PANDOC_PIN (crates/quarto-core/src/pandoc_filters/mod.rs;
+      # enforced by `cargo xtask lint` pandoc-pin). Bump procedure: dev-docs/pandoc-wasm-bump.md.
       - name: Set up Pandoc (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -228,6 +229,32 @@ jobs:
         run: |
           cd crates/tree-sitter-qmd/tree-sitter-markdown
           tree-sitter test
+
+      # A Jupyter runtime plus a Python kernelspec, so the jupyter-gated
+      # integration tests (python_kernel_available / require_kernel!) run
+      # instead of skipping silently. The widget packages are for the widget
+      # epic (claude-notes/plans/2026-11-02-widget-epic.md). The venv's bin
+      # goes on PATH so `jupyter` is found; the kernelspec is installed
+      # per-user so list_kernelspecs() sees it.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          # Pinned so setup-uv downloads this release directly instead of
+          # querying the GitHub API for "latest" on every run (a connect
+          # timeout there failed a macOS job). Also keeps CI reproducible.
+          version: "0.13.7"
+
+      - name: Set up Jupyter kernel and widget packages
+        shell: bash
+        run: |
+          uv venv "$RUNNER_TEMP/jupyter-venv" --python 3.12
+          uv pip install --python "$RUNNER_TEMP/jupyter-venv/bin/python" \
+            jupyter-core ipykernel ipywidgets anywidget plotly \
+            great-tables polars pandas
+          "$RUNNER_TEMP/jupyter-venv/bin/python" -m ipykernel install --user --name python3
+          echo "$RUNNER_TEMP/jupyter-venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/jupyter-venv/bin/jupyter" --version
+          "$RUNNER_TEMP/jupyter-venv/bin/jupyter" kernelspec list
 
       # `ci` profile + `--tests` makes a separate `cargo build` redundant.
       # `--tests` (not `--all-targets`) excludes benches — `quarto-yaml` declares
@@ -396,3 +423,10 @@ jobs:
           CFLAGS_wasm32_unknown_unknown="-isystem ${{ github.workspace }}/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
           cargo test -p pampa --test wasm_lua --target wasm32-unknown-unknown \
             --no-default-features --features lua-filter -Zbuild-std=std,panic_unwind,panic_abort
+
+      - name: Run quarto-core WASM tests
+        run: |
+          CC_wasm32_unknown_unknown=clang \
+          CFLAGS_wasm32_unknown_unknown="-isystem ${{ github.workspace }}/crates/wasm-quarto-hub-client/wasm-sysroot -fno-builtin" \
+          cargo test -p quarto-core --test wasm_replay --target wasm32-unknown-unknown \
+            -Zbuild-std=std,panic_unwind,panic_abort

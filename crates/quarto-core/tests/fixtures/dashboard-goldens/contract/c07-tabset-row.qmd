@@ -1,0 +1,39 @@
+---
+# contract: .tabset on a row; each titled cell becomes a tab
+title: "C07 Tabset Row"
+format: dashboard
+---
+
+## Row
+
+::: {.cell title="C07-TOP"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+## Row {.tabset}
+
+::: {.cell title="C07-TAB-A"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::
+
+::: {.cell title="C07-TAB-B"}
+
+::: {.cell-output-display}
+
+![](plot.svg)
+
+:::
+
+:::

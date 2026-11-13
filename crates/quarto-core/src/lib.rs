@@ -50,6 +50,7 @@ pub mod components;
 pub mod config_paths;
 pub mod config_sources;
 pub mod crossref;
+pub mod dashboard;
 pub mod dates;
 pub mod dependency;
 pub mod diagnostic_policy;
@@ -79,9 +80,13 @@ pub mod pandoc_formats;
 pub mod pandoc_request;
 pub mod pipeline;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod positron_cache;
+pub mod presenter;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod preview_out;
 pub mod project;
 pub mod project_resources;
+pub mod record;
 pub mod render;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod render_to_file;
@@ -94,6 +99,7 @@ pub mod template;
 pub mod theme_diagnostic;
 pub mod transform;
 pub mod transforms;
+pub mod typst_citations;
 pub mod typst_google_fonts;
 
 // Re-export commonly used types

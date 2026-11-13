@@ -20,7 +20,7 @@
 mod assemble;
 mod auto_stretch;
 mod columns;
-mod footer_logo;
+pub(crate) mod footer_logo;
 mod footnotes;
 mod slides;
 mod theme;

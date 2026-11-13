@@ -1,0 +1,19 @@
+---
+title: R fixture (rebuilt from the cached cells)
+---
+
+```{r}
+#| label: fig-cars
+message("hi")
+print(head(cars, 2))
+plot(cars)
+```
+
+```{r}
+stop("boom")
+```
+
+```{r}
+knitr::knit_hooks$set(source = function(x, options) x)
+1 + 1
+```

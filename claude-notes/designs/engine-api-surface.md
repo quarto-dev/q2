@@ -94,7 +94,29 @@ impossible/redundant, reason given).
 | `handledLanguages` | `handled_languages` | present | leave-alone set (§5); `HANDLED_LANGUAGES ∪ {lang owned by others}` |
 | `project: ProjectContext` | `project_dir` + launch `EngineProjectContext` | present | `config` + output-dir carried as values (DQ-5); the two callback members dropped (DQ-1) |
 | — | `source_map` | q2-native | provenance addition |
-| — | `owned_languages` | q2-native | positive projection of the ownership map (§5, Plan 4d) — `{lang owned by this engine}`; informational (not enforcement), so engines select owned cells directly instead of inferring the complement of `handledLanguages` |
+| — | `owned_languages` (wire `ownedLanguages`) | q2-native | positive projection of the ownership map (§5, Plan 4d) — `{lang owned by this engine}`; informational (not enforcement), so engines select owned cells directly instead of inferring the complement of `handledLanguages` |
+| — | `units` (wire `units`) | q2-native | EXR-7: the stage's one shared unit list, relocated into this engine's `input`; see "q2-only execution-record fields" below |
+
+### q2-only execution-record fields (EXR-7)
+
+These ride beside the Q1 `ExecuteOptions`/`ExecuteResult` the way `signal` and `htmlDependencies` do:
+typed in the host's own `types.ts`, attached or read by cast in `host.ts`, and not part of the vendored
+`@quarto/types` parity copy. All are optional, so an old engine on a new core (and a new engine on an old
+core) keeps working. The user-facing extension page waits until Jupyter, Julia and knitr have exercised
+the contract (bd-ixz93hjp); `keep-ipynb` stays omitted deliberately, as above.
+These fields, and `ownedLanguages` from JOL-4 (above), are **not yet published**: the
+`@quarto/types` copy that engine authors install from npm does not carry them until
+bd-ixz93hjp lands.
+
+| Direction | Field | Meaning |
+|---|---|---|
+| core → engine | `units` | One entry per execution unit in the engine's `input`: `id` (the stage's `{index}-{hash8}-{label\|unlabeled}` / `{n}-{hash8}-inline`; absent for a unit an earlier engine's output introduced), `index` (cells only), `kind` (`cell`\|`inline`), `language`, `line` (1-based, in `input`), `owned` (this engine runs it), `inFrontMatter` (omitted unless true). No byte or UTF-16 offsets in v1. |
+| engine → core | `notebook` | A plain nbformat-4 notebook, not a core record. Core takes only each cell's `outputs`, `execution_count` and kernel (`metadata.quarto_kernel`, else `kernelspec.name`); source, ids, hashes and location come from the stage's unit. Two optional keys steer the presenter without being interpreted: `metadata.quarto_file_path` on an image output (the file name) and `metadata.quarto_attrs` (`{id?, classes?, attributes?}`) on a display_data or execute_result output, and `quarto_attrs` in a record cell's metadata for the `.cell` wrapper (OPR-7f; core's Julia mapping writes both after `RecordBuilder::finish`, and an entry the attribute grammar refuses is skipped with a note). Neither is hashed; an old reader ignores them, so there is no `RECORD_VERSION` bump. |
+| engine → core | `recordInfo` | `{version, granularity, outputKind, alignment, hashDefinition?}`. `alignment: "ids"` means a cell names its unit in `metadata.quarto_cell_id`; `"positional"` means code cells match the engine's owned units by order. `hashDefinition` is the engine's declared hash rule; omitted means the conservative default. |
+
+A problem with the notebook (unreadable, wrong count over the engine's owned units, unknown or duplicate
+id) drops that engine's record and raises a warning; it never fails the render while the record is
+additive. Implementation: `engine/ts_record.rs`; plan: `2026-10-28-exr-07-engine-wire.md`.
 
 **`ExecutionTarget`** (Q1 cookie; q2 has **no `target()` step**):
 

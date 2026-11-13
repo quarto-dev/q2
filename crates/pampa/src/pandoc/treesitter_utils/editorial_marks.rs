@@ -9,7 +9,6 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Delete, EditComment, Highlight, Inline, Inlines, Insert, Space, Str};
 use crate::pandoc::location::node_location;
-use hashlink::LinkedHashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -28,7 +27,7 @@ macro_rules! process_editorial_mark {
                 context: &ASTContext,
             ) -> PandocNativeIntermediate {
                 let whitespace_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
-                let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
+                let mut attr = crate::pandoc::attr::empty_attr();
                 let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
                 let mut content: Inlines = vec![];
 
@@ -75,12 +74,12 @@ macro_rules! process_editorial_mark {
 
                 // Create the editorial mark inline element with adjusted source info
                 let adjusted_source_info = crate::pandoc::location::range_to_source_info_with_context(&space_info.adjusted_range, context);
-                let inline = Inline::$struct_name($struct_name {
+                let inline = Inline::$struct_name(Box::new($struct_name {
                     attr,
                     content,
                     source_info: adjusted_source_info,
                     attr_source,
-                });
+                }));
 
                 // Wrap with Space nodes as needed (returns IntermediateInlines)
                 wrap_inline_with_delimiter_spaces(inline, &space_info, context)

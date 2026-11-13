@@ -1,0 +1,38 @@
+---
+title: "Invalid Lightbox Option"
+description: "A `lightbox` option has a value Quarto does not recognize, so the default is used instead."
+code: Q-19-5
+subsystem: image
+status: stub
+since: "99.9.9"
+categories:
+  - image
+---
+
+# `Q-19-5` — Invalid Lightbox Option
+
+> A `lightbox` option has a value Quarto does not recognize, so the
+> default is used instead.
+
+## What this means
+
+The [`lightbox`](../../guides/formats/html/lightbox.qmd) option, or one
+of its sub-options, was given a value Quarto cannot use. That one value is
+ignored and its default applies; the rest of the lightbox configuration
+still takes effect, and the page still renders.
+
+## Why this happens
+
+- **An unknown value**, such as `effect: wobble`. `effect` takes `fade`,
+  `zoom` or `none`; `desc-position` takes `top`, `bottom`, `left` or
+  `right`; `match` takes `auto`; `loop` takes `true` or `false`.
+- **An unknown option name** under `lightbox:`, often a typo.
+- **A `lightbox` value that is not `true`, `false`, `auto` or a map.**
+- **A code cell's `lightbox` option** that could not be read, or that
+  lists fewer values than the cell makes plots.
+
+## How to fix
+
+Use one of the values listed above, or remove the option to get the
+default. Quarto 1 stopped the render on an unknown `effect`; Quarto 2
+warns and carries on.

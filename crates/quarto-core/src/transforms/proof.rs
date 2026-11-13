@@ -23,7 +23,7 @@
 //! treatment. See the Phase 2 plan follow-up.
 
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
-use quarto_pandoc_types::block::{Block, Blocks, Div, Header};
+use quarto_pandoc_types::block::{Block, Blocks, Div};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::inline::Inlines;
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -121,7 +121,7 @@ fn transform_block(block: &mut Block) {
                 attr_source: AttrSourceInfo::empty(),
             },
         ));
-        *block = Block::Custom(converted);
+        *block = Block::Custom(Box::new(converted));
     }
 }
 
@@ -131,7 +131,7 @@ fn has_proof_class(attr: &Attr) -> bool {
 
 fn empty_attr() -> Attr {
     use hashlink::LinkedHashMap;
-    (String::new(), Vec::new(), LinkedHashMap::new())
+    (String::new(), Vec::new(), LinkedHashMap::new()).into()
 }
 
 fn convert_div(mut div: Div) -> CustomNode {
@@ -170,7 +170,7 @@ fn convert_div(mut div: Div) -> CustomNode {
 /// positional-alignment rationale (this is the parallel implementation
 /// for `.proof` Divs).
 fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<Inlines> {
-    let (_id, _classes, kvs) = attr;
+    let (_id, _classes, kvs) = &mut **attr;
 
     let name_idx = kvs.keys().position(|k| k == "name")?;
 
@@ -205,8 +205,8 @@ fn extract_name_attr(attr: &mut Attr, attr_source: &AttrSourceInfo) -> Option<In
 fn extract_first_header_title(content: &mut Blocks) -> Option<Inlines> {
     if let Some(Block::Header(_)) = content.first() {
         let first = content.remove(0);
-        if let Block::Header(Header { content: title, .. }) = first {
-            return Some(title);
+        if let Block::Header(header) = first {
+            return Some(header.content);
         }
     }
     None
@@ -231,6 +231,7 @@ mod tests {
             classes.iter().map(|s| s.to_string()).collect(),
             LinkedHashMap::new(),
         )
+            .into()
     }
 
     fn para(text: &str) -> Block {
@@ -250,12 +251,12 @@ mod tests {
 
     #[test]
     fn div_proof_becomes_proof_custom_node() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr("", &["proof"]),
             content: vec![para("Proof body.")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
         let Block::Custom(node) = &out[0] else {
             panic!("expected custom node");
@@ -269,12 +270,12 @@ mod tests {
 
     #[test]
     fn proof_not_recognized_as_crossref_target() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr("my-proof", &["proof"]),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
         // Even with an id, a Proof doesn't carry `plain_data.ref_type`,
         // so `crossref_target_view` returns None — the indexer and
@@ -286,12 +287,12 @@ mod tests {
     fn proof_with_name_attribute_captures_title() {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("name".into(), "Custom proof title".into());
-        let div = Block::Div(Div {
-            attr: (String::new(), vec!["proof".into()], kvs),
+        let div = Block::Div(Box::new(Div {
+            attr: (String::new(), vec!["proof".into()], kvs).into(),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div]);
         let Block::Custom(node) = &out[0] else {
             panic!()
@@ -307,12 +308,12 @@ mod tests {
 
     #[test]
     fn div_without_proof_class_untouched() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: attr("", &["not-a-proof"]),
             content: vec![para("body")],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let out = run(vec![div.clone()]);
         assert_eq!(out, vec![div]);
     }

@@ -42,6 +42,7 @@
 use std::collections::HashMap;
 
 use quarto_pandoc_types::block::{Block, Paragraph, RawBlock};
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::inline::{Inline, Note};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, Inlines};
@@ -187,11 +188,11 @@ impl NoteContent {
 fn mark_with_ref_id(mut blocks: Blocks, ref_id: &str, source_info: &SourceInfo) -> Blocks {
     blocks.insert(
         0,
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format: FOOTNOTE_REF_ID_MARKER_FORMAT.to_string(),
             text: ref_id.to_string(),
             source_info: source_info.clone(),
-        }),
+        })),
     );
     blocks
 }
@@ -234,6 +235,17 @@ fn strip_ref_id_markers_in_block(block: &mut Block) {
             }
         }
         Block::Div(div) => strip_ref_id_markers(&mut div.content),
+        // Custom-node slots (since #1050 a callout is still a `Callout` custom node here (bd-akkproqy)).
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                match slot {
+                    Slot::Blocks(blocks) => strip_ref_id_markers(blocks),
+                    Slot::Block(b) => strip_ref_id_markers_in_block(b),
+                    Slot::Inlines(inlines) => strip_ref_id_markers_in_inlines(inlines),
+                    Slot::Inline(i) => strip_ref_id_markers_in_inline(i),
+                }
+            }
+        }
         Block::Figure(fig) => {
             strip_ref_id_markers(&mut fig.content);
             if let Some(ref mut blocks) = fig.caption.long {
@@ -358,6 +370,15 @@ fn collect_note_definitions(
                 collect_note_definitions(&mut div.content, definitions);
                 true
             }
+            // Definitions inside custom-node block slots (since #1050 a callout is still a `Callout` custom node here (bd-akkproqy)).
+            Block::Custom(node) => {
+                for (_name, slot) in node.slots.iter_mut() {
+                    if let Slot::Blocks(blocks) = slot {
+                        collect_note_definitions(blocks, definitions);
+                    }
+                }
+                true
+            }
             Block::Figure(fig) => {
                 collect_note_definitions(&mut fig.content, definitions);
                 true
@@ -409,6 +430,17 @@ fn process_block(block: &mut Block, definitions: &HashMap<String, NoteContent>) 
         }
         Block::Div(div) => {
             process_blocks(&mut div.content, definitions);
+        }
+        // Custom-node slots (since #1050 a callout is still a `Callout` custom node here (bd-akkproqy)).
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter_mut() {
+                match slot {
+                    Slot::Blocks(blocks) => process_blocks(blocks, definitions),
+                    Slot::Block(b) => process_block(b, definitions),
+                    Slot::Inlines(inlines) => process_inlines(inlines, definitions),
+                    Slot::Inline(i) => process_inline(i, definitions),
+                }
+            }
         }
         Block::Figure(fig) => {
             process_blocks(&mut fig.content, definitions);
@@ -768,11 +800,11 @@ mod tests {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
                 // Note definition
-                Block::NoteDefinitionPara(NoteDefinitionPara {
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                     id: "myfoot".to_string(),
                     content: vec![make_str("Defined footnote content")],
                     source_info: dummy_source_info(),
-                }),
+                })),
                 // Paragraph with reference
                 Block::Paragraph(Paragraph {
                     content: vec![
@@ -812,11 +844,11 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
-                Block::NoteDefinitionPara(NoteDefinitionPara {
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                     id: "myfoot".to_string(),
                     content: vec![make_str("Defined footnote content")],
                     source_info: dummy_source_info(),
-                }),
+                })),
                 Block::Paragraph(Paragraph {
                     content: vec![
                         make_str("See note"),
@@ -873,28 +905,31 @@ mod tests {
                 Block::Paragraph(Paragraph {
                     content: vec![
                         make_str("Ref."),
-                        Inline::Span(Span {
+                        Inline::Span(Box::new(Span {
                             attr: (
                                 String::new(),
                                 vec!["quarto-note-reference".to_string()],
                                 reference_kv,
-                            ),
+                            )
+                                .into(),
                             content: vec![],
                             source_info: dummy_source_info(),
                             attr_source: AttrSourceInfo::empty(),
-                        }),
+                        })),
                     ],
                     source_info: dummy_source_info(),
                 }),
                 // Block definition `::: ^bk … :::`.
-                Block::NoteDefinitionFencedBlock(quarto_pandoc_types::NoteDefinitionFencedBlock {
-                    id: "bk".to_string(),
-                    content: vec![Block::Paragraph(Paragraph {
-                        content: vec![make_str("Note.")],
+                Block::NoteDefinitionFencedBlock(Box::new(
+                    quarto_pandoc_types::NoteDefinitionFencedBlock {
+                        id: "bk".to_string(),
+                        content: vec![Block::Paragraph(Paragraph {
+                            content: vec![make_str("Note.")],
+                            source_info: dummy_source_info(),
+                        })],
                         source_info: dummy_source_info(),
-                    })],
-                    source_info: dummy_source_info(),
-                }),
+                    },
+                )),
             ],
         };
 
@@ -1146,11 +1181,11 @@ mod tests {
                         ConfigValue::new_string(mode, dummy_source_info()),
                     )]),
                     blocks: vec![
-                        Block::NoteDefinitionPara(NoteDefinitionPara {
+                        Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
                             id: "1".to_string(),
                             content: vec![make_str("note content")],
                             source_info: dummy_source_info(),
-                        }),
+                        })),
                         Block::Paragraph(Paragraph {
                             content: vec![
                                 make_str("Text"),
@@ -1246,5 +1281,87 @@ mod tests {
 
         // Check footnotes section exists
         assert!(matches!(ast.blocks[1], Block::Div(_)));
+    }
+
+    /// Notes inside a custom node's slots resolve like notes anywhere else
+    /// (bd-akkproqy). Since #1050 a callout is still a `Callout` custom
+    /// node when both footnote halves run, so a walker that only descends
+    /// into `Div`s silently skips its body and title: the reference stays
+    /// an unresolved marker and the numbering shifts.
+    #[tokio::test]
+    async fn test_notes_inside_custom_node_slots_resolve() {
+        use quarto_pandoc_types::custom::{CustomNode, Slot};
+        let note_ref = |id: &str| {
+            Inline::NoteReference(quarto_pandoc_types::inline::NoteReference {
+                id: id.to_string(),
+                source_info: dummy_source_info(),
+            })
+        };
+        let mut callout = CustomNode::new(
+            "Callout",
+            (String::new(), vec![], hashlink::LinkedHashMap::new()).into(),
+            dummy_source_info(),
+        );
+        callout.set_slot(
+            "title",
+            Slot::Inlines(vec![make_str("Title"), note_ref("t")]),
+        );
+        callout.set_slot(
+            "content",
+            Slot::Blocks(vec![
+                Block::Paragraph(Paragraph {
+                    content: vec![
+                        make_str("Body"),
+                        note_ref("b"),
+                        Inline::Note(quarto_pandoc_types::inline::Note {
+                            content: vec![Block::Paragraph(Paragraph {
+                                content: vec![make_str("inline note")],
+                                source_info: dummy_source_info(),
+                            })],
+                            source_info: dummy_source_info(),
+                        }),
+                    ],
+                    source_info: dummy_source_info(),
+                }),
+                // A definition inside the callout body is collected too.
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
+                    id: "b".to_string(),
+                    content: vec![make_str("Note B")],
+                    source_info: dummy_source_info(),
+                })),
+            ]),
+        );
+        let mut ast = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![
+                Block::Custom(Box::new(callout)),
+                Block::NoteDefinitionPara(Box::new(NoteDefinitionPara {
+                    id: "t".to_string(),
+                    content: vec![make_str("Note T")],
+                    source_info: dummy_source_info(),
+                })),
+            ],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
+        run_both_halves(&mut ast, &mut ctx).await;
+
+        let dump = format!("{ast:?}");
+        for leftover in ["NoteReference", "NoteDefinitionPara", "Note(Note"] {
+            assert!(!dump.contains(leftover), "unresolved {leftover} in {dump}");
+        }
+        for id in ["fnref1", "fnref2", "fnref3"] {
+            assert!(
+                dump.contains(&format!("\"{id}\"")),
+                "missing {id} in {dump}"
+            );
+        }
+        assert!(!dump.contains("\"fnref4\""), "too many notes in {dump}");
+        // Callout + trailing footnotes section; both definitions removed.
+        assert_eq!(ast.blocks.len(), 2, "{dump}");
     }
 }

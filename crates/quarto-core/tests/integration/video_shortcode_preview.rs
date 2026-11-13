@@ -91,7 +91,7 @@ fn render_preview_ast(content: &[u8], pseudo_format: &str) -> String {
         &mut ctx,
         fresh_runtime(),
         None,
-        vec![],
+        vec![].into(),
     ))
     .expect("q2-preview pipeline render")
     .ast_json

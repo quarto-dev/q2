@@ -636,8 +636,8 @@ impl ProjectType for WebsiteProjectType {
                 diagnostics,
             )?;
             // Website search (bd-eip0naf4): Pagefind bundle under
-            // `<lib_dir>/quarto-search/`, its manifest, and the
-            // Quarto 1-shaped `search.json`, from the captures
+            // `<lib_dir>/quarto-search/`, its manifest, and (when
+            // wanted) the Quarto 1-shaped `search.json`, from the captures
             // `SearchCaptureStage` deposited. Same late slot as llms:
             // every page has rendered and every resource has landed.
             super::search::writer::write_search_index(
@@ -3229,6 +3229,9 @@ async fn pass1_profile_single_file_live(
     let source_name = doc_info.input.to_string_lossy().to_string();
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(project, doc_info, format, &binaries);
+    // This pass runs before the real render, which writes the trace. Its own trace would
+    // replace the recording a replay is reading (KNR-6).
+    ctx.suppress_trace_output = true;
 
     // Exactly the full pipeline's head, so the Pass-1 profile equals
     // the one the full render computes (see `build_head_stages`).

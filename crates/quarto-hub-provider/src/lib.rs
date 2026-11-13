@@ -30,6 +30,7 @@ pub use exec_channel::{BEACON_INTERVAL, BEACON_TIMEOUT, ExecMessage, parse_exec_
 pub use execute::{CAPTURE_MIME_TYPE, ExecOutcome, Provider};
 pub use join::{JoinConfig, join, join_and_list_files};
 pub use materialize::materialize_project;
+pub use quarto_core::record::overlay_free_run;
 pub use token::{StaticTokenSource, TokenSource};
 pub use token_bridge::NodeBridge;
 

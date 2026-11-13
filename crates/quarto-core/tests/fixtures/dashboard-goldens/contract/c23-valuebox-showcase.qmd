@@ -1,0 +1,19 @@
+---
+# contract: value-box showcase position (Q1 ignores it; D5 implements)
+title: "C23 Showcase"
+format: dashboard
+---
+
+## Row
+
+::: {.valuebox icon="pencil" showcase-position="top-right"}
+C23-TOPRIGHT
+
+1
+:::
+
+::: {.valuebox icon="chat" showcase="bottom"}
+C23-BOTTOM
+
+2
+:::

@@ -1,0 +1,21 @@
+---
+title: Duplicates
+jupyter: python3
+execute:
+  record: true
+---
+
+```{python}
+print("same")
+```
+
+Prose between.
+
+```{python}
+print("same")
+```
+
+```{python}
+#| label: lbl-one
+print("labeled")
+```

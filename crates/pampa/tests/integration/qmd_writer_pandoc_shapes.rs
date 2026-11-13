@@ -575,26 +575,13 @@ fn adjacent_ordered_lists_in_nested_containers() {
     assert_roundtrip_with(doc(vec![ordered_list(1, vec![item])]), with_list_separators);
 }
 
-/// Every `Plain` as a `Para`, for comparisons that don't care which one a
-/// list item's first block is.
-fn plains_as_paras(value: &mut Value) {
-    match value {
-        Value::Array(items) => items.iter_mut().for_each(plains_as_paras),
-        Value::Object(map) => {
-            if map.get("t") == Some(&json!("Plain")) {
-                map.insert("t".to_string(), json!("Para"));
-            }
-            map.values_mut().for_each(plains_as_paras);
-        }
-        _ => {}
-    }
-}
-
 #[test]
 fn adjacent_ordered_lists_in_a_tight_item_are_not_swallowed() {
-    // A tight item has no blank line between its blocks, so the separator would
-    // read back as text on the preceding list line. The writer loosens the item
-    // instead (its first `Plain` becomes a `Para`), so only Plain/Para may differ.
+    // A tight item has no blank line between its blocks, so a bare separator
+    // would read back as text on the preceding list line, and a blank line
+    // around it would make the item loose. The writer fences the separator
+    // instead (bd-2bcre8cr), so the item stays tight: the round trip is exact
+    // up to the separator itself.
     let mut item = vec![plain(inl("item"))];
     item.extend([numbered(1, &["x"]), numbered(1, &["y"])]);
     for outer in [
@@ -603,11 +590,14 @@ fn adjacent_ordered_lists_in_a_tight_item_are_not_swallowed() {
     ] {
         let mut t = trip(&doc(vec![outer]));
         with_list_separators(&mut t.before);
-        plains_as_paras(&mut t.before);
-        plains_as_paras(&mut t.after);
         assert_eq!(
             t.before["blocks"], t.after["blocks"],
             "--- qmd ---\n{}",
+            t.qmd
+        );
+        assert!(
+            t.qmd.contains("```{=html}"),
+            "the separator inside the item is fenced: {:?}",
             t.qmd
         );
     }
@@ -920,27 +910,24 @@ fn definition_list_shapes_round_trip() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
-/// Single-paragraph definitions separated by blank lines (`Para` each)
-/// read back tight: the qmd reader, like pandoc's definition-list reader,
-/// does not loosen a list for a blank line between its items. Tight/loose
-/// is not preserved here, but the list settles: the AST is stable from the
-/// first re-read and the text from the second write.
+/// Single-paragraph definitions round-trip with their loose/tight verdict:
+/// the writer puts a blank line between `Para` definitions and none between
+/// `Plain` ones, and the reader applies the CommonMark rule to the bullet
+/// list the `.definition-list` div wraps (bd-az53ojvo), so each spelling
+/// reads back as itself. (pandoc's own definition-list reader would settle
+/// the loose spelling into the tight one; the qmd sugar is a bullet list
+/// and follows CommonMark.)
 #[test]
-fn loose_single_paragraph_definitions_settle_into_tight_ones() {
-    let loose = |b: fn(Vec<Value>) -> Value| {
+fn loose_and_tight_single_paragraph_definitions_round_trip() {
+    let definitions = |b: fn(Vec<Value>) -> Value| {
         doc(vec![definition_list(vec![(
             inl("T"),
             vec![vec![b(inl("a"))], vec![b(inl("b"))]],
         )])])
     };
-    // First trip: the loose AST reads back as the tight one.
-    let first = assert_roundtrip_with(loose(para), |expected| *expected = loose(plain));
-    // From then on the tight AST (and so its text) is a fixpoint.
-    let second = assert_roundtrip(loose(plain));
-    assert_ne!(
-        first, second,
-        "the loose spelling is written once, then settles"
-    );
+    let loose = assert_roundtrip(definitions(para));
+    let tight = assert_roundtrip(definitions(plain));
+    assert_ne!(loose, tight, "the two verdicts have distinct spellings");
 }
 
 /// An empty term is written as the `* []` placeholder, which the reader
