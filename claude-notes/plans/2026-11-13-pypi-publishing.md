@@ -321,8 +321,9 @@ never a user-wide token.
       (`--skip-pypi-tests`), with a test that holds the two commands in sync
 - [x] Credentials 1 and 2: PyPI 2FA, TestPyPI account, pending publishers
       on both (done by Carlos, 2026-11-13)
-- [ ] GitHub environments `pypi` (main only, required reviewer) and
-      `testpypi`
+- [x] GitHub environments `pypi` (deploys from `main` only, required
+      reviewer: Carlos) and `testpypi` (no rules), created with `gh api`
+      2026-11-13; PR #1201 opened
 - [ ] After merge (workflow_dispatch needs the file on `main`): rehearsal
       with `target=testpypi` for v0.45.0
 - [ ] First real publish to PyPI; `uvx --from quarto2 q2 --version`;
