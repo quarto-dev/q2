@@ -250,14 +250,16 @@ already in `Cargo.lock`. Neither has been tried for this purpose.
 
 - Formats: HTML, RevealJS, Dashboard for `q2 render`; `q2 preview` and QuartoHub.
 - Approach A (client-side), because it is the direct parallel to Mermaid and its
-  browser asset is needed for preview whichever way render goes.
+  browser asset is needed for preview whichever way render goes. Chosen by
+  Andrew on 2026-11-13; see [Decisions to ratify](#decisions-to-ratify).
 - Cell options that Mermaid already supports: `fig-cap`, `label`, `fig-alt`,
   `fig-align`. Plus `graph-layout`, which is specific to Graphviz and simple to
   pass through.
 
 Out of the first cut, tracked as follow-ups, not dropped silently:
 
-- Typst and other non-HTML formats (needs approach B or C).
+- Typst and other non-HTML formats (needs approach B or C). Tracked as
+  `bd-atz1c25y`.
 - `file:` to read source from a `.dot` file.
 - `echo: true`.
 - `fig-width`, `fig-height`, `fig-responsive`. Mermaid does not have these in q2
@@ -274,6 +276,9 @@ Out of the first cut, tracked as follow-ups, not dropped silently:
       (`Q-2-58`), and the related braid strands are `bd-p7ionkmv` (closed,
       `Q-2-58`) and `bd-7u2xu4gp` (open, brace-form warning). This work is now
       tracked as `bd-ijlapt70`.
+- [ ] Spike: confirm that a current Graphviz wasm build ships as one
+      self-contained browser file, and record its size and licence. Approach A
+      depends on this, so do it before the team discussion.
 - [ ] Write the q2 plan document in `claude-notes/plans/` in the house format.
 - [ ] Get the decisions below ratified by the q2 team (Carlos is `cscheid` on
       GitHub).
@@ -333,9 +338,22 @@ Out of the first cut, tracked as follow-ups, not dropped silently:
 
 ### Later phase: Typst and other formats
 
+Tracked as `bd-atz1c25y`, which waits for `bd-ijlapt70`.
+
 A spike to choose between approach B and approach C, then a render-time path
 that writes an SVG file and emits an image. This is also the route to Mermaid in
 Typst, so it may be worth designing for both at once.
+
+The first cut must not make this harder. Three constraints follow:
+
+- The fence spelling and the cell options (`fig-cap`, `label`, `fig-alt`,
+  `graph-layout`) mean the same thing in every format, so this path reads the
+  same source.
+- This path pins the same Graphviz version as the browser runtime, so a diagram
+  lays out the same in HTML and in Typst.
+- Once this path exists, `q2 render` to HTML could inline the SVG as well (no
+  JavaScript for the reader, and it matches Q1). That choice stays open. Preview
+  and QuartoHub keep the browser component whichever way it goes.
 
 ## Decisions to ratify
 
@@ -343,6 +361,26 @@ Typst, so it may be worth designing for both at once.
    faithful parallel to Mermaid and the shortest path to three green cells. B
    matches Q1 output and reaches Typst, at more cost and with an unverified
    technical risk. My recommendation is A first, then a spike on B.
+
+   **Decided by Andrew, 2026-11-13: A for the HTML family now, a render-time
+   SVG path for the other formats later (`bd-atz1c25y`).** Team ratification is
+   still open. The reasoning:
+
+   - The browser renderer is needed in any case. Preview and QuartoHub skip the
+     render transform and draw diagrams in a React component, and the hub build
+     of q2 is wasm, so it cannot run a second Graphviz wasm module at render
+     time. The browser work is never thrown away.
+   - It turns the HTML, Dashboard and RevealJS cells of the feature checklist
+     green on its own, and changes show up in QuartoHub immediately.
+
+   Accepted costs:
+
+   - Two renderers to keep in step once the SVG path exists (see the version
+     constraint under [Later phase](#later-phase-typst-and-other-formats)).
+   - A syntax error shows only in the page, not as a source-mapped render
+     diagnostic. Mermaid in q2 has the same limit.
+   - Until the SVG path lands, non-HTML formats keep printing the source as a
+     code block, as Mermaid does in Typst today.
 2. **Which fence spelling?** Mermaid set the precedent: plain fence only, brace
    form warns. Following it means ```` ```dot ```` draws a diagram. That changes
    behaviour for anyone who uses a plain `dot` fence today to *show* Graphviz
