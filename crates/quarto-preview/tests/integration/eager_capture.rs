@@ -83,6 +83,7 @@ async fn eager_capture_populates_index_sidecar() {
 
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
@@ -203,6 +204,7 @@ async fn prose_only_doc_leaves_sidecar_empty() {
 
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port: pick_free_port(),
         project_root: Some(project.path().to_path_buf()),

@@ -16,3 +16,4 @@ pub mod session_auth;
 pub mod support;
 pub mod uds_client;
 pub mod uds_server;
+pub mod upstream_mirror;
