@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "test:unit": "vitest run",
     "test:wasm": "vitest run --config vitest.wasm.config.ts",
-    "test:e2e": "NODE_OPTIONS=--conditions=source playwright test"
+    "test:e2e": "NODE_OPTIONS=--conditions=source playwright test",
+    "share-doc": "NODE_OPTIONS=--conditions=source tsx scripts/share-doc.ts",
+    "deploy:connect": "npm run build:all && tsx scripts/deploy-connect.ts"
   },
   "dependencies": {
     "@quarto/pandoc-types": "*",
@@ -28,6 +30,7 @@
     "vite-plugin-wasm": "^3.5.0",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.17",
+    "tsx": "^4.21.0"
   }
 }

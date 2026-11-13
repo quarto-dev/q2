@@ -135,6 +135,44 @@ besides an optional React hook, so it could become its own package.
    `server` defaults to `ws://127.0.0.1:8080/ws`; override it with
    `&server=<ws-url>`.
 
+## Trying it together
+
+The build (`dist/`) is a static site, and a document doesn't need a hub,
+only an automerge sync server, so two people can edit one document in the
+editor with nothing running on their machines:
+
+1. Put a document on the public automerge sync server:
+
+   ```bash
+   npm run share-doc -- [file.qmd]   # default: e2e/fixtures/basic.qmd
+   ```
+
+   It prints the query string that opens it (`?server=…&doc=…&file=…`).
+   Anyone with the document id can read and edit the document, so share
+   only demo content. `SYNC_SERVER=<ws-url>` puts it on another server.
+
+2. Publish the build to Posit Connect, once per change to the editor:
+
+   ```bash
+   npm run deploy:connect
+   ```
+
+   This builds the WASM module and the app, and updates the demo's content
+   on connect.posit.it
+   (`https://connect.posit.it/content/a52850b5-b6b5-4655-86d9-98f55ef4590f/`).
+   Connect's address and API key come from rsconnect-python's config,
+   saved once per machine, outside the repo:
+
+   ```bash
+   uvx --from rsconnect-python rsconnect add --name connect \
+     --server https://connect.posit.it --api-key <key>
+   ```
+
+   Never put the key in the repo or in a file in it. Who can open the
+   content is set in Connect (its Access settings).
+
+3. Open the content's URL with the query string from step 1.
+
 ## Tests
 
 ```bash
