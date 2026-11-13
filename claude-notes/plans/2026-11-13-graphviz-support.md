@@ -335,10 +335,14 @@ Out of the first cut, tracked as follow-ups, not dropped silently:
 - [x] `q2 render` to HTML, RevealJS and Dashboard, opened in a browser, with
       the diagram actually drawn. See
       [Render transform](#render-transform-phases-1-and-2).
-- [ ] `q2 preview` for a document and for slides. Not done. Only the hub was
-      opened.
+- [x] `q2 preview` for a document. See
+      [q2 preview check](#q2-preview-check).
+- [x] `q2 preview` for slides. See
+      [q2 preview check](#q2-preview-check).
 - [x] Offline check: the page draws with the network disabled.
-- [ ] Firefox and Safari.
+- [x] Firefox and Safari, for `q2 preview`. Checked by Andrew, see
+      [q2 preview check](#q2-preview-check). `q2 render` output was not
+      opened in either.
 
 ### Phase 5: diagnostics, docs, close-out
 
@@ -680,13 +684,88 @@ so the running local hub kept its build.
 
 Not done:
 
-- `q2 preview` and slides preview were not opened after this change.
+- (Done later: document and slides preview, see
+  [q2 preview check](#q2-preview-check).)
 - Firefox and Safari.
 - The Q1 smoke fixtures are not ported.
 - `file:`, `echo: true`, `fig-width`, `fig-height`, `fig-responsive`: still
   out of scope, as listed above.
 - No embedded live example in the docs.
 - The hub-client changelog entry (no file under `hub-client/` changed).
+
+## q2 preview check
+
+Done 2026-11-13 at commit `f71454f4b`, in Aside (Chromium).
+
+The preview bundle had never been built in this worktree, so the chain from
+the repository `CLAUDE.md` ran first: `cargo xtask build-q2-preview-spa`
+(the WASM was already rebuilt at 12:31 by the hub build), then
+`cargo build --bin q2`. The bundle has a separate `viz` chunk.
+
+Invocation, on a scratch copy of `q2-graphviz/repro/dot-repro.qmd` with two
+blocks added (one with cell options and a `@fig-ring` reference, one with a
+syntax error):
+
+```bash
+./target/debug/q2 preview --no-browser --port 4455 dot-repro.qmd
+```
+
+Observed in the preview iframe, read from the DOM:
+
+| Block | Result |
+|---|---|
+| `{dot}` (brace form) | Code block, with Q-2-58 in the warning panel and the hint to drop the braces |
+| `dot`, no options | SVG drawn, graph `H`, 2 nodes |
+| `mermaid` | SVG drawn (no regression) |
+| `dot` with cell options | SVG drawn with 4 nodes; `text-align: left`; `role="img"` and the `fig-alt` text as `aria-label`; caption "Figure 1: A small graph."; "See Figure 1." links to it |
+| `dot` with a syntax error | Error box: "Graphviz error: syntax error in line 1 near `}`", then the source |
+
+Live edit: with the page open, the file on disk changed from `c -> d` to
+`c -> d -> zed`. The diagram gained the `zed` node without a reload. No
+console errors.
+
+### Slides
+
+Same day, same binary, on a scratch `format: revealjs` document with one
+block per slide:
+
+```bash
+./target/debug/q2 preview --no-browser --port 4456 slides.qmd
+```
+
+Observed in the preview iframe, read from the DOM, stepping with the right
+arrow key:
+
+| Slide | Result |
+|---|---|
+| `dot`, no options | SVG drawn, 2 nodes, visible on the current slide |
+| `dot` with cell options | SVG drawn, 4 nodes, `text-align: left`, `fig-alt` as `aria-label` |
+| `mermaid` | SVG drawn (no regression) |
+| `dot` with a syntax error | Error box with the Graphviz message and the source |
+
+No console errors. A slide appended to the file on disk appeared without a
+reload.
+
+Two things seen that are not specific to Graphviz:
+
+- Diagrams draw at their natural size, which is small on a slide (96 by 179
+  CSS pixels on a slide 1218 wide). Nothing scales them up.
+- In slides preview a captioned figure keeps the raw `FloatRefTarget`
+  wrapper: the caption reads "A small graph." with no "Figure 1:" prefix
+  and no `<figure>` element. A captioned mermaid block on the same deck
+  comes out the same way, so this is how slides preview treats figures
+  today.
+
+### Firefox and Safari
+
+Andrew opened the previews in Firefox and Safari on 2026-11-13, after a
+larger example (clusters, HTML-like labels, records, ports, all three
+comment styles) was added to both scratch documents, and reported that they
+look good. This is his check by eye, not an automated one. Rendered
+`q2 render` output was not opened in either browser.
+
+Not checked: that `graph-layout: neato` changed the layout (only that the
+diagram drew).
 
 ## Decisions to ratify
 
