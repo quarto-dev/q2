@@ -38,7 +38,7 @@ built from `main` @ `637508a6b` (see Verification commands).
 `sample` of the hung process: all 15 `quarto-pass2-N` threads sleep in
 `flockfile → __psynch_mutexwait`. 11 of them come from
 `_fwalk` (`fflush(NULL)`), and 2 come from `pclose → fclose → flockfile`. So
-even `pclose`'s own `fclose` cannot take the lock of the `FILE` it is closing.
+even `pclose`\'s own `fclose` cannot take the lock of the `FILE` it is closing.
 This is consistent with the reporter's debugger observation: the `FILE` being
 waited on is already closed (`_flags=0`, `_file=-1`) and its lock is still
 held. The `FILE` lock has been left held or corrupted inside libc. This is not
@@ -98,6 +98,75 @@ Build both with `cc -O2 -pthread <file>.c -o <name>`.
    `fclose`, so glibc is probably immune. The answer does not change the fix.
    The Rust-spawn replacement is platform-independent and also gives `io.popen`
    the per-state env and cwd, so it is the right fix on every platform.
+6. **Can Lua reach libc `exit()`, which runs the same `_fwalk`?** No.
+   `os.exit` is replaced in every production filter state
+   (`crates/pampa/src/lua/filter.rs:196`) and shortcode state
+   (`shortcode.rs:125`) by `os_exit.rs` (GH #941). The replacement raises an
+   error and never calls `exit`. The only other non-test Lua states,
+   `lib.rs:48` and `:81`, are WASM self-tests that load no `os` library.
+
+## Prior art and mechanism
+
+This is a known class of libc bug, with prior reports on two other libcs and
+on hosts that embed Lua.
+
+- **musl, 2018.** A multithreaded server embedding Lua (skynet) deadlocked
+  with one thread in `io_popen → fflush(NULL)` and another in
+  `io_pclose → pclose → fclose`, both on the same `FILE`
+  ([report](https://openwall.com/lists/musl/2018/11/02/1)). Rich Felker
+  confirmed it was a libc bug: `fflush(NULL)` took the open-file-list lock
+  before each stream lock, and `fclose` took them in the opposite order. He
+  also called `fflush(NULL)` valid but "a really bad idea" in threaded code
+  ([reply](https://openwall.com/lists/musl/2018/11/02/2)).
+- **Apple darwin-dev, 2014.** "Hangs in flockfile() during fread() or
+  fclose()" shows the stack we see:
+  `_fwalk → sflush_locked → flockfile → __psynch_mutexwait`, reached from
+  `fflush(NULL)` ([thread](https://lists.apple.com/archives/darwin-dev/2014/Jul/msg00010.html),
+  [mirror](https://groups.google.com/g/darwin-dev/c/e5qPebpfvYM)). According
+  to search summaries, Greg Parker (Apple) attributed it to `_fwalk` walking
+  the FILE list without a lock, and the poster worked around it by dropping
+  `fflush(NULL)`. The archive pages themselves were unreachable during triage
+  (HTTP 502 and a bot wall), so that attribution is second-hand.
+- **Lua mailing list (lua_cn).** Threads name `l_popen`\'s `fflush(NULL)` as
+  the source of crashes and deadlocks in multithreaded hosts
+  ([1](https://groups.google.com/g/lua_cn/c/eGxWR92KYT8),
+  [2](https://groups.google.com/g/lua_cn/c/ILsAntdlw6s)).
+
+**macOS mechanism, from Apple's published Libc source**
+([fwalk.c](https://raw.githubusercontent.com/apple-oss-distributions/Libc/main/stdio/FreeBSD/fwalk.c),
+[fflush.c](https://raw.githubusercontent.com/apple-oss-distributions/Libc/main/stdio/FreeBSD/fflush.c),
+[fclose.c](https://raw.githubusercontent.com/apple-oss-distributions/Libc/main/stdio/FreeBSD/fclose.c),
+[findfp.c](https://raw.githubusercontent.com/apple-oss-distributions/Libc/main/stdio/FreeBSD/findfp.c),
+[popen.c](https://raw.githubusercontent.com/apple-oss-distributions/Libc/main/gen/FreeBSD/popen.c)).
+This is our reading of the code; Apple has not confirmed it.
+
+- `fflush(NULL)` is `_fwalk(sflush_locked)`. `_fwalk` takes **no lock**: a
+  comment says the walk is safe because entries are only appended. It visits
+  every slot whose `_flags` is nonzero, and `sflush_locked` calls `FLOCKFILE`
+  on that slot.
+- `fclose` does `FLOCKFILE … _file = -1 … FUNLOCKFILE` and then
+  `__sfprelease`. `__sfprelease` calls
+  `pthread_mutex_destroy(&fp->_extra->fl_mutex)` and only afterwards sets
+  `_flags = 0` under `FILELIST_LOCK`. `__sfp` later reuses the slot and
+  re-initializes its extra data (`INITEXTRA`).
+- So a walker can see a closing slot as still open and wait on its mutex.
+  The closer then destroys that mutex, which may be re-initialized for a
+  different `FILE`. Destroying a mutex that has a waiter is undefined
+  behaviour in POSIX, and a waiter that never wakes fits all the evidence:
+  the reporter's debugger state (`_flags=0`, `_file=-1`, lock held), our
+  `sample` with `pclose → fclose` also stuck in `flockfile`, and
+  `fflush_fclose_race.c` hanging with no `popen` at all.
+- **`popen`/`pclose` do not walk the FILE list.** `popen` iterates only its
+  own `pidlist` under `pidlist_mutex`. `pclose` unlinks its entry under that
+  mutex, releases it, and then calls `fclose` and `wait4`. Without
+  `fflush(NULL)`, nothing on the `io.popen` path calls `_fwalk`.
+
+**What this means for the fix.** The trigger is `_fwalk`, and the only way
+Lua code reaches it is `fflush(NULL)` in `l_popen`, since `os.exit` is
+already replaced (Q6). Removing that call removes the hazard. A global lock
+is ruled out by mechanism, not only by experiment, because any `fclose` can
+be the other side of the race. Option (b) below rests on Apple's source and
+not only on the 3/3 `NO_FFLUSH` runs.
 
 ## Outcome / recommended next step
 
@@ -116,8 +185,9 @@ Filed bd-hf93wq9r. Fix scope:
   - (b) Call libc `popen` from Rust **without** `fflush(NULL)`, and wrap the
     result in a real `luaL_Stream` (via `mlua::ffi`, `LUA_FILEHANDLE`
     metatable, `closef` → `pclose`). This keeps exact stock semantics, including
-    `io.type`. It still relies on libc `popen`/`pclose` being thread-safe
-    without `fflush`, which Q2 supports empirically but does not prove.
+    `io.type`. It relies on libc `popen`/`pclose` being thread-safe without
+    `fflush`. Apple's source supports that: neither walks the FILE list (see
+    Prior art and mechanism), and Q2's 3/3 `NO_FFLUSH` runs agree.
 - Regression test: an integration test that runs `io.popen` from several Lua
   states on parallel threads, alongside `io.open`/`close`, under a timeout.
   On `main` this should deadlock on macOS.
