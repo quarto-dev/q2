@@ -45,7 +45,8 @@ use quarto_core::{ProjectContext, metadata_flag};
 use quarto_hub::watch::{FileWatcher, WatchConfig, WatchEvent, WatchFilter};
 use quarto_preview::EnginePolicy;
 use quarto_preview::config::{
-    read_engine_policy_from_project, read_static_preview_defaults_from_project,
+    engine_policy_with_overlay, read_engine_policy_from_project,
+    read_static_preview_defaults_from_project,
 };
 use quarto_preview::render_flags::native_runtime_for;
 use quarto_preview::static_mode::{
@@ -444,10 +445,15 @@ async fn run(args: StaticArgs) -> Result<()> {
             .parent()
             .map_or_else(|| full_input.clone(), Path::to_path_buf)
     };
-    let engine_off = matches!(
-        read_engine_policy_from_project(&policy_root, &native_runtime_for(&args.profile), profile),
-        EnginePolicy::Off
-    );
+    // `-M 'preview: {engine: off}'` wins over `_quarto.yml`, as in the live preview; an unknown
+    // value is refused before anything is served.
+    let project_policy =
+        read_engine_policy_from_project(&policy_root, &native_runtime_for(&args.profile), profile);
+    let overlay =
+        metadata_flag::parse_metadata_flags(&base_args.metadata).map_err(|e| anyhow::anyhow!(e))?;
+    let engine_off = engine_policy_with_overlay(project_policy, overlay.as_ref())
+        .map_err(|e| anyhow::anyhow!(e))?
+        == EnginePolicy::Off;
     // Q1's `project: preview:` keys are the defaults; CLI flags win
     // (plan Phase 4). `--no-watch` / `--no-navigate` / `--no-browser`
     // only ever turn things off, so a config `false` cannot be undone

@@ -16,7 +16,9 @@ use anyhow::{Context, Result};
 use quarto_core::project::discovery::PROJECT_CONFIG_FILENAMES;
 use quarto_preview::{
     EnginePolicy, PreviewConfig,
-    config::{read_engine_policy_from_project, resolve_project_resource_html},
+    config::{
+        engine_policy_with_overlay, read_engine_policy_from_project, resolve_project_resource_html,
+    },
 };
 use tempfile::TempDir;
 use tracing::info;
@@ -175,6 +177,18 @@ fn resolve_record_sources(
 
 /// Warn when `engine` is listed under `preview.engine: off`: the engine will not run (the
 /// guard itself lives in the preview crate).
+/// `preview.engine: auto` runs a document's code on every save. Under `--share` a guest with
+/// edit access changes the document, so their edits would run on the host.
+fn warn_auto_under_share(share: bool, policy: EnginePolicy) {
+    if share && policy == EnginePolicy::Auto {
+        tracing::warn!("`preview.engine` is `auto` under `--share`: guest edits run host code");
+        eprintln!(
+            "warning: `preview.engine` is `auto` and this preview is shared: a guest's edits \
+             to a document will run its code on this machine"
+        );
+    }
+}
+
 fn warn_engine_under_off(list: &quarto_core::record::RecordSources, policy: EnginePolicy) {
     if policy == EnginePolicy::Off && list.contains_engine() {
         tracing::warn!(
@@ -378,10 +392,15 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // Every native site goes through the factory, so `--profile` reaches
     // them all (F8-D6).
     let session_runtime = quarto_preview::render_flags::native_runtime_for(&render_flags.profile);
-    let engine_policy = match project_root.as_deref() {
+    let project_policy = match project_root.as_deref() {
         Some(root) => read_engine_policy_from_project(root, &session_runtime, None),
         None => EnginePolicy::Manual,
     };
+    // `-M 'preview: {engine: auto}'` wins over `_quarto.yml`, and is the only way a standalone
+    // document (no `_quarto.yml`) gets anything but `manual`. An unknown value fails here.
+    let engine_policy = engine_policy_with_overlay(project_policy, render_flags.metadata.as_ref())
+        .map_err(|e| anyhow::anyhow!(e))?;
+    warn_auto_under_share(args.share, engine_policy);
     info!(?engine_policy, "resolved preview engine policy");
     warn_engine_under_off(&record_sources, engine_policy);
 
