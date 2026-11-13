@@ -116,6 +116,7 @@ body.dragging, body.dragging * { cursor:grabbing !important; }
 .box.caret { border-color:var(--sel); }
 .box.hover { border-color:#ced4da; }
 .box.idle { border-color:#eceef1; }
+.box.aim { border:2px solid var(--accent); }
 .v-tab .ann { padding:0 2px; border:1px solid; border-bottom:0; border-radius:4px 4px 0 0; background:#fff; }
 .v-tab .ann.caret { border-color:var(--sel); background:var(--sel-bg); color:var(--sel-ink); }
 .v-tab .ann.hover { border-color:#ced4da; background:#f8f9fa; }
@@ -197,6 +198,7 @@ const VARIANTS = {
 const LABELS = { name: 'Name (Heading 2)', short: 'Short (H2)', md: 'Markdown (##)' };
 const SHOWS = { focus: 'Hover and caret', caret: 'Caret only', always: 'Always' };
 const NESTS = { inner: 'Innermost block', all: 'All levels' };
+const TBMARKS = { brackets: 'Nested brackets', outlines: 'Nested outlines' };
 const QUIETS = { show: 'Keep showing', hide: 'Hide until the mouse moves', faint: 'Only a faint bracket until the mouse moves' };
 const TBCRUMBS_TIP = ' The style box is the last crumb of a breadcrumb of the blocks the caret is in: hover a crumb to bracket its block in the margin; click it for its menu. Try it with <b>Nothing</b> in the margin.';
 const TOOLBAR_TIP = ' The toolbar follows the caret: its style box shows the caret’s text block, and the list, quote and callout buttons light up when the caret is inside one (click again to undo).';
@@ -239,7 +241,7 @@ const pick = (k, set, d) => (set[params.get(k)] ? params.get(k) : d);
 const flag = (k, d) => (params.has(k) ? params.get(k) === '1' : d);
 const state = {
   v: pick('v', VARIANTS, 'chipbr'), label: pick('label', LABELS, 'name'),
-  show: pick('show', SHOWS, 'focus'), nest: pick('nest', NESTS, 'all'), quiet: pick('quiet', QUIETS, 'hide'),
+  show: pick('show', SHOWS, 'focus'), nest: pick('nest', NESTS, 'all'), quiet: pick('quiet', QUIETS, 'hide'), tbmark: pick('tbmark', TBMARKS, 'brackets'),
   tb: flag('tb', false), tbcrumbs: flag('tbcrumbs', false), crumbs: flag('crumbs', false), src: flag('src', true),
 };
 // `chipHover`: the block whose chip the pointer is on (or last was, in its label).
@@ -249,7 +251,7 @@ let mouse = null, menu = null, drag = null, crumbHover = null, chipHover = null,
 
 function saveHash() {
   const b = (x) => (x ? '1' : '0');
-  location.replace('#' + new URLSearchParams({ v: state.v, label: state.label, show: state.show, nest: state.nest, quiet: state.quiet, tb: b(state.tb), tbcrumbs: b(state.tbcrumbs), crumbs: b(state.crumbs), src: b(state.src) }));
+  location.replace('#' + new URLSearchParams({ v: state.v, label: state.label, show: state.show, nest: state.nest, quiet: state.quiet, tbmark: state.tbmark, tb: b(state.tb), tbcrumbs: b(state.tbcrumbs), crumbs: b(state.crumbs), src: b(state.src) }));
 }
 
 function renderSide() {
@@ -287,6 +289,7 @@ function renderSide() {
       side.append(l);
     }
   };
+  radios('Toolbar breadcrumb hover', 'tbmark', TBMARKS);
   radios('Label', 'label', LABELS);
   radios('Show on', 'show', SHOWS);
   radios('Nesting', 'nest', NESTS);
@@ -433,7 +436,9 @@ function render() {
     const chain = car.includes(tbAim) ? car : chainOf(tbAim);
     for (const b of chain) {
       const r = rel(b.getBoundingClientRect());
-      place(put('n' + id(b), 'brk ' + (b === tbAim ? 'aim' : 'hover')), { left: L - 30 + Math.min(depth(b), 2) * 8, top: r.top, width: 6, height: r.height });
+      const st = b === tbAim ? 'aim' : 'hover';
+      if (state.tbmark === 'outlines') place(put('o' + id(b), 'box ' + st), r, Math.max(1, 6 - depth(b) * 3));
+      else place(put('n' + id(b), 'brk ' + st), { left: L - 30 + Math.min(depth(b), 2) * 8, top: r.top, width: 6, height: r.height });
     }
   }
 
