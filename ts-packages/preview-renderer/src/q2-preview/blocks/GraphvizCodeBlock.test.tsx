@@ -92,6 +92,31 @@ describe('GraphvizCodeBlock', () => {
         expect(wrapper?.style.textAlign).toBe('right');
     });
 
+    // A `//| fig-alt` cell option reaches the preview as a CodeBlock
+    // attribute. Graphviz has no accessibility directive, so the
+    // component sets it on the drawn SVG, as `q2 render` does.
+    it('sets fig-alt as the accessible name of the drawn SVG', async () => {
+        installFakeGraphviz();
+        const { container } = renderNode(
+            codeBlock(['dot'], 'digraph G {}', [['fig-alt', 'Two nodes joined by an arrow.']]),
+        );
+        await waitFor(() => {
+            expect(container.querySelector('svg[data-fake-graphviz]')).not.toBeNull();
+        });
+        const svg = container.querySelector('svg')!;
+        expect(svg.getAttribute('role')).toBe('img');
+        expect(svg.getAttribute('aria-label')).toBe('Two nodes joined by an arrow.');
+    });
+
+    it('leaves the SVG without a role when there is no fig-alt', async () => {
+        installFakeGraphviz();
+        const { container } = renderNode(codeBlock(['dot'], 'digraph G {}'));
+        await waitFor(() => {
+            expect(container.querySelector('svg[data-fake-graphviz]')).not.toBeNull();
+        });
+        expect(container.querySelector('svg')!.hasAttribute('aria-label')).toBe(false);
+    });
+
     it('delegates non-dot code blocks to the plain CodeBlock', () => {
         const loader = installFakeGraphviz();
         const { container } = renderNode(codeBlock(['python'], "print('hi')"));
@@ -151,7 +176,7 @@ describe('GraphvizCodeBlock', () => {
 
     it('pins the Viz.js version recorded in the plan', () => {
         // Keep in sync with the `@viz-js/viz` version in package.json
-        // and, once it exists, the Rust-side constant.
+        // and VIZ_VERSION in crates/quarto-core/src/transforms/graphviz.rs.
         expect(VIZ_VERSION).toBe('3.31.0');
     });
 });

@@ -9,15 +9,22 @@ import { CodeBlock } from './CodeBlock';
  * bd-ijlapt70 (prototype): built-in Graphviz diagram rendering.
  *
  * A ```dot fenced block parses to a Pandoc CodeBlock whose class list
- * contains `dot`. There is no Rust render transform for Graphviz yet,
- * so the raw CodeBlock reaches the React layer in every pipeline and
- * this component owns rendering in `q2 preview` and QuartoHub.
+ * contains `dot`. In `q2 render` the Rust `graphviz-render` transform
+ * (crates/quarto-core/src/transforms/graphviz.rs) turns it into
+ * `<pre class="graphviz">` + a loader script; that transform is
+ * excluded from the preview pipeline, so here the raw CodeBlock reaches
+ * the React layer and this component owns rendering in `q2 preview`
+ * and QuartoHub.
  *
  * Graphviz needs no DOM: the wasm module takes the source text and
  * returns an SVG string. The runtime is `@viz-js/viz`, which embeds
  * the wasm binary in its JavaScript, so it is bundled (as a lazy
  * chunk) rather than fetched from a CDN, and diagram-free documents
  * never pay for it.
+ *
+ * Cell options (`//| fig-align`, `//| graph-layout`, `//| fig-alt`) are
+ * desugared by the pipeline into attributes on the CodeBlock, in
+ * preview as in render, and read here.
  *
  * The brace form `{dot}` is deliberately NOT matched, following the
  * mermaid precedent. See
@@ -26,11 +33,15 @@ import { CodeBlock } from './CodeBlock';
 
 /**
  * Exact-pinned Viz.js version. Keep in sync with the `@viz-js/viz`
- * entry in this package's `package.json`.
+ * entry in this package's `package.json` and with `VIZ_VERSION` in
+ * `crates/quarto-core/src/transforms/graphviz.rs`.
  */
 export const VIZ_VERSION = '3.31.0';
 
-/** Layout engines in the pinned build (`engines` in `@viz-js/viz`). */
+/**
+ * Layout engines in the pinned build (`engines` in `@viz-js/viz`).
+ * Kept in step with `LAYOUT_ENGINES` in the Rust transform.
+ */
 const ENGINES = new Set([
     'circo',
     'dot',
@@ -142,9 +153,10 @@ interface DiagramProps {
     code: string;
     engine: string;
     align?: 'left' | 'center' | 'right';
+    alt?: string;
 }
 
-const GraphvizDiagram = ({ code, engine, align }: DiagramProps) => {
+const GraphvizDiagram = ({ code, engine, align, alt }: DiagramProps) => {
     const ref = useRef<HTMLDivElement | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -169,6 +181,13 @@ const GraphvizDiagram = ({ code, engine, align }: DiagramProps) => {
                 // size as the maximum (Graphviz sizes are in points).
                 svg.style.maxWidth = '100%';
                 svg.style.height = 'auto';
+                // `fig-alt`: Graphviz has no accessibility directive in
+                // its source language, so the text is set on the SVG,
+                // the same way the `q2 render` init script does it.
+                if (alt) {
+                    svg.setAttribute('role', 'img');
+                    svg.setAttribute('aria-label', alt);
+                }
                 ref.current.replaceChildren(document.importNode(svg, true));
             })
             .catch((err: unknown) => {
@@ -178,7 +197,7 @@ const GraphvizDiagram = ({ code, engine, align }: DiagramProps) => {
         return () => {
             cancelled = true;
         };
-    }, [code, engine]);
+    }, [code, engine, alt]);
 
     if (error) {
         return (
@@ -219,7 +238,12 @@ export const GraphvizCodeBlock = (args: NodeArgs<CodeBlockType>) => {
 
     return (
         <div ref={anchorRef} className="graphviz-diagram-container" {...affordanceAttr} {...dataLocProps(node)}>
-            <GraphvizDiagram code={code} engine={graphLayout(attrs)} align={figAlign(attrs)} />
+            <GraphvizDiagram
+                code={code}
+                engine={graphLayout(attrs)}
+                align={figAlign(attrs)}
+                alt={attrs.find(([key]) => key === 'fig-alt')?.[1]}
+            />
         </div>
     );
 };
