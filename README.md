@@ -18,6 +18,17 @@ On Windows (PowerShell):
 irm https://raw.githubusercontent.com/quarto-dev/q2/main/install.ps1 | iex
 ```
 
+**From PyPI** (any platform with Python 3.9+), as the `quarto2` package:
+
+```sh
+pip install quarto2          # or: uv tool install quarto2 / pipx install quarto2
+uvx --from quarto2 q2 --version   # one-off run, no install
+```
+
+The package downloads this release's binary from GitHub when it is
+installed and checks it against a SHA-256 checksum recorded in the
+package. Nightlies are not published to PyPI.
+
 **Nightly builds** — `main` as of last night, for trying what is not released yet:
 
 ```sh
