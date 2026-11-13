@@ -87,21 +87,21 @@ const INITIAL_NODES: Node[] = [
   { id: 'repo', type: 'repo', position: { x: -800, y: -520 }, data: {}, deletable: false },
   { id: 'hub', type: 'hubproject', position: { x: -696, y: 38 }, data: {}, deletable: false },
   { id: 'doc', type: 'automerge', position: { x: 172, y: -218 }, data: {}, deletable: false },
-  { id: 'view', type: 'rawview', position: { x: 520, y: -560 }, data: {}, deletable: false },
+  { id: 'view', type: 'rawview', position: { x: 828, y: -778 }, data: {}, deletable: false },
   // editor family — presence sits between the project (left), the editor
   // (right) and the user (below it)
   { id: 'explorer', type: 'explorer', position: { x: -200, y: -280 }, data: {}, deletable: false, style: { width: 260, height: 220 } },
   { id: 'filename', type: 'string', position: { x: -200, y: -30 }, data: { label: 'File name' }, deletable: false },
   { id: 'presence', type: 'presence', position: { x: -66, y: 200 }, data: {}, deletable: false },
-  { id: 'user', type: 'user', position: { x: -156, y: 260 }, data: {}, deletable: false },
-  { id: 'editor', type: 'monaco', position: { x: 534, y: 242 }, data: {}, deletable: false, style: { width: 460, height: 300 } },
-  { id: 'language', type: 'language', position: { x: 1080, y: -260 }, data: {}, deletable: false },
+  { id: 'user', type: 'user', position: { x: -256, y: 298 }, data: {}, deletable: false },
+  { id: 'editor', type: 'monaco', position: { x: 566, y: 374 }, data: {}, deletable: false, style: { width: 460, height: 300 } },
+  { id: 'language', type: 'language', position: { x: 902, y: 670 }, data: {}, deletable: false },
   { id: 'preview', type: 'preview', position: { x: 1080, y: -60 }, data: {}, deletable: false, style: { width: 460, height: 420 } },
-  { id: 'rawpreview', type: 'rawpreview', position: { x: 1080, y: 390 }, data: {}, deletable: false, style: { width: 460, height: 380 } },
+  { id: 'rawpreview', type: 'rawpreview', position: { x: 1130, y: 998 }, data: {}, deletable: false, style: { width: 460, height: 380 } },
   // WASM family
   { id: 'wasm', type: 'wasm', position: { x: -754, y: 901 }, data: {}, deletable: false },
   { id: 'vfs', type: 'vfs', position: { x: -480, y: 560 }, data: {}, deletable: false, style: { width: 300, height: 260 } },
-  { id: 'lsp', type: 'lsp', position: { x: -24, y: 368 }, data: {}, deletable: false },
+  { id: 'lsp', type: 'lsp', position: { x: 0, y: 378 }, data: {}, deletable: false },
 ];
 
 const INITIAL_EDGES: Edge[] = [

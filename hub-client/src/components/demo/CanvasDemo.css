@@ -198,8 +198,11 @@
 .cd-vfs-files li.selected { background: #e0e7ff; color: #1e40af; }
 .cd-vfs-content { flex: 1; min-block-size: 0; margin: 0; padding: 6px 8px; overflow: auto; border-block-start: 1px solid #e5e7eb; background: #ffffff; white-space: pre; color: #1f2937; }
 
-/* Node families: Automerge (yellow), WASM (purple), editor (blue). */
-.cd-automerge, .cd-hubproject, .cd-repo, .cd-wsadapter, .cd-idb, .cd-rawview { background: #fefce8; }
+/* Node families: Automerge (yellow), its project and document (green),
+   WASM (purple), editor (blue). */
+.cd-repo, .cd-wsadapter, .cd-idb, .cd-rawview { background: #fefce8; }
+.cd-automerge, .cd-hubproject { background: #f0fdf4; }
+.cd-localstorage { background: #f3f4f6; }
 .cd-wasm, .cd-vfs, .cd-lsp { background: #f5f3ff; }
 .cd-monaco, .cd-language, .cd-presence, .cd-rawpreview, .cd-user, .cd-previewnode, .cd-explorer { background: #eff6ff; }
 
