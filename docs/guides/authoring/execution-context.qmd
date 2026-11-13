@@ -133,16 +133,17 @@ for mode, entry in brand.items():
 
 ## Engines
 
-The knitr engine and Jupyter kernels for Python, R and Julia see all of these variables.
+The knitr engine, the `julia` and `marimo` engines, and Jupyter kernels for Python, R and Julia see all of these variables, along with the values from the project's [environment files](../projects/environment.qmd).
 
 Quarto sets the values inside the document's Jupyter kernel before the document's first cell runs, on every render, so a kernel that `q2 preview` keeps running between re-renders still sees current values. For kernels in other languages, Quarto cannot set them.
 
-The `julia` and `marimo` engines do not receive these variables yet.
+The `julia` and `marimo` engines receive them for the code they run, set separately for each document.
 
 ## Migrating from Quarto 1
 
 The variable names and the JSON layout are the same as in Quarto 1. The differences:
 
+- The `julia` and `marimo` engines see `QUARTO_FIG_*` and the richer execution-information file, which Quarto 1 did not give them. They also see `QUARTO_PROFILE` and the values from the project's environment files, which Quarto 1 set in the environment those engines inherited.
 - A `_brand.yml` file is used only when a `brand:` key names it, so `format.render.brand` is absent without one. See [Brand](brand.qmd).
 - `format.render.brand.dark` is present whenever the brand defines dark values. Quarto 1 also includes it when the document turns dark mode on for a brand without dark values; that dark entry repeated the light one.
 - Each brand mode has `data` and `brandDir`. Quarto 1 also includes other internal fields, such as `processedData`.

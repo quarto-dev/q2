@@ -2,7 +2,7 @@
 title: 'TS engines (julia, marimo): deliver the execute environment (bd-x3h4zjhl)'
 date: 2026-11-12
 description: 'Give julia and marimo cells the per-document variables (`QUARTO_DOCUMENT_*`, `QUARTO_EXECUTE_INFO`, `QUARTO_FIG_*`, `QUARTO_PROJECT_ROOT`) and the project environment (`_environment` files, `QUARTO_PROFILE`) through one optional `executeEnv` field on the TS execute protocol.'
-status: session-1-done  # Decisions final 2026-11-12 (Gordon), after a design/implementation review
+status: done  # Decisions final 2026-11-12 (Gordon), after a design/implementation review
 braid:
   strand: bd-x3h4zjhl
 ---
@@ -403,17 +403,17 @@ Phase 1 adds the field they fail as compile errors. That counts as
 
 ### Session 2, Phase 5: docs
 
-- [ ] `docs/guides/authoring/execution-context.qmd`: remove the line
+- [x] `docs/guides/authoring/execution-context.qmd`: remove the line
       saying julia and marimo do not receive these variables; widen the
       "knitr engine and Jupyter kernels" sentence; note that
       `QUARTO_FIG_*` and the richer execute-info file are new for julia
       and marimo compared with Quarto 1; keep the "read it from a cell"
       caveat.
-- [ ] `docs/guides/extensions/ts-engines-node.qmd`: in a new section
+- [x] `docs/guides/extensions/ts-engines-node.qmd`: in a new section
       after "Environment variables are replaced, not merged", document
       `executeEnv`, what it contains, and the opt-in contract for
       engines that run user code.
-- [ ] `docs/guides/projects/environment.qmd` (the "Executed code"
+- [x] `docs/guides/projects/environment.qmd` (the "Executed code"
       bullet, which names only the Jupyter and knitr engines) and
       `docs/guides/projects/profiles.qmd` (the "code cells and render
       scripts see `QUARTO_PROFILE`" item): name julia and marimo too
@@ -423,17 +423,55 @@ Phase 1 adds the field they fail as compile errors. That counts as
 
 ### Session 2, wrap-up
 
-- [ ] clippy and nextest for `quarto-core` and `quarto`; the host
+- [x] clippy and nextest for `quarto-core` and `quarto`; the host
       package tests; recommend a workspace nextest run to Gordon.
-- [ ] End to end through the real binary: with both syncs landed, run
+- [x] End to end through the real binary: with both syncs landed, run
       `cargo nextest run -p quarto -E 'binary(integration) & test(execute_env_cli_e2e::)'`
       with `--no-capture`, on a machine with julia, Node and uv. The
       test binary embeds the current host bundle and julia subtree.
       Confirm that no test printed a skip line. Record the command, the
       pass lines, and the marimo and julia `env.json` contents the tests
       print, and mark it "output inspected" here.
-- [ ] `q2 render --strict` on the edited docs pages and this plan.
-- [ ] Reconcile this checklist with what landed.
+- [x] `q2 render --strict` on the edited docs pages and this plan.
+- [x] Reconcile this checklist with what landed.
+
+## Session 2 evidence (2026-11-13)
+
+**Forks.** quarto-marimo `d2558d1` (executeEnv to the `extract.py` process
+only; fork `npm test` 40/40) and quarto-julia-engine `c8af0a4` (`qnrRunOptions`
+maps `executeEnv` to `env` and drops it; fork `npm test` 57/57, `npm run
+typecheck` clean, bundle rebuilt), both pushed with Gordon's OK. q2 syncs:
+`7fa816629` (marimo fixture; `marimo_fixture_fresh` 2/2 pass), `d84d348dc` +
+`0223bb2d3` (julia subtree), then the `vendored.toml` bump (`cargo xtask
+lint` clean).
+
+**Bug found while turning the julia e2e tests green.** The `printed()` helper
+in `julia_engine_e2e.rs` matched the code listing (`println("INFO_IS_FILE=", ...`)
+before the cell output, so three cases failed on `&quot;`. It now takes the
+last match. The product code was right.
+
+**Gates.** `cargo clippy -p quarto-core -p quarto --all-targets -- -D warnings`
+clean; `cargo nextest run -p quarto-core -p quarto`: 9305 passed, 38 skipped;
+host package: 181 passed, typecheck clean. `julia_engine_e2e::` (17 tests)
+passes after the helper fix, including the daemon rerender (~97 s) and the
+shared worker (~77 s).
+
+**End to end through the real binary (output inspected).**
+`cargo nextest run -p quarto --no-capture --no-fail-fast -E 'binary(integration) & test(execute_env_cli_e2e::)'`:
+4 passed. The julia and marimo cells each printed this `env.json` (paths
+shortened):
+
+```json
+{"QUARTO_DOCUMENT_FILE":"doc.qmd","QUARTO_DOCUMENT_PATH":".../proj/sub",
+ "QUARTO_EXECUTE_INFO":".../quarto-pipeline_XXXX/quarto-execute-info.json",
+ "QUARTO_FIG_DPI":"96","QUARTO_FIG_FORMAT":"png","QUARTO_FIG_HEIGHT":"5",
+ "QUARTO_FIG_WIDTH":"5.5","QUARTO_PROFILE":"prod","QUARTO_PROJECT_ROOT":".../proj",
+ "X3H_FROM_ENV":"base value","X3H_FROM_PROFILE":"prod value"}
+```
+
+Skip lines: none from the new tests. The pre-existing
+`jupyter_cells_see_their_own_document` printed `skipping: jupyter not
+available` on this machine and passed vacuously; it is not part of this plan.
 
 ## Verified facts (review, 2026-11-12)
 
