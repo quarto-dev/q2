@@ -70,6 +70,9 @@ const DISPLAY_ONLY_KEYS: string[] = [
   "classes",
   "fig-column",
   "tbl-column",
+  // Engine-neutral: whether core's presenter interleaves source and output. Julia does not
+  // declare interleaving, so a cell is held unless the author sets this to true.
+  "output-interleave",
 ];
 
 /** The engine's declared execution-input hash rule (plan EXR-8, task B1a; OPR-3; version 2: OPR-5 excludes `execute: record-sources`). */
@@ -110,12 +113,24 @@ export interface RecordInfo {
  * The options sent to QuartoNotebookRunner. `handledLanguages` passes through
  * untouched (core already added the languages of spans no engine owns);
  * `ownedLanguages` is not used. Core-located `units` are forwarded as given.
+ * Quarto 2's `executeEnv` (per-document variables and the project environment)
+ * becomes QNR's per-run `env`, which QNR sets around cell and inline evaluation
+ * and replaces on every run; `executeEnv` itself is not forwarded, and no `env`
+ * key is sent when it is empty or absent.
  */
 export function qnrRunOptions<T extends object>(
   options: T,
-): T & { emitUnits?: true } {
-  const hasUnits = Array.isArray((options as { units?: unknown }).units);
-  return hasUnits ? { ...options, emitUnits: true } : { ...options };
+): Omit<T, "executeEnv"> & { emitUnits?: true; env?: Record<string, string> } {
+  const { executeEnv, ...rest } = options as T & {
+    executeEnv?: Record<string, string>;
+  };
+  const hasUnits = Array.isArray((rest as { units?: unknown }).units);
+  const hasEnv = executeEnv !== undefined && Object.keys(executeEnv).length > 0;
+  return {
+    ...rest,
+    ...(hasUnits ? { emitUnits: true as const } : {}),
+    ...(hasEnv ? { env: { ...executeEnv } } : {}),
+  } as Omit<T, "executeEnv"> & { emitUnits?: true; env?: Record<string, string> };
 }
 
 /**
