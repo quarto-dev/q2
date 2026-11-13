@@ -53,6 +53,19 @@ test.describe('the style box', () => {
     await expect(editor.styleMenu().getByRole('menuitemradio', { checked: true })).toHaveText('Heading 2')
   })
 
+  test('its check mark is the same size whichever style is checked', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+    await editor.placeCaretInLine(1, 2)
+
+    await editor.styleBox().click()
+
+    const checked = editor.styleMenu().getByRole('menuitemradio', { checked: true })
+    const paragraph = editor.styleMenu().getByRole('menuitemradio', { name: 'Paragraph' })
+    const markSize = await checked.evaluate((el) => getComputedStyle(el, '::before').fontSize)
+    const itemSize = await paragraph.evaluate((el) => getComputedStyle(el).fontSize)
+    expect(markSize).toBe(itemSize)
+  })
+
   test('opening its menu changes nothing in the document', async ({ page }) => {
     const editor = await openEditor(page, 'toolbar')
     await editor.placeCaretInLine(0, 2)
