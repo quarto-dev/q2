@@ -1674,7 +1674,8 @@ mod tests {
 
     // ── RIU-2: reuse across a restart (RIU-0 S1 B3, S2b) ─────────────────
 
-    /// One session over a persisted store: seed, then drop everything so `hub.lock` is free.
+    /// One session over a persisted store: seed, then `shutdown()` and drop everything so
+    /// `hub.lock` is free and the index is on disk (samod saves on background tasks).
     async fn session(
         project: &std::path::Path,
         data: &std::path::Path,
@@ -1710,6 +1711,7 @@ mod tests {
 
         let (ctx, first_calls) = session(project.path(), data.path(), &cfg).await;
         assert_eq!(first_calls, 1, "first open runs the engine once");
+        ctx.shutdown().await;
         drop(ctx);
 
         std::fs::write(
@@ -1740,6 +1742,7 @@ mod tests {
         let (ctx, first_calls) =
             session(project.path(), data1.path(), &restart_cfg(data1.path())).await;
         assert_eq!(first_calls, 1);
+        ctx.shutdown().await;
         drop(ctx);
 
         // Copy the cache into a fresh data dir: the cache survives, the ref does not.
@@ -1756,6 +1759,7 @@ mod tests {
         // Unedited: a hit, no engine.
         let (ctx, calls) = session(project.path(), data2.path(), &restart_cfg(data2.path())).await;
         assert_eq!(calls, 0, "the same content hits the copied cache");
+        ctx.shutdown().await;
         drop(ctx);
 
         // Edited: a different key, a miss, one engine run.
