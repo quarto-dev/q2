@@ -593,7 +593,7 @@ function menuItems(b) {
 }
 function openMenu(b, opts = {}) {
   const items = opts.items || menuItems(b), sel = items.findIndex((it) => it.on && !it.off);
-  menu = { target: b, items, title: opts.title || label(b, 'name'), i: sel >= 0 ? sel : items.findIndex((it) => it.run && !it.off) };
+  menu = { target: b, items, title: 'title' in opts ? opts.title : label(b, 'name'), i: sel >= 0 ? sel : items.findIndex((it) => it.run && !it.off) };
   render();
   drawMenu();
   const anchor = opts.anchor || document.querySelector(`[data-menu="${id(b)}"]`);
@@ -605,7 +605,7 @@ function openMenu(b, opts = {}) {
   menuEl.style.top = (below ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + 'px';
 }
 function drawMenu() {
-  menuEl.innerHTML = `<div class="grp" style="color:var(--ink)">${esc(menu.title)}</div>`;
+  menuEl.innerHTML = menu.title ? `<div class="grp" style="color:var(--ink)">${esc(menu.title)}</div>` : '';
   menu.items.forEach((it, i) => {
     if (it.sep) { menuEl.append(document.createElement('hr')); return; }
     if (it.grp) { const g = document.createElement('div'); g.className = 'grp'; g.textContent = it.grp; menuEl.append(g); return; }
@@ -678,7 +678,7 @@ function onToolbar(k, anchor) {
     if (menu && menu.anchor === 'style') return closeMenu();
     const T = (name, t, css) => ({ label: name, on: c.text && kind(c.text) === t, off: !c.text, css, run: () => convert(c.text, t) });
     openMenu(c.text || c.list, {
-      anchor, title: c.text ? 'Text style' : 'Text style (not in a list)',
+      anchor, title: null,
       items: [T('Paragraph', 'p', ''), T('Heading 1', 'h1', 'font-size:20px;font-weight:600'), T('Heading 2', 'h2', 'font-size:18px;font-weight:600'),
         T('Heading 3', 'h3', 'font-size:16px;font-weight:600'), T('Heading 4', 'h4', 'font-size:14.5px;font-weight:600')],
     });
