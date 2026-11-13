@@ -266,6 +266,40 @@ pub fn read_engine_policy_from_metadata(meta: &ConfigValue) -> EnginePolicy {
     EnginePolicy::Manual
 }
 
+/// The session's `preview.engine`: the `-M` overlay's value when it carries one, else
+/// `from_project` (what `_quarto.yml` said, or `Manual` for a standalone document). `-M` wins
+/// over `_quarto.yml`, the same precedence it has for `record-sources`.
+///
+/// A string maps as [`read_engine_policy_from_metadata`] maps it; a boolean likewise (`false`
+/// is `off`, `true` is `manual`). Unlike the lenient project read, a value `-M` names that
+/// is not one of those is an error, as an unknown `record-sources` entry is: a typo on the
+/// command line must not silently fall back to a policy the user did not ask for.
+pub fn engine_policy_with_overlay(
+    from_project: EnginePolicy,
+    overlay: Option<&serde_json::Value>,
+) -> Result<EnginePolicy, String> {
+    let Some(value) = overlay
+        .and_then(|o| o.get("preview"))
+        .and_then(|p| p.get("engine"))
+    else {
+        return Ok(from_project);
+    };
+    let refused = || {
+        format!("`-M preview.engine` must be `auto`, `manual` or `off` (or a boolean); got {value}")
+    };
+    match value {
+        serde_json::Value::Bool(false) => Ok(EnginePolicy::Off),
+        serde_json::Value::Bool(true) => Ok(EnginePolicy::Manual),
+        serde_json::Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "auto" => Ok(EnginePolicy::Auto),
+            "manual" => Ok(EnginePolicy::Manual),
+            "off" | "false" | "none" | "no" => Ok(EnginePolicy::Off),
+            _ => Err(refused()),
+        },
+        _ => Err(refused()),
+    }
+}
+
 fn parse_policy_str(s: &str) -> EnginePolicy {
     match s.trim().to_ascii_lowercase().as_str() {
         "auto" => EnginePolicy::Auto,
@@ -1412,5 +1446,76 @@ mod static_preview_defaults_tests {
         let d = read_static_preview_defaults(&meta(&[("port", "lots"), ("browser", "maybe")]));
         assert_eq!(d.port, None);
         assert_eq!(d.browser, None);
+    }
+}
+
+#[cfg(test)]
+mod engine_policy_overlay_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn resolve(project: EnginePolicy, overlay: serde_json::Value) -> Result<EnginePolicy, String> {
+        engine_policy_with_overlay(project, Some(&overlay))
+    }
+
+    /// No `-M`, or a `-M` without `preview.engine`, leaves the project's policy alone.
+    #[test]
+    fn without_a_preview_engine_key_the_project_policy_stands() {
+        for p in [EnginePolicy::Manual, EnginePolicy::Auto, EnginePolicy::Off] {
+            assert_eq!(engine_policy_with_overlay(p, None), Ok(p));
+            assert_eq!(resolve(p, json!({"execute": {"record": true}})), Ok(p));
+            assert_eq!(resolve(p, json!({"preview": {"port": 4000}})), Ok(p));
+        }
+    }
+
+    /// A standalone document has no `_quarto.yml`, so the project policy is `Manual` and `-M`
+    /// is the only way to ask for `auto`.
+    #[test]
+    fn a_standalone_document_can_ask_for_auto() {
+        assert_eq!(
+            resolve(EnginePolicy::Manual, json!({"preview": {"engine": "auto"}})),
+            Ok(EnginePolicy::Auto)
+        );
+    }
+
+    #[test]
+    fn minus_m_wins_over_the_project() {
+        let auto = json!({"preview": {"engine": "auto"}});
+        let off = json!({"preview": {"engine": "off"}});
+        let manual = json!({"preview": {"engine": "manual"}});
+        assert_eq!(resolve(EnginePolicy::Off, auto), Ok(EnginePolicy::Auto));
+        assert_eq!(resolve(EnginePolicy::Auto, off), Ok(EnginePolicy::Off));
+        assert_eq!(
+            resolve(EnginePolicy::Auto, manual),
+            Ok(EnginePolicy::Manual)
+        );
+    }
+
+    /// The boolean forms (YAML reads a bare `off` or `no` as `false`), and the string aliases
+    /// the project read accepts.
+    #[test]
+    fn the_boolean_and_alias_forms_map_as_the_project_read_maps_them() {
+        let engine =
+            |v: serde_json::Value| resolve(EnginePolicy::Auto, json!({"preview": {"engine": v}}));
+        assert_eq!(engine(json!(false)), Ok(EnginePolicy::Off));
+        assert_eq!(engine(json!(true)), Ok(EnginePolicy::Manual));
+        for alias in ["off", "none", "no", "false", "OFF"] {
+            assert_eq!(engine(json!(alias)), Ok(EnginePolicy::Off), "{alias}");
+        }
+        assert_eq!(engine(json!(" Auto ")), Ok(EnginePolicy::Auto));
+    }
+
+    /// An unknown value is an error naming the key and the accepted values.
+    #[test]
+    fn an_unknown_value_is_an_error() {
+        for bad in [json!("autoo"), json!(3), json!(null), json!(["auto"])] {
+            let err = resolve(
+                EnginePolicy::Manual,
+                json!({"preview": {"engine": bad.clone()}}),
+            )
+            .expect_err(&format!("{bad} must be refused"));
+            assert!(err.contains("preview.engine"), "{err}");
+            assert!(err.contains("auto"), "{err}");
+        }
     }
 }

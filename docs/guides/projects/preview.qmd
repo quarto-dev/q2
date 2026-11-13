@@ -52,7 +52,18 @@ for `q2 render` ([Render options](render-options.qmd)); for instance
 - They are refused with `--ui editor` (the editor has its own settings),
   `--join` and `--no-project`.
 - `--to` and `-M` are applied to the page preview, the PDF pane and the
-  downloads. They do not reach code execution.
+  downloads. `-M` also reaches code execution: when the preview runs a
+  document's code (at startup, after an edit, or from **Re-execute**), the
+  run sees the `-M` values too, so `-M 'execute: {record: true}'` makes it
+  write the document's [execution record
+  copy](../authoring/execution-records.qmd) and `-M 'execute: {echo: false}'`
+  changes what the code produces. `--to` does not reach code execution.
+- `-M 'preview: {engine: auto}'` sets what the preview does when you save a
+  document. `auto` re-runs a document's code whenever it is out of date;
+  `manual` (the default) marks it out of date and waits for **Re-execute**;
+  `off` never runs code. It wins over `preview: engine:` in `_quarto.yml`, and
+  it is the only way to turn `auto` on for a single file with no project.
+  A value other than `auto`, `manual` or `off` is an error.
 - `-M book-scope:...` is ignored (a startup notice says so): the viewer
   renders one page at a time, and the PDF pane always asks for the
   chapter.
@@ -145,8 +156,11 @@ and `typst` and read the host's project, and an import uploads the file
 to the host (up to 25 MB), where it is converted by a sandboxed `pandoc`.
 A guest can also re-run the document's code, but only when `engine` is in
 `--records` and `preview.engine` is not `off` (see
-[Execution records](../authoring/execution-records.qmd)). Treat the join
-string like a password, as the `--share` help says.
+[Execution records](../authoring/execution-records.qmd)). With
+`preview.engine: auto` (from `_quarto.yml` or `-M`), a guest's edit to a
+document runs that document's code on your machine, and the preview prints a
+warning at startup. Treat the join string like a password, as the `--share`
+help says.
 
 ### Outputs from an imported record
 
@@ -228,6 +242,9 @@ The live-session flags (`--share`, `--allow-edit`, `--ui`, `--join`)
 do not apply to static mode.
 
 ### Code execution
+
+`q2 preview --static -M 'preview: {engine: off}'` turns lazy execution off for one
+run, as `_quarto.yml` does below.
 
 A static preview does not execute every page's code up front: a site
 with many Jupyter or knitr pages would take a long time to start. Pages

@@ -87,6 +87,18 @@ does not offer to edit it; see
 To go the other way and give Positron a cache file built from a document's
 record, use [`q2 convert`](convert.qmd).
 
+### Setting it from the command line
+
+`q2 preview` passes `-M` to the document's code too, so a preview can write the
+copy without editing the document:
+
+``` {.bash filename="Terminal"}
+q2 preview report.qmd -M 'execute: {record: true}'
+```
+
+The copy is then written at the path above each time the preview runs the
+document. Turning `record` on or off does not make a record out of date.
+
 ## Choosing where a preview gets records
 
 `q2 preview` and `q2 provide-hub` take `--records`, a list of the places to
