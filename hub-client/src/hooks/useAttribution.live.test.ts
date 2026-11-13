@@ -7,6 +7,7 @@
  * @vitest-environment jsdom
  */
 
+import { StrictMode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { next as A } from '@automerge/automerge';
@@ -63,7 +64,7 @@ function renderLive(initialProps: Props) {
       expect(runsOf(result.payload).at(-1)!.end).toBe(props.sourceText.length);
     }
   };
-  return { ...hook, expectNoMismatchedPayload };
+  return { ...hook, seen, expectNoMismatchedPayload };
 }
 
 function seed(): Doc<TDoc> {
@@ -108,6 +109,45 @@ describe('useAttribution, live', () => {
     ]);
     expect(result.current.generating).toBe(false);
     expectNoMismatchedPayload();
+  });
+
+  it('settles an edit in the render that brings its text', async () => {
+    let doc = seed();
+    getFileHandle.mockReturnValue({ doc: () => doc });
+    const { result, rerender, seen } = renderLive({ sourceText: doc.text });
+    await waitFor(() => expect(result.current.payload).not.toBeNull());
+
+    for (let i = 0; i < 5; i++) {
+      doc = A.change(doc, { time: 10 + i }, d => A.splice(d, ['text'], i, 0, 'x'));
+      const before = seen.length;
+      rerender({ sourceText: doc.text });
+      // One render, and it already has this text's attribution.
+      expect(seen.length).toBe(before + 1);
+      const { result: r } = seen[before];
+      expect(r.pending).toBe(false);
+      expect(runsOf(r.payload).at(-1)!.end).toBe(doc.text.length);
+    }
+  });
+
+  it('builds and follows edits under StrictMode, which re-runs effects on mount', async () => {
+    let doc = seed();
+    getFileHandle.mockReturnValue({ doc: () => doc });
+    const { result, rerender } = renderHook(
+      (props: Props) =>
+        useAttribution({
+          enabled: true,
+          filePath: 'doc.qmd',
+          identities: IDENTITIES,
+          sourceText: props.sourceText,
+        }),
+      { initialProps: { sourceText: doc.text }, wrapper: StrictMode },
+    );
+    await waitFor(() => expect(result.current.payload).not.toBeNull());
+    expect(result.current.generating).toBe(false);
+
+    doc = A.change(doc, { time: 2 }, d => A.splice(d, ['text'], 0, 0, 'x'));
+    rerender({ sourceText: doc.text });
+    expect(runsOf(result.current.payload).at(-1)!.end).toBe(doc.text.length);
   });
 
   it('shows no overlay rather than a shifted one while the text lags the document', async () => {

@@ -93,7 +93,7 @@ function renderReplay(initialProps: Props) {
       expect(runsOf(result.payload).at(-1)!.end).toBe(props.sourceText.length);
     }
   };
-  return { ...hook, expectNoMismatchedPayload };
+  return { ...hook, seen, expectNoMismatchedPayload };
 }
 
 beforeEach(() => {
@@ -116,14 +116,18 @@ describe('useAttribution in replay', () => {
   it('has the next step ready in the same update when stepping forward', async () => {
     const { doc, steps } = fixture();
     getFileHandle.mockReturnValue({ doc: () => doc });
-    const { result, rerender, expectNoMismatchedPayload } = renderReplay({
+    const { result, rerender, seen, expectNoMismatchedPayload } = renderReplay({
       sourceText: steps[0].text,
       atHeads: steps[0].heads,
     });
     await waitFor(() => expect(result.current.pending).toBe(false));
 
     for (const i of [1, 2]) {
+      const before = seen.length;
       rerender({ sourceText: steps[i].text, atHeads: steps[i].heads });
+      // One render, never held: the step's runs are read during it.
+      expect(seen.length).toBe(before + 1);
+      expect(seen[before].result.pending).toBe(false);
       // No await: a forward step is settled by the time the update commits.
       expect(result.current.pending).toBe(false);
       expect(runsOf(result.current.payload)).toEqual(EXPECTED[i]);

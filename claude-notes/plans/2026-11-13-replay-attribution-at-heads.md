@@ -77,3 +77,29 @@ instead of with shifted runs.
 
 Unit and hook tests cover the run lists and the hook's replay path. The
 change was not exercised in a browser against a running hub.
+
+## Follow-up: cost of the synchronous live update
+
+With the debounce gone, every text change applies its change to the work doc.
+One `applyChanges` call costs time proportional to the document (measured:
+2.2 ms at 10k characters, 8.8 ms at 40k, 35 ms at 160k), and a typing burst
+no longer shares one call.
+
+- [x] Live update reads the doc's own patches (`A.diff` between the heads the
+  runs describe and the live heads) when all new changes share one
+  attribution. Automerge keeps the patches of a doc's latest change, so an
+  edit costs 0.04 to 0.06 ms at the same sizes. The work doc stays behind
+  (`_heads` records where the runs are) and is caught up, in one call, before
+  anything replays on it: changes of several authors in one update, or a
+  replay step.
+- [x] `ReactPreview` passes one shared object when it has no identities.
+- [x] The hook reads the runs during render instead of setting state from an
+  effect. The run-list state moved to `AttributionStore`
+  (`services/attribution-store.ts`), read with `useSyncExternalStore`. A live
+  edit, a forward replay step and a cached replay step are each one render
+  with their own payload; `pending` now covers only the cold build of a
+  replay seek. A read never starts a build: it records the target, and
+  `reconcile()` starts, replaces or drops the build after the commit.
+- [ ] Not done: the cold build has the same per-call cost, so a history whose
+  changes cannot be batched is quadratic (146 s for 8000 changes at 160k
+  characters in the benchmark's worst case). Same on `main`.

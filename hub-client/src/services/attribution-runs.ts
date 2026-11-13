@@ -24,6 +24,7 @@
 import {
   applyChanges,
   decodeChange,
+  diff,
   getChanges,
   getChangesMetaSince,
   getChangesSince,
@@ -79,6 +80,13 @@ export interface RunListAttribution {
    * back to bare actors for the rest.
    */
   _authorByActor?: Map<string, string>;
+  /**
+   * Internal: the heads the runs describe, when the work doc is behind them.
+   * A live update whose changes share one attribution reads their patches
+   * from the live doc and does not apply them to the work doc (which costs
+   * time proportional to the document). Absent when the two are level.
+   */
+  _heads?: string[];
 }
 
 interface SplicePatch {
@@ -300,7 +308,7 @@ function applyPatchToRuns(
 // ---------------------------------------------------------------------------
 
 /** Replay state with every field present; the loop below mutates it. */
-type ReplayState = Required<RunListAttribution>;
+type ReplayState = Required<Omit<RunListAttribution, '_heads'>> & Pick<RunListAttribution, '_heads'>;
 
 /**
  * The attribution key and time of one change.
@@ -478,6 +486,58 @@ function* replayUpTo(
   yield* applyInBatches(state, attributed(), textFieldName);
 }
 
+/**
+ * Live update without the work doc: when every change the live doc has gained
+ * carries one attribution, fold the doc's own patches for them into a copy of
+ * the runs. Automerge keeps the patches of a doc's latest change, so for an
+ * edit this costs nothing that grows with the document. Returns null when the
+ * changes differ in attribution; they must then be replayed one batch each.
+ */
+function updateFromDocPatches(
+  state: RunListAttribution & { _workDoc: Doc<unknown> },
+  live: Doc<unknown>,
+  textFieldName: string,
+): RunListAttribution | null {
+  const at = state._heads ?? getHeads(state._workDoc);
+  // The runs describe changes this doc lacks (it is another history).
+  if (!hasHeads(live, at)) throw new HistoryCompactedError();
+  const pending = getChangesMetaSince(live, at);
+  if (pending.length === 0) return state;
+
+  const authorByActor = state._authorByActor ?? new Map<string, string>();
+  let attribution: CharAttribution | null = null;
+  for (const c of pending) {
+    // Same author-first rule as `resolveAttribution`.
+    if (c.author) authorByActor.set(c.actor, c.author);
+    const actor = c.author ?? authorByActor.get(c.actor) ?? c.actor;
+    if (attribution === null) attribution = { actor, time: c.time };
+    else if (actor !== attribution.actor || c.time !== attribution.time) return null;
+  }
+
+  const heads = getHeads(live);
+  const runs = state.runs.map(r => ({ ...r }));
+  for (const patch of diff(live, at, heads)) {
+    if (isTextPatch(patch, textFieldName)) applyPatchToRuns(runs, patch, attribution!);
+  }
+  return { runs, _workDoc: state._workDoc, _authorByActor: authorByActor, _heads: heads };
+}
+
+/** Bring a work doc left behind by `updateFromDocPatches` level with the runs. */
+function catchUpWorkDoc(state: ReplayState, live: Doc<unknown>): void {
+  const at = state._heads;
+  if (!at) return;
+  if (!hasHeads(live, at)) throw new HistoryCompactedError();
+  const workHeads = getHeads(state._workDoc);
+  const metas = getChangesMetaSince(live, workHeads);
+  const changes = getChangesSince(live, workHeads);
+  // Both lists come from the same traversal; position pairs bytes with hash.
+  if (metas.length !== changes.length) throw new Error('change metadata and changes disagree');
+  const beyond = new Set(getChangesMetaSince(live, at).map(m => m.hash));
+  const behind = changes.filter((_, i) => !beyond.has(metas[i].hash));
+  [state._workDoc] = applyChanges(state._workDoc, behind);
+  state._heads = undefined;
+}
+
 // ---------------------------------------------------------------------------
 // buildRunListAttribution — full history processing
 // ---------------------------------------------------------------------------
@@ -492,7 +552,12 @@ export async function buildRunListAttribution(
   if (!viewable.doc() || signal?.aborted) return null;
 
   // A cold build is the incremental replay started from an empty doc.
-  const state: ReplayState = { runs: [], _workDoc: init(), _authorByActor: new Map() };
+  const state: ReplayState = {
+    runs: [],
+    _workDoc: init(),
+    _authorByActor: new Map(),
+    _heads: undefined,
+  };
   // With a `target` the build stops at that point in history instead of
   // the live heads.
   const replay = target
@@ -518,20 +583,29 @@ export function updateRunListAttribution(
   textFieldName: string,
   target?: ReplayTarget,
 ): RunListAttribution {
-  if (!state._workDoc) throw new HistoryCompactedError();
+  const workDoc = state._workDoc;
+  if (!workDoc) throw new HistoryCompactedError();
+  const viewable = handle as unknown as ViewableHandle;
+  const live = viewable.doc() as Doc<unknown>;
+
+  if (!target) {
+    const folded = updateFromDocPatches({ ...state, _workDoc: workDoc }, live, textFieldName);
+    if (folded) return folded.runs === state.runs ? state : folded;
+  }
 
   const next: ReplayState = {
     runs: state.runs.map(r => ({ ...r })),
-    _workDoc: state._workDoc,
+    _workDoc: workDoc,
     _authorByActor: state._authorByActor ?? new Map<string, string>(),
+    _heads: state._heads,
   };
-  const viewable = handle as unknown as ViewableHandle;
+  catchUpWorkDoc(next, live);
   const replay = target
     ? replayUpTo(next, viewable, textFieldName, target)
     : replayPending(next, viewable, textFieldName);
   while (!replay.next().done);
   // Nothing was applied: keep the caller's state object.
-  return next._workDoc === state._workDoc ? state : next;
+  return next._workDoc === workDoc ? state : next;
 }
 
 // ---------------------------------------------------------------------------

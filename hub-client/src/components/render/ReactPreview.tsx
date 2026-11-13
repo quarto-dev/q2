@@ -478,6 +478,10 @@ export function CommitStatusBulb({
   );
 }
 
+// One object for "no identities": a fresh `{}` per render would re-run the
+// attribution effects, which set state, on every render.
+const NO_IDENTITIES: Record<string, ActorIdentity> = {};
+
 export default function ReactPreview({
   content,
   currentFile,
@@ -629,7 +633,7 @@ export default function ReactPreview({
     enabled: attributionOn,
     filePath: currentFile?.path ?? null,
     sourceText: content,
-    identities: identities ?? {},
+    identities: identities ?? NO_IDENTITIES,
     atHeads: attributionHeads,
     branchId: attributionBranchId,
   });
@@ -836,9 +840,9 @@ export default function ReactPreview({
   // stale result of the one render that was in flight — so a burst
   // settles on the latest content.
   useEffect(() => {
-    // Authors overlay on: wait for the attribution of this text (an edit
-    // or a replay step), so it is drawn once and never with the runs of
-    // another text. The effect runs again when `attributionPending` clears.
+    // Authors overlay on, replay seek: wait for the step's attribution, so
+    // it is drawn once and never with the runs of another text. The effect
+    // runs again when `attributionPending` clears.
     if (attributionPending) return;
     const fxT0 = perfNow();
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
