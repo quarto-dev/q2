@@ -196,10 +196,11 @@ test.describe('typed text is text', () => {
 
     for (const line of typed) {
       await page.keyboard.press('Enter')
-      if (line.startsWith('# ')) {
-        // `# ` makes a heading (`headings.spec.ts`); Backspace right after
-        // takes that back and leaves what was typed.
-        await page.keyboard.type('# ')
+      if (line.startsWith('# ') || line.startsWith('> ')) {
+        // `# ` makes a heading (`headings.spec.ts`) and `> ` a quote
+        // (`quotes.spec.ts`); Backspace right after takes that back and
+        // leaves what was typed.
+        await page.keyboard.type(line.slice(0, 2))
         await page.keyboard.press('Backspace')
         await page.keyboard.type(line.slice(2))
       } else await page.keyboard.type(line)

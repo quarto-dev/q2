@@ -36,8 +36,8 @@ const SELECTORS: Record<Field, string> = {
 /** The body's editable paragraphs. */
 const PARAGRAPH = '#quarto-document-content > p.qe-field'
 
-/** The body's editable lines: paragraphs and headings. */
-const LINE = '#quarto-document-content > .qe-field'
+/** The body's editable lines: paragraphs, headings and the paragraphs of quotes. */
+const LINE = '#quarto-document-content > .qe-field, #quarto-document-content > blockquote > .qe-field'
 
 /** The row of "+" items that add the title-block fields a document doesn't have. */
 const WIDGET = '.qe-widget'
@@ -252,16 +252,22 @@ export class Editor {
     )
   }
 
-  /** The body's editable lines (paragraphs and headings), each as `tag: text`. */
+  /**
+   * The body's editable lines (paragraphs, headings and quotes), each as
+   * `tag: text`, where a quote's tag is `blockquote`.
+   */
   lines(): Promise<string[]> {
     return this.frame.evaluate(
       (selector) =>
-        [...document.querySelectorAll(selector)].map((el) => `${el.tagName.toLowerCase()}: ${el.textContent ?? ''}`),
+        [...document.querySelectorAll(selector)].map((el) => {
+          const tag = el.parentElement?.matches('blockquote') ? 'blockquote' : el.tagName.toLowerCase()
+          return `${tag}: ${el.textContent ?? ''}`
+        }),
       LINE,
     )
   }
 
-  /** Put the caret in the body's `index`th editable line (paragraph or heading), `offset` characters in. */
+  /** Put the caret in the body's `index`th editable line (paragraph, heading or quote), `offset` characters in. */
   async placeCaretInLine(index: number, offset: number) {
     await this.frame.locator(LINE).nth(index).click({ position: { x: 5, y: 5 } })
     await this.page.keyboard.press(lineStart)

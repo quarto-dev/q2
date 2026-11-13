@@ -8,8 +8,9 @@
  * The body is under it, block by block, from the parsed source.
  *
  * The title, subtitle and abstract are edited in place, and so are the
- * body's paragraphs and headings of plain text; the rest of the body
- * (formatted text, lists, code) is shown and can't be edited yet. A
+ * body's paragraphs, headings and one-paragraph quotes of plain text; the
+ * rest of the body (formatted text, lists, code) is shown and can't be
+ * edited yet. A
  * document has only the title-block fields its author adds, with the "+"
  * row above the title block (`TitleBlockWidget`); an added field stays,
  * empty, until Backspace in it removes it. Every edit is
@@ -32,6 +33,7 @@ import {
   bodyInputRule,
   headingAttr,
   headingLevel,
+  isQuote,
   prefixMarkdown,
   readOnlyBlocks,
   type Node,
@@ -81,8 +83,8 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * the body, starting one if there's none; it never adds a title-block
  * field (the "+" row does). The abstract and the body take line breaks
  * (one per paragraph). The title-block fields stay when empty.
- * In the body, `## ` at the start of a paragraph makes it a heading, and
- * a heading is copied with its `#`s.
+ * In the body, `## ` at the start of a paragraph makes it a heading and
+ * `> ` a quote, and they're copied with their `#`s and `>`.
  */
 const SCHEMA: Schema = {
   order: [...TITLE_BLOCK, 'body'],
@@ -165,13 +167,15 @@ export function VisualEditor({ file }: VisualEditorProps) {
     [readOnly],
   )
 
-  // A heading line is an `h1`-`h6`, with its block's id and classes.
+  // A heading line is an `h1`-`h6`, with its block's id and classes, and a
+  // quote line a paragraph in a `blockquote`, as `q2 render` shows them.
   const lineBlocks = useMemo(
     () => (ast && state.fields.body !== undefined ? blocksOfLines(ast.blocks as Node[], state.fields.body) : []),
     [ast, state.fields.body],
   )
   const lineElement = useCallback(
     (prefix: string, index: number) => {
+      if (isQuote(prefix)) return { as: 'p', parent: { as: 'blockquote' } }
       const level = headingLevel(prefix)
       const { id, classes } = headingAttr(lineBlocks[index])
       return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined, id }
