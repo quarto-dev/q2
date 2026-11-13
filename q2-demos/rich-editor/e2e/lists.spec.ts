@@ -444,3 +444,39 @@ test.describe('moving through a list', () => {
     await expect.poll(async () => (await editor.lines())[4]).toMatch(/^p: M.*y/)
   })
 })
+
+test.describe('the toolbar on an item', () => {
+  // An item's line is a paragraph (`toolbar.spec.ts`), and stays one: a
+  // heading can't be in a list yet, and neither can a quote.
+  test('the style box shows Paragraph, and a heading can\'t be chosen', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+    await editor.placeCaretInLine(1, 2)
+
+    await expect(editor.styleBox()).toHaveText('Paragraph')
+    await editor.styleBox().click()
+
+    await expect(editor.styleMenu().getByRole('menuitemradio', { name: 'Heading 1' })).toBeDisabled()
+    await expect(editor.styleMenu().getByRole('menuitemradio', { name: 'Paragraph' })).toBeEnabled()
+  })
+
+  test('the quote button is disabled', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+
+    await editor.placeCaretInLine(1, 2)
+
+    await expect(editor.quoteButton()).toBeDisabled()
+  })
+
+  test('a heading chosen for a selection over items and paragraphs leaves the items as they are', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, 'lists')
+    await editor.placeCaretInLine(3, 2)
+    await page.keyboard.press('Shift+ArrowDown')
+
+    await editor.chooseStyle('Heading 3')
+
+    await editor.document.expectSource(lists.replace('Middle.', '### Middle.'))
+    expect((await editor.lines())[3]).toBe('li: Three.')
+  })
+})

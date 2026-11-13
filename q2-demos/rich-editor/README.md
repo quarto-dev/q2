@@ -46,8 +46,8 @@ in a word processor: its style box shows the style of the caret's line
 is pressed while the caret is in a quote and quotes or unquotes the line.
 With a selection, they change every line it is on, as one undo step, and
 the caret stays on its text. A heading can't be in a quote yet, so neither
-can be made into the other from the toolbar; outside the body, it's
-disabled. Its design is the toolbar of `mockups/block-annotations.html`
+can be made into the other from the toolbar, and nor can a list item be
+made a heading or a quote; outside the body, it's disabled. Its design is the toolbar of `mockups/block-annotations.html`
 with nothing in the margin and no breadcrumb.
 The rest of the body (paragraphs, headings, quotes and lists with
 formatting, quotes of more than one paragraph, lists with blank lines

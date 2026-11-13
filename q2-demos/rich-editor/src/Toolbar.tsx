@@ -7,15 +7,16 @@
  * it; the quote button is pressed while the caret is in a quote, and
  * quotes or unquotes the line. With a selection, they change every line it
  * is on. A heading can't be in a quote yet, so headings can't be chosen
- * in a quote, and a heading can't be quoted. Outside the body, it's
- * disabled.
+ * in a quote, and a heading can't be quoted. Nor can a list item be
+ * a heading or a quote yet, so on an item neither can be chosen. Outside
+ * the body, it's disabled.
  *
  * It lives outside the document's frame. Pressing it doesn't take the
  * focus, so the caret stays where it was.
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { headingLevel, headingPrefix, isQuote, QUOTE } from './editing/body.ts'
+import { headingLevel, headingPrefix, isBullet, isQuote, QUOTE } from './editing/body.ts'
 import { linePrefix, type State } from './engine/model.ts'
 
 interface ToolbarProps {
@@ -59,6 +60,7 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
   const disabled = prefix === null
   const level = prefix === null ? 0 : headingLevel(prefix)
   const quoted = prefix !== null && isQuote(prefix)
+  const listed = prefix !== null && isBullet(prefix)
   const style = level > 0 ? `Heading ${level}` : 'Paragraph'
 
   useEffect(() => {
@@ -91,8 +93,8 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
 
   const choose = (to: number) => {
     setOpen(false)
-    // A quote's line is a paragraph, and stays one.
-    setPrefixes((p) => (isQuote(p) ? p : to > 0 ? headingPrefix(to) : ''))
+    // A quote's or a list item's line is a paragraph, and stays one.
+    setPrefixes((p) => (isQuote(p) || isBullet(p) ? p : to > 0 ? headingPrefix(to) : ''))
   }
 
   const toggleQuote = () => {
@@ -131,7 +133,7 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
                 role="menuitemradio"
                 aria-checked={s.level === level}
                 className={`qe-item qe-item-${s.level}`}
-                disabled={quoted && s.level > 0}
+                disabled={(quoted || listed) && s.level > 0}
                 onClick={() => choose(s.level)}
               >
                 {s.name}
@@ -147,7 +149,7 @@ export function Toolbar({ state, writable, frameDoc, setPrefixes }: ToolbarProps
         aria-label="Quote"
         title="Quote"
         aria-pressed={quoted}
-        disabled={disabled || level > 0}
+        disabled={disabled || level > 0 || listed}
         onClick={toggleQuote}
       >
         {QUOTE_ICON}
