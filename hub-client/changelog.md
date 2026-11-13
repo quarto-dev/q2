@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-11-13
 
+- [`5a8f1d60d`](https://github.com/quarto-dev/q2/commits/5a8f1d60d): Authors overlay now follows every edit immediately, so it no longer shows the wrong author while people are typing, and on a local branch it shows the branch's own authorship
 - [`d7aaeb3d3`](https://github.com/quarto-dev/q2/commits/d7aaeb3d3): Authors overlay in replay now shows who wrote each word at that point in history, instead of the final document's authorship laid over earlier text
 
 ### 2026-11-12
