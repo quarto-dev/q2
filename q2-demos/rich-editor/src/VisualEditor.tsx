@@ -208,17 +208,19 @@ export function VisualEditor({ file }: VisualEditorProps) {
 
   return (
     <div className="visual-editor">
-      <Toolbar state={state} writable={writable} frameDoc={frameDoc} setPrefixes={setPrefixes} />
-      <iframe
-        className="visual-frame"
-        title="Visual editor"
-        srcDoc={SRCDOC}
-        onLoad={(e) => {
-          const doc = e.currentTarget.contentDocument
-          setFrameDoc(doc)
-          setMount(doc?.getElementById('quarto-document-content') ?? null)
-        }}
-      />
+      <div className="visual-box">
+        <Toolbar state={state} writable={writable} frameDoc={frameDoc} setPrefixes={setPrefixes} />
+        <iframe
+          className="visual-frame"
+          title="Visual editor"
+          srcDoc={SRCDOC}
+          onLoad={(e) => {
+            const doc = e.currentTarget.contentDocument
+            setFrameDoc(doc)
+            setMount(doc?.getElementById('quarto-document-content') ?? null)
+          }}
+        />
+      </div>
       <p className="status">
         {themeCss === null ? 'Compiling theme CSS… ' : ''}
         {derived && `Title block derived in ${derived.ms.toFixed(2)} ms. `}
