@@ -27,7 +27,9 @@
  *   prefix. Enter in the middle of a line keeps the prefix on both halves;
  *   at the end of the line the new line has none; and at the start of the
  *   line's text, the new line goes above, so the prefix stays with the
- *   text.
+ *   text. A prefix the schema carries on (`Schema.continued`) is on the
+ *   new line at the end or above too, and Enter on an empty line with
+ *   one takes it off.
  */
 
 import {
@@ -130,6 +132,9 @@ export function enter(schema: Schema, state: State): State {
  * Enter in a multi-line field: a line break, which keeps a line's prefix
  * on both halves of a line split in the middle, gives none to the line
  * started at its end, and goes before the prefix at the start of its text.
+ * A prefix the schema carries on (`Schema.continued`) is on the line
+ * started at the end, or put above at the start, too; and Enter on an
+ * empty line with one takes it off.
  */
 function lineBreak(schema: Schema, state: State): State {
   const cleared = insertText(schema, state, '')
@@ -138,13 +143,20 @@ function lineBreak(schema: Schema, state: State): State {
   const start = lineStartOf(text, at.offset)
   const prefix = linePrefix(text, at.offset)
   const lineEnd = text.indexOf('\n', at.offset) < 0 ? text.length : text.indexOf('\n', at.offset)
-  if (prefix === '' || at.offset === lineEnd && at.offset > start + prefix.length) {
+  const textStart = start + prefix.length
+  const continued = prefix !== '' && (schema.continued?.(prefix) ?? false)
+  const fields = { ...cleared.fields }
+  if (continued && textStart === lineEnd) {
+    fields[at.field] = text.slice(0, start) + text.slice(textStart)
+    return select(schema, { fields, selection: cleared.selection }, caret(at.field, start))
+  }
+  if (prefix === '' || (!continued && at.offset === lineEnd && at.offset > textStart)) {
     return insertText(schema, cleared, '\n')
   }
-  const fields = { ...cleared.fields }
-  if (at.offset === start + prefix.length) {
-    fields[at.field] = text.slice(0, start) + '\n' + text.slice(start)
-    return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + 1))
+  if (at.offset === textStart) {
+    const above = continued ? prefix : ''
+    fields[at.field] = text.slice(0, start) + above + '\n' + text.slice(start)
+    return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + above.length + 1))
   }
   fields[at.field] = text.slice(0, at.offset) + '\n' + prefix + text.slice(at.offset)
   return select(schema, { fields, selection: cleared.selection }, caret(at.field, at.offset + 1 + prefix.length))
