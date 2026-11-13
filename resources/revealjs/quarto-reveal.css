@@ -21,6 +21,16 @@
   overflow-x: auto;
 }
 
+/* Absolute positioning: `{.absolute top=200 left=400}` on a div, span or
+   image. RevealAbsoluteTransform moves the position attributes into an inline
+   style; this rule takes the element out of the flow. Mirrors Quarto 1's
+   `.reveal .slide .absolute` (`styles.html`); q2 slide sections carry no
+   `slide` class, so the slide is matched as `.slides section`. */
+.reveal .slides section .absolute {
+  position: absolute;
+  display: block;
+}
+
 /* Asides (Phase 2e) — `::: {.aside}` → `<aside class="aside">`, shown small
    and muted at the bottom of the slide. (`aside.notes` is hidden by reveal.css.)
    Mirrors Quarto 1's `.reveal .slide aside` rule. */

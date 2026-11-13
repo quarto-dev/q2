@@ -2477,6 +2477,11 @@ pub fn build_transform_pipeline(
         // Columns: rewrite `.column width=X` → `flex-basis` before slide
         // construction (the column Divs are still flat at this point).
         pipeline.push(Box::new(crate::revealjs::RevealColumnsTransform::new()));
+        // Absolute positioning: move the `top`/`left`/… attributes of an
+        // `.absolute` Div, Span or Image into its `style` (Quarto 1's
+        // `applyPosition`). A plain attribute rewrite like the columns one,
+        // so it sits beside it.
+        pipeline.push(Box::new(crate::revealjs::RevealAbsoluteTransform::new()));
         pipeline.push(Box::new(crate::revealjs::RevealSlidesTransform::new()));
         // Alias Quarto-1's reveal `footer:` → `page-footer:` so it flows
         // through the format-agnostic `FooterGenerateTransform` below. Must run
@@ -7182,6 +7187,7 @@ mod tests {
                 "format-css",
                 "draft-alert",
                 "reveal-columns",
+                "reveal-absolute",
                 "reveal-slides",
                 "reveal-footer-alias",
                 "footnotes",

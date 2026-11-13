@@ -100,12 +100,13 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
 
 ### Slice A: RevealJS `.absolute`
 
-- [ ] Unit tests in `revealjs/absolute.rs`: Div, Span and Image; `px` rule; existing style; no attributes; non-absolute untouched; inside a custom node slot.
-- [ ] Integration tests in `revealjs_features.rs`: the three element kinds end to end; `format: html` untouched; the CSS rule ships; an `.absolute` image is not stretched.
-- [ ] `RevealAbsoluteTransform`, pushed for RevealJS next to `RevealColumnsTransform`.
-- [ ] CSS rule in `resources/revealjs/quarto-reveal.css`.
-- [ ] smoke-all fixture `revealjs/absolute.qmd` (a port of Quarto 1 `tests/docs/reveal/mini/absolute.qmd`).
-- [ ] Render the layout fixture, measure against Quarto 1, record below.
+- [x] Unit tests in `revealjs/absolute.rs`: Div, Span and Image; `px` rule; existing style; no attributes; non-absolute untouched; inside a custom node slot. Written first against a stub; 8 of 14 failed as expected.
+- [x] Integration tests in `revealjs_features.rs`: the three element kinds end to end; `format: html` untouched; the CSS rule ships; an `.absolute` image is not stretched. 3 of 5 failed before the change. The other two are guards that already held.
+- [x] `RevealAbsoluteTransform`, pushed for RevealJS next to `RevealColumnsTransform`. The exact-name-list test for the RevealJS pipeline gained `reveal-absolute`.
+- [x] CSS rule in `resources/revealjs/quarto-reveal.css`.
+- [x] smoke-all fixture `revealjs/absolute.qmd` (a port of Quarto 1 `tests/docs/reveal/mini/absolute.qmd`, which had no assertions).
+- [x] Render the layout fixture, measure against Quarto 1, record below.
+- [ ] Preview: `ts-packages/preview-renderer/src/q2-preview/inlines/Image.tsx` does not pass an AST `style` through, so an `.absolute` image is not positioned in `q2 preview` yet. `Div.tsx` and `Span.tsx` do pass it.
 
 ### Slice B: RevealJS aside placement
 
@@ -156,6 +157,30 @@ HTML fixture, CSS pixels (x, y, width, height):
 | `div.column` 60% | 540, 134, 479, 43, `style="width:60%;"` | 293, 176, 400, 43, bare `width="60%"` |
 
 The body column starts further left in Quarto 1 because the fixture has margin content, which switches the page to the `page-full` grid. That is part of the margin-content work, not of slice C. What slice C has to match is the two widths and the shared y.
+
+### After slice A
+
+Invocation, from a folder holding `revealjs-layout.qmd` and `x.png`:
+
+```sh
+target/debug/q2 render revealjs-layout.qmd
+```
+
+Observed markup (inspected in the output file):
+
+```html
+<img src="x.png" alt="" class="absolute" style="top: 200px; left: 400px; width: 100px;" />
+```
+
+Measured in the browser, slide units:
+
+| Element | Quarto 1 | q2 before | q2 after slice A |
+|---|---|---|---|
+| `img.absolute` | 400, 212, 100, 75, `position: absolute` | 0, 101, 100, 75, `position: static` | 400, 212, 100, 75, `position: absolute` |
+| Its paragraph | height 0 | height 111 | height 0 |
+| Body paragraph below it | 0, 89, 1050, 52 | 0, 212, 1050, 52 | 0, 89, 1050, 52 |
+
+The image and the text below it are where Quarto 1 puts them. No other slide of the fixture moved: the measurements of the other seven slides are identical before and after.
 
 ## Not covered
 
