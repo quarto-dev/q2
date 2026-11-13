@@ -1,7 +1,7 @@
 # `q2 render --dry-run`: report Pass-1 diagnostics without rendering
 
 **Strand:** bd-render-dry-run-dyiq7d08
-**Status:** decisions recorded 2026-11-13; awaiting go-ahead to execute
+**Status:** implemented 2026-11-13 (see "Implementation notes" at the end)
 
 ## Goal
 
@@ -296,9 +296,11 @@ All of the original recommendations were accepted:
    - `errors` and `warnings` come from `diagnostic_counts()` after
      `--strict` promotion, so they agree with the stderr records and
      the exit code.
-   - Paths use `wire_path`: absolute and `/`-normalized, like
-     `source_file` in the diagnostics (`cross-platform.md`, wire
-     format).
+   - Paths use `wire_path`, the exact form `source_file` takes in the
+     diagnostic records (absolute, not canonicalized), so a consumer can
+     join the two by string equality. (The draft said
+     "`/`-normalized"; matching `source_file` matters more, and
+     normalizing both is a separate, cross-cutting change.)
    - `files` (the would-render list) is present only under `-v`,
      matching the text mode. Without `-v` the key is omitted, not
      set to `[]`, so "not requested" cannot be confused with "nothing
@@ -380,3 +382,42 @@ behavior does not change in this strand.
    not catch.
 6. `cargo xtask verify`, plus the Windows cross-check clippy for
    `quarto` and `quarto-core` per `.claude/rules/cross-platform.md`.
+
+## Implementation notes (2026-11-13)
+
+- **Orchestrator** (`quarto-core/src/project/orchestrator.rs`):
+  `ProjectPipeline::with_dry_run`; `run_dry` is reached from `run()`
+  and from `run_with_book_support` (after scope resolution and the
+  named-files handling, before the book dispatch branches; the Q-5-33
+  "book format unsupported" check still applies). The prologue of `run_head`
+  and its engine-resolution warning became the shared helpers
+  `initial_diagnostics` and `engine_resolution_diagnostic`. Pass 1
+  takes `Pass1Options { fail_fast, dry_run }` and returns
+  `Pass1Outcome { profiles, diagnostics, failures }`; under `dry_run`
+  `pass1_profile_with_cache` parses live and neither loads nor saves
+  the profile cache. New summary fields: `pass1_diagnostics`
+  (`FileDiagnostics`) and `dry_run` (`DryRunReport` with
+  `files_checked`, `files_failed` and `would_render`).
+- **CLI**: `--dry-run` (conflicts with `--clean-cache`), presentation
+  in `crates/quarto/src/commands/render_dry_run.rs`, schema at
+  `crates/quarto/schemas/render-dry-run-summary.json` with a drift test
+  (`QUARTO_REGEN_SCHEMAS=1`). `main.rs` keeps the default log filter
+  under `--dry-run --json-errors` so `-v` does not add log lines to
+  stderr.
+- **Docs**: `docs/guides/projects/dry-run.qmd`.
+- **Finding: many familiar warnings come from Pass 2.** For example,
+  Q-2-49 (`[text]` with no link target) is emitted by the
+  `reference_link_diagnostics` transform, not the parser, so a dry run
+  does not report it. Pass-1 warnings are those from the parser, the
+  front matter and the metadata merge (Q-5-29, a missing `css:` file,
+  is the one the tests use). The docs say this. Running cheap,
+  engine-free diagnostic transforms in a dry run is the decision-6
+  follow-up.
+- **Known imprecision:** for a book rendered to a consolidating format
+  (typst, epub), `-v` lists every chapter as "would render", although
+  the real render merges them into one output. The list names the
+  inputs that would be rendered, which is still accurate.
+- **Windows cross-check** (`cargo clippy --target x86_64-pc-windows-msvc`)
+  cannot build here: `aws-lc-sys` compiles C for the target. The change
+  adds no platform-specific code; the tests build paths with
+  `Path::join`.

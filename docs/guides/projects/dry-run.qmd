@@ -1,0 +1,104 @@
+---
+title: "Checking a project with --dry-run"
+---
+
+`q2 render --dry-run` checks a document or a whole project without
+rendering it. It finds the project and its files, works out each file's
+format, then parses every file and merges its metadata with the
+project's. It reports every problem it finds and exits. It executes no
+code, runs no pre- or post-render [script](scripts.qmd), and writes
+nothing, not even to `.quarto/`.
+
+It is meant for places where a full render is too slow, or not possible:
+a CI job or a pre-commit hook that should fail fast on a broken file, or
+an agent checking its edits.
+
+```bash
+q2 render --dry-run                 # the whole project
+q2 render chapter.qmd --dry-run     # one file (and its project, if any)
+q2 render --dry-run --strict        # warnings fail the check too
+```
+
+## What it checks, and what it does not
+
+A dry run reports:
+
+- every parse error, in every file (the run does not stop at the first
+  one unless you pass `--fail-fast`);
+- warnings from the front matter and the metadata merge, such as a `css:`
+  entry naming a missing file;
+- problems with the project itself: `project.render` patterns that match
+  nothing, a book chapter list that names a missing file, a format a book
+  cannot be rendered to.
+
+It does **not** report problems that only a full render can find, because
+it stops before running any code or transforming any document:
+
+- errors from code cells and their engines (Jupyter, knitr, …);
+- Lua filter errors;
+- unresolved cross-references, links and citations;
+- template errors, and warnings about the rendered content, such as a
+  `[text]` with no link target.
+
+A clean dry run means every file parses and the project holds together.
+It does not guarantee that the render will succeed.
+
+The project's `pre-render` scripts do not run. If a script creates input
+files, those files are only checked when they already exist.
+
+## Reading the result
+
+The exit status is the same as a render's: non-zero when there are
+errors, and with `--strict`, when there are warnings too. The last line
+summarises the run:
+
+```
+Checked 42 files — 2 errors, 3 warnings
+```
+
+Add `-v` to also list the files a render would produce, each with its
+format. Files that failed to parse are marked as skipped:
+
+```
+Would render 3 files:
+  index.qmd (html)
+  slides.qmd (revealjs)
+  broken.qmd (html) — would be skipped: failed to parse
+```
+
+## Machine-readable output
+
+With `--json-errors`, every diagnostic goes to stderr as one JSON object
+per line, in the same form a real render uses. After the run, stdout
+holds exactly one JSON object summarising the check:
+
+```json
+{"$schema":"https://quarto.org/schemas/v1/render-dry-run-summary.json",
+ "dry_run":true,"project_dir":"/work/site","format":"html",
+ "files_checked":42,"files_failed":1,"errors":2,"warnings":3,
+ "strict":false,"stopped_early":false}
+```
+
+(Shown wrapped here. It is printed as a single line.)
+
+- `errors` and `warnings` count the diagnostics on stderr, after
+  `--strict` has turned warnings into errors.
+- `stopped_early` is `true` when `--fail-fast` stopped the run at the
+  first failure, in which case not every file was checked.
+- With `-v`, a `files` array lists the files a render would produce, as
+  `{"source_file": …, "format": …, "status": "ok" | "failed"}`. Without
+  `-v` the key is absent.
+- With `--json-errors`, `-v` does not add log lines to stderr, so stderr
+  stays pure JSON.
+
+The summary's JSON Schema is in the q2 repository at
+`crates/quarto/schemas/render-dry-run-summary.json`.
+
+## Options it ignores
+
+Because nothing executes and nothing is written, options about
+execution and output, such as `--execute-*`, `--cache`, `-o` and
+`--output-dir`, are accepted and have no effect. `--clean-cache` cannot
+be combined with `--dry-run`, which never modifies the cache.
+`--to`, `-M`, `--profile` and the input paths work as they do for a
+render, since they change what is checked.
