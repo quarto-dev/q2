@@ -1246,6 +1246,13 @@ fn emit_engine_record(
 /// project-relative (a `.quarto/` beside a standalone document), with the
 /// deterministic serializer, so two renders of the same inputs write the same
 /// bytes.
+///
+/// The record is written as the stage built it, so under a runtime `-M` overlay (the preview
+/// applies the session's `-M` to its engine runs) its hashes describe the overlaid metadata,
+/// not the source. A later overlay-free reader (a plain `q2 render`, a viewer's staleness
+/// check) then sees the copy as stale, which errs the safe way: it re-executes rather than
+/// showing outputs the source might not produce. The preview's own stored run is made
+/// overlay-free (`quarto_core::record::overlay_free_run`) before it is published.
 fn write_record_file(
     ctx: &StageContext,
     stage: &str,
