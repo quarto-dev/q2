@@ -22,7 +22,8 @@ flowchart LR
 This is the same syntax GitHub and GitLab render in their markdown
 previews, so a diagram you wrote for a README works in a Quarto document
 unchanged. Diagram blocks render in the `html` and `revealjs` formats,
-and `q2 preview` draws them live as you edit.
+and `q2 preview` draws them live as you edit. Quarto draws
+[Graphviz diagrams](#graphviz-diagrams) the same way, from a `dot` block.
 
 @demo-mermaid-basic shows a complete document with two diagram types
 alongside an ordinary code block:
@@ -206,20 +207,96 @@ other figure; an uncaptioned one sits at the start of the line.
 ## Diagram options
 
 Diagram blocks accept `label`, `fig-cap`, `fig-scap`, `fig-alt`, and
-`fig-align`. A diagram has no execution engine to interpret anything
-else, so Quarto warns about an option it cannot act on rather than
-passing it silently into the drawing.
+`fig-align`. Graphviz blocks also accept `graph-layout`. A diagram has
+no execution engine to interpret anything else, so Quarto warns about an
+option it cannot act on rather than passing it silently into the drawing.
+
+## Graphviz diagrams
+
+Quarto also draws [Graphviz](https://www.graphviz.org/) diagrams. Write a
+fenced code block whose language is `dot`, and describe the graph in the
+Graphviz DOT language:
+
+````markdown
+```dot
+digraph G {
+  rankdir=LR;
+  write -> render -> preview;
+  preview -> write [label="edit"];
+}
+```
+````
+
+Graphviz blocks render in the same places Mermaid blocks do: the `html`
+and `revealjs` formats, and live in `q2 preview`.
+
+### Options
+
+Graphviz blocks take the same options as Mermaid blocks, with the same
+meaning. Only the marker differs. DOT comments start with `//`, so the
+options are written `//|`:
+
+````markdown
+```dot
+//| label: fig-pipeline
+//| fig-cap: The path a document takes from source to page.
+//| fig-alt: Source is rendered, then previewed; an edit returns to source.
+//| fig-align: left
+digraph G {
+  rankdir=LR;
+  source -> render -> preview;
+  preview -> source [label="edit"];
+}
+```
+````
+
+`#|` is not the marker for a `dot` block. Graphviz ignores lines that
+start with `#`, so Quarto warns
+([`Q-2-48`](../../errors/markdown/Q-2-48.qmd)) when it sees one.
+
+### Layout engines
+
+Graphviz has several layout engines. `graph-layout` chooses one; the
+default is `dot`, which draws hierarchies.
+
+````markdown
+```dot
+//| graph-layout: neato
+graph G {
+  a -- b -- c -- d -- a;
+  a -- c;
+}
+```
+````
+
+The engines are `dot`, `neato`, `fdp`, `sfdp`, `circo`, `twopi`,
+`osage`, and `patchwork`. Quarto warns about any other value and uses
+`dot`.
+
+### Syntax errors
+
+Graphviz lays the diagram out in the reader's browser, so `q2 render`
+cannot report a mistake in the DOT source. The page shows the Graphviz
+message, with the line number counted from the first line of the diagram,
+above the source text. `q2 preview` shows the same message while you
+edit.
+
+If you used a plain `dot` block only to *show* DOT source, it now draws a
+diagram. To show the source, use a different language name for the block,
+such as `text`.
 
 ## How diagrams render
 
 Quarto draws diagrams in the browser: the rendered page keeps your
 diagram source and includes one script that loads the Mermaid library
-and converts every diagram on the page to an SVG drawing.
+and converts every diagram on the page to an SVG drawing. Graphviz
+diagrams work the same way, with their own library, which is added only
+to pages that contain a `dot` block.
 
 The library is **written into your rendered output** and referenced by a
-relative path — under `site_libs/mermaid/` in a website project, or
-beside the page in a single-document render. Three consequences are
-worth knowing:
+relative path — under `site_libs/mermaid/` (or `site_libs/graphviz/`) in
+a website project, or beside the page in a single-document render. Three
+consequences are worth knowing:
 
 - **Rendered output works without network access.** A site can be
   archived, or published on a closed or air-gapped network, and its
@@ -228,7 +305,8 @@ worth knowing:
 - **Documents without diagrams are unaffected.** The library is written
   out and linked only for pages containing at least one `mermaid` block.
 - **Every page shares one copy.** In a website project all diagram pages
-  link the same file, which adds roughly 2.6 MB to the site once.
+  link the same file, which adds roughly 2.6 MB to the site once. The
+  Graphviz library adds roughly 1.3 MB, also once.
 
 If Mermaid cannot parse a diagram, the browser console reports the
 error; `q2 preview` goes further and shows the error message, together
@@ -241,17 +319,25 @@ The bundling described above applies to `q2 render`. During
 `q2 preview`, diagrams are drawn by the preview's own copy of Mermaid,
 which is still fetched from a CDN — so previewing a diagram offline may
 show the diagram source instead of a drawing, even though rendering the
-same document produces a self-contained page.
+same document produces a self-contained page. This applies to Mermaid
+only. The preview carries its own copy of the Graphviz library, so `dot`
+blocks draw offline.
 :::
 
 ## Differences from Quarto 1
 
 Quarto 1 embeds diagrams through executable cells — ```` ```{mermaid} ````
-— and Quarto 2 does not recognize that form: only the plain
-fence ```` ```mermaid ```` renders. To move a Quarto 1 document over, drop
-the braces; the diagram body and its `%%|` options need no other change.
-Quarto 2 warns about each brace-form cell
-([`Q-2-58`](../../errors/markdown/Q-2-58.qmd)).
+and ```` ```{dot} ```` — and Quarto 2 does not recognize that form: only
+the plain fences ```` ```mermaid ```` and ```` ```dot ```` render. To move
+a Quarto 1 document over, drop the braces; the diagram body and its `%%|`
+or `//|` options need no other change. Quarto 2 warns about each
+brace-form cell ([`Q-2-58`](../../errors/markdown/Q-2-58.qmd)).
+
+Graphviz is drawn differently. Quarto 1 lays a `{dot}` diagram out while
+rendering and writes the finished SVG into the page. Quarto 2 lays it out
+in the reader's browser, as it does for Mermaid, so the page needs
+JavaScript to show the diagram, and a DOT syntax error appears in the
+page instead of stopping the render.
 
 `fig-align` behaves differently. Quarto 1 accepts it on a diagram cell
 but aligns the diagram only in Reveal.js presentations and multi-panel
@@ -260,7 +346,10 @@ everywhere.
 
 The following Quarto 1 diagram features are not yet available:
 
-- Graphviz (`{dot}`) diagrams
+- Graphviz diagrams in formats other than `html` and `revealjs` (in
+  Typst, PDF and Word output a `dot` block is shown as its source)
+- Reading Graphviz source from a separate file (`file`)
+- Showing the source beside the diagram (`echo: true`)
 - Sizing options (`fig-width`, `fig-height`, `fig-responsive`)
 - Pre-rendered PNG/SVG output for print formats (`mermaid-format`)
 - Theming (Mermaid currently renders with its default theme regardless

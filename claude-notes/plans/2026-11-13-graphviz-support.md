@@ -2,7 +2,7 @@
 title: 'Closing the Graphviz gap in Quarto 2 (bd-ijlapt70)'
 date: 2026-11-13
 description: 'Starting notes and a high-level plan for Graphviz (dot) diagram support, built as a rendering transform in parallel to Mermaid. Not yet ratified.'
-status: draft  # preview-component prototype exists; the two decisions in "Decisions to ratify" still need team ratification
+status: in-progress  # preview component and render transform built for the HTML family; the decisions in "Decisions to ratify" still need team ratification
 braid:
   strand: bd-ijlapt70
   priority: P2
@@ -286,30 +286,35 @@ Out of the first cut, tracked as follow-ups, not dropped silently:
 
 ### Phase 1: tests first, native render
 
-- [ ] Unit tests for the new transform, modelled one-for-one on the tests in
+- [x] Unit tests for the new transform, modelled one-for-one on the tests in
       `mermaid.rs`: block becomes the placeholder, script appended once, re-run
       does not duplicate, nothing happens without a diagram, nothing happens for
       a non-HTML format, nested blocks convert, source is escaped, runtime is
       registered only when needed and is not keyed as `js:`.
-- [ ] Vendored-asset guard tests: version matches the pin, bundle is
+- [x] Vendored-asset guard tests: version matches the pin, bundle is
       self-contained, bundle matches the published package.
-- [ ] smoke-all fixtures in a new `crates/quarto/tests/smoke-all/graphviz/`
-      directory, mirroring the five Mermaid fixtures, plus ports of the Q1
-      fixtures that apply to HTML.
-- [ ] RevealJS scaffold test and pipeline wiring test.
+- [x] smoke-all fixtures in a new `crates/quarto/tests/smoke-all/graphviz/`
+      directory: `basic`, `revealjs`, `cell-options`, `no-graphviz`. The Q1
+      fixtures are **not ported yet**; that is still open.
+- [x] Pipeline wiring tests (`graphviz_render_present_before_code_block_render`
+      for html, revealjs and dashboard; `q2_preview_pipeline_excludes_graphviz_render`).
+      No separate RevealJS scaffold test was added: the scaffold's after-body
+      slot is already covered by the existing tests in `revealjs/assemble.rs`,
+      and the `revealjs` smoke fixture checks the script reaches a deck.
 
 ### Phase 2: implement native render
 
-- [ ] `crates/quarto-core/src/transforms/graphviz.rs`, a
+- [x] `crates/quarto-core/src/transforms/graphviz.rs`, a
       `GraphvizRenderTransform` in the Finalization phase, before
       `CodeBlockRenderTransform`, gated to HTML-family formats.
-- [ ] Vendor the Graphviz browser runtime under `resources/graphviz/` with a
+- [x] Vendor the Graphviz browser runtime under `resources/graphviz/` with a
       `README.md` and `LICENSE`, embedded and registered as a Project-scoped
       artifact under a non-`js:` key.
-- [ ] Loader script through `rendered.includes.after-body` with a sentinel.
-- [ ] Pass `graph-layout` from the cell options to the layout call.
-- [ ] Surface Graphviz syntax errors usefully. In approach A the error happens
-      in the browser, so decide what the reader sees (see open questions).
+- [x] Loader script through `rendered.includes.after-body` with a sentinel.
+- [x] Pass `graph-layout` from the cell options to the layout call.
+- [x] Surface Graphviz syntax errors usefully. In approach A the error happens
+      in the browser. The page shows Graphviz's message above the source and
+      marks the block `graphviz-error`. The render itself cannot warn.
 
 ### Phase 3: preview component
 
@@ -320,24 +325,32 @@ Out of the first cut, tracked as follow-ups, not dropped silently:
       [Prototype: preview component](#prototype-preview-component). The Rust
       constant does not exist yet; the test pins `3.31.0` on the TypeScript
       side only.
-- [ ] Add the transform to `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
-- [ ] A `pipeline.rs` test that render and preview agree on cell-option
-      handling, like the Mermaid one.
+- [x] Add the transform to `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
+- [x] A `pipeline.rs` test that render and preview agree on cell-option
+      handling, like the Mermaid one
+      (`render_qmd_to_preview_ast_processes_graphviz_cell_options`).
 
 ### Phase 4: end-to-end evidence
 
-- [ ] `q2 render` to HTML, RevealJS and Dashboard, opened in a browser, with
-      the diagram actually drawn. Record the evidence in the plan.
-- [ ] `q2 preview` for a document and for slides.
-- [ ] Offline check: the page draws with the network disabled.
+- [x] `q2 render` to HTML, RevealJS and Dashboard, opened in a browser, with
+      the diagram actually drawn. See
+      [Render transform](#render-transform-phases-1-and-2).
+- [ ] `q2 preview` for a document and for slides. Not done. Only the hub was
+      opened.
+- [x] Offline check: the page draws with the network disabled.
+- [ ] Firefox and Safari.
 
 ### Phase 5: diagnostics, docs, close-out
 
-- [ ] Update `Q-2-58`: its text says q2 "has no Graphviz support yet". Change
+- [x] Update `Q-2-58`: its text says q2 "has no Graphviz support yet". Change
       the message and the `brace_diagram_cell_diagnostics.rs` wording so `{dot}`
       gets the same "drop the braces" advice as `{mermaid}`.
-- [ ] Update `docs/guides/authoring/diagrams.qmd`: add a Graphviz section and
-      remove it from the "not yet available" list.
+- [x] Update `docs/guides/authoring/diagrams.qmd`: add a Graphviz section and
+      remove it from the "not yet available" list. Also updated the error
+      pages `Q-2-47`, `Q-2-48` and `Q-2-58`. The docs site itself was not
+      built (it needs the generated `docs/examples`); the four pages were
+      rendered on their own to check they parse. There is no embedded live
+      example for Graphviz yet, as there is for Mermaid.
 - [ ] hub-client changelog entry.
 - [ ] `cargo xtask verify`.
 - [ ] Update the Graphviz row in `~/Desktop/Projects/q2-checklist/checklist.qmd`.
@@ -508,8 +521,8 @@ End-to-end evidence (hub, Aside browser, Chromium-based):
   absence of errors):
   - two `[data-graphviz-diagram] svg` elements: 335 by 113 px with 3 nodes
     and 3 edges, and 205 by 176 px with 4 nodes and 5 edges;
-  - one `[data-graphviz-error]` box reading "Graphviz error: syntax error in
-    line 1 near '}'" with the source under it;
+  - one `[data-graphviz-error]` box with the message
+    `Graphviz error: syntax error in line 1 near '}'` and the source under it;
   - one `[data-mermaid-diagram] svg`.
 - The check was on the DOM. A screenshot was taken but not kept, so the visual
   result was judged by Andrew in the browser ("working quite well").
@@ -532,6 +545,148 @@ separately, and the `vite build` step wrote to a temporary directory, so the
 running local hub kept its local-prod build. The wasm and sandboxed-preview
 steps had already run as part of `build:local-prod`. `cargo xtask verify` was
 not run; no Rust source changed.
+
+## Render transform (Phases 1 and 2)
+
+**Verified** on 2026-11-13. `q2 render` now draws ```` ```dot ```` blocks in
+HTML, RevealJS and Dashboard output. Like the preview prototype, this was built
+before team ratification.
+
+What exists:
+
+- `crates/quarto-core/src/transforms/graphviz.rs`: `GraphvizRenderTransform`
+  (`graphviz-render`), Finalization phase, placed after `mermaid-render` and
+  before `code-block-render`, self-gated to HTML-family formats. A `dot`
+  `CodeBlock` becomes `<pre class="graphviz">` with the escaped source.
+- `resources/graphviz/`: `viz-global.js` (verbatim from the npm tarball),
+  `LICENSE`, `README.md`. Registered in `resources/vendored.toml`. Artifact
+  key `graphviz:runtime`, path `graphviz/viz-global.js`, Project scope.
+- A loader plus an inline init in `rendered.includes.after-body`. The init
+  lays out every `pre.graphviz` and swaps the text for the inline SVG. The
+  `<pre>` stays as the container, as mermaid.js keeps `pre.mermaid`.
+- Cell options for `dot` blocks, written `//|`, in
+  `crossref/codeblock_shorthand.rs`: `label`, `fig-cap`, `fig-scap`,
+  `fig-alt`, `fig-align`, and `graph-layout`. `dot` is now a "diagram
+  language" there, beside mermaid.
+- `Q-2-58` tells `{dot}` authors to drop the braces. `Q-2-47` covers an
+  invalid `graph-layout`. `Q-2-48` covers `#|` on a `dot` block.
+- Alignment rules for `pre.graphviz > svg` in both stylesheets, sharing the
+  mermaid selectors.
+- The preview component now reads `fig-alt`, so render and preview agree.
+
+Choices made while building it, for review:
+
+- **Placeholder element.** `<pre class="graphviz">`, not `<pre class="dot">`,
+  so no highlighter or existing `pre.dot` style touches it.
+- **`fig-alt`.** DOT has no accessibility directive, so the option travels
+  as a `fig-alt` attribute on the code block, then `data-fig-alt` on the
+  `<pre>`, and the init sets `role="img"` and `aria-label` on the SVG. Q1
+  writes it into the SVG at render time; the effect for the reader is the
+  same.
+- **`graph-layout` validation.** A value that is not an engine in the
+  vendored build is dropped with a `Q-2-47` warning at render time, and the
+  transform allow-lists the attribute form again before writing
+  `data-graph-layout`.
+- **No sanitising in render.** The init parses the SVG with `DOMParser` and
+  imports it, but does not filter it, because a rendered document is the
+  author's own content and may already contain raw HTML. The preview
+  component does filter, because hub projects are shared.
+- **`charset="utf-8"` on the script tag.** The bundle stores its WebAssembly
+  binary as raw non-ASCII characters. Read in another encoding it is
+  corrupt. For the same reason `.gitattributes` marks the file `-text`, and
+  the npm drift test compares bytes without normalising line endings.
+- **`fetch(` is allowed in the bundle.** See the spike. The
+  self-containment guard checks for `import(` and `.wasm` only.
+- **Behaviour change.** A plain `dot` fence that an author used to *show*
+  DOT source now draws a diagram. This is decision 2 below, taken here
+  without ratification. The docs say to use another language name.
+- **`{dot}` cells with an engine.** `language_of` strips braces, so a
+  `{dot}` cell is also treated as a diagram cell by the option desugaring,
+  as `{mermaid}` already is. Not examined further.
+
+A bug the browser check caught:
+
+The first build drew nothing. The init script is JavaScript inside a Rust raw
+string, and a `'\n'` had been written as a real newline, which is a syntax
+error in a JavaScript string literal. All 25 Rust unit tests passed, because
+none of them can parse JavaScript. Opening the rendered page showed it at
+once. The fix is in, with a structural test
+(`init_script_is_structurally_sound`) for unterminated strings and unbalanced
+brackets. That test is a guard, not a parser; the real protection is a browser
+run. The Playwright smoke-all sweep should cover these fixtures but was **not
+run**.
+
+End-to-end evidence:
+
+- Invocation: `target/debug/q2 render <fixture>.qmd` for copies of the four
+  smoke fixtures, a dashboard document and a syntax-error document, in a
+  scratch directory.
+- The rendered pages were opened from `file://` in headless Chrome 157 with
+  all host lookups disabled (`--host-resolver-rules="MAP * ~NOTFOUND"`), and
+  the resulting DOM was inspected.
+
+| Document | Observed |
+|---|---|
+| `basic` (html) | 1 `pre.graphviz` holding an SVG with 2 nodes and 1 edge; no source text left; no console message |
+| `cell-options` (html) | 4 diagrams drawn. `div#fig-flow.quarto-figure-right` wraps the first, with "Figure 1: A numbered float, aligned right." and a working `@fig-flow` reference. The third has `quarto-figure-left`, `data-graph-layout="neato"` and `aria-label="Two nodes joined by an edge."` on its SVG. The fourth (`{.dot graph-layout="circo"}`) has 3 nodes and 3 edges |
+| `revealjs` | 1 diagram inside a slide `<section>`, 3 nodes and 2 edges, drawn although the slide is not the visible one |
+| dashboard | 2 diagrams drawn inside cards, one with `circo` |
+| syntax error | `pre.graphviz.graphviz-error` reading `Graphviz error: syntax error in line 1 near '}'` above the source; the render itself reported nothing |
+
+- A screenshot of `cell-options` was inspected: the float is right-aligned,
+  the unnumbered figure is centred, the bare diagrams sit at the left.
+- The written `viz-global.js` is byte-identical to the vendored file.
+- Chrome only. The dashboard page logged one unrelated console message
+  about a dashboard web-component module blocked on `file://`.
+
+Build and test results:
+
+| Step | Result |
+|---|---|
+| `cargo xtask lint` | passed |
+| `cargo clippy -p quarto-core --all-targets -- -D warnings` | clean |
+| `cargo nextest run --workspace --no-fail-fast` | 19,979 of 19,982 passed; 3 failed, none from this work (see below) |
+| claude-notes render (part of `cargo xtask verify`) | 1828 of 1828 |
+| `hub-client`: `npm run build:wasm` | passed |
+| `hub-client`: `npx tsc -b`, `vite build`, `check-sw-precache` | passed |
+| `hub-client`: `npm run test` | 1801 passed |
+| `hub-client`: `npm run test:integration` | 241 passed |
+| `hub-client`: `npm run test:wasm` (includes the smoke-all sweep and DOM parity) | 480 passed |
+
+The three failing Rust tests:
+
+- `smoke_all`: 9 fixtures under `typst/margin-layout` need the Python package
+  `great_tables` and the R packages `gt` and `flextable`, which this machine
+  does not have. The other 362 fixtures passed, including the four Graphviz
+  ones.
+- `dashboard_goldens`: 2 of 76 fixtures need the R package `bsicons`, also
+  missing here.
+- `quarto-preview`
+  `capture_driver::tests::a_prose_edit_while_stopped_reuses_the_record_through_the_ref`
+  fails when the crate's tests run in parallel and passes alone. It fails
+  the same way on clean `origin/main` (`936c29e13`), twice. No braid strand
+  has been filed for it yet.
+
+One fixture was re-captured: `phase5-single-doc-baseline/expected_hashes.txt`.
+The `styles.css` hash changed because the alignment rules now select
+`pre.graphviz > svg`. The `doc.html` hash did not change.
+
+`cargo xtask verify` was not run as one command to completion. Its first run
+stopped at the claude-notes render, because this plan file had a parse error
+(an unbalanced quote, now fixed). Its second run stopped at the first test
+failure. The steps above are the same steps run separately, with
+`--no-fail-fast`. The hub-client `vite build` wrote to a temporary directory
+so the running local hub kept its build.
+
+Not done:
+
+- `q2 preview` and slides preview were not opened after this change.
+- Firefox and Safari.
+- The Q1 smoke fixtures are not ported.
+- `file:`, `echo: true`, `fig-width`, `fig-height`, `fig-responsive`: still
+  out of scope, as listed above.
+- No embedded live example in the docs.
+- The hub-client changelog entry (no file under `hub-client/` changed).
 
 ## Decisions to ratify
 
