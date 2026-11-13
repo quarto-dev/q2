@@ -1992,22 +1992,29 @@ div.gslide-description .gslide-desc {
 // text for an inline <svg>; align that box with margins, as Q1's
 // `fixupAlignment` (core/svg.ts) does in revealjs. The class sits on the
 // figure wrapper (`.quarto-figure-<align>`) or, for a bare diagram, on the
-// <pre> itself. Kept in step with the revealjs copy in
+// <pre> itself. The Graphviz init script does the same swap in a
+// `pre.graphviz` (bd-ijlapt70), so both share these rules. Kept in step with the revealjs copy in
 // `resources/scss/revealjs/quarto-revealjs.scss`.
 .quarto-figure-left pre.mermaid > svg,
-pre.mermaid.quarto-figure-left > svg {
+pre.mermaid.quarto-figure-left > svg,
+.quarto-figure-left pre.graphviz > svg,
+pre.graphviz.quarto-figure-left > svg {
   display: block;
   margin-left: 0;
   margin-right: auto;
 }
 .quarto-figure-center pre.mermaid > svg,
-pre.mermaid.quarto-figure-center > svg {
+pre.mermaid.quarto-figure-center > svg,
+.quarto-figure-center pre.graphviz > svg,
+pre.graphviz.quarto-figure-center > svg {
   display: block;
   margin-left: auto;
   margin-right: auto;
 }
 .quarto-figure-right pre.mermaid > svg,
-pre.mermaid.quarto-figure-right > svg {
+pre.mermaid.quarto-figure-right > svg,
+.quarto-figure-right pre.graphviz > svg,
+pre.graphviz.quarto-figure-right > svg {
   display: block;
   margin-left: auto;
   margin-right: 0;

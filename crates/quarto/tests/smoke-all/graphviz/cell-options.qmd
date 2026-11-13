@@ -1,0 +1,62 @@
+---
+title: "Graphviz cell options"
+# bd-ijlapt70: `//|` cell options on a dot block, with no Q-2-47,
+# Q-2-48 or Q-2-57.
+#
+# - `label` + `fig-cap` build a numbered float, and `fig-align` lands on
+#   its `quarto-figure` wrapper (harvested from the diagram, as for an
+#   image);
+# - a caption without a label builds an unnumbered figure;
+# - a bare diagram has no wrapper, so the alignment class lands on the
+#   <pre>;
+# - `graph-layout` becomes `data-graph-layout`, and `fig-alt` becomes
+#   `data-fig-alt`; the init script reads both;
+# - the attribute form (`{.dot graph-layout="..."}`) works too;
+# - no option line survives into the diagram source.
+_quarto:
+  tests:
+    html:
+      noErrors: true
+      printsMessage:
+        level: WARN
+        regex: "Q-2-4[78]|Q-2-57"
+        negate: true
+      ensureHtmlElements:
+        - [
+            "div#fig-flow.quarto-figure-right pre.graphviz",
+            "div.quarto-figure > figure > pre.graphviz",
+            "pre.graphviz.quarto-figure-left",
+            "pre.graphviz[data-graph-layout='neato']",
+            "pre.graphviz[data-graph-layout='circo']",
+            "pre.graphviz[data-fig-alt='Two nodes joined by an edge.']",
+          ]
+        - ["pre.graphviz[fig-align]", "pre.graphviz[graph-layout]", "pre.graphviz[fig-alt]"]
+      ensureFileRegexMatches:
+        - ["A numbered float, aligned right\\."]
+        - ["//\\| "]
+---
+
+See @fig-flow.
+
+```dot
+//| label: fig-flow
+//| fig-cap: A numbered float, aligned right.
+//| fig-align: right
+digraph G { a -> b }
+```
+
+```dot
+//| fig-cap: An unnumbered figure.
+digraph G { c -> d }
+```
+
+```dot
+//| fig-align: left
+//| graph-layout: neato
+//| fig-alt: Two nodes joined by an edge.
+graph G { e -- f }
+```
+
+```{.dot graph-layout="circo"}
+graph G { g -- h -- i -- g }
+```

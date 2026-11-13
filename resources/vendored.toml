@@ -655,6 +655,35 @@ decision (bd-2qy6mdhq): q2 tracks mermaid's own releases, not Quarto 1's.
 Majors change diagram layout/look defaults; read the release notes.
 '''
 
+[[asset]]
+id = "graphviz"
+title = "Graphviz runtime bundle (Viz.js)"
+paths = ["resources/graphviz"]
+policy = "track"
+version = "3.31.0"
+version_sources = [
+  { kind = "file-contains", file = "resources/graphviz/README.md" },
+  { kind = "file-regex", file = "crates/quarto-core/src/transforms/graphviz.rs", regex = 'VIZ_VERSION: &str = "([^"]+)"' },
+  { kind = "file-regex", file = "ts-packages/preview-renderer/src/q2-preview/blocks/GraphvizCodeBlock.tsx", regex = "VIZ_VERSION = '([^']+)'" },
+  { kind = "json-key", file = "ts-packages/preview-renderer/package.json", key = ["dependencies", "@viz-js/viz"] },
+]
+upstream = { kind = "npm", package = "@viz-js/viz" }
+guards = [
+  "quarto-core graphviz::tests::vendored_bundle_matches_pinned_version",
+  "quarto-core graphviz::tests::vendored_bundle_is_self_contained",
+  "quarto-core graphviz::tests::vendored_bundle_matches_npm_package",
+]
+procedure = "resources/graphviz/README.md#updating"
+license = "MIT"
+last_reviewed = "2026-11-13"
+notes = '''
+Also an exact-pinned npm dependency of ts-packages/preview-renderer, so the
+drift guard compares against node_modules. The bundle contains Graphviz
+(Eclipse Public License) and Expat (MIT) in object-code form; the notice q2
+must carry is not yet confirmed (bd-ijlapt70). A new Graphviz version can
+change diagram layout; read its release notes.
+'''
+
 # ===========================================================================
 # reveal.js
 # ===========================================================================

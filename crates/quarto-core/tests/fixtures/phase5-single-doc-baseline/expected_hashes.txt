@@ -514,5 +514,9 @@
 # the marker gutter, and size `ul.task-list`'s indent to the hung checkbox
 # (1em -> 1.2em). doc.html hash unchanged: the fixture has no task list (the
 # CLI render of doc.qmd hashes the same on main and on this branch).
+# Re-captured 2026-11-13 (bd-ijlapt70): doc_files/styles.css changed
+# because the diagram alignment rules now also select `pre.graphviz > svg`
+# (the Graphviz sibling of `pre.mermaid > svg`). doc.html hash unchanged:
+# the fixture has no diagram, so no runtime script is added.
 doc.html cb911871a3a0f9328ae6a32df4e2d72da647ff8696169aec56c01d66984cd8ef
-doc_files/styles.css 9dffd398b4f2c4c90e0b59144fa6d2aff57b2f56b31e8e562ccc04c4e19865da
+doc_files/styles.css dd51c3daeb3fdbd95bed283ec0a63c7ab36f17e4256db1abc25ff43d2017998c

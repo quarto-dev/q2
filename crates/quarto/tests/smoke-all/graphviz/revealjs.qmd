@@ -1,0 +1,38 @@
+---
+title: "Graphviz Revealjs"
+format: revealjs
+# bd-ijlapt70: same transform output inside a reveal deck. The diagram
+# <pre> sits inside a slide <section>, and the runtime script reaches
+# the deck through the rendered.includes.after-body slot.
+#
+# This is the case most at risk of silent regression: the reveal
+# scaffold collects only `js:revealjs:*` artifacts, so keying the
+# runtime as a template script would emit no tag here at all.
+_quarto:
+  tests:
+    revealjs:
+      noErrors: true
+      ensureHtmlElements:
+        - ["section pre.graphviz"]
+        - []
+      ensureFileRegexMatches:
+        - [
+            "<pre class=\"graphviz\">",
+            "<script src=\"[^\"]*graphviz/viz-global\\.js\" charset=\"utf-8\"></script>",
+            "Viz\\.instance\\(\\)",
+          ]
+        - ["cdn\\.jsdelivr\\.net"]
+---
+
+## A slide
+
+Some text.
+
+## Diagram slide
+
+```dot
+digraph G {
+  a -> b
+  b -> c
+}
+```
