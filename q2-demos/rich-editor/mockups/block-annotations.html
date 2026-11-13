@@ -25,13 +25,17 @@ details.archived { margin-top:22px; border-top:1px solid var(--line); padding-to
 details.archived summary { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); cursor:pointer; margin-bottom:8px; }
 
 /* Toolbar (Extras), Word / Google Docs style. */
-.toolbar { display:flex; flex-wrap:wrap; gap:3px; align-items:center; justify-content:center; padding:7px 16px; border-bottom:1px solid var(--line); background:#fff; }
+.toolbar { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; padding:7px 16px; border-bottom:1px solid var(--line); background:#fff; }
+.toolbar .tb-main { display:flex; gap:3px; align-items:center; }
+/* Crumbs that don't fit are clipped at the far (outer) end. */
+.toolbar .tb-crumbs { display:flex; justify-content:flex-end; align-items:center; gap:1px; min-width:0; overflow:hidden; white-space:nowrap; }
 .toolbar[hidden] { display:none; }
 .toolbar button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; display:inline-flex; align-items:center; gap:6px; }
 .toolbar button:hover:not(:disabled) { background:#f1f3f5; }
 .toolbar button:disabled { color:var(--faint); cursor:default; }
 .toolbar button[aria-pressed="true"] { background:var(--sel-bg); border-color:#c5dcf5; color:var(--sel-ink); }
-.toolbar .style { min-width:130px; justify-content:space-between; border-color:var(--line); }
+.toolbar .style { width:150px; justify-content:space-between; border-color:var(--line); }
+.toolbar .style > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .toolbar .style.open { background:#f1f3f5; }
 .toolbar .style svg { width:8px; height:8px; }
 .toolbar button.icon { padding:4px; position:relative; color:#444746; }
@@ -43,7 +47,6 @@ details.archived summary { font-size:11px; text-transform:uppercase; letter-spac
 .toolbar button.icon:hover::after { visibility:visible; transition:visibility 0s .35s; }
 .toolbar .sep { width:1px; height:20px; background:var(--line); margin:0 6px; }
 /* The style box as a breadcrumb: containers as plain crumbs, then the box. */
-.toolbar .stylebox { display:inline-flex; align-items:center; gap:1px; }
 .toolbar .crumb { padding:4px 6px; color:#5c636a; }
 .toolbar .crumb svg { width:8px; height:8px; }
 .toolbar .crumb.open { background:#f1f3f5; }
@@ -699,8 +702,10 @@ function renderToolbar(car) {
     `<button class="crumb${menu && menu.anchor === 'crumb' && menu.target === b ? ' open' : ''}" data-tb="crumb" data-id="${id(b)}">${esc(label(b))}${CHEV}</button><span class="crumbsep">›</span>`).join('') : '';
   const styleOff = none || (c.code && !state.tbcrumbs);
   const styleText = state.tbcrumbs && c.code ? label(c.code) : style;
-  setHTML($('toolbar'), [
-    `<span class="stylebox">${crumbsHTML}<button data-tb="style" class="style${menu && menu.anchor === 'style' ? ' open' : ''}" ${styleOff ? 'disabled' : ''}><span>${esc(styleText)}</span>${CHEV}</button></span>`,
+  // Three columns: the crumbs grow leftwards from the style box, so the
+  // style box and the buttons never move as the caret's nesting changes.
+  setHTML($('toolbar'), `<div class="tb-crumbs">${crumbsHTML}</div><div class="tb-main">` + [
+    `<button data-tb="style" class="style${menu && menu.anchor === 'style' ? ' open' : ''}" ${styleOff ? 'disabled' : ''}><span>${esc(styleText)}</span>${CHEV}</button>`,
     '<span class="sep"></span>',
     btn('ul', 'Bulleted list', c.list && kind(c.list) === 'ul', none || c.code),
     btn('ol', 'Numbered list', c.list && kind(c.list) === 'ol', none || c.code),
@@ -708,7 +713,7 @@ function renderToolbar(car) {
     '<span class="sep"></span>',
     btn('callout', 'Callout', c.callout, none || c.code),
     btn('code', 'Insert code cell', false, false),
-  ].join(''));
+  ].join('') + '</div><div></div>');
 }
 function onToolbar(k, anchor) {
   const c = caretContext();
