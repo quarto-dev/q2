@@ -447,6 +447,15 @@ impl HubContext {
         })
     }
 
+    /// Stop the samod repo, waiting for every pending storage write to finish.
+    ///
+    /// samod persists document changes on background tasks; dropping the
+    /// context abandons them. Call this before dropping (or reopening the
+    /// same data dir) when a just-made change must be on disk.
+    pub async fn shutdown(&self) {
+        self.repo.stop().await;
+    }
+
     /// Returns whether this hub is running in project mode (has a local project).
     pub fn has_project(&self) -> bool {
         self.storage.project_root().is_some()
@@ -1153,6 +1162,30 @@ mod tests {
         // File should be in the index
         let files = ctx.index().get_all_files();
         assert_eq!(files.len(), 1);
+    }
+
+    /// A capture ref written just before the context is dropped must survive
+    /// a restart on the same data dir. samod persists on background tasks that
+    /// `drop` abandons, so `shutdown()` has to wait for them. Without it this
+    /// failed intermittently under load (the flaky preview restart test).
+    #[tokio::test]
+    async fn capture_ref_survives_restart_after_shutdown() {
+        let project = TempDir::new().unwrap();
+        let data = TempDir::new().unwrap();
+        std::fs::write(project.path().join("index.qmd"), "# Hello").unwrap();
+        let open = || StorageManager::new_with_data_dir(project.path(), data.path()).unwrap();
+        let ctx = HubContext::new(open(), HubConfig::default()).await.unwrap();
+        let cap = crate::index::CaptureRef {
+            capture_doc_id: "cap-doc".to_string(),
+            staleness: Some(false),
+            state: None,
+            last_error: None,
+        };
+        ctx.index().set_capture("index.qmd", &cap).unwrap();
+        ctx.shutdown().await;
+        drop(ctx);
+        let ctx = HubContext::new(open(), HubConfig::default()).await.unwrap();
+        assert!(ctx.index().has_capture("index.qmd"));
     }
 
     /// bd-9cyza5vy: in single-file mode, included `.qmd` injected via
