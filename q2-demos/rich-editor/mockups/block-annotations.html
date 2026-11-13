@@ -430,6 +430,10 @@ function render() {
   // Toolbar breadcrumb: while one of its crumbs is pointed at (or its menu
   // is open), the margin shows only brackets, nested, for the caret's blocks;
   // the crumb's own block is the strong one.
+  // The toolbar first: it follows the caret, and what's under the pointer
+  // in it may now be a different crumb (or none), with no mouse event to say so.
+  renderToolbar(car);
+  tbHover = tbMouse ? tbBlockAt(document.elementFromPoint(tbMouse.x, tbMouse.y), car) : null;
   const tbAim = state.tbcrumbs ? tbHover || (menu && menu.fromToolbar ? menu.target : null) : null;
   if (tbAim && body.contains(tbAim)) {
     vis.clear();
@@ -449,8 +453,6 @@ function render() {
       : '<span class="none">Put the caret in a block</span>';
     setHTML(crumbs, html);
   }
-  renderToolbar(car);
-
   // The bracket of Chip + bracket: the block the chip (or menu, or drag)
   // would act on. While typing, the "faint" setting keeps just this, for the
   // caret's block, in any variant.
@@ -757,15 +759,17 @@ $('toolbar').addEventListener('mousedown', (ev) => {
   ev.preventDefault(); ev.stopPropagation(); // keep the caret where it is
   if (b && !b.disabled) onToolbar(b.dataset.tb, b);
 });
-// Pointing at a crumb (or the style box) brackets its block.
-$('toolbar').addEventListener('mouseover', (ev) => {
-  let b = null;
-  const t = ev.target.closest('[data-tb]');
-  if (t && t.dataset.tb === 'crumb') b = byId.get(+t.dataset.id);
-  if (t && t.dataset.tb === 'style' && !t.disabled) { const c = caretContext(); b = c.text || c.code || c.list || null; }
-  if (b !== tbHover) { tbHover = b; schedule(); }
-});
-$('toolbar').addEventListener('mouseleave', () => { tbHover = null; schedule(); });
+// Pointing at a crumb (or the style box) brackets its block. `render`
+// re-reads it from the pointer's position each time.
+let tbMouse = null;
+function tbBlockAt(el, car) {
+  const t = el && el.closest('#toolbar [data-tb]');
+  if (t && t.dataset.tb === 'crumb') return byId.get(+t.dataset.id);
+  if (t && t.dataset.tb === 'style' && !t.disabled) { const c = caretContext(car); return c.text || c.code || c.list || null; }
+  return null;
+}
+$('toolbar').addEventListener('mousemove', (ev) => { tbMouse = { x: ev.clientX, y: ev.clientY }; schedule(); });
+$('toolbar').addEventListener('mouseleave', () => { tbMouse = null; schedule(); });
 
 // ---- drag --------------------------------------------------------------------
 function startDrag(b) {
