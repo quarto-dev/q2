@@ -143,3 +143,24 @@ source text. Playwright starts the dev server itself.
 
 `/fixture.html?fixture=<name>` (default `basic`) opens the visual editor
 on a fixture held in memory, with no hub, for trying it without a server.
+
+### Why the e2e suite isn't faster
+
+We profiled the suite (2026-11) and decided to leave it as it is. A full
+Chromium run takes about 3–4 minutes, set by `body.spec.ts`: Playwright
+runs a file's tests one after another, and spreads only whole files across
+workers.
+
+- **Running a file's tests in parallel** (`fullyParallel`) halves a run
+  at 16 workers, for the same CPU time. We don't, because the suite
+  then takes over the machine: several agents running it at once slow
+  each other (and whoever is using the machine) down, and slow tests
+  time out.
+- **Opening a document** takes about a second. Half of that is the app
+  compiling its default theme, which only changing the app would avoid
+  (shipping it precompiled); that saves about 10% of a run.
+- **Serving a production build** (`vite preview`) instead of the dev
+  server saves about 0.4s an open, less than the 14s build it needs
+  first.
+- **Moving specs out of the browser** would save little, and would pin
+  the implementation the specs are meant to leave open.
