@@ -107,6 +107,37 @@ describe('Enter', () => {
   })
 })
 
+describe('Enter with a prefix it carries on (a list item\'s)', () => {
+  /** A prefix Enter carries on, as the qmd editor's list item. */
+  const L = '﷘'
+  const lists: Schema = { ...schema, continued: (prefix) => prefix === L }
+
+  it('at the end of a line starts a line with the same prefix', () => {
+    const next = enter(lists, body(`${L}One`, caret('body', 4)))
+    expect(next.fields.body).toBe(`${L}One\n${L}`)
+    expect(next.selection).toEqual(caret('body', 6))
+  })
+  it('in the middle keeps the prefix on both halves', () => {
+    const next = enter(lists, body(`${L}One`, caret('body', 2)))
+    expect(next.fields.body).toBe(`${L}O\n${L}ne`)
+    expect(next.selection).toEqual(caret('body', 4))
+  })
+  it('at the start of the text puts a line with the prefix above, and keeps the caret on the text', () => {
+    const next = enter(lists, body(`Intro\n${L}One`, caret('body', 7)))
+    expect(next.fields.body).toBe(`Intro\n${L}\n${L}One`)
+    expect(next.selection).toEqual(caret('body', 9))
+  })
+  it('on an empty line takes the prefix off', () => {
+    const next = enter(lists, body(`${L}One\n${L}\n${L}Two`, caret('body', 6)))
+    expect(next.fields.body).toBe(`${L}One\n\n${L}Two`)
+    expect(next.selection).toEqual(caret('body', 5))
+  })
+  it('leaves prefixes it doesn\'t carry on as they were', () => {
+    const next = enter(lists, body(`${P}Two`, caret('body', 4)))
+    expect(next.fields.body).toBe(`${P}Two\n`)
+  })
+})
+
 describe('applyInputRule', () => {
   it('replaces the text before the caret with what the rule gives', () => {
     const next = applyInputRule(schema, body('One\n# Two', caret('body', 6)))

@@ -105,6 +105,14 @@ export interface Schema {
    * they don't hold it: Backspace moves on, and the field goes away.
    */
   readonly backspaceStops?: readonly string[]
+  /**
+   * Whether Enter carries a line prefix on to the line it starts (a list
+   * item's, so Enter in an item starts another): Enter at the end of a
+   * line with one starts a line with it too, and at the start of its text
+   * puts one with it above; on an empty line with one, Enter takes it off
+   * instead. (None is, unless given.)
+   */
+  readonly continued?: (prefix: string) => boolean
   /** A line prefix as text, for the clipboard (none unless given). */
   readonly prefixText?: (prefix: string) => string
   /** A `VOID` line as text, for the clipboard (none unless given). */

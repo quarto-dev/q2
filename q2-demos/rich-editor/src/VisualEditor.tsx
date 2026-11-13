@@ -8,9 +8,10 @@
  * The body is under it, block by block, from the parsed source.
  *
  * The title, subtitle and abstract are edited in place, and so are the
- * body's paragraphs, headings and one-paragraph quotes of plain text, and
- * its horizontal rules can be made and removed; the rest of the body
- * (formatted text, lists, code) is shown and can't be edited yet. A
+ * body's paragraphs, headings, one-paragraph quotes and tight bullet lists
+ * of plain text, and its horizontal rules can be made and removed; the
+ * rest of the body (formatted text, other lists, code) is shown and can't
+ * be edited yet. A
  * document has only the title-block fields its author adds, with the "+"
  * row above the title block (`TitleBlockWidget`); an added field stays,
  * empty, until Backspace in it removes it. Every edit is
@@ -34,6 +35,7 @@ import {
   bodyInputRule,
   headingAttr,
   headingLevel,
+  isBullet,
   isQuote,
   prefixMarkdown,
   readOnlyBlocks,
@@ -68,6 +70,7 @@ const EDITING_CSS = `
 #quarto-document-content[contenteditable] { outline: none; }
 .qe-unknown { margin-bottom: 1rem; padding: 0.5rem 0.75rem; border: 1px dashed #ced4da; color: #6c757d; font-size: 0.875em; }
 .qe-field { display: block; position: relative; min-height: 1lh; outline: none; white-space: pre-wrap; }
+li.qe-field { display: list-item; }
 .qe-field[data-empty][data-placeholder]::before {
   content: attr(data-placeholder);
   position: absolute;
@@ -86,9 +89,10 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * field (the "+" row does). Backspace at the start of the body stays there,
  * unless the body is empty. The abstract and the body take line breaks
  * (one per paragraph). The title-block fields stay when empty.
- * In the body, `## ` at the start of a paragraph makes it a heading and
- * `> ` a quote, and they're copied with their `#`s and `>`. `---` there
- * makes a horizontal rule, which is copied as `---`.
+ * In the body, `## ` at the start of a paragraph makes it a heading,
+ * `> ` a quote and `- ` a list item, and they're copied with their `#`s,
+ * `>` and `-`. Enter in an item starts another, and on an empty one ends
+ * the list. `---` there makes a horizontal rule, which is copied as `---`.
  */
 const SCHEMA: Schema = {
   order: [...TITLE_BLOCK, 'body'],
@@ -96,6 +100,7 @@ const SCHEMA: Schema = {
   multiline: ['abstract', 'body'],
   inputRule: (field, line) => (field === 'body' ? bodyInputRule(line) : null),
   prefixText: prefixMarkdown,
+  continued: isBullet,
   voidText: '---',
   keepEmpty: TITLE_BLOCK,
   backspaceStops: ['body'],
@@ -175,8 +180,9 @@ export function VisualEditor({ file }: VisualEditorProps) {
     [readOnly],
   )
 
-  // A heading line is an `h1`-`h6`, with its block's id and classes, and a
-  // quote line a paragraph in a `blockquote`, as `q2 render` shows them.
+  // A heading line is an `h1`-`h6`, with its block's id and classes, a
+  // quote line a paragraph in a `blockquote`, and the lines of a list's
+  // items `li`s in one `ul`, as `q2 render` shows them.
   const lineBlocks = useMemo(
     () => (ast && state.fields.body !== undefined ? blocksOfLines(ast.blocks as Node[], state.fields.body) : []),
     [ast, state.fields.body],
@@ -184,6 +190,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
   const lineElement = useCallback(
     (prefix: string, index: number) => {
       if (isQuote(prefix)) return { as: 'p', parent: { as: 'blockquote' } }
+      if (isBullet(prefix)) return { as: 'li', parent: { as: 'ul', shared: true } }
       const level = headingLevel(prefix)
       const { id, classes } = headingAttr(lineBlocks[index])
       return { as: `h${level || 6}`, className: classes.length > 0 ? classes.join(' ') : undefined, id }

@@ -1,8 +1,9 @@
 /**
  * How the body's blocks are shown. A paragraph of plain text is a
  * paragraph that can be edited, a heading of plain text a heading that
- * can be edited (`headings.spec.ts`), and a quote of one such paragraph a
- * quote that can be edited (`quotes.spec.ts`). Every other block the
+ * can be edited (`headings.spec.ts`), a quote of one such paragraph a
+ * quote that can be edited (`quotes.spec.ts`), and a bullet list of items
+ * of one line of plain text a list that can be edited (`lists.spec.ts`). Every other block the
  * editor knows is shown as `q2 render` would show it, roughly (no syntax
  * highlighting, no rendered math), and can't be edited. A block it doesn't know is a box
  * with the name of its kind.

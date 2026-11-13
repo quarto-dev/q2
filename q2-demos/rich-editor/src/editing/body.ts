@@ -3,19 +3,24 @@
  * block. A paragraph of plain text is its text, a heading of plain text
  * is its text after a prefix for its level (`headingPrefix`), and a block
  * quote of one paragraph of plain text is that paragraph's text after the
- * quote prefix (`QUOTE`). A horizontal rule is a line that can be removed
- * but not edited (`VOID`). Every other block (a paragraph or heading with
- * formatting, a list, a quote of anything else) is a line that can't be
- * edited (`ATOM`), and comes back from an edit as the block it was.
+ * quote prefix (`QUOTE`). A bullet list whose items are each one line of
+ * plain text (a tight list) is a line per item, after the bullet prefix
+ * (`BULLET`), and the lines of items next to each other are one list. A
+ * horizontal rule is a line that can be removed but not edited (`VOID`).
+ * Every other block (a paragraph or heading with formatting, a quote or
+ * list of anything else) is a line that can't be edited (`ATOM`), and
+ * comes back from an edit as the block it was.
  *
  * An empty line is an empty paragraph, which qmd has no syntax for: it's
  * written as a paragraph of one non-breaking space, which takes up a line
  * when rendered, and a paragraph of only that reads as an empty line. An
  * empty quote is a quote of such a paragraph: qmd's `>` alone is a quote
- * with no paragraph in it, which the qmd writer can't write.
+ * with no paragraph in it, which the qmd writer can't write. An empty item
+ * is an item with nothing in it, a bare `*` in qmd.
  *
- * A paragraph that the source wraps over several lines reads as one line,
- * and an edit keeps its line breaks wherever the text around them stays.
+ * A paragraph (or item) that the source wraps over several lines reads as
+ * one line, and an edit keeps its line breaks wherever the text around
+ * them stays.
  */
 
 import { ATOM, isPrefix, VOID, withoutPrefixes } from '../engine/model.ts'
@@ -36,9 +41,17 @@ export function headingPrefix(level: number): string {
 /** The line prefix of a block quote. */
 export const QUOTE = '\ufdd7'
 
+/** The line prefix of a bullet list's item. */
+export const BULLET = '\ufdd8'
+
 /** Whether a line of the body's text is a block quote. */
 export function isQuote(line: string): boolean {
   return line.startsWith(QUOTE)
+}
+
+/** Whether a line of the body's text is an item of a bullet list. */
+export function isBullet(line: string): boolean {
+  return line.startsWith(BULLET)
 }
 
 /** The heading level of a line of the body's text, or 0 for a paragraph. */
@@ -56,7 +69,7 @@ function lineText(line: string): string {
 
 /**
  * A block's line of the body's text, or undefined for a block that can't
- * be edited.
+ * be edited as one line (a list is a line per item: see `bodyLines`).
  */
 export function lineOf(block: Node): string | undefined {
   if (block.t === 'Para') return plainParagraph(block)
@@ -89,19 +102,76 @@ export function plainParagraph(block: Node): string | undefined {
   return text === undefined || text === '' || !editable(text) ? undefined : text
 }
 
+/**
+ * The lines of a bullet list's items, or undefined when it can't be
+ * edited: when an item is anything but one line of plain text.
+ */
+function itemLines(list: Node): string[] | undefined {
+  const lines: string[] = []
+  for (const item of list.c as Node[][]) {
+    if (item.length === 0) {
+      lines.push(BULLET)
+      continue
+    }
+    if (item.length !== 1 || item[0].t !== 'Plain') return undefined
+    const text = plainText(item[0].c as Node[], ' ')
+    if (text === undefined || !editable(text)) return undefined
+    lines.push(BULLET + (text === NBSP ? '' : text))
+  }
+  return lines
+}
+
+/** A line of the body's text, and the block it's from (and the item, for a list's). */
+interface BodyLine {
+  line: string
+  block: number
+  /** The index of the list item the line is, or -1. */
+  item: number
+}
+
+/**
+ * The body's lines: one per block, or per item of a list that can be
+ * edited, and an atom for each block that can't be. A list right after
+ * one that can be edited can't be, since the lines of items next to each
+ * other are one list.
+ */
+function bodyLines(blocks: readonly Node[]): BodyLine[] {
+  const lines: BodyLine[] = []
+  blocks.forEach((block, i) => {
+    if (block.t === 'BulletList') {
+      const prev = lines[lines.length - 1]
+      const items = prev?.item >= 0 ? undefined : itemLines(block)
+      if (items) items.forEach((line, item) => lines.push({ line, block: i, item }))
+      else lines.push({ line: ATOM, block: i, item: -1 })
+      return
+    }
+    lines.push({ line: lineOf(block) ?? ATOM, block: i, item: -1 })
+  })
+  return lines
+}
+
+/** The item a line of a list is. */
+function itemOf(blocks: readonly Node[], line: BodyLine): Node[] {
+  return (blocks[line.block].c as Node[][])[line.item]
+}
+
 /** The blocks that can't be edited, in order: what the body's atoms stand for. */
 export function readOnlyBlocks(blocks: readonly Node[]): Node[] {
-  return blocks.filter((block) => lineOf(block) === undefined)
+  return bodyLines(blocks)
+    .filter((line) => line.line === ATOM)
+    .map((line) => blocks[line.block])
 }
 
 /**
  * What typing turns into in the body: one to six `#` and a space at the
- * start of a paragraph make it a heading of that level, and `>` and a
- * space a block quote, as in qmd. `---`, `***` or `___` there make a
- * horizontal rule, and the rest of the paragraph goes on the line after it.
+ * start of a paragraph make it a heading of that level, `>` and a space a
+ * block quote, and `-`, `*` or `+` and a space an item of a bullet list,
+ * as in qmd. `---`, `***` or `___` there make a horizontal rule, and the
+ * rest of the paragraph goes on the line after it.
  */
 export function bodyInputRule(line: string): string | null {
   if (line === '> ') return QUOTE
+  if (line === '- ' || line === '* ' || line === '+ ') return BULLET
   if (line === '---' || line === '***' || line === '___') return `${VOID}\n`
   const match = /^(#{1,6}) $/.exec(line)
   return match ? headingPrefix(match[1].length) : null
@@ -110,6 +180,7 @@ export function bodyInputRule(line: string): string | null {
 /** A line's prefix as qmd, for the clipboard. */
 export function prefixMarkdown(prefix: string): string {
   if (isQuote(prefix)) return '> '
+  if (isBullet(prefix)) return '- '
   const level = headingLevel(prefix)
   return level > 0 ? `${'#'.repeat(level)} ` : ''
 }
@@ -119,8 +190,12 @@ export function prefixMarkdown(prefix: string): string {
  * block it shows, when it reads as one of them.
  */
 export function blocksOfLines(blocks: readonly Node[], text: string): (Node | undefined)[] {
-  const before = blocks.map((block) => lineOf(block) ?? ATOM)
-  return matchLines(before, text.split('\n')).map((i) => (i >= 0 ? blocks[i] : undefined))
+  const before = bodyLines(blocks)
+  const match = matchLines(
+    before.map((line) => line.line),
+    text.split('\n'),
+  )
+  return match.map((i) => (i >= 0 ? blocks[before[i].block] : undefined))
 }
 
 /**
@@ -133,45 +208,88 @@ export function headingAttr(block: Node | undefined): { id?: string; classes: st
   return { id: id || undefined, classes }
 }
 
-/** The body's text: a line per block. */
+/** The body's text: a line per block, or per item of a list. */
 export function bodyText(blocks: readonly Node[]): string {
-  return blocks.map((block) => lineOf(block) ?? ATOM).join('\n')
+  return bodyLines(blocks)
+    .map((line) => line.line)
+    .join('\n')
 }
 
 /**
  * The blocks of a body edited to read `text`. A line that reads as its
  * block did is that block, untouched; any other line is a new paragraph
- * (an empty one, for a line without text), heading, quote or rule. A
- * paragraph, in a quote or not, is wrapped in the source where the text
- * it keeps was. A heading made from
- * one that was there (the one in the same place among the changed lines)
- * keeps its attributes and source, so only its text is rewritten. Null when
- * `text` doesn't have the body's read-only blocks, which no edit should
- * bring about.
+ * (an empty one, for a line without text), heading, quote or rule. Lines
+ * of items next to each other are one list: the list that was, untouched,
+ * when they're its items as they were, or else a new list, of the items
+ * that read the same and new ones. A paragraph or item, in a quote or
+ * not, is wrapped in the source where the text it keeps was. A heading
+ * made from one that was there (the one in the same place among the
+ * changed lines) keeps its attributes and source, so only its text is
+ * rewritten. Null when `text` doesn't have the body's read-only blocks,
+ * which no edit should bring about.
  */
 export function editBody(blocks: readonly Node[], text: string): Node[] | null {
   const lines = text === '' ? [] : text.split('\n').map(kept)
-  const before = blocks.map((block) => lineOf(block) ?? ATOM)
+  const units = bodyLines(blocks)
+  const before = units.map((unit) => unit.line)
   const readOnly = readOnlyBlocks(blocks)
   if (lines.filter((line) => line === ATOM).length !== readOnly.length) return null
   const match = matchLines(before, lines)
-  const replaced = replacedBlocks(match, blocks.length)
-  const wrapped = keptWraps(blocks, before.join('\n'), lines.join('\n'))
+  const replaced = replacedBlocks(match, before.length)
+  const wrapped = keptWraps(blocks, units, before.join('\n'), lines.join('\n'))
+  const edited: Node[] = []
+  // The items of the list the lines so far end in, and the lines they were.
+  let items: { item: Node[]; was: number }[] = []
+  const endList = () => {
+    if (items.length > 0) edited.push(listOf(blocks, units, items))
+    items = []
+  }
   let atoms = 0
   let start = 0
-  return lines.map((line, i) => {
+  lines.forEach((line, i) => {
     const lineStart = start
     start += line.length + 1
-    if (line === ATOM) return readOnly[atoms++]
-    if (match[i] >= 0) return blocks[match[i]]
-    if (line === VOID) return { t: 'HorizontalRule' }
-    const level = headingLevel(line)
-    if (level > 0) return heading(level, lineText(line), blocks[replaced[i]])
     const text = lineText(line)
     const textStart = lineStart + line.length - text.length
-    const para = paragraph(text, (offset) => wrapped(textStart + offset))
-    return isQuote(line) ? { t: 'BlockQuote', c: [para] } : para
+    const wraps = (offset: number) => wrapped(textStart + offset)
+    if (isBullet(line)) {
+      const was = match[i]
+      items.push({ item: was >= 0 ? itemOf(blocks, units[was]) : item(text, wraps), was })
+      return
+    }
+    endList()
+    if (line === ATOM) edited.push(readOnly[atoms++])
+    else if (match[i] >= 0) edited.push(blocks[units[match[i]].block])
+    else if (line === VOID) edited.push({ t: 'HorizontalRule' })
+    else if (headingLevel(line) > 0) {
+      const was = replaced[i] >= 0 ? blocks[units[replaced[i]].block] : undefined
+      edited.push(heading(headingLevel(line), text, was))
+    } else {
+      const para = paragraph(text, wraps)
+      edited.push(isQuote(line) ? { t: 'BlockQuote', c: [para] } : para)
+    }
   })
+  endList()
+  return edited
+}
+
+/**
+ * The list of `items`: the list they were all the items of, in order, or
+ * else a new one.
+ */
+function listOf(blocks: readonly Node[], units: readonly BodyLine[], items: { item: Node[]; was: number }[]): Node {
+  const first = items[0].was >= 0 ? units[items[0].was] : undefined
+  const whole =
+    first !== undefined &&
+    first.item === 0 &&
+    (blocks[first.block].c as Node[][]).length === items.length &&
+    items.every(({ was }, i) => was === items[0].was + i)
+  return whole ? blocks[first.block] : { t: 'BulletList', c: items.map(({ item }) => item) }
+}
+
+/** An item reading `text` (nothing in it, for no text), wrapped in the source where `wrapped` says. */
+function item(text: string, wrapped: (offset: number) => boolean): Node[] {
+  return text === '' ? [] : [{ t: 'Plain', c: words(text, wrapped) }]
 }
 
 /**
@@ -197,11 +315,11 @@ function heading(level: number, text: string, was: Node | undefined): Node {
 }
 
 /**
- * For each new line, the index of the old block it replaces, or -1: among
+ * For each new line, the index of the old line it replaces, or -1: among
  * the lines that changed between two that didn't, the first new one
  * replaces the first old one, and so on.
  */
-function replacedBlocks(match: readonly number[], blockCount: number): number[] {
+function replacedBlocks(match: readonly number[], lineCount: number): number[] {
   const replaced = new Array<number>(match.length).fill(-1)
   let nextOld = 0
   let i = 0
@@ -209,7 +327,7 @@ function replacedBlocks(match: readonly number[], blockCount: number): number[] 
     // A run of new lines, up to the next line that's an old one.
     let end = i
     while (end < match.length && match[end] < 0) end++
-    const oldEnd = end < match.length ? match[end] : blockCount
+    const oldEnd = end < match.length ? match[end] : lineCount
     for (let j = i, k = nextOld; j < end && k < oldEnd; j++, k++) replaced[j] = k
     nextOld = oldEnd + 1
     i = end + 1
@@ -222,14 +340,23 @@ function replacedBlocks(match: readonly number[], blockCount: number): number[] 
  * line break in the source: it is when it's in the text before or after
  * what the edit changed, and was one there.
  */
-function keptWraps(blocks: readonly Node[], before: string, after: string): (offset: number) => boolean {
+function keptWraps(
+  blocks: readonly Node[],
+  units: readonly BodyLine[],
+  before: string,
+  after: string,
+): (offset: number) => boolean {
   const change = diff(before, after)
   if (!change) return () => false
   // The body's text with a line break where the source wraps a paragraph.
-  const source = blocks
-    .map((block) => {
-      const line = lineOf(block)
-      if (line === undefined) return ATOM
+  const source = units
+    .map(({ line, block: index, item }) => {
+      const block = blocks[index]
+      if (line === ATOM) return ATOM
+      if (item >= 0) {
+        const [plain] = itemOf(blocks, { line, block: index, item })
+        return line === BULLET ? line : BULLET + plainText(plain.c as Node[], '\n')
+      }
       if (block.t === 'Para' && line) return plainText(block.c as Node[], '\n')
       if (block.t === 'BlockQuote' && line !== QUOTE) {
         return QUOTE + plainText((block.c as Node[])[0].c as Node[], '\n')

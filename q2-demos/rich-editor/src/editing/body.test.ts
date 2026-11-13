@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { ATOM, VOID } from '../engine/model.ts'
 import {
+  BULLET,
+  blocksOfLines,
   bodyInputRule,
   bodyText,
   editBody,
   headingLevel,
   headingPrefix,
+  isBullet,
   isQuote,
   plainParagraph,
   prefixMarkdown,
@@ -238,5 +241,98 @@ describe('horizontal rules', () => {
     expect(bodyInputRule('-*-')).toBeNull()
     expect(bodyInputRule(`${QUOTE}---`)).toBeNull()
     expect(bodyInputRule(`${headingPrefix(1)}---`)).toBeNull()
+  })
+})
+
+describe('bullet lists', () => {
+  const plain = (text: string): Node[] => [{ t: 'Plain', c: words(text) }]
+  const list = (...items: Node[][]): Node => ({ t: 'BulletList', c: items })
+  const tight = list(plain('One.'), plain('Two.'))
+
+  it('a list of items of one line of plain text is a line per item, with the bullet prefix', () => {
+    expect(bodyText([para('Intro.'), tight, para('End.')])).toBe(`Intro.\n${BULLET}One.\n${BULLET}Two.\nEnd.`)
+    expect(isBullet(`${BULLET}One.`)).toBe(true)
+    expect(isBullet('One.')).toBe(false)
+    expect(headingLevel(`${BULLET}One.`)).toBe(0)
+  })
+  it('an empty item is a line of only its prefix', () => {
+    expect(bodyText([list(plain('One.'), [], [{ t: 'Plain', c: [{ t: 'Str', c: '\u00a0' }] }])])).toBe(
+      `${BULLET}One.\n${BULLET}\n${BULLET}`,
+    )
+  })
+  it('any other list can\'t be edited', () => {
+    const others = [
+      list([{ t: 'Plain', c: [{ t: 'Emph', c: words('One') }] }]),
+      list([para('Loose.')], [para('List.')]),
+      list([...plain('One.'), list(plain('Nested.'))]),
+    ]
+    expect(bodyText(others)).toBe(others.map(() => ATOM).join('\n'))
+    expect(readOnlyBlocks(others)).toEqual(others)
+  })
+  it('a list right after one that can be edited can\'t be, as its items would read as the first list\'s', () => {
+    const next = list(plain('Three.'))
+    expect(bodyText([tight, next])).toBe(`${BULLET}One.\n${BULLET}Two.\n${ATOM}`)
+    expect(readOnlyBlocks([tight, next])).toEqual([next])
+  })
+  it('each item\'s line shows its list', () => {
+    expect(blocksOfLines([para('Intro.'), tight], `Intro.\n${BULLET}One.\n${BULLET}Two.`)).toEqual([
+      para('Intro.'),
+      tight,
+      tight,
+    ])
+  })
+
+  it('writes lines next to each other with the bullet prefix as one list, and an empty one as an empty item', () => {
+    expect(editBody([para('One.')], `One.\n${BULLET}A\n${BULLET}\n${BULLET}  B  c `)).toEqual([
+      para('One.'),
+      list(plain('A'), [], plain('B c')),
+    ])
+  })
+  it('keeps an unchanged list as it was', () => {
+    expect(editBody([tight, para('End.')], `${BULLET}One.\n${BULLET}Two.\nEnd!`)![0]).toBe(tight)
+  })
+  it('keeps the items that read the same in a list that changed', () => {
+    const [edited] = editBody([tight], `${BULLET}One.\n${BULLET}Two!`)!
+    expect(edited).toEqual(list(plain('One.'), plain('Two!')))
+    expect((edited.c as Node[][])[0]).toBe((tight.c as Node[][])[0])
+  })
+  it('splits a list around a line that isn\'t an item, and joins lists with nothing between them', () => {
+    expect(editBody([tight], `${BULLET}One.\nTwo.`)).toEqual([list(plain('One.')), para('Two.')])
+    expect(editBody([list(plain('A'), plain('B'), plain('C'))], `${BULLET}A\nB\n${BULLET}C`)).toEqual([
+      list(plain('A')),
+      para('B'),
+      list(plain('C')),
+    ])
+    expect(editBody([list(plain('A')), para('B'), list(plain('C'))], `${BULLET}A\n${BULLET}C`)).toEqual([
+      list(plain('A'), plain('C')),
+    ])
+  })
+  it('keeps the line breaks of a wrapped item around what changed', () => {
+    const wrapped = list([{ t: 'Plain', c: [...words('One two'), { t: 'SoftBreak' }, ...words('three.')] }])
+    const [edited] = editBody([wrapped], `${BULLET}One two, three.`)!
+    expect(edited).toEqual(list([{ t: 'Plain', c: [...words('One two,'), { t: 'SoftBreak' }, ...words('three.')] }]))
+  })
+  it('writes an item whose prefix was removed as a paragraph, keeping its line breaks', () => {
+    const wrapped = list([{ t: 'Plain', c: [...words('One'), { t: 'SoftBreak' }, ...words('two.')] }])
+    expect(editBody([wrapped], 'One two.')).toEqual([{ t: 'Para', c: [...words('One'), { t: 'SoftBreak' }, ...words('two.')] }])
+  })
+  it('keeps the read-only blocks between lists', () => {
+    const rule: Node = { t: 'HorizontalRule' }
+    expect(editBody([tight, formatted], `${BULLET}One.\n${ATOM}\n${BULLET}New`)).toEqual([
+      list(plain('One.')),
+      formatted,
+      list(plain('New')),
+    ])
+    expect(editBody([tight], `${BULLET}One.\n${VOID}\n${BULLET}Two.`)).toEqual([list(plain('One.')), rule, list(plain('Two.'))])
+  })
+
+  it('-, * or + and a space at the start of a line make an item', () => {
+    for (const typed of ['- ', '* ', '+ ']) expect(bodyInputRule(typed)).toBe(BULLET)
+    expect(bodyInputRule('-- ')).toBeNull()
+    expect(bodyInputRule(`${BULLET}- `)).toBeNull()
+    expect(bodyInputRule(`${QUOTE}- `)).toBeNull()
+  })
+  it('an item is copied with a -', () => {
+    expect(prefixMarkdown(BULLET)).toBe('- ')
   })
 })

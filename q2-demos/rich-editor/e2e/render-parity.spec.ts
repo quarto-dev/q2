@@ -8,7 +8,7 @@
  * The reference is rendered in the same browser by the WASM module's full
  * render pipeline (`render_qmd_content`), whose `<main>` is the same as
  * `q2 render`'s for these fixtures. Only what the editor can edit is
- * compared (the title block, and paragraphs and quotes of plain text); the read-only
+ * compared (the title block, and paragraphs, quotes and lists of plain text); the read-only
  * blocks are rendered roughly and are left out.
  *
  * The fixtures open in `/fixture.html`, with no hub.
@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 
 /** Fixtures whose rendering should match `q2 render`'s. */
-const MATCHING = ['title-block', 'paragraphs', 'long-title', 'no-subtitle', 'wrapped', 'quote', 'rules']
+const MATCHING = ['title-block', 'paragraphs', 'long-title', 'no-subtitle', 'wrapped', 'quote', 'rules', 'list']
 
 test.describe('the HTML', () => {
   // The comparison is of HTML, which doesn't depend on the browser engine.

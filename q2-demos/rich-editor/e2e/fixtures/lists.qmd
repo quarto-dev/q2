@@ -1,0 +1,20 @@
+---
+title: Field notes
+---
+
+Intro.
+
+* One.
+* Two, wrapped
+  over two lines.
+* Three.
+
+Middle.
+
+* A *formatted* item.
+
+- A loose item.
+
+- And another.
+
+End.

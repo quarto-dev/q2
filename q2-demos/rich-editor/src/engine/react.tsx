@@ -133,7 +133,8 @@ export interface LinesProps {
    * The element to render for the `index`th line, which starts with
    * `prefix` (see `isPrefix`), with a class to add to it, its id, and the
    * element to put it in, if any (a quote's paragraph is in a
-   * `blockquote`). Lines without a prefix are rendered as `as`.
+   * `blockquote`, and a list's items are in one `ul`). Lines without a
+   * prefix are rendered as `as`.
    */
   lineElement?: (prefix: string, index: number) => LineElement
   /** What to show for the `index`th line that can't be edited (`ATOM`). */
@@ -147,7 +148,11 @@ export interface LineElement {
   as: string
   className?: string
   id?: string
-  parent?: { as: string; className?: string }
+  /**
+   * The element to put the line in. Lines next to each other whose
+   * parents are `shared` and the same are in one (a list's items).
+   */
+  parent?: { as: string; className?: string; shared?: boolean }
 }
 
 /**
@@ -157,13 +162,18 @@ export interface LineElement {
  */
 export function Lines({ name, text, className, as = 'p', lineElement, renderAtom, renderVoid }: LinesProps) {
   if (text === undefined) return null
+  // Each line's element, with the lines next to each other that share a
+  // parent together under the first's key.
+  const groups: { key: number; parent?: LineElement['parent']; nodes: ReactNode[] }[] = []
   let start = 0
   let atoms = 0
-  return text.split('\n').map((line, i) => {
+  text.split('\n').forEach((line, i) => {
     const at = start
     start += line.length + 1
-    if (line === ATOM) return <Fragment key={i}>{renderAtom(atoms++)}</Fragment>
-    if (line === VOID) return <Fragment key={i}>{renderVoid?.()}</Fragment>
+    if (line === ATOM || line === VOID) {
+      groups.push({ key: i, nodes: [line === ATOM ? renderAtom(atoms++) : renderVoid?.()] })
+      return
+    }
     const prefix = linePrefix(line, 0)
     const element = prefix === '' ? undefined : lineElement?.(prefix, i)
     const field = (
@@ -178,8 +188,18 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
       />
     )
     const parent = element?.parent
-    return parent ? createElement(parent.as, { key: i, className: parent.className }, field) : field
+    const last = groups[groups.length - 1]
+    const shares = parent?.shared && last?.parent?.shared && last.parent.as === parent.as && last.parent.className === parent.className
+    if (shares) last.nodes.push(field)
+    else groups.push({ key: i, parent, nodes: [field] })
   })
+  return groups.map(({ key, parent, nodes }) =>
+    parent ? (
+      createElement(parent.as, { key, className: parent.className }, ...nodes)
+    ) : (
+      <Fragment key={key}>{nodes}</Fragment>
+    ),
+  )
 }
 
 export interface FieldEditor {
