@@ -2,7 +2,7 @@
 title: 'Layout gaps, first slices: RevealJS `.absolute`, RevealJS aside placement, HTML `.columns` widths'
 date: 2026-11-13
 description: 'Ports three small Quarto 1 layout behaviours that q2 renders in the wrong place: absolutely positioned elements and bottom-of-slide asides in RevealJS, and side-by-side column widths in HTML.'
-status: draft  # implemented locally on andrew/layout-gaps-abc; no strand yet; decisions D1 to D8 need sign-off
+status: draft  # implemented and measured locally (render and preview) on andrew/layout-gaps-abc; no strand yet; decisions D1 to D8 need sign-off
 ---
 
 **Strand:** none yet. This plan was written before the work was agreed with the team, so no strand was filed. **Related strands:** bd-bea550b0 (RevealJS authoring features, open), bd-34rd2y86 (RevealJS columns, closed), bd-0zosmiq8 (RevealJS asides and footnotes, closed), bd-y5j0m776 (RevealJS tabsets, open), bd-9fz5fweg (layout-panel CSS, open), bd-hcp8m3ve (float and layout class taxonomy, closed).
@@ -106,7 +106,7 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
 - [x] CSS rule in `resources/revealjs/quarto-reveal.css`.
 - [x] smoke-all fixture `revealjs/absolute.qmd` (a port of Quarto 1 `tests/docs/reveal/mini/absolute.qmd`, which had no assertions).
 - [x] Render the layout fixture, measure against Quarto 1, record below.
-- [ ] Preview: `ts-packages/preview-renderer/src/q2-preview/inlines/Image.tsx` does not pass an AST `style` through, so an `.absolute` image is not positioned in `q2 preview` yet. `Div.tsx` and `Span.tsx` do pass it.
+- [x] Preview: `ts-packages/preview-renderer/src/q2-preview/inlines/Image.tsx` did not pass an AST `style` through, so an `.absolute` image would not be positioned in `q2 preview`. Upstream #1244 (image width/height as valid HTML) made it apply `style`, so this branch no longer changes it. Checked in a running `q2 preview` (see "In `q2 preview`").
 
 ### Slice B: RevealJS aside placement
 
@@ -115,7 +115,7 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
 - [x] Rules in `quarto-reveal.css`: full height for leaf slides, `.scrollable` overflow, and the two aside overrides.
 - [x] smoke-all fixture `revealjs/aside-bottom.qmd`. It asserts markup only. The CSS is asserted in the Rust integration tests, because no RevealJS fixture uses `ensureCssRegexMatches` yet and the WASM runner for it was not run here.
 - [x] Measure the aside, and check centered slides, vertical stacks, auto-stretch and scrollable slides against Quarto 1. Record below.
-- [ ] Preview: `quarto-reveal.css` is imported by the preview deck too, so the same rules apply there. Not checked in `q2 preview`.
+- [x] Preview: `quarto-reveal.css` is imported by the preview deck too, so the same rules apply there. Checked in a running `q2 preview` (see "In `q2 preview`").
 
 ### Slice C: HTML `.columns`
 
@@ -125,7 +125,7 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
 - [x] Flex rule in `_bootstrap-rules.scss`.
 - [x] smoke-all fixture `layout/columns-width.qmd`, with markup and CSS assertions.
 - [x] Measure against Quarto 1, record below.
-- [ ] Preview: `Div.tsx` passes an AST `style` through, and the transform runs for `HtmlPreview`, so the preview should lay columns out the same way. Not checked in `q2 preview`.
+- [x] Preview: `Div.tsx` passes an AST `style` through, and the transform runs for `HtmlPreview`, so the preview lays columns out the same way. Checked in a running `q2 preview` (see "In `q2 preview`").
 
 ### Close-out
 
@@ -134,8 +134,9 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
   - `dashboard_goldens::dashboard_skeletons_match_goldens` fails on this machine only: two of its 76 fixtures load the R package `bsicons`, which is not installed. No golden mismatch was reported for the other 74.
   - `smoke_all::smoke_all` fails on this machine only: nine `typst/margin-layout/margin-table-*` fixtures need the R packages `gt` and `flextable` or the Python package `great_tables`. The other 361 fixtures pass, the three new ones among them.
 - [x] `cargo xtask verify --skip-hub-build --skip-rust-tests`: custom lints, CSS lint, clippy and the workspace build with warnings denied, formatting, the strict `claude-notes` render, the no-op rebuild check, the tree-sitter tests and the ts-packages build all pass. Its hub-client test step then fails with `Failed to resolve import "wasm-quarto-hub-client"`, because the WASM package was not built in this worktree. That step needs the hub build that was skipped.
-- [ ] The WASM leg: the hub-client build, `npm run test:wasm` (which runs the smoke-all fixtures a second way) and the Playwright sweep. Not run.
-- [ ] `q2 preview` checked for the same documents. Not done. The preview side has unit tests only.
+- [x] The WASM leg, in part. `npm run build:wasm` compiles, and `npm run test:ci` in `hub-client` passes: 1801 unit, 241 integration and 480 WASM tests. The WASM smoke-all runner reports 186 passed, 231 skipped, 0 failed. It renders `format: html` fixtures only, so it ran `layout/columns-width.qmd` and skips the two `revealjs/` fixtures by design. The preview and render DOM parity check reports 109 compared, 0 failed.
+- [ ] `npm run build:all` in `hub-client` and the Playwright sweep. Not run.
+- [x] `q2 preview` checked for the same documents, after the full rebuild chain (`npm run build:wasm`, `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`). All three slices measure the same as `q2 render`.
 - [ ] A hub-client changelog entry for the preview `Image` change, once the commits have public hashes.
 - [ ] Decisions D1 to D8 taken to the team.
 
@@ -280,6 +281,24 @@ All 13 measured elements have the same x, y, width and height in both renderers,
 
 Dashboard check: a dashboard with a `.columns` div of two `.column width=` children measures the same before and after slice C (every rectangle identical), which is what D7 intends. It differs from Quarto 1 both before and after: Pandoc writes `style="width:40%;"` on those children in Quarto 1 too, so they are 132 and 197 wide there and 164 each in q2.
 
+### In `q2 preview`
+
+Each fixture was opened with `target/debug/q2 preview <file> --port N --no-browser` after the rebuild chain, and measured inside the preview iframe (it is same-origin) at 1400 by 900. The preview deck has no global `Reveal` object, so slides were advanced with a Space key event and the scale was read from the `.slides` transform.
+
+| Element | `q2 render` after | `q2 preview` after |
+|---|---|---|
+| A. `img.absolute` (slide units) | 400, 212, 100, 75, `position: absolute` | 400, 212, 100, 75, `position: absolute` |
+| A. Body paragraph below it | 0, 89, 1050, 52 | 0, 89, 1050, 52 |
+| B. Plain slide `<section>` height | 700 | 700 |
+| B. `<aside>` on plain, stack and footnote slides | y=625, 55 tall, absolute | y=625, 55 tall, absolute |
+| B. `.center` slide | 153 tall, `top: 273.5px` | 153 tall, `top: 273.5px` |
+| B. `.scrollable` slide | 700 tall, `overflow-y: auto`, aside relative | 700 tall, `overflow-y: auto`, aside relative |
+| B. `img.r-stretch` | 0, 165, 660, 495 | 0, 165, 660, 495 |
+| C. The 40% and 60% columns (px) | 320 and 479 at y=134 | 320 and 479 at y=134 |
+| C. The 13 edge-case elements | as in the table above | identical, all 13 |
+
+One thing the preview does differently, before and after these slices: it does not honour `center: true`. `RevealDeck.tsx` passes `center: false` to Reveal whatever the document says, so the `center: true` deck is top-aligned in the preview and its slides are full height with the aside at the bottom. In `q2 render` the same deck is centered. That is a preview gap of its own and was not changed.
+
 ## Not covered
 
 - RevealJS tabsets, figure panels, HTML margin and wide content, sidebar panels.
@@ -287,4 +306,5 @@ Dashboard check: a dashboard with a `.columns` div of two `.column width=` child
 - `.absolute` on a captioned image that becomes a cross-referenced figure.
 - RevealJS column sizes (D8).
 - The aside font size (0.6em in q2, 0.7em in Quarto 1), centering of the first slide of a vertical stack, and the height of a footnote-only aside. All three are described under "After slice B".
+- `center: true` in `q2 preview` (see "In `q2 preview`").
 - A small difference in deck scale between the two renderers (1.1571 in Quarto 1, 1.1600 in q2) seen in the baseline. Not investigated.
