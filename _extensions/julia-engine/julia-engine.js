@@ -106,7 +106,10 @@ var DISPLAY_ONLY_KEYS = [
   // Cell classes the presenter writes (KNR-3 slice 7, D10).
   "classes",
   "fig-column",
-  "tbl-column"
+  "tbl-column",
+  // Engine-neutral: whether core's presenter interleaves source and output. Julia does not
+  // declare interleaving, so a cell is held unless the author sets this to true.
+  "output-interleave"
 ];
 var JULIA_HASH_DEFINITION = {
   id: "julia",
@@ -125,8 +128,14 @@ var JULIA_HASH_DEFINITION = {
   ]
 };
 function qnrRunOptions(options) {
-  const hasUnits = Array.isArray(options.units);
-  return hasUnits ? { ...options, emitUnits: true } : { ...options };
+  const { executeEnv, ...rest } = options;
+  const hasUnits = Array.isArray(rest.units);
+  const hasEnv = executeEnv !== void 0 && Object.keys(executeEnv).length > 0;
+  return {
+    ...rest,
+    ...hasUnits ? { emitUnits: true } : {},
+    ...hasEnv ? { env: { ...executeEnv } } : {}
+  };
 }
 function buildRecordResult(nb, units, options) {
   if (!Array.isArray(units)) {
