@@ -4,7 +4,8 @@
 //! matching the CI environment as closely as possible:
 //! 0. Preflight: the `node` on PATH satisfies `engines.node` (see
 //!    `node_version.rs`; skipped only when every npm-driven step is off)
-//! 1. Run custom lint checks, hub-client `lint:css`, and clippy
+//! 1. Run custom lint checks, hub-client `lint:css`, the quarto2 PyPI
+//!    packaging tests (`packaging/pypi/tests`), and clippy
 //! 2. Check Rust formatting (cargo fmt --check)
 //! 3. Build all Rust crates (with -D warnings, matching CI), then check pampa
 //!    under its consumers' no-default feature sets (`check_feature_sets.rs`)
@@ -40,6 +41,21 @@ const TOTAL_STEPS: u32 = 14;
 /// script; without the flag npm 11 errors after the clean hub-client run.
 const CSS_LINT_ARGS: [&str; 5] = ["run", "lint:css", "-w", "hub-client", "--if-present"];
 
+/// The interpreter args of CI's quarto2 PyPI packaging test step in
+/// `.github/workflows/pypi-package.yml` (bd-2p7dwmqe). Stdlib only, offline,
+/// a couple of seconds. Kept as a constant so a test can hold the two in sync.
+const PYPI_TEST_ARGS: [&str; 6] = [
+    "-I",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "packaging/pypi/tests",
+];
+
+/// `python3` on Unix; Windows installs from python.org provide only `python`.
+const PYTHON: &str = if cfg!(windows) { "python" } else { "python3" };
+
 /// The q2 args of CI's `Render claude-notes (warnings are errors)` step in
 /// `.github/workflows/test-suite.yml`. Kept as a constant so a test can hold
 /// the two in sync (bd-zn87vwi8).
@@ -74,6 +90,8 @@ pub struct VerifyConfig {
     pub skip_hub_mcp_tests: bool,
     /// Skip the hub-client CSS lint (`npm run lint:css`).
     pub skip_css_lint: bool,
+    /// Skip the quarto2 PyPI packaging tests.
+    pub skip_pypi_tests: bool,
     /// Skip the strict claude-notes render (`q2 render --strict claude-notes`).
     pub skip_claude_notes_render: bool,
     /// Skip the pampa consumer feature-set check (`check-feature-sets`).
@@ -234,6 +252,22 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             println!("  ✓ hub-client lint:css clean");
         } else {
             println!("  ↳ Skipping hub-client lint:css");
+        }
+
+        // quarto2 PyPI packaging tests (bd-2p7dwmqe): pure-Python, stdlib
+        // only, no network, so they belong with the fail-fast checks.
+        if !config.skip_pypi_tests {
+            println!("  ↳ PyPI packaging tests...");
+            run_command(
+                PYTHON,
+                &PYPI_TEST_ARGS,
+                &project_root,
+                None,
+                "PyPI packaging tests failed (packaging/pypi/tests)",
+            )?;
+            println!("  ✓ PyPI packaging tests pass");
+        } else {
+            println!("  ↳ Skipping PyPI packaging tests");
         }
 
         // Clippy gate (matches the CI step in test-suite.yml). The workspace
@@ -971,6 +1005,19 @@ mod tests {
         assert!(
             workflow.contains(&format!("run: {local}")),
             "ts-test-suite.yml has no `run: {local}` step; keep CI and verify in sync"
+        );
+    }
+
+    /// Same guard for the PyPI packaging tests (bd-2p7dwmqe).
+    #[test]
+    fn pypi_test_command_matches_ci_workflow() {
+        let workflow = include_str!("../../../.github/workflows/pypi-package.yml");
+        let local = format!("run: python {}", PYPI_TEST_ARGS.join(" "));
+        assert!(
+            workflow
+                .lines()
+                .any(|line| line.trim().trim_start_matches("- ") == local),
+            "pypi-package.yml has no `{local}` step; keep CI and verify in sync"
         );
     }
 

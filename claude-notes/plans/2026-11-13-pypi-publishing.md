@@ -2,7 +2,7 @@
 title: 'Publish q2 releases to PyPI (bd-2p7dwmqe)'
 date: 2026-11-13
 description: 'Ship each q2 release on PyPI as a small sdist that downloads and checksum-verifies the platform binary at install time, published by GitHub OIDC trusted publishing straight from the release pipeline.'
-status: draft  # awaiting review; nothing implemented yet
+status: in-progress  # package, workflows and runbook done; first publish pending
 braid:
   strand: bd-2p7dwmqe
 ---
@@ -115,24 +115,27 @@ and makes both limits irrelevant. That is the recommendation.
 the release pipeline, reads the version from the tag, and can be chained
 from the release automatically. Nobody edits a `version.txt`.
 
-**Files:**
+**Files** (as built; see `packaging/pypi/README.dev.md`):
 
-- `packaging/pypi/pyproject.toml`: setuptools backend,
-  `dynamic = ["version"]`, `requires-python = ">=3.9"`, no runtime
-  dependencies, MIT license, URLs to quarto.org and `quarto-dev/q2`.
-- `packaging/pypi/setup.py`: thin; imports helpers from
-  `_q2_pypi_build.py` and wires custom `build_py` and `bdist_wheel`
-  commands.
-- `packaging/pypi/_q2_pypi_build.py`: all logic, stdlib only, unit
-  testable: platform detection, archive name, checksum lookup, download
-  with verification, extraction.
-- `packaging/pypi/release.json`: **generated at sdist build time, not
-  committed.** `{ "version": "0.45.0", "tag": "v0.45.0", "assets": { "<platform>": { "name": ..., "sha256": ... } } }`,
-  built from the release's `checksums.sha256`.
-- `packaging/pypi/README.md`: the PyPI long description (install, what
-  the package does, link to the docs).
-- `packaging/pypi/tests/`: `unittest` tests (stdlib, so CI needs no
-  extra installs).
+- `packaging/pypi/pyproject.toml`: only a `[build-system]` table pointing
+  at an **in-tree PEP 517 backend** (`backend-path = ["backend"]`,
+  `requires = []`). This replaced the setuptools design: setuptools reads
+  scripts as text (`tokenize.open`), which a native binary breaks, and its
+  wheel tags needed overriding anyway. Writing the wheel directly is short,
+  and installs no longer fetch any build dependency.
+- `packaging/pypi/backend/q2_pypi_backend.py`: the hooks `build_sdist`,
+  `build_wheel`, `prepare_metadata_for_build_wheel` (no download).
+- `packaging/pypi/backend/q2_pypi_lib.py`: all logic, stdlib only: platform
+  detection, archive names, version mapping, checksum pins, download with
+  verification, extraction; plus the `prepare` CLI that writes
+  `release.json` and copies `LICENSE`.
+- `packaging/pypi/release.json`, `LICENSE`: generated, gitignored.
+- `packaging/pypi/quarto2/`: `binary_path()` (reads the package's own
+  RECORD), `__version__`, `python -m quarto2`.
+- `packaging/pypi/README.md` (PyPI description), `README.dev.md`.
+- `packaging/pypi/tests/`: `unittest`, offline (a fake release served
+  through a `file://` `QUARTO2_DOWNLOAD_BASE`), including a real
+  `pip install` of the sdist into a fresh venv.
 
 **Install-time behaviour** (`build_py` override):
 
@@ -149,15 +152,13 @@ from the release automatically. Nobody edits a `version.txt`.
    The checksum table travels inside the sdist that PyPI serves over
    TLS, so PyPI is the trust root and we do not need minisign in Python.
 4. Extract the single `q2` (or `q2.exe`) member, refusing any other
-   member path, and stage it as a wheel **script** so pip/uv install the
+   member, link or path, and write it into the wheel under
+   `quarto2-X.Y.Z.data/scripts/` with mode 0755, so pip/uv install the
    real binary straight into the environment's `bin/` (`Scripts\` on
    Windows). No Python shim, no `subprocess`, no signal forwarding.
-   (Spike item: confirm setuptools `build_scripts` copies a non-shebang
-   binary untouched and keeps the executable bit. Fallback is the Quarto
-   1 shim with `os.execv` on POSIX.)
-5. `bdist_wheel` override: mark the wheel impure and tag it
-   `py3-none-<host platform tag>`, so the wheel pip caches can never be
-   reused on another platform.
+5. Tag the wheel `py3-none-<host platform>` (from
+   `sysconfig.get_platform()`), `Root-Is-Purelib: false`, so the wheel a
+   frontend caches can never be reused on another platform.
 6. A small importable package (`quarto2/__init__.py` or similar) exposes
    `binary_path()` and `__version__` for Python callers, and
    `python -m <pkg>` execs the binary.
@@ -285,45 +286,80 @@ never a user-wide token.
 - [x] Publish chaining: automatic dispatch from the release pipeline, with
       a required reviewer on the `pypi` environment for the first few
       releases; drop the reviewer once it has run cleanly (2026-11-13)
-- [ ] Mirror override environment variable name
+- [x] Mirror override environment variable: `QUARTO2_DOWNLOAD_BASE` (2026-11-13)
+- [x] No Jupyter dependency or extra; add one if users ask (2026-11-13)
 
 ### Phase 1: tests first
 
-- [ ] `packaging/pypi/tests/`: platform mapping (all six, plus
-      unsupported hosts → clear error); Cargo → PEP 440 version mapping
-      (`X.Y.Z`, `-rcN`); `release.json` generation from a
-      `checksums.sha256` fixture (missing platform → error); checksum
-      mismatch → abort; archive extraction rejects extra or path-escaping
-      members; wheel tag is host-specific, never `any`
-- [ ] Confirm they fail (no implementation yet)
+- [x] `packaging/pypi/tests/`: platform mapping (all six, plus unsupported
+      hosts → error naming `--from-source`); Cargo → PEP 440 mapping
+      (`X.Y.Z`, `-rcN`, `-beta.N`; nightlies rejected); `release.json` from a
+      `checksums.sha256` fixture (missing platform, malformed digest, bad
+      tag → error; `.postN`); checksum mismatch aborts and leaves no wheel;
+      extraction rejects extra, path-escaping and symlink members; binary
+      bytes survive unchanged; wheel tag never `any`; RECORD hashes; the
+      metadata hook does not download; offline `pip install` of the sdist
+      gives a working `q2`, `python -m quarto2` and `binary_path()`
+- [x] Confirmed failing before implementation (module missing)
 
 ### Phase 2: package
 
-- [ ] Spike: setuptools `scripts` with a raw binary (Linux, macOS,
-      Windows) keeps bytes and exec bit; decide script vs shim
-- [ ] `pyproject.toml`, `setup.py`, `_q2_pypi_build.py`, package module, README
-- [ ] Unit tests green; local end-to-end: build sdist for v0.45.0,
-      `pip install` and `uv tool install` it in a fresh venv, run
-      `q2 --version` and `q2 render` on a small fixture, and record the
-      invocations and output here
+- [x] Script-vs-shim spike: settled by writing the wheel in an in-tree
+      backend (see Files); binary is a wheel script
+- [x] Backend, lib, package module, README, README.dev.md
+- [x] 26 tests green (`python3 -I -m unittest discover -s packaging/pypi/tests`)
+- [x] Local end-to-end against the real v0.45.0 release (record below)
 
 ### Phase 3: workflows
 
-- [ ] `publish-pypi.yml` (build → smoke matrix → publish), actions pinned by SHA
-- [ ] A PR-time workflow running the unit tests when `packaging/pypi/**` changes,
-      plus its `cargo xtask verify` counterpart (`python3 -m unittest`, stdlib only)
-- [ ] Credentials steps 1 to 4 above (you on PyPI/TestPyPI; me on GitHub, with your OK)
-- [ ] Rehearsal: dispatch with `target=testpypi` for v0.45.0; install from
-      TestPyPI on macOS, Linux and Windows
-- [ ] First real publish (latest release at that time) to PyPI; verify
-      with `uvx --from quarto2 q2 --version`; credentials step 5
+- [x] `publish-pypi.yml`: build (unit tests, `prepare`, `python -m build
+      --sdist`, one-file and size guard) → smoke (pip + `uv tool install`
+      on ubuntu x64/arm, macOS, Windows x64/arm) → publish (OIDC,
+      `pypa/gh-action-pypi-publish` pinned by SHA) → check-published
+- [x] `pypi-package.yml` PR workflow (Linux/macOS/Windows, plus Python 3.9
+      floor) and its `cargo xtask verify` counterpart in step 1
+      (`--skip-pypi-tests`), with a test that holds the two commands in sync
+- [x] Credentials 1 and 2: PyPI 2FA, TestPyPI account, pending publishers
+      on both (done by Carlos, 2026-11-13)
+- [ ] GitHub environments `pypi` (main only, required reviewer) and
+      `testpypi`
+- [ ] After merge (workflow_dispatch needs the file on `main`): rehearsal
+      with `target=testpypi` for v0.45.0
+- [ ] First real publish to PyPI; `uvx --from quarto2 q2 --version`;
+      add co-maintainers on the project
 
 ### Phase 4: release integration
 
-- [ ] Chain from `release-pipeline.yml` (`channel == 'release'` and `publish` only)
-- [ ] Runbook updates (listed under "Runbook changes")
-- [ ] README / docs install page: mention `pip install quarto2`
+- [x] `release.yml` job `pypi` dispatches `publish-pypi.yml` after a
+      published release (skipped on dry runs; nightlies never reach it)
+- [x] Runbook: PyPI in "What a release produces", prerequisites rows,
+      step 6 check, § PyPI (approval, retry, rehearsal, `.postN`, never
+      rebuild archives, prereleases, mirror), files table
+- [ ] README / docs install page: mention `pip install quarto2` once the
+      first version is live
 - [ ] Verify on the next real release end to end, record here
+
+## End-to-end record (Phase 2, 2026-11-13)
+
+On macOS arm64, from `packaging/pypi/`, against the published v0.45.0:
+
+```bash
+python3 -I backend/q2_pypi_lib.py prepare --tag v0.45.0 \
+  --checksums $S/checksums.sha256 --license ../../LICENSE
+uv build --sdist -o $S/dist .          # → quarto2-0.45.0.tar.gz, 8624 bytes
+python3 -m venv venv && venv/bin/pip install --no-cache-dir $S/dist/quarto2-0.45.0.tar.gz
+```
+
+Observed (inspected): `venv/bin/q2` is a 177950240-byte `Mach-O 64-bit
+executable arm64`; `q2 --version` prints `q2 (quarto 2) 0.45.0`, and so
+does `python -m quarto2 --version`; `quarto2.binary_path()` returns
+`venv/bin/q2`. `q2 render smoke.qmd` wrote HTML containing
+`<strong>quarto2</strong> on PyPI.` and `generator" content="quarto-rust-0.45.0`.
+`uv tool install` of the same sdist also gives a working `q2`, and the
+wheel uv cached is tagged `py3-none-macosx_11_0_arm64`. `python -m build
+--sdist` (build 1.6.1, as CI runs it) produces the same 8624-byte sdist,
+and `twine check --strict` passes on it. Linux and Windows installs are
+covered by the `smoke` matrix in `publish-pypi.yml`, not yet run.
 
 ## Open questions
 
