@@ -422,6 +422,26 @@ enum Commands {
         /// `--ui editor`, `--join` or `--no-project`.
         #[arg(long, conflicts_with_all = ["join", "no_project"])]
         profile: Vec<String>,
+
+        /// Preview a project that lives on an existing sync server (a
+        /// `q2 hub`) instead of a local directory. Takes the hub's
+        /// websocket URL, e.g. `ws://127.0.0.1:3000/ws`; requires
+        /// --project. The preview mirrors that project's documents: the
+        /// viewer follows it, --allow-edit and --ui editor write edits to
+        /// it. Nothing on this machine is read or written. The hub must
+        /// not require sign-in (yet).
+        #[arg(
+            long,
+            value_name = "WS_URL",
+            requires = "project",
+            conflicts_with_all = ["path", "no_project", "join", "static_mode", "share", "to", "metadata", "profile"]
+        )]
+        hub_url: Option<String>,
+
+        /// With --hub-url: the project to preview — its index document id
+        /// (`automerge:…` or bare) or a hub share URL (`…/#/share/<id>?…`).
+        #[arg(long, value_name = "ID_OR_SHARE_URL", requires = "hub_url")]
+        project: Option<String>,
     },
 
     /// Serve a Shiny interactive document
@@ -1924,6 +1944,8 @@ fn run() -> Result<()> {
             to,
             metadata,
             profile,
+            hub_url,
+            project,
         } => {
             if print_asset_manifest_hashes {
                 // Binary diagnostic (release CI drift check); answers
@@ -1978,6 +2000,7 @@ fn run() -> Result<()> {
                     to,
                     metadata,
                     profile,
+                    upstream: hub_url.zip(project),
                 })
             }
         }

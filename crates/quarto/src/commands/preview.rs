@@ -66,6 +66,9 @@ pub struct PreviewArgs {
     pub metadata: Vec<String>,
     /// `--profile` values, as `q2 render --profile` (F8).
     pub profile: Vec<String>,
+    /// `--hub-url` and `--project` (bd-yq3awhmw): mirror that project from
+    /// an existing sync server instead of serving a local directory.
+    pub upstream: Option<(String, String)>,
 }
 
 /// `--to`, `-M` and `--profile` belong to the read-only viewer: the editor
@@ -266,7 +269,21 @@ async fn run(args: PreviewArgs) -> Result<()> {
     // unless we can confidently identify a specific page to seed in
     // the SPA — typically: user gave a file inside a _quarto.yml
     // project, OR the project root has an `index.qmd`.
-    let (project_root, initial_page, single_file) = if args.no_project {
+    // bd-yq3awhmw: `--hub-url` runs the hub standalone and mirrors the
+    // remote project; clap has already rejected a path and --no-project.
+    let upstream = args
+        .upstream
+        .as_ref()
+        .map(
+            |(url, project)| -> Result<quarto_hub::upstream::UpstreamConfig> {
+                Ok(quarto_hub::upstream::UpstreamConfig {
+                    url: url.clone(),
+                    index_doc_id: parse_project_ref(project)?,
+                })
+            },
+        )
+        .transpose()?;
+    let (project_root, initial_page, single_file) = if args.no_project || upstream.is_some() {
         if args.path.is_some() {
             anyhow::bail!("--no-project and a positional path are mutually exclusive");
         }
@@ -363,6 +380,9 @@ async fn run(args: PreviewArgs) -> Result<()> {
             info!(%url, "starting q2 preview server");
             println!();
             println!("  q2 preview");
+            if let Some(up) = &upstream {
+                println!("  {}", mirror_note(up, args.allow_edit));
+            }
             println!("  → {url}");
             println!();
 
@@ -379,7 +399,9 @@ async fn run(args: PreviewArgs) -> Result<()> {
             info!("starting q2 preview server (editor UI)");
             println!();
             println!("  q2 preview — editor UI");
-            if let Some(note) = quarto_preview::editor_ephemeral_note(args.allow_edit) {
+            if let Some(up) = &upstream {
+                println!("  {}", mirror_note(up, args.allow_edit));
+            } else if let Some(note) = quarto_preview::editor_ephemeral_note(args.allow_edit) {
                 println!("  {note}");
             }
         }
@@ -439,6 +461,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         share: args.share,
         ui: args.ui,
         render: render_flags,
+        upstream,
     };
 
     // Host-side Ctrl-C acknowledgment, symmetric with the guest's line
@@ -1210,6 +1233,40 @@ fn editor_share_route(index_doc_id: &str, file: &str, project_name: &str) -> Str
     )
 }
 
+/// bd-yq3awhmw: the startup line for a `--hub-url` session. Without
+/// `--allow-edit` the mirror gives the browser read-only access, so edits
+/// stay in the browser; with it they go to the remote project.
+fn mirror_note(upstream: &quarto_hub::upstream::UpstreamConfig, allow_edit: bool) -> String {
+    let edits = if allow_edit {
+        "edits are written to that project"
+    } else {
+        "read-only; pass --allow-edit to write edits to that project"
+    };
+    format!(
+        "mirroring project {} from {} ({edits})",
+        upstream.index_doc_id, upstream.url
+    )
+}
+
+/// bd-yq3awhmw: the index document id named by `--project`: a bare id, an
+/// `automerge:` URL, or a hub share URL (`…/#/share/<id>?…`, the shape
+/// `editor_share_route` emits and hub-client's `buildShareableUrl` copies).
+/// Returns the bare id.
+fn parse_project_ref(project: &str) -> Result<String> {
+    let project = project.trim();
+    let id = match project.split_once("#/share/") {
+        Some((_, rest)) => rest.split(['?', '/']).next().unwrap_or_default(),
+        None => project.strip_prefix("automerge:").unwrap_or(project),
+    };
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        anyhow::bail!(
+            "--project expects a project index document id or a hub share URL \
+             (…/#/share/<id>?…), got `{project}`"
+        );
+    }
+    Ok(id.to_string())
+}
+
 /// bd-7htq16rx: build the `--join` guest's boot URL — the same share
 /// route the host prints, but against the guest's local proxy origin.
 /// The params arrive from the host's `/api/preview/config` through the
@@ -1252,6 +1309,44 @@ pub(crate) fn pick_editor_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// bd-yq3awhmw: `--project` takes a bare id, an `automerge:` URL, or a
+    /// hub share URL, and always yields the bare id.
+    #[test]
+    fn parse_project_ref_accepts_ids_and_share_urls() {
+        let id = "2xKqHg7Wn3Ub8mRtYp4Lc9VdJfE1";
+        assert_eq!(parse_project_ref(id).unwrap(), id);
+        assert_eq!(parse_project_ref(&format!("automerge:{id}")).unwrap(), id);
+        assert_eq!(
+            parse_project_ref(&format!(
+                "https://quarto-hub.com/#/share/{id}?server=%2Fws&file=index.qmd&name=x"
+            ))
+            .unwrap(),
+            id
+        );
+        // The share route the preview itself prints round-trips.
+        let route = editor_share_route(&format!("automerge:{id}"), "a.qmd", "p");
+        assert_eq!(
+            parse_project_ref(&format!("http://127.0.0.1:1{route}")).unwrap(),
+            id
+        );
+    }
+
+    #[test]
+    fn parse_project_ref_rejects_garbage() {
+        for bad in [
+            "",
+            "automerge:",
+            "https://x/#/share/?server=y",
+            "a b",
+            "../etc",
+        ] {
+            assert!(
+                parse_project_ref(bad).is_err(),
+                "{bad:?} should be rejected"
+            );
+        }
+    }
 
     #[test]
     fn record_sources_default_to_cache_q2_engine() {

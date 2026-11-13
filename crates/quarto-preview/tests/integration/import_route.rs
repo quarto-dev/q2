@@ -41,6 +41,7 @@ async fn boot() -> Server {
     let port = pick_free_port();
     let config = PreviewConfig {
         render: Default::default(),
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),

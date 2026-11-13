@@ -30,6 +30,7 @@ async fn config_body(render: RenderFlags) -> serde_json::Value {
     let port = pick_free_port();
     let config = PreviewConfig {
         render,
+        upstream: None,
         host: "127.0.0.1".to_string(),
         port,
         project_root: Some(project.path().to_path_buf()),
