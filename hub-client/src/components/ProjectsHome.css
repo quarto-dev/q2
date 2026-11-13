@@ -849,3 +849,22 @@
   margin-inline-start: 0.5em;
   white-space: nowrap;
 }
+
+/* Optional-auth sign-in control in the header: status text beside the
+   provider's sign-in button (signed out) or a Sign out button. */
+.qh-auth {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 6px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border-color);
+}
+.qh-auth-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

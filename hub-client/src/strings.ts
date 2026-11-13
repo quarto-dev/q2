@@ -184,6 +184,7 @@ export const fileSidebar = {
   deleteFolderNotEmpty: 'Only empty folders can be deleted',
   folderEmpty: 'Empty',
   folderActionsFor: (name: string) => `Actions for folder ${name}`,
+  rootActions: 'Actions for the project root',
   confirmDeleteFolder: (path: string) => `Delete folder ${path}?`,
 } as const;
 

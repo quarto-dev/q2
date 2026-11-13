@@ -30,6 +30,7 @@ import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import {
   getFileContent,
+  isWasmReady,
   setImmediateFileChangeCallback,
   vfsAddFile,
   type EditorContentChange,
@@ -40,13 +41,35 @@ import { registerEditorTextProvider } from '../services/editorDebugRegistry';
 import { getBranchText, applyBranchEdits } from '../services/branchService';
 import { perfNow, perfSegment, perfMark } from '../utils/perfCounters';
 
+/**
+ * A document the editor can bind to instead of the preview runtime's
+ * synced project: something that holds the text, reports changes made
+ * elsewhere, and takes the editor's edits as splices. The canvas demo
+ * binds the editor to an Automerge doc handle this way.
+ */
+export interface DocumentSource {
+  /** The current text, or null while it is not available. */
+  getText(): string | null;
+  /** Called with the full new text whenever the document changes elsewhere; returns the unsubscribe. */
+  subscribe(listener: (text: string) => void): () => void;
+  /** Apply the editor's edits to the document. */
+  applyChanges(changes: EditorContentChange[]): void;
+}
+
 interface UseAutomergeSyncOptions {
   /** Current file being edited (null if none selected) */
   currentFile: FileEntry | null;
   /** Map of file paths to content — triggers reconciliation on change */
   fileContents: Map<string, string>;
-  /** Callback to propagate local Monaco changes to Automerge splices */
-  onContentOperations: (path: string, changes: EditorContentChange[]) => void;
+  /** Callback to propagate local Monaco changes to Automerge splices (the runtime path). */
+  onContentOperations?: (path: string, changes: EditorContentChange[]) => void;
+  /**
+   * The document to bind to, instead of the runtime's project file at
+   * `currentFile.path`. Text, remote changes and local edits then all go
+   * through it, and the VFS is the host's to keep (the hook only writes
+   * it on the runtime path).
+   */
+  source?: DocumentSource;
   /** Ref from useReplayMode — gates sync when replay is active */
   replayActiveRef: React.RefObject<boolean>;
   /** Whether replay mode is active (for effect dependency arrays) */
@@ -55,13 +78,19 @@ interface UseAutomergeSyncOptions {
    *  When non-null, Monaco is bound to the branch doc (branchService)
    *  instead of the synced main doc. */
   activeBranchId?: string | null;
+  /**
+   * Called synchronously with every `content` update (the hook's own and
+   * `setContent` calls), in the same batch as the state change. Lets a
+   * parent that mirrors `content` stay one commit ahead of an effect.
+   */
+  onContentChange?: (content: string) => void;
 }
 
 interface UseAutomergeSyncResult {
   /** Current content string for preview rendering */
   content: string;
   /** Direct setter — used by file-switching and replay code */
-  setContent: React.Dispatch<React.SetStateAction<string>>;
+  setContent: (content: string) => void;
   /** True while applying remote edits to Monaco (prevents echo).
    *  Also used by replay code when applying replay edits. */
   applyingRemoteRef: React.MutableRefObject<boolean>;
@@ -80,8 +109,23 @@ export function useAutomergeSync({
   replayActiveRef,
   replayIsActive,
   activeBranchId = null,
+  onContentChange,
+  source,
 }: UseAutomergeSyncOptions): UseAutomergeSyncResult {
-  const [content, setContent] = useState<string>('');
+  // The latest source, for the stable callbacks below.
+  const sourceRef = useRef(source);
+  useEffect(() => {
+    sourceRef.current = source;
+  }, [source]);
+  const [content, setContentState] = useState<string>('');
+  const onContentChangeRef = useRef(onContentChange);
+  useEffect(() => {
+    onContentChangeRef.current = onContentChange;
+  });
+  const setContent = useCallback((next: string) => {
+    setContentState(next);
+    onContentChangeRef.current?.(next);
+  }, []);
   const applyingRemoteRef = useRef(false);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
@@ -190,7 +234,12 @@ export function useAutomergeSync({
       }
     };
 
-    setImmediateFileChangeCallback(handleImmediateSync);
+    // Remote changes come from the bound source when there is one, else
+    // from the runtime's synchronous file-change callback.
+    const path = currentFile.path;
+    const unsubscribe = source !== undefined
+      ? source.subscribe((text) => handleImmediateSync(path, text))
+      : (setImmediateFileChangeCallback(handleImmediateSync), () => setImmediateFileChangeCallback(null));
     document.addEventListener('visibilitychange', onVisibilityChange);
     // `focus` is a belt-and-braces for documented cases where
     // `visibilitychange` doesn't fire on a tab becoming active
@@ -201,7 +250,7 @@ export function useAutomergeSync({
     window.addEventListener('focus', flushPendingRemote);
 
     return () => {
-      setImmediateFileChangeCallback(null);
+      unsubscribe();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', flushPendingRemote);
       // Discard any pending content on unmount or file switch; the
@@ -210,7 +259,7 @@ export function useAutomergeSync({
       // old file catch up from source rather than from a stale diff.
       pendingRemoteContentRef.current = null;
     };
-  }, [currentFile, replayIsActive]);
+  }, [currentFile, replayIsActive, setContent, source]);
 
   // ── Reconciliation on mount / file switch / editor mount ─────────────
   //
@@ -234,7 +283,7 @@ export function useAutomergeSync({
     const readT0 = perfNow();
     const automergeContent = activeBranchId !== null
       ? getBranchText(currentFile.path, activeBranchId)
-      : getFileContent(currentFile.path);
+      : source !== undefined ? source.getText() : getFileContent(currentFile.path);
     if (automergeContent === null) {
       perfMark('effect.automerge-reconcile.early-out');
       return;
@@ -244,7 +293,8 @@ export function useAutomergeSync({
     // Keep the VFS in step with whatever the editor displays, so the
     // preview renders the same state (covers branch switches in both
     // directions — the sync client only maintains the VFS for main edits).
-    vfsAddFile(currentFile.path, automergeContent);
+    // Not for a bound source: its host owns the VFS.
+    if (source === undefined && isWasmReady()) vfsAddFile(currentFile.path, automergeContent);
     const vfsT1 = perfNow();
 
     const model = editorRef.current?.getModel();
@@ -274,7 +324,7 @@ export function useAutomergeSync({
     perfSegment('effect.automerge-reconcile.vfs', readT1, vfsT1);
     perfSegment('effect.automerge-reconcile.monaco', vfsT1, monacoT1);
     perfSegment('effect.automerge-reconcile', fxT0);
-  }, [currentFile, fileContents, replayIsActive, editorMountGen, activeBranchId]);
+  }, [currentFile, fileContents, replayIsActive, editorMountGen, activeBranchId, setContent, source]);
 
   // ── Monaco → Automerge ───────────────────────────────────────────────
   //
@@ -294,11 +344,13 @@ export function useAutomergeSync({
         // client does this in onFileChanged.
         applyBranchEdits(currentFileRef.current.path, branchId, event.changes);
         vfsAddFile(currentFileRef.current.path, value);
+      } else if (sourceRef.current !== undefined) {
+        sourceRef.current.applyChanges(event.changes);
       } else {
-        onContentOperations(currentFileRef.current.path, event.changes);
+        onContentOperations?.(currentFileRef.current.path, event.changes);
       }
     }
-  }, [onContentOperations]);
+  }, [onContentOperations, setContent]);
 
   // ── AST rewrite ────────────────────────────────────────────────────────
   //
@@ -317,10 +369,11 @@ export function useAutomergeSync({
     // a preview interaction can't silently write to main. (Prototype scope.)
     if (activeBranchIdRef.current !== null) return;
 
-    const oldContent = getFileContent(currentFile.path) ?? '';
+    const oldContent = (source !== undefined ? source.getText() : getFileContent(currentFile.path)) ?? '';
     const changes = diffToEditorChanges(oldContent, newContent);
     if (changes.length > 0) {
-      onContentOperations(currentFile.path, changes);
+      if (source !== undefined) source.applyChanges(changes);
+      else onContentOperations?.(currentFile.path, changes);
       // onContentOperations fires setImmediateFileChangeCallback synchronously;
       // handleImmediateSync updates Monaco (if mounted) and calls setContent.
     }
@@ -339,7 +392,7 @@ export function useAutomergeSync({
         applyingRemoteRef.current = false;
       }
     }
-  }, [currentFile, onContentOperations]);
+  }, [currentFile, onContentOperations, setContent, source]);
 
   return {
     content,

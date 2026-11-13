@@ -2,6 +2,9 @@
  * Type definitions for the sync client.
  */
 
+import type { Repo } from '@automerge/automerge-repo/slim';
+import type { StorageAdapterInterface } from '@automerge/automerge-repo';
+import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 import type { Patch } from '@automerge/automerge-repo';
 import type { FileEntry, ActorIdentity, CaptureRef } from '@quarto/quarto-automerge-schema';
 
@@ -296,33 +299,42 @@ export interface RecoveryBackoffOptions {
 }
 
 /**
- * Options bag for `connect()` (bd-jit6pdwq). Passed in place of the
- * legacy positional `peerTimeoutMs` number; all fields optional and
- * defaults preserve the legacy behavior exactly.
+ * Options bag for `connect()`. All fields optional. The client never waits
+ * for a peer: it builds (or is given) a repo and finds documents through
+ * it, from storage or from a peer once one is there.
  */
 export interface ConnectOptions {
-  /**
-   * How long to wait for the samod `peer` event before falling
-   * through to offline mode. Defaults to 1 ms (hub-client's
-   * probe-then-use-IndexedDB behavior). `Infinity` is supported and
-   * means "never fall through": wait for the peer event indefinitely
-   * and never enter offline mode. Callers using `Infinity` own the
-   * decision of when the server is actually gone (the q2-preview SPA
-   * arbitrates via HTTP `/health`, which Firefox's per-IP WebSocket
-   * handshake queue cannot stall).
-   */
-  peerTimeoutMs?: number;
-  /**
-   * Fail instead of falling back to offline mode when the peer wait
-   * times out (bd-xnmd5ni1): `connect` then rejects with
-   * `PeerUnavailableError`. For server-backed callers with memory
-   * storage (the hub MCP server), offline mode persists nothing —
-   * silent fallback is a data black hole. Default false (browser
-   * offline-first behavior unchanged).
-   */
-  requireOnline?: boolean;
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
+  /**
+   * Network backing for this connection. Default `'websocket'`. `'none'`
+   * builds the Repo with storage only — no WebSocket adapter is created,
+   * no peer wait runs, and the connection reports offline. Used by the
+   * optional-auth prototype while the user is signed out (the hub would
+   * reject the upgrade); a later sign-in reloads the page and reconnects.
+   */
+  network?: 'websocket' | 'none';
+  /**
+   * A caller-built network adapter to attach to the Repo instead of the
+   * websocket adapter `connect` would build from the URL. The caller owns
+   * its lifetime but must hand over a fresh instance per `connect`: the
+   * client's `disconnect` is terminal for the adapter it was given. The
+   * module-level adapter wrapper still applies. Ignored when `network` is
+   * `'none'`.
+   */
+  networkAdapter?: NetworkAdapter;
+  /**
+   * A repo built by the caller, used instead of one built here from the
+   * adapters (`network`, `networkAdapter`, `storage`, `storageAdapter` are
+   * then ignored). The client does not shut it down on `disconnect`; its
+   * lifetime is the caller's.
+   */
+  repo?: Repo;
+  /**
+   * A caller-built storage adapter for the Repo instead of the one `storage`
+   * names. Takes precedence over `storage` when both are given.
+   */
+  storageAdapter?: StorageAdapterInterface;
   /**
    * WebSocket adapter retry interval (ms). Default: upstream's 5000.
    * Note for Firefox-sensitive callers: do not shorten this — the
@@ -439,26 +451,16 @@ export interface CreateProjectOptions {
    * When unset, the browser adapter is used unchanged.
    */
   auth?: SyncClientAuthOptions;
-  /**
-   * How long to wait for the samod `peer` event before falling through
-   * to offline mode (ms). Defaults to 1 ms, which triggers offline mode
-   * immediately and lets documents sync to the server in the background.
-   *
-   * Test helpers like `createProjectOnServer` that need documents to be
-   * ONLINE on the hub before returning should pass a longer value (e.g.
-   * 10 000 ms) so documents are created while the WebSocket peer is
-   * already connected and flush to the server immediately — eliminating
-   * the background-sync race against `waitForServerDocuments`.
-   */
-  peerTimeoutMs?: number;
-  /**
-   * Fail instead of creating the project in offline mode when the
-   * peer wait times out — rejects with `PeerUnavailableError`. See
-   * {@link ConnectOptions.requireOnline} (bd-xnmd5ni1).
-   */
-  requireOnline?: boolean;
   /** Storage backing for this connection. Default `'indexeddb'`. */
   storage?: StorageKind;
+  /**
+   * Network backing for this connection. Default `'websocket'`. `'none'`
+   * builds the Repo with storage only — no WebSocket adapter is created,
+   * no peer wait runs, and the connection reports offline. Used by the
+   * optional-auth prototype while the user is signed out (the hub would
+   * reject the upgrade); a later sign-in reloads the page and reconnects.
+   */
+  network?: 'websocket' | 'none';
   /** WebSocket adapter retry interval (ms). See {@link ConnectOptions}. */
   retryIntervalMs?: number;
   /** Cold-start "unavailable" retry policy for post-create index syncs. */

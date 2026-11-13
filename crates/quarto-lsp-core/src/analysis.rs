@@ -26,7 +26,7 @@ use quarto_core::format::Format;
 use quarto_core::pipeline::build_analysis_pipeline;
 use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
-use quarto_core::stage::{LoadedSource, PipelineData, StageContext};
+use quarto_core::stage::{LoadedSource, PipelineData, PipelineError, StageContext};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, default_runtime};
@@ -147,15 +147,30 @@ pub async fn analyze_document_async(doc: &Document) -> DocumentAnalysis {
             }
         },
         Err(err) => {
-            // Parse errors carry their own source context (attached by the
-            // parse stage). The pipeline error type does not expose it
-            // directly, so rebuild one from the document. Any parse-time
-            // diagnostics surface via `StageContext::diagnostics` which
-            // pollster already drained above — except here, where the
-            // pipeline returned before diagnostic transfer.
+            // Warnings collected before the failing stage live on the stage
+            // context; the failure's own diagnostics travel inside the error.
+            // Each is resolved against the context whose file ids its spans
+            // reference: a `Structured` error carries its own, while a parse
+            // stage's `StageError` spans point at FileId(0), which is where
+            // the document is registered both by the parse stage and by
+            // `create_source_context`. (Resolving only the stage context's
+            // diagnostics here dropped the parse error's span, leaving a
+            // single unlocated diagnostic at the top of the document.)
             let source_context = doc.create_source_context();
             let mut diagnostics =
                 diagnostics_from_messages(&stage_ctx.diagnostics, &source_context);
+            match &err {
+                PipelineError::Structured(pe) => {
+                    diagnostics.extend(diagnostics_from_messages(
+                        &pe.diagnostics,
+                        &pe.source_context,
+                    ));
+                }
+                PipelineError::StageError { diagnostics: errs, .. } if !errs.is_empty() => {
+                    diagnostics.extend(diagnostics_from_messages(errs, &source_context));
+                }
+                _ => {}
+            }
             if diagnostics.is_empty() {
                 let diag = DiagnosticMessage::error(err.to_string());
                 diagnostics.extend(diagnostics_from_messages(

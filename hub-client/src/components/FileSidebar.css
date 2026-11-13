@@ -1,7 +1,15 @@
-.file-sidebar {
-  /* Toolbar height (8px padding × 2 + 28px buttons + 1px border), fixed
-     so the sticky folder headers can offset themselves below it. */
+.file-sidebar-shell {
+  /* Toolbar height: 8px padding × 2 + 28px buttons + 1px border. */
   --sidebar-files-toolbar-height: 45px;
+  /* What the tree's sticky folder headers must clear: the FILES section
+     header and the toolbar, both pinned in the same scroll container. */
+  --file-tree-sticky-offset: calc(var(--sidebar-section-header-height, 0px) + var(--sidebar-files-toolbar-height));
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-sidebar {
   flex: 1;
   display: flex;
   flex-direction: column;

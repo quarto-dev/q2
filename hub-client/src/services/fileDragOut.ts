@@ -77,7 +77,7 @@ function readFolderZip(folder: string): { name: string; bytes: Uint8Array } | nu
   try {
     const bytes = exportFolderAsZip(folder);
     if (!bytes) return null;
-    return { name: `${folder.split('/').pop() || folder}.zip`, bytes };
+    return { name: `${folder.split('/').pop() || folder || 'project'}.zip`, bytes };
   } catch {
     return null;
   }
