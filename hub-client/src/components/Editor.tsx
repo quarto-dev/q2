@@ -1894,6 +1894,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
             identities={identities}
             captures={captures}
             attributionOn={attributionOn}
+            attributionHeads={replayState.isActive ? replayState.currentHeads : null}
             commentsMode={commentsMode}
             onAttributionGeneratingChange={setAttributionGenerating}
           />

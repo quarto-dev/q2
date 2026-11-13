@@ -25,6 +25,10 @@ import {
   applyChanges,
   decodeChange,
   getChanges,
+  getChangesMetaSince,
+  getChangesSince,
+  getHeads,
+  hasHeads,
   init,
 } from '@automerge/automerge';
 import type { Change, Doc, Patch } from '@automerge/automerge';
@@ -106,6 +110,47 @@ export class HistoryCompactedError extends Error {
     super('History has been compacted — full rebuild required');
     this.name = 'HistoryCompactedError';
   }
+}
+
+/**
+ * The replay target is not ahead of the work doc: the work doc holds a change
+ * the target lacks (a backward seek, or a step onto a concurrent branch). The
+ * work doc only moves forward, so the caller must rebuild from an empty doc.
+ */
+export class TargetNotAheadError extends Error {
+  constructor() {
+    super('Replay target is not ahead of the work doc — full rebuild required');
+    this.name = 'TargetNotAheadError';
+  }
+}
+
+interface IndexedChange {
+  change: Change;
+  /** Attribution inputs; `author` is null on an actor's seq>1 changes. */
+  actor: string;
+  author: string | null;
+  time: number;
+  deps: string[];
+  /** Position in the live doc's topological order. */
+  order: number;
+}
+
+/** Every change of the live doc by hash, read once per replay. */
+export type ReplayIndex = Map<string, IndexedChange>;
+
+export function createReplayIndex(): ReplayIndex {
+  return new Map();
+}
+
+/**
+ * A point in history to build attribution for: the document made of `heads`
+ * and their ancestors (a replay step is one change hash). `index` is filled
+ * on first use and refilled when a head is missing from it; share one across
+ * the steps of a replay and drop it when the replay ends.
+ */
+export interface ReplayTarget {
+  heads: string[];
+  index: ReplayIndex;
 }
 
 export function isTextPatch(patch: unknown, textFieldName: string): patch is TextPatch {
@@ -294,17 +339,52 @@ function applyBatch(
 }
 
 /**
- * Replay every change the live doc has that `state._workDoc` lacks, and
- * re-check until none is left: when the generator finishes, the state is at
- * the handle's current heads, including edits that arrived while the caller
- * was paused. It yields between batches (never after the last), which is
- * where the cold build may pause; the incremental update just drains it.
+ * Apply `changes` in order and yield between batches (never after the last).
  *
  * One `applyChanges` call costs time proportional to the text length however
  * many changes it carries. Consecutive changes with the same attribution
  * (Automerge stamps changes in whole seconds, so a typing burst shares one)
  * give every inserted character the same run either way, so they go in one
  * call.
+ */
+function* applyInBatches(
+  state: ReplayState,
+  changes: Iterable<[Change, CharAttribution]>,
+  textFieldName: string,
+): Generator<void, void, void> {
+  let batch: Change[] = [];
+  let batchAttribution: CharAttribution | null = null;
+  for (const [change, attribution] of changes) {
+    if (
+      batchAttribution !== null &&
+      (batch.length >= MAX_BATCH_SIZE ||
+        attribution.actor !== batchAttribution.actor ||
+        attribution.time !== batchAttribution.time)
+    ) {
+      applyBatch(state, batch, batchAttribution, textFieldName);
+      batch = [];
+      yield;
+    }
+    batch.push(change);
+    batchAttribution = attribution;
+  }
+  if (batchAttribution !== null) applyBatch(state, batch, batchAttribution, textFieldName);
+}
+
+/** Resolve each change's attribution as it is reached, in replay order. */
+function* withAttribution(
+  changes: Change[],
+  authorByActor: Map<string, string>,
+): Generator<[Change, CharAttribution]> {
+  for (const change of changes) yield [change, resolveAttribution(change, authorByActor)];
+}
+
+/**
+ * Replay every change the live doc has that `state._workDoc` lacks, and
+ * re-check until none is left: when the generator finishes, the state is at
+ * the handle's current heads, including edits that arrived while the caller
+ * was paused. It yields between batches (never after the last), which is
+ * where the cold build may pause; the incremental update just drains it.
  */
 function* replayPending(
   state: ReplayState,
@@ -322,26 +402,80 @@ function* replayPending(
       throw new HistoryCompactedError();
     }
     if (pending.length === 0) return;
-
-    let batch: Change[] = [];
-    let batchAttribution: CharAttribution | null = null;
-    for (const change of pending) {
-      const attribution = resolveAttribution(change, state._authorByActor);
-      if (
-        batchAttribution !== null &&
-        (batch.length >= MAX_BATCH_SIZE ||
-          attribution.actor !== batchAttribution.actor ||
-          attribution.time !== batchAttribution.time)
-      ) {
-        applyBatch(state, batch, batchAttribution, textFieldName);
-        batch = [];
-        yield;
-      }
-      batch.push(change);
-      batchAttribution = attribution;
-    }
-    if (batchAttribution !== null) applyBatch(state, batch, batchAttribution, textFieldName);
+    yield* applyInBatches(state, withAttribution(pending, state._authorByActor), textFieldName);
   }
+}
+
+/** Fill `index` from the live doc unless it already has every target head. */
+function ensureIndexed(target: ReplayTarget, live: Doc<unknown>): void {
+  const { heads, index } = target;
+  if (heads.every(h => index.has(h))) return;
+  const metas = getChangesMetaSince(live, []);
+  const changes = getChangesSince(live, []);
+  // Both lists come from the same traversal; position pairs bytes with hash.
+  if (metas.length !== changes.length) throw new Error('change metadata and changes disagree');
+  index.clear();
+  metas.forEach((meta, order) => {
+    index.set(meta.hash, {
+      change: changes[order],
+      actor: meta.actor,
+      author: meta.author,
+      time: meta.time,
+      deps: meta.deps,
+      order,
+    });
+  });
+}
+
+/**
+ * The changes that take the work doc to `target`, in topological order: the
+ * target heads' ancestors the work doc lacks. Throws `TargetNotAheadError`
+ * when the work doc has a change that the target does not.
+ */
+function changesUpTo(state: ReplayState, live: Doc<unknown>, target: ReplayTarget): IndexedChange[] {
+  ensureIndexed(target, live);
+  const needed: IndexedChange[] = [];
+  const reachedApplied = new Set<string>();
+  const seen = new Set<string>();
+  const stack = [...target.heads];
+  while (stack.length > 0) {
+    const hash = stack.pop()!;
+    if (seen.has(hash)) continue;
+    seen.add(hash);
+    // The work doc is closed under ancestors, so the walk can stop here.
+    if (hasHeads(state._workDoc, [hash])) {
+      reachedApplied.add(hash);
+      continue;
+    }
+    const entry = target.index.get(hash);
+    if (!entry) throw new Error(`replay target change ${hash} is not in the document`);
+    needed.push(entry);
+    stack.push(...entry.deps);
+  }
+  // A work-doc head that the walk did not reach is not an ancestor of the
+  // target (a path down to a head crosses no other applied change).
+  if (getHeads(state._workDoc).some(h => !reachedApplied.has(h))) throw new TargetNotAheadError();
+  return needed.sort((a, b) => a.order - b.order);
+}
+
+/** Replay the work doc forward to `target`; the yields are as in `replayPending`. */
+function* replayUpTo(
+  state: ReplayState,
+  handle: ViewableHandle,
+  textFieldName: string,
+  target: ReplayTarget,
+): Generator<void, void, void> {
+  const needed = changesUpTo(state, handle.doc() as Doc<unknown>, target);
+  const authorByActor = state._authorByActor;
+  function* attributed(): Generator<[Change, CharAttribution]> {
+    for (const c of needed) {
+      // Same author-first rule as `resolveAttribution`; an actor's seq-1
+      // change is an ancestor of its later ones, so it is seen first.
+      if (c.author) authorByActor.set(c.actor, c.author);
+      yield [c.change, { actor: c.author ?? authorByActor.get(c.actor) ?? c.actor, time: c.time }];
+    }
+  }
+  yield* applyInBatches(state, attributed(), textFieldName);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,13 +486,18 @@ export async function buildRunListAttribution(
   handle: DocHandle<unknown>,
   textFieldName: string,
   signal?: AbortSignal,
+  target?: ReplayTarget,
 ): Promise<RunListAttribution | null> {
   const viewable = handle as unknown as ViewableHandle;
   if (!viewable.doc() || signal?.aborted) return null;
 
   // A cold build is the incremental replay started from an empty doc.
   const state: ReplayState = { runs: [], _workDoc: init(), _authorByActor: new Map() };
-  const replay = replayPending(state, viewable, textFieldName);
+  // With a `target` the build stops at that point in history instead of
+  // the live heads.
+  const replay = target
+    ? replayUpTo(state, viewable, textFieldName, target)
+    : replayPending(state, viewable, textFieldName);
   let sliceStart = performance.now();
   while (!replay.next().done) {
     if (performance.now() - sliceStart < SLICE_BUDGET_MS) continue;
@@ -377,6 +516,7 @@ export function updateRunListAttribution(
   state: RunListAttribution,
   handle: DocHandle<unknown>,
   textFieldName: string,
+  target?: ReplayTarget,
 ): RunListAttribution {
   if (!state._workDoc) throw new HistoryCompactedError();
 
@@ -385,7 +525,10 @@ export function updateRunListAttribution(
     _workDoc: state._workDoc,
     _authorByActor: state._authorByActor ?? new Map<string, string>(),
   };
-  const replay = replayPending(next, handle as unknown as ViewableHandle, textFieldName);
+  const viewable = handle as unknown as ViewableHandle;
+  const replay = target
+    ? replayUpTo(next, viewable, textFieldName, target)
+    : replayPending(next, viewable, textFieldName);
   while (!replay.next().done);
   // Nothing was applied: keep the caller's state object.
   return next._workDoc === state._workDoc ? state : next;

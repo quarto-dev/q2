@@ -508,6 +508,7 @@ function ReplayHarness() {
     isPlaying: false,
     playbackSpeed: 1,
     currentContent: '',
+    currentHeads: null,
     // Seconds, not ms — ReplayDrawer formats with `new Date(ts * 1000)`.
     // Module-level so render stays pure (react-hooks/purity); visual
     // specs pin the clock (FIXED_NOW) before page load, so the module

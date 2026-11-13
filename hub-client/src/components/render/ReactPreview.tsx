@@ -136,6 +136,12 @@ interface PreviewProps {
    */
   attributionOn: boolean;
   /**
+   * Replay: change hashes of the history step that `content` shows.
+   * `useAttribution` then builds for that step instead of the live heads,
+   * whose run offsets belong to a different text. Null outside replay.
+   */
+  attributionHeads?: string[] | null;
+  /**
    * Comment-bubble display mode (three-way toggle in the replay bar:
    * expand / show / hide). Forwarded into the q2-preview iframe.
    * Absent ⇒ 'show'.
@@ -489,6 +495,7 @@ export default function ReactPreview({
   identities,
   captures,
   attributionOn,
+  attributionHeads,
   commentsMode,
   onAttributionGeneratingChange,
 }: PreviewProps) {
@@ -608,13 +615,17 @@ export default function ReactPreview({
   // table threaded down from `Editor.tsx`; missing entries fall back
   // to the hook's `(actor.slice(0, 8), actorColor(fnv1aHex8(actor)))`
   // so the Phase 6 producer invariant always holds.
-  const { payload: attributionPayload, generating: attributionGenerating } =
-    useAttribution({
-      enabled: attributionOn,
-      filePath: currentFile?.path ?? null,
-      sourceText: content,
-      identities: identities ?? {},
-    });
+  const {
+    payload: attributionPayload,
+    generating: attributionGenerating,
+    pending: attributionPending,
+  } = useAttribution({
+    enabled: attributionOn,
+    filePath: currentFile?.path ?? null,
+    sourceText: content,
+    identities: identities ?? {},
+    atHeads: attributionHeads,
+  });
 
   // Surface the hook's generating flag to the Attribution pill in the
   // replay bar. Cleanup emits `false` on unmount so switching to a
@@ -818,6 +829,10 @@ export default function ReactPreview({
   // stale result of the one render that was in flight — so a burst
   // settles on the latest content.
   useEffect(() => {
+    // Replay with the authors overlay on: wait for the attribution of this
+    // step, so the step is drawn once and never with another step's runs.
+    // The effect runs again when `attributionPending` clears.
+    if (attributionPending) return;
     const fxT0 = perfNow();
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
     updatePreview(content, currentFile?.path);
@@ -830,6 +845,7 @@ export default function ReactPreview({
     currentFile?.path,
     onDiagnosticsChange,
     attributionPayload,
+    attributionPending,
     captureBytes,
   ]);
 

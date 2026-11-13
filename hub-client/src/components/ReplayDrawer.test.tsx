@@ -23,6 +23,7 @@ function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
     isPlaying: false,
     playbackSpeed: 1,
     currentContent: '',
+    currentHeads: null,
     timestamp: null,
     actor: null,
     chunkActors: [],
@@ -85,6 +86,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 42,
       currentContent: 'hello',
+      currentHeads: null,
       timestamp: 1710000000,
       actor: 'abcdef0123456789abcdef0123456789',
       chunkActors: Array.from({ length: 10 }, () => [{ actor: 'abcdef0123456789abcdef0123456789', fraction: 1 }]),
@@ -223,6 +225,7 @@ describe('ReplayDrawer', () => {
           historyLength: 4,
           currentIndex: 3,
           currentContent: 'hello',
+          currentHeads: null,
           timestamp: 1710000000,
           actor: KEY,
           chunkActors: [
@@ -343,6 +346,7 @@ describe('ReplayDrawer', () => {
       historyLength: 5,
       currentIndex: 2,
       currentContent: 'hello',
+      currentHeads: null,
       timestamp: null,
       actor: null,
     });
@@ -372,6 +376,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 42,
       currentContent: 'hello',
+      currentHeads: null,
       timestamp: 1710000000,
       actor: 'abcdef0123456789abcdef0123456789',
       chunkActors: Array.from({ length: 10 }, () => [{ actor: 'abcdef0123456789abcdef0123456789', fraction: 1 }]),
@@ -458,6 +463,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 42,
       currentContent: 'hello',
+      currentHeads: null,
       chunkActors: [],
     });
 
@@ -502,6 +508,7 @@ describe('ReplayDrawer', () => {
       historyLength: 100,
       currentIndex: 50,
       currentContent: 'test',
+      currentHeads: null,
       chunkActors: Array.from({ length: 10 }, () => [{ actor: 'actor1', fraction: 1 }]),
     });
 
@@ -561,6 +568,7 @@ describe('ReplayDrawer', () => {
         historyLength: 100,
         currentIndex: 42,
         currentContent: 'hello',
+        currentHeads: null,
         timestamp: 1710000000,
         actor: 'abcdef0123456789abcdef0123456789',
         chunkActors: [],
@@ -763,6 +771,7 @@ describe('ReplayDrawer', () => {
         historyLength: 100,
         currentIndex: 42,
         currentContent: 'hello',
+        currentHeads: null,
         timestamp: 1710000000,
         actor: 'abcdef0123456789abcdef0123456789',
         chunkActors: [],

@@ -170,6 +170,23 @@ describe('ReplaySession', () => {
     });
   });
 
+  describe('getHeadsAt()', () => {
+    it('returns the change hashes of the step', () => {
+      const handle = createMockHandle(['a', 'ab', 'abc']);
+      const session = createReplaySession(handle as never, vi.fn())!;
+      expect(session.getHeadsAt(1)).toEqual(['head-1']);
+    });
+
+    it('returns null out of range and after close', () => {
+      const handle = createMockHandle(['a', 'ab']);
+      const session = createReplaySession(handle as never, vi.fn())!;
+      expect(session.getHeadsAt(-1)).toBeNull();
+      expect(session.getHeadsAt(2)).toBeNull();
+      session.close();
+      expect(session.getHeadsAt(0)).toBeNull();
+    });
+  });
+
   describe('getMetadataAt()', () => {
     it('returns timestamp and actor', () => {
       enterSession(['a', 'b', 'c'], [1000, 2000, 3000], ['alice', 'bob', 'carol']);
