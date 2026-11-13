@@ -48,7 +48,7 @@ use quarto_core::project::ProjectContext;
 use quarto_core::record::{
     Chosen, EngineError, EngineResult, ImportContext, ImportedOnly, LookupError, RecordLookup,
     RecordSource, RecordSources, WalkContext, execution_record_path, imported_record_is_stale,
-    overlay_difference, read_record, rehash_record, resolve_records,
+    overlay_free_run, read_record, resolve_records,
 };
 use quarto_hub::index::{CaptureRef, CaptureState, IndexDocument};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -795,34 +795,6 @@ fn is_safe_relative(rel_path: &str) -> bool {
     path.components()
         .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
         && path.components().any(|c| matches!(c, Component::Normal(_)))
-}
-
-/// Make a capture run executed under a `-M` overlay describe the source (EXR-5;
-/// F8-D9): the first capture's `input_qmd` becomes the overlay-free bytes, and
-/// the record's unit hashes, document hashes and `quarto_execution_hash` become
-/// the overlay-free ones, with the overlay's execution-relevant keys noted in
-/// `quarto_overlay`. The outputs are untouched: they were produced under the
-/// overlay, which is the point of `-M`.
-pub fn overlay_free_run(
-    mut run: CaptureRun,
-    source: &SourceInputs,
-    overlay: &RenderOverlay,
-) -> Result<CaptureRun, String> {
-    if let Some(first) = run.captures.first_mut() {
-        first.input_qmd = String::from_utf8(source.input_qmd.clone())
-            .map_err(|e| format!("source input_qmd is not UTF-8: {e}"))?;
-    }
-    if let Some(record) = run.record.as_mut() {
-        rehash_record(record, &source.metadata)
-            .map_err(|e| format!("recomputing the record's overlay-free hashes failed: {e}"))?;
-        let noted = overlay
-            .metadata
-            .as_ref()
-            .map(|m| overlay_difference(m, record))
-            .unwrap_or_default();
-        record.metadata.quarto_overlay = (!noted.is_empty()).then_some(noted);
-    }
-    Ok(run)
 }
 
 /// Encode the run (a record doc when the writer gate is on, which for `provide-hub` is

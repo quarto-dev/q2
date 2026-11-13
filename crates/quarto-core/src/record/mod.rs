@@ -51,7 +51,7 @@ pub use matching::{
     HEADER_KEYS_KEY, Matching, OUTPUT_FORMAT_OPTION, UnitKey, UnitStaleness, lost_header_keys,
     match_units,
 };
-pub use overlay::{overlay_difference, rehash_record};
+pub use overlay::{overlay_difference, overlay_free_run, rehash_record};
 pub use place::{PlaceNote, Placed, QUARTO_MARKDOWN_MIME, VERBATIM_KEY, place};
 pub(crate) use place::{placed_replacement, replacement, stored_markdown};
 pub use positron_export::{
