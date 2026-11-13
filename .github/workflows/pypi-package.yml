@@ -32,7 +32,9 @@ jobs:
         python: ['3.x']
         include:
           # The package declares Requires-Python >=3.9; keep the floor honest.
-          - os: ubuntu-latest
+          # Pinned to 24.04: setup-python ships no 3.9 build for Ubuntu 26.04
+          # (ubuntu-latest), since 3.9 reached end of life before that image.
+          - os: ubuntu-24.04
             python: '3.9'
     steps:
       - uses: actions/checkout@v6
