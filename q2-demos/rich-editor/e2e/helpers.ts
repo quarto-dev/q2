@@ -395,6 +395,32 @@ export class Editor {
     )
   }
 
+  /** The toolbar above the document. */
+  toolbar() {
+    return this.page.getByRole('toolbar', { name: 'Formatting' })
+  }
+
+  /** The toolbar's text style box, which shows the caret's line's style and opens a menu of styles. */
+  styleBox() {
+    return this.toolbar().getByRole('button', { name: 'Text style' })
+  }
+
+  /** The text style menu the style box opens. */
+  styleMenu() {
+    return this.page.getByRole('menu', { name: 'Text style' })
+  }
+
+  /** Choose a style (`Paragraph`, `Heading 1`, …) for the caret's line, from the toolbar's style box. */
+  async chooseStyle(name: string) {
+    await this.styleBox().click()
+    await this.styleMenu().getByRole('menuitemradio', { name }).click()
+  }
+
+  /** The toolbar's quote button. */
+  quoteButton() {
+    return this.toolbar().getByRole('button', { name: 'Quote' })
+  }
+
   /** The row of "+" items above the title block. */
   widget() {
     return this.frame.locator(WIDGET)

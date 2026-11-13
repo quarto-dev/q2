@@ -61,6 +61,113 @@ body {
   min-height: 0;
 }
 
+/* The toolbar above the visual editor, Word / Google Docs style. */
+.qe-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 0 8px;
+}
+
+.qe-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: #343a40;
+  font: 13px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.qe-toolbar button:hover:not(:disabled) {
+  background: #f1f3f5;
+}
+
+.qe-toolbar button:disabled {
+  color: #adb5bd;
+  cursor: default;
+}
+
+.qe-toolbar button[aria-pressed='true'] {
+  background: #e7f1fc;
+  border-color: #c5dcf5;
+  color: #145ca8;
+}
+
+.qe-style-box {
+  position: relative;
+}
+
+.qe-toolbar .qe-style {
+  width: 150px;
+  justify-content: space-between;
+  border-color: #dee2e6;
+}
+
+.qe-toolbar .qe-style.open {
+  background: #f1f3f5;
+}
+
+.qe-style svg {
+  width: 8px;
+  height: 8px;
+}
+
+.qe-toolbar .qe-icon {
+  padding: 4px;
+  color: #444746;
+}
+
+.qe-icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.qe-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: #dee2e6;
+}
+
+.qe-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  width: 230px;
+  padding: 5px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+
+.qe-toolbar .qe-item {
+  position: relative;
+  padding: 5px 8px 5px 26px;
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.qe-toolbar .qe-item[aria-checked='true']::before {
+  content: '✓';
+  position: absolute;
+  left: 9px;
+  color: #145ca8;
+}
+
+.qe-toolbar .qe-item-1 { font-size: 20px; font-weight: 600; }
+.qe-toolbar .qe-item-2 { font-size: 18px; font-weight: 600; }
+.qe-toolbar .qe-item-3 { font-size: 16px; font-weight: 600; }
+.qe-toolbar .qe-item-4 { font-size: 14.5px; font-weight: 600; }
+
 .visual-frame {
   flex: 1;
   width: 100%;
