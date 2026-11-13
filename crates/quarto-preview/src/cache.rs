@@ -58,6 +58,24 @@ pub fn compute_key(input_qmd: &[u8]) -> String {
     hex_encode(&hasher.finalize())
 }
 
+/// The cache key of a session's engine run: [`compute_key`] over the source `input_qmd`, plus
+/// the session's `-M` overlay when it has one. The overlay changes what the engine produces
+/// (`-M 'execute: {echo: false}'`) without changing the overlay-free `input_qmd`, so two
+/// sessions with different `-M` must not share an entry. A session without `-M` keeps the
+/// plain key, so existing entries stay valid.
+pub fn session_cache_key(input_qmd: &[u8]) -> String {
+    match crate::render_flags::get().metadata {
+        None => compute_key(input_qmd),
+        Some(overlay) => {
+            // `serde_json::Value` objects are sorted maps, so the bytes are deterministic.
+            let mut keyed = input_qmd.to_vec();
+            keyed.extend_from_slice(b"\0-M\0");
+            keyed.extend_from_slice(overlay.to_string().as_bytes());
+            compute_key(&keyed)
+        }
+    }
+}
+
 fn hex_encode(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {

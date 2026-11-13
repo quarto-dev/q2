@@ -217,10 +217,13 @@ async fn record_one(
     )
     .await
     .map_err(|e| RecordError::RecordFailed(format!("{}", e)))?;
+    // The inputs above are overlay-free (they are what staleness recomputes); the engine runs
+    // under the session's `-M` overlay, and `PreviewLookup::run_engine` makes the run describe
+    // the source again.
     let lookup = crate::record_lookup::PreviewLookup {
         abs_path,
         project: &project,
-        runtime: runtime.clone(),
+        runtime: crate::render_flags::runtime_with_overlay(),
         registry: engine_registry,
         cache_dir: &cfg.cache_dir,
     };
@@ -410,7 +413,9 @@ pub async fn recompute_staleness(
         }
         // Records compare the per-engine document hashes, recomputed from the record's
         // stored declarations on the masked, overlay-free pre-engine document (EXR-15,
-        // decision 5). No engine is loaded.
+        // decision 5). No engine is loaded. `runtime` here is the plain one: a run under the
+        // session's `-M` overlay was made overlay-free before it was stored
+        // (`record_lookup::overlay_free`), so the two sides hash the same metadata.
         Recorded::Record(record) => {
             let source = compute_source_inputs(&abs_path, &project, runtime)
                 .await
@@ -435,32 +440,33 @@ pub async fn recompute_staleness(
         }
     };
     let target_value = Some(is_stale);
-    if existing.staleness == target_value {
-        return Ok(false);
+    let flipped = existing.staleness != target_value;
+    if flipped {
+        let updated = CaptureRef {
+            capture_doc_id: existing.capture_doc_id.clone(),
+            staleness: target_value,
+            state: existing.state,
+            last_error: existing.last_error.clone(),
+        };
+        ctx.index()
+            .set_capture(rel_path, &updated)
+            .map_err(|e| RecordError::SidecarFailed(format!("{}", e)))?;
+
+        tracing::debug!(
+            rel_path = %rel_path,
+            staleness = is_stale,
+            "updated sidecar staleness",
+        );
     }
 
-    let updated = CaptureRef {
-        capture_doc_id: existing.capture_doc_id.clone(),
-        staleness: target_value,
-        state: existing.state,
-        last_error: existing.last_error.clone(),
-    };
-    ctx.index()
-        .set_capture(rel_path, &updated)
-        .map_err(|e| RecordError::SidecarFailed(format!("{}", e)))?;
-
-    tracing::debug!(
-        rel_path = %rel_path,
-        staleness = is_stale,
-        "updated sidecar staleness",
-    );
-
-    // C.6 Auto policy: when staleness just flipped to true, kick off a
-    // re-execute synchronously so the SPA sees a fresh capture without
-    // requiring the user to click the overlay. We reuse the same path
-    // the HTTP /api/preview/re-execute handler takes, including its
-    // in-flight guard (so a debounced flurry of file changes is
-    // collapsed to one engine run at a time per doc).
+    // C.6 Auto policy: whenever the document is stale (not only on a fresh-to-stale flip),
+    // kick off a re-execute so the SPA sees a fresh capture without requiring the user to
+    // click the overlay. A flip-only trigger left the flag stuck stale in three cases: a copy
+    // that was already stale at startup (bd-twox482l), a failed run (the flag stays stale, so
+    // the save that fixes the error saw no flip), and a save during a run. The same path as
+    // the HTTP /api/preview/re-execute handler, including its in-flight guard: a debounced
+    // flurry of file changes collapses to one engine run at a time per doc, and a trigger that
+    // loses to a running run is remembered, so the run's end re-checks the document.
     if cfg.policy == EnginePolicy::Auto && is_stale {
         crate::re_execute::trigger_auto_re_execute(
             ctx.clone(),
@@ -470,7 +476,7 @@ pub async fn recompute_staleness(
         );
     }
 
-    Ok(true)
+    Ok(flipped)
 }
 
 /// Encode and store a capture run as a samod binary doc: a record doc when the

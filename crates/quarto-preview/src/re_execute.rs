@@ -27,16 +27,19 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use quarto_core::engine::EngineRegistry;
+use quarto_core::engine::preview_record::{compute_source_inputs, record_capture_run};
 use quarto_core::project::ProjectContext;
+use quarto_core::record::RecordSource;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_hub::context::SharedContext;
 use quarto_hub::index::{CaptureRef, CaptureState};
 use quarto_system_runtime::SystemRuntime;
 use serde::{Deserialize, Serialize};
 
-use crate::cache::record_capture_run_cached;
+use crate::cache::{lookup_cached_run, session_cache_key, store_run};
 use crate::config::ReExecuteConfig;
 use crate::diagnostics;
+use crate::record_lookup::overlay_free;
 
 /// Process-wide set of paths currently being re-executed. Used to
 /// detect concurrent POSTs for the same path (→ 409). Lazy because
@@ -49,11 +52,25 @@ fn in_flight() -> Arc<Mutex<HashSet<String>>> {
         .clone()
 }
 
+/// Paths whose automatic re-execute was requested while a run for them was in flight. When the
+/// run ends, the path's staleness is recomputed once, so a save that arrived during a run is
+/// not lost (the run read the file before the save). Always locked after [`IN_FLIGHT`], and
+/// only while that guard is held, so a request cannot slip in between a run's end and its
+/// check.
+static PENDING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+fn pending() -> &'static Mutex<HashSet<String>> {
+    PENDING.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
 /// Test seam: clear the in-flight tracker. Called between tests so
 /// state from one test doesn't leak into another.
 #[cfg(test)]
 pub(crate) fn reset_in_flight_for_tests() {
     if let Some(set) = IN_FLIGHT.get() {
+        set.lock().unwrap().clear();
+    }
+    if let Some(set) = PENDING.get() {
         set.lock().unwrap().clear();
     }
 }
@@ -124,7 +141,7 @@ pub(crate) async fn re_execute_with_registry_and_cache(
         .get_capture(&rel_path)
         .map(|c| c.capture_doc_id.clone());
 
-    match claim_and_spawn(ctx, rel_path.clone(), registry, cfg.clone()) {
+    match claim_and_spawn(ctx, rel_path.clone(), registry, cfg.clone(), false) {
         ClaimOutcome::Spawned => (
             StatusCode::ACCEPTED,
             Json(ReExecuteAccepted {
@@ -163,21 +180,25 @@ fn refusal_message(cfg: &ReExecuteConfig) -> String {
 /// claim the in-flight slot and spawn the worker.
 ///
 /// This is the same machinery as the HTTP handler minus the response
-/// shape — if a run is already in flight for this path, we silently
-/// skip (a debounced flurry of edits collapses to one engine run at
-/// a time per doc, which is what users want).
+/// shape. If a run is already in flight for this path the request is
+/// remembered rather than dropped: a debounced flurry of edits collapses
+/// to one engine run at a time per doc, and when that run ends the path's
+/// staleness is recomputed once, so the newest edit still runs.
 pub(crate) fn trigger_auto_re_execute(
     ctx: SharedContext,
     rel_path: String,
     registry: Option<Arc<EngineRegistry>>,
     cfg: ReExecuteConfig,
 ) {
-    match claim_and_spawn(ctx, rel_path.clone(), registry, cfg) {
+    match claim_and_spawn(ctx, rel_path.clone(), registry, cfg, true) {
         ClaimOutcome::Spawned => {
             tracing::debug!(rel_path = %rel_path, "auto re-execute kicked off");
         }
         ClaimOutcome::AlreadyInFlight => {
-            tracing::debug!(rel_path = %rel_path, "auto re-execute skipped: already in flight");
+            tracing::debug!(
+                rel_path = %rel_path,
+                "auto re-execute deferred: already in flight, will re-check when it ends"
+            );
         }
         ClaimOutcome::MarkRunningFailed(e) => {
             tracing::warn!(rel_path = %rel_path, error = %e, "auto re-execute failed to mark running");
@@ -200,11 +221,15 @@ enum ClaimOutcome {
 /// available, marks the sidecar `state: running`, and spawns the
 /// blocking engine worker. Returns the outcome so the caller can
 /// shape the response (HTTP handler) or log (auto path).
+///
+/// `remember_if_busy` is the automatic path: a request that loses to a run in flight is put in
+/// [`PENDING`] for the run's end to re-check. The HTTP handler answers 409 instead.
 fn claim_and_spawn(
     ctx: SharedContext,
     rel_path: String,
     registry: Option<Arc<EngineRegistry>>,
     cfg: ReExecuteConfig,
+    remember_if_busy: bool,
 ) -> ClaimOutcome {
     // The one guard every kernel start passes through: the HTTP handler (a share guest reaches
     // it through the tunnel) and the automatic path both come here. It sits before the in-flight
@@ -223,6 +248,12 @@ fn claim_and_spawn(
     {
         let mut guard = in_flight_set.lock().expect("in-flight mutex poisoned");
         if !guard.insert(rel_path.clone()) {
+            if remember_if_busy {
+                pending()
+                    .lock()
+                    .expect("pending mutex poisoned")
+                    .insert(rel_path.clone());
+            }
             return ClaimOutcome::AlreadyInFlight;
         }
     }
@@ -246,6 +277,8 @@ fn claim_and_spawn(
     let ctx_for_task = ctx.clone();
     let rel_path_for_task = rel_path.clone();
     let in_flight_for_task = in_flight_set.clone();
+    let registry_for_recheck = registry.clone();
+    let cfg_for_recheck = cfg.clone();
     tokio::task::spawn_blocking(move || {
         let result = pollster::block_on(perform_re_execute(
             ctx_for_task.clone(),
@@ -253,10 +286,16 @@ fn claim_and_spawn(
             registry,
             &cfg,
         ));
-        in_flight_for_task
-            .lock()
-            .expect("in-flight mutex poisoned")
-            .remove(&rel_path_for_task);
+        // End of the run: release the slot and take any request that lost to it, under one
+        // guard (see [`PENDING`]).
+        let rerun = {
+            let mut guard = in_flight_for_task.lock().expect("in-flight mutex poisoned");
+            guard.remove(&rel_path_for_task);
+            pending()
+                .lock()
+                .expect("pending mutex poisoned")
+                .remove(&rel_path_for_task)
+        };
 
         if let Err(e) = result {
             let msg = e.clone();
@@ -289,6 +328,23 @@ fn claim_and_spawn(
                 tracing::warn!(rel_path = %rel_path_for_task, error = %msg, "re-execute failed");
             }
         }
+
+        // A save arrived during the run, which read the file before it: check the document
+        // once more. Under `auto` this re-runs it when it is stale (after a failed run too,
+        // since the failed run's input was the older text); a request that was not made, no
+        // re-check, so a failing document does not retry itself.
+        if rerun {
+            let runtime: Arc<dyn SystemRuntime> = Arc::new(crate::render_flags::native_runtime());
+            if let Err(e) = pollster::block_on(crate::capture_driver::recompute_staleness(
+                ctx_for_task,
+                runtime,
+                &rel_path_for_task,
+                registry_for_recheck,
+                &cfg_for_recheck,
+            )) {
+                tracing::warn!(rel_path = %rel_path_for_task, error = %e, "staleness re-check after re-execute failed");
+            }
+        }
     });
 
     ClaimOutcome::Spawned
@@ -309,20 +365,39 @@ async fn perform_re_execute(
         .ok_or_else(|| "no project root (standalone mode?)".to_string())?;
     let abs_path = project_root.join(rel_path);
 
+    // The source side (project, inputs, cache key) is overlay-free, like staleness; the engine
+    // runs under the session's `-M` overlay, and the run is made to describe the source again.
     let runtime: Arc<dyn SystemRuntime> = Arc::new(crate::render_flags::native_runtime());
+    let engine_runtime = crate::render_flags::runtime_with_overlay();
 
     let project = ProjectContext::discover(&abs_path, runtime.as_ref())
         .map_err(|e| format!("project discovery failed: {e}"))?;
 
-    let run = record_capture_run_cached(
-        &cfg.cache_dir,
-        &abs_path,
-        &project,
-        runtime.clone(),
-        registry,
-    )
-    .await
-    .map_err(|e| format!("engine pipeline failed: {e}"))?;
+    let sources = cfg.document_sources(&abs_path, None)?.sources;
+    let source = compute_source_inputs(&abs_path, &project, runtime.clone())
+        .await
+        .map_err(|e| format!("engine pipeline failed: {e}"))?;
+    let key = session_cache_key(&source.input_qmd);
+
+    // The cache answers a re-execute only when `cache` is one of this document's record sources.
+    // Under `engine` alone a re-execute must run the engine: a cache hit (edit, save, undo,
+    // save) would skip the run and leave the `.quarto` copy holding the undone outputs.
+    let cached = if sources.iter().any(|s| matches!(s, RecordSource::Cache)) {
+        lookup_cached_run(&cfg.cache_dir, &key)
+    } else {
+        None
+    };
+    let run = match cached {
+        Some(run) => run,
+        None => {
+            let run = record_capture_run(&abs_path, &project, engine_runtime, registry)
+                .await
+                .map_err(|e| format!("engine pipeline failed: {e}"))?;
+            let run = overlay_free(run, &source)?;
+            store_run(&cfg.cache_dir, &key, &run);
+            run
+        }
+    };
     if !run.has_content() {
         return Err("engine produced no capture (no code cells?)".to_string());
     }

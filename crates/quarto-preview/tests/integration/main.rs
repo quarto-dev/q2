@@ -15,6 +15,7 @@ pub mod embed_downloads;
 pub mod import_route;
 pub mod join_frontend;
 pub mod join_tunnel;
+pub mod live_reexecute;
 pub mod pdfjs_serving;
 pub mod record_gate;
 pub mod record_payload;
