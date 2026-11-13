@@ -86,6 +86,7 @@ pub mod heading_id_after_expansion;
 pub mod headroom_pipeline;
 pub mod hephaestus_render;
 pub mod html_citations;
+pub mod html_columns;
 pub mod html_text;
 pub mod idempotence;
 pub mod image_dimensions_pipeline;

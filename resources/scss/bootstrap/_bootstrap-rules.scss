@@ -1447,8 +1447,22 @@ a {
 
 // Pandoc HTML `::: {.columns}` / `::: {.column}` layout (authored;
 // `<div class="columns">`/`<div class="column">`). from _quarto-rules.scss:653-662.
+// Each column's `width="40%"` reaches here as an inline `width`
+// (`HtmlColumnsTransform`).
+//
+// One deliberate difference from Quarto 1, which has `display: initial` on
+// `div.columns` and relies on the columns being `inline-block`: whitespace
+// between inline-blocks takes room, and Pandoc's HTML writer leaves none
+// between column divs, but q2's writer puts a newline there. 40% + 60% + that
+// space overflows the line and the second column wraps. A wrapping flex row
+// ignores the whitespace and otherwise behaves the same: a column is as wide
+// as its `width` (50% by default), columns that add up to more than 100% wrap
+// to the next line, and columns are top-aligned. `min-width: 0` keeps a column
+// at its width when its content is wider, as an inline-block would.
 div.columns {
-  display: initial;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: initial;
 }
 div.column {
@@ -1456,6 +1470,7 @@ div.column {
   overflow-x: initial;
   vertical-align: top;
   width: 50%;
+  min-width: 0;
 }
 
 .column-margin figcaption,

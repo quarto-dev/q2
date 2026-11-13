@@ -1,0 +1,49 @@
+---
+title: "html: column widths"
+format: html
+# `::: {.column width="40%"}` becomes an inline `width` (Pandoc's HTML writer
+# does this itself; q2 does it in HtmlColumnsTransform), and the stylesheet
+# lays `div.columns` out as a wrapping flex row so the columns sit side by
+# side at those widths. A column with no width keeps the stylesheet default.
+_quarto:
+  tests:
+    html:
+      ensureHtmlElements:
+        - - 'div.columns > div.column[style="width: 40%;"]'
+          - 'div.columns > div.column[style="width: 60%;"]'
+          - 'div.columns > div.column[style="width: 30%; color: red;"]'
+          - 'div.columns > div.column:not([style])'
+        - - 'div.column[width]'
+      ensureCssRegexMatches:
+        - - 'div\.columns\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap'
+          - 'div\.column\s*\{[^}]*width:\s*50%[^}]*min-width:\s*0'
+        - []
+---
+
+## Two columns
+
+:::: {.columns}
+
+::: {.column width="40%"}
+COL-LEFT
+:::
+
+::: {.column width="60%"}
+COL-RIGHT
+:::
+
+::::
+
+## A styled column and one with no width
+
+:::: {.columns}
+
+::: {.column width="30%" style="color: red;"}
+COL-STYLED
+:::
+
+::: {.column}
+COL-DEFAULT
+:::
+
+::::

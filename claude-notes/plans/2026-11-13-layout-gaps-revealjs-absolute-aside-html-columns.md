@@ -119,12 +119,13 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
 
 ### Slice C: HTML `.columns`
 
-- [ ] Unit tests in `transforms/html_columns.rs`.
-- [ ] Integration tests: `format: html` gets `style="width: 40%;"`; RevealJS keeps `flex-basis`; dashboard and a Pandoc-writer format keep the raw `width`.
-- [ ] `HtmlColumnsTransform`, pushed for the HTML profiles.
-- [ ] Flex rule in `_bootstrap-rules.scss`.
-- [ ] smoke-all fixture `layout/columns-width.qmd`.
-- [ ] Measure against Quarto 1, record below.
+- [x] Unit tests in `transforms/html_columns.rs`. Written first against a stub; 6 of 8 failed as expected.
+- [x] Integration tests in `tests/integration/html_columns.rs`: `format: html` gets `style="width: 40%;"`; RevealJS keeps `flex-basis`; a dashboard is not rewritten. A pipeline test checks which profiles register the transform (HTML render and preview only; not RevealJS, dashboard, docx or pptx).
+- [x] `HtmlColumnsTransform`, pushed in the non-RevealJS, non-dashboard branch, classified `B2` in `BUCKETS` and listed in `PANDOC_TRANSFORM_EXCLUDED`. The two exact-name-list tests for the HTML pipelines gained `html-columns`.
+- [x] Flex rule in `_bootstrap-rules.scss`.
+- [x] smoke-all fixture `layout/columns-width.qmd`, with markup and CSS assertions.
+- [x] Measure against Quarto 1, record below.
+- [ ] Preview: `Div.tsx` passes an AST `style` through, and the transform runs for `HtmlPreview`, so the preview should lay columns out the same way. Not checked in `q2 preview`.
 
 ### Close-out
 
@@ -222,6 +223,46 @@ What still differs from Quarto 1, and why. None of it is part of this slice:
 - A footnote-only aside is 42 tall in Quarto 1 and 55 in q2. The cause was not investigated. Its bottom edge is at 680 in both.
 
 In the main layout fixture, slice B changed nothing except the section heights (all 700 now) and the aside position.
+
+### After slice C
+
+Invocation, from a folder holding `html-layout.qmd` and `x.png`:
+
+```sh
+target/debug/q2 render html-layout.qmd
+```
+
+Observed markup (inspected in the output file):
+
+```html
+<div class="columns">
+<div class="column" style="width: 40%;">
+```
+
+Measured in the browser, CSS pixels (x, y, width, height):
+
+| Element | Quarto 1 | q2 before | q2 after slice C |
+|---|---|---|---|
+| `div.column` 40% | 221, 134, 320, 43 | 293, 134, 400, 43 | 293, 134, 320, 43 |
+| `div.column` 60% | 540, 134, 479, 43 | 293, 176, 400, 43 | 613, 134, 479, 43 |
+| The section that holds them | 103 tall | 145 tall | 103 tall |
+
+The widths, the shared y and the section height match Quarto 1. The x values differ by 72 because of the body column, as explained under the baseline. Everything below the columns moved up by 42, since the columns no longer stack. No width changed anywhere else on the page.
+
+A second document checks the flex rule against Quarto 1's `inline-block` layout in the cases where the two could differ. It has no margin content, so the body column is at x=293 in both renderers and the numbers compare directly:
+
+| Case | Quarto 1 | q2 after slice C |
+|---|---|---|
+| Three columns, no widths | 400 each; two on the first line, the third wraps to x=293, y=176 | identical |
+| 30% and 30% | 240 each at x=293 and x=533; the paragraph after starts at y=356 | identical |
+| 70% and 60% (over 100%) | 559 at y=475, then 479 wrapped to y=518 | identical |
+| A tall column beside a short one | 128 and 43 tall, both starting at y=654 | identical |
+| A 20% column holding a long code line, beside 80% | the 80% column is 639 wide at x=453 | identical |
+| 200px and 300px | 200 at x=293, 300 at x=493 | identical |
+
+All 13 measured elements have the same x, y, width and height in both renderers, and `main` is 1054 tall in both.
+
+Dashboard check: a dashboard with a `.columns` div of two `.column width=` children measures the same before and after slice C (every rectangle identical), which is what D7 intends. It differs from Quarto 1 both before and after: Pandoc writes `style="width:40%;"` on those children in Quarto 1 too, so they are 132 and 197 wide there and 164 each in q2.
 
 ## Not covered
 

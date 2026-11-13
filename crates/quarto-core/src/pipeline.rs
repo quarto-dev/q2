@@ -2499,6 +2499,14 @@ pub fn build_transform_pipeline(
         // must not merge into a section first).
         if !is_dashboard {
             pipeline.push(Box::new(SectionizeTransform::new()));
+            // Columns: rewrite `.column width=X` → an inline `width`, the
+            // `format: html` counterpart of `reveal-columns` above (Pandoc's
+            // HTML writer does this itself; q2's writer does not). Not for
+            // dashboards: there a `.columns` div is a layout container and
+            // `DashboardTransform` reads `width` off its children. Dropped for
+            // Pandoc writers (`PANDOC_TRANSFORM_EXCLUDED`), which need the raw
+            // attribute.
+            pipeline.push(Box::new(crate::transforms::HtmlColumnsTransform::new()));
         }
     }
     pipeline.push(Box::new(FootnotesTransform::new()));
@@ -3105,6 +3113,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     "title-block",
     "book-cover-image",
     "sectionize",
+    "html-columns",
     "title-banner",
     "website-title-prefix",
     "website-favicon",
@@ -3287,6 +3296,9 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     ("book-cover-image", Bucket::B2),
     // `--section-divs` is an HTML-writer concern.
     ("sectionize", Bucket::B2),
+    // HTML presentation of Pandoc's `.column width=` (an inline `width`); a
+    // Pandoc writer reads the raw attribute, a deck uses `reveal-columns`.
+    ("html-columns", Bucket::B2),
     // --- B3: shared post-core services ------------------------------------
     // Publishes local files that body links point at through
     // `meta.resources` (bd-twfep08m). Format-agnostic like the resources
@@ -5899,6 +5911,39 @@ mod tests {
     /// (`neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut`).
     ///
     /// See `claude-notes/designs/transform-pipeline-phases.md`.
+    /// `html-columns` is the `format: html` sibling of `reveal-columns`. It
+    /// runs for HTML render and preview only: a deck has its own transform, a
+    /// dashboard reads `width` off the children of a `.columns` container
+    /// itself, and a Pandoc writer (docx, pptx) needs the raw `width`.
+    #[test]
+    fn html_columns_runs_for_html_profiles_only() {
+        for (format, expected) in [
+            ("html", true),
+            ("q2-preview", true),
+            ("revealjs", false),
+            ("q2-slides", false),
+            ("dashboard", false),
+            ("q2-dashboard", false),
+            ("docx", false),
+            ("pptx", false),
+        ] {
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                make_test_runtime(),
+                format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
+                None,
+                None,
+            );
+            let present = pipeline.iter().any(|t| t.name() == "html-columns");
+            assert_eq!(
+                present, expected,
+                "`html-columns` registration for `{format}`"
+            );
+        }
+    }
+
     #[test]
     fn test_build_transform_pipeline_phase_ordering() {
         use crate::transform::TransformPhase;
@@ -7086,6 +7131,7 @@ mod tests {
                 "book-cover-image",
                 "title-block",
                 "sectionize",
+                "html-columns",
                 "footnotes",
                 "footnotes-resolve",
                 "example-embed",
@@ -7576,6 +7622,7 @@ mod tests {
                 "draft-alert",
                 "book-cover-image",
                 "sectionize",
+                "html-columns",
                 "footnotes",
                 "footnotes-resolve",
                 "example-embed",
