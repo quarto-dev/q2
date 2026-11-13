@@ -252,7 +252,22 @@ fn run_kernel_process(script_json: Option<String>, scripts_json: Option<String>)
             let handle = TestKernel::start_from_file(connection_file, config_from_script(script))
                 .await
                 .expect("start fake kernel");
-            let _ = handle.await;
+            // `TestKernel::run` binds its sockets inside the spawned task, so a
+            // port taken before the kernel binds it surfaces here, as an error.
+            // Report it and exit non-zero, as ipykernel does: the daemon
+            // recognizes a port conflict only by its stderr, and a silent exit 0
+            // would skip its retry (bd-0w8rgjdf).
+            match handle.await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    eprintln!("fake kernel failed: {e}");
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("fake kernel task failed: {e}");
+                    std::process::exit(1);
+                }
+            }
         });
 }
 
@@ -632,6 +647,61 @@ mod tests {
         assert!(err.is_port_conflict(), "{err:?}");
         assert_eq!(spawns(&count), 3);
         assert_eq!(daemon.session_count(), 0);
+    }
+
+    /// bd-0w8rgjdf: a fake kernel that cannot bind a port it was handed exits
+    /// non-zero with the bind error on stderr, as ipykernel does, so the daemon
+    /// sees a port conflict and retries. It used to discard the error and exit
+    /// 0 with empty stderr, which the daemon could not classify (a CI flake).
+    #[tokio::test]
+    async fn test_fake_kernel_losing_a_port_reports_a_port_conflict() {
+        let taken = std::net::TcpListener::bind("127.0.0.1:0").expect("hold a port");
+        let free: Vec<u16> = (0..4)
+            .map(|_| std::net::TcpListener::bind("127.0.0.1:0").unwrap())
+            .collect::<Vec<_>>()
+            .iter()
+            .map(|l| l.local_addr().unwrap().port())
+            .collect();
+        let dir = tempfile::tempdir().unwrap();
+        let connection_file = dir.path().join("connection.json");
+        let connection = serde_json::json!({
+            "ip": "127.0.0.1",
+            "transport": "tcp",
+            "shell_port": taken.local_addr().unwrap().port(),
+            "iopub_port": free[0],
+            "stdin_port": free[1],
+            "control_port": free[2],
+            "hb_port": free[3],
+            "signature_scheme": "hmac-sha256",
+            "key": "k",
+            "kernel_name": "fake-py",
+        });
+        std::fs::write(&connection_file, connection.to_string()).unwrap();
+
+        let output = tokio::time::timeout(
+            Duration::from_secs(30),
+            tokio::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", ENTRY_TEST, "--nocapture"])
+                .arg(&connection_file)
+                .env(SCRIPT_ENV, "{}")
+                .env_remove(SCRIPTS_ENV)
+                .env_remove(EXIT_ENV)
+                .env_remove(FAIL_FIRST_ENV)
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .expect("a kernel that cannot bind exits")
+        .unwrap();
+        drop(taken);
+
+        let err = crate::engine::jupyter::error::JupyterError::ExitedDuringStartup {
+            kernel: "fake-py".to_string(),
+            code: output.status.code(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        };
+        assert_ne!(output.status.code(), Some(0), "{err:?}");
+        assert!(err.is_port_conflict(), "{err:?}");
     }
 
     /// A kernel that exits for any other reason is not retried.
