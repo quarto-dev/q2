@@ -166,6 +166,68 @@ cell:
 A header such as `{python echo=false}` is the knitr style and is rejected
 with error [`Q-2-36`](../../errors/markdown/Q-2-36.qmd).
 
+## Where a cell's output appears
+
+By default, a cell shows its code first and all of its output after the code,
+even when the cell prints between statements:
+
+````markdown
+```{julia}
+println("first")
+x = 1
+println("second")
+x + 1
+```
+````
+
+The rendered cell has one code block, followed by the outputs `first`,
+`second`, and `2`.
+
+The `output-interleave` option changes that. Set it to `true` and the cell
+alternates code and output in the order the statements ran: the code up to the
+first `println`, its output, the next statement, and so on. Set it in a cell:
+
+````markdown
+```{julia}
+#| output-interleave: true
+println("first")
+x = 1
+println("second")
+x + 1
+```
+````
+
+or for the whole document, under `execute`:
+
+```yaml
+execute:
+  output-interleave: true
+```
+
+A cell's own setting overrides the document's setting.
+
+Engines differ in whether they interleave by default:
+
+| Engine | Default | `output-interleave` |
+|---|---|---|
+| Knitr | Interleaves | `false` holds the output |
+| Julia | Holds | `true` interleaves |
+| Jupyter | Holds | No effect yet |
+
+For knitr cells that interleave, the chunk options `results: hold` and
+`fig.show: hold` still work. They hold only printed text or only plots, and
+leave messages and warnings where they were produced. `output-interleave:
+false` holds everything.
+
+::: callout-note
+## Migrating from Quarto 1
+
+Quarto 1 interleaved knitr output and held Julia and Jupyter output. Quarto 2
+keeps those defaults. The new option lets Julia cells interleave. It also lets
+knitr cells hold all of their output, without choosing between `results: hold`
+and `fig.show: hold`.
+:::
+
 ## Inline expressions
 
 A document can also compute a value **inline** --- inside a sentence, or

@@ -156,25 +156,57 @@ already, as expected.
 
 ### Phase 3: Julia declaration and the parity harness
 
-- [ ] Julia `record-wire.ts`: add `output-interleave` to `DISPLAY_ONLY_KEYS`. Edit the fork
-      `external-sources/quarto-julia-engine` on `q2/node-port`, push after Gordon\'s OK, then
-      run `cargo xtask pull-extension-subtree julia-engine`. Commit separately, naming the fork
-      commit.
-- [ ] Parity harness: the `julia-interleaved-cell` normalizer and the pinned
-      `julia/capture-facts` entry should become unused. Check how the harness reports an
-      unused rule, then remove or update them.
+- [ ] Julia `record-wire.ts`: `output-interleave` is added to `DISPLAY_ONLY_KEYS` in the fork
+      (`q2/node-port`, commit `4892bf5`, pushed with Gordon\'s OK; the first push reported an
+      HTTP 500 but `ls-remote` and a fresh fetch showed the tip at `4892bf5`). Hash version stays
+      at 2 (Gordon: everything here is very new). **Pending, left out of this branch on
+      purpose:** sync with `cargo xtask pull-extension-subtree julia-engine` (that also brings in
+      the earlier `executeEnv` commit `c8af0a4`) and move the `subtree-julia-engine` pin in
+      `resources/vendored.toml` to `4892bf5`. Until then, editing `output-interleave` in a Julia
+      cell re-runs the cell; the default (held) does not depend on the sync.
+- [x] Parity harness: nothing to remove. The allowlist is already empty (OPR-9f); the
+      `julia-interleaved-cell` normalizer and the `capture-facts` pin are unit-tested mechanism
+      over static fixtures. The live gate (`OPR_PARITY_REPORT`, Julia installed, measured with the synced subtree) passes: 93
+      identical, 0 allowlisted, 0 blockers, 0 route disagreements, 253 rejected by q2 before any
+      engine runs (same on both routes).
 
 ### Phase 4: end to end and docs
 
-- [ ] `target/debug/q2 render` of a Julia document (record route): held by default,
-      interleaved with the option. Record the invocations and the output.
-- [ ] `target/debug/q2 render` of a knitr document: interleaved by default, held with
-      `output-interleave: false`, and `results: hold` unchanged.
-- [ ] User docs: an `output-interleave` entry next to the other output options, and a
-      migration note for knitr authors (`results: hold` is still supported).
-- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings`;
-      `cargo nextest run -p quarto-core`; the Windows cross-clippy; `q2 render --strict` on
-      this plan and the research note.
+- [x] `target/debug/q2 render` of a Julia document (record route): held by default,
+      interleaved with the option. See "End-to-end record" below.
+- [x] `target/debug/q2 render` of a knitr document: interleaved by default, held with
+      `output-interleave: false` (document and cell scope), and `results: hold` unchanged.
+- [x] User docs: "Where a cell\'s output appears" in `docs/guides/authoring/computations.qmd`,
+      with a migration callout. Rendered with `q2 render docs/guides/authoring/computations.qmd`;
+      no warnings name the page (the 153 warnings are other pages\' missing markdown companions
+      in a partial render). The embedded docs (`cargo xtask build-agents-docs`) are not rebuilt.
+- [ ] Gates: `cargo clippy -p quarto-core --all-targets -- -D warnings` (clean) and
+      `cargo nextest run -p quarto-core` (8403 passed) are done. The Windows cross-clippy cannot
+      run from macOS here: the `wasmtime` and `aws-lc-sys` build scripts need an MSVC sysroot
+      (the caveat in `.claude/rules/cross-platform.md`). The change adds no platform APIs, cfg
+      gates or path assertions; a Windows user can run
+      `cargo clippy -p quarto-core --all-targets -- -D warnings` natively.
+      `q2 render --strict` on this plan: the file renders; the 6 `Q-12-13` listing-preview
+      errors belong to other plans\' pages.
+
+### End-to-end record (2026-11-13, inspected)
+
+Scratch documents live outside the repo. Each cell is the same code:
+`println("first")`, `x = 1`, `println("second")`, `x + 1` (Julia), and the `cat`/`<-` equivalent
+for R. Each render was `target/debug/q2 render <file>.qmd`; the HTML was read for the number
+of `cell-code` blocks and the order of source and output.
+
+| Document | Header | Result |
+|---|---|---|
+| Julia, record route | `execute: {record: true}` | 1 code block, then `first`, `second`, `2` |
+| Julia, record route | `execute: {record: true, output-interleave: true}` | 3 code blocks; `first` between block 1 and `x = 1`, `second` between `x = 1` and `x + 1`, `2` last |
+| Julia, default route | none | 1 code block, outputs after |
+| knitr | none | 3 code blocks, output after each statement |
+| knitr | `execute: {output-interleave: false}` | 1 code block, outputs after |
+| knitr | cell `#| output-interleave: false` | 1 code block, outputs after |
+| knitr | cell `#| results: hold` | 1 code block; `first` and `second` in one stream, then `[1] 2` |
+
+The live parity gate also passed after the Julia sync (93 identical, 0 blockers).
 
 ## Out of scope
 
