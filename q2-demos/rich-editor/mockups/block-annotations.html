@@ -42,6 +42,12 @@ details.archived summary { font-size:11px; text-transform:uppercase; letter-spac
   pointer-events:none; visibility:hidden; z-index:20; }
 .toolbar button.icon:hover::after { visibility:visible; transition:visibility 0s .35s; }
 .toolbar .sep { width:1px; height:20px; background:var(--line); margin:0 6px; }
+/* The style box as a breadcrumb: containers as plain crumbs, then the box. */
+.toolbar .stylebox { display:inline-flex; align-items:center; gap:1px; }
+.toolbar .crumb { padding:4px 6px; color:#5c636a; }
+.toolbar .crumb svg { width:8px; height:8px; }
+.toolbar .crumb.open { background:#f1f3f5; }
+.toolbar .crumbsep { color:#c3c9cf; padding:0 1px; font-size:13px; }
 .radio { display:flex; gap:6px; align-items:center; padding:3px 2px; cursor:pointer; }
 .reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
 .center { display:flex; flex-direction:column; min-width:0; min-height:0; }
@@ -192,6 +198,7 @@ const LABELS = { name: 'Name (Heading 2)', short: 'Short (H2)', md: 'Markdown (#
 const SHOWS = { focus: 'Hover and caret', caret: 'Caret only', always: 'Always' };
 const NESTS = { inner: 'Innermost block', all: 'All levels' };
 const QUIETS = { show: 'Keep showing', hide: 'Hide until the mouse moves', faint: 'Only a faint bracket until the mouse moves' };
+const TBCRUMBS_TIP = ' The style box is the last crumb of a breadcrumb of the blocks the caret is in: hover a crumb to bracket its block in the margin; click it for its menu. Try it with <b>Nothing</b> in the margin.';
 const TOOLBAR_TIP = ' The toolbar follows the caret: its style box shows the caret’s text block, and the list, quote and callout buttons light up when the caret is inside one (click again to undo).';
 const GENERAL = ' <kbd>⌘/</kbd> or <kbd>Ctrl /</kbd> opens the menu for the caret’s block (<kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> <kbd>Esc</kbd>). <kbd>⌥↑</kbd><kbd>⌥↓</kbd> move it.';
 
@@ -233,16 +240,16 @@ const flag = (k, d) => (params.has(k) ? params.get(k) === '1' : d);
 const state = {
   v: pick('v', VARIANTS, 'chipbr'), label: pick('label', LABELS, 'name'),
   show: pick('show', SHOWS, 'focus'), nest: pick('nest', NESTS, 'all'), quiet: pick('quiet', QUIETS, 'hide'),
-  tb: flag('tb', false), crumbs: flag('crumbs', false), src: flag('src', true),
+  tb: flag('tb', false), tbcrumbs: flag('tbcrumbs', false), crumbs: flag('crumbs', false), src: flag('src', true),
 };
 // `chipHover`: the block whose chip the pointer is on (or last was, in its label).
 // `typing`: set by a keystroke that edits, cleared when the mouse moves.
-let lastHov = [], overAnn = false;
+let lastHov = [], overAnn = false, tbHover = null;
 let mouse = null, menu = null, drag = null, crumbHover = null, chipHover = null, typing = false;
 
 function saveHash() {
   const b = (x) => (x ? '1' : '0');
-  location.replace('#' + new URLSearchParams({ v: state.v, label: state.label, show: state.show, nest: state.nest, quiet: state.quiet, tb: b(state.tb), crumbs: b(state.crumbs), src: b(state.src) }));
+  location.replace('#' + new URLSearchParams({ v: state.v, label: state.label, show: state.show, nest: state.nest, quiet: state.quiet, tb: b(state.tb), tbcrumbs: b(state.tbcrumbs), crumbs: b(state.crumbs), src: b(state.src) }));
 }
 
 function renderSide() {
@@ -261,11 +268,16 @@ function renderSide() {
     for (const [key, name] of items) {
       const l = document.createElement('label'); l.className = 'radio';
       l.innerHTML = `<input type="checkbox" ${state[key] ? 'checked' : ''}> ${name}`;
-      l.querySelector('input').onchange = (e) => { state[key] = e.target.checked; apply(); };
+      l.querySelector('input').onchange = (e) => {
+        state[key] = e.target.checked;
+        if (key === 'tbcrumbs' && state.tbcrumbs) state.tb = true;
+        if (key === 'tb' && !state.tb) state.tbcrumbs = false;
+        apply();
+      };
       side.append(l);
     }
   };
-  checks('Extras', [['tb', 'Toolbar'], ['crumbs', 'Breadcrumb bar']]);
+  checks('Extras', [['tb', 'Toolbar'], ['tbcrumbs', 'Toolbar style box as breadcrumb'], ['crumbs', 'Breadcrumb bar']]);
   const radios = (title, key, set) => {
     const h = document.createElement('h2'); h.textContent = title; side.append(h);
     for (const [k, name] of Object.entries(set)) {
@@ -292,7 +304,7 @@ function renderSide() {
 
 function apply() {
   saveHash(); closeMenu(); renderSide();
-  $('tips').innerHTML = VARIANTS[state.v].tips + GENERAL + (state.tb ? TOOLBAR_TIP : '');
+  $('tips').innerHTML = VARIANTS[state.v].tips + GENERAL + (state.tb ? TOOLBAR_TIP : '') + (state.tbcrumbs ? TBCRUMBS_TIP : '');
   app.classList.toggle('nosrc', !state.src);
   app.classList.toggle('crumbs-on', state.crumbs);
   $('toolbar').hidden = !state.tb;
@@ -412,6 +424,18 @@ function render() {
   if (menu && menu.target) vis.set(menu.target, 'caret');
   if (drag) vis.set(drag.el, 'caret');
   if (quiet) vis.clear();
+  // Toolbar breadcrumb: while one of its crumbs is pointed at (or its menu
+  // is open), the margin shows only brackets, nested, for the caret's blocks;
+  // the crumb's own block is the strong one.
+  const tbAim = state.tbcrumbs ? tbHover || (menu && menu.fromToolbar ? menu.target : null) : null;
+  if (tbAim && body.contains(tbAim)) {
+    vis.clear();
+    const chain = car.includes(tbAim) ? car : chainOf(tbAim);
+    for (const b of chain) {
+      const r = rel(b.getBoundingClientRect());
+      place(put('n' + id(b), 'brk ' + (b === tbAim ? 'aim' : 'hover')), { left: L - 30 + Math.min(depth(b), 2) * 8, top: r.top, width: 6, height: r.height });
+    }
+  }
 
   if (state.crumbs) {
     const chain = menu && menu.target && !car.includes(menu.target) ? chainOf(menu.target) : car;
@@ -426,7 +450,7 @@ function render() {
   // would act on. While typing, the "faint" setting keeps just this, for the
   // caret's block, in any variant.
   const faint = quiet && state.quiet === 'faint';
-  if (state.v === 'chipbr' || faint) {
+  if ((state.v === 'chipbr' || faint) && !tbAim) {
     const t = faint ? car[car.length - 1]
       : (drag && drag.el) || (menu && menu.target) || chipHover || car[car.length - 1] || (state.show !== 'caret' ? hov[hov.length - 1] : null);
     if (t && (faint || vis.has(t))) {
@@ -481,7 +505,7 @@ function render() {
 
   // The block a menu, drag or hovered crumb acts on.
   const target = (drag && drag.el) || (menu && menu.target) || crumbHover;
-  const marked = state.v === 'tab' || state.v === 'chipbr'; // these show the target already
+  const marked = state.v === 'tab' || state.v === 'chipbr' || tbAim; // these show the target already
   if (target && body.contains(target) && (crumbHover || !marked)) place(put('hl', 'hl'), rel(target.getBoundingClientRect()), 5);
   if (drag && drag.at != null) {
     const s = drag.sibs, last = s[s.length - 1].getBoundingClientRect();
@@ -661,8 +685,15 @@ function renderToolbar(car) {
   const c = caretContext(car), none = !car.length;
   const style = none ? 'Paragraph' : c.code ? 'Code' : c.text ? label(c.text, 'name') : 'Paragraph';
   const btn = (k, tip, pressed, disabled) => `<button class="icon" data-tb="${k}" data-tip="${tip}" aria-label="${tip}" aria-pressed="${!!pressed}" ${disabled ? 'disabled' : ''}>${ICONS[k]}</button>`;
+  // As a breadcrumb: the caret's containers, then the style box for its
+  // text block (or the code cell, which has its own menu).
+  const leaf = c.text || c.code;
+  const crumbsHTML = state.tbcrumbs ? car.filter((b) => b !== leaf).map((b) =>
+    `<button class="crumb${menu && menu.anchor === 'crumb' && menu.target === b ? ' open' : ''}" data-tb="crumb" data-id="${id(b)}">${esc(label(b))}${CHEV}</button><span class="crumbsep">›</span>`).join('') : '';
+  const styleOff = none || (c.code && !state.tbcrumbs);
+  const styleText = state.tbcrumbs && c.code ? label(c.code) : style;
   setHTML($('toolbar'), [
-    `<button data-tb="style" class="style${menu && menu.anchor === 'style' ? ' open' : ''}" ${none || c.code ? 'disabled' : ''}><span>${esc(style)}</span>${CHEV}</button>`,
+    `<span class="stylebox">${crumbsHTML}<button data-tb="style" class="style${menu && menu.anchor === 'style' ? ' open' : ''}" ${styleOff ? 'disabled' : ''}><span>${esc(styleText)}</span>${CHEV}</button></span>`,
     '<span class="sep"></span>',
     btn('ul', 'Bulleted list', c.list && kind(c.list) === 'ul', none || c.code),
     btn('ol', 'Numbered list', c.list && kind(c.list) === 'ol', none || c.code),
@@ -674,6 +705,19 @@ function renderToolbar(car) {
 }
 function onToolbar(k, anchor) {
   const c = caretContext();
+  if (k === 'crumb') {
+    const b = byId.get(+anchor.dataset.id);
+    if (menu && menu.target === b && menu.anchor === 'crumb') return closeMenu();
+    openMenu(b, { anchor });
+    Object.assign(menu, { anchor: 'crumb', fromToolbar: true });
+    return render();
+  }
+  if (k === 'style' && c.code) {
+    if (menu && menu.anchor === 'style') return closeMenu();
+    openMenu(c.code, { anchor });
+    Object.assign(menu, { anchor: 'style', fromToolbar: true });
+    return render();
+  }
   if (k === 'style') {
     if (menu && menu.anchor === 'style') return closeMenu();
     const T = (name, t, css) => ({ label: name, on: c.text && kind(c.text) === t, off: !c.text, css, run: () => convert(c.text, t) });
@@ -682,8 +726,8 @@ function onToolbar(k, anchor) {
       items: [T('Paragraph', 'p', ''), T('Heading 1', 'h1', 'font-size:20px;font-weight:600'), T('Heading 2', 'h2', 'font-size:18px;font-weight:600'),
         T('Heading 3', 'h3', 'font-size:16px;font-weight:600'), T('Heading 4', 'h4', 'font-size:14.5px;font-weight:600')],
     });
-    menu.anchor = 'style';
-    return;
+    Object.assign(menu, { anchor: 'style', fromToolbar: true });
+    return render();
   }
   closeMenu();
   if (k === 'code') {
@@ -708,6 +752,15 @@ $('toolbar').addEventListener('mousedown', (ev) => {
   ev.preventDefault(); ev.stopPropagation(); // keep the caret where it is
   if (b && !b.disabled) onToolbar(b.dataset.tb, b);
 });
+// Pointing at a crumb (or the style box) brackets its block.
+$('toolbar').addEventListener('mouseover', (ev) => {
+  let b = null;
+  const t = ev.target.closest('[data-tb]');
+  if (t && t.dataset.tb === 'crumb') b = byId.get(+t.dataset.id);
+  if (t && t.dataset.tb === 'style' && !t.disabled) { const c = caretContext(); b = c.text || c.code || c.list || null; }
+  if (b !== tbHover) { tbHover = b; schedule(); }
+});
+$('toolbar').addEventListener('mouseleave', () => { tbHover = null; schedule(); });
 
 // ---- drag --------------------------------------------------------------------
 function startDrag(b) {
