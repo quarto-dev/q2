@@ -2,7 +2,7 @@
 title: 'Publish q2 releases to PyPI (bd-2p7dwmqe)'
 date: 2026-11-13
 description: 'Ship each q2 release on PyPI as a small sdist that downloads and checksum-verifies the platform binary at install time, published by GitHub OIDC trusted publishing straight from the release pipeline.'
-status: in-progress  # package, workflows and runbook done; first publish pending
+status: in-progress  # 0.45.0 live on PyPI; awaiting first automatic release run
 braid:
   strand: bd-2p7dwmqe
 ---
@@ -324,10 +324,16 @@ never a user-wide token.
 - [x] GitHub environments `pypi` (deploys from `main` only, required
       reviewer: Carlos) and `testpypi` (no rules), created with `gh api`
       2026-11-13; PR #1201 opened
-- [ ] After merge (workflow_dispatch needs the file on `main`): rehearsal
-      with `target=testpypi` for v0.45.0
-- [ ] First real publish to PyPI; `uvx --from quarto2 q2 --version`;
-      add co-maintainers on the project
+- [x] TestPyPI rehearsal for v0.45.0 (run 43492748781): all five smoke
+      legs and the install-back passed; `uvx --index-url
+      https://test.pypi.org/simple/ --from quarto2==0.45.0 q2 --version` on
+      macOS printed `q2 (quarto 2) 0.45.0`
+- [x] First real publish to PyPI (run 43493152159, approved by Carlos):
+      https://pypi.org/project/quarto2/ shows 0.45.0, an 8669-byte sdist
+      with a PEP 740 attestation naming `quarto-dev/q2`,
+      `publish-pypi.yml`, environment `pypi`; `uvx --no-cache --from
+      quarto2 q2 --version` printed `q2 (quarto 2) 0.45.0`
+- [ ] Add co-maintainers on the PyPI project (Carlos, on pypi.org)
 
 ### Phase 4: release integration
 
@@ -336,8 +342,7 @@ never a user-wide token.
 - [x] Runbook: PyPI in "What a release produces", prerequisites rows,
       step 6 check, § PyPI (approval, retry, rehearsal, `.postN`, never
       rebuild archives, prereleases, mirror), files table
-- [ ] README / docs install page: mention `pip install quarto2` once the
-      first version is live
+- [x] README: PyPI install instructions
 - [ ] Verify on the next real release end to end, record here
 
 ## End-to-end record (Phase 2, 2026-11-13)
