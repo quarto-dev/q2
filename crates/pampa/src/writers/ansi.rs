@@ -1012,7 +1012,7 @@ fn write_inlines<T: Write + ?Sized>(
 
 /// Parse a color attribute from span attributes
 fn parse_color_attr(attr: &Attr, attr_name: &str) -> Option<Color> {
-    let (_, _, attrs) = attr;
+    let (_, _, attrs) = &**attr;
 
     for (key, value) in attrs {
         if key == attr_name {

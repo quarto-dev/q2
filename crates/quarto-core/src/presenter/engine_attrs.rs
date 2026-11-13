@@ -272,7 +272,7 @@ mod tests {
         let quarto_pandoc_types::Block::Div(div) = &ast.blocks[0] else {
             panic!("`{head}` is not a div: {:?}", ast.blocks[0]);
         };
-        let (id, classes, kvs) = &div.attr;
+        let (id, classes, kvs) = &*div.attr;
         (
             id.clone(),
             classes.clone(),

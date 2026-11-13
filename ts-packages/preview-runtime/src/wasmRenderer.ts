@@ -158,14 +158,17 @@ interface WasmModuleExtended {
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
-  parse_qmd_to_ast: (content: string) => Promise<string>;
+  // The three parse entry points return the response object itself, not a
+  // JSON string: the AST JSON inside it is large, and wrapping it in a
+  // second JSON document doubled its footprint in WASM memory (bd-fz5ls4vq).
+  parse_qmd_to_ast: (content: string) => Promise<ParseResult>;
   parse_qmd_to_ast_with_attribution: (
     content: string,
     attribution_json: string | undefined,
-  ) => Promise<string>;
+  ) => Promise<ParseResult>;
   write_qmd: (astJson: string) => Promise<string>;
   incremental_write_qmd(original_qmd: string, new_ast_json: string): string;
-  parse_qmd_content(content: string): string;
+  parse_qmd_content(content: string): AstResponse;
   apply_node_edit(
     content: string,
     untransformed_ast_json: string,
@@ -1221,13 +1224,11 @@ export async function parseQmdToAstWithAttribution(
     await initWasm();
     const wasm = getWasm();
     const pT0 = perfNow();
-    const responseJson = await wasm.parse_qmd_to_ast_with_attribution(
+    const response: ParseResult = await wasm.parse_qmd_to_ast_with_attribution(
       qmdContent,
       attributionJson ?? undefined,
     );
     if (pT0) perfSegment('parse.qmd-to-ast', pT0);
-
-    const response: ParseResult = parseEnvelope(responseJson);
 
     if (response.success) {
       return {
@@ -1344,7 +1345,7 @@ export function parseQmdContentSync(qmdText: string): AstResponse {
   if (!wasmModule) {
     throw new Error('WASM not initialized. Call initWasm() first.')
   }
-  return parseEnvelope(wasmModule.parse_qmd_content(qmdText)) as AstResponse
+  return wasmModule.parse_qmd_content(qmdText)
 }
 
 export function applyNodeEdit(

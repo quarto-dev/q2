@@ -68,7 +68,7 @@
 use std::collections::HashMap;
 
 use quarto_ast_reconcile::compute_block_hash_fresh;
-use quarto_pandoc_types::{Block, Blocks, Div, Pandoc};
+use quarto_pandoc_types::{Block, Blocks, Pandoc};
 
 use super::cell_lang::engine_cell_lang;
 
@@ -105,10 +105,10 @@ fn is_echo_of(candidate: &Block, cell: &Block) -> bool {
 /// `"cell"`. This is the shape the engine emits to wrap a single
 /// code cell's source + output blocks in its post-engine markdown.
 fn is_cell_wrapper(block: &Block) -> bool {
-    let Block::Div(Div { attr, .. }) = block else {
+    let Block::Div(div) = block else {
         return false;
     };
-    attr.1.iter().any(|c| c == "cell")
+    div.attr.1.iter().any(|c| c == "cell")
 }
 
 /// A B1 block that is an engine's per-cell OUTPUT (to be spliced onto the
@@ -472,12 +472,12 @@ mod tests {
     fn code_cell(lang: &str, body: &str) -> Block {
         let mut classes = Vec::new();
         classes.push(format!("{{{lang}}}"));
-        Block::CodeBlock(CodeBlock {
-            attr: (String::new(), classes, LinkedHashMap::new()),
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), classes, LinkedHashMap::new()).into(),
             text: body.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn prose(text: &str) -> Block {
@@ -495,16 +495,17 @@ mod tests {
     /// (a marker paragraph) so we can assert the splice produced
     /// the right one when there are multiple cells.
     fn cell_wrapper(marker: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 String::new(),
                 vec!["cell".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![prose(marker)],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn first_div_marker(block: &Block) -> Option<&str> {
@@ -713,11 +714,11 @@ mod tests {
     /// executed island. `marker` is embedded so we can assert which island
     /// landed where.
     fn raw_island(marker: &str) -> Block {
-        Block::RawBlock(RawBlock {
+        Block::RawBlock(Box::new(RawBlock {
             format: "html".to_string(),
             text: format!("<marimo-island>{marker}</marimo-island>"),
             source_info: SourceInfo::for_test(),
-        })
+        }))
     }
 
     /// A plain highlighted code block (classes = `[lang]`, no `{lang}` braces) —
@@ -726,12 +727,12 @@ mod tests {
     /// `None` for it (no braces), which is how the derive walk tells it apart
     /// from a braced engine cell.
     fn echo_source(lang: &str, body: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec![lang.to_string()], LinkedHashMap::new()),
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec![lang.to_string()], LinkedHashMap::new()).into(),
             text: body.to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Extract the marker text from a `raw_island(...)` block, else `None`.
@@ -957,12 +958,12 @@ mod tests {
     /// blocks — the shape pre-engine sugaring produces for a cell
     /// carrying `#| label: fig-*`.
     fn fig_div(id: &str, content: Vec<Block>) -> Block {
-        Block::Div(Div {
-            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()),
+        Block::Div(Box::new(Div {
+            attr: (id.to_string(), Vec::new(), LinkedHashMap::new()).into(),
             content,
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[test]
@@ -1030,12 +1031,12 @@ mod tests {
         // must NOT be treated as an engine cell. Confirm
         // engine_cell_lang returns None.
         let attr = (String::new(), vec!["r".to_string()], LinkedHashMap::new());
-        let block = Block::CodeBlock(CodeBlock {
-            attr,
+        let block = Block::CodeBlock(Box::new(CodeBlock {
+            attr: attr.into(),
             text: "x <- 1".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(engine_cell_lang(&block), None);
     }
 
@@ -1050,12 +1051,12 @@ mod tests {
             vec!["{{python}}".to_string()],
             LinkedHashMap::new(),
         );
-        let block = Block::CodeBlock(CodeBlock {
-            attr,
+        let block = Block::CodeBlock(Box::new(CodeBlock {
+            attr: attr.into(),
             text: "import matplotlib.pyplot as plt".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(engine_cell_lang(&block), None);
     }
 }

@@ -38,8 +38,7 @@ export function parseQmdContent(content: string): RustQmdJson | null {
     throw new Error('WASM not initialized. Call initWasm() first.')
   }
 
-  const responseJson = wasmModule.parse_qmd_content(content)
-  const response: AstResponse = JSON.parse(responseJson)
+  const response: AstResponse = wasmModule.parse_qmd_content(content)
 
   if (!response.success || !response.ast) {
     console.warn('[wasm] Parse failed:', response.error)

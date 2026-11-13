@@ -129,12 +129,12 @@ mod tests {
     use quarto_source_map::SourceInfo;
 
     fn cell(class: &str) -> Block {
-        Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec![class.to_string()], Default::default()),
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec![class.to_string()], Default::default()).into(),
             text: "A --> B".to_string(),
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn codes(blocks: &Blocks) -> Vec<Option<String>> {
@@ -159,12 +159,12 @@ mod tests {
 
     #[test]
     fn nested_cells_warn() {
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: Default::default(),
             content: vec![cell("{mermaid}")],
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         assert_eq!(codes(&vec![div]).len(), 1);
     }
 }

@@ -183,33 +183,33 @@ fn register_quarto_component(lua: &Lua, quarto: &Table) -> Result<()> {
                 _ => false,
             };
             if inline {
-                let mut inlines = vec![Inline::RawInline(RawInline {
+                let mut inlines = vec![Inline::RawInline(Box::new(RawInline {
                     format: "html".to_string(),
                     text: script,
                     source_info: source_info.clone(),
-                })];
+                }))];
                 inlines.extend(peek_inlines_fuzzy(lua, content)?);
-                return lua.create_userdata(LuaInline::new(Inline::Span(Span {
-                    attr,
+                return lua.create_userdata(LuaInline::new(Inline::Span(Box::new(Span {
+                    attr: attr.into(),
                     content: inlines,
                     source_info,
                     attr_source: AttrSourceInfo::empty(),
-                })));
+                }))));
             }
-            let mut blocks = vec![Block::RawBlock(RawBlock {
+            let mut blocks = vec![Block::RawBlock(Box::new(RawBlock {
                 format: "html".to_string(),
                 text: script,
                 source_info: source_info.clone(),
-            })];
+            }))];
             if !matches!(content, Value::Nil) {
                 blocks.extend(peek_blocks_fuzzy(lua, content)?);
             }
-            lua.create_userdata(LuaBlock::new(Block::Div(Div {
-                attr,
+            lua.create_userdata(LuaBlock::new(Block::Div(Box::new(Div {
+                attr: attr.into(),
                 content: blocks,
                 source_info,
                 attr_source: AttrSourceInfo::empty(),
-            })))
+            }))))
         })?,
     )?;
     Ok(())

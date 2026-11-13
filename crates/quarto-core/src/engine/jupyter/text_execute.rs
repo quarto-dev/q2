@@ -1291,16 +1291,17 @@ mod tests {
         );
 
         let make_cell = |lang: &str| {
-            Block::CodeBlock(AstCodeBlock {
+            Block::CodeBlock(Box::new(AstCodeBlock {
                 attr: (
                     String::new(),
                     vec![format!("{{{lang}}}")],
                     LinkedHashMap::new(),
-                ),
+                )
+                    .into(),
                 text: format!("-- {lang} code"),
                 source_info: si.clone(),
                 attr_source: AttrSourceInfo::empty(),
-            })
+            }))
         };
         let ast = Pandoc {
             meta: meta.clone(),

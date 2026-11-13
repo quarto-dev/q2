@@ -622,11 +622,11 @@ mod tests {
     }
 
     fn attr_id(id: &str) -> Attr {
-        (id.to_string(), Vec::new(), LinkedHashMap::new())
+        (id.to_string(), Vec::new(), LinkedHashMap::new()).into()
     }
 
     fn header(level: usize, id: &str, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: attr_id(id),
             content: vec![Inline::Str(Str {
@@ -635,36 +635,37 @@ mod tests {
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn header_with_class(level: usize, id: &str, class: &str, text: &str) -> Block {
-        Block::Header(Header {
+        Block::Header(Box::new(Header {
             level,
             attr: (
                 id.to_string(),
                 vec![class.to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Inline::Str(Str {
                 text: text.to_string(),
                 source_info: si(),
             })],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn fig_div(id: &str, caption: &str) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: attr_id(id),
             content: vec![
-                Block::CodeBlock(CodeBlock {
-                    attr: (String::new(), vec!["python".into()], LinkedHashMap::new()),
+                Block::CodeBlock(Box::new(CodeBlock {
+                    attr: (String::new(), vec!["python".into()], LinkedHashMap::new()).into(),
                     text: "x=1".into(),
                     source_info: si(),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
                 Block::Paragraph(Paragraph {
                     content: vec![Inline::Str(Str {
                         text: caption.into(),
@@ -675,7 +676,7 @@ mod tests {
             ],
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(text: &str) -> Block {
@@ -692,16 +693,17 @@ mod tests {
     /// whose first child is the header with its id moved onto the div (the
     /// header's own id is empty).
     fn section_div(id: &str, level: usize, children: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: (
                 id.to_string(),
                 vec!["section".to_string(), format!("level{level}")],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: children,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// Run sugaring + indexing end-to-end on a block list and return the
@@ -1190,7 +1192,7 @@ mod tests {
             fig_div("fig-one", "f1"),
             fig_div("fig-two", "f2"),
             // tbl has its own counter — wrap in a tbl-prefix div.
-            Block::Div(Div {
+            Block::Div(Box::new(Div {
                 attr: attr_id("tbl-one"),
                 content: vec![Block::Paragraph(Paragraph {
                     content: vec![],
@@ -1198,7 +1200,7 @@ mod tests {
                 })],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            }),
+            })),
         ])
         .await;
         assert_eq!(idx.get("fig-one").unwrap().order.order, 1);
@@ -1388,21 +1390,22 @@ mod tests {
     fn eq_para(id: &str, math_text: &str) -> Block {
         use quarto_pandoc_types::inline::{Math, MathType, Span};
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: (
                     id.to_string(),
                     vec!["quarto-math-with-attribute".to_string()],
                     LinkedHashMap::new(),
-                ),
-                content: vec![Inline::Math(Math {
+                )
+                    .into(),
+                content: vec![Inline::Math(Box::new(Math {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),
                     source_info: si(),
                     text_source: None,
-                })],
+                }))],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: si(),
         })
     }

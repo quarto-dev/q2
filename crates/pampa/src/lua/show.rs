@@ -408,9 +408,9 @@ mod tests {
     fn show_attr_matches_pandoc() {
         let mut kvs = LinkedHashMap::new();
         kvs.insert("k".to_string(), "v".to_string());
-        let attr: Attr = ("i".to_string(), vec!["c".to_string()], kvs);
+        let attr: Attr = ("i".to_string(), vec!["c".to_string()], kvs).into();
         assert_eq!(show_attr(&attr), r#"("i",["c"],[("k","v")])"#);
-        let empty: Attr = (String::new(), vec![], LinkedHashMap::new());
+        let empty: Attr = (String::new(), vec![], LinkedHashMap::new()).into();
         assert_eq!(show_attr(&empty), r#"("",[],[])"#);
     }
 

@@ -502,7 +502,10 @@ fn escape_html(s: &str) -> String {
 ///
 /// Standard HTML5 attributes (style, title, dir, lang, etc.) and ARIA attributes
 /// are written as-is. Custom attributes are prefixed with `data-`.
-fn write_attr<W: Write>(attr: &Attr, ctx: &mut HtmlWriterContext<'_, W>) -> std::io::Result<()> {
+fn write_attr<W: Write>(
+    attr: &quarto_pandoc_types::AttrTuple,
+    ctx: &mut HtmlWriterContext<'_, W>,
+) -> std::io::Result<()> {
     let (id, classes, attrs) = attr;
 
     if !id.is_empty() {
@@ -545,7 +548,7 @@ fn write_code_container_attr<W: Write>(
         return write_attr(attr, ctx);
     }
 
-    let (id, classes, attrs) = attr;
+    let (id, classes, attrs) = &**attr;
 
     if !id.is_empty() {
         write!(ctx, " id=\"{}\"", escape_html(id))?;
@@ -593,7 +596,7 @@ fn write_highlighted_codeblock<W: Write>(
     spans: Option<&[quarto_highlight_encoding::HighlightSpan]>,
     ctx: &mut HtmlWriterContext<'_, W>,
 ) -> std::io::Result<()> {
-    let (id, classes, kvs) = &codeblock.attr;
+    let (id, classes, kvs) = &*codeblock.attr;
 
     // First class (if any) is the language, per Pandoc convention.
     let (language, extras) = match classes.split_first() {
@@ -1322,7 +1325,7 @@ fn composed_list_item_attr<W: Write>(
     ctx: &HtmlWriterContext<'_, W>,
 ) -> Attr {
     let fragment = ctx.incremental && ctx.config.incremental_lists;
-    let (id, classes, kvs) = item_attr;
+    let (id, classes, kvs) = &**item_attr;
     let mut out_classes: Vec<String> = Vec::with_capacity(classes.len() + 2);
     if fragment {
         out_classes.push("fragment".to_string());
@@ -1340,7 +1343,7 @@ fn composed_list_item_attr<W: Write>(
             out_classes.push(c.clone());
         }
     }
-    (id.clone(), out_classes, kvs.clone())
+    (id.clone(), out_classes, kvs.clone()).into()
 }
 
 /// Task-list detection, mirroring Pandoc's `Writers.Shared.toTaskListItem`:
@@ -1379,14 +1382,14 @@ fn task_item_checked(item: &[Block]) -> Option<bool> {
 fn rewrite_task_item(item: &[Block]) -> Option<Vec<Block>> {
     let checked = task_item_checked(item)?;
     let raw = |text: &str| {
-        Inline::RawInline(crate::pandoc::RawInline {
+        Inline::RawInline(Box::new(crate::pandoc::RawInline {
             format: "html".to_string(),
             text: text.to_string(),
             source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By {
                 kind: "task-list-checkbox".to_string(),
                 data: serde_json::Value::Null,
             }),
-        })
+        }))
     };
     let checkbox = if checked {
         "<label><input type=\"checkbox\" checked=\"\" disabled=\"\" />"
@@ -2228,7 +2231,7 @@ mod tests {
             source_info: dummy_source_info(),
         };
         let para = Block::Paragraph(Paragraph {
-            content: vec![Inline::Shortcode(sc)],
+            content: vec![Inline::Shortcode(Box::new(sc))],
             source_info: dummy_source_info(),
         });
         let pandoc = Pandoc {
@@ -2538,12 +2541,13 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
 
         let ctx = ASTContext::anonymous();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "my-section".to_string(),
                 vec!["section".to_string(), "level2".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -2553,7 +2557,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let pandoc = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![div],
@@ -2602,12 +2606,13 @@ mod tests {
         use quarto_pandoc_types::attr::AttrSourceInfo;
 
         let ctx = ASTContext::anonymous();
-        let div = Block::Div(Div {
+        let div = Block::Div(Box::new(Div {
             attr: (
                 "my-div".to_string(),
                 vec!["callout".to_string(), "warning".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -2617,7 +2622,7 @@ mod tests {
             })],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let pandoc = Pandoc {
             meta: ConfigValue::default(),
             blocks: vec![div],
@@ -2654,12 +2659,12 @@ mod tests {
         use hashlink::LinkedHashMap;
         let mut kvs = LinkedHashMap::new();
         kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
-        Block::CodeBlock(CodeBlock {
-            attr: (String::new(), vec![language.to_string()], kvs),
+        Block::CodeBlock(Box::new(CodeBlock {
+            attr: (String::new(), vec![language.to_string()], kvs).into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn render_block_to_html(block: Block) -> String {
@@ -2705,16 +2710,17 @@ mod tests {
     fn codeblock_without_hl_spans_falls_back_to_plain() {
         // No data-hl-spans attr: output looks like before this feature.
         use hashlink::LinkedHashMap;
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "def foo():".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(block);
         assert!(!html.contains("<span class=\"hl-"), "no spans expected");
         assert!(html.contains("def foo():"));
@@ -2756,12 +2762,12 @@ mod tests {
             "data-hl-spans".to_string(),
             r#"[[0,3,"keyword"]]"#.to_string(),
         );
-        let code = Inline::Code(Code {
-            attr: (String::new(), vec!["python".to_string()], kvs),
+        let code = Inline::Code(Box::new(Code {
+            attr: (String::new(), vec!["python".to_string()], kvs).into(),
             text: "def".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(Block::Paragraph(Paragraph {
             content: vec![code],
             source_info: dummy_source_info(),
@@ -2794,11 +2800,11 @@ mod tests {
                 Inline::Space(Space {
                     source_info: dummy_source_info(),
                 }),
-                Inline::Attr(InlineAttr::new(
-                    attr,
+                Inline::Attr(Box::new(InlineAttr::new(
+                    attr.into(),
                     AttrSourceInfo::empty(),
                     dummy_source_info(),
-                )),
+                ))),
             ],
             source_info: dummy_source_info(),
         });
@@ -2848,11 +2854,11 @@ mod tests {
             classes.iter().map(|s| s.to_string()).collect(),
             m,
         );
-        Inline::Attr(InlineAttr::new(
-            attr,
+        Inline::Attr(Box::new(InlineAttr::new(
+            attr.into(),
             AttrSourceInfo::empty(),
             dummy_source_info(),
-        ))
+        )))
     }
 
     fn li_plain(inlines: Vec<Inline>) -> Block {
@@ -2938,7 +2944,7 @@ mod tests {
 
     #[test]
     fn ordered_list_item_trailing_attr_becomes_li_class() {
-        let list = Block::OrderedList(crate::pandoc::block::OrderedList {
+        let list = Block::OrderedList(Box::new(crate::pandoc::block::OrderedList {
             attr: (
                 1,
                 crate::pandoc::ListNumberStyle::Decimal,
@@ -2950,7 +2956,7 @@ mod tests {
                 li_attr("", &["foo"], &[]),
             ])]],
             source_info: dummy_source_info(),
-        });
+        }));
         let html = render_block_to_html(list);
         assert!(
             html.contains("<li class=\"foo\">item</li>"),
@@ -3036,16 +3042,17 @@ mod tests {
         use hashlink::LinkedHashMap;
         let mut kvs = LinkedHashMap::new();
         kvs.insert("data-hl-spans".to_string(), spans_json.to_string());
-        Block::CodeBlock(CodeBlock {
+        Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 id.to_string(),
                 classes.into_iter().map(|s| s.to_string()).collect(),
                 kvs,
-            ),
+            )
+                .into(),
             text: text.to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     #[test]
@@ -3167,16 +3174,17 @@ mod tests {
     fn unhighlighted_codeblock_has_no_div_wrapper() {
         // No data-hl-spans => no highlighting => no div.sourceCode wrapper.
         use hashlink::LinkedHashMap;
-        let block = Block::CodeBlock(CodeBlock {
+        let block = Block::CodeBlock(Box::new(CodeBlock {
             attr: (
                 "cb1".to_string(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             text: "def foo()".to_string(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let html = render_block_to_html(block);
         assert!(
             !html.contains("<div class=\"sourceCode"),
@@ -3193,7 +3201,7 @@ mod tests {
         use hashlink::LinkedHashMap;
         let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
         let cell = |text: &str| Cell {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
@@ -3209,13 +3217,13 @@ mod tests {
         };
         let n = colspec.len();
         let row = Row {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             cells: (0..n).map(|_| cell("x")).collect(),
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
-        Block::Table(Table {
-            attr: empty_attr(),
+        Block::Table(Box::new(Table {
+            attr: empty_attr().into(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
                 long: None,
@@ -3223,13 +3231,13 @@ mod tests {
             },
             colspec,
             head: TableHead {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![row],
@@ -3237,14 +3245,14 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// bd-hixmy: an all-default colspec carries no information, so the
@@ -3316,7 +3324,7 @@ mod tests {
         use hashlink::LinkedHashMap;
         let empty_attr = || (String::new(), Vec::new(), LinkedHashMap::new());
         let cell = |text: &str| Cell {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             alignment: Alignment::Default,
             row_span: 1,
             col_span: 1,
@@ -3331,13 +3339,13 @@ mod tests {
             attr_source: AttrSourceInfo::empty(),
         };
         let mk_row = |label: &str| Row {
-            attr: empty_attr(),
+            attr: empty_attr().into(),
             cells: vec![cell(label)],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
         };
-        Block::Table(Table {
-            attr: empty_attr(),
+        Block::Table(Box::new(Table {
+            attr: empty_attr().into(),
             caption: quarto_pandoc_types::Caption {
                 short: None,
                 long: None,
@@ -3345,13 +3353,13 @@ mod tests {
             },
             colspec: vec![(Alignment::Default, ColWidth::Default)],
             head: TableHead {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: (0..head_rows).map(|i| mk_row(&format!("h{i}"))).collect(),
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: (0..body_rows).map(|i| mk_row(&format!("b{i}"))).collect(),
@@ -3359,14 +3367,14 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     /// bd-12fpz (D5): head rows get `<tr class="header">`.

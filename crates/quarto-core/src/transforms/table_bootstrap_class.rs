@@ -204,12 +204,12 @@ fn wrap_in_div(block: &mut Block, class: String) {
     let source_info = block.source_info().clone();
     let inner = std::mem::replace(
         block,
-        Block::Div(Div {
-            attr: (String::new(), vec![class], hashlink::LinkedHashMap::new()),
+        Block::Div(Box::new(Div {
+            attr: (String::new(), vec![class], hashlink::LinkedHashMap::new()).into(),
             content: Vec::new(),
             source_info,
             attr_source: AttrSourceInfo::empty(),
-        }),
+        })),
     );
     if let Block::Div(div) = block {
         div.content.push(inner);
@@ -320,8 +320,8 @@ mod tests {
             classes.into_iter().map(|s| s.to_string()).collect(),
             LinkedHashMap::new(),
         );
-        Block::Table(Table {
-            attr,
+        Block::Table(Box::new(Table {
+            attr: attr.into(),
             caption: Caption {
                 short: None,
                 long: None,
@@ -329,19 +329,19 @@ mod tests {
             },
             colspec: vec![],
             head: TableHead {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             bodies: vec![TableBody {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rowhead_columns: 0,
                 head: vec![],
                 body: vec![Row {
-                    attr: empty_attr(),
+                    attr: empty_attr().into(),
                     cells: vec![Cell {
-                        attr: empty_attr(),
+                        attr: empty_attr().into(),
                         alignment: Alignment::Default,
                         row_span: 1,
                         col_span: 1,
@@ -362,14 +362,14 @@ mod tests {
                 attr_source: AttrSourceInfo::empty(),
             }],
             foot: TableFoot {
-                attr: empty_attr(),
+                attr: empty_attr().into(),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: AttrSourceInfo::empty(),
             },
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn ast_with(blocks: Vec<Block>) -> Pandoc {
@@ -442,12 +442,12 @@ mod tests {
 
     #[test]
     fn table_nested_in_div_is_reached() {
-        let div = Block::Div(Div {
-            attr: empty_attr(),
+        let div = Block::Div(Box::new(Div {
+            attr: empty_attr().into(),
             content: vec![table_with_classes(vec![])],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let mut ast = ast_with(vec![div]);
         apply_to_blocks(&mut ast.blocks);
         let Block::Div(d) = &ast.blocks[0] else {
@@ -469,11 +469,11 @@ mod tests {
             strings(&classes),
             LinkedHashMap::new(),
         );
-        Block::Custom(
-            CustomNode::new(FLOAT_REF_TARGET, attr, dummy_source_info())
+        Block::Custom(Box::new(
+            CustomNode::new(FLOAT_REF_TARGET, attr.into(), dummy_source_info())
                 .with_data(serde_json::json!({ "ref_type": ref_type }))
                 .with_slot("content", Slot::Blocks(content)),
-        )
+        ))
     }
 
     fn float_content(block: &Block) -> &[Block] {
@@ -617,12 +617,12 @@ mod tests {
 
     #[test]
     fn every_table_in_a_multi_table_float_gets_the_classes() {
-        let layout = Block::Div(Div {
-            attr: empty_attr(),
+        let layout = Block::Div(Box::new(Div {
+            attr: empty_attr().into(),
             content: vec![table_with_classes(vec![])],
             source_info: dummy_source_info(),
             attr_source: AttrSourceInfo::empty(),
-        });
+        }));
         let mut ast = ast_with(vec![float_node(
             "tbl",
             vec!["hover"],

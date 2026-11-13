@@ -202,7 +202,7 @@ fn resolve_block(block: &mut Block, counter: &mut u32, env: &ResolveEnv) {
             // Then check if this is a Callout that should be resolved
             if custom.type_name == "Callout" {
                 let resolved_div = resolve_callout(custom, counter, env.terms, env.chapter_seed);
-                *block = Block::Div(resolved_div);
+                *block = Block::Div(Box::new(resolved_div));
             }
         }
         // Other block types don't contain nested blocks
@@ -321,7 +321,7 @@ fn resolve_callout(
         Some(mut inlines) if title_is_user_supplied && !is_crossref => {
             inlines.insert(
                 0,
-                Inline::Span(quarto_pandoc_types::inline::Span {
+                Inline::Span(Box::new(quarto_pandoc_types::inline::Span {
                     attr: make_attr(&["screen-reader-only"]),
                     content: vec![Inline::Str(Str {
                         text: callout_display_name(&callout_type, terms),
@@ -329,7 +329,7 @@ fn resolve_callout(
                     })],
                     source_info: SourceInfo::generated(By::callout()),
                     attr_source: AttrSourceInfo::empty(),
-                }),
+                })),
             );
             Some(inlines)
         }
@@ -353,13 +353,13 @@ fn resolve_callout(
     }
 
     // Preserve original non-callout classes from the source attr.
-    let (orig_id, orig_classes, orig_attrs) = &custom.attr;
+    let (orig_id, orig_classes, orig_attrs) = &*custom.attr;
     for cls in orig_classes {
         if !cls.starts_with("callout") {
             classes.push(cls.clone());
         }
     }
-    let outer_attr: Attr = (orig_id.clone(), classes, orig_attrs.clone());
+    let outer_attr: Attr = (orig_id.clone(), classes, orig_attrs.clone()).into();
 
     // Reserve unique ids for the collapse wrapper. Q1-parity
     // naming (callouts.lua:281, 307, 310, 316-317):
@@ -437,10 +437,10 @@ fn build_titled_content(
 
     // Always emit the icon container (Q1-parity, callouts.lua:254-262);
     // when icon=false the inner `<i>` carries `no-icon` so CSS can hide it.
-    header_content.push(Block::Div(icon_container_div(source_info, icon)));
+    header_content.push(Block::Div(Box::new(icon_container_div(source_info, icon))));
 
     // Title container.
-    header_content.push(Block::Div(Div {
+    header_content.push(Block::Div(Box::new(Div {
         attr: make_attr(&["callout-title-container", "flex-fill"]),
         content: vec![Block::Plain(Plain {
             content: title_inlines,
@@ -448,7 +448,7 @@ fn build_titled_content(
         })],
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    }));
+    })));
 
     // Header: classes + (when collapsible) Bootstrap toggle attrs.
     let mut header_classes: Vec<String> = vec![
@@ -480,22 +480,22 @@ fn build_titled_content(
 
         // Trailing toggle button.
         header_content.push(Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: "<div class=\"callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 \
                        float-end\"><i class=\"callout-toggle\"></i></div>"
                     .to_string(),
                 source_info: source_info.clone(),
-            })],
+            }))],
             source_info: source_info.clone(),
         }));
     }
-    let header_div = Block::Div(Div {
-        attr: (String::new(), header_classes, header_attrs),
+    let header_div = Block::Div(Box::new(Div {
+        attr: (String::new(), header_classes, header_attrs).into(),
         content: header_content,
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
-    });
+    }));
 
     // Body. With collapse, wrap the body-container in a
     // `.callout-collapse.collapse[.show]` div; without collapse, the
@@ -516,18 +516,19 @@ fn build_titled_content(
         // titled+collapse output).
         let mut body_with_class = body_inner_div;
         body_with_class.attr.1.push("callout-body".to_string());
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             // Wrapper id is the clean `callout-N` (no -contents
             // suffix); aria-controls on the header points at this id.
             attr: (
                 ids.wrapper_id.clone(),
                 collapse_classes,
                 LinkedHashMap::new(),
-            ),
+            )
+                .into(),
             content: vec![absorb_section_wrapper(body_with_class)],
             source_info: source_info.clone(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     } else {
         let mut body_with_class = body_inner_div;
         body_with_class.attr.1.push("callout-body".to_string());
@@ -545,7 +546,7 @@ fn build_untitled_content(source_info: &SourceInfo, icon: bool, body_inner_div: 
     // Always emit the icon container (Q1-parity); icon=false adds
     // the `no-icon` co-class to the inner `<i>`.
     let body_content = vec![
-        Block::Div(icon_container_div(source_info, icon)),
+        Block::Div(Box::new(icon_container_div(source_info, icon))),
         absorb_section_wrapper(body_inner_div),
     ];
 
@@ -555,7 +556,7 @@ fn build_untitled_content(source_info: &SourceInfo, icon: bool, body_inner_div: 
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     };
-    vec![Block::Div(body_outer)]
+    vec![Block::Div(Box::new(body_outer))]
 }
 
 /// Build the icon container div. The container is ALWAYS emitted
@@ -574,11 +575,11 @@ fn icon_container_div(source_info: &SourceInfo, icon: bool) -> Div {
     Div {
         attr: make_attr(&["callout-icon-container"]),
         content: vec![Block::Plain(Plain {
-            content: vec![Inline::RawInline(RawInline {
+            content: vec![Inline::RawInline(Box::new(RawInline {
                 format: "html".to_string(),
                 text: format!("<i class=\"{}\"></i>", i_class),
                 source_info: source_info.clone(),
-            })],
+            }))],
             source_info: source_info.clone(),
         })],
         source_info: source_info.clone(),
@@ -618,6 +619,7 @@ fn make_attr(classes: &[&str]) -> Attr {
         classes.iter().map(|s| (*s).to_string()).collect(),
         LinkedHashMap::new(),
     )
+        .into()
 }
 
 /// Extract a string value from JSON.
@@ -742,7 +744,7 @@ mod tests {
 
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Custom(custom)],
+            blocks: vec![Block::Custom(Box::new(custom))],
         };
 
         let project = make_test_project();
@@ -758,7 +760,7 @@ mod tests {
         assert_eq!(ast.blocks.len(), 1);
         match &ast.blocks[0] {
             Block::Div(div) => {
-                let (_, classes, _) = &div.attr;
+                let (_, classes, _) = &*div.attr;
                 assert!(classes.contains(&"callout".to_string()));
                 assert!(classes.contains(&"callout-warning".to_string()));
 
@@ -768,7 +770,7 @@ mod tests {
                 // Check header structure
                 match &div.content[0] {
                     Block::Div(header) => {
-                        let (_, classes, _) = &header.attr;
+                        let (_, classes, _) = &*header.attr;
                         assert!(classes.contains(&"callout-header".to_string()));
                     }
                     _ => panic!("Expected header Div"),
@@ -777,7 +779,7 @@ mod tests {
                 // Check body structure
                 match &div.content[1] {
                     Block::Div(body) => {
-                        let (_, classes, _) = &body.attr;
+                        let (_, classes, _) = &*body.attr;
                         assert!(classes.contains(&"callout-body-container".to_string()));
                         assert!(classes.contains(&"callout-body".to_string()));
                     }
@@ -812,7 +814,7 @@ mod tests {
 
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks: vec![Block::Custom(custom)],
+            blocks: vec![Block::Custom(Box::new(custom))],
         };
 
         let project = make_test_project();
@@ -827,7 +829,7 @@ mod tests {
         // Verify structure
         match &ast.blocks[0] {
             Block::Div(div) => {
-                let (_, classes, _) = &div.attr;
+                let (_, classes, _) = &*div.attr;
                 assert!(classes.contains(&"callout-tip".to_string()));
             }
             _ => panic!("Expected Div"),
@@ -848,7 +850,7 @@ mod tests {
             // Find title container (second child if icon is present)
             for block in &header_div.content {
                 if let Block::Div(div) = block {
-                    let (_, classes, _) = &div.attr;
+                    let (_, classes, _) = &*div.attr;
                     if classes.contains(&"callout-title-container".to_string())
                         && let Block::Plain(plain) = &div.content[0]
                         && let Inline::Str(s) = &plain.content[0]
@@ -915,7 +917,7 @@ mod tests {
         let mut ast = Pandoc {
             meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
-                content: vec![Block::Custom(custom)],
+                content: vec![Block::Custom(Box::new(custom))],
                 source_info: dummy_source_info(),
             })],
         };
@@ -933,7 +935,7 @@ mod tests {
         match &ast.blocks[0] {
             Block::BlockQuote(bq) => match &bq.content[0] {
                 Block::Div(div) => {
-                    let (_, classes, _) = &div.attr;
+                    let (_, classes, _) = &*div.attr;
                     assert!(classes.contains(&"callout-note".to_string()));
                 }
                 _ => panic!("Expected Div inside BlockQuote"),

@@ -366,11 +366,11 @@ mod tests {
 
     #[test]
     fn raw_bslib_value_boxes_flow() {
-        let raw = Block::RawBlock(quarto_pandoc_types::block::RawBlock {
+        let raw = Block::RawBlock(Box::new(quarto_pandoc_types::block::RawBlock {
             format: "html".into(),
             text: r#"<div class="card bslib-value-box">1</div>"#.into(),
             source_info: quarto_source_map::SourceInfo::for_test(),
-        });
+        }));
         let p = parent(Orientation::Rows, vec![raw]);
         assert_eq!(grid_template(&p), "minmax(3em, max-content)");
     }

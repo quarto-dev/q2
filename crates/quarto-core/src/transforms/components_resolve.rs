@@ -523,11 +523,11 @@ fn attach_ast_payloads(ast: &mut Pandoc, decls: &[ComponentDecl]) {
             let text = ast_script(&json[0]);
             div.content.insert(
                 0,
-                Block::RawBlock(quarto_pandoc_types::block::RawBlock {
+                Block::RawBlock(Box::new(quarto_pandoc_types::block::RawBlock {
                     format: "html".to_string(),
                     text,
                     source_info: div.source_info.clone(),
-                }),
+                })),
             );
         }
     });
@@ -545,11 +545,11 @@ fn attach_ast_payloads(ast: &mut Pandoc, decls: &[ComponentDecl]) {
             let text = ast_script(&json[0]);
             span.content.insert(
                 0,
-                Inline::RawInline(quarto_pandoc_types::inline::RawInline {
+                Inline::RawInline(Box::new(quarto_pandoc_types::inline::RawInline {
                     format: "html".to_string(),
                     text,
                     source_info: span.source_info.clone(),
-                }),
+                })),
             );
         }
     });
@@ -722,15 +722,16 @@ mod tests {
             classes.iter().map(|c| c.to_string()).collect(),
             hashlink::LinkedHashMap::new(),
         )
+            .into()
     }
 
     fn div(id: &str, classes: &[&str], content: Vec<Block>) -> Block {
-        Block::Div(Div {
+        Block::Div(Box::new(Div {
             attr: attr(id, classes),
             content,
             source_info: SourceInfo::for_test(),
             attr_source: AttrSourceInfo::empty(),
-        })
+        }))
     }
 
     fn para(text: &str) -> Block {
@@ -745,12 +746,12 @@ mod tests {
 
     fn span_para(id: &str, classes: &[&str]) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Span(Span {
+            content: vec![Inline::Span(Box::new(Span {
                 attr: attr(id, classes),
                 content: vec![],
                 source_info: SourceInfo::for_test(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
             source_info: SourceInfo::for_test(),
         })
     }
@@ -1148,12 +1149,12 @@ mod tests {
     #[tokio::test]
     async fn content_ast_prepends_the_node_json_without_the_props_script() {
         let yaml = "components:\n  - name: gallery\n    src: gallery.js\n    content: ast\n";
-        let props = Block::RawBlock(quarto_pandoc_types::block::RawBlock {
+        let props = Block::RawBlock(Box::new(quarto_pandoc_types::block::RawBlock {
             format: "html".into(),
             text: "<script type=\"application/json\" class=\"quarto-component-props\">{}</script>"
                 .into(),
             source_info: SourceInfo::for_test(),
-        });
+        }));
         let ast = Pandoc {
             meta: meta(yaml),
             blocks: vec![

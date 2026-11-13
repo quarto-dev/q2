@@ -212,7 +212,7 @@ mod tests {
 
     fn code_block(text: &str) -> CodeBlock {
         CodeBlock {
-            attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()).into(),
             text: text.to_string(),
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
@@ -222,12 +222,12 @@ mod tests {
     fn wrapped(id: &str, cb: CodeBlock) -> Pandoc {
         Pandoc {
             meta: Default::default(),
-            blocks: vec![Block::Div(Div {
-                attr: (id.to_string(), Vec::new(), LinkedHashMap::new()),
-                content: vec![Block::CodeBlock(cb)],
+            blocks: vec![Block::Div(Box::new(Div {
+                attr: (id.to_string(), Vec::new(), LinkedHashMap::new()).into(),
+                content: vec![Block::CodeBlock(Box::new(cb))],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
-            })],
+            }))],
         }
     }
 
@@ -330,12 +330,12 @@ mod tests {
     #[test]
     fn collect_returns_wrapper_div_ids_in_document_order() {
         let mut doc = wrapped("fig-a", code_block("plot(a)\n"));
-        let Block::Div(nested) = Block::Div(Div {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+        let Block::Div(nested) = Block::Div(Box::new(Div {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()).into(),
             content: wrapped("tbl-b", code_block("head(b)\n")).blocks,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
-        }) else {
+        })) else {
             unreachable!()
         };
         doc.blocks.push(Block::Div(nested));

@@ -73,7 +73,7 @@ pub fn process_language_specifier(
             // - classes: [{language}, ...classes from commonmark_specifier]
             // - attributes: from commonmark_specifier
 
-            let (cm_id, cm_classes, cm_attrs) = attr;
+            let (cm_id, cm_classes, cm_attrs) = attr.into_tuple();
 
             // Create the language class wrapped in braces for roundtripping
             let language_class = format!("{{{}}}", language);
@@ -105,16 +105,14 @@ pub fn process_language_specifier(
 
             // Combine class sources: [language_source, ...commonmark_class_sources]
             let mut class_sources = vec![lang_source];
+            let attr_source = attr_source.into_parts();
             class_sources.extend(attr_source.classes);
 
-            let combined_attr_source = AttrSourceInfo {
-                id: attr_source.id,
-                classes: class_sources,
-                attributes: attr_source.attributes,
-            };
+            let combined_attr_source =
+                AttrSourceInfo::new(attr_source.id, class_sources, attr_source.attributes);
 
             PandocNativeIntermediate::IntermediateAttr(
-                (cm_id, classes, cm_attrs),
+                (cm_id, classes, cm_attrs).into(),
                 combined_attr_source,
                 crate::pandoc::location::node_source_info_with_context(node, context),
             )
@@ -162,7 +160,7 @@ pub fn process_nested_language_specifier(
     // Fallback - shouldn't happen
     use hashlink::LinkedHashMap;
     PandocNativeIntermediate::IntermediateAttr(
-        (String::new(), vec![], LinkedHashMap::new()),
+        (String::new(), vec![], LinkedHashMap::new()).into(),
         AttrSourceInfo::empty(),
         crate::pandoc::location::node_source_info_with_context(node, context),
     )

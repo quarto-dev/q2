@@ -6327,6 +6327,8 @@ dependencies = [
  "pampa",
  "pollster",
  "quarto-core",
+ "quarto-pandoc-types",
+ "quarto-source-map",
  "quarto-system-runtime",
 ]
 
