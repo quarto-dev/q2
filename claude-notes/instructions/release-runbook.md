@@ -62,6 +62,12 @@ Connect satellite editor builds:
   signature (same minisign key as the binaries; its `.sha256` is also
   folded into `checksums.sha256`).
 
+Plus, after the GitHub Release is published, the **`quarto2` package on
+PyPI** (bd-2p7dwmqe): an sdist of a few KB that holds no binary, only the
+release's per-platform SHA-256 pins. `pip install quarto2` builds it on the
+user's machine, downloading and verifying the matching `q2` archive from
+this GitHub Release. See § PyPI below.
+
 Released binaries carry the bundled quarto-hub.com OAuth defaults, so
 `q2 mcp` connects with zero configuration. Users install with the
 one-liner in the README / release notes.
@@ -77,6 +83,8 @@ These live in repo settings and rarely change. Verify with
 | `QUARTO_HUB_MCP_CLIENT_ID` | secret | Bundled Google OAuth client id (public client; secret only to dodge `GOCSPX-` scanners). |
 | `QUARTO_HUB_MCP_CLIENT_SECRET` | secret | Bundled client secret (same). |
 | `QUARTO_HUB_SERVER` | variable | `wss://quarto-hub.com/ws`. |
+| PyPI trusted publisher | pypi.org / test.pypi.org | Project `quarto2`, repo `quarto-dev/q2`, workflow `publish-pypi.yml`, environments `pypi` / `testpypi`. No token or secret exists; uploads authenticate through GitHub OIDC. |
+| `pypi`, `testpypi` | GitHub environments | Targets of the upload job in `publish-pypi.yml`. `pypi` has a required reviewer for now. |
 
 The signing **secret key** lives only in the repo secret and the team
 password manager. If it is ever rotated: regenerate with
@@ -280,6 +288,12 @@ cargo nextest run -p quarto -E 'test(resolves_latest_version_from_github)' \
   --run-ignored ignored-only
 ```
 
+Then approve the PyPI upload (§ PyPI) and check it:
+
+```bash
+uvx --no-cache --from quarto2==X.Y.Z q2 --version   # → q2 (quarto 2) X.Y.Z
+```
+
 For a thorough release, also drive a real `q2 mcp` session against
 quarto-hub.com (`connect_project` + `read_file`) and spot-check the
 `darwin_amd64` artifact runs under Rosetta with both darwin keyring
@@ -300,6 +314,50 @@ nothing shipped.
 Update the release strand, note the release URL, and (if the release
 introduced user-facing changes) make sure the README install snippet
 still matches.
+
+## PyPI (bd-2p7dwmqe)
+
+Nothing to bump by hand: the package version comes from the tag. Once the
+`Release` run has published the GitHub Release, its last job (`pypi`)
+dispatches `.github/workflows/publish-pypi.yml` with `target=pypi`. That
+workflow builds the sdist from the release's `checksums.sha256`, installs it
+with pip and uv on all five runner platforms (`q2 --version` must match),
+then **waits for a reviewer on the `pypi` environment** before uploading. To
+approve: open the `Publish PyPI package` run in the Actions UI and click
+*Review deployments*, or
+
+```bash
+gh run list --repo quarto-dev/q2 --workflow=publish-pypi.yml --limit 1
+gh run watch <run-id> --repo quarto-dev/q2
+```
+
+Its `check-published` job then installs `quarto2==X.Y.Z` back from PyPI.
+The reviewer gate is temporary; once a few releases have gone through
+cleanly, remove the required reviewer from the `pypi` environment and the
+upload becomes fully automatic.
+
+- **Retry / manual run.** If the dispatch or a smoke leg failed for
+  infrastructure reasons: `gh workflow run publish-pypi.yml --repo
+  quarto-dev/q2 --ref main -f tag=vX.Y.Z -f target=pypi`.
+- **Rehearsal.** `-f target=testpypi` uploads to test.pypi.org instead;
+  install with `pip install --index-url https://test.pypi.org/simple/
+  quarto2==X.Y.Z`.
+- **PyPI versions are immutable.** A version can be uploaded once, ever
+  (even after deletion). A packaging-only fix for a version already on PyPI
+  ships as `-f post=1`, which publishes `X.Y.Z.post1` pointing at the same
+  binaries.
+- **Never rebuild a release's archives after its sdist is on PyPI.** The
+  sdist pins their SHA-256; new bytes under the same tag make every install
+  of that version fail with a checksum mismatch. Moving a tag (§ 5) is only
+  safe *before* the release, and hence the PyPI upload, exists.
+- **Prereleases** (`vX.Y.Z-rcN`) publish as PEP 440 `X.Y.ZrcN`, which pip
+  installs only on request (`--pre` or an exact pin). Nightlies are never
+  published to PyPI.
+- **Installs need github.com.** The sdist downloads at install time;
+  `QUARTO2_DOWNLOAD_BASE` points it at a mirror laid out as
+  `<base>/vX.Y.Z/<archive>`.
+
+Package sources and maintainer notes: `packaging/pypi/` (`README.dev.md`).
 
 ## Nightlies (bd-p4ljdp2e)
 
@@ -525,6 +583,9 @@ Plans: `claude-notes/plans/2026-10-28-exr-13-hub-wire.md` (Phase D) and
 | `.github/workflows/release.yml` | the release trigger + preflight; calls the pipeline |
 | `.github/workflows/release-pipeline.yml` | the reusable build/verify/sign/publish pipeline (both channels) |
 | `.github/workflows/nightly.yml` | the nightly trigger + gate + install smoke; calls the pipeline |
+| `.github/workflows/publish-pypi.yml` | builds, smoke-tests and uploads the `quarto2` sdist for a published tag |
+| `.github/workflows/pypi-package.yml` | PR tests for `packaging/pypi/` |
+| `packaging/pypi/` | the `quarto2` PyPI package (in-tree PEP 517 backend) |
 | `scripts/nightly-gate.sh` | "does main have unreleased changes?" + the nightly version |
 | `crates/quarto/tests/integration/nightly_gate.rs` | tests for the gate script |
 | `Cargo.toml` `[workspace.package].version` | source of truth for the version |

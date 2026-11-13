@@ -303,6 +303,11 @@ enum Command {
         #[arg(long)]
         skip_css_lint: bool,
 
+        /// Skip the quarto2 PyPI packaging tests (python3 -m unittest over
+        /// packaging/pypi/tests). They run in step 1 with the fail-fast lints.
+        #[arg(long)]
+        skip_pypi_tests: bool,
+
         /// Skip the strict claude-notes render (q2 render --strict
         /// claude-notes) that runs right after the Rust build. Also skipped
         /// by --skip-rust-build.
@@ -668,6 +673,7 @@ fn main() -> Result<()> {
             skip_q2_preview_spa_build,
             skip_hub_mcp_tests,
             skip_css_lint,
+            skip_pypi_tests,
             skip_claude_notes_render,
             skip_feature_sets,
             e2e,
@@ -687,6 +693,7 @@ fn main() -> Result<()> {
                 skip_q2_preview_spa_build,
                 skip_hub_mcp_tests,
                 skip_css_lint,
+                skip_pypi_tests,
                 skip_claude_notes_render,
                 skip_feature_sets,
                 include_e2e: e2e,
