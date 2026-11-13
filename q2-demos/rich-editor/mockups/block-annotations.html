@@ -513,8 +513,9 @@ function render() {
     }
   }
 
-  // The block a menu, drag or hovered crumb acts on.
-  const target = (drag && drag.el) || (menu && menu.target) || crumbHover;
+  // The block a menu, drag or hovered crumb acts on. Not for the toolbar's
+  // menus: they follow the caret, so the caret already says which block.
+  const target = (drag && drag.el) || (menu && !menu.fromToolbar && menu.target) || crumbHover;
   const marked = state.v === 'tab' || state.v === 'chipbr' || tbAim; // these show the target already
   if (target && body.contains(target) && (crumbHover || !marked)) place(put('hl', 'hl'), rel(target.getBoundingClientRect()), 5);
   if (drag && drag.at != null) {
