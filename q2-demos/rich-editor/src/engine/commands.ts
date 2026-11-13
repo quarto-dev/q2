@@ -9,7 +9,9 @@
  *   the start of the next field, adding it if it's absent and addable.
  * - Backspace at the start of a field moves to the end of the previous one
  *   without deleting (and Delete at the end moves to the next one). Held
- *   down (repeating), it stops there instead.
+ *   down (repeating), it stops there instead. In a field Backspace stops
+ *   at (`Schema.backspaceStops`), it always stops there, unless the field
+ *   is empty.
  * - An empty field disappears once the selection leaves it, unless it's
  *   one that stays when empty (`Schema.keepEmpty`). Backspace in an empty
  *   field removes it.
@@ -221,6 +223,7 @@ function deleteDirection(
       return select(schema, { fields: rest, selection }, neighbour === undefined ? null : neighbourEnd(neighbour))
     }
     if (neighbour === undefined) return state
+    if (backward && text !== '' && schema.backspaceStops?.includes(at.field)) return state
     return select(schema, state, neighbourEnd(neighbour))
   }
 

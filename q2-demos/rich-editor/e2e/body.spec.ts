@@ -589,13 +589,13 @@ test.describe('between the title block and the body', () => {
     await editor.expectParagraphCaret(0, 0)
   })
 
-  test('Backspace at the start of the body goes to the title block without deleting', async ({ page }) => {
+  test('Backspace at the start of the body stays there and deletes nothing', async ({ page }) => {
     const editor = await openEditor(page)
     await editor.placeCaretInParagraph(0, 0)
 
     await page.keyboard.press('Backspace')
 
-    await editor.expectCaret('subtitle', 13)
+    await editor.expectParagraphCaret(0, 0)
     await editor.document.expectSource(fixture('basic'))
   })
 
@@ -730,6 +730,20 @@ test.describe('a document without a body', () => {
     await page.keyboard.press('ArrowUp')
 
     expect((await editor.caret()).field).toBe('subtitle')
+    expect(await editor.blocks()).toEqual([])
+    expect(document.source()).toBe(source)
+  })
+
+  test('Backspace in a body just started goes back to the title block, and the body goes away', async ({ page }) => {
+    const document = await createDocument(source)
+    const editor = await document.open(page)
+    await editor.placeCaret('subtitle', 5)
+    await page.keyboard.press('Enter')
+    expect(await editor.blocks()).toEqual(['p: '])
+
+    await page.keyboard.press('Backspace')
+
+    await editor.expectCaret('subtitle', 5)
     expect(await editor.blocks()).toEqual([])
     expect(document.source()).toBe(source)
   })

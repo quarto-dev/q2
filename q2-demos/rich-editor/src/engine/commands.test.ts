@@ -61,6 +61,19 @@ describe('deleteBackward', () => {
     expect(next.selection).toEqual(caret('title', 16))
   })
 
+  it('at the start of a field that Backspace stops at stays put', () => {
+    const stopping = { ...schema, backspaceStops: ['subtitle'] }
+    const start = state(both, caret('subtitle', 0))
+    expect(deleteBackward(stopping, start)).toBe(start)
+  })
+
+  it('in an empty field that Backspace stops at moves to the end of the previous one', () => {
+    const stopping = { ...schema, backspaceStops: ['subtitle'] }
+    const next = deleteBackward(stopping, state({ title: 'T', subtitle: '' }, caret('subtitle', 0)))
+    expect(next.fields).toEqual({ title: 'T' })
+    expect(next.selection).toEqual(caret('title', 1))
+  })
+
   it('in an empty field removes it, moving to the end of the previous one', () => {
     const next = deleteBackward(schema, state({ title: 'T', subtitle: '' }, caret('subtitle', 0)))
     expect(next.fields).toEqual({ title: 'T' })

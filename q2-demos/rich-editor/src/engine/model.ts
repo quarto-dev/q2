@@ -85,6 +85,12 @@ export interface Schema {
    * step of its own (see `applyInputRule`).
    */
   readonly inputRule?: (field: string, line: string) => string | null
+  /**
+   * Fields that Backspace at the start of stays in, rather than moving to
+   * the end of the field before (the body, after the title block). Empty,
+   * they don't hold it: Backspace moves on, and the field goes away.
+   */
+  readonly backspaceStops?: readonly string[]
   /** A line prefix as text, for the clipboard (none unless given). */
   readonly prefixText?: (prefix: string) => string
   /**

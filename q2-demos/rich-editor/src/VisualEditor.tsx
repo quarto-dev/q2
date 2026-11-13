@@ -81,7 +81,8 @@ const TITLE_BLOCK = ['title', 'subtitle', 'abstract'] satisfies TitleBlockField[
  * start, and selections across fields follow it. Enter goes to the next
  * field there is, and from the last one-line field of the title block to
  * the body, starting one if there's none; it never adds a title-block
- * field (the "+" row does). The abstract and the body take line breaks
+ * field (the "+" row does). Backspace at the start of the body stays there,
+ * unless the body is empty. The abstract and the body take line breaks
  * (one per paragraph). The title-block fields stay when empty.
  * In the body, `## ` at the start of a paragraph makes it a heading and
  * `> ` a quote, and they're copied with their `#`s and `>`.
@@ -93,6 +94,7 @@ const SCHEMA: Schema = {
   inputRule: (field, line) => (field === 'body' ? bodyInputRule(line) : null),
   prefixText: prefixMarkdown,
   keepEmpty: TITLE_BLOCK,
+  backspaceStops: ['body'],
 }
 
 const PLACEHOLDERS: Record<TitleBlockField, string> = {
