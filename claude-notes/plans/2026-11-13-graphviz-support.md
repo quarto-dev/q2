@@ -767,6 +767,25 @@ look good. This is his check by eye, not an automated one. Rendered
 Not checked: that `graph-layout: neato` changed the layout (only that the
 diagram drew).
 
+## CI follow-up on PR 1206
+
+2026-11-13. `Hub-Client E2E Tests` (chromium and firefox) failed on
+`graphviz/basic.qmd` and `graphviz/cell-options.qmd`: the Playwright
+smoke-all runner renders each fixture in the q2-preview iframe and looked for
+`pre.graphviz`, which only the `q2 render` HTML writer emits. The preview
+draws into `div[data-graphviz-diagram]`. This was a real failure, not a
+flake, and the suite was never run locally.
+
+Fix: both fixtures are listed in `DOM_ASSERTIONS_PENDING_PARITY`
+(`hub-client/e2e/helpers/smokeAllDiscovery.ts`), as the two Mermaid fixtures
+are. The DOM selectors are skipped in the preview iframe; the regex and
+diagnostic assertions still run. The entries name `bd-ijlapt70` because a
+dedicated parity strand could not be filed from this session. Open item:
+write selectors that hold in both DOMs, or preview-specific assertions.
+
+Checked locally: `smokeAll.wasm.test.ts` and `smokeAllParity.wasm.test.tsx`
+pass. The Playwright suite itself was not run locally.
+
 ## Decisions to ratify
 
 1. **Client-side first (A), or render-time SVG from the start (B)?** A is the

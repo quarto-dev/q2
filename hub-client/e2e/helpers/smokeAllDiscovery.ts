@@ -474,6 +474,13 @@ export const DOM_ASSERTIONS_PENDING_PARITY: ReadonlyMap<string, string> = new Ma
   // Same gap, plus no crossref_render wrapper: the preview carries
   // `fig-align` on the CodeBlock and MermaidCodeBlock.tsx applies it.
   ['mermaid/fig-align.qmd', 'bd-c3dtpe36'],
+  // Graphviz blocks: `pre.graphviz` is emitted only by the `q2 render`
+  // HTML writer. In q2-preview GraphvizCodeBlock.tsx draws the diagram
+  // into `div[data-graphviz-diagram]`.
+  ['graphviz/basic.qmd', 'bd-ijlapt70'],
+  // Same gap, plus no crossref_render wrapper class: the preview carries
+  // `fig-align` on the CodeBlock and GraphvizCodeBlock.tsx applies it.
+  ['graphviz/cell-options.qmd', 'bd-ijlapt70'],
   // User-declared `css:` links are not emitted in VFS/preview mode.
   ['metadata/dir-metadata-paths/chapters/intro/doc.qmd', 'bd-b3oq2fsy'],
   // TOC copy of repo actions dropped at the default toc-location.
