@@ -551,20 +551,4 @@ export class Editor {
       document.activeElement!.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: text }))
     }, text)
   }
-
-  /**
-   * Copy (or cut) the selection, and return the text that goes on the
-   * clipboard. (The event is made here, so the system's clipboard isn't
-   * touched.)
-   */
-  copy(kind: 'copy' | 'cut' = 'copy'): Promise<string> {
-    return this.frame.evaluate((kind) => {
-      const data = new DataTransfer()
-      const event = new ClipboardEvent(kind, { bubbles: true, cancelable: true })
-      Object.defineProperty(event, 'clipboardData', { value: data })
-      document.activeElement!.dispatchEvent(event)
-      // Left to the browser, a copy takes the text the page shows selected.
-      return event.defaultPrevented ? data.getData('text/plain') : String(document.getSelection() ?? '')
-    }, kind)
-  }
 }
