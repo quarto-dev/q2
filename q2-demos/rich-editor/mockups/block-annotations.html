@@ -20,6 +20,21 @@ aside h2:first-child { margin-top:0; }
 .opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
 .opt b { display:block; font-weight:600; }
 .opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.opt span.why { font-style:italic; color:#8a6d00; }
+details.archived { margin-top:22px; border-top:1px solid var(--line); padding-top:12px; }
+details.archived summary { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); cursor:pointer; margin-bottom:8px; }
+
+/* Toolbar (Extras), Word / Google Docs style. */
+.toolbar { display:flex; flex-wrap:wrap; gap:3px; align-items:center; justify-content:center; padding:7px 16px; border-bottom:1px solid var(--line); background:#fff; }
+.toolbar[hidden] { display:none; }
+.toolbar button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; display:inline-flex; align-items:center; gap:6px; }
+.toolbar button:hover:not(:disabled) { background:#f1f3f5; }
+.toolbar button:disabled { color:var(--faint); cursor:default; }
+.toolbar button[aria-pressed="true"] { background:var(--sel-bg); border-color:#c5dcf5; color:var(--sel-ink); }
+.toolbar .style { min-width:130px; justify-content:space-between; border-color:var(--line); }
+.toolbar .style.open { background:#f1f3f5; }
+.toolbar svg { width:8px; height:8px; }
+.toolbar .sep { width:1px; height:20px; background:var(--line); margin:0 6px; }
 .radio { display:flex; gap:6px; align-items:center; padding:3px 2px; cursor:pointer; }
 .reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
 .center { display:flex; flex-direction:column; min-width:0; min-height:0; }
@@ -36,7 +51,7 @@ kbd { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; bord
    annotations, which are laid over the page (.overlay) rather than put in
    the editable DOM, so they never become part of what you edit. */
 .page { position:relative; max-width:1060px; margin:0 auto; padding:44px 100px 160px; }
-.page.v-gutter, .page.v-chip, .page.v-bracket { padding-left:210px; }
+.page.v-gutter, .page.v-chip, .page.v-chipbr, .page.v-bracket { padding-left:210px; }
 .page.v-margin { padding-right:210px; }
 .body { outline:none; font-size:17px; line-height:1.5; }
 .body > :first-child { margin-top:0; }
@@ -100,11 +115,16 @@ body.dragging, body.dragging * { cursor:grabbing !important; }
 .brk.caret { border-color:#8fa3b8; }
 .brk.hover { border-color:#d3d8dd; }
 .brk.idle { border-color:#eceef1; }
+.brk.aim { border-color:var(--accent); }
 .v-bracket .chip { padding:1px 4px; }
+
+/* Chip + bracket: like the gutter chip; the chip pointed at is "aimed". */
+.v-chipbr .ann.caret .chip { background:var(--chip); }
+.v-chipbr .chip.aim, .v-chipbr .chip.open { background:var(--sel-bg) !important; color:var(--sel-ink); }
 
 /* Breadcrumb bar under the document. */
 .crumbs { display:none; border-top:1px solid var(--line); background:var(--chrome); padding:5px 12px; font:12.5px/18px system-ui, sans-serif; align-items:center; min-height:34px; color:#5c636a; }
-.app.v-crumbs-on .crumbs { display:flex; }
+.app.crumbs-on .crumbs { display:flex; }
 .crumbs .none { color:var(--faint); padding:0 6px; }
 
 /* Highlight of the block a menu or drag acts on; drop position. */
@@ -126,6 +146,7 @@ body.dragging, body.dragging * { cursor:grabbing !important; }
 <div class="app" id="app">
   <aside id="side"></aside>
   <div class="center">
+    <div class="toolbar" id="toolbar" hidden></div>
     <div class="scroller" id="scroller">
       <div class="tips" id="tips"></div>
       <div class="page" id="page">
@@ -140,22 +161,31 @@ body.dragging, body.dragging * { cursor:grabbing !important; }
 <div class="menu" id="menu" hidden></div>
 <script>
 const VARIANTS = {
+  chipbr: { name: 'Chip + bracket', desc: 'A chip and drag handle in the left margin, and a bracket down the extent of the block they act on.',
+    tips: 'In the callout, hover each chip of “Callout › Paragraph”: the bracket moves to the block that chip acts on. Click a chip for its menu; drag <b>⠿</b> to move the block you last pointed at among its siblings.' },
+  none: { name: 'Nothing', desc: 'No margin affordance: with the toolbar on, try the toolbar alone.',
+    tips: 'Turn on <b>Toolbar</b> (under Extras) to change blocks from there.' },
   gutter: { name: 'Gutter label', desc: 'Quiet text in the left margin, level with the block’s first line. It only says what the block is.',
+    archived: 'Passive: if it’s there, it might as well do something.',
     tips: 'Hover a block or put the caret in it. The label is passive; <kbd>⌘/</kbd> still opens the block menu.' },
   chip: { name: 'Gutter chip + handle', desc: 'A button in the left margin, with a drag handle. Click it to turn the block into another type, or move it.',
+    archived: 'Once blocks nest, nothing shows which block it targets. Became Chip + bracket.',
     tips: 'Click the chip for the block menu. Drag <b>⠿</b> to move the block among its siblings (within a callout, it stays in the callout).' },
   margin: { name: 'Right-margin label', desc: 'The same button in the right margin, away from where each line starts. Text until you hover it.',
+    archived: 'The left margin feels more familiar.',
     tips: 'Hover a block or put the caret in it, then click its label in the right margin.' },
   tab: { name: 'Outline + tab', desc: 'Outlines the block and hangs its type on a tab at its top-left corner, so you also see where it starts and ends.',
+    archived: 'A whole rectangle of ink that is nearly always full width, so it says no more than a bracket.',
     tips: 'Try <b>Nesting: all levels</b> with the caret in the callout or the quote: each level gets an outline.' },
   bracket: { name: 'Bracket', desc: 'A thin bracket down the left edge shows the block’s extent; nested blocks get nested brackets, like code-folding guides.',
+    archived: 'Folded into Chip + bracket.',
     tips: 'Try <b>Nesting: all levels</b> in the callout; the label sits left of the brackets.' },
-  crumbs: { name: 'Breadcrumb bar', desc: 'Nothing on the page: a bar under the document shows the blocks the caret is in, outermost first.',
-    tips: 'Put the caret anywhere. Each crumb opens that block’s menu; hovering one outlines its block.' },
 };
 const LABELS = { name: 'Name (Heading 2)', short: 'Short (H2)', md: 'Markdown (##)' };
 const SHOWS = { focus: 'Hover and caret', caret: 'Caret only', always: 'Always' };
 const NESTS = { inner: 'Innermost block', all: 'All levels' };
+const QUIETS = { show: 'Keep showing', hide: 'Hide until the mouse moves', faint: 'Only a faint bracket until the mouse moves' };
+const TOOLBAR_TIP = ' The toolbar follows the caret: its style box shows the caret’s text block, and the list, quote and callout buttons light up when the caret is inside one (click again to undo).';
 const GENERAL = ' <kbd>⌘/</kbd> or <kbd>Ctrl /</kbd> opens the menu for the caret’s block (<kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> <kbd>Esc</kbd>). <kbd>⌥↑</kbd><kbd>⌥↓</kbd> move it.';
 
 const FIXTURE = `
@@ -192,26 +222,43 @@ document.execCommand('defaultParagraphSeparator', false, 'p');
 // ---- state --------------------------------------------------------------
 const params = new URLSearchParams(location.hash.slice(1));
 const pick = (k, set, d) => (set[params.get(k)] ? params.get(k) : d);
+const flag = (k, d) => (params.has(k) ? params.get(k) === '1' : d);
 const state = {
-  v: pick('v', VARIANTS, 'chip'), label: pick('label', LABELS, 'name'),
-  show: pick('show', SHOWS, 'focus'), nest: pick('nest', NESTS, 'inner'), src: params.get('src') !== '0',
+  v: pick('v', VARIANTS, 'chipbr'), label: pick('label', LABELS, 'name'),
+  show: pick('show', SHOWS, 'focus'), nest: pick('nest', NESTS, 'all'), quiet: pick('quiet', QUIETS, 'hide'),
+  tb: flag('tb', false), crumbs: flag('crumbs', false), src: flag('src', true),
 };
-let mouse = null, menu = null, drag = null, crumbHover = null;
+// `chipHover`: the block whose chip the pointer is on (or last was, in its label).
+// `typing`: set by a keystroke that edits, cleared when the mouse moves.
+let lastHov = [], overAnn = false;
+let mouse = null, menu = null, drag = null, crumbHover = null, chipHover = null, typing = false;
 
 function saveHash() {
-  location.replace('#' + new URLSearchParams({ v: state.v, label: state.label, show: state.show, nest: state.nest, src: state.src ? '1' : '0' }));
+  const b = (x) => (x ? '1' : '0');
+  location.replace('#' + new URLSearchParams({ v: state.v, label: state.label, show: state.show, nest: state.nest, quiet: state.quiet, tb: b(state.tb), crumbs: b(state.crumbs), src: b(state.src) }));
 }
 
 function renderSide() {
   const side = $('side');
-  side.innerHTML = '<h2>Annotation</h2>';
-  for (const [k, o] of Object.entries(VARIANTS)) {
+  side.innerHTML = '<h2>In the margin</h2>';
+  const card = (k, o, into) => {
     const d = document.createElement('div');
     d.className = 'opt' + (k === state.v ? ' on' : '');
-    d.innerHTML = `<b>${o.name}</b><span>${o.desc}</span>`;
+    d.innerHTML = `<b>${o.name}</b><span>${o.desc}</span>` + (o.archived ? `<span class="why">${o.archived}</span>` : '');
     d.onclick = () => { state.v = k; apply(); };
-    side.append(d);
-  }
+    into.append(d);
+  };
+  for (const [k, o] of Object.entries(VARIANTS)) if (!o.archived) card(k, o, side);
+  const checks = (title, items) => {
+    const h = document.createElement('h2'); h.textContent = title; side.append(h);
+    for (const [key, name] of items) {
+      const l = document.createElement('label'); l.className = 'radio';
+      l.innerHTML = `<input type="checkbox" ${state[key] ? 'checked' : ''}> ${name}`;
+      l.querySelector('input').onchange = (e) => { state[key] = e.target.checked; apply(); };
+      side.append(l);
+    }
+  };
+  checks('Extras', [['tb', 'Toolbar'], ['crumbs', 'Breadcrumb bar']]);
   const radios = (title, key, set) => {
     const h = document.createElement('h2'); h.textContent = title; side.append(h);
     for (const [k, name] of Object.entries(set)) {
@@ -224,21 +271,24 @@ function renderSide() {
   radios('Label', 'label', LABELS);
   radios('Show on', 'show', SHOWS);
   radios('Nesting', 'nest', NESTS);
-  const h = document.createElement('h2'); h.textContent = 'Panels'; side.append(h);
-  const l = document.createElement('label'); l.className = 'radio';
-  l.innerHTML = `<input type="checkbox" ${state.src ? 'checked' : ''}> Show source`;
-  l.querySelector('input').onchange = (e) => { state.src = e.target.checked; apply(); };
-  side.append(l);
+  radios('While typing', 'quiet', QUIETS);
+  checks('Panels', [['src', 'Show source']]);
   const r = document.createElement('button'); r.className = 'reset'; r.textContent = 'Reset document';
   r.onclick = () => { closeMenu(); body.innerHTML = FIXTURE; update(); };
   side.append(r);
+  const arch = document.createElement('details'); arch.className = 'archived';
+  arch.open = !!VARIANTS[state.v].archived;
+  arch.innerHTML = '<summary>Archived</summary>';
+  for (const [k, o] of Object.entries(VARIANTS)) if (o.archived) card(k, o, arch);
+  side.append(arch);
 }
 
 function apply() {
   saveHash(); closeMenu(); renderSide();
-  $('tips').innerHTML = VARIANTS[state.v].tips + GENERAL;
+  $('tips').innerHTML = VARIANTS[state.v].tips + GENERAL + (state.tb ? TOOLBAR_TIP : '');
   app.classList.toggle('nosrc', !state.src);
-  app.classList.toggle('v-crumbs-on', state.v === 'crumbs');
+  app.classList.toggle('crumbs-on', state.crumbs);
+  $('toolbar').hidden = !state.tb;
   app.classList.toggle('md', state.label === 'md');
   page.className = 'page v-' + state.v;
   for (const e of live.values()) e.remove();
@@ -338,8 +388,13 @@ function render() {
   const pr = page.getBoundingClientRect(), br = body.getBoundingClientRect();
   const rel = (r) => ({ left: r.left - pr.left, top: r.top - pr.top, width: r.width, height: r.height, bottom: r.bottom - pr.top, right: r.right - pr.left });
   const L = br.left - pr.left, R = br.right - pr.left;
-  const car = caretChain(), hov = drag || menu ? [] : hoverChain();
+  // While the pointer is on a label, keep what it was labelling: re-reading
+  // the hover would change the label (and slide its chips) under the pointer.
+  const car = caretChain(), hov = drag || menu ? [] : overAnn ? lastHov : hoverChain();
+  lastHov = hov;
+  const quiet = typing && state.quiet !== 'show' && !menu && !drag;
   seen = new Set();
+  if (chipHover && !body.contains(chipHover)) chipHover = null;
 
   // Which blocks are annotated, and how strongly.
   const vis = new Map();
@@ -347,16 +402,34 @@ function render() {
   if (state.show === 'always') blocks().forEach((b) => vis.set(b, 'idle'));
   if (state.show !== 'caret') nest(hov).forEach((b) => vis.set(b, 'hover'));
   nest(car).forEach((b) => vis.set(b, 'caret'));
-  if (menu) vis.set(menu.target, 'caret');
+  if (menu && menu.target) vis.set(menu.target, 'caret');
   if (drag) vis.set(drag.el, 'caret');
+  if (quiet) vis.clear();
 
-  if (state.v === 'crumbs') {
-    const chain = menu && !car.includes(menu.target) ? chainOf(menu.target) : car;
+  if (state.crumbs) {
+    const chain = menu && menu.target && !car.includes(menu.target) ? chainOf(menu.target) : car;
     const html = chain.length
       ? chain.map((b) => `<button class="chip${menu && menu.target === b ? ' open' : ''}" data-menu="${id(b)}">${esc(label(b))}${CHEV}</button>`).join('<span class="sep">›</span>')
       : '<span class="none">Put the caret in a block</span>';
     setHTML(crumbs, html);
-  } else {
+  }
+  renderToolbar(car);
+
+  // The bracket of Chip + bracket: the block the chip (or menu, or drag)
+  // would act on. While typing, the "faint" setting keeps just this, for the
+  // caret's block, in any variant.
+  const faint = quiet && state.quiet === 'faint';
+  if (state.v === 'chipbr' || faint) {
+    const t = faint ? car[car.length - 1]
+      : (drag && drag.el) || (menu && menu.target) || chipHover || car[car.length - 1] || (state.show !== 'caret' ? hov[hov.length - 1] : null);
+    if (t && (faint || vis.has(t))) {
+      const r = rel(t.getBoundingClientRect());
+      const st = faint ? 'idle' : drag || menu || chipHover ? 'aim' : vis.get(t);
+      place(put('t', 'brk ' + st), { left: L - 14, top: r.top, width: 6, height: r.height });
+    }
+  }
+
+  if (state.v !== 'none') {
     // Group the annotated blocks whose first lines coincide (a callout and
     // its first paragraph) into one label, outermost first.
     const items = [...vis].map(([b, st]) => {
@@ -374,13 +447,18 @@ function render() {
       g.items.sort((a, b) => a.d - b.d);
       const st = g.items.reduce((s, it) => (rank[it.st] > rank[s] ? it.st : s), 'idle');
       const e = put('g' + g.items.map((it) => id(it.b)).join('-'), 'ann ' + st);
+      const chev = state.v === 'chip' || state.v === 'chipbr' || state.v === 'margin';
       const parts = g.items.map((it) => (interactive
-        ? `<button class="chip${menu && menu.target === it.b ? ' open' : ''}" data-menu="${id(it.b)}">${esc(label(it.b))}${state.v === 'chip' || state.v === 'margin' ? CHEV : ''}</button>`
+        ? `<button class="chip${menu && menu.target === it.b ? ' open' : ''}${state.v === 'chipbr' && chipHover === it.b ? ' aim' : ''}" data-menu="${id(it.b)}">${esc(label(it.b))}${chev ? CHEV : ''}</button>`
         : `<span>${esc(label(it.b))}</span>`));
-      const handle = state.v === 'chip' ? `<span class="handle" data-drag="${id(g.items[0].b)}" title="Drag to move">${GRIP}</span>` : '';
+      // Chip: the handle drags the outermost block of the label. Chip +
+      // bracket: the block whose chip was last pointed at, else the innermost.
+      const dragIds = state.v === 'chip' ? id(g.items[0].b) : g.items.map((it) => id(it.b)).join('-');
+      const handle = state.v === 'chip' || state.v === 'chipbr' ? `<span class="handle" data-drag="${dragIds}" title="Drag to move">${GRIP}</span>` : '';
       setHTML(e, handle + parts.join('<span class="sep">›</span>'));
       const outer = g.items[0];
       if (state.v === 'gutter' || state.v === 'chip') Object.assign(e.style, { left: L - 10 + 'px', top: g.c + 'px', transform: 'translate(-100%, -50%)' });
+      if (state.v === 'chipbr') Object.assign(e.style, { left: L - 22 + 'px', top: g.c + 'px', transform: 'translate(-100%, -50%)' });
       if (state.v === 'margin') Object.assign(e.style, { left: R + 10 + 'px', top: g.c + 'px', transform: 'translate(0, -50%)' });
       if (state.v === 'tab') Object.assign(e.style, { left: outer.r.left - 6 + 'px', top: outer.r.top - 5 + 'px', transform: 'translate(0, -100%)' });
       if (state.v === 'bracket') Object.assign(e.style, { left: L - 34 + 'px', top: g.c + 'px', transform: 'translate(-100%, -50%)' });
@@ -396,7 +474,8 @@ function render() {
 
   // The block a menu, drag or hovered crumb acts on.
   const target = (drag && drag.el) || (menu && menu.target) || crumbHover;
-  if (target && body.contains(target) && !(state.v === 'tab' && !crumbHover)) place(put('hl', 'hl'), rel(target.getBoundingClientRect()), 5);
+  const marked = state.v === 'tab' || state.v === 'chipbr'; // these show the target already
+  if (target && body.contains(target) && (crumbHover || !marked)) place(put('hl', 'hl'), rel(target.getBoundingClientRect()), 5);
   if (drag && drag.at != null) {
     const s = drag.sibs, last = s[s.length - 1].getBoundingClientRect();
     const y = drag.at < s.length
@@ -505,12 +584,12 @@ function menuItems(b) {
     { label: 'Delete', hint: '', run: () => del(b) });
   return items;
 }
-function openMenu(b) {
-  const items = menuItems(b), sel = items.findIndex((it) => it.on);
-  menu = { target: b, items, i: sel >= 0 ? sel : items.findIndex((it) => it.run && !it.off) };
+function openMenu(b, opts = {}) {
+  const items = opts.items || menuItems(b), sel = items.findIndex((it) => it.on && !it.off);
+  menu = { target: b, items, title: opts.title || label(b, 'name'), i: sel >= 0 ? sel : items.findIndex((it) => it.run && !it.off) };
   render();
   drawMenu();
-  const anchor = document.querySelector(`[data-menu="${id(b)}"]`);
+  const anchor = opts.anchor || document.querySelector(`[data-menu="${id(b)}"]`);
   const r = anchor ? anchor.getBoundingClientRect() : (() => { const f = firstLine(b), br = b.getBoundingClientRect(); return { left: br.left, top: f.top, bottom: f.top + f.height }; })();
   menuEl.hidden = false;
   const h = menuEl.offsetHeight, w = menuEl.offsetWidth;
@@ -519,14 +598,20 @@ function openMenu(b) {
   menuEl.style.top = (below ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + 'px';
 }
 function drawMenu() {
-  menuEl.innerHTML = `<div class="grp" style="color:var(--ink)">${esc(label(menu.target, 'name'))}</div>`;
+  menuEl.innerHTML = `<div class="grp" style="color:var(--ink)">${esc(menu.title)}</div>`;
   menu.items.forEach((it, i) => {
     if (it.sep) { menuEl.append(document.createElement('hr')); return; }
     if (it.grp) { const g = document.createElement('div'); g.className = 'grp'; g.textContent = it.grp; menuEl.append(g); return; }
     const d = document.createElement('div');
     d.className = 'item' + (it.on ? ' on' : '') + (it.off ? ' off' : '') + (i === menu.i ? ' sel' : '');
-    d.innerHTML = `<span>${esc(it.label)}</span><small>${esc(it.hint || '')}</small>`;
-    d.onmouseenter = () => { if (!it.off) { menu.i = i; drawMenu(); } };
+    d.innerHTML = `<span style="${it.css || ''}">${esc(it.label)}</span><small>${esc(it.hint || '')}</small>`;
+    d.dataset.i = i;
+    // Only move the highlight: redrawing would replace the item under the pointer.
+    d.onmouseenter = () => {
+      if (it.off) return;
+      menu.i = i;
+      menuEl.querySelectorAll('.item').forEach((x) => x.classList.toggle('sel', +x.dataset.i === i));
+    };
     d.onmousedown = (ev) => { ev.preventDefault(); if (!it.off) choose(it); };
     menuEl.append(d);
   });
@@ -541,6 +626,69 @@ function stepMenu(dir) {
   }
   drawMenu();
 }
+
+// ---- toolbar -----------------------------------------------------------------
+// Word / Google Docs style: a style box for the caret's text block, and
+// toggles for the containers it's in.
+function caretContext(car = caretChain()) {
+  const find = (ks) => [...car].reverse().find((b) => ks.includes(kind(b)));
+  return {
+    car, text: find(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']), list: find(['ul', 'ol']),
+    quote: find(['quote']), callout: find(['callout']), code: find(['code']),
+  };
+}
+function renderToolbar(car) {
+  if (!state.tb) return;
+  const c = caretContext(car), none = !car.length;
+  const style = none ? 'Paragraph' : c.code ? 'Code' : c.text ? label(c.text, 'name') : 'Paragraph';
+  const btn = (k, text, pressed, disabled) => `<button data-tb="${k}" aria-pressed="${!!pressed}" ${disabled ? 'disabled' : ''}>${text}</button>`;
+  setHTML($('toolbar'), [
+    `<button data-tb="style" class="style${menu && menu.anchor === 'style' ? ' open' : ''}" ${none || c.code ? 'disabled' : ''}><span>${esc(style)}</span>${CHEV}</button>`,
+    '<span class="sep"></span>',
+    btn('ul', '• Bullets', c.list && kind(c.list) === 'ul', none || c.code),
+    btn('ol', '1. Numbered', c.list && kind(c.list) === 'ol', none || c.code),
+    btn('quote', '❝ Quote', c.quote, none || c.code),
+    '<span class="sep"></span>',
+    btn('callout', 'Callout', c.callout, none || c.code),
+    btn('code', '{ } Code cell', false, false),
+  ].join(''));
+}
+function onToolbar(k, anchor) {
+  const c = caretContext();
+  if (k === 'style') {
+    if (menu && menu.anchor === 'style') return closeMenu();
+    const T = (name, t, css) => ({ label: name, on: c.text && kind(c.text) === t, off: !c.text, css, run: () => convert(c.text, t) });
+    openMenu(c.text || c.list, {
+      anchor, title: c.text ? 'Text style' : 'Text style (not in a list)',
+      items: [T('Paragraph', 'p', ''), T('Heading 1', 'h1', 'font-size:20px;font-weight:600'), T('Heading 2', 'h2', 'font-size:18px;font-weight:600'),
+        T('Heading 3', 'h3', 'font-size:16px;font-weight:600'), T('Heading 4', 'h4', 'font-size:14.5px;font-weight:600')],
+    });
+    menu.anchor = 'style';
+    return;
+  }
+  closeMenu();
+  if (k === 'code') {
+    const pre = mk('pre'); pre.dataset.lang = 'python'; pre.innerHTML = '<br>';
+    if (c.car[0]) c.car[0].after(pre); else body.append(pre);
+    body.focus();
+    const r = document.createRange(); r.setStart(pre, 0); getSelection().removeAllRanges(); getSelection().addRange(r);
+    return update();
+  }
+  const inner = c.list || c.text; // what a new list, quote or callout takes in
+  withCaret(() => {
+    if (k === 'ul' || k === 'ol') {
+      if (c.list) return convert(c.list, kind(c.list) === k ? 'unlist' : k);
+      return convert(c.text, k);
+    }
+    if (k === 'quote') return c.quote ? convert(c.quote, 'unwrap') : convert(inner, 'quote');
+    if (k === 'callout') return c.callout ? convert(c.callout, 'unwrap') : convert(inner, 'callout');
+  });
+}
+$('toolbar').addEventListener('mousedown', (ev) => {
+  const b = ev.target.closest('[data-tb]');
+  ev.preventDefault(); ev.stopPropagation(); // keep the caret where it is
+  if (b && !b.disabled) onToolbar(b.dataset.tb, b);
+});
 
 // ---- drag --------------------------------------------------------------------
 function startDrag(b) {
@@ -570,17 +718,31 @@ function onControlDown(ev) {
   const h = ev.target.closest('[data-drag]'), c = ev.target.closest('[data-menu]');
   if (!h && !c) return;
   ev.preventDefault(); ev.stopPropagation(); // keep the caret where it is
-  if (h) return startDrag(byId.get(+h.dataset.drag));
+  if (h) {
+    const ids = h.dataset.drag.split('-').map(Number), i = chipHover ? ids.indexOf(id(chipHover)) : -1;
+    return startDrag(byId.get(i >= 0 ? ids[i] : ids[ids.length - 1]));
+  }
   const b = byId.get(+c.dataset.menu);
   if (menu && menu.target === b) closeMenu(); else openMenu(b);
 }
 overlay.addEventListener('mousedown', onControlDown);
+overlay.addEventListener('mouseover', (ev) => {
+  const c = ev.target.closest('[data-menu]');
+  if (c) { const b = byId.get(+c.dataset.menu); if (b !== chipHover) { chipHover = b; schedule(); } }
+});
+// Leaving a label forgets which of its chips was pointed at.
+page.addEventListener('mousemove', (ev) => { if (chipHover && !ev.target.closest('.ann')) { chipHover = null; schedule(); } });
+let lastMove = null;
+document.addEventListener('mousemove', (ev) => {
+  if (typing && lastMove && Math.hypot(ev.clientX - lastMove.x, ev.clientY - lastMove.y) > 3) { typing = false; schedule(); }
+  lastMove = { x: ev.clientX, y: ev.clientY };
+});
 crumbs.addEventListener('mousedown', onControlDown);
 crumbs.addEventListener('mouseover', (ev) => { const c = ev.target.closest('[data-menu]'); const b = c && byId.get(+c.dataset.menu); if (b !== crumbHover) { crumbHover = b; schedule(); } });
 crumbs.addEventListener('mouseleave', () => { crumbHover = null; schedule(); });
 document.addEventListener('mousedown', (ev) => { if (menu && !menuEl.contains(ev.target)) closeMenu(); });
-page.addEventListener('mousemove', (ev) => { mouse = { x: ev.clientX, y: ev.clientY }; schedule(); });
-page.addEventListener('mouseleave', () => { mouse = null; schedule(); });
+page.addEventListener('mousemove', (ev) => { mouse = { x: ev.clientX, y: ev.clientY }; overAnn = !!ev.target.closest('.ann'); schedule(); });
+page.addEventListener('mouseleave', () => { mouse = null; overAnn = false; schedule(); });
 $('scroller').addEventListener('scroll', () => { closeMenu(); schedule(); });
 addEventListener('resize', () => { closeMenu(); schedule(); });
 document.addEventListener('selectionchange', schedule);
@@ -594,6 +756,8 @@ document.addEventListener('keydown', (ev) => {
     closeMenu();
   }
   if (document.activeElement !== body) return;
+  // A keystroke that edits counts as typing; moving the caret doesn't.
+  if (!ev.metaKey && !ev.ctrlKey && !ev.altKey && (ev.key.length === 1 || ['Backspace', 'Delete', 'Enter', 'Tab'].includes(ev.key)) && !typing) { typing = true; schedule(); }
   const chain = caretChain(), b = chain[chain.length - 1];
   if (!b) return;
   if ((ev.metaKey || ev.ctrlKey) && ev.key === '/') { ev.preventDefault(); openMenu(b); }
