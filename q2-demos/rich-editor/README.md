@@ -32,6 +32,10 @@ a space at the start of a paragraph makes it a heading (Backspace or undo
 right after gives back the `#`s as text), and Backspace at the start of a
 heading's text makes it a paragraph again. Block quotes of one paragraph
 of plain text are edited the same way, made by typing `>` and a space.
+Typing `---` (or `***` or `___`) at the start of a paragraph puts a
+horizontal rule before it; Backspace at the start of the line after a
+rule, Delete at the end of the line before it, or deleting a selection
+across it, removes it.
 The rest of the body (paragraphs, headings and quotes with formatting,
 quotes of more than one paragraph, lists, code) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
@@ -51,8 +55,10 @@ splitting and joining paragraphs, undo, and following a collaborator's edit
 are the same text operations as everywhere else. A block that can't be
 edited is a line holding one placeholder character (`ATOM`), which the
 engine never removes, joins to another line or lets text onto, and which
-is rendered as the block it stands for (`src/editing/body.ts`). Each line
-that can be edited is an element of its own (`Lines`).
+is rendered as the block it stands for (`src/editing/body.ts`). A
+horizontal rule is a line holding another (`VOID`), which the engine keeps
+on a line of its own too, but removes as an edit says. Each line that can
+be edited is an element of its own (`Lines`).
 
 A line can start with a prefix, a run of characters the engine keeps out
 of the text (the Unicode noncharacters U+FDD0 to U+FDEF), which gives the
@@ -156,7 +162,8 @@ spec that can't hold in one engine says so where it's skipped, with the
 reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
-`body.spec.ts`, `headings.spec.ts` and `quotes.spec.ts` (editing),
+`body.spec.ts`, `headings.spec.ts`, `quotes.spec.ts` and `rules.spec.ts`
+(editing),
 `title-block-widget.spec.ts` (adding and removing title-block fields), `keys.spec.ts` (moving and
 deleting by word and by line), `clipboard.spec.ts` (copy, cut, paste, drag
 and drop),
@@ -218,7 +225,8 @@ editor has to keep:
   title-block field, and one for each editable line of the body (a direct
   child of `#quarto-document-content`, or, for a quote, the `p` in a
   `blockquote` that is one). An empty field's placeholder is
-  its `::before` content. A block the editor doesn't know is a
+  its `::before` content. A horizontal rule is an `hr` among the body's
+  blocks. A block the editor doesn't know is a
   `.qe-unknown` box, and the row that adds title-block fields is
   `.qe-widget`.
 

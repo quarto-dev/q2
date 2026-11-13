@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addField,
+  applyInputRule,
   deleteBackward,
   deleteForward,
   enter,
@@ -9,7 +10,7 @@ import {
   select,
   selectAllStep,
 } from './commands.ts'
-import { ATOM, caret, range, type Fields, type Schema, type State } from './model.ts'
+import { ATOM, VOID, caret, range, selectedText, type Fields, type Schema, type State } from './model.ts'
 
 const schema: Schema = { order: ['title', 'subtitle'], addable: ['subtitle'] }
 
@@ -274,5 +275,64 @@ describe('lines that can\'t be edited', () => {
   it('can\'t be typed or pasted', () => {
     const next = paste(lines, body(caret('body', 5)), `a${ATOM}b`)
     expect(next.fields.body).toBe(`Firstab\n${ATOM}\nSecond`)
+  })
+})
+
+describe('lines that can be removed but not edited', () => {
+  const lines: Schema = {
+    order: ['title', 'body'],
+    multiline: ['body'],
+    inputRule: (_, line) => (line === '---' ? `${VOID}\n` : null),
+    voidText: '---',
+  }
+  const text = `First\n${VOID}\nSecond`
+  const body = (selection: State['selection'], value = text): State => state({ title: 'T', body: value }, selection)
+
+  it('Backspace at the start of the line after one removes it, and the caret stays on its line', () => {
+    const next = deleteBackward(lines, body(caret('body', 8)))
+    expect(next.fields.body).toBe('First\nSecond')
+    expect(next.selection).toEqual(caret('body', 6))
+  })
+
+  it('Backspace at the start of a line after one with a prefix takes the prefix first', () => {
+    const next = deleteBackward(lines, body(caret('body', 9), `First\n${VOID}\n\ufdd2Second`))
+    expect(next.fields.body).toBe(text)
+  })
+
+  it('Delete at the end of the line before one removes it', () => {
+    const next = deleteForward(lines, body(caret('body', 5)))
+    expect(next.fields.body).toBe('First\nSecond')
+    expect(next.selection).toEqual(caret('body', 5))
+    expect(deleteForward(lines, body(caret('body', 5), `First\n${VOID}`)).fields.body).toBe('First')
+  })
+
+  it('deleting a selection across one removes it', () => {
+    const next = deleteBackward(lines, body(range('body', 2, 'body', 11)))
+    expect(next.fields.body).toBe('Fiond')
+    expect(next.selection).toEqual(caret('body', 2))
+  })
+
+  it('a deletion that would join one to a line keeps it on a line of its own', () => {
+    const next = deleteBackward(lines, body(range('body', 2, 'body', 6)))
+    expect(next.fields.body).toBe(`Fi\n${VOID}\nSecond`)
+    expect(next.selection).toEqual(caret('body', 2))
+  })
+
+  it('can\'t be typed or pasted', () => {
+    const next = paste(lines, body(caret('body', 5)), `a${VOID}b`)
+    expect(next.fields.body).toBe(`Firstab\n${VOID}\nSecond`)
+  })
+
+  it('an input rule can make one', () => {
+    const next = applyInputRule(lines, body(caret('body', 3), '---Next'))
+    expect(next.fields.body).toBe(`${VOID}\nNext`)
+    expect(next.selection).toEqual(caret('body', 2))
+  })
+
+  it('is copied as the schema says', () => {
+    expect(selectedText(lines, { body: text }, range('body', 0, 'body', 14))).toBe('First\n---\nSecond')
+    expect(selectedText({ ...lines, voidText: undefined }, { body: text }, range('body', 0, 'body', 14))).toBe(
+      'First\n\nSecond',
+    )
   })
 })

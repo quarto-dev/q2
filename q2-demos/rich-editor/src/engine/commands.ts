@@ -16,6 +16,10 @@
  * - A line that can't be edited (`ATOM`) stays as it is, on a line of its
  *   own: a deletion that covers it keeps it, and one that would join it
  *   to another line does nothing.
+ * - A line that can't be edited but can be removed (`VOID`) is on a line of
+ *   its own too, but a deletion that covers it removes it, and so does
+ *   Backspace at the start of the line after it, or Delete at the end of
+ *   the line before it.
  * - A line's prefix (see `isPrefix`) is never typed, and the caret never
  *   goes before it. A line joined to the one before takes that line's
  *   prefix. Enter in the middle of a line keeps the prefix on both halves;
@@ -27,12 +31,14 @@
 import {
   ATOM,
   caret,
+  isAtom,
   isCollapsed,
   isPrefix,
   keepsEmpty,
   lineStartOf,
   linePrefix,
   pastPrefixes,
+  VOID,
   withoutPrefixes,
   ordered,
   presentFields,
@@ -236,6 +242,13 @@ function deleteDirection(
   }
   if (start < end) {
     // The browser's range.
+  } else if (backward && at.offset === lineStart && lineStart > 0 && lineAt(text, lineStart - 1) === VOID) {
+    // The line before can be removed: remove it, and its line break.
+    start = lineStart - 1 - VOID.length
+    end = lineStart
+  } else if (!backward && at.offset === lineEnd && lineEnd < text.length && lineAt(text, lineEnd + 1) === VOID) {
+    start = lineEnd
+    end = lineEnd + 1 + VOID.length
   } else if (backward) {
     start = at.offset - graphemeBefore(text, at.offset)
     end = at.offset
@@ -247,13 +260,19 @@ function deleteDirection(
   return replace(schema, state, { field: at.field, offset: start }, { field: at.field, offset: end }, '')
 }
 
+/** The line of `text` that `offset` is on. */
+function lineAt(text: string, offset: number): string {
+  const end = text.indexOf('\n', offset)
+  return text.slice(lineStartOf(text, offset), end < 0 ? text.length : end)
+}
+
 /**
  * Replace the text between `from` and `to` (in reading order), keeping
  * every field: the first keeps what precedes `from`, plus `text`; the last
  * keeps what follows `to`; fields in between are emptied.
  */
 function replace(schema: Schema, state: State, from: Position, to: Position, typed: string): State {
-  const text = withoutPrefixes(typed.replaceAll(ATOM, ''))
+  const text = withoutPrefixes(typed.replaceAll(ATOM, '').replaceAll(VOID, ''))
   const fields: Record<string, string | undefined> = { ...state.fields }
   const first = schema.order.indexOf(from.field)
   const last = schema.order.indexOf(to.field)
@@ -275,7 +294,7 @@ function replace(schema: Schema, state: State, from: Position, to: Position, typ
       after = after.slice(prefixEnd)
     }
     const next = before + after
-    if (!next.includes(ATOM)) fields[field] = next
+    if (![...next].some(isAtom)) fields[field] = next
     else {
       const apart = atomsApart(next, i === first ? offset : 0)
       fields[field] = apart.text
@@ -294,11 +313,11 @@ function atomsApart(text: string, offset: number): { text: string; offset: numbe
   let out = ''
   let at = offset
   for (let i = 0; i < text.length; i++) {
-    const isAtom = text[i] === ATOM
-    const needsBreak = out !== '' && !out.endsWith('\n') && (isAtom || out.endsWith(ATOM)) && text[i] !== '\n'
+    const atom = isAtom(text[i])
+    const needsBreak = out !== '' && !out.endsWith('\n') && (atom || isAtom(out[out.length - 1])) && text[i] !== '\n'
     if (needsBreak) {
       // A caret between text and the atom after it stays with the text.
-      if (isAtom ? i < offset : i <= offset) at++
+      if (atom ? i < offset : i <= offset) at++
       out += '\n'
     }
     out += text[i]
