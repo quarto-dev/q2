@@ -21,20 +21,16 @@
  * to today's q2-debug output (Phase 0 test #10).
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 
+import { buildCharToByteMap, runsCharToByteOffsets } from '../services/attribution-runs';
+import type { AttributionRun, RunListAttribution } from '../services/attribution-runs';
 import {
-  buildCharToByteMap,
-  buildRunListAttribution,
-  HistoryCompactedError,
-  runsCharToByteOffsets,
-  updateRunListAttribution,
-} from '../services/attribution-runs';
-import type {
-  AttributionRun,
-  RunListAttribution,
-} from '../services/attribution-runs';
-import { getFileHandle } from '@quarto/preview-runtime';
+  ATTRIBUTION_NONE,
+  ATTRIBUTION_PENDING,
+  AttributionStore,
+} from '../services/attribution-store';
+import type { AttributionSnapshot } from '../services/attribution-store';
 import type { ActorIdentity } from '@quarto/preview-runtime';
 import { actorColor, fnv1aHex8 } from '../utils/palette';
 
@@ -116,8 +112,6 @@ export function buildAttributionPayload(
   return JSON.stringify(payload);
 }
 
-const DEBOUNCE_MS = 500;
-
 export interface UseAttributionOptions {
   /** When false, the hook returns `null` and does no work. */
   enabled: boolean;
@@ -127,162 +121,87 @@ export interface UseAttributionOptions {
   sourceText: string;
   /** Attribution key → profile identity table (from `App.tsx`'s identities state). */
   identities: Record<string, ActorIdentity>;
+  /**
+   * Replay: the change hashes of the history step that `sourceText` shows.
+   * Attribution is then built for that point in history instead of the live
+   * heads, whose run offsets belong to a different text. Null or absent
+   * outside replay.
+   */
+  atHeads?: string[] | null;
+  /**
+   * The active local branch, when `sourceText` is that branch's text. The
+   * history is then read from the branch's doc, not the synced one. Replay
+   * walks the synced doc's history, so this is ignored while `atHeads` is set.
+   */
+  branchId?: string | null;
 }
 
 export interface UseAttributionResult {
   /**
-   * JSON payload for `parseQmdToAstWithAttribution`, or `null` while
-   * disabled, the file is unknown, or no build has completed yet.
-   * Once a build completes the string remains referentially stable
-   * across re-renders until the source text changes enough to
-   * invalidate it.
+   * JSON payload for `parseQmdToAstWithAttribution`, built for exactly the
+   * current `sourceText` (and `atHeads`), or `null`: while disabled, the
+   * file is unknown, no build has completed yet, or the history and the
+   * text disagree. It is never the payload of another text, whose run
+   * offsets would land on the wrong words.
    */
   payload: string | null;
   /**
-   * True while the hook is doing work the user is waiting on: the
-   * cold-start build, the debounced incremental update window, and
-   * the synchronous update step itself. Drives the Attribution pill's
-   * "work in progress" border animation upstream.
-   *
-   * Distinct from `payload === null` because incremental updates
-   * keep the previous payload until the new one is ready — so a
-   * naïve `payload === null && enabled` check would miss them.
+   * True while a cold build runs (the overlay was just turned on, the file
+   * or branch changed, or a replay seek needs a rebuild). Drives the
+   * Attribution pill's "work in progress" border animation upstream.
    */
   generating: boolean;
+  /**
+   * A replay seek's attribution is being built. The preview holds its render
+   * meanwhile, so the step is drawn once, with its own runs.
+   */
+  pending: boolean;
 }
+
+const noStore = () => () => {};
+const notGenerating = () => false;
 
 /**
  * Build the attribution payload that the q2-debug WASM entry consumes.
  *
- * Returns the payload plus a `generating` flag that is true whenever
- * the hook is mid-build (cold start, debounce window, or synchronous
- * incremental update).
+ * The run list lives in an `AttributionStore` and is read during render, so
+ * the render that brings a text already has that text's attribution: an
+ * edit, a forward replay step, or a replay step shown before. Only a cold
+ * build is asynchronous, and `pending` covers the one for a replay seek.
  */
 export function useAttribution(opts: UseAttributionOptions): UseAttributionResult {
   const { enabled, filePath, sourceText, identities } = opts;
+  // Heads arrive as a fresh array each step; the joined hashes identify it.
+  const headsKey = opts.atHeads ? opts.atHeads.join(',') : null;
+  const branchId = headsKey !== null ? null : (opts.branchId ?? null);
 
-  const [payload, setPayload] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
+  const store = useMemo(
+    () => (enabled && filePath ? new AttributionStore(filePath, branchId) : null),
+    [enabled, filePath, branchId],
+  );
+  useEffect(() => () => store?.dispose(), [store]);
 
-  // Latest run-list state — used by the incremental update path.
-  const stateRef = useRef<RunListAttribution | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Capture latest inputs in refs so async callbacks see the freshest
-  // values without re-binding.
-  const sourceTextRef = useRef(sourceText);
-  sourceTextRef.current = sourceText;
-  const identitiesRef = useRef(identities);
-  identitiesRef.current = identities;
-
-  const finalisePayload = useCallback((state: RunListAttribution) => {
-    setPayload(
-      buildAttributionPayload(state, sourceTextRef.current, identitiesRef.current),
-    );
-  }, []);
-
-  const startBuild = useCallback(
-    (path: string) => {
-      if (abortRef.current) abortRef.current.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      setPayload(null);
-      setGenerating(true);
-      stateRef.current = null;
-
-      let handle;
-      try {
-        handle = getFileHandle(path);
-      } catch {
-        setGenerating(false);
-        return;
-      }
-      if (!handle) {
-        setGenerating(false);
-        return;
-      }
-
-      buildRunListAttribution(handle, 'text', controller.signal)
-        .then(state => {
-          // If aborted, a newer build owns `generating` — leave it alone.
-          if (controller.signal.aborted || !state) return;
-          stateRef.current = state;
-          finalisePayload(state);
-          setGenerating(false);
-        })
-        .catch(err => {
-          if (controller.signal.aborted) return;
-          console.warn('[useAttribution] build failed:', err);
-          setGenerating(false);
-        });
-    },
-    [finalisePayload],
+  const getSnapshot = useCallback(
+    (): AttributionSnapshot => (store ? store.snapshot(headsKey) : ATTRIBUTION_NONE),
+    [store, headsKey],
+  );
+  const snapshot = useSyncExternalStore(store ? store.subscribe : noStore, getSnapshot);
+  const generating = useSyncExternalStore(
+    store ? store.subscribe : noStore,
+    store ? store.isGenerating : notGenerating,
   );
 
-  // (Re)start the build when enabled / filePath changes.
-  useEffect(() => {
-    if (!enabled || !filePath) {
-      setPayload(null);
-      setGenerating(false);
-      stateRef.current = null;
-      if (abortRef.current) abortRef.current.abort();
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      return;
-    }
+  // A read cannot start a build; do it once the render has committed.
+  useEffect(() => store?.reconcile());
 
-    startBuild(filePath);
+  const payload = useMemo(() => {
+    if (typeof snapshot === 'string') return null;
+    // The runs tile the history's text. If that is not the text shown (React
+    // state is a change behind the doc), their offsets would be wrong for
+    // it: show no overlay until the next text arrives.
+    if ((snapshot.runs.at(-1)?.end ?? 0) !== sourceText.length) return null;
+    return buildAttributionPayload(snapshot, sourceText, identities);
+  }, [snapshot, sourceText, identities]);
 
-    return () => {
-      if (abortRef.current) abortRef.current.abort();
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [enabled, filePath, startBuild]);
-
-  // Debounced incremental update on text edits.
-  useEffect(() => {
-    if (!enabled || !filePath || !stateRef.current) return;
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    // Pulse the indicator from the moment we know an update is coming,
-    // not just during the synchronous slice — the debounce window is
-    // part of the "still being generated" period from the user's view.
-    setGenerating(true);
-    debounceRef.current = setTimeout(() => {
-      if (!stateRef.current) return;
-      let handle;
-      try {
-        handle = getFileHandle(filePath);
-      } catch {
-        setGenerating(false);
-        return;
-      }
-      if (!handle) {
-        setGenerating(false);
-        return;
-      }
-
-      try {
-        const next = updateRunListAttribution(stateRef.current, handle, 'text');
-        stateRef.current = next;
-        finalisePayload(next);
-        setGenerating(false);
-      } catch (err) {
-        if (err instanceof HistoryCompactedError) {
-          // startBuild flips generating back to true for the cold-start.
-          startBuild(filePath);
-        } else {
-          console.warn('[useAttribution] update failed:', err);
-          setGenerating(false);
-        }
-      }
-    }, DEBOUNCE_MS);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [sourceText, identities, enabled, filePath, finalisePayload, startBuild]);
-
-  return { payload, generating };
+  return { payload, generating, pending: snapshot === ATTRIBUTION_PENDING };
 }
