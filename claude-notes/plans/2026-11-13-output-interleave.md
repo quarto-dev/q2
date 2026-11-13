@@ -156,14 +156,13 @@ already, as expected.
 
 ### Phase 3: Julia declaration and the parity harness
 
-- [ ] Julia `record-wire.ts`: `output-interleave` is added to `DISPLAY_ONLY_KEYS` in the fork
+- [x] Julia `record-wire.ts`: `output-interleave` is added to `DISPLAY_ONLY_KEYS` in the fork
       (`q2/node-port`, commit `4892bf5`, pushed with Gordon\'s OK; the first push reported an
       HTTP 500 but `ls-remote` and a fresh fetch showed the tip at `4892bf5`). Hash version stays
-      at 2 (Gordon: everything here is very new). **Pending, left out of this branch on
-      purpose:** sync with `cargo xtask pull-extension-subtree julia-engine` (that also brings in
-      the earlier `executeEnv` commit `c8af0a4`) and move the `subtree-julia-engine` pin in
-      `resources/vendored.toml` to `4892bf5`. Until then, editing `output-interleave` in a Julia
-      cell re-runs the cell; the default (held) does not depend on the sync.
+      at 2 (Gordon: everything here is very new). This branch is stacked on #1197, which vendors
+      the fork up to `c8af0a4` (the `executeEnv` mapping); our own
+      `cargo xtask pull-extension-subtree julia-engine` then adds only `c8af0a4..4892bf5`, and the
+      `subtree-julia-engine` pin in `resources/vendored.toml` moves to `4892bf5`.
 - [x] Parity harness: nothing to remove. The allowlist is already empty (OPR-9f); the
       `julia-interleaved-cell` normalizer and the `capture-facts` pin are unit-tested mechanism
       over static fixtures. The live gate (`OPR_PARITY_REPORT`, Julia installed, measured with the synced subtree) passes: 93
