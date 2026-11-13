@@ -41,7 +41,9 @@ export function App() {
   }
   if (error) return <Status error>{error}</Status>
   if (connecting) return <Status>Connecting to {params.syncServer}…</Status>
-  if (!connected) return <Status>Disconnected.</Status>
+  // Only before the document first loads: after that, the editor stays
+  // and keeps working while the connection is down (its status says so).
+  if (!connected && text === null) return <Status>Disconnected.</Status>
   if (text === null || !file) return <Status>Waiting for {params.filePath}…</Status>
 
   if (params.visualOnly) {

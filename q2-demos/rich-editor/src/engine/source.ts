@@ -21,7 +21,7 @@ export type FieldChanges = Readonly<Record<string, string | undefined>>
 export interface FieldSource {
   /** The document's fields now. Empty fields are absent. */
   get(): Fields
-  /** Whether `set` works now (connected, and the document can be read). */
+  /** Whether `set` works now (the document can be read). */
   writable(): boolean
   /**
    * Write `changes` to the document, leaving every other field alone. On

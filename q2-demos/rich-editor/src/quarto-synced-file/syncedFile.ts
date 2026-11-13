@@ -43,7 +43,9 @@ export interface SyncedFile {
   /** The current snapshot. Stable until the next change. */
   getSnapshot(): SyncedFileSnapshot
   /**
-   * Splice edits into the synced text. Ignored while not connected. On
+   * Splice edits into the synced text. Ignored until the file has loaded.
+   * Works while disconnected too: the edit goes into the local automerge
+   * document, which syncs (and merges) when the connection is back. On
    * return, the snapshot has the edited text and its parse.
    */
   applyEdits(changes: EditorContentChange[]): void
@@ -133,7 +135,7 @@ export function createSyncedFile({ syncServer, indexDocId, filePath }: SyncedFil
     },
     getSnapshot: () => snapshot,
     applyEdits(changes) {
-      if (disposed || !snapshot.connected) return
+      if (disposed || snapshot.text === null) return
       client.applyEditorOperations(filePath, changes)
       // Normally the client has already reported the change; make sure.
       const text = client.getFileContent(filePath)

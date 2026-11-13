@@ -75,8 +75,10 @@ export function createMetaFieldSource(
   }
 
   const writable = (): boolean => {
-    const { text, ast, parseError, connected } = file.getSnapshot()
-    return connected && text !== null && ast !== null && !parseError
+    // Not `connected`: an edit made offline is kept locally and synced
+    // when the connection is back.
+    const { text, ast, parseError } = file.getSnapshot()
+    return text !== null && ast !== null && !parseError
   }
 
   const set = (changes: FieldChanges): void => {

@@ -113,7 +113,7 @@ const noop = () => {}
 const renderRule = () => <hr />
 
 export function VisualEditor({ file }: VisualEditorProps) {
-  const { ast, parseError } = useSyncExternalStore(file.subscribe, file.getSnapshot)
+  const { ast, parseError, connected } = useSyncExternalStore(file.subscribe, file.getSnapshot)
   const source = useMemo(
     () =>
       createMetaFieldSource(file, { keys: TITLE_BLOCK, multiline: ['abstract'], body: 'body', keepEmpty: TITLE_BLOCK }),
@@ -214,7 +214,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
         {derived && `Title block derived in ${derived.ms.toFixed(2)} ms. `}
         {parseError
           ? "Read-only: the source doesn't parse. "
-          : !writable && 'Read-only: not connected. '}
+          : !connected && 'Offline: edits will sync when the connection is back. '}
         {derived && derived.issues.length > 0 && ` Issues: ${derived.issues.join('; ')}`}
       </p>
       {mount && frameDoc && writable && (

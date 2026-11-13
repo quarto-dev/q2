@@ -1,7 +1,7 @@
 /**
  * The editor. Receives the file's source text and its parsed AST, and reports
- * edits as positional splices into the text (`onEdit` is null while
- * disconnected).
+ * edits as positional splices into the text (`onEdit` is null until the
+ * file has loaded).
  *
  * Placeholder UI: a plain textarea, to prove the round trip.
  */
