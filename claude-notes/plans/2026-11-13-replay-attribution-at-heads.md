@@ -52,6 +52,27 @@ attribution, instead of first with the previous step's runs.
 per replay (`ReplayTarget.index`) so a step does not rescan history. The hook
 drops the index when replay ends.
 
+## Follow-up: the same mismatch outside replay
+
+Two more places paired a text with runs built for another text. Both are
+fixed on this branch.
+
+- [x] bd-1ga6itse: live edits. The payload was refreshed only after 500 ms
+  without a text change, while the preview re-rendered at once; with
+  collaborators typing it never refreshed. The hook now folds each edit into
+  the runs in the effects of the render that brought the text, with no
+  debounce, and the `pending` hold covers that render.
+- [x] bd-1ewams7j: local branches. The preview showed the branch text with
+  runs from the synced main doc. The hook now takes `branchId` and reads the
+  branch doc (`branchService.getBranchDoc`).
+- [x] Oracle test: under concurrent edits to one sentence, the runs name for
+  each character the actor of the op that inserted it.
+
+The hook's result now records the text it was settled for, and counts only
+for that text. If the history's text and the text shown differ in length
+(React state a change behind the doc), the text is drawn without the overlay
+instead of with shifted runs.
+
 ## Verification
 
 Unit and hook tests cover the run lists and the hook's replay path. The

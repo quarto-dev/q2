@@ -1895,6 +1895,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
             captures={captures}
             attributionOn={attributionOn}
             attributionHeads={replayState.isActive ? replayState.currentHeads : null}
+            attributionBranchId={activeBranchId}
             commentsMode={commentsMode}
             onAttributionGeneratingChange={setAttributionGenerating}
           />

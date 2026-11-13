@@ -142,6 +142,11 @@ interface PreviewProps {
    */
   attributionHeads?: string[] | null;
   /**
+   * The active local branch when `content` is that branch's text.
+   * `useAttribution` then reads the branch's doc instead of the synced one.
+   */
+  attributionBranchId?: string | null;
+  /**
    * Comment-bubble display mode (three-way toggle in the replay bar:
    * expand / show / hide). Forwarded into the q2-preview iframe.
    * Absent ⇒ 'show'.
@@ -496,6 +501,7 @@ export default function ReactPreview({
   captures,
   attributionOn,
   attributionHeads,
+  attributionBranchId,
   commentsMode,
   onAttributionGeneratingChange,
 }: PreviewProps) {
@@ -625,6 +631,7 @@ export default function ReactPreview({
     sourceText: content,
     identities: identities ?? {},
     atHeads: attributionHeads,
+    branchId: attributionBranchId,
   });
 
   // Surface the hook's generating flag to the Attribution pill in the
@@ -829,9 +836,9 @@ export default function ReactPreview({
   // stale result of the one render that was in flight — so a burst
   // settles on the latest content.
   useEffect(() => {
-    // Replay with the authors overlay on: wait for the attribution of this
-    // step, so the step is drawn once and never with another step's runs.
-    // The effect runs again when `attributionPending` clears.
+    // Authors overlay on: wait for the attribution of this text (an edit
+    // or a replay step), so it is drawn once and never with the runs of
+    // another text. The effect runs again when `attributionPending` clears.
     if (attributionPending) return;
     const fxT0 = perfNow();
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
