@@ -9,6 +9,8 @@ import {
   headingLevel,
   headingPrefix,
   isBullet,
+  isNumbered,
+  NUMBERED,
   isQuote,
   plainParagraph,
   prefixMarkdown,
@@ -334,5 +336,81 @@ describe('bullet lists', () => {
   })
   it('an item is copied with a -', () => {
     expect(prefixMarkdown(BULLET)).toBe('- ')
+  })
+})
+
+describe('numbered lists', () => {
+  const plain = (text: string): Node[] => [{ t: 'Plain', c: words(text) }]
+  const attrs = (start = 1, style = 'Decimal', delim = 'Period') => [start, { t: style }, { t: delim }]
+  const numbered = (start: number, ...items: Node[][]): Node => ({ t: 'OrderedList', c: [attrs(start), items] })
+  const bullets = (...items: Node[][]): Node => ({ t: 'BulletList', c: items })
+  const tight = numbered(1, plain('One.'), plain('Two.'))
+
+  it('a decimal list of items of one line of plain text is a line per item, with the numbered prefix', () => {
+    expect(bodyText([para('Intro.'), tight, para('End.')])).toBe(`Intro.\n${NUMBERED}One.\n${NUMBERED}Two.\nEnd.`)
+    expect(isNumbered(`${NUMBERED}One.`)).toBe(true)
+    expect(isBullet(`${NUMBERED}One.`)).toBe(false)
+    expect(isNumbered(`${BULLET}One.`)).toBe(false)
+    expect(headingLevel(`${NUMBERED}One.`)).toBe(0)
+  })
+  it('so is one that starts at another number, or is written with )', () => {
+    const others = [numbered(3, plain('Three.')), { t: 'OrderedList', c: [attrs(1, 'Decimal', 'OneParen'), [plain('A.')]] }]
+    expect(bodyText([others[0], para('Mid.'), others[1]])).toBe(`${NUMBERED}Three.\nMid.\n${NUMBERED}A.`)
+  })
+  it('an example list, or one numbered any other way than 1. or 1), can\'t be edited', () => {
+    const others = [
+      { t: 'OrderedList', c: [attrs(1, 'Example', 'TwoParens'), [plain('A.')]] },
+      { t: 'OrderedList', c: [attrs(1, 'LowerAlpha'), [plain('A.')]] },
+      { t: 'OrderedList', c: [attrs(1, 'UpperRoman'), [plain('A.')]] },
+      { t: 'OrderedList', c: [attrs(1, 'Decimal', 'TwoParens'), [plain('A.')]] },
+      numbered(1, [para('Loose.')], [para('List.')]),
+    ]
+    expect(bodyText(others)).toBe(others.map(() => ATOM).join('\n'))
+  })
+  it('a numbered list right after a bullet list can be edited, and the other way round', () => {
+    const b = bullets(plain('A.'))
+    expect(bodyText([b, tight, bullets(plain('B.'))])).toBe(`${BULLET}A.\n${NUMBERED}One.\n${NUMBERED}Two.\n${BULLET}B.`)
+  })
+  it('a numbered list right after one that can be edited can\'t be', () => {
+    const next = numbered(1, plain('Three.'))
+    expect(bodyText([tight, next])).toBe(`${NUMBERED}One.\n${NUMBERED}Two.\n${ATOM}`)
+  })
+
+  it('writes lines next to each other with the numbered prefix as one list from 1, and an empty one as an empty item', () => {
+    expect(editBody([para('One.')], `One.\n${NUMBERED}A\n${NUMBERED}`)).toEqual([para('One.'), numbered(1, plain('A'), [])])
+  })
+  it('keeps an unchanged list as it was', () => {
+    expect(editBody([tight, para('End.')], `${NUMBERED}One.\n${NUMBERED}Two.\nEnd!`)![0]).toBe(tight)
+  })
+  it('keeps the start number and delimiter of a list that changed, even when an item is added before its first', () => {
+    const list: Node = { t: 'OrderedList', c: [attrs(3, 'Decimal', 'OneParen'), [plain('One.'), plain('Two.')]] }
+    const want = (...items: Node[][]) => ({ t: 'OrderedList', c: [attrs(3, 'Decimal', 'OneParen'), items] })
+    expect(editBody([list], `${NUMBERED}One.\n${NUMBERED}Two!`)).toEqual([want(plain('One.'), plain('Two!'))])
+    expect(editBody([list], `${NUMBERED}Zero.\n${NUMBERED}One.\n${NUMBERED}Two.`)).toEqual([
+      want(plain('Zero.'), plain('One.'), plain('Two.')),
+    ])
+  })
+  it('items of different kinds next to each other are two lists', () => {
+    expect(editBody([para('A')], `${BULLET}A\n${NUMBERED}B\n${BULLET}C`)).toEqual([
+      bullets(plain('A')),
+      numbered(1, plain('B')),
+      bullets(plain('C')),
+    ])
+  })
+  it('an item that changes kind starts a list of its kind', () => {
+    expect(editBody([tight], `${NUMBERED}One.\n${BULLET}Two.`)).toEqual([numbered(1, plain('One.')), bullets(plain('Two.'))])
+  })
+  it('keeps the line breaks of a wrapped item around what changed', () => {
+    const wrapped = numbered(1, [{ t: 'Plain', c: [...words('One two'), { t: 'SoftBreak' }, ...words('three.')] }])
+    const [edited] = editBody([wrapped], `${NUMBERED}One two, three.`)!
+    expect(edited).toEqual(numbered(1, [{ t: 'Plain', c: [...words('One two,'), { t: 'SoftBreak' }, ...words('three.')] }]))
+  })
+  it('1. and a space at the start of a line make an item', () => {
+    expect(bodyInputRule('1. ')).toBe(NUMBERED)
+    expect(bodyInputRule('2. ')).toBeNull()
+    expect(bodyInputRule(`${BULLET}1. `)).toBeNull()
+  })
+  it('an item is copied with a 1.', () => {
+    expect(prefixMarkdown(NUMBERED)).toBe('1. ')
   })
 })

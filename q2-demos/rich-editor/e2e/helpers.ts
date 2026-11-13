@@ -41,6 +41,7 @@ const LINE = [
   '#quarto-document-content > .qe-field',
   '#quarto-document-content > blockquote > .qe-field',
   '#quarto-document-content > ul > .qe-field',
+  '#quarto-document-content > ol > .qe-field',
 ].join(', ')
 
 /** The row of "+" items that add the title-block fields a document doesn't have. */
@@ -258,13 +259,16 @@ export class Editor {
 
   /**
    * The body's editable lines (paragraphs, headings, quotes and list
-   * items), each as `tag: text`, where a quote's tag is `blockquote`.
+   * items), each as `tag: text`, where a quote's tag is `blockquote` and
+   * a numbered list's item's is `ol`.
    */
   lines(): Promise<string[]> {
     return this.frame.evaluate(
       (selector) =>
         [...document.querySelectorAll(selector)].map((el) => {
-          const tag = el.parentElement?.matches('blockquote') ? 'blockquote' : el.tagName.toLowerCase()
+          const tag = el.parentElement?.matches('blockquote, ol')
+            ? el.parentElement.tagName.toLowerCase()
+            : el.tagName.toLowerCase()
           return `${tag}: ${el.textContent ?? ''}`
         }),
       LINE,
@@ -423,6 +427,11 @@ export class Editor {
   /** The toolbar's bulleted list button. */
   listButton() {
     return this.toolbar().getByRole('button', { name: 'Bulleted list' })
+  }
+
+  /** The toolbar's numbered list button. */
+  numberedListButton() {
+    return this.toolbar().getByRole('button', { name: 'Numbered list' })
   }
 
   /** The toolbar's quote button. */

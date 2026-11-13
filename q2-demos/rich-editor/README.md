@@ -36,15 +36,20 @@ So are bullet lists whose items are each one line of plain text (tight
 lists), with a line per item: typing `-`, `*` or `+` and a space makes an
 item, Enter at the end of an item starts another, Enter on an empty item
 ends the list, and the items of lines next to each other are one list.
+Numbered lists of such items, written `1.` or `1)`, are edited the same
+way, made by typing `1.` and a space; an edit keeps a list's start
+number and delimiter, and a new list is numbered `1.` from 1. A bullet
+item and a numbered one next to each other are in two lists.
 Typing `---` (or `***` or `___`) at the start of a paragraph puts a
 horizontal rule before it; Backspace at the start of the line after a
 rule, Delete at the end of the line before it, or deleting a selection
 across it, removes it.
 A toolbar above the document (`src/Toolbar.tsx`) follows the caret, as
 in a word processor: its style box shows the style of the caret's line
-(Paragraph, Heading 1 to 4) and its menu changes it, its bulleted list
-button is pressed while the caret is on an item and makes the line an
-item or a paragraph again, and its quote button is pressed while the
+(Paragraph, Heading 1 to 4) and its menu changes it, its bulleted and
+numbered list buttons are pressed while the caret is on an item of their
+kind and make the line one (from an item of the other kind too) or a
+paragraph again, and its quote button is pressed while the
 caret is in a quote and quotes or unquotes the line.
 With a selection, they change every line it is on, as one undo step, and
 the caret stays on its text. A heading can't be in a quote yet, so neither
@@ -53,7 +58,7 @@ made a heading or a quote, or a heading or a quote an item; outside the body, it
 with nothing in the margin and no breadcrumb.
 The rest of the body (paragraphs, headings, quotes and lists with
 formatting, quotes of more than one paragraph, lists with blank lines
-between items or lists in items, numbered lists, code) is shown by
+between items or lists in items, example lists (`(@)`), code) is shown by
 `src/ReadOnlyBlock.tsx` and can't be edited yet; no edit removes it or
 changes its source. The document is one
 `contenteditable` surface run by a small editing engine in `src/engine/`:
@@ -78,20 +83,21 @@ be edited is an element of its own (`Lines`).
 
 A line can start with a prefix, a run of characters the engine keeps out
 of the text (the Unicode noncharacters U+FDD0 to U+FDEF), which gives the
-line a kind: in the body, a heading's level, a quote, or a list item. A change of kind is then a
+line a kind: in the body, a heading's level, a quote, or a bullet or
+numbered list's item. A change of kind is then a
 text edit like any other, so undo, collaborators' edits and the caret all
 handle it without knowing about headings. The engine's rules for prefixes
 are generic (one can't be typed; the caret never goes before one; a joined
 line takes the kind of the line it joins; Enter in the middle of a line
 keeps the kind on both halves, and at the end starts a line without one,
-unless it's a kind Enter carries on (`Schema.continued`, a list item's),
+unless it's a kind Enter carries on (`Schema.continued`, an item's),
 which it takes off an empty line instead);
 what a prefix means, how it's rendered, what typing makes one
 (`Schema.inputRule`) and how it's copied (`Schema.prefixText`) are up to
 `src/VisualEditor.tsx` and `src/editing/body.ts`; a line can be rendered
 inside an element of its own, as a quote's paragraph is in a
 `blockquote`, or share one with the lines next to it, as a list's items
-are in one `ul`. An edited heading keeps
+are in one `ul` (or `ol`, with the list's start number). An edited heading keeps
 its written attributes (`{#id .class}`), and only its text is rewritten in
 the source.
 
@@ -120,12 +126,16 @@ a paragraph of one non-breaking space, which `q2 render` shows as an empty
 line too; `&nbsp;` on a line of its own in the source reads the same. An
 empty quote is a quote of that paragraph (`> ` and a non-breaking
 space), since `>` alone is a quote with no paragraph in it. An empty
-list item is an item with nothing in it, a bare `*`.
+list item is an item with nothing in it, a bare `*` (or a bare number,
+`2.`, in a numbered list).
 
 The qmd writer writes a list again as a whole when any item of it
 changes, with `*` before every item, so editing an item of a list written
 with `-` changes every item's line in the source (a fixme in
-`lists.spec.ts`).
+`lists.spec.ts`). A numbered list is written renumbered from its start
+number, with two spaces after a number below 10 (`1.  One.`), so editing
+an item of a list written `1. One.`, or `1.` before every item, changes
+every line of it too (a fixme in `numbered-lists.spec.ts`).
 
 A paragraph that the source wraps over several lines is one line here. An
 edit keeps its line breaks wherever the text around them stays, so typing
@@ -241,7 +251,8 @@ spec that can't hold in one engine says so where it's skipped, with the
 reason.
 
 The specs are: `title-block.spec.ts`, `cross-field.spec.ts`,
-`body.spec.ts`, `headings.spec.ts`, `quotes.spec.ts`, `lists.spec.ts` and `rules.spec.ts`
+`body.spec.ts`, `headings.spec.ts`, `quotes.spec.ts`, `lists.spec.ts`,
+`numbered-lists.spec.ts` and `rules.spec.ts`
 (editing),
 `title-block-widget.spec.ts` (adding and removing title-block fields),
 `toolbar.spec.ts` (the toolbar's style box and quote button), `keys.spec.ts` (moving and
@@ -304,15 +315,16 @@ editor has to keep:
 - Text that can be edited is in `.qe-field` elements: one in each
   title-block field, and one for each editable line of the body (a direct
   child of `#quarto-document-content`, or, for a quote, the `p` in a
-  `blockquote` that is one, or, for a list item, an `li` in a `ul` that
-  is one). An empty field's placeholder is
+  `blockquote` that is one, or, for a list item, an `li` in a `ul` or `ol`
+  that is one). An empty field's placeholder is
   its `::before` content. A horizontal rule is an `hr` among the body's
   blocks. A block the editor doesn't know is a
   `.qe-unknown` box, and the row that adds title-block fields is
   `.qe-widget`.
 - The toolbar is found by its roles: a `toolbar` named "Formatting",
   holding a "Text style" button that opens a "Text style" `menu` of
-  `menuitemradio`s, and a "Quote" button with `aria-pressed`.
+  `menuitemradio`s, and "Bulleted list", "Numbered list" and "Quote"
+  buttons with `aria-pressed`.
 
 ### What no spec covers
 

@@ -196,12 +196,13 @@ test.describe('typed text is text', () => {
 
     for (const line of typed) {
       await page.keyboard.press('Enter')
-      const rule = ['# ', '> ', '- ', '---'].find((start) => line.startsWith(start))
+      const rule = ['# ', '> ', '- ', '1. ', '---'].find((start) => line.startsWith(start))
       if (rule) {
         // `# ` makes a heading (`headings.spec.ts`), `> ` a quote
-        // (`quotes.spec.ts`), `- ` a list item (`lists.spec.ts`) and `---`
-        // a rule (`rules.spec.ts`); Backspace right after takes that back
-        // and leaves what was typed.
+        // (`quotes.spec.ts`), `- ` a list item (`lists.spec.ts`), `1. ` a
+        // numbered one (`numbered-lists.spec.ts`) and `---` a rule
+        // (`rules.spec.ts`); Backspace right after takes that back and
+        // leaves what was typed.
         await page.keyboard.type(rule)
         await page.keyboard.press('Backspace')
         await page.keyboard.type(line.slice(rule.length))

@@ -150,9 +150,10 @@ export interface LineElement {
   id?: string
   /**
    * The element to put the line in. Lines next to each other whose
-   * parents are `shared` and the same are in one (a list's items).
+   * parents are `shared` and the same element with the same class are in
+   * one (a list's items), which has the first's `attrs`.
    */
-  parent?: { as: string; className?: string; shared?: boolean }
+  parent?: { as: string; className?: string; shared?: boolean; attrs?: Record<string, string> }
 }
 
 /**
@@ -195,7 +196,7 @@ export function Lines({ name, text, className, as = 'p', lineElement, renderAtom
   })
   return groups.map(({ key, parent, nodes }) =>
     parent ? (
-      createElement(parent.as, { key, className: parent.className }, ...nodes)
+      createElement(parent.as, { ...parent.attrs, key, className: parent.className }, ...nodes)
     ) : (
       <Fragment key={key}>{nodes}</Fragment>
     ),
