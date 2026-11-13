@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-11-13
+
+- [`d7aaeb3d3`](https://github.com/quarto-dev/q2/commits/d7aaeb3d3): Authors overlay in replay now shows who wrote each word at that point in history, instead of the final document's authorship laid over earlier text
+
 ### 2026-11-12
 
 - [`2ec078671`](https://github.com/quarto-dev/q2/commits/2ec078671): Task-list items in the preview now show their checkbox in place of the bullet (also in lists that mix tasks and plain items), and an empty `- [ ] ` item shows its checkbox as soon as you type it.
