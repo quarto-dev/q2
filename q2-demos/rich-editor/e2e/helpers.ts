@@ -420,6 +420,11 @@ export class Editor {
     await this.styleMenu().getByRole('menuitemradio', { name }).click()
   }
 
+  /** The toolbar's bulleted list button. */
+  listButton() {
+    return this.toolbar().getByRole('button', { name: 'Bulleted list' })
+  }
+
   /** The toolbar's quote button. */
   quoteButton() {
     return this.toolbar().getByRole('button', { name: 'Quote' })

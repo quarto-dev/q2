@@ -480,3 +480,80 @@ test.describe('the toolbar on an item', () => {
     expect((await editor.lines())[3]).toBe('li: Three.')
   })
 })
+
+test.describe('the bulleted list button', () => {
+  test('makes the caret\'s paragraph an item, with the caret where it was', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+    await editor.placeCaretInLine(5, 2)
+
+    await editor.listButton().click()
+
+    expect((await editor.lines())[5]).toBe('li: End.')
+    await editor.document.expectSource(lists.replace('End.', '* End.'))
+    await expect(editor.listButton()).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.type('!')
+    await editor.document.expectSource(lists.replace('End.', '* En!d.'))
+  })
+
+  test('makes a paragraph next to a list an item of it', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+    await editor.placeCaretInLine(4, 2)
+
+    await editor.listButton().click()
+
+    await expect(editor.frame.locator('main > ul:has(> li.qe-field) > li')).toHaveCount(4)
+    await editor.document.expectSource(lists.replace('* Three.\n\nMiddle.', '* Three.\n* Middle.'))
+  })
+
+  test('is pressed on an item, and makes it a paragraph again', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+    await editor.placeCaretInLine(3, 2)
+    await expect(editor.listButton()).toHaveAttribute('aria-pressed', 'true')
+
+    await editor.listButton().click()
+
+    expect((await editor.lines())[3]).toBe('p: Three.')
+    await editor.document.expectSource(lists.replace('* Three.', '\nThree.'))
+    await expect(editor.listButton()).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  test('a selection over paragraphs makes each an item', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+    await editor.placeCaretInLine(4, 2)
+    await page.keyboard.press('Shift+ArrowDown')
+
+    await editor.listButton().click()
+
+    expect((await editor.lines()).slice(4)).toEqual(['li: Middle.', 'li: End.'])
+  })
+
+  test('undo gives the line back its style', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+    await editor.placeCaretInLine(5, 2)
+    await editor.listButton().click()
+    await editor.document.expectSource(lists.replace('End.', '* End.'))
+
+    await page.keyboard.press(`${mod}+z`)
+
+    await editor.document.expectSource(lists)
+    expect((await editor.lines())[5]).toBe('p: End.')
+  })
+
+  test('is disabled on a heading and in a quote', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+
+    await editor.placeCaretInLine(1, 2)
+    await expect(editor.listButton()).toBeDisabled()
+
+    await editor.placeCaretInLine(2, 2)
+    await expect(editor.listButton()).toBeDisabled()
+  })
+
+  test('in the title block, it is disabled', async ({ page }) => {
+    const editor = await openEditor(page, 'lists')
+
+    await editor.placeCaret('title', 2)
+
+    await expect(editor.listButton()).toBeDisabled()
+  })
+})
