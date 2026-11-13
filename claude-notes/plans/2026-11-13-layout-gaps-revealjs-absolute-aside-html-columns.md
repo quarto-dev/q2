@@ -129,8 +129,14 @@ Small differences from Quarto 1 in slice A, each \[decided\] as a fix for an und
 
 ### Close-out
 
-- [ ] `cargo nextest run --workspace` and `cargo xtask verify --skip-hub-build`.
-- [ ] `q2 preview` checked for the same documents.
+- [x] `cargo nextest run --workspace`: 20005 run, 20002 passed, 3 failed, 201 skipped.
+  - `artifact_scoping_pipeline::single_doc_render_unchanged_under_scope_refactor` pins the hash of the compiled stylesheet, which slice C changes. The baseline was re-captured in the slice C commit, with a note that the only delta is the two column rules. It passes now.
+  - `dashboard_goldens::dashboard_skeletons_match_goldens` fails on this machine only: two of its 76 fixtures load the R package `bsicons`, which is not installed. No golden mismatch was reported for the other 74.
+  - `smoke_all::smoke_all` fails on this machine only: nine `typst/margin-layout/margin-table-*` fixtures need the R packages `gt` and `flextable` or the Python package `great_tables`. The other 361 fixtures pass, the three new ones among them.
+- [x] `cargo xtask verify --skip-hub-build --skip-rust-tests`: custom lints, CSS lint, clippy and the workspace build with warnings denied, formatting, the strict `claude-notes` render, the no-op rebuild check, the tree-sitter tests and the ts-packages build all pass. Its hub-client test step then fails with `Failed to resolve import "wasm-quarto-hub-client"`, because the WASM package was not built in this worktree. That step needs the hub build that was skipped.
+- [ ] The WASM leg: the hub-client build, `npm run test:wasm` (which runs the smoke-all fixtures a second way) and the Playwright sweep. Not run.
+- [ ] `q2 preview` checked for the same documents. Not done. The preview side has unit tests only.
+- [ ] A hub-client changelog entry for the preview `Image` change, once the commits have public hashes.
 - [ ] Decisions D1 to D8 taken to the team.
 
 ## Measurements
@@ -223,6 +229,16 @@ What still differs from Quarto 1, and why. None of it is part of this slice:
 - A footnote-only aside is 42 tall in Quarto 1 and 55 in q2. The cause was not investigated. Its bottom edge is at 680 in both.
 
 In the main layout fixture, slice B changed nothing except the section heights (all 700 now) and the aside position.
+
+Print mode (`?print-pdf`) was measured too, because Reveal lays slides out differently there. Positions are relative to each `.pdf-page`, which is 1155 by 769:
+
+| Element | Quarto 1 | q2 before | q2 after slice B |
+|---|---|---|---|
+| Plain slide `<section>` height | 769 | 153 | 769 |
+| Its `<aside>` bottom edge | 784 | 168 | 784 |
+| `.center` slide `<section>` | 153 tall, 309 from the page top | the same | the same |
+| Single-image slide: image | 660 by 495, 200 from the page top | the same | the same |
+| Slide in a vertical stack: `<aside>` bottom edge | 784 | 168 | 784 |
 
 ### After slice C
 
