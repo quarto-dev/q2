@@ -122,6 +122,14 @@ pub struct RenderArgs {
     /// `-M/--metadata KEY:VALUE` arguments, unparsed. Parsed by
     /// [`quarto_core::metadata_flag`] into the render's runtime overlay.
     pub metadata: Vec<String>,
+    /// `--dry-run` (bd-render-dry-run-dyiq7d08): stop after Pass 1 and
+    /// the project's `pre_render` hook, report every diagnostic, write
+    /// nothing. Skips `pre-render` / `post-render` scripts. See
+    /// [`ProjectPipeline::with_dry_run`].
+    pub dry_run: bool,
+    /// The global `-v` count. Read only by `--dry-run`, which lists the
+    /// files a render would produce when it is at least 1.
+    pub verbose: u8,
 }
 
 impl RenderArgs {
@@ -880,6 +888,10 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 /// from before the split.
 pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
     print_render_diagnostics(&report.summary, args, &report.config_sources);
+    if let Some(dry_run) = &report.summary.dry_run {
+        present_dry_run(report, dry_run, args);
+        return;
+    }
     match report.total_files {
         Some(total_files) => {
             let rendered = report.summary.outputs.len();
@@ -912,6 +924,48 @@ pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
             }
         }
     }
+}
+
+/// The end of a `--dry-run` (bd-render-dry-run-dyiq7d08), after the
+/// diagnostics: under `--json-errors`, the one JSON summary object on
+/// stdout; otherwise the `-v` would-render list and the `Checked N
+/// files` line on stderr. Unlike a render, a single file gets the line
+/// too, so a clean dry run says so instead of printing nothing.
+fn present_dry_run(
+    report: &RenderReport,
+    dry_run: &quarto_core::project::orchestrator::DryRunReport,
+    args: &RenderArgs,
+) {
+    use super::render_dry_run;
+    let counts = report.diagnostic_counts();
+    if args.json_errors {
+        let summary = render_dry_run::json_summary(&render_dry_run::SummaryInputs {
+            report: dry_run,
+            counts,
+            project_dir: &report.project_dir,
+            format: &report.project_format_key,
+            strict: args.strict,
+            stopped_early: report.summary.stopped_early,
+            list_files: args.verbose > 0,
+            wire_path,
+        });
+        match serde_json::to_string(&summary) {
+            Ok(line) => println!("{line}"),
+            Err(e) => eprintln!("(internal: failed to serialize the dry-run summary: {e})"),
+        }
+        return;
+    }
+    if args.verbose > 0 && !report.summary.stopped_early {
+        for line in render_dry_run::would_render_lines(&dry_run.would_render, &report.project_dir) {
+            quarto_util::user_status!(args.console_quiet(), "{}", line);
+        }
+    }
+    let mut line = render_dry_run::summary_line(dry_run);
+    match format_counts_clause(&counts, stderr_use_color()) {
+        Some(clause) => line = format!("{line} — {clause}"),
+        None => line.push_str(" — no problems found"),
+    }
+    quarto_util::user_status!(args.console_quiet(), "{}", line);
 }
 
 /// Render once, in process, and return what happened.
@@ -1060,7 +1114,12 @@ fn render_single_doc(
 
     quarto_util::user_status!(
         args.console_quiet(),
-        "Rendering single file: {}",
+        "{} single file: {}",
+        if args.dry_run {
+            "Checking"
+        } else {
+            "Rendering"
+        },
         input.display()
     );
 
@@ -1082,7 +1141,8 @@ fn render_single_doc(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
-    .with_fail_fast(args.fail_fast);
+    .with_fail_fast(args.fail_fast)
+    .with_dry_run(args.dry_run);
     if resolved.is_book {
         pipeline = pipeline.with_project_format(resolved.project_format.clone());
     }
@@ -1207,7 +1267,9 @@ fn render_project(
     // the project so script-created inputs and config edits are
     // picked up. `project.type` / `project.output-dir` changes are
     // forbidden (Q1-compatible mutation guard).
-    let run_scripts = !args.no_render_scripts;
+    // A dry run never runs scripts: they are arbitrary user code that may
+    // write files (bd-render-dry-run-dyiq7d08).
+    let run_scripts = !args.no_render_scripts && !args.dry_run;
     let render_all = targets.is_none();
     let target = match &targets {
         None => RenderTarget::FullProject {
@@ -1263,7 +1325,12 @@ fn render_project(
 
     quarto_util::user_status!(
         args.console_quiet(),
-        "Rendering project: {} (type: {})",
+        "{} project: {} (type: {})",
+        if args.dry_run {
+            "Checking"
+        } else {
+            "Rendering"
+        },
         project.dir.display(),
         project.project_type_label()
     );
@@ -1290,7 +1357,8 @@ fn render_project(
         runtime_arc.clone(),
     )
     .with_format_override(args.to.clone())
-    .with_fail_fast(args.fail_fast);
+    .with_fail_fast(args.fail_fast)
+    .with_dry_run(args.dry_run);
     if resolved.is_book {
         pipeline = pipeline.with_project_format(resolved.project_format.clone());
     }
@@ -1760,8 +1828,16 @@ fn format_render_diagnostics_text(
     };
 
     for failure in &summary.pass1_failures {
+        // A full render reports the file as skipped by the profile pass;
+        // a dry run checks exactly that pass, so the failure is the
+        // finding itself (bd-render-dry-run-dyiq7d08).
+        let prefix = if summary.dry_run.is_some() {
+            "error:"
+        } else {
+            "warning: profile-pass skipped"
+        };
         line(&format!(
-            "warning: profile-pass skipped {}: {}",
+            "{prefix} {}: {}",
             failure.input.display(),
             failure_error_text(failure, &opts)
         ));
@@ -1833,7 +1909,7 @@ fn format_render_diagnostics_text(
     if !quiet {
         use quarto_error_reporting::coalesce_by_source;
 
-        let entries = summary.outputs.iter().flat_map(|result| {
+        let output_entries = summary.outputs.iter().flat_map(|result| {
             result.render_output.diagnostics.iter().map(|d| {
                 (
                     result.input_path.clone(),
@@ -1842,6 +1918,18 @@ fn format_render_diagnostics_text(
                 )
             })
         });
+        // A dry run's Pass-1 warnings (no outputs exist) take the same
+        // path: one report per shared location, an "Affected files:" tail.
+        let pass1_entries = summary.pass1_diagnostics.iter().flat_map(|file| {
+            file.diagnostics.iter().map(|d| {
+                (
+                    file.input.clone(),
+                    d.clone(),
+                    Some(file.source_context.clone()),
+                )
+            })
+        });
+        let entries = output_entries.chain(pass1_entries);
         // Q-5-37 (unreferenced brand file) is emitted once per page but
         // is one project-wide problem with no source span, so the
         // location coalescer would print it once per page.
@@ -2109,7 +2197,7 @@ fn json_source_file(
 /// A path as `--json-errors` spells it: absolute, without resolving
 /// symlinks (`std::path::absolute` keeps the plain form on Windows,
 /// unlike `canonicalize`'s `\\?\` prefix).
-fn wire_path(path: &Path) -> String {
+pub(crate) fn wire_path(path: &Path) -> String {
     std::path::absolute(path)
         .unwrap_or_else(|_| path.to_path_buf())
         .display()
@@ -2251,6 +2339,19 @@ fn print_render_diagnostics_json(
             render_diagnostic_guarded(code, || diagnostic_json(diagnostic, &project_ctx, None))
         {
             emit_json_line(&json);
+        }
+    }
+
+    // A dry run's Pass-1 warnings on files that parsed: the same
+    // JsonDiagnostic records a real render emits for them from Pass 2.
+    for file in &summary.pass1_diagnostics {
+        for d in &file.diagnostics {
+            let code = d.code.as_deref();
+            if let Some(json) = render_diagnostic_guarded(code, || {
+                diagnostic_json(d, &file.source_context, Some(&file.input))
+            }) {
+                emit_json_line(&json);
+            }
         }
     }
 
@@ -3497,6 +3598,8 @@ mod tests {
             pass2_failures: Vec::new(),
             project_diagnostics,
             stopped_early: false,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         }
     }
 
@@ -3562,6 +3665,8 @@ mod tests {
             pass2_failures: Vec::new(),
             project_diagnostics: Vec::new(),
             stopped_early: false,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         }
     }
 

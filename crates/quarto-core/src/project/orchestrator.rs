@@ -712,6 +712,46 @@ pub(crate) fn file_failure_from_error(input: std::path::PathBuf, e: QuartoError)
     }
 }
 
+/// Non-fatal diagnostics Pass 1 produced for a file that profiled
+/// successfully (`--dry-run`, bd-render-dry-run-dyiq7d08).
+///
+/// A full render does not collect these: Pass 2 re-runs the same head
+/// stages and reports them on the page's output, so keeping them here
+/// too would print every warning twice. A dry run has no Pass 2, so
+/// this is the only place they surface.
+#[derive(Debug)]
+pub struct FileDiagnostics {
+    pub input: std::path::PathBuf,
+    pub diagnostics: Vec<DiagnosticMessage>,
+    pub source_context: quarto_source_map::SourceContext,
+}
+
+/// One file a dry run would have rendered.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DryRunFile {
+    pub input: std::path::PathBuf,
+    /// The format key the file resolves to (`html`, `revealjs`, …).
+    pub format: String,
+    /// `true` when the file failed Pass 1 (it is listed, but a real
+    /// render would skip it).
+    pub failed: bool,
+}
+
+/// What a dry run (`--dry-run`) checked, for the summary line and the
+/// machine-readable report. Present on [`ProjectRenderSummary::dry_run`]
+/// only when the pipeline ran in dry-run mode.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DryRunReport {
+    /// Files Pass 1 profiled (successfully or not). Under `--fail-fast`
+    /// this can be fewer than the project's files.
+    pub files_checked: usize,
+    /// Files Pass 1 failed on.
+    pub files_failed: usize,
+    /// The files a real render would render, in `project.files` order,
+    /// each with its resolved format.
+    pub would_render: Vec<DryRunFile>,
+}
+
 /// Result of a full project render, generic over the per-page
 /// output type produced by the configured
 /// [`Pass2Renderer`](super::pass2_renderer::Pass2Renderer).
@@ -740,6 +780,12 @@ pub struct ProjectRenderSummary<O = RenderToFileResult> {
     /// failures are then **not** exhaustive — remaining files were not
     /// checked. Always `false` without `--fail-fast`.
     pub stopped_early: bool,
+    /// Pass-1 warnings on files that profiled successfully. Populated
+    /// only by a dry run; see [`FileDiagnostics`].
+    pub pass1_diagnostics: Vec<FileDiagnostics>,
+    /// `Some` exactly when the pipeline ran in dry-run mode
+    /// ([`ProjectPipeline::with_dry_run`]).
+    pub dry_run: Option<DryRunReport>,
 }
 
 impl<O> ProjectRenderSummary<O> {
@@ -819,7 +865,7 @@ impl OutputDiagnostics for RenderToFileResult {
 }
 
 impl<O: OutputDiagnostics> ProjectRenderSummary<O> {
-    /// Aggregate every reported error / warning across all four
+    /// Aggregate every reported error / warning across all five
     /// diagnostic sources into a single [`DiagnosticCounts`].
     ///
     /// Counting rules (bd-ooleh):
@@ -831,7 +877,8 @@ impl<O: OutputDiagnostics> ProjectRenderSummary<O> {
     ///   non-zero exit code.)
     /// - A failure **with** structured diagnostics contributes those
     ///   diagnostics counted by [`DiagnosticKind`].
-    /// - [`Self::project_diagnostics`] and the per-page diagnostics of
+    /// - [`Self::project_diagnostics`], the dry-run
+    ///   [`Self::pass1_diagnostics`] and the per-page diagnostics of
     ///   every successful render in [`Self::outputs`] are counted by
     ///   kind.
     /// - `Info` / `Note` severities are ignored.
@@ -848,6 +895,10 @@ impl<O: OutputDiagnostics> ProjectRenderSummary<O> {
 
         counts.add_diagnostics(&self.project_diagnostics);
 
+        for file in &self.pass1_diagnostics {
+            counts.add_diagnostics(&file.diagnostics);
+        }
+
         for output in &self.outputs {
             counts.add_diagnostics(output.diagnostics());
         }
@@ -855,7 +906,7 @@ impl<O: OutputDiagnostics> ProjectRenderSummary<O> {
         counts
     }
 
-    /// Promote every `Warning` diagnostic to `Error`, across all four
+    /// Promote every `Warning` diagnostic to `Error`, across all five
     /// diagnostic sources (strict mode, bd-yjs54ptg / GH #220).
     ///
     /// This is the single seam through which every structured
@@ -885,6 +936,9 @@ impl<O: OutputDiagnostics> ProjectRenderSummary<O> {
             promote(&mut failure.diagnostics);
         }
         promote(&mut self.project_diagnostics);
+        for file in &mut self.pass1_diagnostics {
+            promote(&mut file.diagnostics);
+        }
         for output in &mut self.outputs {
             promote(output.diagnostics_mut());
         }
@@ -1030,6 +1084,9 @@ pub struct ProjectPipeline<'a, R: Pass2Renderer> {
     /// `Authoring` via [`with_audience`](Self::with_audience), which
     /// makes every draft `visible`.
     audience: RenderAudience,
+    /// Stop after Pass 1 and `pre_render`, report every diagnostic, and
+    /// write nothing (`q2 render --dry-run`). See [`Self::with_dry_run`].
+    dry_run: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1155,7 +1212,14 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
                 }
             }
         }
-        let result = if let Some(entries) = separate {
+        let result = if self.dry_run {
+            // The one whole-render check the dispatch below makes before
+            // any Pass 1: a book's own format must have book support.
+            match self.unsupported_book_format(&request, requested_format.as_deref()) {
+                Some(error) if separate.is_none() && is_book => Err(error),
+                _ => self.run_dry().await,
+            }
+        } else if let Some(entries) = separate {
             self.run_book_named_separately(entries).await
         } else if is_book {
             // Books render only to formats with book support. Unknown
@@ -1165,9 +1229,6 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             // judges the whole-book format, so it applies only when the
             // requested scope is the book (a chapter may render to any
             // format: FR11).
-            let unsupported = request.value == crate::BookScope::Book
-                && FormatIdentifier::try_from(self.format_str.as_str())
-                    .is_ok_and(|id| !crate::project::book::is_supported_format(&id));
             // Scope is explicit (P3-D1): the whole book, or the page named on
             // the command line as a standalone document. Only formats that
             // consolidate a book into one file (typst, epub) have a
@@ -1176,15 +1237,9 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             // per-document path (pinned by book_project_type::
             // single_chapter_subset_render_keeps_one_file_render_set).
             let full_render = matches!(self.mode, RenderMode::Full);
-            if unsupported {
-                let from_request = crate::format_resolution::resolve_project_format(
-                    self.project,
-                    &request,
-                    requested_format.as_deref(),
-                    self.runtime.as_ref(),
-                )
-                .requested;
-                Err(self.unsupported_book_format_error(from_request))
+            if let Some(error) = self.unsupported_book_format(&request, requested_format.as_deref())
+            {
+                Err(error)
             } else if crate::project::book::format_consolidates_book(&self.format) {
                 self.run_book_scoped(&request, &mut notices_emitted).await
             } else if full_render && self.format.identifier == FormatIdentifier::Html {
@@ -1217,6 +1272,31 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
         }
         result
+    }
+
+    /// The `Q-5-33` error when the requested scope is the whole book and the
+    /// book's own format has no book support, else `None`. Only meaningful
+    /// for a Book project. Unknown (extension) format identifiers pass —
+    /// they may be html-based.
+    fn unsupported_book_format(
+        &self,
+        request: &crate::format_resolution::ScopeRequest,
+        requested_format: Option<&str>,
+    ) -> Option<QuartoError> {
+        let unsupported = request.value == crate::BookScope::Book
+            && FormatIdentifier::try_from(self.format_str.as_str())
+                .is_ok_and(|id| !crate::project::book::is_supported_format(&id));
+        if !unsupported {
+            return None;
+        }
+        let from_request = crate::format_resolution::resolve_project_format(
+            self.project,
+            request,
+            requested_format,
+            self.runtime.as_ref(),
+        )
+        .requested;
+        Some(self.unsupported_book_format_error(from_request))
     }
 
     /// `Q-5-33`: the book's own format has no book support. Names where the
@@ -1619,6 +1699,8 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
                 pass2_failures: Vec::new(),
                 project_diagnostics: Vec::new(),
                 stopped_early: true,
+                pass1_diagnostics: Vec::new(),
+                dry_run: None,
             });
         }
         let index = Arc::new(self.build_index(profiles));
@@ -1721,6 +1803,8 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             pass2_failures,
             project_diagnostics,
             stopped_early: false,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         })
     }
 
@@ -1749,6 +1833,8 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
                 pass2_failures: Vec::new(),
                 project_diagnostics,
                 stopped_early: true,
+                pass1_diagnostics: Vec::new(),
+                dry_run: None,
             });
         }
         let index = Arc::new(self.build_index(profiles));
@@ -1882,6 +1968,8 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
             pass2_failures,
             project_diagnostics,
             stopped_early,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         })
     }
 }
@@ -1911,6 +1999,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             project_artifacts: crate::artifact::ArtifactStore::new(),
             renderer,
             fail_fast: false,
+            dry_run: false,
             jobs: None,
             audience: RenderAudience::default(),
         }
@@ -1941,6 +2030,22 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
     /// (Pass-1 or Pass-2), instead of best-effort rendering everything.
     pub fn with_fail_fast(mut self, fail_fast: bool) -> Self {
         self.fail_fast = fail_fast;
+        self
+    }
+
+    /// Dry run (`q2 render --dry-run`, bd-render-dry-run-dyiq7d08): run
+    /// the render only through Pass 1 and the project type's
+    /// `pre_render` hook, then return a summary carrying every diagnostic
+    /// found so far and a [`DryRunReport`].
+    ///
+    /// Nothing executes and nothing is written: no engine runs (Pass 1
+    /// only *converts* non-`.qmd` sources), no Pass 2, no resource copy or
+    /// manifest, and the Pass-1 profile cache is neither read nor saved —
+    /// every file is parsed live, so its warnings are reported even when
+    /// a cached profile exists. Problems only Pass 2 finds (engine,
+    /// filter, template and cross-reference errors) are not reported.
+    pub fn with_dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
         self
     }
 
@@ -1990,7 +2095,11 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // explicit `registry.shutdown_all()` (not Drop) to reap TS-engine Node
         // subprocesses at end-of-render. Best-effort: log at WARN and continue;
         // the host's own Drop is the backstop if this errs.
-        let result = self.run_inner().await;
+        let result = if self.dry_run {
+            self.run_dry().await
+        } else {
+            self.run_inner().await
+        };
         if let Err(e) = self.project.registry.shutdown_all() {
             tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
         }
@@ -2054,10 +2163,11 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             .await
     }
 
-    /// The part of a project render that happens once, before any Pass 2:
-    /// the initial diagnostics, Pass 1, the engine warning, the fail-fast
-    /// barrier, `pre_render` and the book's chapter seeds.
-    async fn run_head(&mut self) -> Result<RunHead<R::Output>> {
+    /// The project-level diagnostics a render reports once, before Pass 1:
+    /// an empty render set, unmatched `project.render` patterns, nested
+    /// projects and missing project `css:` files. Shared by
+    /// [`Self::run_head`] and the dry run.
+    fn initial_diagnostics(&self) -> Vec<DiagnosticMessage> {
         let mut initial_diagnostics = self.empty_render_set_diagnostic();
         // `project.render` patterns that contributed nothing
         // (bd-mt7a6uc4 D7). Computed here rather than inside
@@ -2093,8 +2203,16 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             ),
         );
 
-        let (profiles, pass1_failures) = self.pass_one().await;
+        initial_diagnostics
+    }
 
+    /// Tally lifted vs. fell-through engine resolution over the profiles
+    /// Pass 1 just returned, and build the decision-5 warning when it is
+    /// due. Shared by [`Self::run_head`] and the dry run.
+    fn engine_resolution_diagnostic(
+        &self,
+        profiles: &[crate::document_profile::DocumentProfile],
+    ) -> Option<DiagnosticMessage> {
         // Plan 6 Phase 5: tally lifted vs. fell-through ONCE here, from the
         // profiles pass_one just returned — regardless of cache hit/miss (a
         // cached profile carries `engine_resolution` too). The SAME tally
@@ -2124,12 +2242,124 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             .registry
             .engines_needing_load(&self.project.tabled_engines);
         if pass1_engine_resolution_should_warn(fell_through, &engines_needing_load) {
-            initial_diagnostics.push(pass1_engine_resolution_warning(
+            return Some(pass1_engine_resolution_warning(
                 &engines_needing_load,
                 fell_through,
                 profiles.len(),
             ));
         }
+        None
+    }
+
+    /// The dry run ([`Self::with_dry_run`]): the head of a render —
+    /// initial diagnostics, a live Pass 1 that keeps every file's
+    /// diagnostics, the engine warning and `pre_render` — then a summary
+    /// with a [`DryRunReport`] instead of Pass 2.
+    ///
+    /// Unlike [`Self::run_head`], a `pre_render` failure (a book's broken
+    /// chapter list: Q-5-34/35/36) does not abort: it is reported as a
+    /// project diagnostic next to the per-file results, so one run shows
+    /// every problem it found.
+    async fn run_dry(&mut self) -> Result<ProjectRenderSummary<R::Output>> {
+        let mut project_diagnostics = self.initial_diagnostics();
+
+        let pass1 = self
+            .pass_one_with(Pass1Options {
+                fail_fast: self.fail_fast,
+                dry_run: true,
+            })
+            .await;
+        project_diagnostics.extend(self.engine_resolution_diagnostic(&pass1.profiles));
+        let files_checked = pass1.profiles.len() + pass1.failures.len();
+        let index = Arc::new(self.build_index(pass1.profiles));
+        let stopped_early = self.fail_fast && !pass1.failures.is_empty();
+
+        if !stopped_early
+            && let Err(e) = self
+                .project_type
+                .pre_render(self.project, &index, self.runtime.as_ref())
+                .await
+        {
+            match e {
+                QuartoError::Parse(pe) => project_diagnostics.extend(pe.diagnostics),
+                other => project_diagnostics.push(
+                    DiagnosticMessageBuilder::error("Project pre-render failed")
+                        .problem(format!("pre_render failed: {other}"))
+                        .build(),
+                ),
+            }
+        }
+
+        let would_render = if stopped_early {
+            Vec::new()
+        } else {
+            self.dry_run_would_render(&index, &pass1.failures)
+        };
+        project_diagnostics.extend(self.drain_registry_diagnostics());
+
+        Ok(ProjectRenderSummary {
+            outputs: Vec::new(),
+            pass2_failures: Vec::new(),
+            project_diagnostics,
+            stopped_early,
+            pass1_diagnostics: pass1.diagnostics,
+            dry_run: Some(DryRunReport {
+                files_checked,
+                files_failed: pass1.failures.len(),
+                would_render,
+            }),
+            pass1_failures: pass1.failures,
+        })
+    }
+
+    /// The files a real render would render after this Pass 1 and
+    /// `pre_render` (which may restrict `project.files`, as a book does),
+    /// each with the format it resolves to. Files that failed Pass 1 are
+    /// listed with `failed: true`.
+    fn dry_run_would_render(
+        &self,
+        index: &Arc<ProjectIndex>,
+        failures: &[FileFailure],
+    ) -> Vec<DryRunFile> {
+        let render_set = self.compute_augmented_render_set(index);
+        let failed: std::collections::HashSet<&std::path::Path> =
+            failures.iter().map(|f| f.input.as_path()).collect();
+        let request = crate::format_resolution::resolve_render_scope(
+            self.project,
+            &self.mode,
+            self.runtime.as_ref(),
+        );
+        let format_override = self.renderer.format_override();
+        self.project
+            .files
+            .iter()
+            .filter(|d| render_set.as_ref().is_none_or(|set| set.contains(&d.input)))
+            .map(|d| {
+                let resolution = crate::format_resolution::resolve_document_format(
+                    self.project,
+                    &d.input,
+                    None,
+                    &request,
+                    format_override,
+                    self.runtime.as_ref(),
+                );
+                DryRunFile {
+                    input: d.input.clone(),
+                    format: resolution.key_or(&self.format_str).to_string(),
+                    failed: failed.contains(d.input.as_path()),
+                }
+            })
+            .collect()
+    }
+
+    /// The part of a project render that happens once, before any Pass 2:
+    /// the initial diagnostics, Pass 1, the engine warning, the fail-fast
+    /// barrier, `pre_render` and the book's chapter seeds.
+    async fn run_head(&mut self) -> Result<RunHead<R::Output>> {
+        let mut initial_diagnostics = self.initial_diagnostics();
+
+        let (profiles, pass1_failures) = self.pass_one().await;
+        initial_diagnostics.extend(self.engine_resolution_diagnostic(&profiles));
 
         let index = Arc::new(self.build_index(profiles));
 
@@ -2149,6 +2379,8 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 pass2_failures: Vec::new(),
                 project_diagnostics,
                 stopped_early: true,
+                pass1_diagnostics: Vec::new(),
+                dry_run: None,
             }));
         }
 
@@ -2345,6 +2577,8 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             pass2_failures,
             project_diagnostics,
             stopped_early,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         })
     }
 
@@ -2503,6 +2737,16 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         Vec<crate::document_profile::DocumentProfile>,
         Vec<FileFailure>,
     ) {
+        let outcome = self
+            .pass_one_with(Pass1Options {
+                fail_fast: self.fail_fast,
+                dry_run: false,
+            })
+            .await;
+        (outcome.profiles, outcome.failures)
+    }
+
+    async fn pass_one_with(&self, opts: Pass1Options) -> Pass1Outcome {
         // bd-3y7ul: route the monotonic clock through SystemRuntime so the
         // WASM build doesn't hit `std::time::Instant::now()` (which panics
         // with "time not implemented on this platform" on
@@ -2514,20 +2758,10 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // per-doc future. Native keeps the sync `pass_one_dispatch` for
         // rayon compatibility.
         #[cfg(not(target_arch = "wasm32"))]
-        let (profiles, failures) = pass_one_dispatch(
-            &self.runtime,
-            self.project,
-            self.pass1_format(),
-            self.fail_fast,
-        );
+        let outcome = pass_one_dispatch(&self.runtime, self.project, self.pass1_format(), opts);
         #[cfg(target_arch = "wasm32")]
-        let (profiles, failures) = pass_one_dispatch_async(
-            &self.runtime,
-            self.project,
-            self.pass1_format(),
-            self.fail_fast,
-        )
-        .await;
+        let outcome =
+            pass_one_dispatch_async(&self.runtime, self.project, self.pass1_format(), opts).await;
         // bd-m7x9s Phase 0: feed the `perf.pass1` gauge with cumulative
         // doc count and wall time. `pass1_profile_with_cache`
         // increments the thread-set; here we add the per-`pass_one`
@@ -2535,7 +2769,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // intentional — under rayon the dispatch's wall time is what
         // we want, not the sum of per-doc CPU.
         PASS1_DOCS.fetch_add(
-            profiles.len() + failures.len(),
+            outcome.profiles.len() + outcome.failures.len(),
             std::sync::atomic::Ordering::Relaxed,
         );
         PASS1_WALL_NANOS.fetch_add(
@@ -2544,7 +2778,7 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 .saturating_sub(start_nanos),
             std::sync::atomic::Ordering::Relaxed,
         );
-        (profiles, failures)
+        outcome
     }
 
     /// Helper: project-relative source path for cache-key
@@ -2708,6 +2942,37 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
 // with `self.runtime`/`self.project`/`self.format` substituted for
 // the explicit parameters; behavior is unchanged in Phase 1.
 
+/// How Pass 1 runs: the fail-fast barrier, and whether this is a dry
+/// run (live parse, no profile cache, diagnostics kept).
+#[derive(Debug, Clone, Copy, Default)]
+struct Pass1Options {
+    fail_fast: bool,
+    dry_run: bool,
+}
+
+/// One file's Pass-1 result: its profile, plus (dry run only) the
+/// non-fatal diagnostics the head stages produced for it.
+struct Pass1Doc {
+    profile: crate::document_profile::DocumentProfile,
+    diagnostics: Option<FileDiagnostics>,
+}
+
+/// Everything Pass 1 produced, in `project.files` order.
+#[derive(Default)]
+struct Pass1Outcome {
+    profiles: Vec<crate::document_profile::DocumentProfile>,
+    /// Dry run only; always empty for a full render.
+    diagnostics: Vec<FileDiagnostics>,
+    failures: Vec<FileFailure>,
+}
+
+impl Pass1Outcome {
+    fn push(&mut self, doc: Pass1Doc) {
+        self.profiles.push(doc.profile);
+        self.diagnostics.extend(doc.diagnostics);
+    }
+}
+
 /// Resolve the worker-count knob shared by Pass-1
 /// ([`pass_one_dispatch_parallel`]) and Pass-2
 /// ([`RenderToFileRenderer::render_batch`]).
@@ -2754,16 +3019,13 @@ fn pass_one_dispatch(
     runtime: &Arc<dyn SystemRuntime>,
     project: &ProjectContext,
     format: &Format,
-    fail_fast: bool,
-) -> (
-    Vec<crate::document_profile::DocumentProfile>,
-    Vec<FileFailure>,
-) {
+    opts: Pass1Options,
+) -> Pass1Outcome {
     let workers = worker_count();
     if workers == 1 || project.files.len() <= 1 {
-        return pass_one_dispatch_sequential(runtime, project, format, fail_fast);
+        return pass_one_dispatch_sequential(runtime, project, format, opts);
     }
-    pass_one_dispatch_parallel(runtime, project, format, workers, fail_fast)
+    pass_one_dispatch_parallel(runtime, project, format, workers, opts)
 }
 
 /// Sequential fan-out — the pre-Phase-2 behavior. Used:
@@ -2775,27 +3037,31 @@ fn pass_one_dispatch_sequential(
     runtime: &Arc<dyn SystemRuntime>,
     project: &ProjectContext,
     format: &Format,
-    fail_fast: bool,
-) -> (
-    Vec<crate::document_profile::DocumentProfile>,
-    Vec<FileFailure>,
-) {
-    let mut profiles = Vec::with_capacity(project.files.len());
-    let mut failures = Vec::new();
+    opts: Pass1Options,
+) -> Pass1Outcome {
+    let mut outcome = Pass1Outcome::default();
     for doc_info in &project.files {
-        match pollster::block_on(pass1_profile_with_cache(runtime, project, format, doc_info)) {
-            Ok(profile) => profiles.push(profile),
+        match pollster::block_on(pass1_profile_with_cache(
+            runtime,
+            project,
+            format,
+            doc_info,
+            opts.dry_run,
+        )) {
+            Ok(doc) => outcome.push(doc),
             Err(e) => {
-                failures.push(file_failure_from_error(doc_info.input.clone(), e));
+                outcome
+                    .failures
+                    .push(file_failure_from_error(doc_info.input.clone(), e));
                 // Fail-fast: stop at the first error in document order.
                 // This path is deterministic (single-threaded).
-                if fail_fast {
+                if opts.fail_fast {
                     break;
                 }
             }
         }
     }
-    (profiles, failures)
+    outcome
 }
 
 /// WASM dispatch — async sequential fan-out, driven by `.await`.
@@ -2811,25 +3077,23 @@ async fn pass_one_dispatch_async(
     runtime: &Arc<dyn SystemRuntime>,
     project: &ProjectContext,
     format: &Format,
-    fail_fast: bool,
-) -> (
-    Vec<crate::document_profile::DocumentProfile>,
-    Vec<FileFailure>,
-) {
-    let mut profiles = Vec::with_capacity(project.files.len());
-    let mut failures = Vec::new();
+    opts: Pass1Options,
+) -> Pass1Outcome {
+    let mut outcome = Pass1Outcome::default();
     for doc_info in &project.files {
-        match pass1_profile_with_cache(runtime, project, format, doc_info).await {
-            Ok(profile) => profiles.push(profile),
+        match pass1_profile_with_cache(runtime, project, format, doc_info, opts.dry_run).await {
+            Ok(doc) => outcome.push(doc),
             Err(e) => {
-                failures.push(file_failure_from_error(doc_info.input.clone(), e));
-                if fail_fast {
+                outcome
+                    .failures
+                    .push(file_failure_from_error(doc_info.input.clone(), e));
+                if opts.fail_fast {
                     break;
                 }
             }
         }
     }
-    (profiles, failures)
+    outcome
 }
 
 /// Native parallel fan-out via rayon.
@@ -2856,15 +3120,12 @@ fn pass_one_dispatch_parallel(
     project: &ProjectContext,
     format: &Format,
     workers: usize,
-    fail_fast: bool,
-) -> (
-    Vec<crate::document_profile::DocumentProfile>,
-    Vec<FileFailure>,
-) {
+    opts: Pass1Options,
+) -> Pass1Outcome {
     use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
     enum DocOutcome {
-        Profile(crate::document_profile::DocumentProfile),
+        Profile(Pass1Doc),
         Failure(FileFailure),
         /// Fail-fast short-circuit: another worker already errored, so
         /// this document was never parsed. Folded away (no profile, no
@@ -2890,7 +3151,7 @@ fn pass_one_dispatch_parallel(
         // Pool construction failed (extremely rare — typically an
         // OOM or thread-limit signal from the OS). Degrade to the
         // sequential path rather than aborting the render.
-        Err(_) => return pass_one_dispatch_sequential(runtime, project, format, fail_fast),
+        Err(_) => return pass_one_dispatch_sequential(runtime, project, format, opts),
     };
 
     // Fail-fast abort flag. A plain local `AtomicBool` is `Sync`, so
@@ -2914,7 +3175,7 @@ fn pass_one_dispatch_parallel(
             .map(|doc_info| {
                 // Fail-fast: if another worker has already errored,
                 // skip parsing this document entirely.
-                if fail_fast && aborted.load(std::sync::atomic::Ordering::Relaxed) {
+                if opts.fail_fast && aborted.load(std::sync::atomic::Ordering::Relaxed) {
                     return DocOutcome::Skipped;
                 }
                 let input = doc_info.input.clone();
@@ -2927,18 +3188,24 @@ fn pass_one_dispatch_parallel(
                 // requirements; `AssertUnwindSafe` papers over the
                 // strict checker.
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    pollster::block_on(pass1_profile_with_cache(runtime, project, format, doc_info))
+                    pollster::block_on(pass1_profile_with_cache(
+                        runtime,
+                        project,
+                        format,
+                        doc_info,
+                        opts.dry_run,
+                    ))
                 }));
                 match result {
                     Ok(Ok(profile)) => DocOutcome::Profile(profile),
                     Ok(Err(e)) => {
-                        if fail_fast {
+                        if opts.fail_fast {
                             aborted.store(true, std::sync::atomic::Ordering::Relaxed);
                         }
                         DocOutcome::Failure(file_failure_from_error(input, e))
                     }
                     Err(panic_payload) => {
-                        if fail_fast {
+                        if opts.fail_fast {
                             aborted.store(true, std::sync::atomic::Ordering::Relaxed);
                         }
                         let msg = panic_message(&panic_payload);
@@ -2954,18 +3221,17 @@ fn pass_one_dispatch_parallel(
             .collect_into_vec(&mut outcomes);
     });
 
-    let mut profiles = Vec::with_capacity(project.files.len());
-    let mut failures = Vec::new();
+    let mut result = Pass1Outcome::default();
     for outcome in outcomes {
         match outcome {
-            DocOutcome::Profile(p) => profiles.push(p),
-            DocOutcome::Failure(f) => failures.push(f),
+            DocOutcome::Profile(doc) => result.push(doc),
+            DocOutcome::Failure(f) => result.failures.push(f),
             // Fail-fast skip: contributed neither a profile nor a
             // failure. Dropped here.
             DocOutcome::Skipped => {}
         }
     }
-    (profiles, failures)
+    result
 }
 
 /// Extract a printable message from a `catch_unwind` payload —
@@ -3095,7 +3361,8 @@ async fn pass1_profile_with_cache(
     project: &ProjectContext,
     format: &Format,
     doc_info: &DocumentInfo,
-) -> Result<crate::document_profile::DocumentProfile> {
+    dry_run: bool,
+) -> Result<Pass1Doc> {
     pass1_threads_record();
 
     // Read source bytes — used for both the cache key
@@ -3107,6 +3374,30 @@ async fn pass1_profile_with_cache(
             e
         ))
     })?;
+
+    // Dry run (bd-render-dry-run-dyiq7d08): always parse live and never
+    // touch the profile cache. A cached profile carries no diagnostics, so
+    // a cache hit would hide the file's warnings; and a dry run writes
+    // nothing, so the cache is not saved either.
+    if dry_run {
+        let (profile, diagnostics, source_context) = pass1_profile_single_file_live(
+            runtime.clone(),
+            project,
+            format,
+            doc_info,
+            &source_bytes,
+        )
+        .await?;
+        let diagnostics = (!diagnostics.is_empty()).then(|| FileDiagnostics {
+            input: doc_info.input.clone(),
+            diagnostics,
+            source_context,
+        });
+        return Ok(Pass1Doc {
+            profile,
+            diagnostics,
+        });
+    }
 
     // Compute the project-relative source path the same way
     // DocumentProfileStage does (canonicalize when possible, else
@@ -3199,10 +3490,13 @@ async fn pass1_profile_with_cache(
     if let Ok(Some(profile)) =
         crate::project::profile_cache::load(runtime.as_ref(), &key_hex, include_resolver).await
     {
-        return Ok(profile);
+        return Ok(Pass1Doc {
+            profile,
+            diagnostics: None,
+        });
     }
 
-    let profile =
+    let (profile, _diagnostics, _source_context) =
         pass1_profile_single_file_live(runtime.clone(), project, format, doc_info, &source_bytes)
             .await?;
 
@@ -3211,7 +3505,10 @@ async fn pass1_profile_with_cache(
     // this run; the next run will just retry the cache write.
     let _ = crate::project::profile_cache::save(runtime.as_ref(), &key_hex, &profile).await;
 
-    Ok(profile)
+    Ok(Pass1Doc {
+        profile,
+        diagnostics: None,
+    })
 }
 
 /// Run the head pipeline live (no cache lookup). Used by
@@ -3222,7 +3519,11 @@ async fn pass1_profile_single_file_live(
     format: &Format,
     doc_info: &DocumentInfo,
     source_bytes: &[u8],
-) -> Result<crate::document_profile::DocumentProfile> {
+) -> Result<(
+    crate::document_profile::DocumentProfile,
+    Vec<DiagnosticMessage>,
+    quarto_source_map::SourceContext,
+)> {
     use crate::pipeline::{build_head_stages, run_pipeline};
     use crate::render::{BinaryDependencies, RenderContext};
 
@@ -3242,15 +3543,21 @@ async fn pass1_profile_single_file_live(
     // (bd-xfwx, Phase 8.0d).
     let stages = build_head_stages();
 
-    let (output, _diagnostics) =
+    // The non-fatal diagnostics are returned for a dry run; a full render
+    // drops them, because Pass 2 reruns these stages and reports them.
+    let (output, diagnostics) =
         run_pipeline(source_bytes, &source_name, &mut ctx, runtime, stages).await?;
 
-    let profile = output.into_at_profile().ok_or_else(|| {
+    let at_profile = output.into_at_profile().ok_or_else(|| {
         QuartoError::other(
             "Pass 1 did not produce an AtProfile variant — pipeline shape unexpected",
         )
     })?;
-    Ok(profile.profile)
+    Ok((
+        at_profile.profile,
+        diagnostics,
+        at_profile.ast.source_context,
+    ))
 }
 
 #[cfg(test)]
@@ -3411,7 +3718,7 @@ mod tests {
             .expect("a.qmd must be discovered as a project file");
 
         // Run 1: whatever key the CURRENT _extension.yml bytes produce.
-        pass1_profile_with_cache(&runtime, &project, &format, &doc_info)
+        pass1_profile_with_cache(&runtime, &project, &format, &doc_info, false)
             .await
             .expect("pass1 run 1");
 
@@ -3437,7 +3744,7 @@ mod tests {
 
         // Run 2: same project (same registry, same doc) — only the
         // extension's on-disk bytes changed.
-        pass1_profile_with_cache(&runtime, &project, &format, &doc_info)
+        pass1_profile_with_cache(&runtime, &project, &format, &doc_info, false)
             .await
             .expect("pass1 run 2");
 
@@ -3982,6 +4289,8 @@ mod tests {
             // 1 warning from a successful render
             outputs: vec![output_with(vec![DiagnosticMessage::warning("ow")])],
             stopped_early: false,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         };
         let counts = summary.diagnostic_counts();
         assert_eq!(counts.errors, 3);
@@ -4002,6 +4311,8 @@ mod tests {
             project_diagnostics: vec![DiagnosticMessage::warning("pw")],
             outputs: vec![output_with(vec![DiagnosticMessage::warning("ow")])],
             stopped_early: false,
+            pass1_diagnostics: Vec::new(),
+            dry_run: None,
         };
         summary.promote_warnings_to_errors();
 
@@ -4020,6 +4331,67 @@ mod tests {
                 .chain(&summary.project_diagnostics)
                 .chain(summary.outputs.iter().flat_map(|o| o.diagnostics()))
                 .all(|d| d.kind == DiagnosticKind::Error)
+        );
+    }
+
+    fn file_diagnostics(diagnostics: Vec<DiagnosticMessage>) -> FileDiagnostics {
+        FileDiagnostics {
+            input: PathBuf::from("doc.qmd"),
+            diagnostics,
+            source_context: quarto_source_map::SourceContext::new(),
+        }
+    }
+
+    /// Dry-run Pass-1 warnings (bd-render-dry-run-dyiq7d08) are a fifth
+    /// diagnostic source: counted by kind, Info / Note ignored.
+    #[test]
+    fn diagnostic_counts_include_dry_run_pass1_diagnostics() {
+        let summary: ProjectRenderSummary<StubOutput> = ProjectRenderSummary {
+            pass1_diagnostics: vec![
+                file_diagnostics(vec![
+                    DiagnosticMessage::warning("w1"),
+                    DiagnosticMessage::info("i"),
+                ]),
+                file_diagnostics(vec![
+                    DiagnosticMessage::warning("w2"),
+                    DiagnosticMessage::error("e"),
+                ]),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            summary.diagnostic_counts(),
+            DiagnosticCounts {
+                errors: 1,
+                warnings: 2
+            }
+        );
+    }
+
+    /// `--strict` reaches the dry-run Pass-1 warnings through the same
+    /// single promotion seam as every other source.
+    #[test]
+    fn promote_warnings_covers_dry_run_pass1_diagnostics() {
+        let mut summary: ProjectRenderSummary<StubOutput> = ProjectRenderSummary {
+            pass1_diagnostics: vec![file_diagnostics(vec![
+                DiagnosticMessage::warning("w"),
+                DiagnosticMessage::info("i"),
+            ])],
+            ..Default::default()
+        };
+        summary.promote_warnings_to_errors();
+        let kinds: Vec<DiagnosticKind> = summary.pass1_diagnostics[0]
+            .diagnostics
+            .iter()
+            .map(|d| d.kind)
+            .collect();
+        assert_eq!(kinds, vec![DiagnosticKind::Error, DiagnosticKind::Info]);
+        assert_eq!(
+            summary.diagnostic_counts(),
+            DiagnosticCounts {
+                errors: 1,
+                warnings: 0
+            }
         );
     }
 

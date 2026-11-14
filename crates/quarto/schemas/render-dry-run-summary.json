@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "JsonDryRunFile": {
+      "description": "One file a real render would produce.",
+      "properties": {
+        "format": {
+          "description": "The format key the file resolves to (`html`, `revealjs`, …).",
+          "type": "string"
+        },
+        "source_file": {
+          "description": "The source file, in the same form as `source_file` in the\ndiagnostic records.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/JsonDryRunFileStatus",
+          "description": "`ok`, or `failed` when the file failed to parse (a real render\nwould skip it)."
+        }
+      },
+      "required": [
+        "source_file",
+        "format",
+        "status"
+      ],
+      "type": "object"
+    },
+    "JsonDryRunFileStatus": {
+      "description": "Whether a would-render file passed the dry run's checks.",
+      "enum": [
+        "ok",
+        "failed"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The `--dry-run --json-errors` summary object, printed once on stdout\nat the end of the run.",
+  "properties": {
+    "$schema": {
+      "description": "JSON Schema URI describing this object's shape. Const value is\n[`JsonDryRunSummary::SCHEMA_URL`].",
+      "type": "string"
+    },
+    "dry_run": {
+      "description": "Always `true`: this object is only printed by a dry run.",
+      "type": "boolean"
+    },
+    "errors": {
+      "description": "Error diagnostics reported on stderr, after `--strict` promotion.\nA failure with no structured diagnostic counts as one error.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "files": {
+      "description": "The files a real render would produce, with their resolved\nformats. Present only with `-v` (the list can be long); absent,\nnot empty, otherwise.",
+      "items": {
+        "$ref": "#/$defs/JsonDryRunFile"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "files_checked": {
+      "description": "Files whose parse and metadata merge ran (successfully or not).\nUnder `--fail-fast` this can be fewer than the project's files.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "files_failed": {
+      "description": "Files that failed to parse or merge (each also has a\n`JsonPass1Failure` record on stderr).",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "format": {
+      "description": "The project's own format key. Each file may resolve to its own\nformat; see `files[].format`.",
+      "type": "string"
+    },
+    "project_dir": {
+      "description": "The project root (the document's directory for a single file), in\nthe same form as `source_file` in the diagnostic records.",
+      "type": "string"
+    },
+    "stopped_early": {
+      "description": "`true` when `--fail-fast` stopped the run at the first failure;\nthe report is then not exhaustive.",
+      "type": "boolean"
+    },
+    "strict": {
+      "description": "Whether `--strict` was given (warnings promoted to errors).",
+      "type": "boolean"
+    },
+    "warnings": {
+      "description": "Warning diagnostics reported on stderr (always 0 under `--strict`).",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "$schema",
+    "dry_run",
+    "project_dir",
+    "format",
+    "files_checked",
+    "files_failed",
+    "errors",
+    "warnings",
+    "strict",
+    "stopped_early"
+  ],
+  "title": "JsonDryRunSummary",
+  "type": "object"
+}
