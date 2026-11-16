@@ -15,6 +15,7 @@ pub mod docs_llms;
 pub mod docs_serve;
 pub mod get_config;
 pub mod hub;
+pub mod hub_lsp;
 pub mod inline_css;
 pub mod install;
 pub mod list;

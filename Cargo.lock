@@ -6963,6 +6963,7 @@ dependencies = [
  "quarto-error-catalog",
  "quarto-error-reporting",
  "quarto-hub",
+ "quarto-hub-lsp",
  "quarto-hub-provider",
  "quarto-lsp",
  "quarto-mcp-launcher",
@@ -7319,6 +7320,28 @@ dependencies = [
  "tungstenite 0.27.0",
  "url",
  "walkdir",
+]
+
+[[package]]
+name = "quarto-hub-lsp"
+version = "0.45.0"
+dependencies = [
+ "automerge",
+ "futures",
+ "pampa",
+ "quarto-core",
+ "quarto-hub",
+ "quarto-hub-provider",
+ "quarto-util",
+ "samod",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite 0.27.0",
+ "tower 0.4.13",
+ "tower-lsp",
+ "url",
 ]
 
 [[package]]
@@ -10078,6 +10101,7 @@ dependencies = [
  "pin-project-lite",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]

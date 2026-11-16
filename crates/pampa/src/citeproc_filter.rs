@@ -1021,6 +1021,17 @@ fn collect_citations_from_block(
                 collect_citations_from_inlines(line, citations, note_number);
             }
         }
+        // `[^id]: ...` footnotes stay note-definition blocks until the
+        // footnotes transform; citeproc in the `.pre` bucket (e.g.
+        // `filters: [citeproc]`) runs before it (issue #1225).
+        Block::NoteDefinitionPara(def) => {
+            collect_citations_from_inlines(&def.content, citations, note_number);
+        }
+        Block::NoteDefinitionFencedBlock(def) => {
+            for b in &def.content {
+                collect_citations_from_block(b, citations, note_number);
+            }
+        }
         // Callouts, custom crossref floats (e.g. the "Dinosaur" ref-type),
         // theorems, etc. are CustomNode-scaffolded by this point in the
         // pipeline (float-ref-target sugar / callout-resolve). Without this
@@ -1444,6 +1455,13 @@ fn transform_block(block: &mut Block, rendered: &RenderedCitations, citation_ind
             for line in &mut lb.content {
                 transform_inlines(line, rendered, citation_index);
             }
+        }
+        // See the matching arms in `collect_citations_from_block`.
+        Block::NoteDefinitionPara(def) => {
+            transform_inlines(&mut def.content, rendered, citation_index);
+        }
+        Block::NoteDefinitionFencedBlock(def) => {
+            transform_blocks(&mut def.content, rendered, citation_index);
         }
         // See the matching arm in `collect_citations_from_block` for why
         // this is needed: a Callout/FloatRefTarget/etc. must be descended
@@ -3760,6 +3778,67 @@ mod tests {
         {
             assert_eq!(s.text, "(Note 2020)");
         }
+    }
+
+    /// A `[^id]: ...` footnote stays a `NoteDefinitionPara` /
+    /// `NoteDefinitionFencedBlock` until the footnotes transform. Citeproc
+    /// running before it (`filters: [citeproc]` puts it in `.pre`) must still
+    /// resolve the citations inside, as it does for body text (issue #1225).
+    fn note_definition_blocks() -> Vec<Block> {
+        vec![
+            Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![make_cite("body2020")],
+                source_info: si(),
+            }),
+            Block::NoteDefinitionPara(Box::new(crate::pandoc::NoteDefinitionPara {
+                id: "1".to_string(),
+                content: vec![make_cite("para2020")],
+                source_info: si(),
+            })),
+            Block::NoteDefinitionFencedBlock(Box::new(crate::pandoc::NoteDefinitionFencedBlock {
+                id: "2".to_string(),
+                content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("fenced2020")],
+                    source_info: si(),
+                })],
+                source_info: si(),
+            })),
+        ]
+    }
+
+    #[test]
+    fn test_collect_citations_in_note_definitions() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: note_definition_blocks(),
+        };
+        let ids: Vec<String> = collect_citations(&pandoc)
+            .into_iter()
+            .map(|c| c.items[0].id.clone())
+            .collect();
+        assert_eq!(ids, ["body2020", "para2020", "fenced2020"]);
+    }
+
+    #[test]
+    fn test_transform_note_definitions() {
+        let mut blocks = note_definition_blocks();
+        let rendered = str_renders(&["(Body 2020)", "(Para 2020)", "(Fenced 2020)"]);
+
+        let mut citation_index = 0;
+        transform_blocks(&mut blocks, &rendered, &mut citation_index);
+        assert_eq!(citation_index, 3);
+
+        let Block::NoteDefinitionPara(def) = &blocks[1] else {
+            panic!("expected NoteDefinitionPara");
+        };
+        assert_eq!(resolved_str(&def.content[0]).unwrap().text, "(Para 2020)");
+        let Block::NoteDefinitionFencedBlock(def) = &blocks[2] else {
+            panic!("expected NoteDefinitionFencedBlock");
+        };
+        let Block::Paragraph(p) = &def.content[0] else {
+            panic!("expected Paragraph");
+        };
+        assert_eq!(resolved_str(&p.content[0]).unwrap().text, "(Fenced 2020)");
     }
 
     #[test]
