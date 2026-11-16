@@ -1,10 +1,11 @@
 # KaTeX playbook
 
-KaTeX's version is deliberately coupled across **three surfaces** so `q2 render`
+KaTeX's version is deliberately coupled across **four surfaces** so `q2 render`
 and the preview surfaces can never render math differently. The coupling is
 enforced by `katex_cdn_version_matches_npm_pin`
 (`crates/quarto-core/src/stage/stages/math_js.rs`, ~line 1021; strand
-bd-4b7f1hr7). Snyk bumps only surface 2 — every katex Snyk PR arrives red.
+bd-4b7f1hr7) and by the `vendored-registry` check in `cargo xtask lint`
+(surface 4). Snyk bumps only surface 2 — every katex Snyk PR arrives red.
 
 ## The four surfaces
 
@@ -31,6 +32,12 @@ bd-4b7f1hr7). Snyk bumps only surface 2 — every katex Snyk PR arrives red.
    pub const DEFAULT_KATEX_URL_BASE: &str = "https://cdn.jsdelivr.net/npm/katex@X.Y.Z/dist/";
    ```
 
+4. **`resources/vendored.toml`**, the `cdn-katex` entry: set
+   `version = "X.Y.Z"` and `last_reviewed` to today. The `vendored-registry`
+   lint compares this field against surfaces 1 and 3 (its `version_sources`)
+   and fails `cargo xtask lint` — the first CI step — if it is stale.
+   PR #1214 missed this surface.
+
 **Formerly a fourth surface:** `hub-client/public/q2-sandboxed-preview.html`,
 a committed single-file bundle with KaTeX inlined (the surface PR #571 missed,
 repaired in PR #573). Since `5684cfead` (2026-09-01) the sandboxed preview
@@ -43,6 +50,9 @@ here.
 
 ```bash
 cargo nextest run -p quarto-core -E 'test(katex_cdn_version_matches_npm_pin)'
+
+# registry version matches the pins (surface 4)
+cargo xtask lint
 
 # no stray old-version pins anywhere
 grep -rn '"katex":' --include='*.json' . | grep -v node_modules | grep -v '\.worktrees'

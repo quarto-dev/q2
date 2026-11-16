@@ -124,6 +124,10 @@ Scale to what changed, per AGENTS.md:
 ```bash
 # targeted guard first (fast signal)
 cargo nextest run -p quarto-core -E 'test(katex_cdn_version_matches_npm_pin)'
+# custom lints — always. The vendored-registry lint checks that
+# resources/vendored.toml `version` matches every pinned surface, so any
+# bump of a registry-tracked package fails CI here (PR #1214).
+cargo xtask lint
 # Rust files changed => workspace build + tests
 cargo build --workspace && cargo nextest run --workspace
 # hub-client touched => production build (stricter than tsc --noEmit)
