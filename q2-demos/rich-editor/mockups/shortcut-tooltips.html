@@ -74,6 +74,9 @@
   .qe-item .md { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; color: #6c757d; }
   .qe-item .md + .keys { margin-left: 10px; }
   .qe-item .right { display: inline-flex; align-items: center; }
+  /* After the keys: a column as wide as the longest, so the keys line up. */
+  .qe-item .md-trail { width: 4ch; margin-left: 10px; text-align: left; }
+  .qe-item .md-lead { margin-right: 7px; vertical-align: 1px; }
 
   /* ── Tooltips ───────────────────────────────────────── */
   .tip {
@@ -313,14 +316,23 @@ const capsRow = (b) => `<span>${b.label}</span>${b.keys ? caps(b.keys) : ''}`
 
 const MD_TIPS = [
   {
-    name: 'H. After the keys',
-    note: 'One line; the Markdown dimmer than the keys, past a hairline',
+    name: 'H1. After the keys',
+    note: 'One line; the Markdown dimmer than the keys, past a hairline. The menu’s G2.',
     cls: 'tip-caps',
     render: (b) => capsRow(b) + (b.md ? `<span class="md-sep"></span><span class="mono md-after">${md(b.md)}</span>` : ''),
   },
   {
+    name: 'H2. Before the keys',
+    note: 'As H1, with what to type first. The menu’s G1.',
+    cls: 'tip-caps',
+    render: (b) =>
+      `<span>${b.label}</span>` +
+      (b.md ? `<span class="mono md-after">${md(b.md)}</span><span class="md-sep"></span>` : '') +
+      (b.keys ? caps(b.keys) : ''),
+  },
+  {
     name: 'I. Before the label',
-    note: 'Written as it is in the source: the label reads as a line of qmd',
+    note: 'Written as it is in the source: the label reads as a line of qmd. The menu’s G3.',
     cls: 'tip-caps',
     render: (b) => (b.md ? `<span class="mono md-before">${md(b.md)}</span>` : '') + capsRow(b),
   },
@@ -419,10 +431,22 @@ const MENUS = [
     item: (s) => `<span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
   },
   {
-    name: 'G. Shortcuts and Markdown',
-    note: 'What to type, then the keys',
+    name: 'G1. Markdown before the keys',
+    note: 'What to type, then the keys. The tooltips’ H2.',
     item: (s) =>
       `<span>${s.name}</span><span class="right">${s.level ? `<span class="md">${'#'.repeat(s.level)}</span>` : ''}<span class="keys">${keysText(KEYS.h(s.level))}</span></span>`,
+  },
+  {
+    name: 'G2. Markdown after the keys',
+    note: 'The keys line up; what to type trails them. The tooltips’ H1.',
+    item: (s) =>
+      `<span>${s.name}</span><span class="right"><span class="keys">${keysText(KEYS.h(s.level))}</span><span class="md md-trail">${'#'.repeat(s.level)}</span></span>`,
+  },
+  {
+    name: 'G3. Markdown before the label',
+    note: 'Each heading reads as its line of qmd. The tooltips’ I.',
+    item: (s) =>
+      `<span>${s.level ? `<span class="md md-lead">${'#'.repeat(s.level)}</span>` : ''}${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
   },
 ]
 const STYLES = ['Paragraph', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4'].map((name, level) => ({ name, level }))
