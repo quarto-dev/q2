@@ -215,6 +215,25 @@ test.describe('the popover', () => {
     expect(editor.document.source()).toBe(inlines)
   })
 
+  test('clicking elsewhere in the document closes the form opened by Edit, changing nothing, and the caret goes where the click was', async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, 'inlines')
+    await editor.placeCaretInLine(0, inLink(2))
+    await editor.linkPopover().getByRole('button', { name: 'Edit' }).click()
+    await expect(editor.linkForm()).toBeVisible()
+
+    await editor.line(2).click()
+
+    await expect(editor.linkForm()).toHaveCount(0)
+    await expect(editor.linkPopover()).toHaveCount(0)
+    // Typed where the click was (past the end of the line's text), and the
+    // link is as it was.
+    await page.keyboard.type('x')
+    await expect.poll(() => editor.document.source()).toContain('Plain words.x')
+    expect(editor.document.source()).toContain('[a link](https://quarto.org)')
+  })
+
   test('Cancel in the form opened by Edit goes back to Edit', async ({ page }) => {
     const editor = await openEditor(page, 'inlines')
     await editor.placeCaretInLine(0, inLink(2))

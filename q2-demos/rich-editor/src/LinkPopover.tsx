@@ -15,8 +15,9 @@
  *
  * The form (from Edit, ⌘K or the toolbar's link button) has the link's
  * text and address: Enter or Apply makes it, Escape or Cancel goes back to
- * where it was opened from: the popover's Edit button, or the text. An
- * empty address makes no link.
+ * where it was opened from: the popover's Edit button, or the text. A
+ * click elsewhere in the document closes it too, leaving the caret where
+ * the click was. An empty address makes no link.
  *
  * Both are in the document's frame, laid over the page, outside the
  * editing root.
@@ -154,6 +155,17 @@ export function LinkPopover({ doc, root, schema, state, writable, form, setForm,
     doc.addEventListener('keydown', onKey, true)
     return () => doc.removeEventListener('keydown', onKey, true)
   }, [doc, root])
+
+  // A press in the document outside the form closes it, as Cancel does,
+  // but the caret goes where the press was.
+  useEffect(() => {
+    if (!form) return
+    const onDown = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setForm(null)
+    }
+    doc.addEventListener('mousedown', onDown, true)
+    return () => doc.removeEventListener('mousedown', onDown, true)
+  }, [form, doc, setForm])
 
   // Into the popover once it's held for the keyboard.
   useEffect(() => {
