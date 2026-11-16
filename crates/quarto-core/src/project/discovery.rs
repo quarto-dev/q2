@@ -1321,8 +1321,7 @@ mod tests {
         let (rels, _) = discover_with(&project_dir, &["**/*.qmd"]);
         assert_eq!(rels, vec!["index.qmd"]);
 
-        let (rels, diags) =
-            discover_with(&project_dir, &["renv/library/pkg/doc/vignette.qmd"]);
+        let (rels, diags) = discover_with(&project_dir, &["renv/library/pkg/doc/vignette.qmd"]);
         assert!(rels.is_empty(), "got {rels:?}");
         assert!(
             diags.iter().any(|d| d.code.as_deref() == Some("Q-5-13")),
