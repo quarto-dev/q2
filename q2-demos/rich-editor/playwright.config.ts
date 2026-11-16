@@ -1,3 +1,6 @@
+import { mkdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
 /**
@@ -9,6 +12,13 @@ import { defineConfig, devices } from '@playwright/test'
 // Another checkout's tests may be running at the same time, with a dev
 // server of their own: `E2E_PORT` gives this run a different port.
 const PORT = Number(process.env.E2E_PORT ?? 5192)
+
+// On macOS, Firefox exits at launch ("Could not find profile folder") when it
+// can't create `~/Library/Application Support/Firefox`, and some machines
+// forbid that. `CFFIXED_USER_HOME` moves that home folder into a throwaway
+// directory.
+const firefoxHome = join(tmpdir(), 'rich-editor-e2e-firefox-home')
+mkdirSync(firefoxHome, { recursive: true })
 
 export default defineConfig({
   testDir: './e2e',
@@ -23,7 +33,13 @@ export default defineConfig({
   // editor lives (the caret, selections, `contenteditable`).
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        launchOptions: { env: { ...process.env, CFFIXED_USER_HOME: firefoxHome } },
+      },
+    },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
   webServer: {
