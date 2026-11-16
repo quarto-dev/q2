@@ -1175,6 +1175,7 @@ editor.addEventListener('beforeinput', (e) => {
   e.preventDefault()
   const type = e.inputType
   hovered = null   // typing puts the hovered link's popover away
+  settle(null)
   const wasRuled = ruled
   ruled = null
   const target = () => {
@@ -1239,7 +1240,8 @@ editor.addEventListener('keydown', (e) => {
     e.preventDefault()
     const link = currentLink()
     if (link) dismissed = { b: link.b, start: link.start }
-    shunned = hovered
+    shunned = hovered ?? settling?.link ?? null
+    settle(null)
     hovered = null
     renderOverlay()
   }
@@ -1259,6 +1261,16 @@ editor.addEventListener('keydown', (e) => {
 // redrawn under a still mouse.)
 let unhover = null
 let shunned = null
+let settling = null    // the link the mouse is on but hasn't rested on yet
+function settle(link) {
+  clearTimeout(settling?.timer)
+  settling = link && { link, timer: setTimeout(() => {
+    settling = null
+    hovered = link
+    dismissed = null
+    renderOverlay()
+  }, 250) }
+}
 document.addEventListener('mousemove', (e) => {
   if (opts.links !== 'popover' || e.buttons || form) return
   const a = e.target.closest?.('a[data-s]')
@@ -1268,11 +1280,16 @@ document.addEventListener('mousemove', (e) => {
     unhover = null
     // Not the link whose popover Escape put away, until the mouse has left it.
     if (over && !sameLink(over, shunned)) shunned = null
-    if (!over || sameLink(over, hovered) || shunned) return
-    hovered = over
-    dismissed = null
-    renderOverlay()
-  } else if (shunned) shunned = null
+    if (!over) return
+    if (sameLink(over, hovered) || shunned) { settle(null); return }
+    // Only once the mouse has rested on the link a moment, so crossing it
+    // on the way somewhere else shows nothing.
+    if (sameLink(over, settling?.link)) return
+    settle(over)
+    return
+  }
+  settle(null)
+  if (shunned) shunned = null
   else if (hovered && !unhover) {
     unhover = setTimeout(() => { unhover = null; hovered = null; renderOverlay() }, 300)
   }
