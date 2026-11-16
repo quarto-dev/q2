@@ -7297,6 +7297,7 @@ dependencies = [
  "notify",
  "notify-debouncer-mini",
  "parking_lot",
+ "quarto-project-files",
  "quarto-system-runtime",
  "quarto-util",
  "rand 0.9.5",
@@ -7318,7 +7319,6 @@ dependencies = [
  "tracing-subscriber",
  "tungstenite 0.27.0",
  "url",
- "walkdir",
 ]
 
 [[package]]
@@ -7576,6 +7576,15 @@ dependencies = [
  "serde_yaml 0.9.34+deprecated",
  "thiserror 2.0.21",
  "time",
+]
+
+[[package]]
+name = "quarto-project-files"
+version = "0.45.0"
+dependencies = [
+ "tempfile",
+ "tracing",
+ "walkdir",
 ]
 
 [[package]]

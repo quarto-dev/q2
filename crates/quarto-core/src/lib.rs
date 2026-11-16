@@ -78,6 +78,7 @@ pub mod overlay_runtime;
 pub mod pandoc_filters;
 pub mod pandoc_formats;
 pub mod pandoc_request;
+pub mod pass1;
 pub mod pipeline;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod positron_cache;

@@ -1,0 +1,18 @@
+[package]
+name = "quarto-project-files"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Which files in a Quarto project directory are sources, config, extension files and binary resources"
+
+[dependencies]
+tracing = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

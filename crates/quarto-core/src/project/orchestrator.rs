@@ -3380,7 +3380,11 @@ async fn pass1_profile_with_cache(
     // a cache hit would hide the file's warnings; and a dry run writes
     // nothing, so the cache is not saved either.
     if dry_run {
-        let (profile, diagnostics, source_context) = pass1_profile_single_file_live(
+        let crate::pass1::Pass1Document {
+            profile,
+            diagnostics,
+            source_context,
+        } = crate::pass1::profile_document(
             runtime.clone(),
             project,
             format,
@@ -3496,9 +3500,12 @@ async fn pass1_profile_with_cache(
         });
     }
 
-    let (profile, _diagnostics, _source_context) =
-        pass1_profile_single_file_live(runtime.clone(), project, format, doc_info, &source_bytes)
-            .await?;
+    // The non-fatal diagnostics are dropped: Pass 2 reruns these stages and
+    // reports them (a dry run, above, keeps them).
+    let profile =
+        crate::pass1::profile_document(runtime.clone(), project, format, doc_info, &source_bytes)
+            .await?
+            .profile;
 
     // Best-effort save. A save failure is also non-fatal — the
     // profile is already computed and downstream code can use it for
@@ -3509,55 +3516,6 @@ async fn pass1_profile_with_cache(
         profile,
         diagnostics: None,
     })
-}
-
-/// Run the head pipeline live (no cache lookup). Used by
-/// [`pass1_profile_with_cache`] when the cache misses.
-async fn pass1_profile_single_file_live(
-    runtime: Arc<dyn SystemRuntime>,
-    project: &ProjectContext,
-    format: &Format,
-    doc_info: &DocumentInfo,
-    source_bytes: &[u8],
-) -> Result<(
-    crate::document_profile::DocumentProfile,
-    Vec<DiagnosticMessage>,
-    quarto_source_map::SourceContext,
-)> {
-    use crate::pipeline::{build_head_stages, run_pipeline};
-    use crate::render::{BinaryDependencies, RenderContext};
-
-    let source_name = doc_info.input.to_string_lossy().to_string();
-    let binaries = BinaryDependencies::new();
-    let mut ctx = RenderContext::new(project, doc_info, format, &binaries);
-    // This pass runs before the real render, which writes the trace. Its own trace would
-    // replace the recording a replay is reading (KNR-6).
-    ctx.suppress_trace_output = true;
-
-    // Exactly the full pipeline's head, so the Pass-1 profile equals
-    // the one the full render computes (see `build_head_stages`).
-    // Source conversion runs first: a non-QMD input without it would
-    // yield a garbage DocumentProfile / ProjectIndex entry
-    // (plan1c §1067-1086); include expansion precedes the checkpoint so
-    // transitive `{{< include … >}}` content and body links are visible
-    // (bd-xfwx, Phase 8.0d).
-    let stages = build_head_stages();
-
-    // The non-fatal diagnostics are returned for a dry run; a full render
-    // drops them, because Pass 2 reruns these stages and reports them.
-    let (output, diagnostics) =
-        run_pipeline(source_bytes, &source_name, &mut ctx, runtime, stages).await?;
-
-    let at_profile = output.into_at_profile().ok_or_else(|| {
-        QuartoError::other(
-            "Pass 1 did not produce an AtProfile variant — pipeline shape unexpected",
-        )
-    })?;
-    Ok((
-        at_profile.profile,
-        diagnostics,
-        at_profile.ast.source_context,
-    ))
 }
 
 #[cfg(test)]

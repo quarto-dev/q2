@@ -257,14 +257,27 @@ same call `q2 render` and `q2 get-config` make, and the active profiles
 come from `initializationOptions`, then `QUARTO_PROFILE`. A session
 holds the following:
 
-- **Pass-1 results** per document: profile, merged metadata, and
-  diagnostics. They are computed by `quarto_core::pass1::profile_document`,
-  which is `pass1_profile_single_file_live` made public, with the
-  orchestrator calling it too. The session does **not** keep ASTs or
-  `SourceContext`s for the whole project. The measurements under D1
-  show that profiles for 1,841 documents fit comfortably in memory,
-  while ASTs would not. Re-running one document's Pass 1 takes 7 ms for
-  a median document, so a request that needs an AST or source spans
+- **Pass-1 results** per document: profile and diagnostics, computed by
+  `quarto_core::pass1::profile_document`, which is
+  `pass1_profile_single_file_live` made public (C1). The orchestrator
+  calls it too.
+- **Merged metadata** per document, computed by
+  `quarto_core::get_config::merge_document_metadata` (the `q2
+  get-config` function) when a client asks for it, and cached with the
+  same version keys. It cannot be taken from the Pass-1 run.
+  - By the profile checkpoint, `LanguageResolveStage`,
+    `IncludeResolveStage` and `ListingItemInfoStage` have written their
+    own keys into `ast.meta`: `quarto.language`, `rendered.includes` and
+    `listing-item`. That makes it no longer the authored merge that D7
+    promises.
+  - Found in C1 and pinned by
+    `pass1_profile_document::checkpoint_meta_is_not_the_authored_merge`.
+  - The extra parse costs a few milliseconds, and only on request.
+- **No whole-project ASTs.** The session does not keep ASTs or
+  `SourceContext`s for every document. The measurements under D1 show
+  that profiles for 1,841 documents fit comfortably in memory, while
+  ASTs would not. Re-running one document's Pass 1 takes 7 ms for a
+  median document, so a request that needs an AST or source spans
   re-runs it, or reads a small cache of recently used documents.
 - A **`ProjectIndex`**, built from those results.
 - A **project crossref index**, built lazily by reusing
@@ -466,6 +479,10 @@ Execution order is top to bottom.
 
 Gates for every child: `cargo xtask verify`, the WASM build of the
 WASM-safe crates, and the Windows cross-check for the crates touched.
+From macOS the cross-check covers only crates with no C build scripts.
+As of C1 that means `quarto-project-files` but not `quarto-core`,
+`quarto-lsp*` or `quarto-hub`, which stop at `ring`, `wasmtime`,
+`tree-sitter` or `aws-lc-sys`. Say so in each PR.
 `Mount` and the watcher have to handle `file:///C:/…` and
 case-insensitive paths.
 
