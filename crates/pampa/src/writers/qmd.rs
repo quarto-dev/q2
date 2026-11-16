@@ -9,6 +9,7 @@ use crate::pandoc::inline::Inline;
 use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
 use crate::pandoc::table::{Alignment, Cell, ColWidth, Row, Table};
 use crate::pandoc::treesitter_utils::html_block::{starts_block_html, starts_raw_text_element};
+use crate::pandoc::treesitter_utils::span_link_helpers::escape_uri;
 use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
@@ -2406,7 +2407,9 @@ fn write_link(
     write!(buf, "[")?;
     write_inline_run(&link.content, buf, ctx, false)?;
     write!(buf, "](")?;
-    write!(buf, "{}", link.target.0)?;
+    // Encoded as the reader encodes it: written as it is, a space (say)
+    // makes the target unreadable.
+    write!(buf, "{}", escape_uri(&link.target.0))?;
     if !link.target.1.is_empty() {
         write!(buf, " \"{}\"", escape_quotes(&link.target.1))?;
     }
@@ -2425,7 +2428,9 @@ fn write_image(
     write!(buf, "![")?;
     write_inline_run(&image.content, buf, ctx, false)?;
     write!(buf, "](")?;
-    write!(buf, "{}", image.target.0)?;
+    // Encoded as the reader encodes it: written as it is, a space (say)
+    // makes the target unreadable.
+    write!(buf, "{}", escape_uri(&image.target.0))?;
     if !image.target.1.is_empty() {
         write!(buf, " \"{}\"", escape_quotes(&image.target.1))?;
     }

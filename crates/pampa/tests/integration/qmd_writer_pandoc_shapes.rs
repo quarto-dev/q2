@@ -958,3 +958,67 @@ fn definition_list_term_without_definitions_falls_back_to_the_div() {
         },
     );
 }
+
+// ---------------------------------------------------------------------------
+// Link and image targets the qmd syntax can't hold as they are
+// ---------------------------------------------------------------------------
+
+/// The reader percent-encodes whitespace and `<>|"{}[]^` and backtick in a
+/// target (pandoc's `escapeURI`), so the writer writes them encoded: written
+/// as they are, `[a](x y)` isn't a link at all.
+const UNWRITABLE_TARGETS: &[(&str, &str)] = &[
+    ("x y", "x%20y"),
+    ("https://example.com/a b c", "https://example.com/a%20b%20c"),
+    ("a\tb", "a%09b"),
+    ("a<b>|\"{}[]^`", "a%3Cb%3E%7C%22%7B%7D%5B%5D%5E%60"),
+];
+
+fn link_to(target: &str) -> Value {
+    json!({"t": "Link", "c": [attr("", &[], &[]), [str_("a")], [target, ""]]})
+}
+
+/// Replace every `from` target in `v` by `to`.
+fn retarget(v: &mut Value, from: &str, to: &str) {
+    match v {
+        Value::Array(items) => {
+            if items.len() == 2 && items[0] == from && items[1].is_string() {
+                items[0] = json!(to);
+            }
+            items.iter_mut().for_each(|i| retarget(i, from, to));
+        }
+        Value::Object(map) => map.values_mut().for_each(|i| retarget(i, from, to)),
+        _ => {}
+    }
+}
+
+#[test]
+fn link_target_with_unwritable_characters_is_percent_encoded() {
+    for (target, encoded) in UNWRITABLE_TARGETS {
+        let qmd = assert_roundtrip_with(
+            doc(vec![json!({"t": "Para", "c": [link_to(target)]})]),
+            |v| retarget(v, target, encoded),
+        );
+        assert_eq!(qmd.trim_end(), format!("[a]({encoded})"));
+    }
+}
+
+#[test]
+fn image_target_with_unwritable_characters_is_percent_encoded() {
+    for (target, encoded) in UNWRITABLE_TARGETS {
+        let qmd = assert_roundtrip_with(
+            doc(vec![
+                json!({"t": "Para", "c": [str_("x"), space(), image(attr("", &[], &[]), inl("a"), target)]}),
+            ]),
+            |v| retarget(v, target, encoded),
+        );
+        assert_eq!(qmd.trim_end(), format!("x ![a]({encoded})"));
+    }
+}
+
+#[test]
+fn encoded_targets_are_not_encoded_again() {
+    let qmd = assert_roundtrip(doc(vec![
+        json!({"t": "Para", "c": [link_to("x%20y?q=1#f")]}),
+    ]));
+    assert_eq!(qmd.trim_end(), "[a](x%20y?q=1#f)");
+}
