@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inline formatting mockups</title>
+<style>
+:root { --ink:#212529; --muted:#6c757d; --faint:#adb5bd; --line:#dee2e6; --accent:#2780e3; --chrome:#f6f7f9;
+  --chip:#eef0f3; --chip-hover:#e2e6ea; --sel:#9ec5f0; --sel-bg:#e7f1fc; --sel-ink:#145ca8; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#fff; }
+.app { display:grid; grid-template-columns: 280px 1fr 320px; height:100vh; }
+aside { background:var(--chrome); border-right:1px solid var(--line); padding:16px; overflow:auto; font-size:14px; }
+aside h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:18px 0 8px; }
+aside h2:first-child { margin-top:0; }
+.opt { display:block; padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+.opt:hover { background:#eceef1; }
+.opt.on { background:#fff; box-shadow:0 0 0 1px var(--line); }
+.opt b { display:block; font-weight:600; }
+.opt span { color:var(--muted); font-size:12.5px; line-height:1.35; display:block; margin-top:2px; }
+.reset { margin-top:12px; font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:5px; cursor:pointer; }
+
+/* Toolbar, as in the editor (and block-annotations.html). */
+.toolbar { display:flex; gap:3px; align-items:center; padding:7px 16px; border-bottom:1px solid var(--line); background:#fff; position:relative; }
+.toolbar button, .bubble button { font:13px system-ui, sans-serif; border:1px solid transparent; background:none; padding:4px 9px; border-radius:5px; cursor:pointer; color:#343a40; display:inline-flex; align-items:center; gap:6px; }
+.toolbar button:hover:not(:disabled), .bubble button:hover { background:#f1f3f5; }
+.toolbar button:disabled { color:var(--faint); cursor:default; }
+.toolbar button[aria-pressed="true"], .bubble button[aria-pressed="true"] { background:var(--sel-bg); border-color:#c5dcf5; color:var(--sel-ink); }
+.toolbar .style { width:150px; justify-content:space-between; border-color:var(--line); }
+.toolbar .style svg { width:8px; height:8px; }
+button.icon { padding:4px !important; position:relative; color:#444746; }
+button.icon svg { width:20px; height:20px; display:block; }
+.toolbar button.icon::after { content:attr(data-tip); position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+  background:#343a40; color:#fff; font:12px/1 system-ui, sans-serif; padding:5px 7px; border-radius:4px; white-space:nowrap;
+  pointer-events:none; visibility:hidden; z-index:20; }
+.toolbar button.icon:hover::after { visibility:visible; transition:visibility 0s .35s; }
+.toolbar .sep { width:1px; height:20px; background:var(--line); margin:0 6px; }
+.menu { position:absolute; top:100%; background:#fff; border:1px solid var(--line); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.12); padding:4px; z-index:30; display:flex; flex-direction:column; min-width:190px; }
+.menu button { justify-content:space-between; }
+.menu kbd { color:var(--muted); font:12px system-ui, sans-serif; }
+
+.center { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.scroller { flex:1; overflow:auto; }
+.tips { max-width:760px; margin:16px auto 0; padding:9px 14px; background:#fff8e1; border:1px solid #f3e1a6; border-radius:6px; font-size:13px; color:#5c4b00; line-height:1.6; }
+.tips kbd { font:11.5px ui-monospace, Menlo, monospace; border:1px solid #d9c98f; border-bottom-width:2px; border-radius:3px; padding:0 4px; background:#fffdf3; }
+.source { border-left:1px solid var(--line); background:var(--chrome); padding:16px; overflow:auto; }
+.source h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; }
+.source div { font:12.5px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; margin:0 0 12px; padding:1px 4px; border-radius:3px; min-height:1lh; overflow-wrap:anywhere; }
+.source .cur { background:var(--sel-bg); }
+
+/* The document. */
+.page { position:relative; max-width:800px; margin:0 auto; padding:36px 40px 200px; }
+.body { outline:none; font-size:17px; line-height:1.5; white-space:pre-wrap; }
+.body > :first-child { margin-top:0; }
+.body p { margin:0 0 17px; min-height:1lh; }
+.body h2 { font-size:1.6rem; font-weight:600; line-height:1.2; margin:1.8rem 0 .75rem; border-bottom:1px solid var(--line); padding-bottom:.25rem; }
+.body code { font:.875em ui-monospace, Menlo, monospace; color:#7d12ba; background:#f1f3f5; padding:.125em .3em; border-radius:3px; }
+.body a { color:var(--accent); text-decoration:underline; cursor:text; }
+.body .ro { cursor:default; }
+
+/* Inlines that can't be edited: chips. */
+.atom { border-radius:3px; cursor:default; white-space:nowrap; }
+.atom:hover { background:var(--chip); }
+.atom.sel { background:var(--sel-bg); box-shadow:0 0 0 1.5px var(--sel); }
+.atom.math { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", Georgia, serif; font-style:italic; padding:0 2px; }
+.atom.math sup { font-size:.7em; }
+.atom.cite { color:#5c636a; }
+.atom.note { color:var(--accent); font-size:.75em; vertical-align:super; padding:0 1px; }
+.atom.image { display:inline-flex; align-items:center; gap:4px; font:12px system-ui, sans-serif; color:var(--muted); border:1px solid var(--line); background:#f8f9fa; padding:1px 6px; vertical-align:baseline; }
+.atom.image svg { width:14px; height:14px; }
+.ro .atom:hover { background:none; }
+
+/* A link shown with its source, while the caret is in it. */
+.dim { color:var(--faint); font:.85em ui-monospace, Menlo, monospace; user-select:none; }
+.dim input { font:inherit; color:var(--muted); border:0; border-bottom:1px dotted var(--faint); background:none; outline:none; padding:0; min-width:7ch; field-sizing:content; }
+.dim input:focus { border-bottom:1px solid var(--accent); color:var(--ink); }
+
+/* Popovers, laid over the page. */
+.overlay { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.bubble { position:absolute; pointer-events:auto; background:#fff; border:1px solid var(--line); border-radius:7px; box-shadow:0 4px 14px rgba(0,0,0,.12);
+  padding:4px 6px; display:flex; align-items:center; gap:2px; font-size:13px; white-space:nowrap; }
+.bubble .url { color:var(--accent); max-width:260px; overflow:hidden; text-overflow:ellipsis; padding:0 6px; }
+.bubble .none { color:var(--faint); padding:0 6px; }
+.bubble .bsep { width:1px; height:18px; background:var(--line); margin:0 4px; }
+.bubble code { font:12px ui-monospace, Menlo, monospace; padding:0 6px; }
+.bubble .hint { color:var(--muted); padding:0 6px 0 2px; }
+.bubble.form { flex-direction:column; align-items:stretch; gap:6px; padding:10px; width:300px; white-space:normal; }
+.bubble.form label { display:grid; grid-template-columns:38px 1fr; align-items:center; color:var(--muted); font-size:12px; }
+.bubble.form input { font:13px system-ui, sans-serif; padding:4px 7px; border:1px solid var(--line); border-radius:4px; outline:none; }
+.bubble.form input:focus { border-color:var(--accent); }
+.bubble.form .row { display:flex; justify-content:flex-end; gap:4px; }
+.bubble.form .apply { background:var(--accent); color:#fff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="options"></aside>
+  <div class="center">
+    <div class="toolbar" id="toolbar"></div>
+    <div class="scroller">
+      <div class="tips">
+        <kbd>⌘B</kbd> bold · <kbd>⌘I</kbd> italic · <kbd>⌘⇧X</kbd> strikethrough · <kbd>⌘E</kbd> code · <kbd>⌘K</kbd> link · <kbd>⌘Z</kbd> undo.
+        The choices on the left change how the document behaves; the address keeps them, so a link to this page shows what you chose.
+      </div>
+      <div class="page" id="page">
+        <div class="body" id="editor" contenteditable="true" spellcheck="false"></div>
+        <div class="overlay" id="overlay"></div>
+      </div>
+    </div>
+  </div>
+  <div class="source"><h2>Source (qmd)</h2><div id="source-blocks" style="all:unset"></div></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- options
+const GROUPS = [
+  { key: 'edge', title: 'At the edge of formatting', options: [
+    ['continue', 'Carry on', 'Typing at the end of bold, italic or code continues it; ⌘B / ⌘E or the toolbar turns it off. As in Word and Google Docs.'],
+    ['code', 'Arrow out of code', 'Bold and italic carry on, but code has an inside and an outside at each end: → at the end of code steps out of it without moving. As in Notion and Slack.'],
+    ['all', 'Arrow out of everything', 'Every format has an inside and an outside at each end.'],
+  ]},
+  { key: 'md', title: 'Typing markdown', options: [
+    ['on', 'Converts as you type', '**bold**, *italic*, ~~strike~~, `code` and [text](url) become formatting when closed. Backspace right after gives the characters back.'],
+    ['off', 'Stays as typed', 'A typed * is a *, as today.'],
+  ]},
+  { key: 'links', title: 'Links', options: [
+    ['popover', 'Popover', 'The caret in a link shows its address under it, with Edit and Remove. ⌘K opens a small form. As in Google Docs.'],
+    ['inline', 'Source in place', 'A link with the caret in it shows as [text](url), the address editable right there (click it, or ⌘K). As in Typora and Obsidian.'],
+  ]},
+  { key: 'atoms', title: "Inlines the editor can't edit yet", options: [
+    ['chip', 'A chip in the line', 'Math, citations, footnotes and images are one read-only unit each; the text around them is edited as usual. Click one to see its source. Backspace selects it, then deletes it.'],
+    ['ro', 'Read-only paragraph', 'A paragraph with any of them in it can\'t be edited at all, as today.'],
+  ]},
+  { key: 'toolbar', title: 'Toolbar', options: [
+    ['full', 'All buttons', 'Bold, italic, strikethrough, code and link, after the style box.'],
+    ['compact', 'Bold, italic, link, and more', 'The rest are in a "⋯" menu.'],
+  ]},
+  { key: 'bubble', title: 'Selection bubble', options: [
+    ['off', 'None', 'Formatting is in the toolbar only.'],
+    ['on', 'Over the selection', 'Selecting text shows the formatting buttons right above it. As in Notion and Medium.'],
+  ]},
+]
+const opts = Object.fromEntries(GROUPS.map((g) => [g.key, g.options[0][0]]))
+opts.edge = 'code'
+for (const [k, v] of new URLSearchParams(location.hash.slice(1))) if (k in opts) opts[k] = v
+
+function renderOptions() {
+  const aside = document.getElementById('options')
+  aside.replaceChildren()
+  for (const g of GROUPS) {
+    const h = document.createElement('h2')
+    h.textContent = g.title
+    aside.append(h)
+    for (const [value, name, why] of g.options) {
+      const el = document.createElement('label')
+      el.className = 'opt' + (opts[g.key] === value ? ' on' : '')
+      el.innerHTML = '<b></b><span></span>'
+      el.children[0].textContent = name
+      el.children[1].textContent = why
+      el.onclick = () => {
+        opts[g.key] = value
+        history.replaceState(null, '', '#' + new URLSearchParams(opts))
+        renderOptions()
+        closeForm()
+        render()
+      }
+      aside.append(el)
+    }
+  }
+  const reset = document.createElement('button')
+  reset.className = 'reset'
+  reset.textContent = 'Reset the document'
+  reset.onclick = () => { start(); editor.focus(); render() }
+  aside.append(reset)
+}
+
+// ------------------------------------------------------------------ model
+// A block is a run of cells: one character each, with its formats (`m`, a
+// bit set) and its link's address (`h`, or null). A cell with `a` is an
+// inline that can't be edited.
+const B = 1, I = 2, S = 4, C = 8
+const cells = (text, m = 0, h = null) => text.split('').map((c) => ({ c, m, h }))
+const atom = (kind, src) => [{ c: '￼', m: 0, h: null, a: { kind, src } }]
+const block = (tag, ...parts) => ({ tag, cells: parts.flatMap((p) => (typeof p === 'string' ? cells(p) : p)) })
+
+let doc, sel, pending, ruled, hist, form
+function start() {
+  doc = [
+    block('h2', 'Formatting'),
+    block('p', 'Put the caret at the end of ', cells('bold text', B), ' and type, then at its start. Do the same with ', cells('italic text', I),
+      ', and try ⌘B with nothing selected. Formats ', cells('can ', B), cells('nest', B | I), cells(' inside', B), ' each other.'),
+    block('p', 'Code is where the edge matters most: get the caret out of ', cells('renderDocument()', C), ' and keep typing, here and at the end of a line: ', cells('q2 render', C)),
+    block('p', 'Type markdown here, a word between two pairs of asterisks, say: '),
+    block('h2', 'Links'),
+    block('p', 'A paragraph with ', cells('a link to Quarto', 0, 'https://quarto.org'), ' in it. Put the caret in the link, change its address, remove it. Then select a few words and press ⌘K.'),
+    block('h2', "Things the editor can't edit yet"),
+    block('p', 'The area is ', atom('math', '$\\pi r^2$'), ', as shown by ', atom('cite', '@knuth1984'), ', with a footnote', atom('note', '^[A note.]'),
+      ' and a picture ', atom('image', '![chart](chart.png)'), ' in the line. Edit the words around them, and Backspace into one.'),
+    block('p', 'An ordinary paragraph after it.'),
+  ]
+  sel = { a: { b: 1, o: 37 }, f: { b: 1, o: 37 }, aff: 'L' }
+  pending = null   // the formats of what's typed next, when toggled with no selection
+  ruled = null     // the state before a typing rule applied: Backspace goes back to it
+  hist = { past: [], future: [], kind: null, at: 0 }
+  form = null
+}
+
+const cmp = (p, q) => p.b - q.b || p.o - q.o
+const collapsed = () => cmp(sel.a, sel.f) === 0
+const range = () => (cmp(sel.a, sel.f) <= 0 ? { from: sel.a, to: sel.f } : { from: sel.f, to: sel.a })
+const cellAt = (b, o) => doc[b].cells[o]
+const marksOf = (cell) => (cell && !cell.a ? cell.m : 0)
+const isEditable = (b) => !(opts.atoms === 'ro' && doc[b].cells.some((c) => c.a))
+const setCaret = (b, o, aff = 'L') => { sel = { a: { b, o }, f: { b, o }, aff } }
+
+/** The formats that have an inside and an outside at their edges. */
+const twoStop = () => (opts.edge === 'continue' ? 0 : opts.edge === 'code' ? C : B | I | S | C)
+const isBoundary = (b, o) => ((marksOf(cellAt(b, o - 1)) ^ marksOf(cellAt(b, o))) & twoStop()) !== 0
+
+/** The formats of what's typed at the caret. */
+function typingMarks() {
+  if (pending !== null) return pending
+  const { b, o } = sel.f
+  const L = cellAt(b, o - 1), R = cellAt(b, o)
+  const t = twoStop()
+  // Formats that carry on: those of the character before (at the start of a line, after).
+  const carried = marksOf(L ?? R) & ~t
+  const sided = marksOf(sel.aff === 'R' ? R : L) & t
+  return carried | sided
+}
+
+/** The link typed text joins: only when it's strictly inside one. */
+function inheritedLink(from, to) {
+  const L = cellAt(from.b, from.o - 1), R = cellAt(to.b, to.o)
+  if (L && R && L.h !== null && L.h === R.h) return L.h
+  if (from.b === to.b && to.o > from.o) {
+    const first = cellAt(from.b, from.o), last = cellAt(to.b, to.o - 1)
+    if (first.h !== null && first.h === last.h) return first.h
+  }
+  return null
+}
+
+/** The link the selection is in (or at an end of). */
+function currentLink() {
+  const { from, to } = range()
+  if (from.b !== to.b || !isEditable(from.b)) return null
+  const cs = doc[from.b].cells
+  const at = collapsed() ? (cs[from.o - 1]?.h != null ? from.o - 1 : from.o) : from.o
+  const h = cs[at]?.h
+  if (h == null) return null
+  let s = at, e = at + 1
+  while (s > 0 && cs[s - 1].h === h) s--
+  while (e < cs.length && cs[e].h === h) e++
+  return to.o <= e ? { b: from.b, start: s, end: e, h } : null
+}
+
+function selectedCells() {
+  const { from, to } = range()
+  const out = []
+  for (let b = from.b; b <= to.b; b++) {
+    if (!isEditable(b)) continue
+    const cs = doc[b].cells
+    out.push(...cs.slice(b === from.b ? from.o : 0, b === to.b ? to.o : cs.length))
+  }
+  return out
+}
+
+function activeMarks() {
+  if (collapsed()) return typingMarks()
+  const cs = selectedCells().filter((c) => !c.a)
+  return cs.length === 0 ? 0 : cs.reduce((m, c) => m & c.m, 15)
+}
+
+// ---------------------------------------------------------------- history
+const snapshot = () => JSON.stringify({ doc, sel })
+function restore(s) {
+  ;({ doc, sel } = JSON.parse(s))
+  pending = null
+  hist.kind = null
+}
+function record(kind) {
+  const now = Date.now()
+  const merge = kind !== 'edit' && hist.kind === kind && now - hist.at < 1500
+  hist.at = now
+  hist.kind = kind
+  if (merge) return
+  hist.past.push(snapshot())
+  hist.future = []
+}
+function undo() { if (hist.past.length) { hist.future.push(snapshot()); restore(hist.past.pop()) } }
+function redo() { if (hist.future.length) { hist.past.push(snapshot()); restore(hist.future.pop()) } }
+
+// ------------------------------------------------------------------ edits
+function deleteRange(from, to) {
+  if (from.b === to.b) doc[from.b].cells.splice(from.o, to.o - from.o)
+  else {
+    doc[from.b].cells = doc[from.b].cells.slice(0, from.o).concat(doc[to.b].cells.slice(to.o))
+    doc.splice(from.b + 1, to.b - from.b)
+  }
+  setCaret(from.b, from.o)
+}
+
+function insertText(text) {
+  const { from, to } = range()
+  let m
+  const h = inheritedLink(from, to)
+  if (collapsed()) {
+    m = typingMarks()
+    record('type')
+  } else {
+    // Typing over a selection takes the formats of its first character.
+    m = pending ?? marksOf(cellAt(from.b, from.o))
+    record('edit')
+    deleteRange(from, to)
+  }
+  const add = text.split('').map((c) => ({ c, m, h }))
+  doc[from.b].cells.splice(from.o, 0, ...add)
+  setCaret(from.b, from.o + add.length)
+  pending = null
+}
+
+const RULES = [
+  [/(?<![*\\])\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, B, 2],
+  [/(?<![*\\])\*([^*\s](?:[^*]*[^*\s])?)\*$/, I, 1],
+  [/~~([^~\s](?:[^~]*[^~\s])?)~~$/, S, 2],
+  [/`([^`\s](?:[^`]*[^`\s])?)`$/, C, 1],
+]
+/** Markdown typed out and just closed becomes formatting. */
+function typingRule() {
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  let s = o
+  while (s > 0 && !cs[s - 1].a) s--
+  const text = cs.slice(s, o).map((c) => c.c).join('')
+  const link = /\[([^\]]+)\]\(([^)\s]*)\)$/.exec(text)
+  if (link) {
+    const before = snapshot()
+    const at = s + link.index
+    const outer = cs[at].m
+    const inner = cs.slice(at + 1, at + 1 + link[1].length).map((c) => ({ ...c, h: link[2] }))
+    cs.splice(at, link[0].length, ...inner)
+    setCaret(b, at + inner.length)
+    pending = outer
+    ruled = before
+    return
+  }
+  for (const [re, bit, d] of RULES) {
+    const m = re.exec(text)
+    if (!m) continue
+    const before = snapshot()
+    const at = s + m.index
+    const outer = cs[at].m
+    const n = m[1].length
+    for (let i = at + d; i < at + d + n; i++) cs[i].m |= bit
+    cs.splice(at + d + n, d)
+    cs.splice(at, d)
+    setCaret(b, at + n)
+    // What's typed next is as it was before the opening mark.
+    pending = outer
+    ruled = before
+    return
+  }
+}
+
+function backspace() {
+  if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to); return }
+  const { b, o } = sel.f
+  if (o === 0) {
+    const p = b - 1
+    if (p < 0 || !isEditable(p)) return
+    record('edit')
+    const at = doc[p].cells.length
+    doc[p].cells.push(...doc[b].cells)
+    doc.splice(b, 1)
+    setCaret(p, at)
+    return
+  }
+  // A chip is selected first, then deleted.
+  if (cellAt(b, o - 1).a) { sel = { a: { b, o: o - 1 }, f: { b, o }, aff: 'L' }; return }
+  const m = typingMarks()
+  record('delete')
+  doc[b].cells.splice(o - 1, 1)
+  setCaret(b, o - 1)
+  // Deleting the last bold character leaves bold on for what's typed next.
+  pending = m
+}
+
+function deleteForward() {
+  if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to); return }
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  if (o === cs.length) {
+    if (!doc[b + 1] || !isEditable(b + 1)) return
+    record('edit')
+    cs.push(...doc[b + 1].cells)
+    doc.splice(b + 1, 1)
+    return
+  }
+  if (cs[o].a) { sel = { a: { b, o }, f: { b, o: o + 1 }, aff: 'L' }; return }
+  record('delete')
+  cs.splice(o, 1)
+}
+
+function enter() {
+  record('edit')
+  if (!collapsed()) { const { from, to } = range(); deleteRange(from, to) }
+  const m = typingMarks()
+  const { b, o } = sel.f
+  const rest = doc[b].cells.splice(o)
+  const tag = doc[b].tag !== 'p' && rest.length === 0 ? 'p' : doc[b].tag
+  doc.splice(b + 1, 0, { tag, cells: rest })
+  setCaret(b + 1, 0)
+  // Bold goes on to the new line; code doesn't.
+  pending = m & ~C
+}
+
+function toggle(bit) {
+  if (collapsed()) { pending = typingMarks() ^ bit; return }
+  const cs = selectedCells().filter((c) => !c.a)
+  if (cs.length === 0) return
+  record('edit')
+  const all = cs.every((c) => c.m & bit)
+  for (const c of cs) c.m = all ? c.m & ~bit : c.m | bit
+}
+
+/** Left and Right. At the edge of a format with two sides, the first press changes side. */
+function moveH(dir, shift) {
+  if (!shift && !collapsed()) { const { from, to } = range(); const p = dir < 0 ? from : to; setCaret(p.b, p.o); pending = null; return }
+  const f = sel.f
+  if (!shift && pending === null && isBoundary(f.b, f.o)) {
+    if (dir > 0 && sel.aff === 'L') { sel.aff = 'R'; return }
+    if (dir < 0 && sel.aff === 'R') { sel.aff = 'L'; return }
+  }
+  pending = null
+  let b = f.b, o = f.o + dir
+  if (o < 0 || o > doc[b].cells.length) {
+    let nb = b + dir
+    while (doc[nb] && !isEditable(nb)) nb += dir
+    if (!doc[nb]) return
+    b = nb
+    o = dir > 0 ? 0 : doc[nb].cells.length
+  }
+  if (shift) sel = { a: sel.a, f: { b, o }, aff: 'L' }
+  else setCaret(b, o, dir < 0 ? 'R' : 'L')
+}
+
+// ------------------------------------------------------------------ links
+function setLink(b, s, e, h) { for (let i = s; i < e; i++) doc[b].cells[i].h = h }
+
+function removeLink() {
+  const link = currentLink()
+  if (!link) return
+  record('edit')
+  setLink(link.b, link.start, link.end, null)
+}
+
+/** ⌘K, or the link button. */
+function linkCommand() {
+  const link = currentLink()
+  const { from, to } = range()
+  if (from.b !== to.b || !isEditable(from.b)) return
+  if (opts.links === 'popover') {
+    const s = link ? link.start : from.o, e = link ? link.end : to.o
+    form = { b: from.b, start: s, end: e, text: doc[from.b].cells.slice(s, e).map((c) => c.c).join(''), url: link ? link.h : '' }
+    return
+  }
+  if (!link) {
+    record('edit')
+    if (collapsed()) {
+      // A new link: its text selected, to type over.
+      const m = typingMarks()
+      doc[from.b].cells.splice(from.o, 0, ...cells('link', m, ''))
+      sel = { a: { b: from.b, o: from.o }, f: { b: from.b, o: from.o + 4 }, aff: 'L' }
+      return
+    }
+    setLink(from.b, from.o, to.o, '')
+  }
+  focusUrl = true
+}
+let focusUrl = false
+
+function applyForm(text, url) {
+  const { b, start, end } = form
+  const cs = doc[b].cells
+  const was = cs.slice(start, end)
+  text = text || url
+  form = null
+  if (!text) return
+  record('edit')
+  const m = was.length ? was[0].m : typingMarks()
+  const next = was.map((c) => c.c).join('') === text ? was.map((c) => ({ ...c, h: url })) : cells(text, m, url)
+  cs.splice(start, end - start, ...next)
+  setCaret(b, start + next.length)
+}
+function closeForm() { form = null }
+
+// ----------------------------------------------------------------- render
+const editor = document.getElementById('editor')
+const overlay = document.getElementById('overlay')
+const page = document.getElementById('page')
+let leaves = []      // per block: the text nodes and chips, with where they start
+let holder = null    // the empty text node the caret sits in, at the edge of a format
+let blockEls = []
+
+function wrap(m, node) {
+  let el = node
+  for (const [bit, tag] of [[C, 'code'], [S, 's'], [I, 'em'], [B, 'strong']]) {
+    if (!(m & bit)) continue
+    const outer = document.createElement(tag)
+    outer.append(el)
+    el = outer
+  }
+  return el
+}
+
+const IMAGE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86-3 3.87L9 13.14 6 17h12l-3.86-5.14z"/></svg>'
+const ATOM_HTML = {
+  math: 'πr<sup>2</sup>',
+  cite: '(Knuth 1984)',
+  note: '1',
+  image: IMAGE_ICON + 'chart',
+}
+
+function renderBlock(blk, b) {
+  const el = document.createElement(blk.tag)
+  el.dataset.b = b
+  const editable = isEditable(b)
+  if (!editable) { el.contentEditable = 'false'; el.className = 'ro' }
+  const cs = blk.cells
+  const own = []
+  leaves[b] = own
+  const caret = collapsed() && sel.f.b === b && editable ? sel.f.o : -1
+  const { from, to } = range()
+  const selected = (o) => !collapsed() && cmp(from, { b, o }) <= 0 && cmp({ b, o: o + 1 }, to) <= 0
+  const edge = (o) => o === 0 || o === cs.length || cs[o - 1].a || cs[o].a || cs[o - 1].m !== cs[o].m || cs[o - 1].h !== cs[o].h
+
+  // The line in pieces: runs of text in one format, chips, and the caret's holder.
+  const pieces = []
+  for (let o = 0; o <= cs.length; ) {
+    if (o === caret && (pending !== null || edge(o)) && !pieces.some((p) => p.holder)) {
+      holder = document.createTextNode('​')
+      pieces.push({ holder: true, h: inheritedLink(sel.f, sel.f), node: wrap(typingMarks(), holder) })
+      continue
+    }
+    if (o === cs.length) break
+    const c = cs[o]
+    if (c.a) {
+      const chip = document.createElement('span')
+      chip.className = `atom ${c.a.kind}${selected(o) ? ' sel' : ''}`
+      chip.contentEditable = 'false'
+      chip.title = c.a.src
+      chip.innerHTML = ATOM_HTML[c.a.kind]
+      chip.dataset.o = o
+      own.push({ el: chip, start: o, len: 1 })
+      pieces.push({ h: null, node: chip })
+      o++
+      continue
+    }
+    let e = o + 1
+    while (e < cs.length && !cs[e].a && cs[e].m === c.m && cs[e].h === c.h && e !== caret) e++
+    const text = document.createTextNode(cs.slice(o, e).map((x) => x.c).join(''))
+    own.push({ node: text, start: o, len: e - o })
+    pieces.push({ h: c.h, node: wrap(c.m, text), start: o })
+    o = e
+  }
+
+  // Pieces of one link next to each other are in one <a>.
+  const link = currentLink()
+  for (let i = 0; i < pieces.length; ) {
+    const h = pieces[i].h
+    if (h === null) { el.append(pieces[i++].node); continue }
+    const a = document.createElement('a')
+    const s = pieces[i].start
+    a.dataset.s = s
+    while (i < pieces.length && pieces[i].h === h) a.append(pieces[i++].node)
+    if (opts.links === 'inline' && link && link.b === b && link.start === (s ?? link.start)) {
+      const open = document.createElement('span')
+      open.className = 'dim'
+      open.contentEditable = 'false'
+      open.textContent = '['
+      const close = document.createElement('span')
+      close.className = 'dim'
+      close.contentEditable = 'false'
+      const input = document.createElement('input')
+      input.value = h
+      input.placeholder = 'address'
+      close.append('](', input, ')')
+      wireUrlInput(input, link)
+      el.append(open, a, close)
+    } else el.append(a)
+  }
+  if (cs.length === 0 && caret < 0) el.append(document.createElement('br'))
+  return el
+}
+
+/** The DOM point of a model position. */
+function locate({ b, o }) {
+  const el = blockEls[b]
+  if (holder && collapsed() && sel.f.b === b && sel.f.o === o && el.contains(holder)) return [holder, 1]
+  const own = leaves[b]
+  for (const leaf of own) {
+    if (leaf.node) { if (o >= leaf.start && o <= leaf.start + leaf.len) return [leaf.node, o - leaf.start] }
+    else if (o === leaf.start) return [leaf.el.parentNode, [...leaf.el.parentNode.childNodes].indexOf(leaf.el)]
+  }
+  const last = own[own.length - 1]
+  if (last?.el) return [last.el.parentNode, [...last.el.parentNode.childNodes].indexOf(last.el) + 1]
+  return [el, 0]
+}
+
+/** The model offset of a DOM point in block `b`. */
+function offsetIn(b, node, offset) {
+  if (node === holder) return sel.f.o
+  const upTo = document.createRange()
+  upTo.setStart(blockEls[b], 0)
+  upTo.setEnd(node, offset)
+  let at = 0
+  for (const leaf of leaves[b]) {
+    if (leaf.node === node) return leaf.start + Math.min(offset, leaf.len)
+    const [n, o] = leaf.node ? [leaf.node, leaf.node.length] : [leaf.el.parentNode, [...leaf.el.parentNode.childNodes].indexOf(leaf.el) + 1]
+    if (upTo.comparePoint(n, o) > 0) break
+    at = leaf.start + leaf.len
+  }
+  return at
+}
+
+function pointToModel(node, offset) {
+  const el = (node.nodeType === 1 ? node : node.parentElement)?.closest('[data-b]')
+  if (!el || !editor.contains(el)) return null
+  const b = Number(el.dataset.b)
+  return isEditable(b) ? { b, o: offsetIn(b, node, offset) } : null
+}
+
+function readSelection() {
+  const s = getSelection()
+  if (!s.anchorNode || !s.focusNode) return null
+  const a = pointToModel(s.anchorNode, s.anchorOffset)
+  const f = pointToModel(s.focusNode, s.focusOffset)
+  return a && f ? { a, f } : null
+}
+
+function writeSelection() {
+  const [an, ao] = locate(sel.a)
+  const [fn, fo] = locate(sel.f)
+  getSelection().setBaseAndExtent(an, ao, fn, fo)
+}
+
+function render() {
+  const focused = document.activeElement === editor
+  holder = null
+  leaves = []
+  blockEls = doc.map(renderBlock)
+  editor.replaceChildren(...blockEls)
+  if (focused) writeSelection()
+  renderToolbar()
+  renderSource()
+  renderOverlay()
+  if (focusUrl) {
+    focusUrl = false
+    editor.querySelector('.dim input')?.focus()
+  }
+}
+
+function wireUrlInput(input, link) {
+  let recorded = false
+  input.addEventListener('input', () => {
+    if (!recorded) { record('edit'); recorded = true }
+    setLink(link.b, link.start, link.end, input.value)
+    link.h = input.value
+    renderSource()
+  })
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key !== 'Enter' && e.key !== 'Escape' && e.key !== 'Tab') return
+    e.preventDefault()
+    setCaret(link.b, link.end)
+    editor.focus()
+    render()
+  })
+  input.addEventListener('beforeinput', (e) => e.stopPropagation())
+  input.addEventListener('mousedown', (e) => e.stopPropagation())
+}
+
+// ---------------------------------------------------------------- toolbar
+const ICONS = {
+  bold: 'M15.6 10.79c.97-.67 1.65-1.77 1.65-2.79 0-2.26-1.75-4-4-4H7v14h7.04c2.09 0 3.71-1.7 3.71-3.79 0-1.52-.86-2.82-2.15-3.42zM10 6.5h3c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-3v-3zm3.5 9H10v-3h3.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5z',
+  italic: 'M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z',
+  strike: 'M10 19h4v-3h-4v3zM5 4v3h5v3h4V7h5V4H5zM3 14h18v-2H3v2z',
+  code: 'M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z',
+  link: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z',
+  more: 'M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
+  bullets: 'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z',
+  numbers: 'M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z',
+  quote: 'M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z',
+}
+const FORMATS = [
+  { name: 'Bold', icon: 'bold', bit: B, keys: '⌘B' },
+  { name: 'Italic', icon: 'italic', bit: I, keys: '⌘I' },
+  { name: 'Strikethrough', icon: 'strike', bit: S, keys: '⌘⇧X' },
+  { name: 'Code', icon: 'code', bit: C, keys: '⌘E' },
+]
+let menuOpen = false
+
+/** Do `action` from a button, keeping the caret in the document. */
+function run(action) {
+  ruled = null
+  action()
+  editor.focus()
+  render()
+}
+
+function iconButton(name, icon, pressed, action, tip = name) {
+  const button = document.createElement('button')
+  button.className = 'icon'
+  button.dataset.tip = tip
+  button.setAttribute('aria-label', name)
+  if (pressed !== null) button.setAttribute('aria-pressed', String(pressed))
+  button.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="${ICONS[icon]}"/></svg>`
+  button.onmousedown = (e) => e.preventDefault()
+  if (action) button.onclick = action
+  else button.disabled = true
+  return button
+}
+
+function formatButtons(formats, withLink) {
+  const active = activeMarks()
+  const buttons = formats.map((f) => iconButton(f.name, f.icon, Boolean(active & f.bit), () => run(() => toggle(f.bit)), `${f.name} (${f.keys})`))
+  if (withLink) buttons.push(iconButton('Link', 'link', currentLink() !== null, () => run(linkCommand), 'Link (⌘K)'))
+  return buttons
+}
+
+function renderToolbar() {
+  const bar = document.getElementById('toolbar')
+  const sep = () => Object.assign(document.createElement('span'), { className: 'sep' })
+  const style = document.createElement('button')
+  style.className = 'style'
+  style.disabled = true
+  style.innerHTML = `<span>${doc[sel.f.b]?.tag === 'h2' ? 'Heading 2' : 'Paragraph'}</span><svg viewBox="0 0 8 8"><path d="M1 2.5 4 5.5 7 2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`
+  bar.replaceChildren(style, sep())
+  if (opts.toolbar === 'full') bar.append(...formatButtons(FORMATS, true))
+  else {
+    bar.append(...formatButtons(FORMATS.slice(0, 2), true))
+    const more = iconButton('More formatting', 'more', menuOpen || Boolean(activeMarks() & (S | C)), () => { menuOpen = !menuOpen; renderToolbar() })
+    bar.append(more)
+    if (menuOpen) {
+      const menu = document.createElement('div')
+      menu.className = 'menu'
+      menu.onmousedown = (e) => e.preventDefault()
+      for (const f of FORMATS.slice(2)) {
+        const item = document.createElement('button')
+        item.setAttribute('aria-pressed', String(Boolean(activeMarks() & f.bit)))
+        item.innerHTML = `<span>${f.name}</span><kbd>${f.keys}</kbd>`
+        item.onclick = () => { menuOpen = false; run(() => toggle(f.bit)) }
+        menu.append(item)
+      }
+      bar.append(menu)
+      menu.style.left = more.offsetLeft + 'px'
+    }
+  }
+  bar.append(sep(), iconButton('Bulleted list', 'bullets', null, null), iconButton('Numbered list', 'numbers', null, null), iconButton('Quote', 'quote', null, null))
+}
+
+// ----------------------------------------------------------------- source
+function toQmd(blk) {
+  const cs = blk.cells.map((c) => ({ ...c }))
+  // Markdown can't format the spaces at the ends of a run: they go outside it.
+  for (const bit of [B, I, S]) {
+    for (let i = 0; i < cs.length; ) {
+      if (!(marksOf(cs[i]) & bit)) { i++; continue }
+      let j = i
+      while (j < cs.length && marksOf(cs[j]) & bit) j++
+      let s = i, e = j
+      while (s < e && cs[s].c === ' ') cs[s++].m &= ~bit
+      while (e > s && cs[e - 1].c === ' ') cs[--e].m &= ~bit
+      i = j
+    }
+  }
+  const DELIM = { [B]: '**', [I]: '*', [S]: '~~', [C]: '`' }
+  let out = ''
+  let href = null
+  const open = []
+  const closeTo = (n) => { while (open.length > n) { const t = open.pop(); out += t === 'L' ? `](${href})` : DELIM[t] } }
+  for (const c of cs) {
+    const want = []
+    if (c.h !== null) want.push('L')
+    for (const bit of [B, I, S, C]) if (marksOf(c) & bit) want.push(bit)
+    if (open[0] === 'L' && c.h !== href) closeTo(0)
+    let k = 0
+    while (k < open.length && k < want.length && open[k] === want[k]) k++
+    closeTo(k)
+    for (; k < want.length; k++) {
+      if (want[k] === 'L') { href = c.h; out += '[' } else out += DELIM[want[k]]
+      open.push(want[k])
+    }
+    out += c.a ? c.a.src : c.c
+  }
+  closeTo(0)
+  return (blk.tag === 'h2' ? '## ' : '') + out
+}
+
+function renderSource() {
+  document.getElementById('source-blocks').replaceChildren(
+    ...doc.map((blk, b) => {
+      const el = document.createElement('div')
+      el.textContent = toQmd(blk)
+      if (b === sel.f.b) el.className = 'cur'
+      return el
+    }),
+  )
+}
+
+// ---------------------------------------------------------------- overlay
+function place(el, rect, where) {
+  overlay.append(el)
+  const origin = page.getBoundingClientRect()
+  const left = Math.max(8, Math.min(rect.left - origin.left, origin.width - el.offsetWidth - 8))
+  el.style.left = left + 'px'
+  el.style.top = (where === 'above' ? rect.top - origin.top - el.offsetHeight - 8 : rect.bottom - origin.top + 6) + 'px'
+}
+
+function bubbleButton(label, action) {
+  const button = document.createElement('button')
+  button.textContent = label
+  button.onmousedown = (e) => e.preventDefault()
+  button.onclick = action
+  return button
+}
+
+function renderOverlay() {
+  overlay.replaceChildren()
+  const link = currentLink()
+  const linkEl = link && blockEls[link.b].querySelector(`a[data-s="${link.start}"]`)
+  const rects = linkEl ? [...linkEl.getClientRects()] : []
+
+  if (form) {
+    const el = document.createElement('div')
+    el.className = 'bubble form'
+    el.innerHTML = `<label>Text<input name="text"></label><label>Link<input name="url" placeholder="Paste or type an address"></label><div class="row"><button type="button">Cancel</button><button type="button" class="apply">Apply</button></div>`
+    const [text, url] = el.querySelectorAll('input')
+    text.value = form.text
+    url.value = form.url
+    const cancel = () => { closeForm(); editor.focus(); render() }
+    const apply = () => { applyForm(text.value, url.value); editor.focus(); render() }
+    el.querySelectorAll('button')[0].onclick = cancel
+    el.querySelectorAll('button')[1].onclick = apply
+    el.onkeydown = (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') { e.preventDefault(); apply() }
+      if (e.key === 'Escape') { e.preventDefault(); cancel() }
+    }
+    const [node, offset] = locate({ b: form.b, o: form.end })
+    const at = document.createRange()
+    at.setStart(node, offset)
+    const rect = rects[rects.length - 1] ?? at.getClientRects()[0] ?? blockEls[form.b].getBoundingClientRect()
+    place(el, rect, 'below')
+    ;(form.text ? url : text).focus()
+    return
+  }
+  if (document.activeElement !== editor) return
+
+  if (link && opts.links === 'popover' && rects.length > 0) {
+    const el = document.createElement('div')
+    el.className = 'bubble'
+    const url = document.createElement('span')
+    url.className = link.h ? 'url' : 'none'
+    url.textContent = link.h || 'No address'
+    const sep = document.createElement('span')
+    sep.className = 'bsep'
+    el.append(url, sep, bubbleButton('Edit', () => run(linkCommand)), bubbleButton('Remove', () => run(removeLink)))
+    place(el, rects[rects.length - 1], 'below')
+  }
+
+  // One chip selected: its source.
+  const { from, to } = range()
+  const chip = from.b === to.b && to.o === from.o + 1 ? cellAt(from.b, from.o) : null
+  if (chip?.a) {
+    const el = document.createElement('div')
+    el.className = 'bubble'
+    const code = document.createElement('code')
+    code.textContent = chip.a.src
+    const hint = document.createElement('span')
+    hint.className = 'hint'
+    hint.textContent = '· edit in the source'
+    el.append(code, hint)
+    place(el, blockEls[from.b].querySelector(`.atom[data-o="${from.o}"]`).getBoundingClientRect(), 'below')
+  } else if (opts.bubble === 'on' && !collapsed() && !mouseDown) {
+    const s = getSelection()
+    if (s.rangeCount > 0) {
+      const el = document.createElement('div')
+      el.className = 'bubble'
+      el.append(...formatButtons(FORMATS, true))
+      place(el, s.getRangeAt(0).getClientRects()[0] ?? s.getRangeAt(0).getBoundingClientRect(), 'above')
+    }
+  }
+}
+
+// ----------------------------------------------------------------- events
+let mouseDown = false
+
+editor.addEventListener('beforeinput', (e) => {
+  if (e.isComposing || e.inputType === 'insertCompositionText') return
+  e.preventDefault()
+  const type = e.inputType
+  const wasRuled = ruled
+  ruled = null
+  const target = () => {
+    const [r] = e.getTargetRanges()
+    const a = r && pointToModel(r.startContainer, r.startOffset)
+    const f = r && pointToModel(r.endContainer, r.endOffset)
+    if (a && f) sel = { a, f, aff: 'L' }
+  }
+  if (type === 'insertText') {
+    insertText(e.data ?? '')
+    if (opts.md === 'on') typingRule()
+  } else if (type === 'insertReplacementText') {
+    target()
+    insertText(e.dataTransfer?.getData('text/plain') ?? e.data ?? '')
+  } else if (type === 'insertParagraph' || type === 'insertLineBreak') enter()
+  else if (type === 'deleteContentBackward') {
+    if (wasRuled) restore(wasRuled)
+    else backspace()
+  } else if (type === 'deleteContentForward') deleteForward()
+  else if (type.startsWith('delete')) {
+    target()
+    if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to) }
+  } else if (type === 'historyUndo') undo()
+  else if (type === 'historyRedo') redo()
+  else if (type === 'formatBold') toggle(B)
+  else if (type === 'formatItalic') toggle(I)
+  render()
+})
+
+editor.addEventListener('paste', (e) => {
+  e.preventDefault()
+  ruled = null
+  insertText((e.clipboardData?.getData('text/plain') ?? '').replace(/\s*[\r\n]+\s*/g, ' '))
+  render()
+})
+
+editor.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey
+  const key = e.key.toLowerCase()
+  const does = (action) => { e.preventDefault(); ruled = null; action(); hist.kind = null; render() }
+  if (mod && key === 'z') does(e.shiftKey ? redo : undo)
+  else if (mod && !e.shiftKey && key === 'b') does(() => toggle(B))
+  else if (mod && !e.shiftKey && key === 'i') does(() => toggle(I))
+  else if (mod && e.shiftKey && key === 'x') does(() => toggle(S))
+  else if (mod && !e.shiftKey && key === 'e') does(() => toggle(C))
+  else if (mod && !e.shiftKey && key === 'k') does(linkCommand)
+  else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    does(() => moveH(e.key === 'ArrowLeft' ? -1 : 1, e.shiftKey))
+  }
+})
+
+editor.addEventListener('mousedown', (e) => {
+  const chip = e.target.closest?.('.atom')
+  if (chip && !chip.closest('.ro')) {
+    // A click on a chip selects it.
+    e.preventDefault()
+    const b = Number(chip.closest('[data-b]').dataset.b)
+    const o = Number(chip.dataset.o)
+    sel = { a: { b, o }, f: { b, o: o + 1 }, aff: 'L' }
+    pending = null
+    editor.focus()
+    render()
+    return
+  }
+  mouseDown = true
+})
+/** Take the page's selection into the model. Returns whether it moved. */
+function syncSelection() {
+  const read = readSelection()
+  if (!read || (cmp(read.a, sel.a) === 0 && cmp(read.f, sel.f) === 0)) return false
+  sel = { ...read, aff: 'L' }
+  pending = null
+  ruled = null
+  hist.kind = null
+  menuOpen = false
+  return true
+}
+document.addEventListener('mouseup', () => {
+  if (!mouseDown) return
+  mouseDown = false
+  if (document.activeElement !== editor) return
+  // The click's selection may not have been announced yet.
+  syncSelection()
+  render()
+})
+
+document.addEventListener('selectionchange', () => {
+  if (document.activeElement !== editor || !syncSelection()) return
+  // Not while the mouse is selecting: rebuilding the line would stop it.
+  if (mouseDown) { renderToolbar(); renderSource() } else render()
+})
+// Not for a click: the caret goes where the click was.
+editor.addEventListener('focus', () => setTimeout(() => !mouseDown && render()))
+editor.addEventListener('blur', () => setTimeout(() => document.activeElement !== editor && renderOverlay()))
+
+start()
+renderOptions()
+editor.focus()
+render()
+</script>
+</body>
+</html>
