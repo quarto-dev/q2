@@ -104,3 +104,16 @@ the `.md` summary into the session instead; the `.json` is what ticks the boxes,
 
 Anything else that fails is a finding: it goes into the plan\'s notes with its output, and the macOS session proposes a
 plan or strand for it. Product code is not changed in this plan.
+
+## Explaining the failures
+
+If the run reports failures, run this once from the repository root. It reads the logs the run already wrote, so it does not rerun any test:
+
+```powershell
+uv run scripts/rfu6-windows/extract_failures.py
+git add scripts/rfu6-windows/results
+git commit -m "RFU-6: failure details"
+git push origin HEAD:feature/rfu-6-windows-run
+```
+
+It writes `results/failure-details-<run>.md`: which tools are on `PATH` (pandoc, typst, and so on), every failing test grouped by its first panic message, a failure count per test module, and the full output of the failing tests for items 1, 4, and 6. Add `--show NAME` to include the full output of any failing test whose name contains `NAME`.
