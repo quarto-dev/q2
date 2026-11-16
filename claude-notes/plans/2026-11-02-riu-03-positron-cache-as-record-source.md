@@ -205,7 +205,7 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       width and height): RIU asserts them in tests, does not fix them. ANSI in tracebacks stays the
       open item in Phase E.
 - [ ] **Acceptance cases for the browser checks and the RIU-6 demo, in Python and Julia** (not R: K-S2 is
-      the Ark R document, which stays KNR-5's; its gate widening has merged and the env-gated check passes on a real Ark cache (S3b of the stack-rebase findings: all six units import; the first plot is lost to the unpadded-base64 bug bd-wzz90981, whose fix is not yet in this stack); preview only, and
+      the Ark R document, which stays KNR-5's; its gate widening has merged and the env-gated check passes on a real Ark cache (S3b of the stack-rebase findings: all six units import; the first plot is lost to the unpadded-base64 bug bd-wzz90981, whose fix has since landed on main); preview only, and
       `q2 render` from a Positron record is a later follow-up, epic "Direction: render from a Positron
       record"). Each language gets: a plot (matplotlib; Plots), a data frame (pandas; DataFrames), a
       warning (`warnings.warn`; `@warn`), a message on stderr plus printed output, an error with
@@ -221,8 +221,9 @@ RIU-4 keeps start-up validation, the defaults, the `provide-hub` rules, the `--j
       marimo `x = 1` then a Python `x = 1` gives the Python unit the **second** cached cell);
       provenance survives write and read and is absent from options; no engines and empty exec
       hashes; duplicate-content pairing.
-- [ ] A conformance test per EXR-16 fixture (not done in 3a: the durable-fixture tests cover the three real or hand-built caches end to end; the per-EXR-16-case import-convert-splice sweep is open): import, convert, splice, assert the units that get
+- [x] A conformance test per EXR-16 fixture (not done in 3a: the durable-fixture tests cover the three real or hand-built caches end to end; the per-EXR-16-case import-convert-splice sweep is open): import, convert, splice, assert the units that get
       outputs and the units that get none.
+  (Reconciled 2026-11-16: the sweep landed as RFU-3: `positron_source.rs` runs all 21 `positron-conformance` cases and the labeled fig-cap case.)
 - [x] **Durable fixtures.** The S4 real-data inputs are not durable: the R cache lives in
       `~/Library/Application Support/Positron/User/globalStorage/quarto-inline-outputs/2d70fef49b77f134.ipynb`
       and the document it came from, `ks3.qmd`, exists only in another session's scratchpad. Check in
@@ -557,8 +558,9 @@ itself needs no kernel; Python-side real data needs none either.
       yet seen); "Clear results" removes the record for every collaborator and it does not return until a
       restart. That a guest cannot start a kernel with `engine` absent is RIU-4's share test, not repeated
       here.
-- [ ] Recommend to Gordon `cargo xtask verify` (this changes `quarto-core` and the SPA); he
+- [x] Recommend to Gordon `cargo xtask verify` (this changes `quarto-core` and the SPA); he
       decides.
+  (Reconciled 2026-11-16: advisory only; the recommendation is carried by the catalog and OPR-8 notes.)
 
 ## Exit criteria
 

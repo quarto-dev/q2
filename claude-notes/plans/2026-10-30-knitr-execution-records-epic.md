@@ -2,7 +2,7 @@
 title: 'Epic: knitr execution records as structured ipynb (and knitr as a first-class Positron engine)'
 date: 2026-10-30
 description: 'Extends the execution-records epic to knitr: capture knitr evaluated pieces on the q2 side, store them as standard nbformat outputs, present them with the shared Rust presenter plus a knitr option layer, and make knitr records valid to present in Positron. Differential testing against knitr output decides how much further work is needed.'
-status: in-progress  # parent epic complete (not yet merged to main); KNR-1 and the interlude done, KNR-2 closed; next KNR-3, then KNR-4, KNR-2b, KNR-6
+status: in-progress  # merged to main (PR #1077); KNR-1 to KNR-6 and KNR-2b done; KNR-7 in progress; KNR-8 deferred; open items are in the 2026-11-16 epic close-out catalog
 ---
 
 **Branch:** the work runs on `knr-2-presenter` (workspace-3), rebased on 2026-11-03 onto the
@@ -467,10 +467,10 @@ version branches at `patch.R:6`, `:152` and `:300` (`hooks.R` has none; its 1.44
 
 ## Plans and DAG
 
-**Status (2026-11-05).** KNR-1 to KNR-6 are complete on `knr-2-presenter`, KNR-5 included; the
-one open KNR-5 item is the real-binary half of K-S2, which waits on RIU-3/4. KNR-7 is next. KNR-8
-waits on its trigger. The parent epic is complete but not yet merged to main, so this work stays on
-top of it until it is, and nothing here is on main yet.
+**Status (2026-11-16).** KNR-1 to KNR-6 and KNR-2b are complete and merged to main (PR #1077). The
+one open KNR-5 item is the real-binary half of K-S2; RIU-3 and RIU-4 have landed, so it is runnable
+through `execute: record-sources` but needs an Ark cache from Positron. KNR-7 is in progress. KNR-8
+waits on its trigger. (Earlier text, 2026-11-05: the epic was not yet merged and KNR-7 was next.)
 
 | ID | Plan | Sessions (guesses) | Notes |
 |---|---|---|---|

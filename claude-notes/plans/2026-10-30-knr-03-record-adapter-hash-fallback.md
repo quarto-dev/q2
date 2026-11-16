@@ -2,7 +2,7 @@
 title: 'KNR-3: knitr record adapter, hash profiles, fallback units, cache and child handling'
 date: 2026-10-30
 description: 'Turns KNR-1 captured pieces into EXR-4 record units for knitr: cells and outputs, the structured hash profile beside the default one, notebook-level engine results, per-chunk fallback units, and the policies for knitr cache hits, child documents and user-overridden hooks.'
-status: in progress  # re-scoped 2026-11-03 after the epic rebase; Step 0 (bd-js24dold) landed
+status: complete  # all 31 boxes checked; leftovers (workspace run, full verify, native Windows clippy, wasm32 check) are Gordon's; earlier: in progress; re-scoped 2026-11-03 after the epic rebase; Step 0 (bd-js24dold) landed
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-3).

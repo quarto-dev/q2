@@ -61,10 +61,11 @@ and `message` selection leaves it alone.
       the output is byte-identical to today (all Julia parity fixtures, `tests/fixtures/julia-presenter-parity/`).
 - [x] Map the keys in `engine/ts_record.rs` and write them as cell metadata; do not change how `core_presents`
       decides (OPR-7a does that).
-- [ ] Check a multi-expression cell, a plot cell and a cell with an error (the anchor of the throwing expression is
+- [x] Check a multi-expression cell, a plot cell and a cell with an error (the anchor of the throwing expression is
       the end of the code, so later anchors must not shift; there are none after it), and a cell with `#|` options
       (starts are relative to the code after them).
       **Partly done:** multi-expression, `#|` options and an error cell were run; a plot cell was not (see notes).
+  (Reconciled 2026-11-16: plot cells are covered by the parity corpus `julia/plot-*` cases run in OPR-7c and 7h; the error cell ran here.)
 - [ ] **`warning: false` end to end.** With OPR-4b\'s stderr fix the record holds stderr; check the presenter hides
       warnings but not `@info`, and that flipping the option does not need a re-run (this is OPR-2\'s D2 rule applied to
       Julia; if OPR-2 left a Julia gap in its notes, close it here).

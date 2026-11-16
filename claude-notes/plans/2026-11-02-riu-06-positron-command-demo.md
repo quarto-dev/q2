@@ -171,13 +171,15 @@ S5 exercised one saved document in one editor with a Python kernel. The behavior
 From the epic's "Decisions recorded 2026-11-05", revised after the fourth review
 ([review 4](../research/2026-11-05-riu-plans-review-4.md)).
 
-- [ ] **The demo route is the default viewer opened in Positron's preview pane**, like Positron's Quarto 1
+- [x] **The demo route is the default viewer opened in Positron's preview pane**, like Positron's Quarto 1
       preview. `--ui editor` and live share are product behavior, tested in RIU-3 and RIU-4, and are not
       part of the demo. `provide-hub` to quarto-hub.com is not part of the demo either: the hosted hub
       predates the reader (epic "Direction: flipping `provide-hub`").
-- [ ] **The acceptance cases are RIU-3's Python and Julia cases** (plot, data frame, warning, message plus
+  (Reconciled 2026-11-16: delivered per the RIU-6 findings; see the [epic close-out catalog](2026-11-16-epic-closeout-catalog.md).)
+- [x] **The acceptance cases are RIU-3's Python and Julia cases** (plot, data frame, warning, message plus
       printed output, error, labeled cell with figure options). K-S2 is the Ark R document and stays
       KNR-5's.
+  (Reconciled 2026-11-16: the acceptance cases are RIU-3's and ran in RIU-6; see the [epic close-out catalog](2026-11-16-epic-closeout-catalog.md).)
 
 ## Phase 0: the early spike (viewer inside the preview pane)
 
@@ -237,8 +239,9 @@ at the window.
       `positron_loader` mirror (RIU-5 owns the test; this plan only calls it).
       `scripts/riu-6-check-export-mirror.sh`: 12 tests passed (`positron_export::` and
       `positron_conformance::` in the integration binary of `quarto-core`).
-- [ ] The rest is manual with Gordon at the window; write the script first so the run is
+- [x] The rest is manual with Gordon at the window; write the script first so the run is
       repeatable (Phase D).
+  (Reconciled 2026-11-16: the manual run happened with Gordon at the window (RIU-6 notes); see the [epic close-out catalog](2026-11-16-epic-closeout-catalog.md).)
 
 ## Phase B: the commands
 
@@ -343,8 +346,9 @@ at the window.
         spike documents had none). If Gordon has a Julia kernel in the dev build, run one cell and see
         that command 3 shows it; otherwise say "not run".
       - q2 needs `julia` on PATH (1.12.7 here) and, for a plot, Plots in the document's project.
-- [ ] R is out of this demo (epic decision 11: R through Ark is not in this epic, and importing an Ark R
+- [x] R is out of this demo (epic decision 11: R through Ark is not in this epic, and importing an Ark R
       cache rides on KNR-5's gate widening; R through knitr waits on KNR-3 and KNR-5). Say so in the findings.
+  (Reconciled 2026-11-16: delivered as the plan says; see the [epic close-out catalog](2026-11-16-epic-closeout-catalog.md).)
 
 ## Phase D: demo and findings
 

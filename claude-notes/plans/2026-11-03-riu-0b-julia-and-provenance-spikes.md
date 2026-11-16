@@ -70,5 +70,6 @@ gate), RIU-6 Phase C (Julia leg and its exit criteria).
 - [x] Spike P run; findings written; RIU-3 Phase E written from the result.
 - [x] Spike branches recorded in the findings note (never merged).
 - [x] Findings note rendered with `q2 render --strict`.
-- [ ] Not run: Positron producing a Julia cache itself, and a Julia cell with option lines in
+- [x] Not run: Positron producing a Julia cache itself, and a Julia cell with option lines in
       Positron (named in the findings, "Not tested"). RIU-6 Phase C covers them.
+  (Reconciled 2026-11-16: covered by RIU-6 Phase C.)

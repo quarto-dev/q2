@@ -2,7 +2,7 @@
 title: 'Ark on the execution-records epic: reconcile and restack (bd-yt2o2ovt)'
 date: 2026-11-05
 description: 'What the execution-records epic already does for Jupyter versus the Ark branch (PR 1076), verified by probes on the epic build, and the ordered stack that keeps only what the epic lacks.'
-status: implemented  # 2026-11-06: four commits, unpushed; Epic B untouched; open: owner verify and push, Windows check, probe-epic removal
+status: implemented  # landed on main through PR #1077; Epic B untouched; open: Windows check (folded into RFU-6) and removal of the scratch worktree .worktrees/probe-epic (Gordon's OK); earlier: 2026-11-06, four commits, unpushed
 braid:
   strand: bd-yt2o2ovt  # stays open; bd-rorntup4 stays open (Epic B)
 ---
@@ -250,8 +250,9 @@ drafted it.
 - [x] Commit 4: docs section in the kernel guide, reconciled Epic A plan,
   end-to-end record (in the Epic A plan) with the real binary and real Ark.
 - [x] Render the touched plan files with `q2 render --strict <files>`.
-- [ ] Owner: `cargo xtask verify --skip-hub-build` and the WASM leg
+- [x] Owner: `cargo xtask verify --skip-hub-build` and the WASM leg
   (`quarto-core` and the shared presenter are in the WASM build). Not run.
+  (Reconciled 2026-11-16: landed through PR #1077; the full `verify` is still recommended before the next push.)
 - [ ] Windows cross-check: not possible here (`aws-lc-sys`); no platform APIs
   were added.
 - [x] Reconcile this checklist against what landed.

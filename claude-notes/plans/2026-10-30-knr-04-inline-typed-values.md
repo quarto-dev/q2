@@ -2,7 +2,7 @@
 title: 'KNR-4: knitr inline expressions as recorded values'
 date: 2026-10-30
 description: 'Records each knitr inline expression as an inline unit of the engine execution record, aligned with the Jupyter execution-of-inline-expressions conventions, replacing the id-embedding mechanism of EXR-12 once the structured capture exists.'
-status: done  # 2026-11-04; the retirement of EXR-12's id statement is KNR-6's
+status: done  # 2026-11-04; except the retirement of EXR-12's `spans` mechanism, which is still read (`engine/knitr/mod.rs`) and belongs with KNR-8 unless Gordon retargets it
 ---
 
 **Part of:** [the epic](2026-10-30-knitr-execution-records-epic.md) (plan KNR-4).

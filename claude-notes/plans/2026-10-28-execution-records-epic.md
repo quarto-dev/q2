@@ -593,6 +593,8 @@ is git (branches, commits) plus each plan\'s checkboxes and `status:` line.
 `/Users/gordon/src/q2/.worktrees/workspace-1`. Nobody works in that worktree except to merge
 into it and to edit this epic.
 
+(Historical: every lane below is done except EXR-17 and JOL-3, which are deferred. The queues record the plan as assigned on 2026-11-01, not the current state.)
+
 | Lane | Worktree | Queue, in order (a plan starts when its hard dependencies have landed) |
 |---|---|---|
 | A: Jupyter spine, then knitr inline and Positron | `workspace-4` | Done: EXR-2, EXR-3, EXR-5, EXR-6. Next, re-assigned by Gordon, 2026-11-01: EXR-12 (knitr K2 inline; its gate, EXR-11, landed at `d0112a569`, so branch from that or later), then EXR-16 (the Positron spikes need nothing; its q2-side half needs EXR-4 Phases 0 to 5, landed) |

@@ -69,7 +69,7 @@ All plans use the shared integration branch `feature/one-presenter`, the lanes a
 |---|---|---|---|---|
 | [RFU-1](2026-11-08-rfu-1-convert-command.md) | `q2 convert --to positron-ipynb` replaces `q2 record export-positron` | nothing | C | ready |
 | [RFU-2](2026-11-08-rfu-2-knitr-export-and-import-gate.md) | knitr cells export; import gate by declared kernel equivalence | RFU-1, OPR-3 | B | ready |
-| [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | EXR-16 sweep test and the labeled-cell `fig-cap` splice test | OPR-1b | A | ready |
+| [RFU-3](2026-11-08-rfu-3-positron-splice-tests.md) | EXR-16 sweep test and the labeled-cell `fig-cap` splice test | OPR-1b | A | complete |
 | [RFU-4](2026-11-08-rfu-4-verification-and-small-fixes.md) | Hub verification, decision 12 re-check, highlight check, Julia server messages | OPR-5 | B (was C) | ready |
 | [RFU-5](2026-11-08-rfu-5-julia-e2e-flake.md) | The Julia e2e flake: find the EPIPE closer (a note) | nothing | B | ready |
 | [RFU-6](2026-11-08-rfu-6-windows-run.md) | The Windows run | OPR-6, RFU-1, RFU-2 | (Gordon) | blocked-on-gordon |

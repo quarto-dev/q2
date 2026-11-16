@@ -185,11 +185,8 @@ cost in exchange for byte-faithful reproduction.
 
 Plan: `claude-notes/plans/2026-05-03-replay-engine.md`.
 
-## Known issue: knitr traces are not claimed
+## Knitr traces
 
-`ReplayEngine::claims_language` (`crates/quarto-core/src/engine/replay.rs:107-113`)
-claims only a language equal to the engine name, so the replay engine
-registered under `knitr` does not claim `{r}` chunks. Replaying a
-knitr trace renders the page with unexecuted code and no error, which
-contradicts the miss policy above. Seen on 2026-11-01 (KNR-1 S6) with
-an unmodified trace; tracked as bd-js24dold.
+`ReplayEngine::claims_language` claims `{r}` chunks in a knitr trace by delegating to `knitr_claims`
+(`crates/quarto-core/src/engine/replay.rs`), tested by `knitr_replay_claims_what_knitr_claims`. This fixed
+bd-js24dold (found 2026-11-01, KNR-1 S6), where a knitr trace rendered unexecuted code with no error.

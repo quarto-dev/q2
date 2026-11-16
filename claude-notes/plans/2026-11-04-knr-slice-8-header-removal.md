@@ -140,10 +140,11 @@ below.
   again, and asserts the fresh capture differs from the old record in `results`, `fig.show`,
   `comment` and `fenced.echo`, and that the deletion is stale (so the old derived values are never
   presented).
-- [ ] The slice 7 Phase 7.0 known-gap test, flipped once it exists: header deleted, the unit is
+- [x] The slice 7 Phase 7.0 known-gap test, flipped once it exists: header deleted, the unit is
   stale, so the presenter is not asked to show the old caption. (Not written yet: slice 7 has not
   landed. The sweep deletion test and the real-record test pin the same property; flip slice 7\'s
   test when it lands.)
+  (Reconciled 2026-11-16: moot: slice 7 chose not to write it, and `knitr_header_deletion` plus the option sweep pin the property.)
 
 ### Phase 8.1: adapter and predicate
 
@@ -172,7 +173,8 @@ below.
   passes.
 - [x] Update KNR-3\'s slice 8 item and KNR-6\'s layering test list to the D3 wording, and slice 7\'s
   Phase 7.0 known-gap test.
-- [ ] `cargo xtask verify --skip-hub-build` is the recommended pre-push check (recommended to Gordon, not run).
+- [x] `cargo xtask verify --skip-hub-build` is the recommended pre-push check (recommended to Gordon, not run).
+  (Reconciled 2026-11-16: advisory; the work merged with the knitr epic (PR #1077).)
 
 ## Alternatives
 

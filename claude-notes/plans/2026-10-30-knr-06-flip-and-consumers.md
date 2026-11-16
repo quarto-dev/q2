@@ -161,8 +161,8 @@ The flip is in. Live knitr returns the presented text; replay presents over the 
   - A recorded run\'s `markdown` is now the presented text, so the old guard that replay differs from
     the stored markdown is replaced by: replay equals the recorded run, and the skeleton holds markers.
 - **Scope of the flip.** It applies when a record is wanted (a trace, the preview, the hub, or
-  `execute: {record: true}`). A plain `q2 render` still asks for none and takes the old path; making
-  recording the default is a separate step (risk 5).
+  `execute: {record: true}`). A plain `q2 render` still asked for none and took the old path; making
+  recording the default was a separate step. (Superseded 2026-11-11: OPR-9g flipped plain render, `e559061dd`.)
 - **Not verified.** Inline markers on knitr 1.44 and 1.52 (one knitr on this machine); the wasm32 build
   (a bare `cargo check --target wasm32-unknown-unknown` fails in C build scripts before reaching our code, so
   it needs the project\'s WASM build); Windows cross-clippy; an unreadable image (R cannot produce one, so it
@@ -414,8 +414,9 @@ EXR-11-era records carry the old declaration version and read as stale (KNR-3).
   a knitr record and equals the live output, and the existing Jupyter replay tests stay green;
   `capture.result.markdown` holds the final text and the skeleton rides in `result.skeleton` (settled design, point 4). The unused-capture check
   (6A) and "replay never writes a trace" (below) are done.
-- [ ] Update this epic with the knitr outcome. The parent\'s text is not edited; tell the
+- [x] Update this epic with the knitr outcome. The parent\'s text is not edited; tell the
   parent session what changed.
+  (Reconciled 2026-11-16: the epic table already carries the knitr outcome.)
 
 ### Phase 6C: deletions (separate commits, each green)
 

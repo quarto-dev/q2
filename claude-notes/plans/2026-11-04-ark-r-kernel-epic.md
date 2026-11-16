@@ -2,7 +2,7 @@
 title: 'Run R via the Ark Jupyter kernel (bd-yt2o2ovt)'
 date: 2026-11-04
 description: 'Epic A, reconciled with the execution-records epic: what the epic already does for Jupyter, what this stack adds (lenient base64, a located image-failure warning, a corpus, docs), and the end-to-end record on real Ark.'
-status: implemented  # 2026-11-06, four commits on braid/bd-yt2o2ovt-ark-r-kernel-on-epic, unpushed; open: Windows cross-check, owner-approved push and PR
+status: implemented  # landed on main through PR #1077 (`960b406cb`); PR 1076 closed unmerged; open: the Windows cross-check (folded into RFU-6); earlier: 2026-11-06, four commits on braid/bd-yt2o2ovt-ark-r-kernel-on-epic, unpushed
 braid:
   strand: bd-yt2o2ovt  # "Epic: run R via the Ark Jupyter kernel in q2"
   priority: P3
@@ -100,9 +100,11 @@ absence of errors.
   needs a C toolchain for the Windows target). The change uses no
   platform-specific API; a Windows user can run
   `cargo clippy -p quarto-core --all-targets -- -D warnings`.
-- [ ] Owner: `cargo xtask verify --skip-hub-build` plus the WASM leg
+- [x] Owner: `cargo xtask verify --skip-hub-build` plus the WASM leg
   (`quarto-core` and the shared presenter are in the WASM build), then push.
-- [ ] Owner: push, open the PR against the epic branch, close PR 1076.
+  (Reconciled 2026-11-16: landed through PR #1077; the full `verify` is still recommended before the next push.)
+- [x] Owner: push, open the PR against the epic branch, close PR 1076.
+  (Reconciled 2026-11-16: landed through PR #1077 (`960b406cb`); PR 1076 is closed unmerged.)
 
 # Known environment issue
 

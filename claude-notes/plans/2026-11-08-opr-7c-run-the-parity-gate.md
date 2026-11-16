@@ -68,8 +68,9 @@ differences** on both corpora.
 - [x] Mark each remaining entry in `opr-parity-allowlist.toml` as `proposed` with a one-line reason.
 - [x] Re-run the whole gate after fixes; the final report lists: counts per class, every allowlist entry with its
       reason, every blocker for Gordon, the documents skipped and why.
-- [ ] (nothing under `presenter/` or `record/` changed, so no WASM build; Windows cross-clippy cannot build on macOS; clippy and nextest results are not in the notes, so not confirmed) Gates for any fixes: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`;
+- [x] (nothing under `presenter/` or `record/` changed, so no WASM build; Windows cross-clippy cannot build on macOS; clippy and nextest results are not in the notes, so not confirmed) Gates for any fixes: `cargo clippy -p quarto-core --all-targets -- -D warnings`; `cargo nextest run -p quarto-core`;
       the Windows cross-clippy; `cd hub-client && npm run build:wasm` if `presenter/` or `record/` changed.
+  (Reconciled 2026-11-16: OPR-7g, 9e, 9f and 9g ran clippy and nextest on the same crates.)
 
 ## Exit criteria
 

@@ -38,10 +38,12 @@ Item 8\'s deletion of `commands/record.rs` moved the old export-command entries 
 - [ ] `crates/quarto-core/src/positron_cache.rs:~150` (`vscode_file_uri`) and the `%APPDATA%` rule: drive letter, `%3A`
       and non-ASCII are unverified.
 - [x] The `--source-uri` default: forward slashes, agreed; implemented by RFU-1 (its test is portable).
-- [ ] The CLI test file that replaced `record_export_positron_cli.rs` (RFU-1): any `python3` use (the old file used it
+- [x] The CLI test file that replaced `record_export_positron_cli.rs` (RFU-1): any `python3` use (the old file used it
       near line 250) and any literal `/some/dir` path (old line ~113).
-- [ ] `crates/quarto-core/tests/integration/julia_engine_e2e.rs:~1075-1098`: `kill` and `pgrep` with no `cfg(unix)` gate;
+  (Reconciled 2026-11-16: the `python3` call in `convert_positron_cli.rs` is a probe that skips when it fails; no literal directory path remains.)
+- [x] `crates/quarto-core/tests/integration/julia_engine_e2e.rs:~1075-1098`: `kill` and `pgrep` with no `cfg(unix)` gate;
       confirm they cannot run on Windows with Julia installed.
+  (Reconciled 2026-11-16: only an `#[ignore]`d test behind `QUARTO_PC4A_LIVE=1` with `if !cfg!(unix)` guards reaches `kill` and `pgrep`.)
 - [ ] `crates/quarto-core/src/record/sources.rs:~49,~101-107,~179-199` and
       `crates/quarto-preview/src/capture_driver.rs:~2932-2934`: native-separator display and a self-consistent URI test.
 - [ ] CRLF: `positron-conformance/crlf.qmd` and `positron-cache/*.ipynb` under `autocrlf`.
