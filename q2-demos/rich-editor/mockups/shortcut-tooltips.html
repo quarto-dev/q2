@@ -190,6 +190,28 @@
   .qe-menu.linger.open .md-col { opacity: 1; }
   .qe-menu[hidden] { display: none; }
 
+  /* G6, G7: the labels at the usual indent; on linger, the menu grows to the
+     left by a gutter (--g) for the #s, so the labels don't move. G6 puts the
+     gutter left of the check mark (nothing moves); G7 between it and the
+     labels (the check mark moves out with the menu's edge). */
+  @property --g { syntax: '<length>'; inherits: true; initial-value: 0px; }
+  .menu-wide .qe-menu.gutter {
+    --g: 0px; transition: --g .2s ease;
+    margin-left: calc(-1 * var(--g)); width: calc(280px + var(--g));
+  }
+  .menu-wide .qe-menu.gutter.open { --g: 36px; }
+  .qe-menu.gutter .qe-item { padding-left: calc(26px + var(--g)); }
+  .qe-item .md-g {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: var(--g); overflow: hidden; text-align: right; white-space: nowrap;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 400; color: #6c757d;
+    opacity: 0; transition: opacity .2s ease .05s;
+  }
+  .qe-menu.gutter.open .md-g { opacity: 1; }
+  .qe-menu.g-outer .qe-item .md-g { left: 0; }
+  .qe-menu.g-outer .qe-item[aria-checked='true']::before { left: calc(9px + var(--g)); }
+  .qe-menu.g-inner .qe-item .md-g { left: 20px; }
+
   /* J: C, until the pointer stays; then the Markdown grows in below. */
   .tip-grow {
     padding: 4px 5px 4px 8px; border-radius: 6px; background: #2b2f33; color: #fff;
@@ -533,6 +555,20 @@ const MENUS = [
     item: (s) =>
       `<span><span class="md-col">${'#'.repeat(s.level)}</span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
   },
+  {
+    name: 'G6. Grows left, outside the check mark',
+    note: 'Labels at the usual indent. On linger the menu grows to the left and the #s fill the new gutter; nothing else moves. Click the style box to replay.',
+    linger: true,
+    gutter: 'g-outer',
+    item: (s) => `<span class="md-g">${'#'.repeat(s.level)}</span><span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
+  {
+    name: 'G7. Grows left, inside the check mark',
+    note: 'As G6, but the #s go between the check mark and the labels; the check mark moves out with the menu’s edge. Click the style box to replay.',
+    linger: true,
+    gutter: 'g-inner',
+    item: (s) => `<span class="md-g">${'#'.repeat(s.level)}</span><span>${s.name}</span><span class="keys">${keysText(KEYS.h(s.level))}</span>`,
+  },
 ]
 const STYLES = ['Paragraph', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4'].map((name, level) => ({ name, level }))
 
@@ -561,7 +597,7 @@ function render() {
 
   const menus = document.getElementById('menus')
   menus.innerHTML = MENUS.map((m) => {
-    const menu = `<div class="qe-menu${m.linger ? ' linger' : ''}">${STYLES.map((s) =>
+    const menu = `<div class="qe-menu${m.gutter ? ` gutter ${m.gutter}` : m.linger ? ' linger' : ''}">${STYLES.map((s) =>
       `<button class="qe-item qe-item-${s.level} with-keys" role="menuitemradio" aria-checked="${s.level === 0}">${m.item(s)}</button>`).join('')}</div>`
     return `
     <div class="option menu-option">
