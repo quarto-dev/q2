@@ -171,7 +171,9 @@ pub struct OnDemandFile {
 /// A [`BaseLayer`] backed by a [`VirtualFileSystem`], the same in-memory
 /// store the browser analyses from. Text files hold their bytes; binaries
 /// can be entered by metadata only and read on demand (D2).
-#[derive(Debug)]
+/// `Clone` copies every held file; a session clones only when a background
+/// job still holds the previous snapshot (copy-on-write via `Arc::make_mut`).
+#[derive(Debug, Clone)]
 pub struct VfsBaseLayer {
     /// Holds the loaded files under [`VFS_ROOT`], at their relative paths.
     vfs: VirtualFileSystem,

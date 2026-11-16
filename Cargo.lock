@@ -7391,6 +7391,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-lsp-project"
+version = "0.45.0"
+dependencies = [
+ "pampa",
+ "pollster",
+ "quarto-core",
+ "quarto-lsp-core",
+ "quarto-pandoc-types",
+ "quarto-project-files",
+ "quarto-system-runtime",
+ "tempfile",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "quarto-math"
 version = "0.45.0"
 dependencies = [

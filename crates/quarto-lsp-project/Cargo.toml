@@ -1,0 +1,29 @@
+[package]
+name = "quarto-lsp-project"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Project-aware analysis sessions for the Quarto language server: a sans-IO workspace with a typed query API"
+
+[dependencies]
+pampa = { workspace = true }
+pollster = { workspace = true }
+quarto-core = { workspace = true }
+quarto-lsp-core = { workspace = true }
+quarto-pandoc-types = { workspace = true }
+quarto-system-runtime = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# `file:` URI <-> path (percent-decoding, Windows drive letters).
+url = "2.5"
+# Single-file change events are classified like the initial walk (D3).
+quarto-project-files = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
