@@ -378,11 +378,22 @@ function backspace() {
   // A chip is selected first, then deleted.
   if (cellAt(b, o - 1).a) { sel = { a: { b, o: o - 1 }, f: { b, o }, aff: 'L' }; return }
   const m = typingMarks()
+  const gone = marksOf(cellAt(b, o - 1))
   record('delete')
   doc[b].cells.splice(o - 1, 1)
   setCaret(b, o - 1)
-  // Deleting the last bold character leaves bold on for what's typed next.
-  pending = m
+  pending = keptMarks(m, gone)
+}
+
+/**
+ * The pending formats after deleting backward. Deleting the last bold
+ * character leaves bold on for what's typed next; otherwise the caret takes
+ * the formats of what it now follows, so Backspace into bold types bold.
+ */
+function keptMarks(typing, gone) {
+  const { b, o } = sel.f
+  const L = cellAt(b, o - 1)
+  return !L || (gone & ~marksOf(L)) ? typing : null
 }
 
 function deleteForward() {
@@ -399,6 +410,31 @@ function deleteForward() {
   if (cs[o].a) { sel = { a: { b, o }, f: { b, o: o + 1 }, aff: 'L' }; return }
   record('delete')
   cs.splice(o, 1)
+}
+
+// Option+Backspace, Cmd+Backspace and their forward twins: the model works
+// out how far to delete, since the browser's range can end in the caret's
+// holder node.
+function deleteSpan(dir, unit) {
+  if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to); return }
+  const { b, o } = sel.f
+  const cs = doc[b].cells
+  // At the paragraph's edge, or next to a chip, it's the one-character case.
+  if (o === (dir < 0 ? 0 : cs.length) || cs[dir < 0 ? o - 1 : o].a) return dir < 0 ? backspace() : deleteForward()
+  let e = o
+  const next = () => cs[dir < 0 ? e - 1 : e]
+  if (unit === 'line') e = dir < 0 ? 0 : cs.length
+  else {
+    const kind = (c) => !c || c.a ? 'edge' : /\s/.test(c.c) ? 'space' : /[\p{L}\p{N}_]/u.test(c.c) ? 'word' : 'punct'
+    while (kind(next()) === 'space') e += dir
+    const k = kind(next())
+    if (k !== 'edge') while (kind(next()) === k) e += dir
+  }
+  const m = typingMarks()
+  const gone = marksOf(cs[o - 1])
+  record('edit')
+  deleteRange({ b, o: Math.min(o, e) }, { b, o: Math.max(o, e) })
+  if (dir < 0) pending = keptMarks(m, gone)
 }
 
 function enter() {
@@ -919,6 +955,10 @@ editor.addEventListener('beforeinput', (e) => {
     if (wasRuled) restore(wasRuled)
     else backspace()
   } else if (type === 'deleteContentForward') deleteForward()
+  else if (type === 'deleteWordBackward') deleteSpan(-1, 'word')
+  else if (type === 'deleteWordForward') deleteSpan(1, 'word')
+  else if (type === 'deleteSoftLineBackward' || type === 'deleteHardLineBackward') deleteSpan(-1, 'line')
+  else if (type === 'deleteSoftLineForward' || type === 'deleteHardLineForward') deleteSpan(1, 'line')
   else if (type.startsWith('delete')) {
     target()
     if (!collapsed()) { record('edit'); const { from, to } = range(); deleteRange(from, to) }
