@@ -33,10 +33,30 @@ epic](../plans/2026-10-28-execution-records-epic.md).)
 ## Pipeline position
 
 ```
-Parse → Merge → [Profile checkpoint] → Sugar → Engine → ThemeCSS →
+Convert → Parse → Merge → [Authored-metadata checkpoint] →
+LanguageResolve → IncludeExpansion → IncludeResolve → ListingItemInfo →
+[Profile checkpoint] → LinkResolution → Sugar → Engine → ThemeCSS →
 UserFilters(pre) → AstTransforms → UserFilters(post) → Highlight →
 RenderBody → ApplyTemplate
 ```
+
+`build_head_stages` (in `crates/quarto-core/src/pipeline.rs`) runs these
+phases, ending at the profile checkpoint. Its doc comment is the
+authoritative list:
+
+1. **Ingest:** convert, parse, merge.
+2. **Authored-metadata checkpoint.** It records the merged metadata
+   before anything derived is added, on `DocumentAst::authored_meta`
+   (bd-xzsnuoqq). This is what `q2 get-config` reports. It is **not** a
+   profile field: it is open-shaped and repeats the project
+   configuration in every document. `pass1::Pass1Document` carries it
+   next to the profile.
+3. **Enrich:** stages that write derived keys (`quarto.language`,
+   `rendered.includes`, `listing-item`) into `meta`.
+4. **Profile checkpoint.**
+5. **Pass-1 analyses:** `LinkResolution`.
+
+Profile fields drawn from `meta` therefore see the enriched metadata.
 
 The checkpoint is **deliberately pre-sugar**: outlines reflect the
 author's heading hierarchy, not synthetic sections added by theorem /

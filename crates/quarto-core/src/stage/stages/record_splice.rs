@@ -315,6 +315,7 @@ fn splice_units(
         mut warnings,
         recorded_includes,
         derived_listing,
+        authored_meta,
     } = doc;
     let fallback = ast.clone();
     match merge_markdown_into_ast_with_slot(ast, &mut ast_context, &baseline, &text, intermediate) {
@@ -337,6 +338,7 @@ fn splice_units(
                 warnings,
                 recorded_includes,
                 derived_listing,
+                authored_meta,
             };
         }
         Err(_) => {
@@ -353,6 +355,7 @@ fn splice_units(
                 warnings,
                 recorded_includes,
                 derived_listing,
+                authored_meta,
             };
         }
     }
@@ -512,6 +515,7 @@ mod tests {
             warnings,
             recorded_includes: Vec::new(),
             derived_listing: Default::default(),
+            authored_meta: None,
         }
     }
 

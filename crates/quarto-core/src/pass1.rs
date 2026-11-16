@@ -22,7 +22,9 @@
 
 use std::sync::Arc;
 
+use pampa::pandoc::ASTContext;
 use quarto_error_reporting::DiagnosticMessage;
+use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::SystemRuntime;
 
@@ -38,19 +40,23 @@ use crate::render::{BinaryDependencies, RenderContext};
 pub struct Pass1Document {
     /// The static snapshot extracted at the profile checkpoint.
     pub profile: DocumentProfile,
+    /// The document's authored, merged metadata — project `_quarto.yml`,
+    /// directory `_metadata.yml` layers, front matter, `format.<id>.*`
+    /// flattening — as recorded by `AuthoredMetadataStage` at the end of the
+    /// ingest phase, before the enrich stages add derived keys. The same
+    /// value `q2 get-config` reports. Deliberately not a `DocumentProfile`
+    /// field: it is open-shaped, it repeats the project configuration in
+    /// every document, and `ConfigValue`'s serde form is internal.
+    pub authored_meta: ConfigValue,
+    /// Needed to project prose values in `authored_meta`
+    /// (`pampa::config_json::ProseMode::Pandoc`).
+    pub ast_context: ASTContext,
     /// Maps the source spans in `profile` and `diagnostics` back to files.
     pub source_context: SourceContext,
     /// Non-fatal diagnostics raised by the head stages. A fatal problem is
     /// the `Err` of [`profile_document`] instead.
     pub diagnostics: Vec<DiagnosticMessage>,
 }
-
-// No merged metadata here, deliberately. By the checkpoint, stages after
-// `MetadataMergeStage` have written their own keys into `ast.meta`
-// (`quarto.language`, `rendered.includes`, `listing-item`), so it is not the
-// authored merge that `q2 get-config` reports. Callers that want that value
-// call `crate::get_config::merge_document_metadata` on the same bytes; it
-// stops right after the merge. (Found in bd-n0uth2zt.)
 
 /// Run Pass 1 on `source_bytes` as the contents of `doc_info.input`.
 ///
@@ -87,9 +93,17 @@ pub async fn profile_document(
             "Pass 1 did not produce an AtProfile variant — pipeline shape unexpected",
         )
     })?;
+    let ast = at_profile.ast;
+    let authored_meta = ast.authored_meta.ok_or_else(|| {
+        QuartoError::other(
+            "Pass 1 did not record authored metadata — AuthoredMetadataStage missing from the head",
+        )
+    })?;
     Ok(Pass1Document {
         profile: at_profile.profile,
-        source_context: at_profile.ast.source_context,
+        authored_meta,
+        ast_context: ast.ast_context,
+        source_context: ast.source_context,
         diagnostics,
     })
 }

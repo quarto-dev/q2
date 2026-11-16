@@ -3,10 +3,10 @@
  * Copyright (c) 2026 Posit, PBC
  *
  * `quarto_core::pass1::profile_document`, the public single-document Pass-1
- * entry point (epic bd-3f6ijnw9, child C1). The language server calls it with
- * an editor buffer's bytes, so these tests pin the two properties it relies
- * on: the supplied bytes win over the file on disk, and the merged metadata it
- * returns is the same value `q2 get-config` reports.
+ * entry point (epic bd-3f6ijnw9, children C1 and C1b). The language server
+ * calls it with an editor buffer's bytes, so these tests pin the properties it
+ * relies on: the supplied bytes win over the file on disk, and the authored
+ * metadata it records is the same value `q2 get-config` reports.
  *
  * Plan: claude-notes/plans/2026-11-16-lsp-document-profile-requests.md
  */
@@ -98,16 +98,23 @@ fn supplied_bytes_win_over_the_file_on_disk() {
 }
 
 #[test]
-fn checkpoint_meta_is_not_the_authored_merge() {
-    // Pins the reason `Pass1Document` carries no merged metadata: stages
-    // between the merge and the checkpoint add their own keys, so callers
-    // that want what `q2 get-config` reports must use
-    // `merge_document_metadata`. If this starts failing because the two
-    // agree, `Pass1Document` can carry `meta` again.
+fn authored_meta_matches_get_config_and_excludes_derived_keys() {
+    // bd-xzsnuoqq: Pass 1 records the merged metadata at the end of the
+    // ingest phase, before the enrich stages add `quarto.language`,
+    // `rendered.includes` and `listing-item`. It must equal what
+    // `q2 get-config` reports, which runs the ingest phase alone.
     let (_dir, doc) = make_project();
     let s = setup(&doc);
     let bytes = std::fs::read(&doc).unwrap();
 
+    let pass1 = pollster::block_on(profile_document(
+        s.runtime.clone(),
+        &s.project,
+        &s.format,
+        &s.doc_info,
+        &bytes,
+    ))
+    .expect("pass 1 succeeds");
     let (merged, merged_ctx) = pollster::block_on(merge_document_metadata(
         s.runtime.clone(),
         &s.project,
@@ -116,35 +123,24 @@ fn checkpoint_meta_is_not_the_authored_merge() {
         &bytes,
     ))
     .expect("metadata merge succeeds");
-    let authored = config_value_to_json(&merged, ProseMode::Value, &merged_ctx);
-    assert_eq!(authored["description"], "from dir");
-    assert_eq!(authored["toc"], true);
-    for internal in ["quarto", "rendered", "listing-item"] {
+
+    let from_pass1 =
+        config_value_to_json(&pass1.authored_meta, ProseMode::Value, &pass1.ast_context);
+    let from_get_config = config_value_to_json(&merged, ProseMode::Value, &merged_ctx);
+    assert_eq!(from_pass1, from_get_config);
+
+    // The layers are all there: dir beats project, format flattened.
+    assert_eq!(from_pass1["description"], "from dir");
+    assert_eq!(from_pass1["keywords"], serde_json::json!(["dir"]));
+    assert_eq!(from_pass1["toc"], true);
+    assert_eq!(from_pass1["author"], "Alice");
+    // And nothing derived by the enrich phase.
+    for derived in ["quarto", "rendered", "listing-item"] {
         assert!(
-            authored.get(internal).is_none(),
-            "authored merge should not contain `{internal}`"
+            from_pass1.get(derived).is_none(),
+            "authored metadata must not contain `{derived}`"
         );
     }
-
-    let at_checkpoint = pollster::block_on(async {
-        use quarto_core::pipeline::{build_head_stages, run_pipeline};
-        use quarto_core::render::{BinaryDependencies, RenderContext};
-        let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&s.project, &s.doc_info, &s.format, &binaries);
-        let (out, _) = run_pipeline(
-            &bytes,
-            &doc.to_string_lossy(),
-            &mut ctx,
-            s.runtime.clone(),
-            build_head_stages(),
-        )
-        .await
-        .expect("head pipeline");
-        let at = out.into_at_profile().expect("AtProfile");
-        config_value_to_json(&at.ast.ast.meta, ProseMode::Value, &at.ast.ast_context)
-    });
-    assert!(at_checkpoint.get("quarto").is_some());
-    assert_ne!(at_checkpoint, authored);
 }
 
 #[test]
