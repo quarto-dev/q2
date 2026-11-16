@@ -444,6 +444,17 @@ fn roundtrip_remove_first_paragraph() {
     assert_roundtrip("First.\n\nSecond.\n\nThird.\n", "Second.\n\nThird.\n");
 }
 
+/// Removing every block of a document without front matter leaves it empty.
+#[test]
+fn roundtrip_remove_only_paragraph() {
+    assert_roundtrip("a\n", "");
+}
+
+#[test]
+fn roundtrip_remove_every_paragraph() {
+    assert_roundtrip("First.\n\nSecond.\n", "");
+}
+
 // --- Change header ---
 
 #[test]

@@ -19,7 +19,9 @@
  * it on or off; and, after a separator, the link button, pressed while the
  * caret is in a link, which opens the link form. Outside the body, it's
  * disabled, but for its undo and redo buttons, which come first and work
- * wherever the caret is, as the keyboard's undo and redo do.
+ * wherever the caret is, as the keyboard's undo and redo do. At its right
+ * end, where the page has one, is the Developer tools button, which shows
+ * and hides the source pane.
  *
  * Resting the mouse on a button shows a tooltip with its name and keyboard
  * shortcut (`Tooltip.tsx`), and the style menu gives each style's shortcut
@@ -60,6 +62,8 @@ interface ToolbarProps {
   inLink: boolean
   /** Open the link form. */
   onLink: () => void
+  /** Whether the source pane shows, and show or hide it (absent: no source pane to show). */
+  devTools?: { open: boolean; toggle: () => void }
 }
 
 // Material Icons (Apache 2.0), as in Google Docs' toolbar.
@@ -134,6 +138,15 @@ const NUMBERED_ICON = (
   </svg>
 )
 
+// Lucide's "code-xml" (ISC): angle brackets around a slash.
+const DEV_TOOLS_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m18 16 4-4-4-4" />
+    <path d="m6 8-4 4 4 4" />
+    <path d="m14.5 4-5 16" />
+  </svg>
+)
+
 // Material Icons' "format_quote" (Apache 2.0), as in Google Docs' toolbar.
 const QUOTE_ICON = (
   <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -170,6 +183,7 @@ export function Toolbar({
   toggleMark,
   inLink,
   onLink,
+  devTools,
 }: ToolbarProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -359,6 +373,21 @@ export function Toolbar({
       >
         {QUOTE_ICON}
       </button>
+      {devTools && (
+        <button
+          type="button"
+          className="qe-icon qe-dev-tools"
+          aria-label="Developer tools"
+          {...tip(devTools.open ? 'Hide source' : 'Show source')}
+          aria-pressed={devTools.open}
+          onClick={() => {
+            setOpen(false)
+            devTools.toggle()
+          }}
+        >
+          {DEV_TOOLS_ICON}
+        </button>
+      )}
       {tooltips.element}
     </div>
   )

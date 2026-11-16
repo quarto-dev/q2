@@ -113,15 +113,15 @@ export class Document {
   async open(page: Page, { shows = 'something' }: { shows?: 'something' | 'nothing' } = {}): Promise<Editor> {
     // The hub must have the document before a browser asks for it.
     if (!(await this.hub.hubHasHeadsOf(this.client))) throw new Error('The hub never received the document.')
-    const query = new URLSearchParams({ server: this.hub.url, doc: this.indexDocId, file: FILE, view: 'visual' })
+    const query = new URLSearchParams({ server: this.hub.url, doc: this.indexDocId, file: FILE })
     await page.goto(`/?${query}`)
     await page.locator('iframe.visual-frame').waitFor()
     const frame = page.frameLocator('iframe.visual-frame')
     // The title block, or the first block of a document without one.
     if (shows === 'something') await frame.locator('#title-block-header, #quarto-document-content > *').first().waitFor()
     else await frame.locator('#quarto-document-content').waitFor({ state: 'attached' })
-    await expect(page.locator('.visual-editor .status')).toContainText('Title block derived')
-    await expect(page.locator('.visual-editor .status')).not.toContainText('Compiling')
+    // The title block is worked out and the theme compiled.
+    await page.locator('.visual-editor[data-ready]').waitFor()
     const handle = await page.locator('iframe.visual-frame').elementHandle()
     const doc = (await handle!.contentFrame())!
     return new Editor(page, doc, this)

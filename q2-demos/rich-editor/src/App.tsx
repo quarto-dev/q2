@@ -4,10 +4,11 @@
  *   ?server=ws://127.0.0.1:8080/ws&doc=<index-doc-id>&file=index.qmd
  *
  * `server` defaults to the local-prod hub (`npm run local-prod` in hub-client).
- * `&view=visual` shows the visual editor alone, without the source pane.
+ * The visual editor fills the page; the toolbar's Developer tools button
+ * shows the source pane beside it.
  */
 
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useSyncedFile } from './quarto-synced-file/index.ts'
 import { Editor } from './Editor.tsx'
 import { VisualEditor } from './VisualEditor.tsx'
@@ -23,13 +24,13 @@ function readParams() {
     syncServer: q.get('server') ?? DEFAULT_SERVER,
     indexDocId,
     filePath,
-    visualOnly: q.get('view') === 'visual',
   }
 }
 
 export function App() {
   const params = useMemo(readParams, [])
   const { file, text, parseError, connected, connecting, error, applyEdits } = useSyncedFile(params)
+  const [devToolsOpen, setDevToolsOpen] = useState(false)
 
   if (!params) {
     return (
@@ -46,17 +47,11 @@ export function App() {
   if (!connected && text === null) return <Status>Disconnected.</Status>
   if (text === null || !file) return <Status>Waiting for {params.filePath}…</Status>
 
-  if (params.visualOnly) {
-    return (
-      <div className="panes panes-single">
-        <VisualEditor file={file} />
-      </div>
-    )
-  }
+  const devTools = { open: devToolsOpen, toggle: () => setDevToolsOpen((o) => !o) }
   return (
-    <div className="panes">
-      <Editor text={text} parseError={parseError} onEdit={applyEdits} />
-      <VisualEditor file={file} />
+    <div className={devToolsOpen ? 'panes' : 'panes panes-single'}>
+      <VisualEditor file={file} devTools={devTools} />
+      {devToolsOpen && <Editor text={text} parseError={parseError} onEdit={applyEdits} />}
     </div>
   )
 }

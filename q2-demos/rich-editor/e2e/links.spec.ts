@@ -76,6 +76,51 @@ test.describe('the popover', () => {
     expect((await editor.lines())[0]).toBe(`p: ${FIRST}`)
   })
 
+  test("undoing Remove with ⌘Z gives the link back, with the caret where it was", async ({ page }) => {
+    const editor = await openEditor(page, 'inlines')
+    await editor.placeCaretInLine(0, inLink(2))
+    await editor.expectLineCaret(0, LINK + 2)
+    await editor.linkPopover().getByRole('button', { name: 'Remove' }).click()
+    await editor.document.expectSource(inlines.replace('[a link](https://quarto.org)', 'a link'))
+
+    await page.keyboard.press(`${mod}+z`)
+
+    await editor.document.expectSource(inlines)
+    await editor.expectLineCaret(0, LINK + 2)
+  })
+
+  test("undoing Remove with the toolbar's Undo gives the link back, with the caret where it was", async ({ page }) => {
+    const editor = await openEditor(page, 'inlines')
+    await editor.placeCaretInLine(0, inLink(2))
+    await editor.expectLineCaret(0, LINK + 2)
+    await editor.linkPopover().getByRole('button', { name: 'Remove' }).click()
+    await editor.document.expectSource(inlines.replace('[a link](https://quarto.org)', 'a link'))
+
+    await page.getByRole('button', { name: 'Undo' }).click()
+
+    await editor.document.expectSource(inlines)
+    await editor.expectLineCaret(0, LINK + 2)
+  })
+
+  test('undoing Remove pressed from the keyboard gives the link back, with the caret where it was', async ({ page }) => {
+    const document = await createDocument('---\ntitle: T\n---\n\n[a](b)\n')
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(0, 1)
+    await expect(editor.linkPopover()).toBeVisible()
+
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await expect.poll(() => focused(editor)).toBe('Remove')
+    await page.keyboard.press('Enter')
+    await document.expectSource('---\ntitle: T\n---\n\na\n')
+    await editor.expectLineCaret(0, 1)
+    await page.keyboard.press(`${mod}+z`)
+
+    await document.expectSource('---\ntitle: T\n---\n\n[a](b)\n')
+    await editor.expectLineCaret(0, 1)
+  })
+
   test('Edit opens the form, where Enter changes the address', async ({ page }) => {
     const editor = await openEditor(page, 'inlines')
     await editor.placeCaretInLine(0, inLink(2))
@@ -151,6 +196,48 @@ test.describe('the popover', () => {
     await page.keyboard.press('ArrowLeft')
     await expect(editor.linkPopover()).toBeVisible()
   })
+  test('Escape in the form opened by Edit goes back to Edit; then Escape returns to the text, and Escape again puts it away', async ({ page }) => {
+    const editor = await openEditor(page, 'inlines')
+    await editor.placeCaretInLine(0, inLink(2))
+    await editor.linkPopover().getByRole('button', { name: 'Edit' }).click()
+    await expect(editor.linkForm()).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(editor.linkForm()).toHaveCount(0)
+    await expect.poll(() => focused(editor)).toBe('Edit')
+
+    await page.keyboard.press('Escape')
+    await editor.expectLineCaret(0, LINK + 2)
+    await expect(editor.linkPopover()).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(editor.linkPopover()).toHaveCount(0)
+    expect(editor.document.source()).toBe(inlines)
+  })
+
+  test('Cancel in the form opened by Edit goes back to Edit', async ({ page }) => {
+    const editor = await openEditor(page, 'inlines')
+    await editor.placeCaretInLine(0, inLink(2))
+    await editor.linkPopover().getByRole('button', { name: 'Edit' }).click()
+
+    await editor.linkForm().getByRole('button', { name: 'Cancel' }).click()
+
+    await expect(editor.linkForm()).toHaveCount(0)
+    await expect.poll(() => focused(editor)).toBe('Edit')
+  })
+
+  test('put away with Escape, it shows while the mouse rests on the link, and only then', async ({ page }) => {
+    const editor = await openEditor(page, 'inlines')
+    await editor.placeCaretInLine(0, inLink(2))
+    await page.keyboard.press('Escape')
+    await expect(editor.linkPopover()).toHaveCount(0)
+
+    await editor.line(0).locator('a').hover()
+    await expect(editor.linkPopover()).toBeVisible()
+    await editor.pointAway()
+
+    await expect(editor.linkPopover()).toHaveCount(0)
+  })
 })
 
 test.describe('editing a link', () => {
@@ -190,6 +277,19 @@ test.describe('the link form', () => {
     await editor.expectLineCaret(2, 5)
   })
 
+  test('an address with a space is written encoded, as the source reads it back, with the caret after the link', async ({ page }) => {
+    const editor = await openEditor(page, 'inlines')
+    await editor.placeCaretInLine(2, 0)
+    for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+ArrowRight')
+
+    await page.keyboard.press(`${mod}+k`)
+    await page.keyboard.type('https://example.com/a b')
+    await page.keyboard.press('Enter')
+
+    await editor.document.expectSource(inlines.replace('Plain words.', '[Plain](https://example.com/a%20b) words.'))
+    await editor.expectLineCaret(2, 5)
+  })
+
   test('⌘K with nothing selected puts in a new link, its address as its text when it has none', async ({ page }) => {
     const document = await createDocument('---\ntitle: T\n---\n\nSee .\n')
     const editor = await document.open(page)
@@ -202,6 +302,21 @@ test.describe('the link form', () => {
     await page.keyboard.press('Enter')
 
     await document.expectSource('---\ntitle: T\n---\n\nSee [https://example.com](https://example.com).\n')
+  })
+
+  test('⌘K at the end of a paragraph before a list puts the link at the end of the paragraph', async ({ page }) => {
+    const document = await createDocument('---\ntitle: T\n---\n\nSee\n\n* item\n')
+    const editor = await document.open(page)
+    await editor.placeCaretInLine(0, 3)
+
+    await page.keyboard.press(`${mod}+k`)
+    await page.keyboard.type(' here')
+    await page.keyboard.press('Tab')
+    await page.keyboard.type('https://example.com')
+    await page.keyboard.press('Enter')
+
+    await document.expectSource('---\ntitle: T\n---\n\nSee[ here](https://example.com)\n\n* item\n')
+    await editor.expectLineCaret(0, 8)
   })
 
   test('the toolbar\'s link button is pressed in a link, and opens the form', async ({ page }) => {

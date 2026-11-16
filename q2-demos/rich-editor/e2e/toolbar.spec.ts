@@ -51,6 +51,23 @@ test.describe('following the caret', () => {
     await expect(editor.styleBox()).toBeDisabled()
     await expect(editor.quoteButton()).toBeDisabled()
   })
+
+  test('after switching to another window and back, it follows the caret again at once', async ({ page }) => {
+    const editor = await openEditor(page, 'toolbar')
+    await editor.placeCaretInLine(1, 2)
+    await expect(editor.styleBox()).toHaveText('Heading 2')
+
+    // Another window takes the focus, and gives it back: the document's
+    // text loses it and gets it again, with its selection where it was.
+    // (Playwright keeps every page focused, so the test sends the events.)
+    const root = editor.frame.locator('#quarto-document-content')
+    await root.dispatchEvent('blur')
+    await expect(editor.styleBox()).toBeDisabled()
+    await root.dispatchEvent('focus')
+
+    await expect(editor.styleBox()).toBeEnabled()
+    await expect(editor.styleBox()).toHaveText('Heading 2')
+  })
 })
 
 test.describe('the style box', () => {

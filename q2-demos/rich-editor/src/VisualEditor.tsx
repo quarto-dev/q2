@@ -63,6 +63,8 @@ import { matches, SHORTCUTS, styleShortcut } from './shortcuts.ts'
 
 interface VisualEditorProps {
   file: QmdFile
+  /** The toolbar's Developer tools button (absent: no source pane to show). */
+  devTools?: { open: boolean; toggle: () => void }
 }
 
 // The page structure `q2 render` emits for an article without a TOC.
@@ -182,7 +184,7 @@ const noop = () => {}
 
 const renderRule = () => <hr />
 
-export function VisualEditor({ file }: VisualEditorProps) {
+export function VisualEditor({ file, devTools }: VisualEditorProps) {
   const { ast, parseError, connected } = useSyncExternalStore(file.subscribe, file.getSnapshot)
   const source = useMemo(
     () =>
@@ -332,7 +334,13 @@ export function VisualEditor({ file }: VisualEditorProps) {
   )
 
   return (
-    <div className="visual-editor">
+    // `data-ready` once the title block is worked out and the theme compiled;
+    // `data-offline` while the connection to the sync server is down.
+    <div
+      className="visual-editor"
+      data-ready={derived && themeCss !== null ? '' : undefined}
+      data-offline={connected ? undefined : ''}
+    >
       <div className="visual-box">
         <Toolbar
           state={state}
@@ -347,6 +355,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
           toggleMark={toggleMark}
           inLink={caretLink !== null}
           onLink={openLinkForm}
+          devTools={devTools}
         />
         <iframe
           className="visual-frame"
@@ -361,11 +370,7 @@ export function VisualEditor({ file }: VisualEditorProps) {
       </div>
       <p className="status">
         {themeCss === null ? 'Compiling theme CSS… ' : ''}
-        {derived && `Title block derived in ${derived.ms.toFixed(2)} ms. `}
-        {parseError
-          ? "Read-only: the source doesn't parse. "
-          : !connected && 'Offline: edits will sync when the connection is back. '}
-        {derived && derived.issues.length > 0 && ` Issues: ${derived.issues.join('; ')}`}
+        {parseError && "Read-only: the source doesn't parse."}
       </p>
       {mount && frameDoc && writable && (
         <TitleBlockWidget

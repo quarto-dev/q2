@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { canonical, LINK_CLOSE, LINK_OPEN, LINK_TEXT, withoutMarks } from '../engine/marks.ts'
-import { CODE, EMPH, formatted, HIGHLIGHT, inlineRule, inlinesOf, inlineText, keptText, STRONG, UNDERLINE, words, type Node } from './inlines.ts'
+import { CODE, EMPH, escapeUri, formatted, HIGHLIGHT, inlineRule, inlinesOf, inlineText, keptText, STRONG, UNDERLINE, words, type Node } from './inlines.ts'
 
 const str = (c: string): Node => ({ t: 'Str', c })
 const space: Node = { t: 'Space' }
@@ -97,5 +97,15 @@ describe('inlineRule', () => {
   it('leaves what is typed in code', () => {
     const line = formatted(CODE, '**b**')
     expect(inlineRule(line, line.length - 1)).toBeNull()
+  })
+})
+
+describe('escapeUri', () => {
+  it('percent-encodes what the reader does, as UTF-8, and nothing else', () => {
+    expect(escapeUri('https://example.com/a b')).toBe('https://example.com/a%20b')
+    expect(escapeUri('a\tb')).toBe('a%09b')
+    expect(escapeUri('<>|"{}[]^`')).toBe('%3C%3E%7C%22%7B%7D%5B%5D%5E%60')
+    expect(escapeUri('a\u00a0b')).toBe('a%C2%A0b')
+    expect(escapeUri("%20;=&'~()#?é")).toBe("%20;=&'~()#?é")
   })
 })

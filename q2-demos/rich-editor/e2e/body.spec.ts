@@ -333,6 +333,29 @@ test.describe('splitting and joining paragraphs', () => {
     await editor.document.expectSource(body.replace('Second paragraph.\n\n', ''))
   })
 
+  test('in a document of only a paragraph, Backspace deletes its last character, leaving the document empty', async ({ page }) => {
+    const document = await createDocument('ab\n')
+    const editor = await document.open(page)
+    await editor.placeCaretInParagraph(0, 2)
+
+    await page.keyboard.press('Backspace')
+    await document.expectSource('a\n')
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource('')
+  })
+
+  test('in a document of only a paragraph, selecting all and Backspace leaves it empty', async ({ page }) => {
+    const document = await createDocument('b\n')
+    const editor = await document.open(page)
+    await editor.placeCaretInParagraph(0, 1)
+    await page.keyboard.press(`${mod}+a`)
+
+    await page.keyboard.press('Backspace')
+
+    await document.expectSource('')
+  })
+
   test('the only paragraph, emptied, is gone from the source, and from the page when the caret leaves it', async ({
     page,
   }) => {

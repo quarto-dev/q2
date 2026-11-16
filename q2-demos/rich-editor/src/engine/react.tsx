@@ -788,6 +788,12 @@ export function useFieldEditor(
     root.addEventListener('cut', onCut)
     root.addEventListener('drop', onDrop)
     root.addEventListener('blur', onBlur)
+    // Back from another window, the page's selection is where it was, so no
+    // `selectionchange` comes: read it back. Not at once: when the editor
+    // focuses the fields itself (`writeSelection`), the focus comes before
+    // it puts the selection where it goes.
+    const onFocus = () => doc.defaultView?.setTimeout(syncSelection)
+    root.addEventListener('focus', onFocus)
     root.addEventListener('keyup', syncSelection)
     root.addEventListener('mousedown', onMouseDown)
     doc.addEventListener('mouseup', onMouseUp)
@@ -802,6 +808,7 @@ export function useFieldEditor(
       root.removeEventListener('cut', onCut)
       root.removeEventListener('drop', onDrop)
       root.removeEventListener('blur', onBlur)
+      root.removeEventListener('focus', onFocus)
       root.removeEventListener('keyup', syncSelection)
       root.removeEventListener('mousedown', onMouseDown)
       doc.removeEventListener('mouseup', onMouseUp)

@@ -75,6 +75,18 @@ function special(text: string): boolean {
 }
 
 /**
+ * A link's address as the qmd reader reads it back (pampa's `escape_uri`,
+ * pandoc's `escapeURI`): whitespace and `<>|"{}[]^` and backtick
+ * percent-encoded, as UTF-8. The writer writes it so, and a link the editor
+ * holds any other way wouldn't be the one the source has.
+ */
+export function escapeUri(url: string): string {
+  return url.replace(/[\s<>|"{}[\]^`]/gu, (c) =>
+    [...new TextEncoder().encode(c)].map((b) => '%' + b.toString(16).toUpperCase().padStart(2, '0')).join(''),
+  )
+}
+
+/**
  * The line of text `inlines` stand for, with marks for their formatting,
  * or undefined when they hold anything the editor can't edit.
  * `softBreak` is what a line break in the source reads as.

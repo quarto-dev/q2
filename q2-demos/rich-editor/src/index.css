@@ -77,8 +77,8 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 6px 8px;
+  gap: 2px;
+  padding: 5px 8px;
   border-bottom: 1px solid #ccc;
 }
 
@@ -91,7 +91,7 @@ body {
   border-radius: 5px;
   background: none;
   color: #343a40;
-  font: 13px system-ui, sans-serif;
+  font: 12.5px system-ui, sans-serif;
   cursor: pointer;
 }
 
@@ -161,6 +161,11 @@ body {
   height: 8px;
 }
 
+/* At the toolbar's right end, away from the formatting buttons. */
+.qe-toolbar .qe-dev-tools {
+  margin-left: auto;
+}
+
 .qe-toolbar .qe-icon {
   padding: 4px;
   color: #444746;
@@ -168,8 +173,8 @@ body {
 
 .qe-icon svg {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .qe-sep {
@@ -247,4 +252,8 @@ body {
 
 .panes.panes-single {
   grid-template-columns: minmax(0, 1fr);
+  /* The width of a Google Docs page (US Letter at 96 dpi), centred; a
+     narrower window has the 16px gutter alone. */
+  max-width: 816px;
+  margin: 0 auto;
 }

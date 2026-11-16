@@ -366,8 +366,9 @@ The specs find their way around the page by this markup, which a new
 editor has to keep:
 
 - The page: `?doc=<index document id>&file=<path>`, with
-  `&server=<ws-url>` and `&view=visual` (see `app.spec.ts`), and
-  `/fixture.html?fixture=<name>`. The source pane is a `textarea`. The
+  `&server=<ws-url>` (see `app.spec.ts`), and
+  `/fixture.html?fixture=<name>`. The source pane is a `textarea`, shown
+  by the toolbar's "Developer tools" button. The
   page's own status is `.status` (`.status-error` for an error), and the
   line under the editor is `.visual-editor .status`.
 - The document is in `iframe.visual-frame`, in the page structure `q2

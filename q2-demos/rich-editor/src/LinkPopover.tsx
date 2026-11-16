@@ -9,12 +9,14 @@
  * the popover, and a moment longer to cross between them. Tab in the text
  * moves into the popover of the caret's link: its address (Enter opens the
  * link), then Edit and Remove; Escape, or Tab past either end, returns to
- * the text. Escape in the text puts the popover away until the caret or
- * the mouse comes back to the link.
+ * the text. Escape in the text puts the popover away until the caret
+ * comes back to the link; the mouse resting on it shows it meanwhile, for
+ * as long as it rests there.
  *
  * The form (from Edit, ⌘K or the toolbar's link button) has the link's
  * text and address: Enter or Apply makes it, Escape or Cancel goes back to
- * the text. An empty address makes no link.
+ * where it was opened from: the popover's Edit button, or the text. An
+ * empty address makes no link.
  *
  * Both are in the document's frame, laid over the page, outside the
  * editing root.
@@ -22,6 +24,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { escapeUri } from './editing/inlines.ts'
 import { linkAround, linkAt, type LinkSpan } from './engine/commands.ts'
 import { rectOf } from './engine/dom.ts'
 import type { Position, Schema, Selection, State } from './engine/model.ts'
@@ -33,6 +36,8 @@ export interface LinkForm {
   text: string
   url: string
   selection: Selection
+  /** The link whose popover's Edit opened it (none: ⌘K or the toolbar). */
+  fromEdit?: LinkSpan
 }
 
 interface LinkPopoverProps {
@@ -64,7 +69,8 @@ export function LinkPopover({ doc, root, schema, state, writable, form, setForm,
   const [dismissed, setDismissed] = useState<string | null>(null)
   const shunned = useRef<string | null>(null)
   // While the keyboard is in the popover: the link it's for, and the selection to go back to.
-  const [held, setHeld] = useState<{ link: LinkSpan; selection: Selection } | null>(null)
+  // (`atEdit`: with its Edit button focused, not its first stop.)
+  const [held, setHeld] = useState<{ link: LinkSpan; selection: Selection; atEdit?: boolean } | null>(null)
   const popover = useRef<HTMLDivElement>(null)
 
   // A dismissed popover comes back once the caret leaves its link.
@@ -92,7 +98,6 @@ export function LinkPopover({ doc, root, schema, state, writable, form, setForm,
         timer: view.setTimeout(() => {
           rest = null
           setHovered(over)
-          setDismissed(null)
         }, REST_MS),
       }
     }
@@ -152,7 +157,9 @@ export function LinkPopover({ doc, root, schema, state, writable, form, setForm,
 
   // Into the popover once it's held for the keyboard.
   useEffect(() => {
-    if (held && !popover.current?.contains(doc.activeElement)) popover.current?.querySelector<HTMLElement>('a[href], button')?.focus()
+    if (!held || popover.current?.contains(doc.activeElement)) return
+    const stops = [...(popover.current?.querySelectorAll<HTMLElement>('a[href], button') ?? [])]
+    ;(held.atEdit ? stops.find((el) => el.textContent === 'Edit') : stops[0])?.focus()
   }, [held, doc])
 
   const backToText = useCallback(() => {
@@ -178,11 +185,15 @@ export function LinkPopover({ doc, root, schema, state, writable, form, setForm,
     const selection = held?.selection ?? state.selection ?? { anchor: target.to, focus: target.to }
     setHeld(null)
     setHovered(null)
-    setForm({ from: target.from, to: target.to, text, url: target.url, selection })
+    setForm({ from: target.from, to: target.to, text, url: target.url, selection, fromEdit: target })
   }
   const remove = (target: LinkSpan) => {
+    // From the keyboard, the text has no selection while it's in here: put
+    // it back first, so undo returns to it.
+    const selection = held?.selection
     setHeld(null)
     setHovered(null)
+    if (selection) focusAt(selection)
     setLink(target, null)
   }
 
@@ -215,11 +226,13 @@ export function LinkPopover({ doc, root, schema, state, writable, form, setForm,
           form={form}
           onCancel={() => {
             setForm(null)
-            focusAt(form.selection)
+            if (form.fromEdit) setHeld({ link: form.fromEdit, selection: form.selection, atEdit: true })
+            else focusAt(form.selection)
           }}
-          onApply={(text, url) => {
+          onApply={(text, typed) => {
             setForm(null)
-            const label = text || url
+            const url = escapeUri(typed.trim())
+            const label = text || typed.trim()
             if (!label) focusAt(form.selection)
             else setLink(form, url || null, label)
           }}

@@ -82,7 +82,8 @@ export function writeQmdFromAst(ast: RustQmdJson): string {
   const responseJson = wasmModule.ast_to_qmd(astJson)
   const response: AstResponse = JSON.parse(responseJson)
 
-  if (!response.success || !response.qmd) {
+  // An empty document is `qmd: ''`, which is falsy.
+  if (!response.success || response.qmd == null) {
     throw new Error(`AST-to-QMD conversion failed: ${response.error}`)
   }
 
@@ -104,7 +105,8 @@ export function incrementalWriteQmd(originalQmd: string, newAst: RustQmdJson): s
   const responseJson = wasmModule.incremental_write_qmd(originalQmd, newAstJson)
   const response: AstResponse = JSON.parse(responseJson)
 
-  if (!response.success || !response.qmd) {
+  // An empty document is `qmd: ''`, which is falsy.
+  if (!response.success || response.qmd == null) {
     throw new Error(`Incremental write failed: ${response.error}`)
   }
 

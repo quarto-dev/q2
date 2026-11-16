@@ -1,12 +1,12 @@
 /**
  * The app around the visual editor: which document it opens, the source
- * pane beside the editor, the connection to the hub, the line of status
- * under the editor, and the layout in a narrow window.
+ * pane the toolbar's Developer tools button shows beside the editor, the
+ * connection to the hub, the line of status under the editor, and the
+ * layout in a narrow window.
  *
  * The document is named in the URL: `?doc=<index document id>&file=<path>`,
- * with `&server=<hub's WebSocket URL>` unless the hub is the local one, and
- * `&view=visual` for the visual editor alone. `/fixture.html` opens a
- * fixture with no hub at all.
+ * with `&server=<hub's WebSocket URL>` unless the hub is the local one.
+ * `/fixture.html` opens a fixture with no hub at all.
  */
 
 import { createDocument, expect, fixture, openEditor, test } from './helpers.ts'
@@ -50,30 +50,58 @@ test.describe('which document', () => {
 })
 
 test.describe('the source pane', () => {
-  /** Open the document with both panes: the page `open` shows has the visual editor alone. */
+  /** Open the document, and show the source pane with the Developer tools button. */
   async function openBothPanes(page: import('@playwright/test').Page, source = basic) {
     const document = await createDocument(source)
     await document.open(page)
-    await page.goto(withQuery(page.url(), (query) => query.delete('view')))
+    await page.getByRole('button', { name: 'Developer tools' }).click()
     const frame = page.frameLocator('iframe.visual-frame')
-    await frame.locator('h1.title').waitFor()
     return { document, frame, sourcePane: page.locator('textarea') }
   }
 
-  test('is to the left of the visual editor, and holds the source text', async ({ page }) => {
-    const { sourcePane } = await openBothPanes(page)
-
-    await expect(sourcePane).toHaveValue(basic)
-    const source = (await sourcePane.boundingBox())!
-    const visual = (await page.locator('iframe.visual-frame').boundingBox())!
-    expect(source.x + source.width).toBeLessThanOrEqual(visual.x)
-  })
-
-  test('is not there with view=visual', async ({ page }) => {
+  test('is not there until the Developer tools button is pressed, and the editor is a page wide, in the middle', async ({ page }) => {
+    await page.setViewportSize({ width: 1400, height: 900 })
     await openEditor(page)
 
     await expect(page.locator('iframe.visual-frame')).toHaveCount(1)
     await expect(page.locator('textarea')).toHaveCount(0)
+    const button = page.getByRole('button', { name: 'Developer tools' })
+    await expect(button).toHaveAttribute('aria-pressed', 'false')
+    const visual = (await page.locator('.visual-box').boundingBox())!
+    expect(Math.abs(visual.width - 816)).toBeLessThan(2)
+    expect(Math.abs(visual.x - (1400 - (visual.x + visual.width)))).toBeLessThan(2)
+  })
+
+  test('is to the right of the visual editor, and holds the source text', async ({ page }) => {
+    const { sourcePane } = await openBothPanes(page)
+
+    await expect(page.getByRole('button', { name: 'Developer tools' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(sourcePane).toHaveValue(basic)
+    const source = (await sourcePane.boundingBox())!
+    const visual = (await page.locator('iframe.visual-frame').boundingBox())!
+    expect(visual.x + visual.width).toBeLessThanOrEqual(source.x)
+  })
+
+  test('goes when the Developer tools button is pressed again, and the caret stays where it was', async ({ page }) => {
+    const document = await createDocument(basic)
+    const editor = await document.open(page)
+    const button = page.getByRole('button', { name: 'Developer tools' })
+    await editor.placeCaret('title', 4)
+
+    await button.click()
+    await expect(page.locator('textarea')).toHaveCount(1)
+    await button.click()
+
+    await expect(page.locator('textarea')).toHaveCount(0)
+    await expect(button).toHaveAttribute('aria-pressed', 'false')
+    await editor.expectCaret('title', 4)
+  })
+
+  test('is not offered on a fixture, which has no source pane', async ({ page }) => {
+    await page.goto('/fixture.html')
+
+    await expect(page.frameLocator('iframe.visual-frame').locator('h1.title')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Developer tools' })).toHaveCount(0)
   })
 
   test('the caret starts in the visual editor, at the start of the title', async ({ page }) => {
@@ -194,16 +222,16 @@ test.describe('the connection to the hub', () => {
     document.replace('Quarterly report', 'Annual report')
 
     // It tries again after a few seconds; the editor stays all along.
-    await expect(page.locator('.visual-editor .status')).toContainText('Offline')
+    await expect(page.locator('.visual-editor[data-offline]')).toHaveCount(1)
     await expect(page.locator('iframe.visual-frame')).toHaveCount(1)
     await expect(title).toHaveText('Annual report', { timeout: 15000 })
-    await expect(page.locator('.visual-editor .status')).not.toContainText('Offline')
+    await expect(page.locator('.visual-editor[data-offline]')).toHaveCount(0)
     await page.frameLocator('iframe.visual-frame').locator('h1.title .qe-field').click()
     await page.keyboard.type('!')
     await expect.poll(() => document.source()).toContain('!')
   })
 
-  test('while the connection is down, the editor stays editable, with its caret, and what was typed reaches the document once it is back', async ({ page }) => {
+  test('while the connection is down, the editor stays editable, with its caret, saying nothing, and what was typed reaches the document once it is back', async ({ page }) => {
     const hub = await cuttableHub(page)
     const document = await createDocument(basic)
     const editor = await document.open(page)
@@ -211,14 +239,16 @@ test.describe('the connection to the hub', () => {
 
     await hub.cut()
 
-    await expect(page.locator('.visual-editor .status')).toContainText('Offline')
+    await expect(page.locator('.visual-editor[data-offline]')).toHaveCount(1)
+    // Nothing says so on the page (yet).
+    await expect(page.locator('.visual-editor .status')).toHaveText('')
     await editor.expectCaret('title', 4)
     await page.keyboard.type('x')
     expect(await editor.text('title')).toBe('Quarxterly report')
     expect(document.source()).toContain('title: Quarterly report')
 
     hub.restore()
-    await expect(page.locator('.visual-editor .status')).not.toContainText('Offline', { timeout: 15000 })
+    await expect(page.locator('.visual-editor[data-offline]')).toHaveCount(0, { timeout: 15000 })
     await expect.poll(() => document.source()).toContain('title: Quarxterly report')
     await editor.expectCaret('title', 5)
   })
@@ -230,7 +260,7 @@ test.describe('the connection to the hub', () => {
     await editor.placeCaret('title', 4)
 
     await hub.cut()
-    await expect(page.locator('.visual-editor .status')).toContainText('Offline')
+    await expect(page.locator('.visual-editor[data-offline]')).toHaveCount(1)
     await page.keyboard.type('x')
     document.replace('Third quarter', 'Third quarter, revised')
 
@@ -245,18 +275,17 @@ test.describe('the connection to the hub', () => {
 test.describe('a narrow window', () => {
   async function openNarrow(page: import('@playwright/test').Page) {
     const document = await createDocument(basic)
-    await document.open(page)
     await page.setViewportSize({ width: 700, height: 800 })
-    await page.goto(withQuery(page.url(), (query) => query.delete('view')))
-    await page.frameLocator('iframe.visual-frame').locator('h1.title').waitFor()
+    await document.open(page)
+    await page.getByRole('button', { name: 'Developer tools' }).click()
   }
 
-  test('has the source pane above the visual editor, each as wide as the window', async ({ page }) => {
+  test('has the source pane below the visual editor, each as wide as the window', async ({ page }) => {
     await openNarrow(page)
 
     const source = (await page.locator('textarea').boundingBox())!
     const visual = (await page.locator('iframe.visual-frame').boundingBox())!
-    expect(source.y + source.height).toBeLessThanOrEqual(visual.y)
+    expect(visual.y + visual.height).toBeLessThanOrEqual(source.y)
     expect(Math.abs(source.x - visual.x)).toBeLessThan(2)
     expect(Math.abs(source.width - visual.width)).toBeLessThan(4)
   })
@@ -270,10 +299,10 @@ test.describe('a narrow window', () => {
 })
 
 test.describe('the status line under the visual editor', () => {
-  test('says how long the title block took to work out', async ({ page }) => {
+  test('is empty while all is well', async ({ page }) => {
     await openEditor(page)
 
-    await expect(page.locator('.visual-editor .status')).toHaveText(/^Title block derived in \d+\.\d\d ms\./)
+    await expect(page.locator('.visual-editor .status')).toHaveText('')
   })
 
   test('says so while the theme is being worked out, when the page is not styled yet', async ({ page }) => {
@@ -282,17 +311,6 @@ test.describe('the status line under the visual editor', () => {
 
     await expect(status).toContainText('Compiling theme CSS…')
     await expect(status).not.toContainText('Compiling theme CSS…')
-  })
-
-  test('lists what is wrong with the authors', async ({ page }) => {
-    const document = await createDocument(
-      '---\ntitle: Notes\nauthor:\n  - name: Ana Silva\n    affiliations:\n      - ref: nowhere\n---\n',
-    )
-    await document.open(page)
-
-    await expect(page.locator('.visual-editor .status')).toContainText(
-      "Issues: Undefined affiliation 'nowhere' for author 'Ana Silva'.",
-    )
   })
 })
 
