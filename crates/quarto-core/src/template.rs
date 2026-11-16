@@ -142,7 +142,7 @@ pub(crate) fn escape_html_text(s: &str) -> String {
 }
 
 const MINIMAL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
-<html$if(lang)$ lang="$lang$"$endif$>
+<html$if(lang)$ lang="$lang$"$endif$$if(dir)$ dir="$dir$"$endif$>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -257,7 +257,7 @@ $endfor$
 macro_rules! html_head {
     () => {
         r#"<!DOCTYPE html>
-<html$if(lang)$ lang="$lang$"$endif$>
+<html$if(lang)$ lang="$lang$"$endif$$if(dir)$ dir="$dir$"$endif$>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -4568,6 +4568,50 @@ mod tests {
             "metadata must not reach $skip-to-content-text$"
         );
         assert!(html.contains(">Skip to main content</a>"));
+    }
+
+    // ─────────── GH #1219: `dir` on the root element ───────────
+
+    /// Render `meta` through each built-in HTML template and return the
+    /// `<html ...>` opening tag of each.
+    fn html_open_tags(meta: &ConfigValue) -> Vec<String> {
+        [
+            minimal_html_template().expect("minimal template compiles"),
+            full_html_template().expect("full template compiles"),
+            dashboard_html_template().expect("dashboard template compiles"),
+        ]
+        .iter()
+        .map(|template| {
+            let (html, _diags) =
+                render_with_compiled_template(template, "<p>body</p>", meta, &[], &[])
+                    .expect("template renders");
+            let start = html.find("<html").expect("has <html");
+            let end = html[start..].find('>').expect("<html closes") + start + 1;
+            html[start..end].to_string()
+        })
+        .collect()
+    }
+
+    #[test]
+    fn html_templates_write_dir_on_root_element() {
+        let meta = ConfigValue::new_map(
+            vec![
+                entry("lang", ConfigValue::new_string("ar", dummy_source_info())),
+                entry("dir", ConfigValue::new_string("rtl", dummy_source_info())),
+            ],
+            dummy_source_info(),
+        );
+        for tag in html_open_tags(&meta) {
+            assert_eq!(tag, r#"<html lang="ar" dir="rtl">"#);
+        }
+    }
+
+    #[test]
+    fn html_templates_omit_dir_when_unset() {
+        let meta = ConfigValue::new_map(vec![], dummy_source_info());
+        for tag in html_open_tags(&meta) {
+            assert_eq!(tag, "<html>");
+        }
     }
 
     #[test]

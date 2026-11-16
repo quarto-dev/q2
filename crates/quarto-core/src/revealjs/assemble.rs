@@ -384,6 +384,13 @@ pub fn render_revealjs_document(
         .and_then(|v| v.as_plain_text())
         .unwrap_or_else(|| "en".to_string());
     let lang = attr_escape(&lang);
+    // Text direction (`dir: rtl`), written on `<html>` only when set, as
+    // Quarto 1 and Pandoc's reveal.js template do (GH #1219).
+    let dir_attr = meta
+        .get("dir")
+        .and_then(|v| v.as_plain_text())
+        .map(|dir| format!(r#" dir="{}""#, attr_escape(&dir)))
+        .unwrap_or_default();
     let config = reveal_config_json(meta);
 
     // Deck-level footer/logo live OUTSIDE `.slides` (see `footer_logo_html`).
@@ -426,7 +433,7 @@ pub fn render_revealjs_document(
 
     format!(
         r#"<!DOCTYPE html>
-<html lang="{lang}">
+<html lang="{lang}"{dir_attr}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
